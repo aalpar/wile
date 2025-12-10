@@ -3,8 +3,8 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimDigitValue implements the (digit-value) primitive.

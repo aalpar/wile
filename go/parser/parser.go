@@ -5,13 +5,13 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/values"
 	"strconv"
 	"strings"
 
-	"skeme/tokenizer"
+	"wile/tokenizer"
 )
 
 const (

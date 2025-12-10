@@ -4,9 +4,9 @@ import (
 	"context"
 	"unicode"
 
-	"skeme/machine"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimCharUpperCaseQ implements the (char-upper-case?) primitive.

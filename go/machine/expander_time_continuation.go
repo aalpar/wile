@@ -28,9 +28,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/values"
 )
 
 // ExpanderTimeContinuation is a continuation used during the expansion phase.

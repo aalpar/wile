@@ -4,8 +4,8 @@ import (
 	"context"
 	"unicode"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimCharFoldcase implements the (char-foldcase) primitive.

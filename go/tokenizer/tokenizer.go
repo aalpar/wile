@@ -32,8 +32,8 @@ package tokenizer
 
 import (
 	"io"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 	"strconv"
 	"strings"
 	"unicode"

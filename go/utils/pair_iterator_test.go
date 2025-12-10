@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"skeme/values"
+	"wile/values"
 	"testing"
 
 	qt "github.com/frankban/quicktest"

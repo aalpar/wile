@@ -1,7 +1,7 @@
 package tokenizer
 
 import (
-	"skeme/syntax"
+	"wile/syntax"
 )
 
 type ErrorCode int

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimNumGt implements the > primitive for numeric greater-than comparison.

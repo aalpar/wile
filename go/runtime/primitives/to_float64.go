@@ -1,6 +1,6 @@
 package primitives
 
-import "skeme/values"
+import "wile/values"
 
 func ToFloat64(v values.Value) (float64, error) {
 	switch n := v.(type) {

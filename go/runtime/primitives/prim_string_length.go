@@ -4,8 +4,8 @@ import (
 	"context"
 	"unicode/utf8"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimStringLength implements string-length.

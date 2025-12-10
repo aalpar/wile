@@ -3,7 +3,7 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
+	"wile/machine"
 )
 
 // PrimList implements the (list) primitive.

@@ -8,7 +8,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
 
-	"skeme/values"
+	"wile/values"
 )
 
 func TestUtilsMatchSuites(t *testing.T) {

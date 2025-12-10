@@ -3,8 +3,8 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimSymbolToString implements the symbol->string primitive.

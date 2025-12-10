@@ -24,8 +24,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 )
 
 // LibraryName represents an R7RS library name like (scheme base) or (my lib).

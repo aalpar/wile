@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/parser"
-	schemertime "skeme/runtime"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/parser"
+	schemertime "wile/runtime"
+	"wile/syntax"
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )

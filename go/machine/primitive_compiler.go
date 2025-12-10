@@ -1,8 +1,8 @@
 package machine
 
 import (
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // PrimitiveCompilerFunc is the type for compile-time special form handlers.

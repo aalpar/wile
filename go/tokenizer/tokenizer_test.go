@@ -3,7 +3,7 @@ package tokenizer
 import (
 	"fmt"
 	"io"
-	"skeme/syntax"
+	"wile/syntax"
 	"strings"
 	"testing"
 	"unicode/utf8"

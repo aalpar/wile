@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimNumEq implements the = primitive for numeric equality.

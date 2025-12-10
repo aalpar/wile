@@ -1,9 +1,9 @@
 package machine
 
 import (
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/values"
 )
 
 // RegisterPrimitiveCompilers binds all primitive compilers in the compile-time

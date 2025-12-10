@@ -3,7 +3,7 @@ package machine
 import (
 	"fmt"
 
-	"skeme/values"
+	"wile/values"
 )
 
 // ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).

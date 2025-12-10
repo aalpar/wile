@@ -2,7 +2,7 @@ package machine
 
 import (
 	"context"
-	"skeme/values"
+	"wile/values"
 )
 
 // OperationMakeCaseLambdaClosure creates a case-lambda closure from multiple closures.

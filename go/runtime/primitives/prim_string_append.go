@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimStringAppend implements the (string-append) primitive.

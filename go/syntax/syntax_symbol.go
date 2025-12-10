@@ -2,7 +2,7 @@ package syntax
 
 import (
 	"fmt"
-	"skeme/values"
+	"wile/values"
 )
 
 var (

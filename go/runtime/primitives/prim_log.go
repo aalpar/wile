@@ -4,8 +4,8 @@ import (
 	"context"
 	"math"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimLog implements the (log) primitive.

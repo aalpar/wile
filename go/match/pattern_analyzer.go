@@ -1,7 +1,7 @@
 package match
 
 import (
-	"skeme/values"
+	"wile/values"
 )
 
 // PatternAnalysis holds analysis results for a pattern

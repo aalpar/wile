@@ -5,8 +5,8 @@ import (
 	"math"
 	"math/cmplx"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimAngle implements the angle primitive.

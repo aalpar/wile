@@ -1,10 +1,10 @@
 package machine
 
 import (
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/validate"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/validate"
+	"wile/values"
 )
 
 // compileValidated dispatches compilation based on the validated expression type.

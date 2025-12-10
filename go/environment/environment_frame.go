@@ -1,8 +1,8 @@
 package environment
 
 import (
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // EnvironmentFrame represents an environment frame in the hierarchy.

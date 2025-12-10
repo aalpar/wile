@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimNumLe implements the <= primitive for numeric less-than-or-equal comparison.

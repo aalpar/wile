@@ -1,6 +1,6 @@
 package define_syntax
 
-import "skeme/values"
+import "wile/values"
 
 // MacroOpBind binds a captured value to a pattern variable.
 //

@@ -2,7 +2,7 @@ package machine
 
 import (
 	"context"
-	"skeme/environment"
+	"wile/environment"
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.

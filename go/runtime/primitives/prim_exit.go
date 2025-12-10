@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimExit implements the (exit) primitive.

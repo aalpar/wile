@@ -5,8 +5,8 @@ import (
 	"math"
 	"math/big"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimAbs implements the abs primitive.

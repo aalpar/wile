@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/values"
+	"wile/machine"
+	"wile/parser"
+	"wile/values"
 )
 
 // PrimLoad implements the (load) primitive.

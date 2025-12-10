@@ -4,8 +4,8 @@ import (
 	"context"
 	"unicode"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimCharUpcase implements the (char-upcase) primitive.

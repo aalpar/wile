@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"skeme/tokenizer"
+	"wile/tokenizer"
 )
 
 type ParserError struct {

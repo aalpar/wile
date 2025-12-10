@@ -1,7 +1,7 @@
 package syntax
 
 import (
-	"skeme/values"
+	"wile/values"
 	"strings"
 )
 

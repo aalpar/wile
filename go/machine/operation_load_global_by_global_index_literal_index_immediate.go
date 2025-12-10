@@ -3,8 +3,8 @@ package machine
 import (
 	"context"
 	"fmt"
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 )
 
 type OperationLoadGlobalByGlobalIndexLiteralIndexImmediate struct {

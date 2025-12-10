@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"skeme/syntax"
+	"wile/syntax"
 )
 
 // ValidationError captures location and details for error reporting

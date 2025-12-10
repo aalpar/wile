@@ -1,7 +1,7 @@
 package validate
 
 import (
-	"skeme/syntax"
+	"wile/syntax"
 )
 
 // ValidatedExpr is the interface for all validated expressions

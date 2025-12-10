@@ -10,11 +10,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"skeme/environment"
-	"skeme/parser"
-	"skeme/syntax"
-	"skeme/validate"
-	"skeme/values"
+	"wile/environment"
+	"wile/parser"
+	"wile/syntax"
+	"wile/validate"
+	"wile/values"
 )
 
 const (

@@ -18,10 +18,10 @@ package machine
 // Reference: R7RS Section 4.3.2 (syntax-rules)
 
 import (
-	"skeme/environment"
-	"skeme/match"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/match"
+	"wile/syntax"
+	"wile/values"
 )
 
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.

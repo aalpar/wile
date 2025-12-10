@@ -4,9 +4,9 @@ import (
 	"context"
 	"unicode/utf8"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimWriteChar implements the write-char primitive.

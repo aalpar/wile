@@ -4,9 +4,9 @@ import (
 	"context"
 	"weak"
 
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/values"
+	"wile/machine"
+	"wile/parser"
+	"wile/values"
 )
 
 // PrimRead implements the (read) primitive.

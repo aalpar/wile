@@ -1,8 +1,8 @@
 package define_syntax
 
 import (
-	"skeme/match"
-	"skeme/values"
+	"wile/match"
+	"wile/values"
 )
 
 // MacroOpCapture verifies that the current element matches a pattern variable.

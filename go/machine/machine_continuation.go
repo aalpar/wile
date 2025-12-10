@@ -2,8 +2,8 @@ package machine
 
 import (
 	"fmt"
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 	"slices"
 )
 

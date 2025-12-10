@@ -1,6 +1,6 @@
 package primitives
 
-import "skeme/values"
+import "wile/values"
 
 // Eqv is a helper implementing eqv? semantics for memv and assv.
 func Eqv(a, b values.Value) bool {

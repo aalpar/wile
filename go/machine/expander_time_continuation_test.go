@@ -2,9 +2,9 @@ package machine
 
 import (
 	"context"
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/values"
 	"testing"
 
 	qt "github.com/frankban/quicktest"

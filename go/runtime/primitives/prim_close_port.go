@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimClosePort implements the (close-port) primitive.

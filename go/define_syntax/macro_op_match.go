@@ -1,8 +1,8 @@
 package define_syntax
 
 import (
-	"skeme/match"
-	"skeme/values"
+	"wile/match"
+	"wile/values"
 )
 
 // MacroOpMatch matches the current element against a literal value.

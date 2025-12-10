@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 	"testing"
 
 	qt "github.com/frankban/quicktest"

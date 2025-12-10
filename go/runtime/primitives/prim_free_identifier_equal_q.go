@@ -3,10 +3,10 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
-	"skeme/syntax"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/syntax"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimFreeIdentifierEqualQ implements the free-identifier=? predicate (R7RS).

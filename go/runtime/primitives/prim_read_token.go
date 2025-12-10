@@ -5,9 +5,9 @@ import (
 	"io"
 	"weak"
 
-	"skeme/machine"
-	"skeme/tokenizer"
-	"skeme/values"
+	"wile/machine"
+	"wile/tokenizer"
+	"wile/values"
 )
 
 // PrimReadToken implements the (read-token) primitive.

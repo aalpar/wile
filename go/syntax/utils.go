@@ -2,7 +2,7 @@ package syntax
 
 import (
 	"reflect"
-	"skeme/values"
+	"wile/values"
 )
 
 func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {

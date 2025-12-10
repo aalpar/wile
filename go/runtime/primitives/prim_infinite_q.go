@@ -4,9 +4,9 @@ import (
 	"context"
 	"math"
 
-	"skeme/machine"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimInfiniteQ implements the (infinite?) primitive.

@@ -1,8 +1,8 @@
 package define_syntax
 
 import (
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // LiteralIndex is the index of a literal value in the MacroMachine's literals pool.

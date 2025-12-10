@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimCurrentJiffy implements the (current-jiffy) primitive.

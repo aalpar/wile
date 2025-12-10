@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.

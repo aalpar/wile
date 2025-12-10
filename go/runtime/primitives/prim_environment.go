@@ -3,9 +3,9 @@ package primitives
 import (
 	"context"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimEnvironment implements the (environment) primitive.

@@ -1,6 +1,6 @@
 package define_syntax
 
-import "skeme/values"
+import "wile/values"
 
 // MacroOpEndList returns from a nested list during pattern matching.
 //

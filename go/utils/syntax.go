@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // SyntaxValueToDatum converts a syntax object back to a raw Scheme datum,

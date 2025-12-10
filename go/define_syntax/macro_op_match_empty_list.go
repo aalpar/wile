@@ -1,8 +1,8 @@
 package define_syntax
 
 import (
-	"skeme/match"
-	"skeme/values"
+	"wile/match"
+	"wile/values"
 )
 
 // MacroOpMatchEmptyList asserts that the current position is at the end of a list.

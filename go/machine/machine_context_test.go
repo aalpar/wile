@@ -1,8 +1,8 @@
 package machine
 
 import (
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 	"testing"
 
 	qt "github.com/frankban/quicktest"

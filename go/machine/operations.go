@@ -1,7 +1,7 @@
 package machine
 
 import (
-	"skeme/values"
+	"wile/values"
 )
 
 type Operations []Operation

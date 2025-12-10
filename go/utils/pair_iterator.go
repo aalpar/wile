@@ -1,6 +1,6 @@
 package utils
 
-import "skeme/values"
+import "wile/values"
 
 // PairIterator provides sequential traversal over Scheme pairs (linked lists).
 // It tracks the original head, the current pair being visited, and the tail

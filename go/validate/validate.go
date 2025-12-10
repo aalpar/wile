@@ -1,8 +1,8 @@
 package validate
 
 import (
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // ValidateExpression validates a syntax expression and returns

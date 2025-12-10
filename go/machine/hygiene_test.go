@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/parser"
+	"wile/syntax"
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )

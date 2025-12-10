@@ -1,7 +1,7 @@
 package validate
 
 import (
-	"skeme/syntax"
+	"wile/syntax"
 )
 
 // validateIf validates (if test conseq [alt])

@@ -1,7 +1,7 @@
 package machine
 
 import (
-	"skeme/values"
+	"wile/values"
 )
 
 // CaseLambdaClause represents a single clause in a case-lambda.

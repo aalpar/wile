@@ -5,9 +5,9 @@ import (
 	"time"
 	"weak"
 
-	"skeme/parser"
-	"skeme/tokenizer"
-	"skeme/values"
+	"wile/parser"
+	"wile/tokenizer"
+	"wile/values"
 )
 
 // Package-level state for I/O ports.

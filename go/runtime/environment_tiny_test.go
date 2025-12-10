@@ -3,12 +3,12 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/runtime/primitives"
-	"skeme/syntax"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/parser"
+	"wile/runtime/primitives"
+	"wile/syntax"
+	"wile/utils"
+	"wile/values"
 	"strings"
 	"testing"
 

@@ -17,10 +17,10 @@ import (
 	"io"
 	"os"
 
-	"skeme/environment"
-	"skeme/parser"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/parser"
+	"wile/syntax"
+	"wile/values"
 )
 
 // LibraryEnvFactory is a function that creates a new top-level environment for a library.

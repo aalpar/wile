@@ -2,7 +2,7 @@ package machine
 
 import (
 	qt "github.com/frankban/quicktest"
-	"skeme/values"
+	"wile/values"
 	"testing"
 )
 

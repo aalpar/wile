@@ -9,11 +9,11 @@ import (
 	"io"
 	"log"
 	"os"
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/runtime"
-	"skeme/syntax"
+	"wile/environment"
+	"wile/machine"
+	"wile/parser"
+	"wile/runtime"
+	"wile/syntax"
 	"strings"
 
 	"github.com/ergochat/readline"
@@ -315,7 +315,7 @@ func getHistoryFile() string {
 	if err != nil {
 		return ""
 	}
-	return home + "/.skeme_history"
+	return home + "/.wile_history"
 }
 
 func Printf(fmtstr string, args ...interface{}) {

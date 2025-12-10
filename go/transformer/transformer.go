@@ -1,8 +1,8 @@
 package transformer
 
 import (
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 )
 
 type Transformer struct {

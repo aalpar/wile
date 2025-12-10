@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimNumberToString implements the number->string primitive.

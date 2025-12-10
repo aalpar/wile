@@ -1,8 +1,8 @@
 package define_syntax
 
 import (
-	"skeme/match"
-	"skeme/values"
+	"wile/match"
+	"wile/values"
 	"testing"
 
 	qt "github.com/frankban/quicktest"

@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"skeme/machine"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimFileExistsQ implements the (file-exists?) primitive.

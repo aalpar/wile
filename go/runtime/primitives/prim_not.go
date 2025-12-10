@@ -3,9 +3,9 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimNot implements the not primitive.

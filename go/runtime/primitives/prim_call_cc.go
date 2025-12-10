@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimCallCC implements the call/cc primitive.

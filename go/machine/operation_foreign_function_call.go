@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"skeme/values"
+	"wile/values"
 )
 
 type ForeignFunction func(ctx context.Context, mc *MachineContext) error

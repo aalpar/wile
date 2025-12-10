@@ -3,7 +3,7 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
+	"wile/machine"
 )
 
 // PrimCurrentOutputPort implements the (current-output-port) primitive.

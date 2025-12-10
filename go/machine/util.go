@@ -1,6 +1,6 @@
 package machine
 
-import "skeme/environment"
+import "wile/environment"
 
 func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool, fn ForeignFunction) *MachineClosure {
 	tpl := NewNativeTemplate(pcnt, 0, vardiac,

@@ -4,9 +4,9 @@ import (
 	"context"
 	"math"
 
-	"skeme/machine"
-	"skeme/utils"
-	"skeme/values"
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimNanQ implements the nan? primitive.

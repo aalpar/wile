@@ -1,6 +1,6 @@
 package syntax
 
-import "skeme/values"
+import "wile/values"
 
 // syntaxVoidType is a sentinel value representing the absence of a syntax value.
 type syntaxVoidType struct{}

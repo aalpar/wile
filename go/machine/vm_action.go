@@ -1,7 +1,7 @@
 package machine
 
 import (
-	"skeme/values"
+	"wile/values"
 )
 
 // VMAction represents an action the VM should take after a foreign function returns.

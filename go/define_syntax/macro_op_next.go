@@ -1,6 +1,6 @@
 package define_syntax
 
-import "skeme/values"
+import "wile/values"
 
 // MacroOpNext advances the current position to the next element in the list.
 //

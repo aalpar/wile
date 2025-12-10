@@ -2,8 +2,8 @@ package environment
 
 import (
 	"fmt"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 	"slices"
 )
 

@@ -1,4 +1,4 @@
-module skeme
+module wile
 
 go 1.25
 

@@ -2,8 +2,8 @@ package machine
 
 import (
 	"context"
-	"skeme/environment"
-	"skeme/values"
+	"wile/environment"
+	"wile/values"
 )
 
 type OperationMakeClosure struct {

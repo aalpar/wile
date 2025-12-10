@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/syntax"
-	"skeme/utils"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/syntax"
+	"wile/utils"
+	"wile/values"
 )
 
 // PrimEval implements the (eval) primitive.

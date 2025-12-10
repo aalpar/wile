@@ -3,7 +3,7 @@ package machine
 import (
 	"context"
 	"fmt"
-	"skeme/values"
+	"wile/values"
 )
 
 // ForeignFunctionV2 is the new foreign function signature that returns VMAction.

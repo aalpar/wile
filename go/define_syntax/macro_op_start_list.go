@@ -1,6 +1,6 @@
 package define_syntax
 
-import "skeme/values"
+import "wile/values"
 
 // MacroOpStartList descends into a nested list during pattern matching.
 //

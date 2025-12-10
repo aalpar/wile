@@ -29,8 +29,8 @@ package machine
 
 import (
 	"context"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.

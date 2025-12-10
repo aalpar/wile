@@ -35,11 +35,11 @@ import (
 	"io"
 	"strings"
 
-	"skeme/environment"
-	"skeme/machine"
-	"skeme/parser"
-	"skeme/runtime/primitives"
-	"skeme/values"
+	"wile/environment"
+	"wile/machine"
+	"wile/parser"
+	"wile/runtime/primitives"
+	"wile/values"
 )
 
 // bootstrapMacros contains the R7RS derived expression forms as syntax-rules macros.

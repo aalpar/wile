@@ -23,8 +23,8 @@ package match
 
 import (
 	"errors"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 // SyntaxMatcher adapts the unhygienic Matcher to work with syntax objects.

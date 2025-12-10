@@ -3,9 +3,9 @@ package parser
 import (
 	"io"
 	"math"
-	"skeme/environment"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/environment"
+	"wile/syntax"
+	"wile/values"
 	"strings"
 	"testing"
 

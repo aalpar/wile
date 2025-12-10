@@ -1,6 +1,6 @@
 package utils
 
-import "skeme/values"
+import "wile/values"
 
 func BoolToBoolean(b bool) *values.Boolean {
 	if b {

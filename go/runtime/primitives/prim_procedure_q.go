@@ -3,8 +3,8 @@ package primitives
 import (
 	"context"
 
-	"skeme/machine"
-	"skeme/utils"
+	"wile/machine"
+	"wile/utils"
 )
 
 // PrimProcedureQ implements the (procedure?) primitive.

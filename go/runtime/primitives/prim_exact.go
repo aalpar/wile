@@ -4,8 +4,8 @@ import (
 	"context"
 	"math/big"
 
-	"skeme/machine"
-	"skeme/values"
+	"wile/machine"
+	"wile/values"
 )
 
 // PrimExact implements the (exact) primitive.

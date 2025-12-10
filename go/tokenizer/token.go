@@ -2,8 +2,8 @@ package tokenizer
 
 import (
 	"fmt"
-	"skeme/syntax"
-	"skeme/values"
+	"wile/syntax"
+	"wile/values"
 )
 
 type Token interface {

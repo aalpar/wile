@@ -1,6 +1,6 @@
 package syntax
 
-import "skeme/values"
+import "wile/values"
 
 type SyntaxTuple interface {
 	values.Tuple

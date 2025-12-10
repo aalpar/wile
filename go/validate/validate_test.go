@@ -3,9 +3,9 @@ package validate
 import (
 	"testing"
 
-	"skeme/syntax"
-	"skeme/utils"
-	"skeme/values"
+	"wile/syntax"
+	"wile/utils"
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
