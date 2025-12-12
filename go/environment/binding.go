@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package environment
 
 import (
@@ -9,11 +24,12 @@ import (
 
 // Binding represents a variable binding in the environment.
 // It stores the bound value, the binding type (variable, syntax, or primitive),
-// and optional scopes for hygienic macro expansion.
+// optional scopes for hygienic macro expansion, and optional source location.
 type Binding struct {
 	value       values.Value
 	bindingType BindingType
-	scopes      []*syntax.Scope // Scopes associated with this binding
+	scopes      []*syntax.Scope        // Scopes associated with this binding
+	source      *syntax.SourceContext  // Where this binding was defined (optional)
 }
 
 // NewBinding creates a new binding with the given value and type.
@@ -35,6 +51,16 @@ func NewBindingWithScopes(value values.Value, bindingType BindingType, scopes []
 		scopes:      scopes,
 	}
 	return q
+}
+
+// NewBindingWithSource creates a binding with source location information.
+func NewBindingWithSource(value values.Value, bindingType BindingType, scopes []*syntax.Scope, source *syntax.SourceContext) *Binding {
+	return &Binding{
+		value:       value,
+		bindingType: bindingType,
+		scopes:      scopes,
+		source:      source,
+	}
 }
 
 // Value returns the value stored in this binding.
@@ -66,6 +92,17 @@ func (p *Binding) Scopes() []*syntax.Scope {
 // SetScopes updates the hygiene scopes associated with this binding.
 func (p *Binding) SetScopes(scopes []*syntax.Scope) {
 	p.scopes = scopes
+}
+
+// Source returns the source location where this binding was defined.
+// Returns nil for bindings without source information.
+func (p *Binding) Source() *syntax.SourceContext {
+	return p.source
+}
+
+// SetSource updates the source location for this binding.
+func (p *Binding) SetSource(source *syntax.SourceContext) {
+	p.source = source
 }
 
 // SchemeString returns a string representation of this binding.
@@ -106,6 +143,7 @@ func (p *Binding) Copy() values.Value {
 		value:       p.value,
 		bindingType: p.bindingType,
 		scopes:      scopesCopy,
+		source:      p.source, // Source context is immutable, no need to copy
 	}
 	return q
 }

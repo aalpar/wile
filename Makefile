@@ -7,6 +7,10 @@ build:
 	@mkdir -p $(DIST_DIR)
 	cd go && go build -o ../$(DIST_DIR)/$(PROJECT) ./cmd
 
+.PHONY: lint
+lint:
+	cd go && golangci-lint run ./...
+
 .PHONY: all
 all: $(SUBDIRS)
 

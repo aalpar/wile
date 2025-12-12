@@ -1,30 +1,67 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package syntax
 
 import (
 	"reflect"
-	"wile/values"
 )
 
+// SyntaxList constructs a syntax list from the given elements.
+// The sc parameter provides a fallback source context for the list container.
+// Each intermediate pair uses the source context of its car element when available,
+// preserving per-element source location information for better error reporting.
 func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 	l := len(os)
 	switch l {
 	case 0:
 		return NewSyntaxEmptyList(sc)
 	case 1:
+		// Use element's source context if available, otherwise fall back to sc
+		elemSc := sc
+		if os[0] != nil {
+			if esc := os[0].SourceContext(); esc != nil {
+				elemSc = esc
+			}
+		}
 		return &SyntaxPair{
 			Values:        [2]SyntaxValue{os[0], NewSyntaxEmptyList(sc)},
-			sourceContext: sc,
+			sourceContext: elemSc,
+		}
+	}
+	// Use first element's source context for the head pair
+	headSc := sc
+	if os[0] != nil {
+		if esc := os[0].SourceContext(); esc != nil {
+			headSc = esc
 		}
 	}
 	q := &SyntaxPair{
 		Values:        [2]SyntaxValue{os[0], &SyntaxPair{}},
-		sourceContext: sc,
+		sourceContext: headSc,
 	}
 	curr := q
 	for _, v := range os[1:] {
 		curr = curr.Cdr().(*SyntaxPair)
 		curr.SetCar(v)
 		curr.SetCdr(&SyntaxPair{})
+		// Use element's source context for this pair
+		if v != nil {
+			if esc := v.SourceContext(); esc != nil {
+				curr.sourceContext = esc
+			}
+		}
 	}
 	curr.SetCdr(NewSyntaxEmptyList(sc))
 	return q
@@ -64,11 +101,11 @@ func IsSyntaxList(v SyntaxValue) bool {
 	return false
 }
 
-func IsSyntaxVoid(v values.Value) bool {
+func IsSyntaxVoid(v SyntaxValue) bool {
 	return v == nil || v.IsVoid()
 }
 
-func IsSyntaxEmptyList(v values.Value) bool {
+func IsSyntaxEmptyList(v SyntaxValue) bool {
 	if v == nil {
 		return false
 	}

@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package validate
 
 import (
@@ -7,6 +22,10 @@ import (
 	"wile/syntax"
 )
 
+// DefaultMaxOriginDepth is the default maximum number of macro expansions to show
+// in error messages. Set to 0 for unlimited depth.
+const DefaultMaxOriginDepth = 10
+
 // ValidationError captures location and details for error reporting
 type ValidationError struct {
 	Source  *syntax.SourceContext
@@ -15,12 +34,25 @@ type ValidationError struct {
 }
 
 func (e ValidationError) Error() string {
+	return e.ErrorWithMaxOriginDepth(DefaultMaxOriginDepth)
+}
+
+// ErrorWithMaxOriginDepth returns the error message with a configurable origin chain depth.
+func (e ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
+	var msg string
 	if e.Source != nil {
-		return fmt.Sprintf("%s:%d:%d: %s in %s form",
+		msg = fmt.Sprintf("%s:%d:%d: %s in %s form",
 			e.Source.File, e.Source.Start.Line(), e.Source.Start.Column(),
 			e.Message, e.Form)
+
+		// Add origin chain if present
+		if e.Source.Origin != nil {
+			msg += syntax.FormatOriginChain(e.Source.Origin, maxDepth)
+		}
+	} else {
+		msg = fmt.Sprintf("%s in %s form", e.Message, e.Form)
 	}
-	return fmt.Sprintf("%s in %s form", e.Message, e.Form)
+	return msg
 }
 
 // ValidationResult collects all errors from validation

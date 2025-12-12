@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 import (
@@ -15,7 +29,7 @@ func ParseLibraryNameFromDatum(expr values.Value) (LibraryName, error) {
 	}
 
 	var parts []string
-	_, err := pair.ForEach(func(i int, hasNext bool, partExpr values.Value) error {
+	_, err := pair.ForEach(nil, func(i int, hasNext bool, partExpr values.Value) error {
 		if sym, ok := partExpr.(*values.Symbol); ok {
 			parts = append(parts, sym.Key)
 			return nil
@@ -176,7 +190,7 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
-	_, err = renamesPair.ForEach(func(i int, hasNext bool, renamePairVal values.Value) error {
+	_, err = renamesPair.ForEach(nil, func(i int, hasNext bool, renamePairVal values.Value) error {
 		renamePair, ok := renamePairVal.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
@@ -216,7 +230,7 @@ func parseIdentifierListFromDatum(expr values.Value) ([]string, error) {
 	}
 
 	var ids []string
-	_, err := pair.ForEach(func(i int, hasNext bool, idExpr values.Value) error {
+	_, err := pair.ForEach(nil, func(i int, hasNext bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected identifier symbol")

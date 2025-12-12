@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 // expander_time_continuation.go implements macro expansion for syntax-rules.
@@ -28,6 +43,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"wile/environment"
 	"wile/syntax"
 	"wile/values"
@@ -174,6 +190,10 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(ectx ExpandTimeCallContex
 	case "cond-expand":
 		// cond-expand: do NOT expand - feature requirements use and/or/not
 		// which are NOT macros in this context, but special syntax
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+
+	case "syntax", "syntax-case", "quasisyntax", "unsyntax", "unsyntax-splicing", "with-syntax":
+		// These are compile-time forms that should not have their arguments expanded
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 
 	default:
@@ -448,10 +468,16 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 	bnd := expandEnv.GetBinding(sym0)
 
 	// Check if it's a macro binding
-	if bnd != nil && !bnd.IsVoid() && bnd.BindingType() == environment.BindingTypeSyntax {
+	if !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
 		// This is a macro - invoke the transformer (handled below)
 	} else {
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
+		// First check for compile-time primitives that don't have runtime bindings
+		switch sym0.Key {
+		case "syntax", "syntax-case", "quasisyntax", "unsyntax", "unsyntax-splicing", "with-syntax":
+			return p.ExpandPrimitiveForm(ectx, sym0.Key, sym, expr)
+		}
+
 		runtimeBnd := p.env.GetBinding(sym0)
 		if runtimeBnd != nil && !runtimeBnd.IsVoid() && runtimeBnd.BindingType() == environment.BindingTypePrimitive {
 			// Primitive form - handle based on which primitive it is
@@ -504,6 +530,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 	if result == nil {
 		return nil, fmt.Errorf("syntax transformer returned nil")
 	}
+
 	// For syntax-rules transformers, the result should be the expanded form.
 	// The expanded result may itself contain macro invocations (especially for
 	// recursive macros like `and`, `or`, `let*`, etc.), so we must recursively
@@ -513,6 +540,97 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return p.ExpandExpression(ectx, stx)
 	}
 	return nil, fmt.Errorf("syntax transformer returned non-syntax value: %T", result)
+}
+
+// ExpandOnce performs a single step of macro expansion.
+// Returns (expanded-syntax, did-expand, error).
+// If the input is a macro call, it expands it once and returns (result, true, nil).
+// If the input is not a macro call, it returns (input, false, nil).
+// Unlike ExpandExpression, this does NOT recursively expand the result.
+func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+	// Only pairs can be macro calls
+	stxPair, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return expr, false, nil
+	}
+
+	// Handle empty list
+	if syntax.IsSyntaxEmptyList(stxPair) {
+		return expr, false, nil
+	}
+
+	// Check if the car is a symbol
+	car, ok := stxPair.Car().(syntax.SyntaxValue)
+	if !ok {
+		return expr, false, nil
+	}
+
+	sym, ok := car.(*syntax.SyntaxSymbol)
+	if !ok {
+		return expr, false, nil
+	}
+
+	sym0, ok := sym.Unwrap().(*values.Symbol)
+	if !ok {
+		return expr, false, nil
+	}
+
+	// Look up syntax bindings in the expand phase environment
+	expandEnv := p.env.Expand()
+	bnd := expandEnv.GetBinding(sym0)
+
+	// Check if it's a macro binding
+	if values.IsVoid(bnd) || bnd.BindingType() != environment.BindingTypeSyntax {
+		// Not a macro - no expansion
+		return expr, false, nil
+	}
+
+	// Get the transformer closure
+	mcls, ok := bnd.Value().(*MachineClosure)
+	if !ok {
+		return nil, false, fmt.Errorf("not a machine closure: %T", bnd.Value())
+	}
+
+	// Create a machine context from the closure
+	mc := NewMachineContextFromMachineClosure(mcls)
+	if mc == nil {
+		return nil, false, fmt.Errorf("failed to create machine context from closure")
+	}
+
+	// Build the input form
+	cdr, ok := stxPair.Cdr().(*syntax.SyntaxPair)
+	if !ok {
+		cdr = syntax.SyntaxList(sym.SourceContext())
+	}
+	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
+
+	// Apply the transformer
+	_, err := mc.Apply(mcls, inputForm)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to apply transformer: %w", err)
+	}
+
+	err = mc.Run(context.TODO())
+	if err != nil && !errors.Is(err, ErrMachineHalt) {
+		return nil, false, err
+	}
+
+	// Check if the transformer produced a result
+	if mc.value == nil || len(mc.value) == 0 {
+		return nil, false, fmt.Errorf("syntax transformer produced no result")
+	}
+
+	result := mc.value[0]
+	if result == nil {
+		return nil, false, fmt.Errorf("syntax transformer returned nil")
+	}
+
+	// Return the result WITHOUT recursive expansion
+	if stx, ok := result.(syntax.SyntaxValue); ok {
+		return stx, true, nil
+	}
+
+	return nil, false, fmt.Errorf("syntax transformer returned non-syntax value: %T", result)
 }
 
 // ExpandSyntaxArgumentList expands each argument in the argument list.

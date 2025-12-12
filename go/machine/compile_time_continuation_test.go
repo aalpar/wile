@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 import (
@@ -331,7 +345,7 @@ func evalSchemeString(code string) (values.Value, error) {
 
 	var lastResult values.Value = values.Void
 	for {
-		stx, err := p.ReadSyntax()
+		stx, err := p.ReadSyntax(nil)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -441,7 +455,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 	gi = mc.env.GlobalEnvironment().GetGlobalIndex(mc.env.InternSymbol(values.NewSymbol("x")))
 	qt.Assert(t, gi, qt.IsNotNil)
-	v := mc.env.GlobalEnvironment().GetGlobalBinding(gi)
+	v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi)
 	qt.Assert(t, v.BindingType(), qt.Equals, environment.BindingTypeVariable)
 	qt.Assert(t, v.Value(), values.SchemeEquals, values.NewString("true"))
 }
@@ -609,7 +623,7 @@ func TestCondExpandRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterPrimitiveCompilers failed: %v", err)
 	}
-	
+
 	// Check if cond-expand is registered
 	sym := env.InternSymbol(values.NewSymbol("cond-expand"))
 	pc := LookupPrimitiveCompiler(env, sym, nil)
@@ -653,7 +667,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 		return nil
 	}
 	callDepthClosure := NewForeignClosure(env, 0, false, callDepthFn)
-	env.SetGlobalValue(environment.NewGlobalIndex(callDepthSym), callDepthClosure)
+	env.SetGlobalValue(environment.NewGlobalIndex(callDepthSym), callDepthClosure) //nolint:errcheck
 
 	// Register subtraction primitive: (- a b)
 	subSym := env.InternSymbol(values.NewSymbol("-"))
@@ -665,7 +679,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 		return nil
 	}
 	subClosure := NewForeignClosure(env, 2, false, subFn)
-	env.SetGlobalValue(environment.NewGlobalIndex(subSym), subClosure)
+	env.SetGlobalValue(environment.NewGlobalIndex(subSym), subClosure) //nolint:errcheck
 
 	// Register equality primitive: (= a b)
 	eqSym := env.InternSymbol(values.NewSymbol("="))
@@ -681,7 +695,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 		return nil
 	}
 	eqClosure := NewForeignClosure(env, 2, false, eqFn)
-	env.SetGlobalValue(environment.NewGlobalIndex(eqSym), eqClosure)
+	env.SetGlobalValue(environment.NewGlobalIndex(eqSym), eqClosure) //nolint:errcheck
 
 	// Compile: (define (loop n) (call-depth) (if (= n 0) n (loop (- n 1))))
 	// This is a tail-recursive loop that calls call-depth on each iteration
@@ -724,4 +738,68 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// This assertion verifies TCO IS working (depth stays constant)
 	qt.Assert(t, maxCallDepth <= 5, qt.IsTrue,
 		qt.Commentf("Expected call depth <= 5 with TCO, got %d. TCO may not be working!", maxCallDepth))
+}
+
+func TestCompileContext_CompileCaseLambda(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	sctx := syntax.NewZeroValueSourceContext()
+
+	// (case-lambda
+	//   ((x) x)
+	//   ((x y) y))
+	prog := values.List(
+		values.NewSymbol("case-lambda"),
+		values.List(values.List(values.NewSymbol("x")), values.NewSymbol("x")),
+		values.List(values.List(values.NewSymbol("x"), values.NewSymbol("y")), values.NewSymbol("y")))
+
+	cont, err := newTopLevelThunk(utils.DatumToSyntaxValue(sctx, prog), env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Run compilation to create case-lambda closure
+	mc := NewMachineContext(cont)
+	ctx := context.Background()
+	err = mc.Run(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Verify we got a case-lambda closure
+	qt.Assert(t, mc.value, qt.HasLen, 1)
+	caseLambda, ok := mc.value[0].(*CaseLambdaClosure)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, caseLambda.Clauses(), qt.HasLen, 2)
+
+	// Verify clause arities
+	clauses := caseLambda.Clauses()
+	qt.Assert(t, clauses[0].closure.Template().ParameterCount(), qt.Equals, 1)
+	qt.Assert(t, clauses[1].closure.Template().ParameterCount(), qt.Equals, 2)
+}
+
+func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	sctx := syntax.NewZeroValueSourceContext()
+
+	// ((case-lambda
+	//    ((x) x)
+	//    ((x y) y))
+	//  42)
+	prog := values.List(
+		values.List(
+			values.NewSymbol("case-lambda"),
+			values.List(values.List(values.NewSymbol("x")), values.NewSymbol("x")),
+			values.List(values.List(values.NewSymbol("x"), values.NewSymbol("y")), values.NewSymbol("y"))),
+		values.NewInteger(42))
+
+	cont, err := newTopLevelThunk(utils.DatumToSyntaxValue(sctx, prog), env)
+	qt.Assert(t, err, qt.IsNil)
+
+	mc := NewMachineContext(cont)
+	ctx := context.Background()
+	err = mc.Run(ctx)
+	if err == ErrMachineHalt {
+		err = nil
+	}
+	qt.Assert(t, err, qt.IsNil)
+
+	// Should call first clause with 1 arg: returns 42
+	qt.Assert(t, mc.value, qt.HasLen, 1)
+	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }

@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 import (
@@ -32,8 +47,8 @@ func (p *Stack) Pop() values.Value {
 	return v
 }
 
-// FIXME: turn into a helper. Share with vector.go
 // AsList converts the stack to a Scheme list (values.Tuple).
+// The list is in stack order (first pushed = first element).
 func (p Stack) AsList() values.Tuple {
 	if p.IsVoid() {
 		return (*values.Pair)(nil)
@@ -41,15 +56,12 @@ func (p Stack) AsList() values.Tuple {
 	if len(p) == 0 {
 		return values.EmptyList
 	}
-	q := &values.Pair{p[0], values.EmptyList}
-	curr := q
-	for _, v := range p[1:] {
-		curr = curr[1].(*values.Pair)
-		curr[0] = v
-		curr[1] = &values.Pair{}
+	// Build list from end to start to avoid mutating EmptyList
+	var result values.Tuple = values.EmptyList
+	for i := len(p) - 1; i >= 0; i-- {
+		result = &values.Pair{p[i], result}
 	}
-	curr[1] = values.EmptyList
-	return q
+	return result
 }
 
 func (p *Stack) PushAll(vs []values.Value) {

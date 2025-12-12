@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package primitives
 
 import (
@@ -17,7 +31,7 @@ func PrimAssq(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "assq: expected a list but got %T", alist)
 	}
-	v, err := pr.ForEach(func(i int, hasNext bool, elem values.Value) error {
+	v, err := pr.ForEach(nil, func(i int, hasNext bool, elem values.Value) error {
 		entry, ok := elem.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assq: expected a pair in alist but got %T", pr.Car())

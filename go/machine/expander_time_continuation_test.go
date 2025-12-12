@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 import (
@@ -57,7 +71,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
 	env := environment.NewEnvironmentFrame(nil,
-		environment.NewGlobalEnvironment(nil, nil))
+		environment.NewGlobalEnvironmentFrame(nil, nil))
 	gi, ok := env.CreateGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
@@ -76,7 +90,7 @@ func TestExpandExpression_List(t *testing.T) {
 		args := pair.Cdr().(*syntax.SyntaxPair)
 		// Collect arguments and reverse them
 		var argList []syntax.SyntaxValue
-		syntax.SyntaxForEach(args, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+		syntax.SyntaxForEach(args, func(i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
 			argList = append(argList, v)
 			return nil
 		})
@@ -107,4 +121,63 @@ func TestExpandExpression_List(t *testing.T) {
 	result, err := cont.ExpandExpression(cctx, lst0)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.UnwrapAll(), values.SchemeEquals, lst1.UnwrapAll())
+}
+
+func TestExpandCaseLambdaForm_Basic(t *testing.T) {
+	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil, nil))
+	cont := NewExpanderTimeContinuation(env)
+	cctx := NewExpandTimeCallContext()
+
+	// (case-lambda ((x) x) ((x y) (+ x y)))
+	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
+	clause1 := syntax.SyntaxList(nil,
+		syntax.SyntaxList(nil, syntax.NewSyntaxSymbol("x", nil)),
+		syntax.NewSyntaxSymbol("x", nil))
+	clause2 := syntax.SyntaxList(nil,
+		syntax.SyntaxList(nil, syntax.NewSyntaxSymbol("x", nil), syntax.NewSyntaxSymbol("y", nil)),
+		syntax.SyntaxList(nil,
+			syntax.NewSyntaxSymbol("+", nil),
+			syntax.NewSyntaxSymbol("x", nil),
+			syntax.NewSyntaxSymbol("y", nil)))
+
+	clauses := syntax.SyntaxList(nil, clause1, clause2)
+
+	result, err := cont.expandCaseLambdaForm(cctx, sym, clauses)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Result should be (case-lambda expanded-clauses...)
+	resultPair, ok := result.(*syntax.SyntaxPair)
+	qt.Assert(t, ok, qt.IsTrue)
+	resultSym, ok := resultPair.Car().(*syntax.SyntaxSymbol)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, resultSym.Unwrap(), values.SchemeEquals, values.NewSymbol("case-lambda"))
+
+	// Count clauses
+	clauseCount := 0
+	clausePair, ok := resultPair.Cdr().(*syntax.SyntaxPair)
+	qt.Assert(t, ok, qt.IsTrue)
+	syntax.SyntaxForEach(clausePair, func(i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
+		clauseCount++
+		return nil
+	})
+	qt.Assert(t, clauseCount, qt.Equals, 2)
+}
+
+func TestExpandCaseLambdaForm_Empty(t *testing.T) {
+	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil, nil))
+	cont := NewExpanderTimeContinuation(env)
+	cctx := NewExpandTimeCallContext()
+
+	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
+	emptyClauses := syntax.SyntaxList(nil)
+
+	result, err := cont.expandCaseLambdaForm(cctx, sym, emptyClauses)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Should return (case-lambda)
+	resultPair, ok := result.(*syntax.SyntaxPair)
+	qt.Assert(t, ok, qt.IsTrue)
+	resultSym, ok := resultPair.Car().(*syntax.SyntaxSymbol)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, resultSym.Unwrap(), values.SchemeEquals, values.NewSymbol("case-lambda"))
 }

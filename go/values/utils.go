@@ -1,10 +1,24 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package values
 
 import (
+	"context"
 	"encoding/base32"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"time"
 )
 
@@ -39,10 +53,10 @@ func List(os ...Value) *Pair {
 // If the value is not a Tuple, returns the value unchanged with no error.
 // The callback receives the element index, whether more elements follow, and the element value.
 // Returns the tail of the tuple (EmptyList for proper lists) and any error from the callback.
-func ForEach(o Value, fn func(i int, hasNext bool, v Value) error) (Value, error) {
+func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 	pr, ok := o.(Tuple)
 	if ok {
-		return pr.ForEach(fn)
+		return pr.ForEach(ctx, fn)
 	}
 	return o, nil
 }
@@ -99,9 +113,11 @@ func IsList(v Value) bool {
 }
 
 // IsVoid returns true if the value represents the absence of a value.
-// A value is void if it is nil, the Void singleton, or a nil interface value.
+// A value is void if it is nil or its IsVoid() method returns true.
+// Note: typed nil pointers (e.g., var p *Pair = nil) are handled by the
+// type's IsVoid() method, which checks for nil receiver.
 func IsVoid(v Value) bool {
-	return v == nil || v == Void || reflect.ValueOf(v).IsNil()
+	return v == nil || v.IsVoid()
 }
 
 // IsEmptyList returns true if the value is the empty list.
@@ -121,7 +137,7 @@ func IsEmptyList(v Value) bool {
 // Iterates backward through the vector, prepending each element to build the list.
 // Returns EmptyList for nil or void vectors.
 func VectorToList(vs *Vector) *Pair {
-	if vs == nil || vs.IsVoid() {
+	if IsVoid(vs) {
 		return EmptyList
 	}
 	var q = EmptyList

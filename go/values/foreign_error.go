@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package values
 
 import (
@@ -55,6 +70,22 @@ var (
 	ErrNotAVector                  = NewStaticError("not a vector")
 	ErrNotAByteVector              = NewStaticError("not a bytevector")
 	ErrNotAProcedure               = NewStaticError("not a procedure")
+	ErrNotAStringOutputPort        = NewStaticError("not a string output port")
+	ErrNotABytevectorOutputPort    = NewStaticError("not a bytevector output port")
+	ErrNotAnErrorObject            = NewStaticError("not an error object")
+	ErrNotARecord                  = NewStaticError("not a record")
+	ErrNotARecordType              = NewStaticError("not a record type")
+
+	// Threading errors
+	ErrNotAThread            = NewStaticError("not a thread")
+	ErrNotAMutex             = NewStaticError("not a mutex")
+	ErrNotAConditionVariable = NewStaticError("not a condition variable")
+	ErrNotATime              = NewStaticError("not a time")
+	ErrNotAChannel           = NewStaticError("not a channel")
+	ErrNotAWaitGroup         = NewStaticError("not a wait-group")
+	ErrNotARWMutex           = NewStaticError("not a rw-mutex")
+	ErrNotAOnce              = NewStaticError("not a once")
+	ErrNotAnAtomic           = NewStaticError("not an atomic")
 )
 
 type StaticError struct {

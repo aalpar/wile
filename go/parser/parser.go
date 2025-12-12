@@ -1,6 +1,21 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package parser
 
 import (
+	"context"
 	"io"
 	"math"
 	"math/big"
@@ -43,6 +58,7 @@ var (
 	ErrUnknownTokenType = values.NewStaticError("unknown token type")
 )
 
+// Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
 	rdr         io.RuneReader // the rune reader
 	env         *environment.EnvironmentFrame
@@ -50,18 +66,25 @@ type Parser struct {
 	cur         tokenizer.Token
 	err         error
 	skipComment bool
+	file        string // source file name for error reporting
 }
 
+// Parse reads a single syntax value from the given rune reader in the context of the given environment.
 func Parse(env *environment.EnvironmentFrame, rdr io.RuneReader) (syntax.SyntaxValue, error) {
 	p := NewParser(env, rdr)
-	return p.ReadSyntax()
+	return p.ReadSyntax(nil)
 }
 
 func NewParser(env *environment.EnvironmentFrame, rdr io.RuneReader) *Parser {
+	return NewParserWithFile(env, rdr, "")
+}
+
+func NewParserWithFile(env *environment.EnvironmentFrame, rdr io.RuneReader, file string) *Parser {
 	q := &Parser{
 		env:         env,
 		rdr:         rdr,
 		skipComment: true,
+		file:        file,
 	}
 	return q
 }
@@ -90,7 +113,7 @@ func (p *Parser) Text() string {
 	return p.toks.Text()
 }
 
-func (p *Parser) ReadSyntax() (syntax.SyntaxValue, error) {
+func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 	if p.toks == nil {
 		p.toks = tokenizer.NewTokenizerWithComments(p.rdr, false, !p.skipComment)
 		p.cur, p.err = p.toks.Next()
@@ -116,21 +139,21 @@ func (p *Parser) ReadSyntax() (syntax.SyntaxValue, error) {
 func (p *Parser) wrapSyntax(o values.Value, t tokenizer.Token) *syntax.SyntaxObject {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	return syntax.NewSyntaxObject(o, sc)
 }
 
 func (p *Parser) wrapSyntaxSymbol(o string, t tokenizer.Token) *syntax.SyntaxSymbol {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	return syntax.NewSyntaxSymbol(o, sc)
 }
 
 func (p *Parser) wrapSyntaxVector(os []values.Value, t tokenizer.Token) *syntax.SyntaxVector {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	svs := make([]syntax.SyntaxValue, len(os))
 	for i, v := range os {
 		svs[i] = p.wrapSyntax(v, t)
@@ -141,7 +164,7 @@ func (p *Parser) wrapSyntaxVector(os []values.Value, t tokenizer.Token) *syntax.
 func (p *Parser) wrapSyntaxEmptyList(t tokenizer.Token) *syntax.SyntaxPair {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxEmptyList(sc)
 	return q
 }
@@ -149,7 +172,7 @@ func (p *Parser) wrapSyntaxEmptyList(t tokenizer.Token) *syntax.SyntaxPair {
 func (p *Parser) wrapSyntaxPair(v0, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxPair {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxCons(v0, v1, sc)
 	return q
 }
@@ -157,7 +180,7 @@ func (p *Parser) wrapSyntaxPair(v0, v1 syntax.SyntaxValue, t tokenizer.Token) *s
 func (p *Parser) wrapSyntaxComment(v0 string, t tokenizer.Token) *syntax.SyntaxComment {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxComment(v0, sc)
 	return q
 }
@@ -165,7 +188,7 @@ func (p *Parser) wrapSyntaxComment(v0 string, t tokenizer.Token) *syntax.SyntaxC
 func (p *Parser) wrapSyntaxDatumComment(v0 string, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumComment {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxDatumComment(v0, v1, sc)
 	return q
 }
@@ -173,7 +196,7 @@ func (p *Parser) wrapSyntaxDatumComment(v0 string, v1 syntax.SyntaxValue, t toke
 func (p *Parser) wrapSyntaxDatumLabel(v0 int, t tokenizer.Token) *syntax.SyntaxDatumLabel {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxDatumLabel(v0, sc)
 	return q
 }
@@ -181,7 +204,7 @@ func (p *Parser) wrapSyntaxDatumLabel(v0 int, t tokenizer.Token) *syntax.SyntaxD
 func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumLabelAssignment {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxDatumLabelAssignment(v0, v1, sc)
 	return q
 }
@@ -189,7 +212,7 @@ func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t
 func (p *Parser) wrapSyntaxDirective(v0 string, t tokenizer.Token) *syntax.SyntaxDirective {
 	sti := t.Start()
 	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), "", sti, eni)
+	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
 	q := syntax.NewSyntaxDirective(v0, sc)
 	return q
 }
@@ -714,6 +737,26 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, p.err
 		}
 		return p.readSyntax()
+	case tokenizer.TokenizerStateBigInteger:
+		// #m prefix for arbitrary-precision integer
+		s := strings.TrimPrefix(p.cur.String(), "#m")
+		s = strings.TrimPrefix(s, "#M")
+		q1 := values.NewBigIntegerFromString(s, 10)
+		if q1 == nil {
+			return nil, p.cur, values.NewForeignError("invalid big integer: " + p.cur.String())
+		}
+		q = p.wrapSyntax(q1, p.cur)
+		return q, p.cur, nil
+	case tokenizer.TokenizerStateBigFloat:
+		// #z prefix for arbitrary-precision float
+		s := strings.TrimPrefix(p.cur.String(), "#z")
+		s = strings.TrimPrefix(s, "#Z")
+		q1 := values.NewBigFloatFromString(s)
+		if q1 == nil {
+			return nil, p.cur, values.NewForeignError("invalid big float: " + p.cur.String())
+		}
+		q = p.wrapSyntax(q1, p.cur)
+		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBooleanTrue:
 		q1 := values.TrueValue
 		q = p.wrapSyntax(q1, p.cur)

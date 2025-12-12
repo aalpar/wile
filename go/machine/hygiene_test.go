@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine_test
 
 import (
@@ -18,7 +32,7 @@ import (
 func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
 	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax()
+	stx, err := p.ReadSyntax(nil)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -37,11 +51,9 @@ func createHygieneTestEnv() *environment.EnvironmentFrame {
 }
 
 func TestBasicHygiene_SwapMacro(t *testing.T) {
-	// Note: This test demonstrates that multiple independent ellipsis now works,
-	// but it requires recursive macro expansion (swap! inside let1 body).
-	// The pattern matcher enhancement is complete, but recursive expansion
-	// needs additional work.
-	t.Skip("Requires recursive macro expansion - multiple ellipsis now works")
+	// This test demonstrates hygienic macro expansion with the classic swap! example.
+	// The swap! macro uses a temporary variable 'tmp' which should not capture
+	// any user-defined 'tmp' variable due to hygiene.
 
 	env := createHygieneTestEnv()
 

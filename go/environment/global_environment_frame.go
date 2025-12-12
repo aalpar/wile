@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package environment
 
 import (
@@ -22,7 +36,7 @@ func NewGlobalIndex(key *values.Symbol) *GlobalIndex {
 
 // SchemeString returns a string representation of this global index.
 func (p *GlobalIndex) SchemeString() string {
-	return fmt.Sprintf("<global-index %s>", p.Index.SchemeString())
+	return fmt.Sprintf("<global-index %q>", p.Index.SchemeString())
 }
 
 // IsVoid returns true if this global index is nil.
@@ -65,16 +79,16 @@ type GlobalEnvironmentFrame struct {
 	libraryRegistry any
 }
 
-// NewTopLevelGlobalEnvironment creates a new global environment with fresh interning maps.
+// NewTopLevelGlobalEnvironmentFrame creates a new global environment with fresh interning maps.
 // Use this for creating the tip-top environment that holds shared interning state.
-func NewTopLevelGlobalEnvironment() *GlobalEnvironmentFrame {
-	return NewGlobalEnvironment(nil, nil)
+func NewTopLevelGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
+	return NewGlobalEnvironmentFrame(nil, nil)
 }
 
-// NewGlobalEnvironment creates a new global environment frame.
+// NewGlobalEnvironmentFrame creates a new global environment frame.
 // If symInterns or synInterns are nil, new maps are created.
 // Pass existing maps to share interning state between phases.
-func NewGlobalEnvironment(symInterns map[values.Symbol]*values.Symbol, synInterns map[values.Value]syntax.SyntaxValue) *GlobalEnvironmentFrame {
+func NewGlobalEnvironmentFrame(symInterns map[values.Symbol]*values.Symbol, synInterns map[values.Value]syntax.SyntaxValue) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
 		keys:     map[values.Symbol]int{},
@@ -163,9 +177,10 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 	return q
 }
 
-// GetGlobalBinding returns the binding for the given GlobalIndex.
-// Returns nil if the binding does not exist.
-func (p *GlobalEnvironmentFrame) GetGlobalBinding(gi *GlobalIndex) *Binding {
+// GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
+// Unlike EnvironmentFrame.GetGlobalBinding, this does NOT traverse the parent chain.
+// Returns nil if the binding does not exist in this frame.
+func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	ge := p
 	key := p.InternSymbol(gi.Index)
 	i, ok := ge.keys[*key]

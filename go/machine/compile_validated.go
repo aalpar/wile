@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 import (
@@ -31,7 +46,13 @@ func (p *CompileTimeContinuation) compileValidated(ccnt CompileTimeCallContext, 
 	case *validate.ValidatedCall:
 		return p.compileValidatedCall(ccnt, v)
 	case *validate.ValidatedSymbol:
-		return p.CompileSymbol(ccnt, v.Symbol)
+		startPC := len(p.template.operations)
+		err := p.CompileSymbol(ccnt, v.Symbol)
+		if err != nil {
+			return err
+		}
+		p.recordSource(startPC, v.Source())
+		return nil
 	case *validate.ValidatedLiteral:
 		// ValidatedLiteral wraps self-evaluating values AND special forms
 		// that pass through validation (like define-syntax, define-library, etc.)
@@ -44,6 +65,8 @@ func (p *CompileTimeContinuation) compileValidated(ccnt CompileTimeCallContext, 
 // compileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
 func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext, v *validate.ValidatedIf) error {
+	startPC := len(p.template.operations)
+
 	// Compile the test condition (not in tail position)
 	err := p.compileValidated(ccnt.NotInTail(), v.Test)
 	if err != nil {
@@ -85,6 +108,7 @@ func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext
 	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseOffsetImmediate(altStart - branchOnFalseIndex)
 	p.template.operations[branchToEndIndex] = NewOperationBranchOffsetImmediate(endIndex - branchToEndIndex)
 
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -99,6 +123,8 @@ func (p *CompileTimeContinuation) compileValidatedDefine(ccnt CompileTimeCallCon
 }
 
 func (p *CompileTimeContinuation) compileValidatedDefineVar(ccnt CompileTimeCallContext, v *validate.ValidatedDefine) error {
+	startPC := len(p.template.operations)
+
 	// Get the symbol for the name
 	sym, ok := v.Name.Unwrap().(*values.Symbol)
 	if !ok {
@@ -139,10 +165,14 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ccnt CompileTimeCall
 
 	// define returns void
 	p.template.AppendOperations(NewOperationLoadVoid())
+
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallContext, v *validate.ValidatedDefine) error {
+	startPC := len(p.template.operations)
+
 	// Get the symbol for the name
 	sym, ok := v.Name.Unwrap().(*values.Symbol)
 	if !ok {
@@ -168,6 +198,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallC
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 	tpl := NewNativeTemplate(0, 0, false)
+	tpl.SetName(sym.Key) // Set function name for stack traces
 
 	// Add parameters to the environment
 	for _, paramSym := range v.Params.Required {
@@ -264,11 +295,15 @@ func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallC
 
 	// define returns void
 	p.template.AppendOperations(NewOperationLoadVoid())
+
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallContext, v *validate.ValidatedLambda) error {
+	startPC := len(p.template.operations)
+
 	// Create child environment and template for lambda body
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
@@ -347,7 +382,7 @@ func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallCon
 	// Add return operation
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 
-	// Emit MakeClosure operations
+	// Emit MakeClosure operations for compileValidatedLambda
 	p.template.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 		NewOperationPush(),
@@ -356,11 +391,14 @@ func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallCon
 		NewOperationMakeClosure(),
 	)
 
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedCaseLambda compiles a validated (case-lambda [clause] ...) form.
 func (p *CompileTimeContinuation) compileValidatedCaseLambda(ccnt CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
+	startPC := len(p.template.operations)
+
 	// Compile each clause as a separate closure and push to stack
 	for _, clause := range v.Clauses {
 		// Create child environment and template for this clause
@@ -459,11 +497,14 @@ func (p *CompileTimeContinuation) compileValidatedCaseLambda(ccnt CompileTimeCal
 		NewOperationMakeCaseLambdaClosure(len(v.Clauses)),
 	)
 
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedSetBang compiles a validated (set! name expr) form.
 func (p *CompileTimeContinuation) compileValidatedSetBang(ccnt CompileTimeCallContext, v *validate.ValidatedSetBang) error {
+	startPC := len(p.template.operations)
+
 	// Get the symbol
 	sym, ok := v.Name.Unwrap().(*values.Symbol)
 	if !ok {
@@ -501,28 +542,46 @@ func (p *CompileTimeContinuation) compileValidatedSetBang(ccnt CompileTimeCallCo
 			NewOperationLoadVoid(),
 		)
 	}
+
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedQuote compiles a validated (quote datum) form.
 func (p *CompileTimeContinuation) compileValidatedQuote(ccnt CompileTimeCallContext, v *validate.ValidatedQuote) error {
-	// Unwrap all syntax and deduplicate literals
+	startPC := len(p.template.operations)
+
+	// Unwrap all syntax and intern symbols in the global environment.
+	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
+	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
 	unwrapped := v.Datum.UnwrapAll()
-	deduplicated := p.template.DeduplicateLiteral(unwrapped)
-	litIdx := p.template.MaybeAppendLiteral(deduplicated)
+	interned := p.internSymbolsInValue(unwrapped)
+	litIdx := p.template.MaybeAppendLiteral(interned)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
+
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
 func (p *CompileTimeContinuation) compileValidatedQuasiquote(ccnt CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
+	startPC := len(p.template.operations)
+
 	// The existing quasiquote compiler expects the raw syntax template
-	return p.compileQuasiquoteDatum(ccnt, v.Template, 1)
+	err := p.compileQuasiquoteDatum(ccnt, v.Template, 1)
+	if err != nil {
+		return err
+	}
+
+	p.recordSource(startPC, v.Source())
+	return nil
 }
 
 // compileValidatedBegin compiles a validated (begin expr...) form.
 func (p *CompileTimeContinuation) compileValidatedBegin(ccnt CompileTimeCallContext, v *validate.ValidatedBegin) error {
+	startPC := len(p.template.operations)
+
 	for i, expr := range v.Exprs {
 		isLast := i == len(v.Exprs)-1
 		exprCtx := ccnt.NotInTail()
@@ -534,11 +593,15 @@ func (p *CompileTimeContinuation) compileValidatedBegin(ccnt CompileTimeCallCont
 			return err
 		}
 	}
+
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedCall compiles a validated function call (proc args...).
 func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallContext, v *validate.ValidatedCall) error {
+	startPC := len(p.template.operations)
+
 	var operationSaveContinuationIndex int
 	if !ccnt.inTail {
 		// Non-tail call: save continuation so we can return here after the call
@@ -575,6 +638,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallConte
 		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
 	}
 
+	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -588,5 +652,11 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ccnt CompileTimeCallCo
 	}
 
 	// Self-evaluating literal
-	return p.CompileSelfEvaluating(ccnt, v.Value)
+	startPC := len(p.template.operations)
+	err := p.CompileSelfEvaluating(ccnt, v.Value)
+	if err != nil {
+		return err
+	}
+	p.recordSource(startPC, v.Source())
+	return nil
 }

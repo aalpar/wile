@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 // Package tokenizer implements lexical analysis for Scheme source code.
 //
 // The tokenizer converts a stream of runes into tokens representing the
@@ -278,7 +293,7 @@ func (p *Tokenizer) Next() (Token, error) {
 			return nil, p.err
 		}
 
-		p.skipWhitespace()
+		p.skipWhitespace() //nolint:errcheck
 		if p.err != nil {
 			return nil, p.err
 		}
@@ -333,7 +348,7 @@ func (p *Tokenizer) continueLineComment() (Token, error) {
 		// Only emit End token if there's an actual line ending; skip at EOF
 		if p.err == nil && isLineEnding(p.curr()) {
 			p.state = TokenizerStateLineCommentEnd
-			p.scanLineEnding()
+			p.scanLineEnding() //nolint:errcheck
 			p.term()
 			return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.negative, p.signed, p.radix), nil
 		}
@@ -448,7 +463,7 @@ func (p *Tokenizer) read() {
 		p.next()
 		p.term()
 	case isDot(p.curr()):
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10)
+		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10) //nolint:errcheck
 		p.term()
 	case p.curr() == '\'':
 		p.state = TokenizerStateQuote
@@ -475,7 +490,7 @@ func (p *Tokenizer) read() {
 			p.term()
 			return
 		}
-		p.readString()
+		p.readString() //nolint:errcheck
 		p.term()
 	case p.curr() == ';':
 		if p.emitComments {
@@ -491,7 +506,7 @@ func (p *Tokenizer) read() {
 			// Old behavior: return single token with all comment content
 			p.state = TokenizerStateLineCommentStart
 			p.next()
-			p.readLineCommentOrPragma()
+			p.readLineCommentOrPragma() //nolint:errcheck
 		}
 		p.term()
 	case isVerticalLine(p.curr()):
@@ -504,14 +519,14 @@ func (p *Tokenizer) read() {
 			p.term()
 			return
 		}
-		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment()
+		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() //nolint:errcheck
 		p.term()
 	case isExplicitSign(p.curr()):
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10)
+		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10) //nolint:errcheck
 		p.term()
 	case isDigit(10, p.curr()):
 		p.state = TokenizerStateIntegerBase10
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10)
+		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(false, 10) //nolint:errcheck
 		p.term()
 	case isSymbolInitial(p.curr()): // read symbol
 		p.state = TokenizerStateSymbol
@@ -520,7 +535,7 @@ func (p *Tokenizer) read() {
 			p.term()
 			return
 		}
-		p.readSymbol()
+		p.readSymbol() //nolint:errcheck
 		p.term()
 	default:
 		p.term()
@@ -645,7 +660,7 @@ func (p *Tokenizer) readString() error {
 			if p.err != nil {
 				return p.err
 			}
-			p.readIntraStringEscape()
+			p.readIntraStringEscape() //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -682,7 +697,7 @@ func (p *Tokenizer) skipLine() error {
 		p.next()
 	}
 	if p.err == nil && isLineEnding(p.curr()) {
-		p.scanLineEnding()
+		p.scanLineEnding() //nolint:errcheck
 	}
 	return p.err
 }
@@ -781,7 +796,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 			// Old behavior: return single token with all comment content
 			p.state = TokenizerStateBlockComment
 			p.next()
-			p.readBlockComment()
+			p.readBlockComment() //nolint:errcheck
 		}
 	case isLetter(p.curr()): // #u8(, #true, #false ... unsigned byte array
 		return p.readTypedArrayOrExactnessOrRadixOrBooleanMarker()
@@ -993,6 +1008,64 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() error {
 		if p.err != nil {
 			return p.err
 		}
+	case p.curr() == 'm' || p.curr() == 'M': // big integer #m
+		p.next()
+		if p.err != nil {
+			return p.err
+		}
+		// Read the number (digits only for now, supports sign)
+		if p.curr() == '-' || p.curr() == '+' {
+			p.next()
+			if p.err != nil {
+				return p.err
+			}
+		}
+		// Read digits
+		for p.err == nil && isDigit(10, p.curr()) {
+			p.next()
+		}
+		if p.err != nil && p.err != io.EOF {
+			return p.err
+		}
+		p.state = TokenizerStateBigInteger
+	case p.curr() == 'z' || p.curr() == 'Z': // big float #z
+		p.next()
+		if p.err != nil {
+			return p.err
+		}
+		// Read the number (supports sign, decimal point, exponent)
+		if p.curr() == '-' || p.curr() == '+' {
+			p.next()
+			if p.err != nil {
+				return p.err
+			}
+		}
+		// Read integer part
+		for p.err == nil && isDigit(10, p.curr()) {
+			p.next()
+		}
+		// Check for decimal point
+		if p.err == nil && p.curr() == '.' {
+			p.next()
+			// Read fractional part
+			for p.err == nil && isDigit(10, p.curr()) {
+				p.next()
+			}
+		}
+		// Check for exponent
+		if p.err == nil && (p.curr() == 'e' || p.curr() == 'E') {
+			p.next()
+			if p.err == nil && (p.curr() == '-' || p.curr() == '+') {
+				p.next()
+			}
+			for p.err == nil && isDigit(10, p.curr()) {
+				p.next()
+			}
+		}
+		if p.err != nil && p.err != io.EOF {
+			return p.err
+		}
+		p.state = TokenizerStateBigFloat
 	default:
 		p.state = TokenizerStateMarker
 		for p.err == nil && isSubsequent(p.curr()) {
@@ -1020,7 +1093,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		if p.err != nil {
 			return p.err
 		}
-		p.readBaseNInteger(16, 4)
+		p.readBaseNInteger(16, 4) //nolint:errcheck
 		return p.err
 	} else if isLetter(p.curr()) {
 		p.state = TokenizerStateCharGraphic
@@ -1164,7 +1237,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				if p.err != nil {
 					return p.err
 				}
-				p.mustReadUnsignedInteger(r)
+				p.mustReadUnsignedInteger(r) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1175,7 +1248,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 						return p.err
 					}
 					// +inf.0+2i - complex with signed decimal real
-					p.mayUnsignedFractionalRealNumberOrRationalRealNumber(r)
+					p.mayUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
 					if p.err != nil {
 						return p.err
 					}
@@ -1221,7 +1294,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				return p.err
 			}
 			p.state = TokenizerStateSignedNan
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1253,7 +1326,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				if p.err != nil {
 					return p.err
 				}
-				p.readSymbol()
+				p.readSymbol() //nolint:errcheck
 			} else if !isDigit(r, p.curr()) { // +.10
 				// TODO Peculiar identifier
 				p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
@@ -1261,11 +1334,11 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			} else {
 				p.state = TokenizerStateSignedDecimalFraction
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1286,7 +1359,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			}
 		} else if isDigit(r, p.curr()) {
 			p.state = TokenizerStateSignedInteger
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1298,14 +1371,14 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				}
 				// Digits after dot are optional if followed by exponent (R7RS: <digit>+ . <digit>* <suffix>)
 				if isDigit(r, p.curr()) { // +10.00
-					p.readBaseNInteger(r, 0)
+					p.readBaseNInteger(r, 0) //nolint:errcheck
 					if p.err != nil {
 						return p.err
 					}
 				} else if !isExponent(p.curr()) {
 					return NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 				}
-				p.mayReadExponent(r)
+				p.mayReadExponent(r) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1318,13 +1391,13 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				if !isDigit(r, p.curr()) { // +10/10
 					return NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 				}
-				p.readBaseNInteger(r, 0)
+				p.readBaseNInteger(r, 0) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
 			} else if isExponent(p.curr()) { // +1e10, -1e10
 				p.state = TokenizerStateSignedDecimalFraction
-				p.mayReadExponent(r)
+				p.mayReadExponent(r) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1338,13 +1411,13 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				}
 			} else if isExplicitSign(p.curr()) { // -1+2i, +3-4i - complex with signed real
 				p.state = TokenizerStateSignedComplex
-				p.mayReadSignedImaginaryPart(r)
+				p.mayReadSignedImaginaryPart(r) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
 			} else if isComplexPolar(p.curr()) { // -1@1.5708 - polar form with signed magnitude
 				p.state = TokenizerStateSignedComplexPolar
-				p.mayReadPolarPart(r)
+				p.mayReadPolarPart(r) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1377,18 +1450,18 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			if p.err != nil {
 				return p.err
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
 		}
 	} else if isDigit(r, p.curr()) { // 1.2, 1/2 12
 		p.state = TokenizerStateUnsignedInteger
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1402,7 +1475,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 				return p.err
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1414,7 +1487,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			}
 			// Digits after dot are optional if followed by exponent (R7RS: <digit>+ . <digit>* <suffix>)
 			if isDigit(r, p.curr()) {
-				p.readBaseNInteger(r, 0)
+				p.readBaseNInteger(r, 0) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1422,12 +1495,12 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 				return p.err
 			}
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
 		} else if isExponent(p.curr()) { // 000e+10
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1443,7 +1516,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		} else if isExplicitSign(p.curr()) {
 			p.state = TokenizerStateUnsignedComplex
 			p.next() // skip the sign
-			p.mayUnsignedFractionalRealNumberOrRationalRealNumber(r)
+			p.mayUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1454,7 +1527,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			p.next()
 		} else if isComplexPolar(p.curr()) { // <real>@<real> - polar form
 			p.state = TokenizerStateUnsignedComplexPolar
-			p.mayReadPolarPart(r)
+			p.mayReadPolarPart(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1487,7 +1560,7 @@ func (p *Tokenizer) mayUnsignedFractionalRealNumberOrRationalRealNumber(r int) e
 		if p.err != nil {
 			return p.err
 		}
-		p.mustReadUnsignedInteger(r)
+		p.mustReadUnsignedInteger(r) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1513,7 +1586,7 @@ func (p *Tokenizer) mayUnsignedFractionalRealNumberOrRationalRealNumber(r int) e
 			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
 			return p.err
 		}
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1528,22 +1601,22 @@ func (p *Tokenizer) mayUnsignedFractionalRealNumberOrRationalRealNumber(r int) e
 			if p.err != nil {
 				return p.err
 			}
-			p.readSymbol()
+			p.readSymbol() //nolint:errcheck
 		} else if !isDigit(r, p.curr()) { // +.10
 			// TODO Peculiar identifier
 			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
 			return p.err
 		}
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
-		p.mayReadExponent(r)
+		p.mayReadExponent(r) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
 	} else if isDigit(r, p.curr()) {
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1555,16 +1628,16 @@ func (p *Tokenizer) mayUnsignedFractionalRealNumberOrRationalRealNumber(r int) e
 			if !isDigit(r, p.curr()) { // +10.00
 				return NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
 		} else if isExponent(p.curr()) { // 000e+10
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1576,7 +1649,7 @@ func (p *Tokenizer) mayUnsignedFractionalRealNumberOrRationalRealNumber(r int) e
 			if !isDigit(r, p.curr()) { // +10/10
 				return NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1649,7 +1722,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) error {
 			if p.err != nil {
 				return p.err
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1672,7 +1745,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) error {
 			if p.err != nil {
 				return p.err
 			}
-			p.readBaseNInteger(r, 0)
+			p.readBaseNInteger(r, 0) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1688,7 +1761,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) error {
 
 	// Check for numeric coefficient: +3i, +3.5i, etc.
 	if isDigit(r, p.curr()) {
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1699,17 +1772,17 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) error {
 				return p.err
 			}
 			if isDigit(r, p.curr()) {
-				p.readBaseNInteger(r, 0)
+				p.readBaseNInteger(r, 0) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
 			}
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
 		} else {
-			p.mayReadExponent(r)
+			p.mayReadExponent(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err
 			}
@@ -1758,12 +1831,12 @@ func (p *Tokenizer) mayReadPolarPart(r int) error {
 		if !isDigit(r, p.curr()) {
 			return NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 		}
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
 	} else if isDigit(r, p.curr()) {
-		p.readBaseNInteger(r, 0)
+		p.readBaseNInteger(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return p.err
 		}
@@ -1774,7 +1847,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) error {
 				return p.err
 			}
 			if isDigit(r, p.curr()) {
-				p.readBaseNInteger(r, 0)
+				p.readBaseNInteger(r, 0) //nolint:errcheck
 				if p.err != nil {
 					return p.err
 				}
@@ -1785,7 +1858,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) error {
 	}
 
 	// Check for exponent
-	p.mayReadExponent(r)
+	p.mayReadExponent(r) //nolint:errcheck
 	if p.err != nil && p.err != io.EOF {
 		return p.err
 	}

@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 import (
@@ -70,4 +85,135 @@ func TestNativeTemplate_DeduplicateLiteral_Vector(t *testing.T) {
 	dedupedVec, ok := deduped.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert((*dedupedVec)[0] == sym, qt.IsTrue, qt.Commentf("symbol inside vector should be deduplicated"))
+}
+
+func TestNativeTemplate_ValueCount(t *testing.T) {
+	tpl := NewNativeTemplate(3, 5, false)
+	qt.Assert(t, tpl.ValueCount(), qt.Equals, 5)
+}
+
+func TestNativeTemplate_SchemeString(t *testing.T) {
+	tpl := NewNativeTemplate(0, 0, false)
+	qt.Assert(t, tpl.SchemeString(), qt.Equals, "#<native-template>")
+}
+
+func TestNativeTemplate_IsVoid(t *testing.T) {
+	tpl := NewNativeTemplate(0, 0, false)
+	qt.Assert(t, tpl.IsVoid(), qt.IsFalse)
+
+	var nilTpl *NativeTemplate
+	qt.Assert(t, nilTpl.IsVoid(), qt.IsTrue)
+}
+
+func TestNativeTemplate_Copy(t *testing.T) {
+	tpl := NewNativeTemplate(2, 3, true, NewOperationPush())
+	tpl.MaybeAppendLiteral(values.NewInteger(42))
+	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+
+	copy := tpl.Copy()
+
+	// Verify copy is different object
+	qt.Assert(t, copy != tpl, qt.IsTrue)
+	// Verify fields match
+	qt.Assert(t, copy.parameterCount, qt.Equals, tpl.parameterCount)
+	qt.Assert(t, copy.valueCount, qt.Equals, tpl.valueCount)
+	qt.Assert(t, copy.isVariadic, qt.Equals, tpl.isVariadic)
+	qt.Assert(t, len(copy.literals), qt.Equals, len(tpl.literals))
+	qt.Assert(t, len(copy.operations), qt.Equals, len(tpl.operations))
+}
+
+func TestNativeTemplate_Copy_Nil(t *testing.T) {
+	var nilTpl *NativeTemplate
+	copy := nilTpl.Copy()
+	qt.Assert(t, copy, qt.IsNil)
+}
+
+func TestNativeTemplate_EqualTo(t *testing.T) {
+	tpl1 := NewNativeTemplate(2, 3, true, NewOperationPush())
+	tpl1.MaybeAppendLiteral(values.NewInteger(42))
+
+	tpl2 := NewNativeTemplate(2, 3, true, NewOperationPush())
+	tpl2.MaybeAppendLiteral(values.NewInteger(42))
+
+	tpl3 := NewNativeTemplate(2, 3, true, NewOperationPush())
+	tpl3.MaybeAppendLiteral(values.NewInteger(99)) // Different literal
+
+	// Equal templates
+	qt.Assert(t, tpl1.EqualTo(tpl2), qt.IsTrue)
+
+	// Different literals
+	qt.Assert(t, tpl1.EqualTo(tpl3), qt.IsFalse)
+
+	// Different parameter count
+	tpl4 := NewNativeTemplate(3, 3, true, NewOperationPush())
+	tpl4.MaybeAppendLiteral(values.NewInteger(42))
+	qt.Assert(t, tpl1.EqualTo(tpl4), qt.IsFalse)
+
+	// Different value count
+	tpl5 := NewNativeTemplate(2, 4, true, NewOperationPush())
+	tpl5.MaybeAppendLiteral(values.NewInteger(42))
+	qt.Assert(t, tpl1.EqualTo(tpl5), qt.IsFalse)
+
+	// Different variadic flag
+	tpl6 := NewNativeTemplate(2, 3, false, NewOperationPush())
+	tpl6.MaybeAppendLiteral(values.NewInteger(42))
+	qt.Assert(t, tpl1.EqualTo(tpl6), qt.IsFalse)
+
+	// Different operation count
+	tpl7 := NewNativeTemplate(2, 3, true, NewOperationPush(), NewOperationPush())
+	tpl7.MaybeAppendLiteral(values.NewInteger(42))
+	qt.Assert(t, tpl1.EqualTo(tpl7), qt.IsFalse)
+
+	// Different type
+	qt.Assert(t, tpl1.EqualTo(values.NewInteger(42)), qt.IsFalse)
+
+	// Nil comparison
+	var nilTpl *NativeTemplate
+	qt.Assert(t, nilTpl.EqualTo(nilTpl), qt.IsTrue)
+}
+
+func TestNativeTemplate_DeduplicateLiteral_EmptyPair(t *testing.T) {
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Empty list
+	result := tmpl.DeduplicateLiteral(values.EmptyList)
+	qt.Assert(t, result, qt.Equals, values.EmptyList)
+}
+
+func TestNativeTemplate_DeduplicateLiteral_EmptyVector(t *testing.T) {
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Empty vector
+	emptyVec := values.NewVector()
+	result := tmpl.DeduplicateLiteral(emptyVec)
+	qt.Assert(t, result, qt.Equals, emptyVec)
+}
+
+func TestNativeTemplate_DeduplicateLiteral_NoChange(t *testing.T) {
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Pair with elements that don't need deduplication
+	pair := values.NewCons(values.NewFloat(3.14), values.EmptyList)
+	result := tmpl.DeduplicateLiteral(pair)
+	// Same object since no deduplication happened
+	qt.Assert(t, result, qt.Equals, pair)
+
+	// Vector with no change
+	vec := values.NewVector(values.NewFloat(1.0), values.NewFloat(2.0))
+	result = tmpl.DeduplicateLiteral(vec)
+	qt.Assert(t, result, qt.Equals, vec)
+}
+
+func TestNativeTemplate_DeduplicateLiteral_OtherTypes(t *testing.T) {
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Float - not deduplicated, just returned
+	f := values.NewFloat(3.14)
+	result := tmpl.DeduplicateLiteral(f)
+	qt.Assert(t, result, qt.Equals, f)
+
+	// String
+	s := values.NewString("hello")
+	result = tmpl.DeduplicateLiteral(s)
+	qt.Assert(t, result, qt.Equals, s)
 }

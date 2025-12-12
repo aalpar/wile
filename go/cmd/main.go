@@ -1,10 +1,23 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,23 +30,23 @@ import (
 	"strings"
 
 	"github.com/ergochat/readline"
+	"github.com/jessevdk/go-flags"
 )
 
-var (
-	paths       []string
-	fnm         string
-	libraryPath string
-)
+type Options struct {
+	File        string `short:"f" long:"file" description:"Scheme file to run"`
+	LibraryPath string `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
+	Version     bool   `short:"v" long:"version" description:"Print version information and exit"`
+}
+
+var opts Options
 
 const (
 	// SchemeLibraryPathEnv is the environment variable for library search paths
 	SchemeLibraryPathEnv = "SCHEME_LIBRARY_PATH"
+	// Version is the current version of the Scheme interpreter
+	Version = "0.1.0"
 )
-
-func init() {
-	flag.StringVar(&fnm, "file", "", "File to include")
-	flag.StringVar(&libraryPath, "L", "", "Library search path (colon-separated, prepended to search paths)")
-}
 
 func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -55,8 +68,15 @@ func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machi
 }
 
 func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
+	return runWithDebugger(ctx, tpl, env, nil)
+}
+
+func runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame, debugger *machine.Debugger) (machine.MultipleValues, error) {
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(cont)
+	if debugger != nil {
+		mc.SetDebugger(debugger)
+	}
 	err := mc.Run(ctx)
 	if err != nil {
 		return nil, err
@@ -70,7 +90,7 @@ func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.Envi
 //  1. -L command line flag paths
 //  2. SCHEME_LIBRARY_PATH environment variable paths
 //  3. Default paths (".", "./lib")
-func initLibraryRegistry() *machine.LibraryRegistry {
+func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	registry := machine.NewLibraryRegistry()
 
 	// Add environment variable paths (after defaults)
@@ -83,8 +103,8 @@ func initLibraryRegistry() *machine.LibraryRegistry {
 	}
 
 	// Add command line paths (highest priority, added last so they're first)
-	if libraryPath != "" {
-		for _, p := range strings.Split(libraryPath, string(os.PathListSeparator)) {
+	if opts.LibraryPath != "" {
+		for _, p := range strings.Split(opts.LibraryPath, string(os.PathListSeparator)) {
 			if p != "" {
 				registry.AddSearchPath(p)
 			}
@@ -97,14 +117,36 @@ func initLibraryRegistry() *machine.LibraryRegistry {
 func main() {
 	var fin io.RuneReader
 	var fd *os.File
-	flag.Parse()
+
+	parser := flags.NewParser(&opts, flags.Default)
+	parser.Name = "scheme"
+	parser.Usage = "[OPTIONS] [FILE]"
+
+	args, err := parser.Parse()
+	if err != nil {
+		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
+			os.Exit(0)
+		}
+		os.Exit(1)
+	}
+
+	if opts.Version {
+		fmt.Printf("Wile Scheme %s\n", Version)
+		os.Exit(0)
+	}
+
+	// Handle positional argument as file if --file not specified
+	if opts.File == "" && len(args) > 0 {
+		opts.File = args[0]
+	}
+
 	env, err0 := runtime.NewTopLevelEnvironmentFrameTiny()
 	if err0 != nil {
 		Failf(err0, "Cannot create top-level environment")
 	}
 
 	// Initialize library registry with search paths and attach to environment
-	registry := initLibraryRegistry()
+	registry := initLibraryRegistry(nil)
 	env.SetLibraryRegistry(registry)
 
 	// Set up the library environment factory (avoids import cycle)
@@ -112,15 +154,15 @@ func main() {
 	// read evaluate loop
 	ctx := context.Background()
 	// include file if any
-	if fnm != "" {
+	if opts.File != "" {
 		var err1 error
-		log.Printf("reading file %q", fnm)
-		fd, err1 = os.Open(fnm)
+		log.Printf("reading file %q", opts.File)
+		fd, err1 = os.Open(opts.File)
 		if err1 != nil {
-			Failf(err1, "Cannot open file %s", fnm)
+			Failf(err1, "Cannot open file %s", opts.File)
 		}
 		fin = bufio.NewReader(fd)
-		runFile(ctx, env, fin)
+		runFile(ctx, env, fin, opts.File)
 		return
 	}
 	// interactive REPL
@@ -128,9 +170,9 @@ func main() {
 }
 
 // runFile processes a Scheme file, exiting on errors
-func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.RuneReader) {
-	p := parser.NewParser(env, fin)
-	stx, err := p.ReadSyntax()
+func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.RuneReader, filename string) {
+	p := parser.NewParserWithFile(env, fin, filename)
+	stx, err := p.ReadSyntax(nil)
 	for err == nil {
 		tpl, err2 := compile(env, stx)
 		if err2 != nil {
@@ -142,7 +184,7 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 		} else if err2 != nil {
 			Failf(err2)
 		}
-		stx, err = p.ReadSyntax()
+		stx, err = p.ReadSyntax(nil)
 	}
 	if !errors.Is(err, io.EOF) {
 		Failf(err)
@@ -163,7 +205,28 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		runSimpleREPL(ctx, env)
 		return
 	}
-	defer rl.Close()
+	defer rl.Close() //nolint:errcheck
+
+	// Create debug context
+	debugCtx := NewDebugContext()
+
+	// Set up break callback
+	debugCtx.Debugger().OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
+		debugCtx.SetCurrentMC(mc)
+		if bp != nil {
+			fmt.Printf("\nBreakpoint %d hit", bp.ID)
+			if source := mc.CurrentSource(); source != nil {
+				fmt.Printf(" at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+			}
+			fmt.Println()
+		} else {
+			fmt.Print("\nStepped")
+			if source := mc.CurrentSource(); source != nil {
+				fmt.Printf(" to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+			}
+			fmt.Println()
+		}
+	})
 
 	var inputBuffer strings.Builder
 
@@ -186,6 +249,13 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 			continue
 		}
 
+		// Check for debug commands before parsing as Scheme
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, ",") && inputBuffer.Len() == 0 {
+			debugCtx.HandleDebugCommand(trimmed)
+			continue
+		}
+
 		// Accumulate input
 		if inputBuffer.Len() > 0 {
 			inputBuffer.WriteString("\n")
@@ -197,7 +267,7 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		rdr := strings.NewReader(input)
 		p := parser.NewParser(env, rdr)
 
-		stx, parseErr := p.ReadSyntax()
+		stx, parseErr := p.ReadSyntax(nil)
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
 				// Incomplete expression - prompt for more input
@@ -222,8 +292,8 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 			continue
 		}
 
-		// Run
-		mv, runErr := run(ctx, tpl, env)
+		// Run with debugger
+		mv, runErr := runWithDebugger(ctx, tpl, env, debugCtx.Debugger())
 		if runErr != nil {
 			fmt.Fprintf(os.Stderr, "Exception: %v\n", runErr)
 			continue
@@ -258,7 +328,7 @@ func runSimpleREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		rdr := strings.NewReader(input)
 		p := parser.NewParser(env, rdr)
 
-		stx, parseErr := p.ReadSyntax()
+		stx, parseErr := p.ReadSyntax(nil)
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
 				Printf("  ")
@@ -323,7 +393,7 @@ func Printf(fmtstr string, args ...interface{}) {
 	if err != nil {
 		os.Exit(EX_IOERR)
 	}
-	os.Stdout.Sync()
+	os.Stdout.Sync() //nolint:errcheck
 }
 
 func Failf(err error, messes ...string) {

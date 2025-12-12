@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package match
 
 // syntax_compiler.go compiles R7RS syntax-rules patterns into bytecode.
@@ -173,11 +188,6 @@ func NewSyntaxCompiler() *SyntaxCompiler {
 	return q
 }
 
-// GetEllipsisVariables returns the mapping of ellipsis IDs to their captured pattern variables.
-func (q *SyntaxCompiler) GetEllipsisVariables() map[int]map[string]struct{} {
-	return q.ellipsisVars
-}
-
 func (q *SyntaxCompiler) Compile(pr *values.Pair) error {
 	// Analyze pattern first to identify which subtrees contain variables
 	// Use the pre-set variables for now (from test setup)
@@ -338,13 +348,18 @@ func compile(vis *SyntaxCompiler, v0 *values.Pair) bool {
 						}
 					} else {
 						// its not "..."
-						_, ok = vis.variables[sym.Key]
-						if ok {
-							// it's a variable
-							vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key})
-							stack[l-1].variables[sym.Key] = struct{}{}
+						if sym.Key == "_" {
+							// Underscore is a wildcard - matches anything but doesn't bind
+							// Don't emit any bytecode (effectively skips the element)
 						} else {
-							vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
+							_, ok = vis.variables[sym.Key]
+							if ok {
+								// it's a variable
+								vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key})
+								stack[l-1].variables[sym.Key] = struct{}{}
+							} else {
+								vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
+							}
 						}
 					}
 				} else {

@@ -1,6 +1,22 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 import (
+	"wile/syntax"
 	"wile/values"
 	"slices"
 )
@@ -13,6 +29,8 @@ type NativeTemplate struct {
 	isVariadic     bool
 	literals       MultipleValues
 	operations     Operations
+	sourceMap      *SourceMap // PC → source location mapping
+	name           string     // Function name (for stack traces)
 }
 
 func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *NativeTemplate {
@@ -21,6 +39,7 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		valueCount:     vcnt,
 		isVariadic:     vd,
 		operations:     operations,
+		sourceMap:      NewSourceMap(),
 	}
 	return q
 }
@@ -39,6 +58,25 @@ func (p *NativeTemplate) IsVariadic() bool {
 
 func (p *NativeTemplate) Operations() Operations {
 	return p.operations
+}
+
+func (p *NativeTemplate) SourceMap() *SourceMap {
+	return p.sourceMap
+}
+
+func (p *NativeTemplate) SourceAt(pc int) *syntax.SourceContext {
+	if p.sourceMap == nil {
+		return nil
+	}
+	return p.sourceMap.Lookup(pc)
+}
+
+func (p *NativeTemplate) Name() string {
+	return p.name
+}
+
+func (p *NativeTemplate) SetName(name string) {
+	p.name = name
 }
 
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
@@ -168,8 +206,12 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		parameterCount: p.parameterCount,
 		valueCount:     p.valueCount,
 		isVariadic:     p.isVariadic,
+		name:           p.name,
 	}
 	q.literals = slices.Clone(p.literals)
 	q.operations = slices.Clone(p.operations)
+	if p.sourceMap != nil {
+		q.sourceMap = &SourceMap{entries: slices.Clone(p.sourceMap.entries)}
+	}
 	return q
 }

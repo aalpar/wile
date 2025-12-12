@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package match
 
 // match.go implements the pattern matching VM for syntax-rules.
@@ -220,6 +235,15 @@ func (p *Matcher) Match(target *values.Pair) error {
 	return nil
 }
 
+// GetBindings returns the captured pattern variable bindings from the last match.
+// Returns nil if no match has been performed.
+func (p *Matcher) GetBindings() map[string]values.Value {
+	if len(p.captureStack) == 0 {
+		return nil
+	}
+	return p.captureStack[0].bindings
+}
+
 // Expand substitutes pattern variables in template with captured values
 func (p *Matcher) Expand(template values.Value) (values.Value, error) {
 	if len(p.captureStack) == 0 {
@@ -333,11 +357,30 @@ func (p *Matcher) expandEllipsis(pattern values.Value, rest values.Value, ctx *c
 
 // findMatchingEllipsisID finds the ellipsis ID that captured the given pattern variables.
 // Returns -1 if no matching ellipsis ID is found.
+// When multiple variables are requested, finds the ID that contains ALL of them.
+// This is important for nested ellipsis patterns like ((var init step ...) ...)
+// where step appears in both the inner (step only) and outer (var, init, step) IDs.
 func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 	if p.ellipsisVars == nil {
 		// Legacy mode: no ellipsis IDs, use ID 0
 		return 0
 	}
+
+	// Find the ID that contains ALL the requested variables
+	for id, ellipsisVars := range p.ellipsisVars {
+		allFound := true
+		for v := range vars {
+			if _, ok := ellipsisVars[v]; !ok {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return id
+		}
+	}
+
+	// Fallback: find any ID that contains at least one variable
 	for id, ellipsisVars := range p.ellipsisVars {
 		for v := range vars {
 			if _, ok := ellipsisVars[v]; ok {

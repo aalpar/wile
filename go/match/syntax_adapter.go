@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package match
 
 // syntax_adapter.go bridges between syntax objects (with hygiene info) and
@@ -23,6 +38,7 @@ package match
 
 import (
 	"errors"
+
 	"wile/syntax"
 	"wile/values"
 )
@@ -85,6 +101,28 @@ func (sm *SyntaxMatcher) Expand(template syntax.SyntaxValue) (syntax.SyntaxValue
 // but NOT to syntax objects preserved from pattern variable substitution.
 // The freeIds set contains identifiers that should not receive the intro scope.
 func (sm *SyntaxMatcher) ExpandWithIntroScope(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}) (syntax.SyntaxValue, error) {
+	return sm.ExpandWithUseSite(template, introScope, freeIds, nil)
+}
+
+// ExpandWithUseSite performs template expansion with hygiene support and use-site tracking.
+// The introScope is added to newly created syntax objects (from the template),
+// but NOT to syntax objects preserved from pattern variable substitution.
+// The freeIds set contains identifiers that should not receive the intro scope.
+// The useSiteCtx, if provided, is used for the source context of newly created syntax
+// objects instead of the template's context. This allows error messages to point to
+// where the macro was invoked rather than where it was defined.
+func (sm *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
+	return sm.ExpandWithOrigin(template, introScope, freeIds, useSiteCtx, nil)
+}
+
+// ExpandWithOrigin performs template expansion with full hygiene and origin tracking.
+// Parameters:
+//   - template: The template to expand
+//   - introScope: Hygiene scope added to newly created syntax (not pattern variables)
+//   - freeIds: Identifiers that should not receive the intro scope
+//   - useSiteCtx: Source context for newly created syntax (use-site vs template-site)
+//   - origin: Origin info for tracking macro expansion chains
+func (sm *SyntaxMatcher) ExpandWithOrigin(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) (syntax.SyntaxValue, error) {
 	// Convert template to raw values
 	rawTemplate := syntaxToValue(template)
 
@@ -97,7 +135,8 @@ func (sm *SyntaxMatcher) ExpandWithIntroScope(template syntax.SyntaxValue, intro
 	// Wrap result back in syntax, using the syntax map to preserve
 	// original syntax objects from captured pattern variables.
 	// The intro scope is only added to newly created syntax objects.
-	return sm.valueToSyntaxWithIntroScope(expanded, template, introScope, freeIds), nil
+	// Use use-site context if provided, otherwise fall back to template context.
+	return sm.valueToSyntaxWithOrigin(expanded, template, introScope, freeIds, useSiteCtx, origin), nil
 }
 
 // syntaxToValueWithMap recursively unwraps syntax objects to raw values,
@@ -179,6 +218,28 @@ func (sm *SyntaxMatcher) valueToSyntaxWithMap(val values.Value, templateStx synt
 // pattern variables. When introScope is provided, it's added to newly
 // created symbols (but not to preserved originals or free identifiers).
 func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}) syntax.SyntaxValue {
+	return sm.valueToSyntaxWithUseSite(val, templateStx, introScope, freeIds, nil)
+}
+
+// valueToSyntaxWithUseSite wraps raw values back into syntax objects,
+// using the syntax map to preserve original syntax objects from captured
+// pattern variables. When introScope is provided, it's added to newly
+// created symbols (but not to preserved originals or free identifiers).
+// When useSiteCtx is provided, it's used as the source context for newly
+// created syntax objects instead of the template's context.
+func (sm *SyntaxMatcher) valueToSyntaxWithUseSite(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext) syntax.SyntaxValue {
+	return sm.valueToSyntaxWithOrigin(val, templateStx, introScope, freeIds, useSiteCtx, nil)
+}
+
+// valueToSyntaxWithOrigin wraps raw values back into syntax objects,
+// using the syntax map to preserve original syntax objects from captured
+// pattern variables. When introScope is provided, it's added to newly
+// created symbols (but not to preserved originals or free identifiers).
+// When useSiteCtx is provided, it's used as the source context for newly
+// created syntax objects instead of the template's context.
+// When origin is provided, it's attached to the source context of newly
+// created syntax objects to track macro expansion chains.
+func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) syntax.SyntaxValue {
 	if val == nil {
 		return nil
 	}
@@ -189,10 +250,20 @@ func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateS
 		return origStx
 	}
 
-	// Get source context from template if available
+	// Determine source context: use-site context takes precedence if provided,
+	// otherwise fall back to template context
 	var srcCtx *syntax.SourceContext
-	if templateStx != nil {
+	if useSiteCtx != nil {
+		srcCtx = useSiteCtx
+	} else if templateStx != nil {
 		srcCtx = templateStx.SourceContext()
+	}
+
+	// If we have origin info, attach it to the source context
+	if origin != nil && srcCtx != nil {
+		srcCtx = srcCtx.WithOrigin(origin)
+	} else if origin != nil {
+		srcCtx = &syntax.SourceContext{Origin: origin}
 	}
 
 	switch v := val.(type) {
@@ -202,13 +273,13 @@ func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateS
 		}
 
 		// Recursively wrap car and cdr, checking the map for each
-		car := sm.valueToSyntaxWithIntroScope(v[0], templateStx, introScope, freeIds)
+		car := sm.valueToSyntaxWithOrigin(v[0], templateStx, introScope, freeIds, useSiteCtx, origin)
 
 		var cdr syntax.SyntaxValue
 		if v[1] == nil || values.IsEmptyList(v[1]) {
 			cdr = syntax.NewSyntaxEmptyList(srcCtx)
 		} else {
-			cdr = sm.valueToSyntaxWithIntroScope(v[1], templateStx, introScope, freeIds)
+			cdr = sm.valueToSyntaxWithOrigin(v[1], templateStx, introScope, freeIds, useSiteCtx, origin)
 		}
 
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
@@ -435,4 +506,26 @@ func CompileSyntaxPatternFull(pattern syntax.SyntaxValue, variables map[string]s
 		Codes:        compiler.codes,
 		EllipsisVars: compiler.ellipsisVars,
 	}, nil
+}
+
+// GetBindings returns the captured pattern variable bindings from the last match,
+// converted back to syntax values. This is used by syntax-case to bind pattern
+// variables in the body's environment.
+func (sm *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
+	rawBindings := sm.matcher.GetBindings()
+	if rawBindings == nil {
+		return nil
+	}
+
+	result := make(map[string]syntax.SyntaxValue)
+	for name, rawValue := range rawBindings {
+		// Convert raw value back to syntax using the syntax map
+		if stx, ok := sm.syntaxMap[rawValue]; ok {
+			result[name] = stx
+		} else {
+			// Wrap the raw value in a SyntaxObject if not in map
+			result[name] = syntax.NewSyntaxObject(rawValue, nil)
+		}
+	}
+	return result
 }

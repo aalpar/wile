@@ -1,6 +1,21 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package values
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -52,7 +67,7 @@ func (p *Pair) IsList() bool {
 	if IsVoid(pr) {
 		return false
 	}
-	v, _ := p.ForEach(func(i int, hasNext bool, v Value) error {
+	v, _ := p.ForEach(nil, func(_ context.Context, _ int, hasNext bool, _ Value) error {
 		return nil
 	})
 	return IsEmptyList(v)
@@ -92,7 +107,7 @@ func (p *Pair) Append(vs Value) Value {
 // It panics if the Pair does not represent a proper list.
 func (p *Pair) Length() int {
 	q := 0
-	r, _ := p.ForEach(func(i int, hasNext bool, v Value) error {
+	r, _ := p.ForEach(nil, func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1
 		return nil
 	})
@@ -118,7 +133,7 @@ func (p *Pair) IsEmptyList() bool {
 // a boolean hasNext indicating if there are more elements, and the value v.
 // If fn returns an error, the iteration stops and the error is returned.
 // If the list ends with a non-empty cdr, that cdr is returned as the second return value.
-func (p *Pair) ForEach(fn ForEachFunc) (Value, error) {
+func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return Void, nil
 	}
@@ -128,7 +143,7 @@ func (p *Pair) ForEach(fn ForEachFunc) (Value, error) {
 	i := 0
 	for pr != nil && !pr.IsEmptyList() {
 		hasNext := !IsEmptyList(pr[1])
-		err := fn(i, hasNext, pr[0])
+		err := fn(ctx, i, hasNext, pr[0])
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +211,7 @@ func (p *Pair) SchemeString() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(func(i int, hasNext bool, v Value) error {
+	cdr, _ := p.ForEach(nil, func(_ context.Context, i int, _ bool, v Value) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -234,7 +249,7 @@ func (p *Pair) String() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(func(i int, hasNext bool, v Value) error {
+	cdr, _ := p.ForEach(nil, func(ctx context.Context, i int, hasNext bool, v Value) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -259,7 +274,7 @@ func (p *Pair) AsVector() *Vector {
 		return NewVector()
 	}
 	vs := []Value{}
-	cdr, _ := p.ForEach(func(i int, hasNext bool, v Value) error {
+	cdr, _ := p.ForEach(nil, func(_ context.Context, _ int, _ bool, v Value) error {
 		vs = append(vs, v)
 		return nil
 	})

@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package environment
 
 import (
@@ -45,8 +59,9 @@ type EnvironmentFrame struct {
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
 // Deprecated: Use NewTipTopEnvironmentFrame for the new phase-based hierarchy.
 func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
-	global := NewTopLevelGlobalEnvironment()
+	global := NewTopLevelGlobalEnvironmentFrame()
 	q := &EnvironmentFrame{
+		parent: nil,
 		local:  nil,
 		global: global,
 	}
@@ -57,8 +72,9 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 // This is the root of the environment hierarchy. Its GlobalEnvironmentFrame
 // holds shared symbol and syntax interning maps used by all phases.
 // Phase environments (runtime, expand, compile) are created lazily via accessors.
+// TODO: is this really needed separate from NewTopLevelEnvironmentFrame?
 func NewTipTopEnvironmentFrame() *EnvironmentFrame {
-	global := NewTopLevelGlobalEnvironment()
+	global := NewTopLevelGlobalEnvironmentFrame()
 	return &EnvironmentFrame{
 		parent: nil,
 		local:  nil,
@@ -72,7 +88,7 @@ func NewTipTopEnvironmentFrame() *EnvironmentFrame {
 func NewPhaseEnvironmentFrame(tenv *EnvironmentFrame) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	// Share the interning maps from tip-top.
-	global := NewGlobalEnvironment(
+	global := NewGlobalEnvironmentFrame(
 		tenv.global.symbolInterns,
 		tenv.global.syntaxInterns,
 	)
@@ -102,7 +118,7 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 		local:  local,
 	}
 	if parent == nil {
-		q.global = NewTopLevelGlobalEnvironment()
+		q.global = NewTopLevelGlobalEnvironmentFrame()
 	} else {
 		q.global = parent.global
 	}

@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package values
 
 import (
@@ -289,4 +303,59 @@ func TestArrayList_AsList(t *testing.T) {
 			qt.Assert(t, q, SchemeEquals, tc.out)
 		})
 	}
+}
+
+func TestArrayList_Datum(t *testing.T) {
+	a := NewArrayList(NewInteger(1), NewInteger(2))
+	datum := a.Datum()
+	qt.Assert(t, len(datum), qt.Equals, 2)
+	qt.Assert(t, datum[0], SchemeEquals, NewInteger(1))
+	qt.Assert(t, datum[1], SchemeEquals, NewInteger(2))
+}
+
+func TestArrayList_Car(t *testing.T) {
+	a := NewArrayList(NewInteger(42), NewInteger(99))
+	qt.Assert(t, a.Car(), SchemeEquals, NewInteger(42))
+}
+
+func TestArrayList_Cdr(t *testing.T) {
+	a := NewArrayList(NewInteger(42), NewInteger(99))
+	cdr := a.Cdr()
+	cdrList, ok := cdr.(*ArrayList)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, len(*cdrList), qt.Equals, 1)
+	qt.Assert(t, (*cdrList)[0], SchemeEquals, NewInteger(99))
+}
+
+func TestArrayList_ForEach(t *testing.T) {
+	a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
+	count := 0
+	sum := int64(0)
+	a.ForEach(nil, func(i int, hasNext bool, v Value) error { //nolint:errcheck
+		count++
+		if intVal, ok := v.(*Integer); ok {
+			sum += intVal.Value
+		}
+		return nil
+	})
+	qt.Assert(t, count, qt.Equals, 3)
+	qt.Assert(t, sum, qt.Equals, int64(6))
+}
+
+func TestArrayList_AsVector(t *testing.T) {
+	a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
+	v := a.AsVector()
+	qt.Assert(t, len(*v), qt.Equals, 3)
+	qt.Assert(t, (*v)[0], SchemeEquals, NewInteger(1))
+	qt.Assert(t, (*v)[1], SchemeEquals, NewInteger(2))
+	qt.Assert(t, (*v)[2], SchemeEquals, NewInteger(3))
+}
+
+func TestArrayList_Append_Single(t *testing.T) {
+	a := NewArrayList(NewInteger(1), NewInteger(2))
+	result := a.Append(NewInteger(3))
+	resultList, ok := result.(*ArrayList)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, len(*resultList), qt.Equals, 3)
+	qt.Assert(t, (*resultList)[2], SchemeEquals, NewInteger(3))
 }

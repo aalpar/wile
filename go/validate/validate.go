@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package validate
 
 import (
@@ -84,6 +99,24 @@ func validateForm(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedEx
 				return validateCondExpand(pair, result)
 			case "meta":
 				// Meta passes through to compiler directly
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "syntax":
+				// syntax form passes through to compiler
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "syntax-case":
+				// syntax-case form passes through to compiler
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "quasisyntax":
+				// quasisyntax form passes through to compiler
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "unsyntax":
+				// unsyntax form passes through to compiler (error outside quasisyntax)
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "unsyntax-splicing":
+				// unsyntax-splicing form passes through to compiler (error outside quasisyntax)
+				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			case "with-syntax":
+				// with-syntax form passes through to compiler
 				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
 			}
 		}

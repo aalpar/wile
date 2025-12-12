@@ -1,6 +1,21 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package values
 
 import (
+	"context"
 	"slices"
 	"strings"
 )
@@ -159,13 +174,13 @@ func (p *ArrayList) IsVoid() bool {
 	return false
 }
 
-func (p *ArrayList) ForEach(fn ForEachFunc) (Value, error) {
+func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return EmptyList, nil
 	}
 	l := len(*p)
 	for i, v := range *p {
-		err := fn(i, i < l-1, v)
+		err := fn(ctx, i, i < l-1, v)
 		if err != nil {
 			return EmptyList, err
 		}

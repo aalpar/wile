@@ -22,6 +22,10 @@ $(SUBDIRS):
 build: $(SOURCES)
 	go build -v ./...
 
+.PHONY: lint
+lint:
+	golangci-lint run ./...
+
 .PHONY: clean
 clean:
 	go clean -x -cache -fuzzcache -testcache

@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package values
 
 import (
@@ -395,4 +410,43 @@ func TestPair_Append(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPair_Car(t *testing.T) {
+	p := NewCons(NewInteger(42), NewInteger(99))
+	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(42))
+
+	p2 := NewCons(NewString("hello"), EmptyList)
+	qt.Assert(t, p2.Car(), SchemeEquals, NewString("hello"))
+}
+
+func TestPair_SetCar(t *testing.T) {
+	p := NewCons(NewInteger(1), NewInteger(2))
+	p.SetCar(NewInteger(10))
+	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(10))
+	qt.Assert(t, p.Cdr(), SchemeEquals, NewInteger(2))
+}
+
+func TestPair_SetCdr(t *testing.T) {
+	p := NewCons(NewInteger(1), NewInteger(2))
+	p.SetCdr(NewInteger(20))
+	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(1))
+	qt.Assert(t, p.Cdr(), SchemeEquals, NewInteger(20))
+}
+
+func TestPair_Datum(t *testing.T) {
+	p := NewCons(NewInteger(1), NewInteger(2))
+	datum := p.Datum()
+	qt.Assert(t, datum[0], SchemeEquals, NewInteger(1))
+	qt.Assert(t, datum[1], SchemeEquals, NewInteger(2))
+}
+
+func TestPair_String(t *testing.T) {
+	p := NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList))
+	s := p.String()
+	qt.Assert(t, s, qt.Equals, "(1 2)")
+
+	p2 := NewCons(NewInteger(1), NewInteger(2))
+	s2 := p2.String()
+	qt.Assert(t, s2, qt.Equals, "(1 . 2)")
 }

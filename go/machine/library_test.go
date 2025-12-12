@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine_test
 
 import (
@@ -27,7 +41,7 @@ func getTestdataPath() string {
 func parseLibrarySyntax(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
 	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax()
+	stx, err := p.ReadSyntax(nil)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -456,4 +470,109 @@ func TestImport_PrefixModifier(t *testing.T) {
 	// Verify unprefixed names are NOT bound
 	double := env.InternSymbol(values.NewSymbol("double"))
 	c.Assert(env.GetBinding(double), qt.IsNil)
+}
+
+func TestCopyLibraryBindingsToEnv(t *testing.T) {
+	c := qt.New(t)
+
+	// Create source library with runtime and syntax bindings
+	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	libName := machine.NewLibraryName("test", "copylib")
+	lib := machine.NewCompiledLibrary(libName, srcEnv)
+
+	// Add runtime binding (variable)
+	foSym := srcEnv.InternSymbol(values.NewSymbol("foo"))
+	_, _ = srcEnv.MaybeCreateGlobalBinding(foSym, environment.BindingTypeVariable)
+	fooIdx := srcEnv.GetGlobalIndex(foSym)
+	_ = srcEnv.SetGlobalValue(fooIdx, values.NewInteger(42))
+	lib.AddExport("foo", "")
+
+	// Add syntax binding (macro)
+	barSym := srcEnv.InternSymbol(values.NewSymbol("bar"))
+	expandEnv := srcEnv.Expand()
+	_, _ = expandEnv.MaybeCreateGlobalBinding(barSym, environment.BindingTypeSyntax)
+	barIdx := expandEnv.GetGlobalIndex(barSym)
+	mockMacro := values.NewSymbol("mock-macro")
+	_ = expandEnv.SetGlobalValue(barIdx, mockMacro)
+	lib.AddExport("bar", "")
+
+	// Create target environment
+	targetEnv := environment.NewTopLevelEnvironmentFrame()
+
+	// Create bindings map (localName -> externalName)
+	bindings := map[string]string{
+		"foo": "foo",
+		"bar": "bar",
+	}
+
+	// Copy bindings
+	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	c.Assert(err, qt.IsNil)
+
+	// Verify runtime binding was copied
+	fooTarget := targetEnv.InternSymbol(values.NewSymbol("foo"))
+	fooBinding := targetEnv.GetBinding(fooTarget)
+	c.Assert(fooBinding, qt.IsNotNil)
+	c.Assert(fooBinding.Value(), values.SchemeEquals, values.NewInteger(42))
+
+	// Verify syntax binding was copied
+	barTarget := targetEnv.InternSymbol(values.NewSymbol("bar"))
+	barBinding := targetEnv.Expand().GetBinding(barTarget)
+	c.Assert(barBinding, qt.IsNotNil)
+	c.Assert(barBinding.BindingType(), qt.Equals, environment.BindingTypeSyntax)
+	c.Assert(barBinding.Value(), values.SchemeEquals, mockMacro)
+}
+
+func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
+	c := qt.New(t)
+
+	// Create source library
+	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	libName := machine.NewLibraryName("test", "renamelib")
+	lib := machine.NewCompiledLibrary(libName, srcEnv)
+
+	// Add binding with internal name different from external
+	internalSym := srcEnv.InternSymbol(values.NewSymbol("internal-foo"))
+	_, _ = srcEnv.MaybeCreateGlobalBinding(internalSym, environment.BindingTypeVariable)
+	idx := srcEnv.GetGlobalIndex(internalSym)
+	_ = srcEnv.SetGlobalValue(idx, values.NewInteger(99))
+	lib.AddExport("foo", "internal-foo")
+
+	// Create target environment
+	targetEnv := environment.NewTopLevelEnvironmentFrame()
+
+	// Rename on import: "my-foo" -> "foo"
+	bindings := map[string]string{
+		"my-foo": "foo",
+	}
+
+	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	c.Assert(err, qt.IsNil)
+
+	// Verify binding is accessible with local name
+	myFooSym := targetEnv.InternSymbol(values.NewSymbol("my-foo"))
+	binding := targetEnv.GetBinding(myFooSym)
+	c.Assert(binding, qt.IsNotNil)
+	c.Assert(binding.Value(), values.SchemeEquals, values.NewInteger(99))
+}
+
+func TestCopyLibraryBindingsToEnv_MissingBinding(t *testing.T) {
+	c := qt.New(t)
+
+	// Create library with no bindings
+	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	libName := machine.NewLibraryName("test", "empty")
+	lib := machine.NewCompiledLibrary(libName, srcEnv)
+	lib.AddExport("missing", "")
+
+	targetEnv := environment.NewTopLevelEnvironmentFrame()
+
+	bindings := map[string]string{
+		"missing": "missing",
+	}
+
+	// Should error because binding doesn't exist
+	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "binding not found")
 }

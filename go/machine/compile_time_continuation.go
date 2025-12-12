@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 import (
@@ -149,6 +163,10 @@ func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ccnt CompileTimeCallCon
 		err = p.CompileImport(ccnt, expr)
 	case "export":
 		err = p.CompileExport(ccnt, expr)
+	case "syntax":
+		err = p.CompileSyntax(ccnt, expr)
+	case "syntax-case":
+		err = p.CompileSyntaxCase(ccnt, expr)
 	default:
 		return false, values.ErrNotAPrimitive
 	}
@@ -173,10 +191,10 @@ func (p *CompileTimeContinuation) CompileMeta(ccnt CompileTimeCallContext, expr 
 	return nil
 }
 
-func findFile(p *CompileTimeContinuation, ccnt CompileTimeCallContext, path string) (fs.File, error) {
+func findFile(p *CompileTimeContinuation, ccnt CompileTimeCallContext, path string) (fs.File, string, error) {
 	includePath := os.Getenv(SchemeIncludePathEnv)
 	if includePath == "" {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "environment variable %q not set", SchemeIncludePathEnv)
+		return nil, "", values.WrapForeignErrorf(values.ErrInvalidSyntax, "environment variable %q not set", SchemeIncludePathEnv)
 	}
 	includePaths := filepath.SplitList(includePath)
 	for i := range includePath {
@@ -184,10 +202,10 @@ func findFile(p *CompileTimeContinuation, ccnt CompileTimeCallContext, path stri
 		f, err := os.Open(fn)
 		// return the first found file
 		if err == nil {
-			return f, nil
+			return f, fn, nil
 		}
 	}
-	return nil, nil
+	return nil, "", nil
 }
 
 // CompileInclude compiles an include expression.
@@ -216,22 +234,22 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ccnt CompileTimeCallContext
 		}
 
 		// Find and open the file
-		file, err := findFile(p, ccnt, fn.Value)
+		file, filePath, err := findFile(p, ccnt, fn.Value)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
 		}
 		if file == nil {
 			return values.NewForeignErrorf("include: file not found: %q", fn.Value)
 		}
-		defer file.Close()
+		defer file.Close() //nolint:errcheck
 
 		// Create parser for the file
 		reader := bufio.NewReader(file)
-		fileParser := parser.NewParser(p.env, reader)
+		fileParser := parser.NewParserWithFile(p.env, reader, filePath)
 
 		// Read and compile all forms from the file
 		for {
-			stx, readErr := fileParser.ReadSyntax()
+			stx, readErr := fileParser.ReadSyntax(nil)
 			if readErr != nil {
 				if errors.Is(readErr, io.EOF) {
 					break
@@ -477,270 +495,169 @@ func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ccnt CompileTi
 // depth=2 means nested quasiquote `(a `(b ,x)), etc.
 // depth=0 would mean we should evaluate (but we start at 1, so this is the trigger).
 func (p *CompileTimeContinuation) compileQuasiquoteDatum(ccnt CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
-	switch d := datum.(type) {
-	case *syntax.SyntaxPair:
-		return p.compileQuasiquotePair(ccnt, d, depth)
-	default:
-		// Self-evaluating or symbol - just quote it as a literal
-		li := p.template.MaybeAppendLiteral(datum.Unwrap())
+	// Optimization: if no runtime evaluation needed, emit as literal
+	if !p.quasiquoteNeedsRuntime(datum, depth) {
+		// Intern symbols to ensure eq? identity per R7RS 6.5
+		val := p.internSymbolsInValue(datum.UnwrapAll())
+		li := p.template.MaybeAppendLiteral(val)
 		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
 		return nil
 	}
+
+	// Transform to equivalent Scheme code and compile
+	expanded := p.expandQuasiquote(datum, depth)
+	return p.CompileExpression(ccnt, expanded)
 }
 
-// compileQuasiquotePair handles pairs in quasiquote context.
-//
-// This is the core dispatch function that detects special keywords (unquote,
-// unquote-splicing, quasiquote) and routes to the appropriate handler based
-// on the current depth.
-//
-// IMPORTANT: For nested forms, we extract the body/argument and process it
-// at the adjusted depth, rather than recursing on the entire form. This
-// prevents infinite recursion.
-func (p *CompileTimeContinuation) compileQuasiquotePair(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair, depth int) error {
-	car := pair.Car()
-	if carSym, ok := p.getSymbolName(car); ok {
-		switch carSym {
-		case "unquote":
-			if depth == 1 {
-				// At depth 1, unquote triggers evaluation
-				return p.compileUnquoteExpr(ccnt, pair)
-			}
-			// Nested unquote at depth > 1: extract argument, process at depth-1
-			// Example: for `(a `(b ,,x) c), the inner ,x is processed at depth 1
-			if pair.Length() == 2 {
-				cdr := pair.Cdr().(*syntax.SyntaxPair)
-				arg := cdr.Car().(syntax.SyntaxValue)
-				return p.compileQuasiquoteNestedUnquote(ccnt, arg, depth-1, "unquote")
-			}
-			return p.compileQuasiquoteListElements(ccnt, pair, depth-1)
-
-		case "unquote-splicing":
-			if depth == 1 {
-				// unquote-splicing at depth 1 is only valid within a list context
-				return values.NewForeignError("unquote-splicing: not in list context")
-			}
-			// Nested unquote-splicing at depth > 1: same pattern as unquote
-			if pair.Length() == 2 {
-				cdr := pair.Cdr().(*syntax.SyntaxPair)
-				arg := cdr.Car().(syntax.SyntaxValue)
-				return p.compileQuasiquoteNestedUnquote(ccnt, arg, depth-1, "unquote-splicing")
-			}
-			return p.compileQuasiquoteListElements(ccnt, pair, depth-1)
-
-		case "quasiquote":
-			// Nested quasiquote: extract body, process at depth+1
-			// Example: for `(a `(b ,x) c), (b ,x) is processed at depth 2
-			if pair.Length() == 2 {
-				cdr := pair.Cdr().(*syntax.SyntaxPair)
-				body := cdr.Car().(syntax.SyntaxValue)
-				return p.compileQuasiquoteNestedQuasiquote(ccnt, body, depth+1)
-			}
-			return p.compileQuasiquoteListElements(ccnt, pair, depth+1)
-		}
+// buildQuasiquoteSyntaxList creates a proper list from syntax elements.
+func (p *CompileTimeContinuation) buildQuasiquoteSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
+	var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
+	for i := len(elems) - 1; i >= 0; i-- {
+		result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
 	}
-
-	// Regular list - check for unquote-splicing in elements
-	return p.compileQuasiquoteListElements(ccnt, pair, depth)
+	return result
 }
 
-// compileUnquoteExpr compiles (unquote expr) at depth 1, which means we
-// actually evaluate the expression. This is the "base case" for unquote.
-func (p *CompileTimeContinuation) compileUnquoteExpr(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair) error {
-	if pair.Length() != 2 {
-		return values.NewForeignError("unquote: expected exactly one argument")
+// wrapDatumAsSyntax wraps a values.Value as syntax.SyntaxValue.
+func (p *CompileTimeContinuation) wrapDatumAsSyntax(srcCtx *syntax.SourceContext, v values.Value) syntax.SyntaxValue {
+	if values.IsEmptyList(v) {
+		return syntax.NewSyntaxEmptyList(srcCtx)
 	}
-	cdr := pair.Cdr()
-	cdrPair, ok := cdr.(*syntax.SyntaxPair)
-	if !ok {
-		return values.NewForeignError("unquote: malformed syntax")
+	switch val := v.(type) {
+	case *values.Symbol:
+		return syntax.NewSyntaxSymbol(val.Key, srcCtx)
+	case *values.Pair:
+		car := p.wrapDatumAsSyntax(srcCtx, val.Car())
+		cdr := p.wrapDatumAsSyntax(srcCtx, val.Cdr())
+		return syntax.NewSyntaxCons(car, cdr, srcCtx)
+	default:
+		return syntax.NewSyntaxObject(v, srcCtx)
 	}
-	expr, ok := cdrPair.Car().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("unquote: expected syntax value")
-	}
-	return p.CompileExpression(ccnt, expr)
 }
 
-// compileQuasiquoteNestedUnquote handles nested unquote/unquote-splicing at depth > 1.
+// expandQuasiquote transforms quasiquoted syntax into equivalent Scheme code.
+// At depth=1, unquotes are evaluated. At depth>1, they produce literal unquote forms.
 //
-// When we encounter (unquote arg) or (unquote-splicing arg) at depth > 1, we:
-//  1. Process the argument at newDepth (which is depth-1)
-//  2. Wrap the result in (list 'unquote <processed>) or (list 'unquote-splicing <processed>)
-//
-// Example: For `(a `(b ,,x) c) with x=5:
-//   - Outer quasiquote starts at depth 1
-//   - Inner quasiquote increases to depth 2
-//   - First unquote (the outer ,) decreases to depth 1
-//   - Second unquote (the inner ,) is processed at depth 1, evaluating x to 5
-//   - Result: (a (quasiquote (b (unquote 5))) c)
-func (p *CompileTimeContinuation) compileQuasiquoteNestedUnquote(ccnt CompileTimeCallContext, arg syntax.SyntaxValue, newDepth int, keyword string) error {
-	srcCtx := arg.SourceContext()
+// Key behaviors:
+//   - unquote at d=1: return the expression directly (evaluate it)
+//   - unquote at d>1: process arg at d-1, wrap in (list 'unquote <result>)
+//   - unquote-splicing at d=1: handled specially by expandQuasiquoteList
+//   - unquote-splicing at d>1: process arg at d-1, wrap in (list 'unquote-splicing <result>)
+//   - quasiquote: process body at d+1, wrap in (list 'quasiquote <result>)
+//   - lists: generate (list ...) or (append ...) for runtime construction
+//   - atoms: quote them
+func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth int) syntax.SyntaxValue {
+	srcCtx := stx.SourceContext()
 
-	// Helper to build a syntax list
-	buildSyntaxList := func(elems []syntax.SyntaxValue) syntax.SyntaxValue {
-		var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
-		for i := len(elems) - 1; i >= 0; i-- {
-			result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
-		}
-		return result
-	}
-
-	// Check if the argument needs runtime evaluation at the new depth
-	if p.quasiquoteNeedsRuntime(arg, newDepth) {
-		// The argument contains unquotes that need evaluation at newDepth.
-		// Generate (keyword arg) as syntax and process via compileQuasiquoteComplexListFromElements.
-		return p.compileQuasiquoteComplexListFromElements(ccnt,
-			syntax.NewSyntaxCons(
-				syntax.NewSyntaxSymbol(keyword, srcCtx),
-				syntax.NewSyntaxCons(arg, syntax.NewSyntaxEmptyList(srcCtx), srcCtx),
-				srcCtx),
-			newDepth+1) // +1 because we're wrapping in unquote
-	}
-
-	// Argument doesn't need runtime evaluation - emit as compile-time literal
-	keywordSym := syntax.NewSyntaxSymbol(keyword, srcCtx)
-	wrapped := buildSyntaxList([]syntax.SyntaxValue{keywordSym, arg})
-	li := p.template.MaybeAppendLiteral(wrapped.UnwrapAll())
-	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-	return nil
-}
-
-// compileQuasiquoteNestedQuasiquote handles nested quasiquote at any depth.
-//
-// When we encounter (quasiquote body) inside another quasiquote, we:
-//  1. Process the body at newDepth (which is depth+1)
-//  2. Wrap the result in (list 'quasiquote <processed>)
-//
-// Example: For `(a `(b ,x) c):
-//   - Outer quasiquote starts at depth 1
-//   - Inner quasiquote increases to depth 2
-//   - The ,x at depth 2 does NOT evaluate (would need ,,x to reach depth 0)
-//   - Result: (a (quasiquote (b (unquote x))) c)
-func (p *CompileTimeContinuation) compileQuasiquoteNestedQuasiquote(ccnt CompileTimeCallContext, body syntax.SyntaxValue, newDepth int) error {
-	srcCtx := body.SourceContext()
-
-	// Helper to build a syntax list
-	buildSyntaxList := func(elems []syntax.SyntaxValue) syntax.SyntaxValue {
-		var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
-		for i := len(elems) - 1; i >= 0; i-- {
-			result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
-		}
-		return result
-	}
-
-	// Check if the body needs runtime evaluation at the new depth
-	if p.quasiquoteNeedsRuntime(body, newDepth) {
-		// Generate (list 'quasiquote <processed-body>) and compile it
-		qqSym := syntax.NewSyntaxSymbol("quasiquote", srcCtx)
-		wrapped := syntax.NewSyntaxCons(
-			qqSym,
-			syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(srcCtx), srcCtx),
-			srcCtx)
-		return p.compileQuasiquoteComplexListFromElements(ccnt, wrapped, newDepth-1) // -1 because we're inside quasiquote
-	}
-
-	// Body doesn't need runtime - quote the whole thing as literal
-	qqSym := syntax.NewSyntaxSymbol("quasiquote", srcCtx)
-	wrapped := buildSyntaxList([]syntax.SyntaxValue{qqSym, body})
-	li := p.template.MaybeAppendLiteral(wrapped.UnwrapAll())
-	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-	return nil
-}
-
-// compileQuasiquoteListElements compiles a list with potential unquote-splicing
-func (p *CompileTimeContinuation) compileQuasiquoteListElements(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair, depth int) error {
-	// Collect segments: either quoted literals or expressions to evaluate
-	// A segment can be:
-	// - A literal element (quote it)
-	// - An unquote expression (evaluate it, wrap in list)
-	// - An unquote-splicing expression (evaluate it, append directly)
-
-	type segment struct {
-		isSplice bool
-		// For literals, we accumulate them
-		literals []values.Value
-		// For expressions, we compile them
-		isExpr bool
-	}
-
-	var segments []segment
-	var currentLiterals []values.Value
-
-	// Helper to flush literals
-	flushLiterals := func() {
-		if len(currentLiterals) > 0 {
-			segments = append(segments, segment{literals: currentLiterals})
-			currentLiterals = nil
-		}
-	}
-
-	// Walk the list
-	current := pair
-	for {
-		if values.IsEmptyList(current) {
-			break
+	switch v := stx.(type) {
+	case *syntax.SyntaxPair:
+		if values.IsEmptyList(v) {
+			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+			return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 		}
 
-		car := current.Car()
-		carSyntax, ok := car.(syntax.SyntaxValue)
-		if !ok {
-			// Not a syntax value, treat as literal
-			currentLiterals = append(currentLiterals, car)
-		} else if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
-			// Check if it's (unquote x) or (unquote-splicing x)
-			if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
-				if carSymName == "unquote" && depth == 1 {
-					flushLiterals()
-					segments = append(segments, segment{isExpr: true, isSplice: false})
-					// Compile the unquote expression - will be handled below
-				} else if carSymName == "unquote-splicing" && depth == 1 {
-					flushLiterals()
-					segments = append(segments, segment{isExpr: true, isSplice: true})
-				} else {
-					// Nested or other form - recursively process
-					currentLiterals = append(currentLiterals, nil) // placeholder
+		if carSymName, ok := p.getSymbolName(v.Car()); ok {
+			switch carSymName {
+			case "unquote":
+				if depth == 1 {
+					if v.Length() == 2 {
+						cdr := v.Cdr().(*syntax.SyntaxPair)
+						return cdr.Car().(syntax.SyntaxValue)
+					}
 				}
-			} else {
-				currentLiterals = append(currentLiterals, nil) // placeholder
+				if v.Length() == 2 {
+					cdr := v.Cdr().(*syntax.SyntaxPair)
+					arg := cdr.Car().(syntax.SyntaxValue)
+					processedArg := p.expandQuasiquote(arg, depth-1)
+					return p.buildQuasiquoteSyntaxList(srcCtx,
+						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.buildQuasiquoteSyntaxList(srcCtx,
+							syntax.NewSyntaxSymbol("quote", srcCtx),
+							syntax.NewSyntaxSymbol("unquote", srcCtx),
+						),
+						processedArg,
+					)
+				}
+				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+
+			case "unquote-splicing":
+				if depth > 1 && v.Length() == 2 {
+					cdr := v.Cdr().(*syntax.SyntaxPair)
+					arg := cdr.Car().(syntax.SyntaxValue)
+					processedArg := p.expandQuasiquote(arg, depth-1)
+					return p.buildQuasiquoteSyntaxList(srcCtx,
+						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.buildQuasiquoteSyntaxList(srcCtx,
+							syntax.NewSyntaxSymbol("quote", srcCtx),
+							syntax.NewSyntaxSymbol("unquote-splicing", srcCtx),
+						),
+						processedArg,
+					)
+				}
+				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+
+			case "quasiquote":
+				if v.Length() == 2 {
+					cdr := v.Cdr().(*syntax.SyntaxPair)
+					body := cdr.Car().(syntax.SyntaxValue)
+					processedBody := p.expandQuasiquote(body, depth+1)
+					return p.buildQuasiquoteSyntaxList(srcCtx,
+						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.buildQuasiquoteSyntaxList(srcCtx,
+							syntax.NewSyntaxSymbol("quote", srcCtx),
+							syntax.NewSyntaxSymbol("quasiquote", srcCtx),
+						),
+						processedBody,
+					)
+				}
+				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 			}
-		} else {
-			currentLiterals = append(currentLiterals, carSyntax.Unwrap())
 		}
 
-		// Move to next element
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
-			break
+		// Regular list - check for unquote-splicing at depth 1
+		return p.expandQuasiquoteList(v, depth)
+
+	case *syntax.SyntaxSymbol:
+		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+		return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+
+	case *syntax.SyntaxVector:
+		// Vectors: expand elements and wrap in (list->vector (list ...))
+		var elems []syntax.SyntaxValue
+		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+		for _, elem := range v.Values {
+			elems = append(elems, p.expandQuasiquote(elem, depth))
 		}
-		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if !ok {
-			// Improper list - handle the tail
-			currentLiterals = append(currentLiterals, cdr)
-			break
-		}
-		current = nextPair
+		listExpr := p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+		return p.buildQuasiquoteSyntaxList(srcCtx,
+			syntax.NewSyntaxSymbol("list->vector", srcCtx),
+			listExpr,
+		)
+
+	default:
+		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+		return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, stx)
 	}
+}
 
-	flushLiterals()
+// expandQuasiquoteList handles list expansion, detecting unquote-splicing.
+func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
+	srcCtx := pair.SourceContext()
 
-	// For now, use a simpler approach: compile the whole thing recursively
-	// and build with cons/list/append at runtime
-
-	// Simple case: no unquote/unquote-splicing at this level
-	hasUnquote := false
+	// Check if any element is ,@ at depth 1
 	hasSplice := false
-
-	current = pair
+	current := pair
 	for !values.IsEmptyList(current) {
 		car := current.Car()
 		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
 			if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
 				if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
-					if carSymName == "unquote" && depth == 1 {
-						hasUnquote = true
-					} else if carSymName == "unquote-splicing" && depth == 1 {
+					if carSymName == "unquote-splicing" && depth == 1 {
 						hasSplice = true
+						break
 					}
 				}
 			}
@@ -756,96 +673,184 @@ func (p *CompileTimeContinuation) compileQuasiquoteListElements(ccnt CompileTime
 		}
 	}
 
-	if !hasUnquote && !hasSplice {
-		// No unquoting at this level - recursively process each element and build list
-		return p.compileQuasiquoteSimpleList(ccnt, pair, depth)
+	if !hasSplice {
+		// Simple case: (list elem1 elem2 ...)
+		var elems []syntax.SyntaxValue
+		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+
+		current := pair
+		for !values.IsEmptyList(current) {
+			car := current.Car()
+			if carSyntax, ok := car.(syntax.SyntaxValue); ok {
+				elems = append(elems, p.expandQuasiquote(carSyntax, depth))
+			} else {
+				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+				litStx := p.wrapDatumAsSyntax(srcCtx, car)
+				elems = append(elems, p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx))
+			}
+			cdr := current.Cdr()
+			if values.IsEmptyList(cdr) {
+				break
+			}
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else {
+				// Improper list - handle dotted tail
+				// Generate (cons elem1 (cons elem2 ... tail))
+				return p.expandQuasiquoteImproperList(pair, depth)
+			}
+		}
+		return p.buildQuasiquoteSyntaxList(srcCtx, elems...)
 	}
 
-	// Has unquote or splice - need to use list/append
-	return p.compileQuasiquoteComplexList(ccnt, pair, depth)
+	// Has splicing: use (append seg1 seg2 ...)
+	return p.expandQuasiquoteListWithSplice(pair, depth)
 }
 
-// compileQuasiquoteSimpleList compiles a list with no unquote/splice at current level
-// Each element may still contain nested unquotes, so we process recursively.
-func (p *CompileTimeContinuation) compileQuasiquoteSimpleList(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair, depth int) error {
-	// Check if we need any runtime evaluation by recursively checking for unquotes
-	needsRuntime := p.quasiquoteNeedsRuntime(pair, depth)
-
-	if !needsRuntime {
-		// Pure literal - emit as compile-time constant
-		li := p.template.MaybeAppendLiteral(pair.UnwrapAll())
-		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-		return nil
-	}
-
-	// Some nested element needs runtime evaluation
-	// Build the list using (list elem1 elem2 ...) at runtime
-	// Each element is recursively processed through quasiquote
+// expandQuasiquoteImproperList handles improper (dotted) lists.
+func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	srcCtx := pair.SourceContext()
 
-	// Helper to build a syntax list
-	buildSyntaxList := func(elems []syntax.SyntaxValue) syntax.SyntaxValue {
-		var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
-		for i := len(elems) - 1; i >= 0; i-- {
-			result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
+	// Collect all elements and the tail
+	var elements []syntax.SyntaxValue
+	var tail values.Value
+
+	current := pair
+	for {
+		car := current.Car()
+		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
+			elements = append(elements, p.expandQuasiquote(carSyntax, depth))
+		} else {
+			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+			litStx := p.wrapDatumAsSyntax(srcCtx, car)
+			elements = append(elements, p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx))
 		}
-		return result
+		cdr := current.Cdr()
+		if values.IsEmptyList(cdr) {
+			tail = values.EmptyList
+			break
+		}
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			// Found the improper tail
+			if tailSyntax, ok := cdr.(syntax.SyntaxValue); ok {
+				tail = tailSyntax
+			} else {
+				tail = cdr
+			}
+			break
+		}
 	}
 
-	// Collect elements, recursively processing each through quasiquote
-	var listArgs []syntax.SyntaxValue
-	listArgs = append(listArgs, syntax.NewSyntaxSymbol("list", srcCtx))
+	// Build nested cons: (cons elem1 (cons elem2 ... tail))
+	var result syntax.SyntaxValue
+	if tailSyntax, ok := tail.(syntax.SyntaxValue); ok {
+		result = p.expandQuasiquote(tailSyntax, depth)
+	} else {
+		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
+		litStx := p.wrapDatumAsSyntax(srcCtx, tail)
+		result = p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx)
+	}
+
+	for i := len(elements) - 1; i >= 0; i-- {
+		result = p.buildQuasiquoteSyntaxList(srcCtx,
+			syntax.NewSyntaxSymbol("cons", srcCtx),
+			elements[i],
+			result,
+		)
+	}
+	return result
+}
+
+// expandQuasiquoteListWithSplice handles lists containing unquote-splicing.
+func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
+	srcCtx := pair.SourceContext()
+
+	// Segment types
+	type segmentType int
+	const (
+		segNormal segmentType = iota
+		segSplice
+	)
+
+	type segment struct {
+		typ   segmentType
+		elems []syntax.SyntaxValue // for normal segments
+		expr  syntax.SyntaxValue   // for splice segments
+	}
+
+	var segments []segment
+	var currentElems []syntax.SyntaxValue
+
+	flushNormal := func() {
+		if len(currentElems) > 0 {
+			segments = append(segments, segment{typ: segNormal, elems: currentElems})
+			currentElems = nil
+		}
+	}
 
 	current := pair
 	for !values.IsEmptyList(current) {
 		car := current.Car()
 		carSyntax, ok := car.(syntax.SyntaxValue)
 		if !ok {
-			// Not syntax, quote it
 			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-			litStx := syntax.NewSyntaxObject(car, srcCtx)
-			listArgs = append(listArgs, buildSyntaxList([]syntax.SyntaxValue{quoteSym, litStx}))
-		} else {
-			// Wrap in quasiquote processing
-			// We generate (qq-expand elem depth) where qq-expand is our recursive processor
-			// But actually, we just need to check if this element has unquotes
-			if p.quasiquoteNeedsRuntime(carSyntax, depth) {
-				// This element needs runtime processing - emit a recursive quasiquote call
-				// by directly compiling it as a quasiquote datum and wrapping it
-				// Actually, we need to generate code that processes this element.
-				// The cleanest way is to call compileQuasiquoteDatum inline.
-				// But that emits to the current template, not builds syntax.
-				// Let's use a different approach: generate the equivalent Scheme code.
+			litStx := p.wrapDatumAsSyntax(srcCtx, car)
+			currentElems = append(currentElems, p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx))
+			goto next
+		}
 
-				// For a pair element, wrap it in a nested (quasiquote ...) at compile time
-				// so the recursive call handles it. But this would double-nest the quasiquote!
-				// Actually, we're already inside a quasiquote context.
-				// We need to inline the quasiquote processing here.
-
-				// Simplest: just call the complex list compiler which handles this properly
-				return p.compileQuasiquoteComplexListFromElements(ccnt, pair, depth)
-			} else {
-				// Pure literal element, quote it
-				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-				listArgs = append(listArgs, buildSyntaxList([]syntax.SyntaxValue{quoteSym, carSyntax}))
+		if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
+			if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
+				if carSymName == "unquote-splicing" && depth == 1 {
+					flushNormal()
+					if carPair.Length() != 2 {
+						// Malformed - treat as normal
+						currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
+					} else {
+						cdrPair := carPair.Cdr().(*syntax.SyntaxPair)
+						expr := cdrPair.Car().(syntax.SyntaxValue)
+						segments = append(segments, segment{typ: segSplice, expr: expr})
+					}
+					goto next
+				}
 			}
 		}
 
+		currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
+
+	next:
 		cdr := current.Cdr()
 		if values.IsEmptyList(cdr) {
 			break
 		}
-		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if !ok {
-			// Improper list - handle tail
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
 			break
 		}
-		current = nextPair
 	}
 
-	// Build and compile (list arg1 arg2 ...)
-	stx := buildSyntaxList(listArgs)
-	return p.CompileExpression(ccnt, stx)
+	flushNormal()
+
+	// Build (append seg1 seg2 ...)
+	var appendArgs []syntax.SyntaxValue
+	appendArgs = append(appendArgs, syntax.NewSyntaxSymbol("append", srcCtx))
+
+	for _, seg := range segments {
+		switch seg.typ {
+		case segNormal:
+			// Wrap in (list ...)
+			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
+			listArgs = append(listArgs, seg.elems...)
+			appendArgs = append(appendArgs, p.buildQuasiquoteSyntaxList(srcCtx, listArgs...))
+		case segSplice:
+			appendArgs = append(appendArgs, seg.expr)
+		}
+	}
+
+	return p.buildQuasiquoteSyntaxList(srcCtx, appendArgs...)
 }
 
 // quasiquoteNeedsRuntime checks if a syntax value contains unquotes that would
@@ -924,508 +929,6 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 	return false
 }
 
-// compileQuasiquoteComplexListFromElements handles lists where some elements need
-// runtime evaluation. It generates a (list ...) expression where each element
-// is processed through quasiquote transformation.
-//
-// The key helper here is genQuasiquoteExpr which transforms a syntax value at a
-// given depth into the equivalent Scheme expression that will produce the correct
-// result at runtime.
-func (p *CompileTimeContinuation) compileQuasiquoteComplexListFromElements(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair, depth int) error {
-	srcCtx := pair.SourceContext()
-
-	// Helper to build a syntax list from elements
-	buildSyntaxList := func(elems []syntax.SyntaxValue) syntax.SyntaxValue {
-		var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
-		for i := len(elems) - 1; i >= 0; i-- {
-			result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
-		}
-		return result
-	}
-
-	// Helper to wrap a datum value in syntax (for quoting non-syntax values)
-	var wrapDatum func(v values.Value) syntax.SyntaxValue
-	wrapDatum = func(v values.Value) syntax.SyntaxValue {
-		if values.IsEmptyList(v) {
-			return syntax.NewSyntaxEmptyList(srcCtx)
-		}
-		switch val := v.(type) {
-		case *values.Symbol:
-			return syntax.NewSyntaxSymbol(val.Key, srcCtx)
-		case *values.Pair:
-			car := wrapDatum(val.Car())
-			cdr := wrapDatum(val.Cdr())
-			return syntax.NewSyntaxCons(car, cdr, srcCtx)
-		default:
-			return syntax.NewSyntaxObject(v, srcCtx)
-		}
-	}
-
-	// genQuasiquoteExpr transforms a syntax value at depth d into the Scheme
-	// expression that produces the quasiquote result.
-	//
-	// Key behaviors:
-	//   - unquote at d=1: return the expression directly (evaluate it)
-	//   - unquote at d>1: process arg at d-1, wrap in (list 'unquote <result>)
-	//   - quasiquote: process body at d+1, wrap in (list 'quasiquote <result>)
-	//   - lists: generate (list <processed-elem1> <processed-elem2> ...)
-	//   - atoms: quote them
-	//
-	// IMPORTANT: For nested unquote/quasiquote, we extract the body and process
-	// it at the adjusted depth. We do NOT recurse on the entire form, which
-	// would cause infinite recursion.
-	var genQuasiquoteExpr func(stx syntax.SyntaxValue, d int) syntax.SyntaxValue
-	genQuasiquoteExpr = func(stx syntax.SyntaxValue, d int) syntax.SyntaxValue {
-		switch v := stx.(type) {
-		case *syntax.SyntaxPair:
-			if values.IsEmptyList(v) {
-				// Empty list - quote it
-				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-				return buildSyntaxList([]syntax.SyntaxValue{quoteSym, v})
-			}
-			// Check if this is (unquote ...) or (unquote-splicing ...)
-			if carSymName, ok := p.getSymbolName(v.Car()); ok {
-				switch carSymName {
-				case "unquote":
-					if d == 1 {
-						// Return the unquoted expression directly
-						if v.Length() == 2 {
-							cdr := v.Cdr().(*syntax.SyntaxPair)
-							return cdr.Car().(syntax.SyntaxValue)
-						}
-					}
-					// Nested unquote at depth > 1 - process the argument at d-1
-					// For `(a `(b ,,x) c)`: the inner `,x` should be evaluated
-					// and wrapped back in (list 'unquote <evaluated>)
-					if v.Length() == 2 {
-						cdr := v.Cdr().(*syntax.SyntaxPair)
-						arg := cdr.Car().(syntax.SyntaxValue)
-						processedArg := genQuasiquoteExpr(arg, d-1)
-						unquoteSym := syntax.NewSyntaxSymbol("unquote", srcCtx)
-						return buildSyntaxList([]syntax.SyntaxValue{
-							syntax.NewSyntaxSymbol("list", srcCtx),
-							buildSyntaxList([]syntax.SyntaxValue{
-								syntax.NewSyntaxSymbol("quote", srcCtx),
-								unquoteSym,
-							}),
-							processedArg,
-						})
-					}
-					// Malformed, just quote it
-					quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-					return buildSyntaxList([]syntax.SyntaxValue{quoteSym, v})
-
-				case "unquote-splicing":
-					if d > 1 {
-						// Nested unquote-splicing - process the argument at d-1
-						if v.Length() == 2 {
-							cdr := v.Cdr().(*syntax.SyntaxPair)
-							arg := cdr.Car().(syntax.SyntaxValue)
-							processedArg := genQuasiquoteExpr(arg, d-1)
-							usSym := syntax.NewSyntaxSymbol("unquote-splicing", srcCtx)
-							return buildSyntaxList([]syntax.SyntaxValue{
-								syntax.NewSyntaxSymbol("list", srcCtx),
-								buildSyntaxList([]syntax.SyntaxValue{
-									syntax.NewSyntaxSymbol("quote", srcCtx),
-									usSym,
-								}),
-								processedArg,
-							})
-						}
-					}
-					// At depth 1 or malformed - quote it
-					quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-					return buildSyntaxList([]syntax.SyntaxValue{quoteSym, v})
-
-				case "quasiquote":
-					// Nested quasiquote - process the body at depth+1
-					// For `(a `(b ,x) c): process (b ,x) at depth+1, wrap result in (list 'quasiquote ...)
-					if v.Length() == 2 {
-						cdr := v.Cdr().(*syntax.SyntaxPair)
-						body := cdr.Car().(syntax.SyntaxValue)
-						processedBody := genQuasiquoteExpr(body, d+1)
-						qqSym := syntax.NewSyntaxSymbol("quasiquote", srcCtx)
-						return buildSyntaxList([]syntax.SyntaxValue{
-							syntax.NewSyntaxSymbol("list", srcCtx),
-							buildSyntaxList([]syntax.SyntaxValue{
-								syntax.NewSyntaxSymbol("quote", srcCtx),
-								qqSym,
-							}),
-							processedBody,
-						})
-					}
-					// Malformed - quote it
-					quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-					return buildSyntaxList([]syntax.SyntaxValue{quoteSym, v})
-				}
-			}
-
-			// Regular list - build (list elem1 elem2 ...)
-			var elems []syntax.SyntaxValue
-			elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
-			current := v
-			for !values.IsEmptyList(current) {
-				car := current.Car()
-				if carSyntax, ok := car.(syntax.SyntaxValue); ok {
-					elems = append(elems, genQuasiquoteExpr(carSyntax, d))
-				} else {
-					// Non-syntax, quote it
-					quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-					litStx := wrapDatum(car)
-					elems = append(elems, buildSyntaxList([]syntax.SyntaxValue{quoteSym, litStx}))
-				}
-				cdr := current.Cdr()
-				if values.IsEmptyList(cdr) {
-					break
-				}
-				nextPair, ok := cdr.(*syntax.SyntaxPair)
-				if !ok {
-					break
-				}
-				current = nextPair
-			}
-			return buildSyntaxList(elems)
-
-		case *syntax.SyntaxSymbol:
-			// Symbol - quote it
-			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-			return buildSyntaxList([]syntax.SyntaxValue{quoteSym, v})
-
-		default:
-			// Other values - quote them
-			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-			return buildSyntaxList([]syntax.SyntaxValue{quoteSym, stx})
-		}
-	}
-
-	// Generate (list elem1 elem2 ...) for the pair
-	stx := genQuasiquoteExpr(pair, depth)
-	return p.CompileExpression(ccnt, stx)
-}
-
-// compileQuasiquoteComplexList compiles a list with unquote/splice
-func (p *CompileTimeContinuation) compileQuasiquoteComplexList(ccnt CompileTimeCallContext, pair *syntax.SyntaxPair, depth int) error {
-	// Strategy: build segments and use append
-	// Each segment is either:
-	// - A list of quoted literals: (list 'a 'b 'c)
-	// - An unquoted expression wrapped in list: (list ,x)
-	// - A spliced expression: ,@x
-	// Then: (append seg1 seg2 seg3 ...)
-
-	type segmentType int
-	const (
-		segLiterals segmentType = iota
-		segUnquote
-		segSplice
-	)
-
-	type seg struct {
-		typ      segmentType
-		literals []values.Value
-		expr     syntax.SyntaxValue
-	}
-
-	var segments []seg
-	var currentLiterals []values.Value
-
-	flushLiterals := func() {
-		if len(currentLiterals) > 0 {
-			segments = append(segments, seg{typ: segLiterals, literals: currentLiterals})
-			currentLiterals = nil
-		}
-	}
-
-	current := pair
-	for !values.IsEmptyList(current) {
-		car := current.Car()
-		carSyntax, ok := car.(syntax.SyntaxValue)
-		if !ok {
-			currentLiterals = append(currentLiterals, car)
-			goto next
-		}
-
-		if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
-			if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
-				if carSymName == "unquote" && depth == 1 {
-					flushLiterals()
-					// Get the expression
-					if carPair.Length() != 2 {
-						return values.NewForeignError("unquote: expected exactly one argument")
-					}
-					cdrPair := carPair.Cdr().(*syntax.SyntaxPair)
-					expr := cdrPair.Car().(syntax.SyntaxValue)
-					segments = append(segments, seg{typ: segUnquote, expr: expr})
-					goto next
-				} else if carSymName == "unquote-splicing" && depth == 1 {
-					flushLiterals()
-					if carPair.Length() != 2 {
-						return values.NewForeignError("unquote-splicing: expected exactly one argument")
-					}
-					cdrPair := carPair.Cdr().(*syntax.SyntaxPair)
-					expr := cdrPair.Car().(syntax.SyntaxValue)
-					segments = append(segments, seg{typ: segSplice, expr: expr})
-					goto next
-				}
-			}
-		}
-
-		// Regular element - need to recursively process it
-		// For simplicity, just unwrap it for now
-		currentLiterals = append(currentLiterals, carSyntax.Unwrap())
-
-	next:
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
-			break
-		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
-			current = nextPair
-		} else {
-			// Improper list - add tail
-			currentLiterals = append(currentLiterals, cdr)
-			break
-		}
-	}
-
-	flushLiterals()
-
-	if len(segments) == 0 {
-		li := p.template.MaybeAppendLiteral(values.EmptyList)
-		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-		return nil
-	}
-
-	// If only 1 segment, compile it directly without append
-	if len(segments) == 1 {
-		s := segments[0]
-		switch s.typ {
-		case segLiterals:
-			var lst values.Value = values.EmptyList
-			for j := len(s.literals) - 1; j >= 0; j-- {
-				lst = values.NewCons(s.literals[j], lst)
-			}
-			li := p.template.MaybeAppendLiteral(lst)
-			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-
-		case segUnquote:
-			// Compile expression and wrap in list: (list expr)
-			// Must use SaveContinuation to provide return point for RestoreContinuation in list
-			listSym := p.env.InternSymbol(values.NewSymbol("list"))
-			listIdx := p.template.MaybeAppendLiteral(p.env.GetGlobalIndex(listSym))
-
-			// SaveContinuation - offset will be patched
-			saveContinuationIdx := p.template.operations.Length()
-			p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
-
-			p.AppendOperations(NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(listIdx))
-			p.AppendOperations(NewOperationPush())
-			if err := p.CompileExpression(ccnt.NotInTail(), s.expr); err != nil {
-				return err
-			}
-			p.AppendOperations(NewOperationPush())
-			p.AppendOperations(NewOperationPull())
-			p.AppendOperations(NewOperationApply())
-
-			// Patch SaveContinuation offset
-			currentIdx := p.template.operations.Length()
-			p.template.operations[saveContinuationIdx] = NewOperationSaveContinuationOffsetImmediate(currentIdx - saveContinuationIdx)
-
-		case segSplice:
-			// Just compile the expression
-			if err := p.CompileExpression(ccnt, s.expr); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	// Multiple segments: use append
-	// Strategy: compile each segment, push result, then call append
-	// For segUnquote we need to call (list expr), so we use SaveContinuation/RestoreContinuation
-	// to call list as a subexpression and continue building the append args.
-	//
-	// Actually, simpler: we can use the calling convention properly.
-	// For each segment:
-	//   - segLiterals: load literal list, push
-	//   - segUnquote: call (list expr) - result in value, push
-	//   - segSplice: compile expr - result in value, push
-	// Then load append, swap with args somehow...
-	//
-	// Problem: Push puts value on stack, but we need function at bottom.
-	// Solution: Push all segment results first, then load append and apply.
-	// But Apply pops function from value register, args from stack.
-	// So: push all segment results, load append into value, apply.
-
-	// Compile each segment, push result onto stack
-	for _, s := range segments {
-		switch s.typ {
-		case segLiterals:
-			var lst values.Value = values.EmptyList
-			for j := len(s.literals) - 1; j >= 0; j-- {
-				lst = values.NewCons(s.literals[j], lst)
-			}
-			li := p.template.MaybeAppendLiteral(lst)
-			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
-			p.AppendOperations(NewOperationPush())
-
-		case segUnquote:
-			// Need to call (cons expr '()) to wrap the expression result in a list
-			// Use SaveContinuation to properly isolate this call from the outer eval stack
-			consSym := p.env.InternSymbol(values.NewSymbol("cons"))
-			consIdx := p.template.MaybeAppendLiteral(p.env.GetGlobalIndex(consSym))
-			emptyLi := p.template.MaybeAppendLiteral(values.EmptyList)
-
-			// SaveContinuation creates a fresh eval stack for the nested call
-			// The offset will be patched to jump past the Apply
-			saveContinuationIdx := p.template.operations.Length()
-			p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
-
-			// Load cons and push
-			p.AppendOperations(NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(consIdx))
-			p.AppendOperations(NewOperationPush())
-
-			// Compile expr and push
-			if err := p.CompileExpression(ccnt.NotInTail(), s.expr); err != nil {
-				return err
-			}
-			p.AppendOperations(NewOperationPush())
-
-			// Push empty list
-			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(emptyLi))
-			p.AppendOperations(NewOperationPush())
-
-			// Pull cons and apply
-			p.AppendOperations(NewOperationPull())
-			p.AppendOperations(NewOperationApply())
-
-			// Patch SaveContinuation offset to point here (after Apply)
-			currentIdx := p.template.operations.Length()
-			p.template.operations[saveContinuationIdx] = NewOperationSaveContinuationOffsetImmediate(currentIdx - saveContinuationIdx)
-
-			// Now result is in value register (after RestoreContinuation from cons)
-			// Push it for append
-			p.AppendOperations(NewOperationPush())
-
-		case segSplice:
-			if err := p.CompileExpression(ccnt, s.expr); err != nil {
-				return err
-			}
-			p.AppendOperations(NewOperationPush())
-		}
-	}
-
-	// Transform quasiquote to equivalent (list ...) or (append ...) call at compile time.
-	// This is the simplest approach - let the normal compiler handle the function calls.
-	//
-	// For `(a ,x c)` without splicing: generate (list 'a x 'c)
-	// For `(a ,@xs c)` with splicing: generate (append (list 'a) xs (list 'c))
-
-	hasSplice := false
-	for _, s := range segments {
-		if s.typ == segSplice {
-			hasSplice = true
-			break
-		}
-	}
-
-	// Build the syntax tree for the equivalent expression
-	var stx syntax.SyntaxValue
-	srcCtx := pair.SourceContext()
-
-	// Helper to build a syntax list from syntax values
-	buildSyntaxList := func(elems []syntax.SyntaxValue) syntax.SyntaxValue {
-		var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
-		for i := len(elems) - 1; i >= 0; i-- {
-			result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
-		}
-		return result
-	}
-
-	// Helper to wrap a datum value in syntax (declared first for recursion)
-	var wrapDatum func(v values.Value) syntax.SyntaxValue
-	wrapDatum = func(v values.Value) syntax.SyntaxValue {
-		// Check for empty list first
-		if values.IsEmptyList(v) {
-			return syntax.NewSyntaxEmptyList(srcCtx)
-		}
-		switch val := v.(type) {
-		case *values.Symbol:
-			return syntax.NewSyntaxSymbol(val.Key, srcCtx)
-		case *values.Pair:
-			// Recursively wrap pair elements
-			car := wrapDatum(val.Car())
-			cdr := wrapDatum(val.Cdr())
-			return syntax.NewSyntaxCons(car, cdr, srcCtx)
-		default:
-			// For other values (numbers, strings, etc.), use SyntaxObject
-			return syntax.NewSyntaxObject(v, srcCtx)
-		}
-	}
-
-	// Helper to build (quote datum)
-	quoteExpr := func(v values.Value) syntax.SyntaxValue {
-		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-		litStx := wrapDatum(v)
-		return buildSyntaxList([]syntax.SyntaxValue{quoteSym, litStx})
-	}
-
-	if !hasSplice {
-		// No splicing - use (list elem1 elem2 ...)
-		// Build: (list 'a x 'c) for `(a ,x c)
-		listArgs := []syntax.SyntaxValue{}
-		for _, s := range segments {
-			switch s.typ {
-			case segLiterals:
-				for _, lit := range s.literals {
-					// Quote each literal: 'a becomes (quote a)
-					listArgs = append(listArgs, quoteExpr(lit))
-				}
-			case segUnquote:
-				// Use the expression directly
-				listArgs = append(listArgs, s.expr)
-			}
-		}
-		// Build (list arg1 arg2 ...)
-		listSym := syntax.NewSyntaxSymbol("list", srcCtx)
-		allArgs := append([]syntax.SyntaxValue{listSym}, listArgs...)
-		stx = buildSyntaxList(allArgs)
-
-	} else {
-		// Has splicing - use (append seg1 seg2 ...)
-		// Each segment becomes either (list ...) for literals/unquote, or just the expr for splice
-		appendArgs := []syntax.SyntaxValue{}
-		for _, s := range segments {
-			switch s.typ {
-			case segLiterals:
-				// Build (list 'a 'b ...) for this segment's literals
-				listArgs := []syntax.SyntaxValue{}
-				for _, lit := range s.literals {
-					listArgs = append(listArgs, quoteExpr(lit))
-				}
-				listSym := syntax.NewSyntaxSymbol("list", srcCtx)
-				allArgs := append([]syntax.SyntaxValue{listSym}, listArgs...)
-				appendArgs = append(appendArgs, buildSyntaxList(allArgs))
-
-			case segUnquote:
-				// Build (list expr) to wrap single element in a list
-				listSym := syntax.NewSyntaxSymbol("list", srcCtx)
-				appendArgs = append(appendArgs, buildSyntaxList([]syntax.SyntaxValue{listSym, s.expr}))
-
-			case segSplice:
-				// Use the expression directly (it should evaluate to a list)
-				appendArgs = append(appendArgs, s.expr)
-			}
-		}
-		// Build (append seg1 seg2 ...)
-		appendSym := syntax.NewSyntaxSymbol("append", srcCtx)
-		allArgs := append([]syntax.SyntaxValue{appendSym}, appendArgs...)
-		stx = buildSyntaxList(allArgs)
-	}
-
-	// Compile the generated syntax
-	return p.CompileExpression(ccnt, stx)
-}
-
 // getSymbolName returns the symbol name if the value is a symbol
 func (p *CompileTimeContinuation) getSymbolName(v interface{}) (string, bool) {
 	switch s := v.(type) {
@@ -1463,6 +966,45 @@ func (p *CompileTimeContinuation) CompileExpression(ccnt CompileTimeCallContext,
 	return p.compileValidated(ccnt, result.Expr)
 }
 
+// internSymbolsInValue recursively interns all symbols in a value using the environment.
+// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
+// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
+func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) values.Value {
+	switch val := v.(type) {
+	case *values.Symbol:
+		return p.env.InternSymbol(val)
+	case *values.Pair:
+		if val == nil || val == values.EmptyList {
+			return val
+		}
+		car := p.internSymbolsInValue(val.Car())
+		cdr := p.internSymbolsInValue(val.Cdr())
+		if car == val.Car() && cdr == val.Cdr() {
+			return val
+		}
+		return values.NewCons(car, cdr)
+	case *values.Vector:
+		if val == nil || len(*val) == 0 {
+			return val
+		}
+		changed := false
+		newElements := make([]values.Value, len(*val))
+		for i, elem := range *val {
+			interned := p.internSymbolsInValue(elem)
+			newElements[i] = interned
+			if interned != elem {
+				changed = true
+			}
+		}
+		if !changed {
+			return val
+		}
+		return values.NewVector(newElements...)
+	default:
+		return v
+	}
+}
+
 func (p *CompileTimeContinuation) CompileSelfEvaluating(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if expr == nil {
 		// Load void for nil expressions
@@ -1471,7 +1013,9 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(ccnt CompileTimeCallCont
 		)
 		return nil
 	}
-	li := p.template.MaybeAppendLiteral(expr.Unwrap())
+	// Intern symbols to ensure eq? identity per R7RS 6.5
+	val := p.internSymbolsInValue(expr.Unwrap())
+	li := p.template.MaybeAppendLiteral(val)
 	p.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(li),
 	)
@@ -1480,6 +1024,15 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(ccnt CompileTimeCallCont
 
 func (p *CompileTimeContinuation) AppendOperations(ops ...Operation) {
 	p.template.operations = append(p.template.operations, ops...)
+}
+
+// recordSource records source location mapping for operations emitted between
+// startPC and the current PC. This enables stack traces and debugging.
+func (p *CompileTimeContinuation) recordSource(startPC int, source *syntax.SourceContext) {
+	if source != nil && p.template.sourceMap != nil {
+		endPC := len(p.template.operations)
+		p.template.sourceMap.Add(startPC, endPC, source)
+	}
 }
 
 // CompileDefineLibrary handles (define-library (lib-name) <library-declaration> ...).
@@ -2257,6 +1810,30 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ccnt CompileTimeCallContex
 						// define-syntax is compile-time only, emit no runtime operations
 						return nil
 					}
+
+					// Check if transformer is a lambda (procedural macro)
+					if symbol, ok := symVal.(*values.Symbol); ok && symbol.Key == "lambda" {
+						// Compile and evaluate the lambda at compile time to get a transformer closure
+						closure, err := p.compileAndEvalTransformer(transformerPairExpr)
+						if err != nil {
+							return values.WrapForeignErrorf(err, "could not compile lambda transformer")
+						}
+
+						// Store the transformer in the expand phase environment with BindingTypeSyntax
+						expandEnv := p.env.Expand()
+						globalIndex, created := expandEnv.MaybeCreateGlobalBinding(keyword, environment.BindingTypeSyntax)
+						if !created {
+							globalIndex = expandEnv.GetGlobalIndex(keyword)
+						}
+						if globalIndex != nil {
+							err = expandEnv.SetGlobalValue(globalIndex, closure)
+							if err != nil {
+								return err
+							}
+						}
+
+						return nil
+					}
 				}
 			}
 		}
@@ -2265,6 +1842,50 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ccnt CompileTimeCallContex
 	// For non-syntax-rules transformers, we would need to compile and evaluate
 	// the transformer expression at compile time. For now, just support syntax-rules
 	return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+}
+
+// compileAndEvalTransformer compiles a lambda expression and evaluates it at
+// compile time to produce a closure that can be used as a syntax transformer.
+func (p *CompileTimeContinuation) compileAndEvalTransformer(transformerExpr syntax.SyntaxValue) (*MachineClosure, error) {
+	// Create a fresh template for the transformer
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Use the expand phase environment for compiling the transformer
+	// since transformers operate at the expand phase
+	expandEnv := p.env.Expand()
+
+	// Expand the transformer expression first
+	ectx := NewExpandTimeCallContext()
+	expandedExpr, err := NewExpanderTimeContinuation(expandEnv).ExpandExpression(ectx, transformerExpr)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error expanding transformer")
+	}
+
+	// Compile the transformer lambda to bytecode
+	// Use inTail=false and inExpression=true for compile-time evaluation
+	cctx := NewCompileTimeCallContext(false, true, expandEnv)
+	compiler := NewCompiletimeContinuation(tpl, expandEnv)
+	err = compiler.CompileExpression(cctx, expandedExpr)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error compiling transformer")
+	}
+
+	// Execute the compiled template at compile time to get the closure
+	cont := NewMachineContinuation(nil, tpl, expandEnv)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error evaluating transformer")
+	}
+
+	// The result should be a closure
+	result := mc.GetValue()
+	closure, ok := result.(*MachineClosure)
+	if !ok {
+		return nil, values.NewForeignErrorf("define-syntax: transformer must be a procedure, got %T", result)
+	}
+
+	return closure, nil
 }
 
 // CompileCondExpand compiles a cond-expand expression.
@@ -2597,22 +2218,22 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ccnt Compile
 		}
 
 		// Find and open the file
-		file, err := findFile(p, ccnt, fn.Value)
+		file, filePath, err := findFile(p, ccnt, fn.Value)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
 		}
 		if file == nil {
 			return values.NewForeignErrorf("include-library-declarations: file not found: %q", fn.Value)
 		}
-		defer file.Close()
+		defer file.Close() //nolint:errcheck
 
 		// Create parser for the file
 		reader := bufio.NewReader(file)
-		fileParser := parser.NewParser(p.env, reader)
+		fileParser := parser.NewParserWithFile(p.env, reader, filePath)
 
 		// Read and process all forms from the file as library declarations
 		for {
-			stx, readErr := fileParser.ReadSyntax()
+			stx, readErr := fileParser.ReadSyntax(nil)
 			if readErr != nil {
 				if errors.Is(readErr, io.EOF) {
 					break

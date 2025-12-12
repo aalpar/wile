@@ -129,4 +129,13 @@
     write
     write-char
     display
-    features))
+    features
+    ;; Exception handling (R7RS 6.11)
+    error-object?
+    error-object-message
+    error-object-irritants
+    error
+    raise
+    raise-continuable
+    with-exception-handler
+    guard))

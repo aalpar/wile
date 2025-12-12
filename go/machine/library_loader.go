@@ -1,3 +1,17 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 // library_loader.go implements R7RS library loading.
@@ -92,7 +106,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "could not open file")
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	// Create a fresh top-level environment for the library
 	// This isolates the library from the caller's environment
@@ -110,10 +124,10 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 
 	// Parse the file
 	reader := bufio.NewReader(file)
-	p := parser.NewParser(libEnv, reader)
+	p := parser.NewParserWithFile(libEnv, reader, filePath)
 
 	// Read the first form - should be define-library
-	stx, err := p.ReadSyntax()
+	stx, err := p.ReadSyntax(nil)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, values.NewForeignErrorf("library file is empty")

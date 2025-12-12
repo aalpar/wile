@@ -1,3 +1,18 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 package machine
 
 // operation_syntax_rules_transform.go implements the runtime behavior of syntax-rules.
@@ -29,6 +44,8 @@ package machine
 
 import (
 	"context"
+	"fmt"
+
 	"wile/syntax"
 	"wile/values"
 )
@@ -50,7 +67,7 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	// Get the clauses from the value register
 	clausesVal := mctx.GetValue()
 	if clausesVal == nil {
-		return nil, values.NewForeignErrorf("syntax-rules: no clauses in value register")
+		return nil, mctx.Error("syntax-rules: no clauses in value register")
 	}
 
 	// Extract from wrapper
@@ -58,14 +75,14 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	if !ok {
 		// The value register might have the input if operations aren't running correctly
 		// Check if this is actually being called as the second operation
-		return nil, values.NewForeignErrorf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mctx.pc)
+		return nil, mctx.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mctx.pc))
 	}
 	clauses := wrapper.clauses
 
 	// Get the input form from local parameter 0 (transformer is called with input as argument)
 	inputVal := mctx.env.GetLocalBindingByIndex(0).Value()
 	if inputVal == nil {
-		return nil, values.NewForeignErrorf("syntax-rules: invalid input form")
+		return nil, mctx.Error("syntax-rules: invalid input form")
 	}
 
 	// Convert input to syntax value if needed
@@ -75,6 +92,38 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	} else {
 		// Wrap raw value in syntax
 		input = syntax.NewSyntaxObject(inputVal, nil)
+	}
+
+	// Get the use-site source context for better error reporting
+	var useSiteCtx *syntax.SourceContext
+	if input != nil {
+		useSiteCtx = input.SourceContext()
+	}
+
+	// Extract macro name from the input form's car for origin tracking
+	macroName := ""
+	if inputPair, ok := input.(*syntax.SyntaxPair); ok {
+		if car := inputPair.Car(); car != nil {
+			if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+				macroName = sym.Key
+			}
+		}
+	}
+
+	// Create origin info for tracking macro expansion chains
+	// The origin chain is built up as macros expand other macros
+	var origin *syntax.OriginInfo
+	if macroName != "" {
+		// Check if input already has origin info (from a previous macro expansion)
+		var parentOrigin *syntax.OriginInfo
+		if useSiteCtx != nil && useSiteCtx.Origin != nil {
+			parentOrigin = useSiteCtx.Origin
+		}
+		origin = &syntax.OriginInfo{
+			Identifier: macroName,
+			Location:   useSiteCtx,
+			Parent:     parentOrigin,
+		}
 	}
 
 	// Try each clause in order
@@ -90,9 +139,11 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 			// - Pattern variable substitutions preserve original syntax (with original scopes)
 			// - Newly created symbols from template get the intro scope
 			// - Free identifiers (like 'if', 'lambda') don't get intro scope
-			expanded, err := clause.matcher.ExpandWithIntroScope(clause.template, introScope, clause.freeIds)
+			// - Use-site context is used for newly created syntax objects (better error messages)
+			// - Origin info tracks the macro expansion chain
+			expanded, err := clause.matcher.ExpandWithOrigin(clause.template, introScope, clause.freeIds, useSiteCtx, origin)
 			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "syntax-rules: expansion error in clause %d", i+1)
+				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}
 
 			// Set the expanded result as the value
@@ -104,7 +155,7 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	}
 
 	// No clauses matched
-	return nil, values.NewForeignErrorf("syntax-rules: no matching clause for input")
+	return nil, mctx.Error("syntax-rules: no matching clause for input")
 }
 
 func (p *OperationSyntaxRulesTransform) String() string {
