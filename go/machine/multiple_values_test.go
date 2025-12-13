@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -123,5 +122,19 @@ func TestMultipleValues_EqualTo(t *testing.T) {
 	qt.Assert(t, mv1.EqualTo(mv4), qt.IsFalse)
 
 	// Different type
+	qt.Assert(t, mv1.EqualTo(values.NewInteger(1)), qt.IsFalse)
+}
+
+// Tests moved from coverage_additional_test.go
+// TestMultipleValuesEqualTo tests MultipleValues EqualTo method
+func TestMultipleValuesEqualTo(t *testing.T) {
+	mv1 := MultipleValues{values.NewInteger(1), values.NewInteger(2)}
+	mv2 := MultipleValues{values.NewInteger(1), values.NewInteger(2)}
+
+	qt.Assert(t, mv1.EqualTo(mv2), qt.IsTrue)
+
+	mv3 := MultipleValues{values.NewInteger(1)}
+	qt.Assert(t, mv1.EqualTo(mv3), qt.IsFalse)
+
 	qt.Assert(t, mv1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }

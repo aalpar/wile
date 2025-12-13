@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestByteVector_SchemeString(t *testing.T) {

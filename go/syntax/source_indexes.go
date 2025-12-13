@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package syntax
 
 import (
@@ -68,7 +67,7 @@ func (i *SourceIndexes) NewLine() int {
 func (i SourceIndexes) SchemeString() string {
 	q := &strings.Builder{}
 	q.WriteString("<indexes ")
-	q.WriteString(fmt.Sprintf("%d:%d:%d", i.index, i.column, i.line))
+	fmt.Fprintf(q, "%d:%d:%d", i.index, i.column, i.line)
 	q.WriteString(">")
 	return q.String()
 }

@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"fmt"
 
 	"wile/values"
@@ -29,7 +30,7 @@ func ParseLibraryNameFromDatum(expr values.Value) (LibraryName, error) {
 	}
 
 	var parts []string
-	_, err := pair.ForEach(nil, func(i int, hasNext bool, partExpr values.Value) error {
+	_, err := pair.ForEach(nil, func(_ context.Context, i int, hasNext bool, partExpr values.Value) error {
 		if sym, ok := partExpr.(*values.Symbol); ok {
 			parts = append(parts, sym.Key)
 			return nil
@@ -190,7 +191,7 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
-	_, err = renamesPair.ForEach(nil, func(i int, hasNext bool, renamePairVal values.Value) error {
+	_, err = renamesPair.ForEach(nil, func(_ context.Context, i int, hasNext bool, renamePairVal values.Value) error {
 		renamePair, ok := renamePairVal.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
@@ -230,7 +231,7 @@ func parseIdentifierListFromDatum(expr values.Value) ([]string, error) {
 	}
 
 	var ids []string
-	_, err := pair.ForEach(nil, func(i int, hasNext bool, idExpr values.Value) error {
+	_, err := pair.ForEach(nil, func(_ context.Context, i int, hasNext bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected identifier symbol")

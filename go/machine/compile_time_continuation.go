@@ -59,7 +59,7 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 	p.libraryCallback = cb
 }
 
-func (p *CompileTimeContinuation) CompileSymbol(ccnt CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
+func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
 	sym, ok := expr.Unwrap().(*values.Symbol)
 	if !ok {
 		return values.ErrNotASymbol
@@ -125,58 +125,29 @@ func (p *CompileTimeContinuation) CompileSymbol(ccnt CompileTimeCallContext, exp
 	return nil
 }
 
-func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ccnt CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
+func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
 	symVal := sym.Unwrap().(*values.Symbol)
 	symVal = p.env.InternSymbol(symVal)
 	scopes := sym.Scopes()
 
-	// First, try dynamic lookup in the compile environment.
-	// This is the new data-driven approach where primitive compilers
-	// are bound as PrimitiveCompiler values in env.Compile().
-	if pc := LookupPrimitiveCompiler(p.env, symVal, scopes); pc != nil {
-		err := pc.Compile(p, ccnt, expr)
+	// Dynamic lookup in the compile environment.
+	// Syntax compilers are bound as SyntaxCompiler values in env.Compile().
+	// All syntax compilers are registered in syntax_compilers_registry.go.
+	if pc := LookupSyntaxCompiler(p.env, symVal, scopes); pc != nil {
+		err := pc.Compile(p, ctctx, expr)
 		if err != nil {
 			return true, err
 		}
 		return true, nil
 	}
 
-	// Fallback to switch statement for passthrough forms that aren't in the registry.
+	// Not a primitive - caller should treat as procedure call.
 	// Core forms (define, lambda, quote, quasiquote, if, set!, begin) are handled
-	// by compileValidated* methods and should never reach here.
-	var err error
-	switch symVal.Key {
-	case "meta":
-		err = p.CompileMeta(ccnt, expr)
-	case "include":
-		err = p.CompileInclude(ccnt, expr)
-	case "include-ci":
-		err = p.CompileIncludeCi(ccnt, expr)
-	case "define-syntax":
-		err = p.CompileDefineSyntax(ccnt, expr)
-	case "define-library":
-		err = p.CompileDefineLibrary(ccnt, expr)
-	case "library":
-		// R6RS-style library - treat as define-library
-		err = p.CompileDefineLibrary(ccnt, expr)
-	case "import":
-		err = p.CompileImport(ccnt, expr)
-	case "export":
-		err = p.CompileExport(ccnt, expr)
-	case "syntax":
-		err = p.CompileSyntax(ccnt, expr)
-	case "syntax-case":
-		err = p.CompileSyntaxCase(ccnt, expr)
-	default:
-		return false, values.ErrNotAPrimitive
-	}
-	if err != nil {
-		return true, err
-	}
-	return true, nil
+	// by compileValidated* methods and never reach here.
+	return false, values.ErrNotAPrimitive
 }
 
-func (p *CompileTimeContinuation) CompileMeta(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%T is not a pair", expr)
@@ -184,14 +155,14 @@ func (p *CompileTimeContinuation) CompileMeta(ccnt CompileTimeCallContext, expr 
 	// Get the meta environment and compile expressions in it
 	metaEnv := p.env.Meta()
 	metaCont := NewCompiletimeContinuation(p.template, metaEnv)
-	err := metaCont.compileExpressionList(ccnt, rest)
+	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "failed to compile meta")
 	}
 	return nil
 }
 
-func findFile(p *CompileTimeContinuation, ccnt CompileTimeCallContext, path string) (fs.File, string, error) {
+func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
 	includePath := os.Getenv(SchemeIncludePathEnv)
 	if includePath == "" {
 		return nil, "", values.WrapForeignErrorf(values.ErrInvalidSyntax, "environment variable %q not set", SchemeIncludePathEnv)
@@ -211,19 +182,19 @@ func findFile(p *CompileTimeContinuation, ccnt CompileTimeCallContext, path stri
 // CompileInclude compiles an include expression.
 // It reads and compiles all forms from the specified files in order.
 // Each form is expanded and compiled in the current environment.
-func (p *CompileTimeContinuation) CompileInclude(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	return p.compileIncludeImpl(ccnt, expr, false)
+func (p *CompileTimeContinuation) CompileInclude(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	return p.compileIncludeImpl(ctctx, expr, false)
 }
 
 // compileIncludeImpl is the shared implementation for include and include-ci.
-func (p *CompileTimeContinuation) compileIncludeImpl(ccnt CompileTimeCallContext, expr syntax.SyntaxValue, caseInsensitive bool) error {
+func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, caseInsensitive bool) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
 	}
 	for !syntax.IsSyntaxEmptyList(rest) {
 		// Get the file name
-		car := rest.Car()
+		car := rest.SyntaxCar()
 		next, ok := car.(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a value, but got %T", car)
@@ -234,7 +205,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ccnt CompileTimeCallContext
 		}
 
 		// Find and open the file
-		file, filePath, err := findFile(p, ccnt, fn.Value)
+		file, filePath, err := findFile(p, ctctx, fn.Value)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
 		}
@@ -265,14 +236,14 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ccnt CompileTimeCallContext
 			}
 
 			// Compile the expanded form
-			compileErr := p.CompileExpression(ccnt, expanded)
+			compileErr := p.CompileExpression(ctctx, expanded)
 			if compileErr != nil {
 				return values.WrapForeignErrorf(compileErr, "include: error compiling form from %q", fn.Value)
 			}
 		}
 
 		// Move to next filename
-		rest, ok = rest.Cdr().(*syntax.SyntaxPair)
+		rest, ok = rest.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list, got %T", rest)
 		}
@@ -283,17 +254,17 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ccnt CompileTimeCallContext
 // CompileIncludeCi compiles an include-ci expression.
 // It reads and compiles all forms from the specified files in order,
 // treating symbols as case-insensitive (folded to lowercase).
-func (p *CompileTimeContinuation) CompileIncludeCi(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileIncludeCi(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// TODO: implement case-insensitive parsing by creating parser with caseInsensitive=true
 	// For now, just use the regular include implementation
-	return p.compileIncludeImpl(ccnt, expr, true)
+	return p.compileIncludeImpl(ctctx, expr, true)
 }
 
-func (p *CompileTimeContinuation) compileLambdaParameterList(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) (*NativeTemplate, *environment.EnvironmentFrame, error) {
+func (p *CompileTimeContinuation) compileLambdaParameterList(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) (*NativeTemplate, *environment.EnvironmentFrame, error) {
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 	tpl := NewNativeTemplate(0, 0, false)
-	tail, err := syntax.SyntaxForEach(expr, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctctx.ctx, expr, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
 		param, ok := v.Unwrap().(*values.Symbol)
 		if !ok {
 			return values.ErrInvalidSyntax
@@ -327,7 +298,7 @@ func (p *CompileTimeContinuation) compileLambdaParameterList(ccnt CompileTimeCal
 	if err != nil {
 		return nil, nil, values.WrapForeignErrorf(err, "failed to compile lambda parameter list")
 	}
-	if values.IsEmptyList(tail) {
+	if syntax.IsSyntaxEmptyList(tail) {
 		env := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 		return tpl, env, nil
 	}
@@ -362,9 +333,9 @@ func (p *CompileTimeContinuation) compileLambdaParameterList(ccnt CompileTimeCal
 	return tpl, env, nil
 }
 
-func (p *CompileTimeContinuation) compileProcedureArgumentList(ccnt CompileTimeCallContext, args *syntax.SyntaxPair) error {
-	tail, err := syntax.SyntaxForEach(args, func(i int, hasNext bool, v syntax.SyntaxValue) error {
-		err := p.CompileExpression(ccnt.NotInTail(), v)
+func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTimeCallContext, args *syntax.SyntaxPair) error {
+	tail, err := syntax.SyntaxForEach(ctctx.ctx, args, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
+		err := p.CompileExpression(ctctx.NotInTail(), v)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to compile procedure argument list")
 		}
@@ -382,16 +353,16 @@ func (p *CompileTimeContinuation) compileProcedureArgumentList(ccnt CompileTimeC
 	return nil
 }
 
-func (p *CompileTimeContinuation) compileExpressionList(ccnt CompileTimeCallContext, expr *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
 	if !expr.IsList() {
 		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of expressions, got %T", expr)
 	}
-	tail, err := syntax.SyntaxForEach(expr, func(i int, hasNext bool, v syntax.SyntaxValue) error {
-		ccnt0 := ccnt
+	tail, err := syntax.SyntaxForEach(ctctx.ctx, expr, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
+		ctctx0 := ctctx
 		if hasNext {
-			ccnt0 = ccnt.NotInTail()
+			ctctx0 = ctctx.NotInTail()
 		}
-		err := p.CompileExpression(ccnt0, v)
+		err := p.CompileExpression(ctctx0, v)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to compile expression list")
 		}
@@ -410,13 +381,13 @@ func (p *CompileTimeContinuation) compileExpressionList(ccnt CompileTimeCallCont
 // It assumes that the initial element is not a primitive and compiles it as a procedure call.
 // The compiled code will leave the result of the procedure call on the stack.
 //
-// Tail Call Optimization: When ccnt.inTail is true, we skip SaveContinuation.
+// Tail Call Optimization: When ctctx.inTail is true, we skip SaveContinuation.
 // This allows the called function's RestoreContinuation to return directly
 // to our caller's continuation, implementing proper tail call optimization
 // per R7RS Section 3.5.
-func (p *CompileTimeContinuation) CompileProcedureCall(ccnt CompileTimeCallContext, initial syntax.SyntaxValue, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallContext, initial syntax.SyntaxValue, expr syntax.SyntaxValue) error {
 	var operationSaveContinuationIndex int
-	if !ccnt.inTail {
+	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
 		operationSaveContinuationIndex = p.template.operations.Length()
 		p.AppendOperations(
@@ -425,7 +396,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ccnt CompileTimeCallConte
 	}
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
-	err := p.CompileExpression(ccnt.NotInTail(), initial)
+	err := p.CompileExpression(ctctx.NotInTail(), initial)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "failed to compile expression")
 	}
@@ -433,7 +404,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ccnt CompileTimeCallConte
 		NewOperationPush(),
 	)
 	// compile as a procedure call
-	err = p.compileProcedureArgumentList(ccnt, expr.(*syntax.SyntaxPair))
+	err = p.compileProcedureArgumentList(ctctx, expr.(*syntax.SyntaxPair))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "failed to compile expression list")
 	}
@@ -442,7 +413,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ccnt CompileTimeCallConte
 		NewOperationApply(),
 	)
 
-	if !ccnt.inTail {
+	if !ctctx.inTail {
 		// Patch the SaveContinuation offset for non-tail calls
 		l := p.template.operations.Length()
 		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
@@ -453,34 +424,34 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ccnt CompileTimeCallConte
 // CompilePrimitiveOrProcedureCall compiles either a primitive or a procedure call.
 // It first checks if the initial element is a syntax symbol that corresponds to a primitive.
 // If so, it compiles the primitive. If not, it treats it as a procedure call.
-func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	stx0pr, ok := expr.Unwrap().(*values.Pair)
+func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	stx0pr, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair for procedure call, got %T", expr)
 	}
-	initial, ok := stx0pr.Car().(syntax.SyntaxValue)
+	initial, ok := stx0pr.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "expected a syntax object for procedure call, got %T", stx0pr.Car())
 	}
-	stx1cdr, ok := stx0pr.Cdr().(syntax.SyntaxValue)
+	stx1cdr, ok := stx0pr.SyntaxCdr().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair for procedure call, got %T", stx1cdr)
 	}
-	stx0pr, ok = stx1cdr.Unwrap().(*values.Pair)
+	stx0pr, ok = stx1cdr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair for procedure call, got %T", stx1cdr.Unwrap())
 	}
 	switch v := initial.(type) {
 	case *syntax.SyntaxSymbol:
-		ok, err := p.CompileSyntaxPrimitive(ccnt, v, stx1cdr)
+		ok, err := p.CompileSyntaxPrimitive(ctctx, v, stx1cdr)
 		if !ok {
-			return p.CompileProcedureCall(ccnt, v, stx1cdr)
+			return p.CompileProcedureCall(ctctx, v, stx1cdr)
 		}
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to compile primitive or call")
 		}
 	case *syntax.SyntaxPair:
-		err := p.CompileProcedureCall(ccnt, v, stx1cdr)
+		err := p.CompileProcedureCall(ctctx, v, stx1cdr)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to compile expression")
 		}
@@ -494,7 +465,7 @@ func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ccnt CompileTi
 // depth=1 means we're inside one level of quasiquote (the common case).
 // depth=2 means nested quasiquote `(a `(b ,x)), etc.
 // depth=0 would mean we should evaluate (but we start at 1, so this is the trigger).
-func (p *CompileTimeContinuation) compileQuasiquoteDatum(ccnt CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
+func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
 	// Optimization: if no runtime evaluation needed, emit as literal
 	if !p.quasiquoteNeedsRuntime(datum, depth) {
 		// Intern symbols to ensure eq? identity per R7RS 6.5
@@ -506,7 +477,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ccnt CompileTimeCallCon
 
 	// Transform to equivalent Scheme code and compile
 	expanded := p.expandQuasiquote(datum, depth)
-	return p.CompileExpression(ccnt, expanded)
+	return p.CompileExpression(ctctx, expanded)
 }
 
 // buildQuasiquoteSyntaxList creates a proper list from syntax elements.
@@ -530,6 +501,8 @@ func (p *CompileTimeContinuation) wrapDatumAsSyntax(srcCtx *syntax.SourceContext
 		car := p.wrapDatumAsSyntax(srcCtx, val.Car())
 		cdr := p.wrapDatumAsSyntax(srcCtx, val.Cdr())
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
+	case syntax.SyntaxValue:
+		return val
 	default:
 		return syntax.NewSyntaxObject(v, srcCtx)
 	}
@@ -551,23 +524,23 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
-		if values.IsEmptyList(v) {
+		if syntax.IsSyntaxEmptyList(v) {
 			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
 			return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 		}
 
-		if carSymName, ok := p.getSymbolName(v.Car()); ok {
+		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok {
 			switch carSymName {
 			case "unquote":
 				if depth == 1 {
 					if v.Length() == 2 {
-						cdr := v.Cdr().(*syntax.SyntaxPair)
-						return cdr.Car().(syntax.SyntaxValue)
+						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+						return cdr.SyntaxCar().(syntax.SyntaxValue)
 					}
 				}
 				if v.Length() == 2 {
-					cdr := v.Cdr().(*syntax.SyntaxPair)
-					arg := cdr.Car().(syntax.SyntaxValue)
+					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+					arg := cdr.SyntaxCar().(syntax.SyntaxValue)
 					processedArg := p.expandQuasiquote(arg, depth-1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -583,8 +556,8 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 
 			case "unquote-splicing":
 				if depth > 1 && v.Length() == 2 {
-					cdr := v.Cdr().(*syntax.SyntaxPair)
-					arg := cdr.Car().(syntax.SyntaxValue)
+					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+					arg := cdr.SyntaxCar().(syntax.SyntaxValue)
 					processedArg := p.expandQuasiquote(arg, depth-1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -600,8 +573,8 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 
 			case "quasiquote":
 				if v.Length() == 2 {
-					cdr := v.Cdr().(*syntax.SyntaxPair)
-					body := cdr.Car().(syntax.SyntaxValue)
+					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+					body := cdr.SyntaxCar().(syntax.SyntaxValue)
 					processedBody := p.expandQuasiquote(body, depth+1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -650,11 +623,14 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 	// Check if any element is ,@ at depth 1
 	hasSplice := false
 	current := pair
-	for !values.IsEmptyList(current) {
-		car := current.Car()
-		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
-			if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
-				if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
+		carSyntax, ok := car.(syntax.SyntaxValue)
+		if ok {
+			carPair, ok := carSyntax.(*syntax.SyntaxPair)
+			if ok {
+				carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
+				if ok {
 					if carSymName == "unquote-splicing" && depth == 1 {
 						hasSplice = true
 						break
@@ -662,8 +638,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 				}
 			}
 		}
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -680,7 +656,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 
 		current := pair
 		for !values.IsEmptyList(current) {
-			car := current.Car()
+			car := current.SyntaxCar()
 			if carSyntax, ok := car.(syntax.SyntaxValue); ok {
 				elems = append(elems, p.expandQuasiquote(carSyntax, depth))
 			} else {
@@ -688,8 +664,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 				litStx := p.wrapDatumAsSyntax(srcCtx, car)
 				elems = append(elems, p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx))
 			}
-			cdr := current.Cdr()
-			if values.IsEmptyList(cdr) {
+			cdr := current.SyntaxCdr()
+			if syntax.IsSyntaxEmptyList(cdr) {
 				break
 			}
 			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -717,7 +693,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 
 	current := pair
 	for {
-		car := current.Car()
+		car := current.SyntaxCdr()
 		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
 			elements = append(elements, p.expandQuasiquote(carSyntax, depth))
 		} else {
@@ -725,8 +701,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 			litStx := p.wrapDatumAsSyntax(srcCtx, car)
 			elements = append(elements, p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, litStx))
 		}
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			tail = values.EmptyList
 			break
 		}
@@ -791,8 +767,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 	}
 
 	current := pair
-	for !values.IsEmptyList(current) {
-		car := current.Car()
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
 		carSyntax, ok := car.(syntax.SyntaxValue)
 		if !ok {
 			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
@@ -802,15 +778,16 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 		}
 
 		if carPair, ok := carSyntax.(*syntax.SyntaxPair); ok {
-			if carSymName, ok := p.getSymbolName(carPair.Car()); ok {
+			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
+			if ok {
 				if carSymName == "unquote-splicing" && depth == 1 {
 					flushNormal()
 					if carPair.Length() != 2 {
 						// Malformed - treat as normal
 						currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
 					} else {
-						cdrPair := carPair.Cdr().(*syntax.SyntaxPair)
-						expr := cdrPair.Car().(syntax.SyntaxValue)
+						cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
+						expr := cdrPair.SyntaxCar().(syntax.SyntaxValue)
 						segments = append(segments, segment{typ: segSplice, expr: expr})
 					}
 					goto next
@@ -821,8 +798,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 		currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
 
 	next:
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -865,11 +842,11 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue, depth int) bool {
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
-		if values.IsEmptyList(v) {
+		if syntax.IsSyntaxEmptyList(v) {
 			return false
 		}
 		// Check if this is (unquote ...) or (unquote-splicing ...) at depth 1
-		if carSymName, ok := p.getSymbolName(v.Car()); ok {
+		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok {
 			switch carSymName {
 			case "unquote", "unquote-splicing":
 				if depth == 1 {
@@ -878,8 +855,8 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 				// Nested unquote at depth > 1 - check if the argument needs runtime
 				// For ,,x at depth 2: the inner ,x is at depth 1 and needs eval
 				if v.Length() == 2 {
-					cdr := v.Cdr().(*syntax.SyntaxPair)
-					arg := cdr.Car()
+					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+					arg := cdr.SyntaxCar()
 					if argSyntax, ok := arg.(syntax.SyntaxValue); ok {
 						return p.quasiquoteNeedsRuntime(argSyntax, depth-1)
 					}
@@ -909,15 +886,15 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 
 func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.SyntaxPair, depth int) bool {
 	current := pair
-	for !values.IsEmptyList(current) {
-		car := current.Car()
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
 		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
 			if p.quasiquoteNeedsRuntime(carSyntax, depth) {
 				return true
 			}
 		}
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		nextPair, ok := cdr.(*syntax.SyntaxPair)
@@ -930,40 +907,34 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 }
 
 // getSymbolName returns the symbol name if the value is a symbol
-func (p *CompileTimeContinuation) getSymbolName(v interface{}) (string, bool) {
+func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	switch s := v.(type) {
 	case *syntax.SyntaxSymbol:
 		if sym, ok := s.Unwrap().(*values.Symbol); ok {
 			return sym.Key, true
 		}
-	case *syntax.SyntaxObject:
-		if sym, ok := s.Unwrap().(*values.Symbol); ok {
-			return sym.Key, true
-		}
-	case *values.Symbol:
-		return s.Key, true
 	}
 	return "", false
 }
 
 // CompileUnquote errors - unquote outside of quasiquote
-func (p *CompileTimeContinuation) CompileUnquote(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileUnquote(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	return values.NewForeignError("unquote: not in quasiquote context")
 }
 
 // CompileUnquoteSplicing errors - unquote-splicing outside of quasiquote
-func (p *CompileTimeContinuation) CompileUnquoteSplicing(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileUnquoteSplicing(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	return values.NewForeignError("unquote-splicing: not in quasiquote context")
 }
 
-func (p *CompileTimeContinuation) CompileExpression(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// Validate the expression first
-	result := validate.ValidateExpression(expr)
+	result := validate.ValidateExpression(nil, expr)
 	if !result.Ok() {
 		return values.NewForeignError(result.Error())
 	}
 	// Compile the validated form
-	return p.compileValidated(ccnt, result.Expr)
+	return p.compileValidated(ctctx, result.Expr)
 }
 
 // internSymbolsInValue recursively interns all symbols in a value using the environment.
@@ -1005,7 +976,7 @@ func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) values.Va
 	}
 }
 
-func (p *CompileTimeContinuation) CompileSelfEvaluating(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileSelfEvaluating(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if expr == nil {
 		// Load void for nil expressions
 		p.AppendOperations(
@@ -1051,7 +1022,7 @@ func (p *CompileTimeContinuation) recordSource(startPC int, source *syntax.Sourc
 //
 // This creates an isolated environment for the library, processes declarations
 // in order, and registers the compiled library in the registry.
-func (p *CompileTimeContinuation) CompileDefineLibrary(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is ((lib-name) <declaration> ...) - args after 'define-library' keyword
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -1059,7 +1030,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ccnt CompileTimeCallConte
 	}
 
 	// Parse library name: (lib-name) is a list of identifiers
-	libNameExpr, ok := rest.Car().(syntax.SyntaxValue)
+	libNameExpr, ok := rest.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "define-library: expected library name")
 	}
@@ -1084,7 +1055,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ccnt CompileTimeCallConte
 	lib := NewCompiledLibrary(libName, libEnv)
 
 	// Process library declarations
-	declsExpr, ok := rest.Cdr().(syntax.SyntaxValue)
+	declsExpr, ok := rest.SyntaxCdr().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "define-library: expected declarations")
 	}
@@ -1109,8 +1080,8 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ccnt CompileTimeCallConte
 	libCompiler := NewCompiletimeContinuation(libTemplate, libEnv)
 
 	// Process each declaration
-	_, err = syntax.SyntaxForEach(decls, func(i int, hasNext bool, decl syntax.SyntaxValue) error {
-		return libCompiler.processLibraryDeclaration(ccnt, lib, decl)
+	_, err = syntax.SyntaxForEach(ctctx.ctx, decls, func(ctx context.Context, i int, hasNext bool, decl syntax.SyntaxValue) error {
+		return libCompiler.processLibraryDeclaration(ctctx, lib, decl)
 	})
 	if err != nil {
 		return values.WrapForeignErrorf(err, "define-library: error processing declarations")
@@ -1129,14 +1100,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ccnt CompileTimeCallConte
 }
 
 // processLibraryDeclaration handles a single library declaration.
-func (p *CompileTimeContinuation) processLibraryDeclaration(ccnt CompileTimeCallContext, lib *CompiledLibrary, decl syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCallContext, lib *CompiledLibrary, decl syntax.SyntaxValue) error {
 	declPair, ok := decl.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "library declaration must be a list")
 	}
 
 	// Get the declaration keyword
-	keywordExpr, ok := declPair.Car().(syntax.SyntaxValue)
+	keywordExpr, ok := declPair.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "library declaration must start with keyword")
 	}
@@ -1149,7 +1120,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ccnt CompileTimeCall
 	keyword := keywordSym.Unwrap().(*values.Symbol).Key
 
 	// Get the rest of the declaration (arguments)
-	argsExpr, ok := declPair.Cdr().(syntax.SyntaxValue)
+	argsExpr, ok := declPair.SyntaxCdr().(syntax.SyntaxValue)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "library declaration missing arguments")
 	}
@@ -1158,7 +1129,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ccnt CompileTimeCall
 	case "export":
 		return p.processLibraryExport(lib, argsExpr)
 	case "import":
-		return p.processLibraryImport(ccnt, lib, argsExpr)
+		return p.processLibraryImport(ctctx, lib, argsExpr)
 	case "begin":
 		// Compile the begin body in the library environment
 		beginPair, ok := argsExpr.(*syntax.SyntaxPair)
@@ -1168,15 +1139,15 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ccnt CompileTimeCall
 			}
 			return values.WrapForeignErrorf(values.ErrNotAPair, "begin: expected list of expressions")
 		}
-		return p.compileExpressionList(ccnt, beginPair)
+		return p.compileExpressionList(ctctx, beginPair)
 	case "include":
-		return p.CompileInclude(ccnt, argsExpr)
+		return p.CompileInclude(ctctx, argsExpr)
 	case "include-ci":
-		return p.CompileIncludeCi(ccnt, argsExpr)
+		return p.CompileIncludeCi(ctctx, argsExpr)
 	case "include-library-declarations":
-		return p.processIncludeLibraryDeclarations(ccnt, lib, argsExpr)
+		return p.processIncludeLibraryDeclarations(ctctx, lib, argsExpr)
 	case "cond-expand":
-		return p.processCondExpand(ccnt, lib, argsExpr)
+		return p.processCondExpand(ctctx, lib, argsExpr)
 	default:
 		return values.NewForeignErrorf("unknown library declaration: %s", keyword)
 	}
@@ -1193,7 +1164,7 @@ func (p *CompileTimeContinuation) processLibraryExport(lib *CompiledLibrary, arg
 		return values.WrapForeignErrorf(values.ErrNotAPair, "export: expected list of export specs")
 	}
 
-	_, err := syntax.SyntaxForEach(argsPair, func(i int, hasNext bool, spec syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(nil, argsPair, func(ctx context.Context, i int, hasNext bool, spec syntax.SyntaxValue) error {
 		return parseExportSpec(lib, spec)
 	})
 	return err
@@ -1213,7 +1184,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 
 	case *syntax.SyntaxPair:
 		// Could be (rename internal external)
-		carExpr, ok := s.Car().(syntax.SyntaxValue)
+		carExpr, ok := s.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "export: invalid spec")
 		}
@@ -1225,12 +1196,12 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 
 		if carSym.Unwrap().(*values.Symbol).Key == "rename" {
 			// (rename internal external)
-			cdrExpr, ok := s.Cdr().(*syntax.SyntaxPair)
+			cdrExpr, ok := s.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAPair, "export rename: expected internal and external names")
 			}
 
-			internalExpr, ok := cdrExpr.Car().(syntax.SyntaxValue)
+			internalExpr, ok := cdrExpr.SyntaxCar().(syntax.SyntaxValue)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "export rename: expected internal name")
 			}
@@ -1239,12 +1210,12 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 				return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "export rename: internal name must be symbol")
 			}
 
-			cdrCdr, ok := cdrExpr.Cdr().(*syntax.SyntaxPair)
+			cdrCdr, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAPair, "export rename: expected external name")
 			}
 
-			externalExpr, ok := cdrCdr.Car().(syntax.SyntaxValue)
+			externalExpr, ok := cdrCdr.SyntaxCar().(syntax.SyntaxValue)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "export rename: expected external name")
 			}
@@ -1267,7 +1238,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 }
 
 // processLibraryImport handles (import <import-set> ...) within a library.
-func (p *CompileTimeContinuation) processLibraryImport(ccnt CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil // empty import is valid
 	}
@@ -1278,8 +1249,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ccnt CompileTimeCallConte
 	}
 
 	// Process each import set
-	ctx := context.Background()
-	_, err := syntax.SyntaxForEach(argsPair, func(i int, hasNext bool, importSetExpr syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, i int, hasNext bool, importSetExpr syntax.SyntaxValue) error {
 		importSet, err := parseImportSet(importSetExpr)
 		if err != nil {
 			return err
@@ -1325,10 +1295,10 @@ func (p *CompileTimeContinuation) processLibraryImport(ccnt CompileTimeCallConte
 
 			// Create binding in the importing library's environment
 			localSym := lib.Env.InternSymbol(values.NewSymbol(localName))
-			_, _ = lib.Env.MaybeCreateGlobalBinding(localSym, importedBinding.BindingType())
+			_, _ = lib.Env.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
 			globalIdx := lib.Env.GetGlobalIndex(localSym)
 			if globalIdx != nil {
-				if err := lib.Env.SetGlobalValue(globalIdx, importedBinding.Value()); err != nil {
+				if err := lib.Env.SetOwnGlobalValue(globalIdx, importedBinding.Value()); err != nil {
 					return values.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 				}
 			}
@@ -1336,10 +1306,10 @@ func (p *CompileTimeContinuation) processLibraryImport(ccnt CompileTimeCallConte
 			// If it's a syntax binding, also copy to expand phase
 			if importedBinding.BindingType() == environment.BindingTypeSyntax {
 				expandEnv := lib.Env.Expand()
-				_, _ = expandEnv.MaybeCreateGlobalBinding(localSym, environment.BindingTypeSyntax)
+				_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
 				expandIdx := expandEnv.GetGlobalIndex(localSym)
 				if expandIdx != nil {
-					_ = expandEnv.SetGlobalValue(expandIdx, importedBinding.Value())
+					_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 				}
 			}
 		}
@@ -1363,7 +1333,7 @@ func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 	}
 
 	// Check if first element is a modifier keyword
-	carExpr, ok := pair.Car().(syntax.SyntaxValue)
+	carExpr, ok := pair.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "import set: invalid first element")
 	}
@@ -1393,13 +1363,13 @@ func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 
 // parseImportSetOnly parses (only <import-set> <id> ...)
 func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.Cdr().(*syntax.SyntaxPair)
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected import-set and identifiers")
 	}
 
 	// Get nested import set
-	nestedExpr, ok := cdrExpr.Car().(syntax.SyntaxValue)
+	nestedExpr, ok := cdrExpr.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "only: expected import-set")
 	}
@@ -1425,13 +1395,13 @@ func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 // parseImportSetExcept parses (except <import-set> <id> ...)
 func parseImportSetExcept(pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.Cdr().(*syntax.SyntaxPair)
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "except: expected import-set and identifiers")
 	}
 
 	// Get nested import set
-	nestedExpr, ok := cdrExpr.Car().(syntax.SyntaxValue)
+	nestedExpr, ok := cdrExpr.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "except: expected import-set")
 	}
@@ -1463,7 +1433,7 @@ func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
 	}
 
 	// Get nested import set
-	nestedExpr, ok := cdrExpr.Car().(syntax.SyntaxValue)
+	nestedExpr, ok := cdrExpr.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "prefix: expected import-set")
 	}
@@ -1473,12 +1443,12 @@ func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
 	}
 
 	// Get prefix
-	prefixPair, ok := cdrExpr.Cdr().(*syntax.SyntaxPair)
+	prefixPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected prefix identifier")
 	}
 
-	prefixExpr, ok := prefixPair.Car().(syntax.SyntaxValue)
+	prefixExpr, ok := prefixPair.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "prefix: expected prefix identifier")
 	}
@@ -1494,13 +1464,13 @@ func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 // parseImportSetRename parses (rename <import-set> (<old> <new>) ...)
 func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.Cdr().(*syntax.SyntaxPair)
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected import-set and rename pairs")
 	}
 
 	// Get nested import set
-	nestedExpr, ok := cdrExpr.Car().(syntax.SyntaxValue)
+	nestedExpr, ok := cdrExpr.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "rename: expected import-set")
 	}
@@ -1524,13 +1494,13 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
-	_, err = syntax.SyntaxForEach(renamesPair, func(i int, hasNext bool, renamePairExpr syntax.SyntaxValue) error {
+	_, err = syntax.SyntaxForEach(nil, renamesPair, func(ctx context.Context, i int, hasNext bool, renamePairExpr syntax.SyntaxValue) error {
 		renamePair, ok := renamePairExpr.(*syntax.SyntaxPair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
 		}
 
-		oldExpr, ok := renamePair.Car().(syntax.SyntaxValue)
+		oldExpr, ok := renamePair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "rename: expected old name")
 		}
@@ -1539,12 +1509,12 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "rename: old name must be symbol")
 		}
 
-		newPair, ok := renamePair.Cdr().(*syntax.SyntaxPair)
+		newPair, ok := renamePair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected new name")
 		}
 
-		newExpr, ok := newPair.Car().(syntax.SyntaxValue)
+		newExpr, ok := newPair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "rename: expected new name")
 		}
@@ -1574,7 +1544,7 @@ func parseIdentifierList(expr syntax.SyntaxValue) ([]string, error) {
 	}
 
 	var ids []string
-	_, err := syntax.SyntaxForEach(pair, func(i int, hasNext bool, idExpr syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(nil, pair, func(ctx context.Context, i int, hasNext bool, idExpr syntax.SyntaxValue) error {
 		idSym, ok := idExpr.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "expected identifier symbol")
@@ -1596,7 +1566,7 @@ func parseLibraryName(expr syntax.SyntaxValue) (LibraryName, error) {
 	}
 
 	var parts []string
-	_, err := syntax.SyntaxForEach(pair, func(i int, hasNext bool, partExpr syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(nil, pair, func(ctx context.Context, i int, hasNext bool, partExpr syntax.SyntaxValue) error {
 		if sym, ok := partExpr.(*syntax.SyntaxSymbol); ok {
 			parts = append(parts, sym.Unwrap().(*values.Symbol).Key)
 			return nil
@@ -1621,7 +1591,7 @@ func parseLibraryName(expr syntax.SyntaxValue) (LibraryName, error) {
 //
 // This is for top-level imports outside of a library definition.
 // It loads the specified libraries and binds their exports in the current environment.
-func (p *CompileTimeContinuation) CompileImport(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is (<import-set> ...) - args after 'import' keyword
 	if syntax.IsSyntaxEmptyList(expr) {
 		return nil // empty import is valid
@@ -1633,8 +1603,7 @@ func (p *CompileTimeContinuation) CompileImport(ccnt CompileTimeCallContext, exp
 	}
 
 	// Process each import set
-	ctx := context.Background()
-	_, err := syntax.SyntaxForEach(importSets, func(i int, hasNext bool, importSetExpr syntax.SyntaxValue) error {
+	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, i int, hasNext bool, importSetExpr syntax.SyntaxValue) error {
 		importSet, err := parseImportSet(importSetExpr)
 		if err != nil {
 			return err
@@ -1679,14 +1648,14 @@ func (p *CompileTimeContinuation) CompileImport(ccnt CompileTimeCallContext, exp
 
 			// Create binding in the importing environment
 			localSym := p.env.InternSymbol(values.NewSymbol(localName))
-			_, created := p.env.MaybeCreateGlobalBinding(localSym, libBinding.BindingType())
+			_, created := p.env.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
 			if !created {
 				// Binding already exists - update it
 				// (This allows re-importing in REPL)
 			}
 			globalIdx := p.env.GetGlobalIndex(localSym)
 			if globalIdx != nil {
-				if err := p.env.SetGlobalValue(globalIdx, libBinding.Value()); err != nil {
+				if err := p.env.SetOwnGlobalValue(globalIdx, libBinding.Value()); err != nil {
 					return values.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 				}
 			}
@@ -1694,23 +1663,29 @@ func (p *CompileTimeContinuation) CompileImport(ccnt CompileTimeCallContext, exp
 			// If it's a syntax binding, also copy to expand phase
 			if libBinding.BindingType() == environment.BindingTypeSyntax {
 				expandEnv := p.env.Expand()
-				_, _ = expandEnv.MaybeCreateGlobalBinding(localSym, environment.BindingTypeSyntax)
+				_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
 				expandIdx := expandEnv.GetGlobalIndex(localSym)
 				if expandIdx != nil {
-					_ = expandEnv.SetGlobalValue(expandIdx, libBinding.Value())
+					_ = expandEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
 				}
 			}
 		}
 
 		return nil
 	})
-	return err
+	if err != nil {
+		return values.WrapForeignErrorf(err, "import: error processing import sets")
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "import: unexpected return value")
+	}
+	return nil
 }
 
 // CompileExport handles top-level (export <export-spec> ...).
 //
 // This is only valid within a library definition. At top-level, it's an error.
-func (p *CompileTimeContinuation) CompileExport(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileExport(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	return values.NewForeignErrorf("export: only valid within define-library")
 }
 
@@ -1737,108 +1712,117 @@ func (p *CompileTimeContinuation) CompileExport(ccnt CompileTimeCallContext, exp
 //	     ((lambda (name ...) body) val ...))))
 //
 // Reference: R7RS Section 5.4 (Syntax definitions)
-func (p *CompileTimeContinuation) CompileDefineSyntax(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if p.env == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: nil environment")
 	}
 	if p.template == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: nil template")
 	}
-
 	// expr is (keyword transformer-expr) - the args after 'define-syntax' has been stripped
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-syntax: expected keyword and transformer")
 	}
-
 	// Get the keyword to bind
-	keywordStx := argsPair.Car()
+	keywordStx := argsPair.SyntaxCar()
 	if keywordStx == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing keyword")
 	}
-
 	keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol")
 	}
-
 	keyword := keywordSym.Unwrap().(*values.Symbol)
-
 	// Get the transformer expression
 	transformerCdr := argsPair.Cdr()
 	if transformerCdr == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing transformer expression")
 	}
-
 	transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-syntax: expected transformer expression")
 	}
-
-	transformerExpr := transformerPair.Car()
+	transformerExpr := transformerPair.SyntaxCar()
 	if transformerExpr == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing transformer expression")
 	}
-
 	// Check if transformer is a syntax-rules form
-	if transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair); ok {
-		if car := transformerPairExpr.Car(); car != nil {
-			if sym, ok := car.(*syntax.SyntaxSymbol); ok {
-				if symVal := sym.Unwrap(); symVal != nil {
-					if symbol, ok := symVal.(*values.Symbol); ok && symbol.Key == "syntax-rules" {
-						// Compile syntax-rules directly
-						closure, err := CompileSyntaxRules(p.env, transformerPairExpr)
-						if err != nil {
-							return values.WrapForeignErrorf(err, "could not compile syntax-rules transformer")
-						}
+	transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
+	if !ok {
+		// For non-syntax-rules transformers, we would need to compile and evaluate
+		// the transformer expression at compile time. For now, just support syntax-rules
+		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+	}
+	car := transformerPairExpr.SyntaxCar()
+	if car == nil {
+		// For non-syntax-rules transformers, we would need to compile and evaluate
+		// the transformer expression at compile time. For now, just support syntax-rules
+		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+	}
+	sym, ok := car.(*syntax.SyntaxSymbol)
+	if !ok {
+		// For non-syntax-rules transformers, we would need to compile and evaluate
+		// the transformer expression at compile time. For now, just support syntax-rules
+		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+	}
+	symVal := sym.Unwrap()
+	if symVal == nil {
+		// For non-syntax-rules transformers, we would need to compile and evaluate
+		// the transformer expression at compile time. For now, just support syntax-rules
+		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+	}
+	symbol, ok := symVal.(*values.Symbol)
+	if ok && symbol.Key == "syntax-rules" {
+		// Compile syntax-rules directly
+		closure, err := CompileSyntaxRules(ctctx.ctx, p.env, transformerPairExpr)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "could not compile syntax-rules transformer")
+		}
 
-						// Store the transformer in the expand phase environment with BindingTypeSyntax
-						// R7RS requires syntax bindings to live in the expand phase, separate from runtime bindings
-						expandEnv := p.env.Expand()
-						globalIndex, created := expandEnv.MaybeCreateGlobalBinding(keyword, environment.BindingTypeSyntax)
-						if !created {
-							// Update existing binding
-							globalIndex = expandEnv.GetGlobalIndex(keyword)
-						}
-						if globalIndex != nil {
-							err = expandEnv.SetGlobalValue(globalIndex, closure)
-							if err != nil {
-								return err
-							}
-						}
-
-						// define-syntax is compile-time only, emit no runtime operations
-						return nil
-					}
-
-					// Check if transformer is a lambda (procedural macro)
-					if symbol, ok := symVal.(*values.Symbol); ok && symbol.Key == "lambda" {
-						// Compile and evaluate the lambda at compile time to get a transformer closure
-						closure, err := p.compileAndEvalTransformer(transformerPairExpr)
-						if err != nil {
-							return values.WrapForeignErrorf(err, "could not compile lambda transformer")
-						}
-
-						// Store the transformer in the expand phase environment with BindingTypeSyntax
-						expandEnv := p.env.Expand()
-						globalIndex, created := expandEnv.MaybeCreateGlobalBinding(keyword, environment.BindingTypeSyntax)
-						if !created {
-							globalIndex = expandEnv.GetGlobalIndex(keyword)
-						}
-						if globalIndex != nil {
-							err = expandEnv.SetGlobalValue(globalIndex, closure)
-							if err != nil {
-								return err
-							}
-						}
-
-						return nil
-					}
-				}
+		// Store the transformer in the expand phase environment with BindingTypeSyntax
+		// R7RS requires syntax bindings to live in the expand phase, separate from runtime bindings
+		expandEnv := p.env.Expand()
+		globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+		if !created {
+			// Update existing binding
+			globalIndex = expandEnv.GetGlobalIndex(keyword)
+		}
+		if globalIndex != nil {
+			err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
+			if err != nil {
+				return err
 			}
 		}
-	}
 
+		// define-syntax is compile-time only, emit no runtime operations
+		return nil
+	}
+	// Check if transformer is a lambda (procedural macro)
+	symbol, ok = symVal.(*values.Symbol)
+	if ok && symbol.Key == "lambda" {
+		// Compile and evaluate the lambda at compile time to get a transformer closure
+		closure, err := p.compileAndEvalTransformer(transformerPairExpr)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "could not compile lambda transformer")
+		}
+
+		// Store the transformer in the expand phase environment with BindingTypeSyntax
+		expandEnv := p.env.Expand()
+		globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+		if !created {
+			globalIndex = expandEnv.GetGlobalIndex(keyword)
+		}
+		if globalIndex == nil {
+			return nil
+		}
+		err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
 	// For non-syntax-rules transformers, we would need to compile and evaluate
 	// the transformer expression at compile time. For now, just support syntax-rules
 	return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
@@ -1900,7 +1884,7 @@ func (p *CompileTimeContinuation) compileAndEvalTransformer(transformerExpr synt
 //	(cond-expand
 //	  (r7rs (display "R7RS"))
 //	  (else (display "other")))
-func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(expr) {
 		return values.NewForeignErrorf("cond-expand: no clauses")
 	}
@@ -1918,7 +1902,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext,
 
 	// Find the first matching clause
 	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(argsPair, func(i int, hasNext bool, clause syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, i int, hasNext bool, clause syntax.SyntaxValue) error {
 		if matchedClause != nil {
 			return nil // Already found a match
 		}
@@ -1929,7 +1913,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext,
 		}
 
 		// Get the feature requirement (car of clause)
-		reqExpr, ok := clausePair.Car().(syntax.SyntaxValue)
+		reqExpr, ok := clausePair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "cond-expand: invalid feature requirement")
 		}
@@ -1977,7 +1961,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext,
 
 	// Expand and compile each body expression
 	// (since cond-expand is not expanded, we must expand the body here)
-	_, err = syntax.SyntaxForEach(bodyPair, func(i int, hasNext bool, expr syntax.SyntaxValue) error {
+	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(ctx context.Context, i int, hasNext bool, expr syntax.SyntaxValue) error {
 		// Expand the expression
 		ectx := NewExpandTimeCallContext()
 		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, expr)
@@ -1987,9 +1971,9 @@ func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext,
 
 		// Compile the expanded expression
 		// Use the appropriate context for tail position (only last expression is in tail position)
-		bodyCtx := ccnt
+		bodyCtx := ctctx
 		if hasNext {
-			bodyCtx = ccnt.NotInTail()
+			bodyCtx = ctctx.NotInTail()
 		}
 		return p.CompileExpression(bodyCtx, expanded)
 	})
@@ -1999,7 +1983,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ccnt CompileTimeCallContext,
 // processCondExpand handles (cond-expand <clause> ...) within a library.
 // Each clause is (<feature-requirement> <library-declaration> ...)
 // The first clause whose feature requirement is satisfied has its declarations processed.
-func (p *CompileTimeContinuation) processCondExpand(ccnt CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
 		return values.NewForeignErrorf("cond-expand: no clauses")
 	}
@@ -2017,7 +2001,7 @@ func (p *CompileTimeContinuation) processCondExpand(ccnt CompileTimeCallContext,
 
 	// Iterate through clauses
 	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(argsPair, func(i int, hasNext bool, clause syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, i int, hasNext bool, clause syntax.SyntaxValue) error {
 		if matchedClause != nil {
 			return nil // Already found a match
 		}
@@ -2028,7 +2012,7 @@ func (p *CompileTimeContinuation) processCondExpand(ccnt CompileTimeCallContext,
 		}
 
 		// Get the feature requirement (car of clause)
-		reqExpr, ok := clausePair.Car().(syntax.SyntaxValue)
+		reqExpr, ok := clausePair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "cond-expand: invalid feature requirement")
 		}
@@ -2070,8 +2054,8 @@ func (p *CompileTimeContinuation) processCondExpand(ccnt CompileTimeCallContext,
 	}
 
 	// Process each declaration
-	_, err = syntax.SyntaxForEach(declsPair, func(i int, hasNext bool, decl syntax.SyntaxValue) error {
-		return p.processLibraryDeclaration(ccnt, lib, decl)
+	_, err = syntax.SyntaxForEach(ctctx.ctx, declsPair, func(ctx context.Context, i int, hasNext bool, decl syntax.SyntaxValue) error {
+		return p.processLibraryDeclaration(ctctx, lib, decl)
 	})
 	return err
 }
@@ -2098,7 +2082,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 			return nil, values.NewForeignErrorf("empty feature requirement")
 		}
 
-		carExpr, ok := v.Car().(syntax.SyntaxValue)
+		carExpr, ok := v.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "invalid feature requirement")
 		}
@@ -2121,7 +2105,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
 				return nil, values.NewForeignErrorf("library: expected library name")
 			}
-			libNameExpr, ok := argsPair.Car().(syntax.SyntaxValue)
+			libNameExpr, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
 			if !ok {
 				return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "library: invalid library name")
 			}
@@ -2153,7 +2137,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
 				return nil, values.NewForeignErrorf("not: expected one requirement")
 			}
-			reqExpr, ok := argsPair.Car().(syntax.SyntaxValue)
+			reqExpr, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
 			if !ok {
 				return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "not: invalid requirement")
 			}
@@ -2184,7 +2168,7 @@ func parseFeatureRequirementList(expr syntax.SyntaxValue) ([]FeatureRequirement,
 	}
 
 	var reqs []FeatureRequirement
-	_, err := syntax.SyntaxForEach(pair, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(nil, pair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
 		req, err := parseFeatureRequirement(v)
 		if err != nil {
 			return err
@@ -2200,7 +2184,7 @@ func parseFeatureRequirementList(expr syntax.SyntaxValue) ([]FeatureRequirement,
 
 // processIncludeLibraryDeclarations handles (include-library-declarations <string> ...) within a library.
 // It reads each file and processes its contents as library declarations.
-func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ccnt CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil // Empty is valid (no-op)
 	}
@@ -2211,14 +2195,14 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ccnt Compile
 	}
 
 	// Process each filename
-	_, err := syntax.SyntaxForEach(argsPair, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
 		fn, ok := v.Unwrap().(*values.String)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAString, "include-library-declarations: expected string filename")
 		}
 
 		// Find and open the file
-		file, filePath, err := findFile(p, ccnt, fn.Value)
+		file, filePath, err := findFile(p, ctctx, fn.Value)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
 		}
@@ -2242,7 +2226,7 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ccnt Compile
 			}
 
 			// Process the form as a library declaration
-			if err := p.processLibraryDeclaration(ccnt, lib, stx); err != nil {
+			if err := p.processLibraryDeclaration(ctctx, lib, stx); err != nil {
 				return values.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value)
 			}
 		}

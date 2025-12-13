@@ -36,7 +36,7 @@ func PrimError(_ context.Context, mc *machine.MachineContext) error {
 
 	// Convert irritants list to slice
 	var irritants []values.Value
-	if _, err := values.ForEach(nil, irritantsList, func(i int, hasNext bool, v values.Value) error {
+	if _, err := values.ForEach(nil, irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		irritants = append(irritants, v)
 		return nil
 	}); err != nil {

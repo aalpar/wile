@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
 	"context"
-	"fmt"
 	"wile/values"
 )
 
@@ -37,7 +35,7 @@ func (p *OperationLoadVoid) Apply(ctx context.Context, mc *MachineContext) (*Mac
 }
 
 func (p *OperationLoadVoid) SchemeString() string {
-	return fmt.Sprintf("#<machine-operation-load-void>")
+	return "#<machine-operation-load-void>"
 }
 
 func (p *OperationLoadVoid) IsVoid() bool {

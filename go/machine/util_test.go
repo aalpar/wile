@@ -12,19 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
+	"bufio"
 	"context"
 	"wile/environment"
+	"wile/parser"
+	"wile/syntax"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
 
+// parseSchemeExpr is a test helper to parse Scheme code into syntax.
+func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
+	reader := bufio.NewReader(strings.NewReader(code))
+	p := parser.NewParser(env, reader)
+	sv, err := p.ReadSyntax(nil)
+	qt.Assert(t, err, qt.IsNil)
+	return sv
+}
+
 func TestNewForeignClosure(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	fn := func(ctx context.Context, mc *MachineContext) error {
 		return nil
@@ -46,7 +58,7 @@ func TestNewForeignClosure(t *testing.T) {
 }
 
 func TestNewForeignClosure_Variadic(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	fn := func(ctx context.Context, mc *MachineContext) error {
 		return nil
@@ -58,4 +70,3 @@ func TestNewForeignClosure_Variadic(t *testing.T) {
 	qt.Assert(t, closure.Template().ParameterCount(), qt.Equals, 1)
 	qt.Assert(t, closure.Template().IsVariadic(), qt.IsTrue)
 }
-

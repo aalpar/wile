@@ -52,8 +52,8 @@ func TestGetEnvironmentVariableWithNonexistentVar(t *testing.T) {
 }
 
 func TestGetEnvironmentVariableWithTestVar(t *testing.T) {
-	os.Setenv("wile_TEST_VAR", "test_value")   //nolint:errcheck
-	defer os.Unsetenv("wile_TEST_VAR")         //nolint:errcheck
+	os.Setenv("wile_TEST_VAR", "test_value") //nolint:errcheck
+	defer os.Unsetenv("wile_TEST_VAR")       //nolint:errcheck
 
 	result, err := runSchemeCode(t, `(get-environment-variable "wile_TEST_VAR")`)
 	qt.Assert(t, err, qt.IsNil)

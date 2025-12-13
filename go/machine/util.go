@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import "wile/environment"
@@ -27,4 +26,3 @@ func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool
 	q := NewClosureWithTemplate(tpl, env)
 	return q
 }
-

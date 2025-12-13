@@ -15,11 +15,15 @@
 package machine
 
 import (
+	"bufio"
 	"context"
+	"strings"
+	"testing"
+
 	"wile/environment"
+	"wile/parser"
 	"wile/syntax"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -90,7 +94,7 @@ func TestExpandExpression_List(t *testing.T) {
 		args := pair.Cdr().(*syntax.SyntaxPair)
 		// Collect arguments and reverse them
 		var argList []syntax.SyntaxValue
-		syntax.SyntaxForEach(args, func(i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
+		syntax.SyntaxForEach(context.Background(), args, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
 			argList = append(argList, v)
 			return nil
 		})
@@ -105,7 +109,7 @@ func TestExpandExpression_List(t *testing.T) {
 		mc.value = NewMultipleValues(result)
 		return nil
 	})
-	err := env.SetGlobalValue(gi, mcls)
+	err := env.SetOwnGlobalValue(gi, mcls)
 	qt.Assert(t, err, qt.IsNil)
 	cont := NewExpanderTimeContinuation(env)
 	lst0 := syntax.SyntaxList(nil,
@@ -156,7 +160,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 	clauseCount := 0
 	clausePair, ok := resultPair.Cdr().(*syntax.SyntaxPair)
 	qt.Assert(t, ok, qt.IsTrue)
-	syntax.SyntaxForEach(clausePair, func(i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
+	syntax.SyntaxForEach(context.Background(), clausePair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error { //nolint:errcheck
 		clauseCount++
 		return nil
 	})
@@ -180,4 +184,217 @@ func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 	resultSym, ok := resultPair.Car().(*syntax.SyntaxSymbol)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, resultSym.Unwrap(), values.SchemeEquals, values.NewSymbol("case-lambda"))
+}
+
+// Tests moved from coverage_additional_test.go
+// TestAddScopeToSyntaxViaDefineSyntax tests the addScopeToSyntax helper in syntax rules transform
+func TestAddScopeToSyntaxViaDefineSyntax(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	reader := bufio.NewReader(strings.NewReader(`
+	(define-syntax my-id
+	  (syntax-rules ()
+	    ((my-id x) x)))
+	`))
+
+	p := parser.NewParser(env, reader)
+	sv, err := p.ReadSyntax(nil)
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+}
+
+// TestAddScopeToSyntax tests the addScopeToSyntax helper function
+func TestAddScopeToSyntax(t *testing.T) {
+	scope := syntax.NewScope(nil)
+	srcCtx := syntax.NewZeroValueSourceContext()
+
+	// Test with nil
+	result := addScopeToSyntax(nil, scope)
+	qt.Assert(t, result, qt.IsNil)
+
+	// Test with SyntaxSymbol
+	sym := syntax.NewSyntaxSymbol("foo", srcCtx)
+	result = addScopeToSyntax(sym, scope)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	// Test with SyntaxPair
+	pair := syntax.NewSyntaxCons(
+		syntax.NewSyntaxSymbol("a", srcCtx),
+		syntax.NewSyntaxEmptyList(srcCtx),
+		srcCtx,
+	)
+	result = addScopeToSyntax(pair, scope)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	// Test with SyntaxObject
+	obj := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
+	result = addScopeToSyntax(obj, scope)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	// Test with non-syntax value
+	result = addScopeToSyntax(values.NewInteger(42), scope)
+	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestAddScopeToSyntaxSkipFreeIds tests the addScopeToSyntaxSkipFreeIds function
+func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
+	scope := syntax.NewScope(nil)
+	srcCtx := syntax.NewZeroValueSourceContext()
+	freeIds := map[string]struct{}{
+		"if": {},
+	}
+
+	// Test with nil
+	result := addScopeToSyntaxSkipFreeIds(nil, scope, freeIds)
+	qt.Assert(t, result, qt.IsNil)
+
+	// Test with a free identifier - should NOT get the scope
+	sym := syntax.NewSyntaxSymbol("if", srcCtx)
+	result = addScopeToSyntaxSkipFreeIds(sym, scope, freeIds)
+	qt.Assert(t, result, qt.IsNotNil)
+	// The symbol should be returned unchanged (same object)
+	qt.Assert(t, result, qt.Equals, sym)
+
+	// Test with a non-free identifier - should get the scope
+	sym2 := syntax.NewSyntaxSymbol("foo", srcCtx)
+	result = addScopeToSyntaxSkipFreeIds(sym2, scope, freeIds)
+	qt.Assert(t, result, qt.IsNotNil)
+	// Should be a different object with added scope
+	qt.Assert(t, result != sym2, qt.IsTrue)
+
+	// Test with pair containing free and non-free identifiers
+	pair := syntax.NewSyntaxCons(
+		syntax.NewSyntaxSymbol("if", srcCtx),
+		syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("x", srcCtx),
+			syntax.NewSyntaxEmptyList(srcCtx),
+			srcCtx,
+		),
+		srcCtx,
+	)
+	result = addScopeToSyntaxSkipFreeIds(pair, scope, freeIds)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	// Test with SyntaxObject
+	obj := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
+	result = addScopeToSyntaxSkipFreeIds(obj, scope, freeIds)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	// Test with non-syntax value
+	result = addScopeToSyntaxSkipFreeIds(values.NewInteger(42), scope, freeIds)
+	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestAddScopeToPairSkipFreeIds tests the addScopeToPairSkipFreeIds function
+func TestAddScopeToPairSkipFreeIds(t *testing.T) {
+	scope := syntax.NewScope(nil)
+	srcCtx := syntax.NewZeroValueSourceContext()
+	freeIds := map[string]struct{}{
+		"if": {},
+	}
+
+	// Test with nil pair
+	result := addScopeToPairSkipFreeIds(nil, scope, freeIds)
+	qt.Assert(t, result, qt.IsNil)
+
+	// Test with empty list
+	emptyList := syntax.NewSyntaxEmptyList(srcCtx)
+	result = addScopeToPairSkipFreeIds(emptyList, scope, freeIds)
+	// Empty list should be returned as-is
+	qt.Assert(t, result, qt.Equals, emptyList)
+
+	// Test with pair containing symbols
+	pair := syntax.NewSyntaxCons(
+		syntax.NewSyntaxSymbol("a", srcCtx),
+		syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("b", srcCtx),
+			syntax.NewSyntaxEmptyList(srcCtx),
+			srcCtx,
+		),
+		srcCtx,
+	)
+	result = addScopeToPairSkipFreeIds(pair, scope, freeIds)
+	qt.Assert(t, result, qt.IsNotNil)
+}
+
+// TestAddScopeToSyntaxCoverage tests additional addScopeToSyntax paths
+func TestAddScopeToSyntaxCoverage(t *testing.T) {
+	// Test syntax pair
+	scope := syntax.NewScope(nil)
+	sym1 := syntax.NewSyntaxSymbol("a", nil)
+	sym2 := syntax.NewSyntaxSymbol("b", nil)
+	pair := syntax.NewSyntaxCons(sym1, sym2, nil)
+	result := addScopeToSyntax(pair, scope)
+	qt.Assert(t, result, qt.IsNotNil)
+}
+
+// TestExpandSetForm tests set! form expansion
+func TestExpandSetForm(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Define and then set!
+	sv := parseSchemeExpr(t, env, "(define x 1)")
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	sv = parseSchemeExpr(t, env, "(set! x 42)")
+	cont, err = newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc = NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	sv = parseSchemeExpr(t, env, "x")
+	cont, err = newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc = NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestExpandCaseLambdaForm tests case-lambda expansion
+func TestExpandCaseLambdaForm(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Define a case-lambda without + (which isn't bound)
+	sv := parseSchemeExpr(t, env, `(define cl
+		(case-lambda
+			(() 0)
+			((x) x)
+			((x y) x)))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	// Call with 0 args
+	sv = parseSchemeExpr(t, env, "(cl)")
+	cont, err = newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc = NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(0))
+
+	// Call with 1 arg
+	sv = parseSchemeExpr(t, env, "(cl 42)")
+	cont, err = newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc = NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }

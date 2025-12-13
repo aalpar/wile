@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateLambda validates (lambda (params...) body...)
-func validateLambda(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateLambda(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -37,12 +37,12 @@ func validateLambda(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 	}
 
 	// Validate parameters
-	params := validateParams(elements[1], "lambda", result)
+	params := validateParams(elements[1], result)
 
 	// Validate body - must have at least one expression
 	var body []ValidatedExpr
 	for i := 2; i < len(elements); i++ {
-		expr := validateExpr(elements[i], result)
+		expr := validateExpr(ctx, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 		}
@@ -54,8 +54,9 @@ func validateLambda(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 	}
 
 	return &ValidatedLambda{
-		source: source,
-		Params: params,
-		Body:   body,
+		formName: "lambda",
+		source:   source,
+		Params:   params,
+		Body:     body,
 	}
 }

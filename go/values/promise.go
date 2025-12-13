@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
-
-import "fmt"
 
 var (
 	_ Value = (*Promise)(nil)
@@ -66,7 +63,7 @@ func (p *Promise) EqualTo(v Value) bool {
 
 func (p *Promise) SchemeString() string {
 	if p.Forced {
-		return fmt.Sprintf("#<promise (forced)>")
+		return "#<promise (forced)>"
 	}
-	return fmt.Sprintf("#<promise>")
+	return "#<promise>"
 }

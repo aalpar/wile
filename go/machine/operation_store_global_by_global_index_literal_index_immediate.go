@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -59,7 +58,7 @@ func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx conte
 		return nil, mc.Error(fmt.Sprintf("literal %v is not a global index", o))
 	}
 	val := mc.evals.Pop()
-	err := mc.env.GlobalEnvironment().SetGlobalValue(gi, val)
+	err := mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
 	if err != nil {
 		return nil, mc.WrapError(err, fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
 	}

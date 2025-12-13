@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
 	"context"
-	"fmt"
 	"wile/values"
 )
 
@@ -37,7 +35,7 @@ func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineCon
 }
 
 func (p *OperationRestoreContinuation) SchemeString() string {
-	return fmt.Sprintf("#<machine-operation-restore-continuation>")
+	return "#<machine-operation-restore-continuation>"
 }
 
 func (p *OperationRestoreContinuation) IsVoid() bool {

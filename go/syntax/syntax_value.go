@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package syntax
 
 import (
@@ -87,7 +86,7 @@ func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 // Returns SyntaxValue interface to support recursive scope propagation.
 func (p *SyntaxObject) AddScope(scope *Scope) SyntaxValue {
 	// If the datum is a syntax value, recursively add scope to it
-	var newDatum values.Value = p.Datum
+	var newDatum = p.Datum
 	if stx, ok := p.Datum.(SyntaxValue); ok {
 		if adder, ok := stx.(interface{ AddScope(*Scope) SyntaxValue }); ok {
 			newDatum = adder.AddScope(scope)

@@ -132,7 +132,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	var timeout *time.Duration
-	var owner *values.Thread = currentThread
+	var owner = currentThread
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {

@@ -15,6 +15,7 @@
 package syntax
 
 import (
+	"context"
 	"reflect"
 )
 
@@ -67,10 +68,10 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 	return q
 }
 
-func SyntaxForEach(o SyntaxValue, fn func(i int, hasNext bool, v SyntaxValue) error) (SyntaxValue, error) {
+func SyntaxForEach(ctx context.Context, o SyntaxValue, fn func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error) (SyntaxValue, error) {
 	pr, ok := o.(SyntaxTuple)
 	if ok {
-		return pr.SyntaxForEach(fn)
+		return pr.SyntaxForEach(ctx, fn)
 	}
 	return o, nil
 }

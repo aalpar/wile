@@ -21,7 +21,7 @@ import "wile/values"
 // When an exception is raised, handlers are invoked in reverse order
 // of installation (most recent first).
 type ExceptionHandler struct {
-	handler values.Value     // The handler procedure (closure)
+	handler values.Value      // The handler procedure (closure)
 	parent  *ExceptionHandler // Previous handler in chain
 }
 

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package syntax
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -34,7 +34,7 @@ func Test_SyntaxForEach(t *testing.T) {
 	var hasNextValues []bool
 
 	// Call SyntaxForEach
-	_, err := SyntaxForEach(list, func(i int, hasNext bool, v SyntaxValue) error {
+	_, err := SyntaxForEach(context.Background(), list, func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		indices = append(indices, i)
 		hasNextValues = append(hasNextValues, hasNext)
 		items = append(items, v)
@@ -50,7 +50,7 @@ func Test_SyntaxForEach(t *testing.T) {
 
 	// Test with non-list value
 	nonList := NewSyntaxSymbol("symbol", nil)
-	result, err := SyntaxForEach(nonList, func(i int, hasNext bool, v SyntaxValue) error {
+	result, err := SyntaxForEach(context.Background(), nonList, func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		t.Fatalf("Should not be called for non-list")
 		return nil
 	})

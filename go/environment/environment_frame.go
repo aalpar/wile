@@ -57,7 +57,7 @@ type EnvironmentFrame struct {
 }
 
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
-// Deprecated: Use NewTipTopEnvironmentFrame for the new phase-based hierarchy.
+// This frame has no parent and contains the shared symbol/syntax interning maps.
 func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	global := NewTopLevelGlobalEnvironmentFrame()
 	q := &EnvironmentFrame{
@@ -68,30 +68,13 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	return q
 }
 
-// NewTipTopEnvironmentFrame creates the universal tip-top environment frame.
-// This is the root of the environment hierarchy. Its GlobalEnvironmentFrame
-// holds shared symbol and syntax interning maps used by all phases.
-// Phase environments (runtime, expand, compile) are created lazily via accessors.
-// TODO: is this really needed separate from NewTopLevelEnvironmentFrame?
-func NewTipTopEnvironmentFrame() *EnvironmentFrame {
-	global := NewTopLevelGlobalEnvironmentFrame()
-	return &EnvironmentFrame{
-		parent: nil,
-		local:  nil,
-		global: global,
-	}
-}
-
 // NewPhaseEnvironmentFrame creates an environment frame for a specific phase.
 // It has its own GlobalEnvironmentFrame for phase-specific bindings and
 // parents to the given tip-top frame for shared interning access.
 func NewPhaseEnvironmentFrame(tenv *EnvironmentFrame) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	// Share the interning maps from tip-top.
-	global := NewGlobalEnvironmentFrame(
-		tenv.global.symbolInterns,
-		tenv.global.syntaxInterns,
-	)
+	global := NewGlobalEnvironmentFrame(nil, nil)
 	return &EnvironmentFrame{
 		parent: tenv,
 		local:  nil,
@@ -142,7 +125,11 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // Runtime returns the runtime phase environment, creating it if needed.
 // This should only be called on the tip-top frame; other frames delegate to tip-top.
 func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
-	return p.TopLevel()
+	cenv := p.TopLevel()
+	if cenv.meta == nil {
+		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
+	}
+	return cenv.meta
 }
 
 // Expand returns the expand phase environment, creating it if needed.
@@ -151,7 +138,7 @@ func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 	cenv := p.Runtime()
 	if cenv.meta == nil {
-		cenv.meta = NewPhaseEnvironmentFrame(cenv)
+		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
 	}
 	return cenv.meta
 }
@@ -162,7 +149,7 @@ func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
 	cenv := p.Expand()
 	if cenv.meta == nil {
-		cenv.meta = NewPhaseEnvironmentFrame(cenv)
+		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
 	}
 	return cenv.meta
 }
@@ -209,11 +196,9 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
 		i  int
 		ok bool
 	)
-	for {
+	for cenv.local != nil {
 		// always check local first
-		if cenv.local == nil {
-			break
-		}
+
 		i, ok = cenv.local.keys[*key]
 		if ok {
 			return cenv.local.bindings[i]
@@ -224,11 +209,9 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
 		}
 		cenv = cenv.parent
 	}
-	for {
+	for cenv.global != nil {
 		// then check global
-		if cenv.global == nil {
-			break
-		}
+
 		i, ok = cenv.global.keys[*key]
 		if ok {
 			return cenv.global.bindings[i]
@@ -473,16 +456,11 @@ func (p *EnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingTyp
 	return q, true
 }
 
-// MaybeCreateGlobalBinding creates a new global binding in the current or parent global environments if it does not already exist.
+// MaybeCreateOwnGlobalBinding creates a new global binding in the current or parent global environments if it does not already exist.
 // It returns the GlobalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) MaybeCreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
-	ge := p
-	_, ok := ge.global.keys[*key]
-	for !ok && !ge.IsTopLevel() {
-		ge = ge.parent
-		_, ok = ge.global.keys[*key]
-	}
+func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
+	_, ok := p.global.keys[*key]
 	if ok {
 		return NewGlobalIndex(key), false
 	}
@@ -523,15 +501,11 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 	return ge.global.bindings[i]
 }
 
-// SetGlobalValue sets the value of the binding for the given GlobalIndex.
+// SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // It returns an error if the binding does not exist.
-func (p *EnvironmentFrame) SetGlobalValue(gi *GlobalIndex, v values.Value) error {
+func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
 	ge := p
 	i, ok := ge.global.keys[*gi.Index]
-	for !ok && !ge.IsTopLevel() {
-		ge = ge.parent
-		i, ok = ge.global.keys[*gi.Index]
-	}
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such global binding %q", gi.Index)
 	}

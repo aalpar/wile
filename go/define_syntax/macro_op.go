@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Package define_syntax provides a virtual machine for macro pattern matching.
 //
 // This package implements the pattern matching engine used by syntax-rules macros.

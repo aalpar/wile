@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 	"wile/values"
 )
 
 // validateDefine validates both forms:
 // (define name expr) and (define (name params...) body...)
-func validateDefine(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefine(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -44,11 +44,11 @@ func validateDefine(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 	switch s := second.(type) {
 	case *syntax.SyntaxSymbol:
 		// (define name expr) - simple variable definition
-		return validateDefineVariable(source, s, elements, result)
+		return validateDefineVariable(nil, source, s, elements, result)
 
 	case *syntax.SyntaxPair:
 		// (define (name params...) body...) - function definition
-		return validateDefineFunction(source, s, elements, result)
+		return validateDefineFunction(nil, source, s, elements, result)
 
 	default:
 		result.addErrorf(source, "define", "expected symbol or list after define, got %T", second)
@@ -57,18 +57,19 @@ func validateDefine(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 }
 
 // validateDefineVariable validates (define name expr)
-func validateDefineVariable(source *syntax.SourceContext, name *syntax.SyntaxSymbol, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateDefineVariable(ctx context.Context, source *syntax.SourceContext, name *syntax.SyntaxSymbol, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	if len(elements) != 3 {
 		result.addErrorf(source, "define", "variable definition requires exactly 1 value, got %d", len(elements)-2)
 		return nil
 	}
 
-	value := validateExpr(elements[2], result)
+	value := validateExpr(ctx, elements[2], result)
 	if value == nil {
 		return nil
 	}
 
 	return &ValidatedDefine{
+		formName:   "define",
 		source:     source,
 		Name:       name,
 		Value:      value,
@@ -77,7 +78,7 @@ func validateDefineVariable(source *syntax.SourceContext, name *syntax.SyntaxSym
 }
 
 // validateDefineFunction validates (define (name params...) body...)
-func validateDefineFunction(source *syntax.SourceContext, nameAndParams *syntax.SyntaxPair, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateDefineFunction(ctx context.Context, source *syntax.SourceContext, nameAndParams *syntax.SyntaxPair, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	// Extract the function name from car of the list
 	nameExpr := nameAndParams.Car()
 	name, ok := asSyntaxSymbol(nameExpr.(syntax.SyntaxValue))
@@ -88,7 +89,7 @@ func validateDefineFunction(source *syntax.SourceContext, nameAndParams *syntax.
 
 	// Extract and validate parameters from cdr
 	paramsCdr := nameAndParams.Cdr()
-	params := validateParams(paramsCdr.(syntax.SyntaxValue), "define", result)
+	params := validateParams(paramsCdr.(syntax.SyntaxValue), result)
 	if params == nil && result.Errors != nil {
 		// params can be nil for () but we should have errors if validation failed
 		// Check if we actually had errors or just empty params
@@ -102,7 +103,7 @@ func validateDefineFunction(source *syntax.SourceContext, nameAndParams *syntax.
 
 	var body []ValidatedExpr
 	for i := 2; i < len(elements); i++ {
-		expr := validateExpr(elements[i], result)
+		expr := validateExpr(ctx, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 		}
@@ -114,6 +115,7 @@ func validateDefineFunction(source *syntax.SourceContext, nameAndParams *syntax.
 	}
 
 	return &ValidatedDefine{
+		formName:   "define",
 		source:     source,
 		Name:       name,
 		IsFunction: true,
@@ -124,8 +126,8 @@ func validateDefineFunction(source *syntax.SourceContext, nameAndParams *syntax.
 
 // validateParams validates a parameter list
 // Handles: (a b c), (a b . rest), and just rest
-func validateParams(paramExpr syntax.SyntaxValue, form string, result *ValidationResult) *ValidatedParams {
-	params := &ValidatedParams{}
+func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *ValidatedParams {
+	params := &ValidatedParams{formName: "@params"}
 
 	// Handle single symbol as rest parameter: (lambda x body)
 	if sym, ok := asSyntaxSymbol(paramExpr); ok {
@@ -136,7 +138,7 @@ func validateParams(paramExpr syntax.SyntaxValue, form string, result *Validatio
 	// Must be a pair (possibly empty list)
 	pair, ok := paramExpr.(*syntax.SyntaxPair)
 	if !ok {
-		result.addErrorf(getSourceContext(paramExpr), form, "expected parameter list, got %T", paramExpr)
+		result.addErrorf(getSourceContext(paramExpr), params.formName, "expected parameter list, got %T", paramExpr)
 		return nil
 	}
 
@@ -156,14 +158,14 @@ func validateParams(paramExpr syntax.SyntaxValue, form string, result *Validatio
 			if sv, ok := current.(syntax.SyntaxValue); ok {
 				sym, ok := asSyntaxSymbol(sv)
 				if !ok {
-					result.addErrorf(getSourceContext(sv), form, "expected symbol as rest parameter, got %T", current)
+					result.addErrorf(getSourceContext(sv), params.formName, "expected symbol as rest parameter, got %T", current)
 					return nil
 				}
 
 				// Check for duplicate with rest param
 				symKey := sym.Unwrap().(*values.Symbol).Key
 				if seen[symKey] {
-					result.addErrorf(getSourceContext(sv), form, "duplicate parameter name: %s", symKey)
+					result.addErrorf(getSourceContext(sv), params.formName, "duplicate parameter name: %s", symKey)
 					return nil
 				}
 
@@ -181,20 +183,20 @@ func validateParams(paramExpr syntax.SyntaxValue, form string, result *Validatio
 		car := p.Car()
 		paramVal, ok := car.(syntax.SyntaxValue)
 		if !ok {
-			result.addErrorf(nil, form, "expected syntax value in parameter list, got %T", car)
+			result.addErrorf(nil, params.formName, "expected syntax value in parameter list, got %T", car)
 			return nil
 		}
 
 		sym, ok := asSyntaxSymbol(paramVal)
 		if !ok {
-			result.addErrorf(getSourceContext(paramVal), form, "expected symbol in parameter list, got %T", paramVal)
+			result.addErrorf(getSourceContext(paramVal), params.formName, "expected symbol in parameter list, got %T", paramVal)
 			return nil
 		}
 
 		// Check for duplicates
 		symKey := sym.Unwrap().(*values.Symbol).Key
 		if seen[symKey] {
-			result.addErrorf(getSourceContext(paramVal), form, "duplicate parameter name: %s", symKey)
+			result.addErrorf(getSourceContext(paramVal), params.formName, "duplicate parameter name: %s", symKey)
 			return nil
 		}
 		seen[symKey] = true

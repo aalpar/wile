@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -25,7 +24,7 @@ import (
 )
 
 func TestOperationBrk(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 	called := false
 	var capturedMc *MachineContext
 
@@ -50,7 +49,7 @@ func TestOperationBrk(t *testing.T) {
 }
 
 func TestOperationBrk_WithError(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 	expectedErr := values.NewForeignError("test error")
 
 	fn := func(ctx context.Context, mc *MachineContext) error {
@@ -100,7 +99,7 @@ func TestOperationBrk_EqualTo(t *testing.T) {
 }
 
 func TestOperationLoadLiteralInteger(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	mc := &MachineContext{
 		env:   env,

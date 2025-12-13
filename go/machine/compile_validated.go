@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
 	"wile/environment"
+	"wile/forms"
 	"wile/syntax"
 	"wile/validate"
 	"wile/values"
@@ -25,50 +25,41 @@ import (
 // compileValidated dispatches compilation based on the validated expression type.
 // Each ValidatedExpr type has a corresponding compile method that can assume
 // the expression structure has already been validated.
-func (p *CompileTimeContinuation) compileValidated(ccnt CompileTimeCallContext, expr validate.ValidatedExpr) error {
+func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext, expr validate.ValidatedExpr) error {
+	// Look up compiler by form name
+	if expr.FormName() != "" {
+		if spec := forms.Lookup(expr.FormName()); spec != nil && spec.Compile != nil {
+			return spec.Compile(p, ctctx, expr)
+		}
+	}
+
+	// Handle non-form expressions (symbols, calls, literals without form name)
 	switch v := expr.(type) {
-	case *validate.ValidatedIf:
-		return p.compileValidatedIf(ccnt, v)
-	case *validate.ValidatedDefine:
-		return p.compileValidatedDefine(ccnt, v)
-	case *validate.ValidatedLambda:
-		return p.compileValidatedLambda(ccnt, v)
-	case *validate.ValidatedCaseLambda:
-		return p.compileValidatedCaseLambda(ccnt, v)
-	case *validate.ValidatedSetBang:
-		return p.compileValidatedSetBang(ccnt, v)
-	case *validate.ValidatedQuote:
-		return p.compileValidatedQuote(ccnt, v)
-	case *validate.ValidatedQuasiquote:
-		return p.compileValidatedQuasiquote(ccnt, v)
-	case *validate.ValidatedBegin:
-		return p.compileValidatedBegin(ccnt, v)
 	case *validate.ValidatedCall:
-		return p.compileValidatedCall(ccnt, v)
+		return p.compileValidatedCall(ctctx, expr.FormName(), v)
 	case *validate.ValidatedSymbol:
 		startPC := len(p.template.operations)
-		err := p.CompileSymbol(ccnt, v.Symbol)
+		err := p.CompileSymbol(ctctx, v.Symbol)
 		if err != nil {
 			return err
 		}
 		p.recordSource(startPC, v.Source())
 		return nil
 	case *validate.ValidatedLiteral:
-		// ValidatedLiteral wraps self-evaluating values AND special forms
-		// that pass through validation (like define-syntax, define-library, etc.)
-		return p.compileValidatedLiteral(ccnt, v)
+		// Self-evaluating literal (formName is empty)
+		return p.compileValidatedLiteral(ctctx, v)
 	default:
-		return values.NewForeignError("unknown validated expression type")
+		return values.NewForeignErrorf("unknown validated expression type: %T", expr)
 	}
 }
 
 // compileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
-func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext, v *validate.ValidatedIf) error {
+func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedIf) error {
 	startPC := len(p.template.operations)
 
 	// Compile the test condition (not in tail position)
-	err := p.compileValidated(ccnt.NotInTail(), v.Test)
+	err := p.compileValidated(ctctx.NotInTail(), v.Test)
 	if err != nil {
 		return err
 	}
@@ -79,7 +70,7 @@ func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext
 	p.template.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Compile consequent (inherits tail position)
-	err = p.compileValidated(ccnt, v.Conseq)
+	err = p.compileValidated(ctctx, v.Conseq)
 	if err != nil {
 		return err
 	}
@@ -93,7 +84,7 @@ func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext
 
 	// Compile alternative (or load void if none)
 	if v.Alt != nil {
-		err = p.compileValidated(ccnt, v.Alt)
+		err = p.compileValidated(ctctx, v.Alt)
 		if err != nil {
 			return err
 		}
@@ -113,16 +104,16 @@ func (p *CompileTimeContinuation) compileValidatedIf(ccnt CompileTimeCallContext
 }
 
 // compileValidatedDefine compiles a validated define form.
-func (p *CompileTimeContinuation) compileValidatedDefine(ccnt CompileTimeCallContext, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) compileValidatedDefine(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
 	if v.IsFunction {
 		// (define (name params...) body...) - compile as lambda then define
-		return p.compileValidatedDefineFn(ccnt, v)
+		return p.compileValidatedDefineFn(ctctx, formName, v)
 	}
 	// (define name expr) - compile value then store
-	return p.compileValidatedDefineVar(ccnt, v)
+	return p.compileValidatedDefineVar(ctctx, formName, v)
 }
 
-func (p *CompileTimeContinuation) compileValidatedDefineVar(ccnt CompileTimeCallContext, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
 	startPC := len(p.template.operations)
 
 	// Get the symbol for the name
@@ -147,7 +138,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ccnt CompileTimeCall
 	}
 
 	// Compile the value expression
-	err := p.compileValidated(ccnt.NotInTail(), v.Value)
+	err := p.compileValidated(ctctx.NotInTail(), v.Value)
 	if err != nil {
 		return err
 	}
@@ -170,7 +161,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ccnt CompileTimeCall
 	return nil
 }
 
-func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallContext, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) compileValidatedDefineFn(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
 	startPC := len(p.template.operations)
 
 	// Get the symbol for the name
@@ -257,7 +248,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallC
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
 
 	// Compile body expressions (last one in tail position)
-	lambdaBodyContext := NewCompileTimeCallContext(true, ccnt.inExpression, childEnv)
+	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
 	for i, bodyExpr := range v.Body {
 		isLast := i == len(v.Body)-1
 		bodyCtx := lambdaBodyContext.NotInTail()
@@ -301,7 +292,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineFn(ccnt CompileTimeCallC
 }
 
 // compileValidatedLambda compiles a validated (lambda params body...) form.
-func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallContext, v *validate.ValidatedLambda) error {
+func (p *CompileTimeContinuation) compileValidatedLambda(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedLambda) error {
 	startPC := len(p.template.operations)
 
 	// Create child environment and template for lambda body
@@ -366,7 +357,7 @@ func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallCon
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
 
 	// Compile body expressions (last one in tail position)
-	lambdaBodyContext := NewCompileTimeCallContext(true, ccnt.inExpression, childEnv)
+	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
 	for i, bodyExpr := range v.Body {
 		isLast := i == len(v.Body)-1
 		bodyCtx := lambdaBodyContext.NotInTail()
@@ -396,7 +387,7 @@ func (p *CompileTimeContinuation) compileValidatedLambda(ccnt CompileTimeCallCon
 }
 
 // compileValidatedCaseLambda compiles a validated (case-lambda [clause] ...) form.
-func (p *CompileTimeContinuation) compileValidatedCaseLambda(ccnt CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
+func (p *CompileTimeContinuation) compileValidatedCaseLambda(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedCaseLambda) error {
 	startPC := len(p.template.operations)
 
 	// Compile each clause as a separate closure and push to stack
@@ -465,7 +456,7 @@ func (p *CompileTimeContinuation) compileValidatedCaseLambda(ccnt CompileTimeCal
 		childCompiler := NewCompiletimeContinuation(tpl, childEnv)
 
 		// Compile body expressions (last one in tail position)
-		lambdaBodyContext := NewCompileTimeCallContext(true, ccnt.inExpression, childEnv)
+		lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
 		for i, bodyExpr := range clause.Body {
 			isLast := i == len(clause.Body)-1
 			bodyCtx := lambdaBodyContext.NotInTail()
@@ -502,7 +493,7 @@ func (p *CompileTimeContinuation) compileValidatedCaseLambda(ccnt CompileTimeCal
 }
 
 // compileValidatedSetBang compiles a validated (set! name expr) form.
-func (p *CompileTimeContinuation) compileValidatedSetBang(ccnt CompileTimeCallContext, v *validate.ValidatedSetBang) error {
+func (p *CompileTimeContinuation) compileValidatedSetBang(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedSetBang) error {
 	startPC := len(p.template.operations)
 
 	// Get the symbol
@@ -514,7 +505,7 @@ func (p *CompileTimeContinuation) compileValidatedSetBang(ccnt CompileTimeCallCo
 	symbolScopes := v.Name.Scopes()
 
 	// Compile the value expression
-	err := p.compileValidated(ccnt.NotInTail(), v.Value)
+	err := p.compileValidated(ctctx.NotInTail(), v.Value)
 	if err != nil {
 		return err
 	}
@@ -548,7 +539,7 @@ func (p *CompileTimeContinuation) compileValidatedSetBang(ccnt CompileTimeCallCo
 }
 
 // compileValidatedQuote compiles a validated (quote datum) form.
-func (p *CompileTimeContinuation) compileValidatedQuote(ccnt CompileTimeCallContext, v *validate.ValidatedQuote) error {
+func (p *CompileTimeContinuation) compileValidatedQuote(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedQuote) error {
 	startPC := len(p.template.operations)
 
 	// Unwrap all syntax and intern symbols in the global environment.
@@ -565,11 +556,11 @@ func (p *CompileTimeContinuation) compileValidatedQuote(ccnt CompileTimeCallCont
 
 // compileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
-func (p *CompileTimeContinuation) compileValidatedQuasiquote(ccnt CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
+func (p *CompileTimeContinuation) compileValidatedQuasiquote(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedQuasiquote) error {
 	startPC := len(p.template.operations)
 
 	// The existing quasiquote compiler expects the raw syntax template
-	err := p.compileQuasiquoteDatum(ccnt, v.Template, 1)
+	err := p.compileQuasiquoteDatum(ctctx, v.Template, 1)
 	if err != nil {
 		return err
 	}
@@ -579,14 +570,14 @@ func (p *CompileTimeContinuation) compileValidatedQuasiquote(ccnt CompileTimeCal
 }
 
 // compileValidatedBegin compiles a validated (begin expr...) form.
-func (p *CompileTimeContinuation) compileValidatedBegin(ccnt CompileTimeCallContext, v *validate.ValidatedBegin) error {
+func (p *CompileTimeContinuation) compileValidatedBegin(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedBegin) error {
 	startPC := len(p.template.operations)
 
 	for i, expr := range v.Exprs {
 		isLast := i == len(v.Exprs)-1
-		exprCtx := ccnt.NotInTail()
+		exprCtx := ctctx.NotInTail()
 		if isLast {
-			exprCtx = ccnt // Last expression inherits tail position
+			exprCtx = ctctx // Last expression inherits tail position
 		}
 		err := p.compileValidated(exprCtx, expr)
 		if err != nil {
@@ -599,11 +590,11 @@ func (p *CompileTimeContinuation) compileValidatedBegin(ccnt CompileTimeCallCont
 }
 
 // compileValidatedCall compiles a validated function call (proc args...).
-func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallContext, v *validate.ValidatedCall) error {
+func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedCall) error {
 	startPC := len(p.template.operations)
 
 	var operationSaveContinuationIndex int
-	if !ccnt.inTail {
+	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
 		operationSaveContinuationIndex = p.template.operations.Length()
 		p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
@@ -611,7 +602,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallConte
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
 	// Compile the procedure expression
-	err := p.compileValidated(ccnt.NotInTail(), v.Proc)
+	err := p.compileValidated(ctctx.NotInTail(), v.Proc)
 	if err != nil {
 		return err
 	}
@@ -619,7 +610,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallConte
 
 	// Compile arguments in order, pushing each to the stack
 	for _, arg := range v.Args {
-		err := p.compileValidated(ccnt.NotInTail(), arg)
+		err := p.compileValidated(ctctx.NotInTail(), arg)
 		if err != nil {
 			return err
 		}
@@ -632,7 +623,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallConte
 		NewOperationApply(),
 	)
 
-	if !ccnt.inTail {
+	if !ctctx.inTail {
 		// Patch the SaveContinuation offset for non-tail calls
 		l := p.template.operations.Length()
 		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
@@ -643,17 +634,17 @@ func (p *CompileTimeContinuation) compileValidatedCall(ccnt CompileTimeCallConte
 }
 
 // compileValidatedLiteral handles self-evaluating values and passthrough forms.
-func (p *CompileTimeContinuation) compileValidatedLiteral(ccnt CompileTimeCallContext, v *validate.ValidatedLiteral) error {
+func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallContext, v *validate.ValidatedLiteral) error {
 	// Check if this is actually a special form that passed through validation
 	// (like define-syntax, define-library, etc.)
 	if pair, ok := v.Value.(*syntax.SyntaxPair); ok {
 		// This is a form that wasn't validated deeply - use the old path
-		return p.CompilePrimitiveOrProcedureCall(ccnt, pair)
+		return p.CompilePrimitiveOrProcedureCall(ctctx, pair)
 	}
 
 	// Self-evaluating literal
 	startPC := len(p.template.operations)
-	err := p.CompileSelfEvaluating(ccnt, v.Value)
+	err := p.CompileSelfEvaluating(ctctx, v.Value)
 	if err != nil {
 		return err
 	}

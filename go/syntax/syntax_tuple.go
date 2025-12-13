@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package syntax
 
-import "wile/values"
+import (
+	"context"
+	"wile/values"
+)
+
+type SyntaxForEachFunc func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error
 
 type SyntaxTuple interface {
 	values.Tuple
@@ -26,5 +30,5 @@ type SyntaxTuple interface {
 	SetSyntaxCdr(SyntaxValue)
 	AsSyntaxVector() *SyntaxVector
 	SyntaxAppend(value SyntaxValue) SyntaxValue
-	SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error) (SyntaxValue, error)
+	SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error)
 }

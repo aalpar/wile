@@ -15,9 +15,11 @@
 package machine
 
 import (
+	"context"
+	"testing"
+
 	"wile/environment"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -463,4 +465,141 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 	// Empty message should use cause's message
 	qt.Assert(t, err.Message, qt.Equals, "original error")
 	qt.Assert(t, err.Cause, qt.Equals, cause)
+}
+
+// Tests moved from coverage_additional_test.go
+// TestExecuteSimpleProcedureCall tests actually running a procedure call
+func TestExecuteSimpleProcedureCall(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+
+	prog := "((lambda (x) x) 42)"
+	sv := parseSchemeExpr(t, env, prog)
+
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.value, qt.IsNotNil)
+	qt.Assert(t, len(mc.value) > 0, qt.IsTrue)
+	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestExecuteVariadicProcedure tests running a variadic procedure
+func TestExecuteVariadicProcedure(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+
+	// (lambda args args) called with (1 2 3) should return (1 2 3)
+	prog := "((lambda args args) 1 2 3)"
+	sv := parseSchemeExpr(t, env, prog)
+
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.value, qt.IsNotNil)
+}
+
+// TestMachineContextNewSubContext tests creating a sub-context
+func TestMachineContextNewSubContext(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	sv := parseSchemeExpr(t, env, `42`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+
+	// Create a sub-context
+	sub := mc.NewSubContext()
+	qt.Assert(t, sub, qt.IsNotNil)
+}
+
+// TestMachineContextSetValues tests SetValues and GetValues
+func TestMachineContextSetValues(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
+	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(cont)
+
+	// SetValues
+	mc.SetValues(values.NewInteger(1), values.NewInteger(2))
+	vs := mc.GetValues()
+	qt.Assert(t, len(vs), qt.Equals, 2)
+	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(2))
+}
+
+// TestMachineContextSetValue tests SetValue and GetValue
+func TestMachineContextSetValue(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
+	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(cont)
+
+	// SetValue
+	mc.SetValue(values.NewInteger(42))
+	v := mc.GetValue()
+	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestMachineContextApplySimple tests mc.Apply with a simple closure
+func TestMachineContextApplySimple(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Create a lambda and apply it
+	sv := parseSchemeExpr(t, env, `((lambda (x) x) 100)`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+}
+
+// TestMachineContextValueMethods tests MachineContext value get/set
+func TestMachineContextValueMethods(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(cont)
+
+	// Test SetValue and GetValue
+	mc.SetValue(values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+
+	// Test SetValues and GetValues
+	mc.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	vals := mc.GetValues()
+	qt.Assert(t, len(vals), qt.Equals, 3)
+}
+
+// TestMachineContextNewSubContextAdditional tests additional sub-context paths
+func TestMachineContextNewSubContextAdditional(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(cont)
+
+	sub := mc.NewSubContext()
+	qt.Assert(t, sub, qt.IsNotNil)
+
+	// Sub context should have its own environment
+	qt.Assert(t, sub.EnvironmentFrame(), qt.IsNotNil)
 }

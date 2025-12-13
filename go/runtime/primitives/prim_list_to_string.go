@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package primitives
 
 import (
@@ -35,7 +34,7 @@ func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
-	v, err := pr.ForEach(func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotACharacter, "list->string: expected a character but got %T", v)

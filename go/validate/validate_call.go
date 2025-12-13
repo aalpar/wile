@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateCall validates (proc arg...)
-func validateCall(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCall(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -37,12 +37,12 @@ func validateCall(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedEx
 	}
 
 	// Validate the procedure expression
-	proc := validateExpr(elements[0], result)
+	proc := validateExpr(ctx, elements[0], result)
 
 	// Validate all arguments
 	var args []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		arg := validateExpr(elements[i], result)
+		arg := validateExpr(ctx, elements[i], result)
 		if arg != nil {
 			args = append(args, arg)
 		}
@@ -55,8 +55,9 @@ func validateCall(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedEx
 	}
 
 	return &ValidatedCall{
-		source: source,
-		Proc:   proc,
-		Args:   args,
+		formName: "@call",
+		source:   source,
+		Proc:     proc,
+		Args:     args,
 	}
 }

@@ -15,8 +15,10 @@
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
+	"context"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestArrayList_SchemeString(t *testing.T) {
@@ -331,7 +333,7 @@ func TestArrayList_ForEach(t *testing.T) {
 	a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
 	count := 0
 	sum := int64(0)
-	a.ForEach(nil, func(i int, hasNext bool, v Value) error { //nolint:errcheck
+	a.ForEach(nil, func(_ context.Context, i int, hasNext bool, v Value) error { //nolint:errcheck
 		count++
 		if intVal, ok := v.(*Integer); ok {
 			sum += intVal.Value

@@ -15,6 +15,8 @@
 package utils
 
 import (
+	"context"
+
 	"wile/syntax"
 	"wile/values"
 )
@@ -108,7 +110,7 @@ func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.Synta
 			var pr *syntax.SyntaxPair
 			pr0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
 			pr = pr0stx
-			v0, _ = pr1.ForEach(nil, func(i int, hasNext bool, v1 values.Value) error {
+			v0, _ = pr1.ForEach(nil, func(_ context.Context, i int, hasNext bool, v1 values.Value) error {
 				pr.SetCdr(
 					syntax.NewSyntaxCons(
 						DatumToSyntaxValue(sctx, v1),

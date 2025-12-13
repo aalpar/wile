@@ -31,7 +31,7 @@ import (
 // Each expression is compiled and executed at compile time. The expressions
 // can use define-for-syntax bindings and runtime primitives. The result
 // of the last expression is discarded (begin-for-syntax is used for side effects).
-func (p *CompileTimeContinuation) CompileBeginForSyntax(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if p.env == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "begin-for-syntax: nil environment")
 	}
@@ -62,7 +62,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ccnt CompileTimeCallCont
 	current := exprPair
 	for !syntax.IsSyntaxEmptyList(current) {
 		// Get current expression
-		exprVal := current.Car()
+		exprVal := current.SyntaxCar()
 		if exprVal == nil {
 			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "begin-for-syntax: nil expression")
 		}
@@ -82,7 +82,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ccnt CompileTimeCallCont
 		tmpTpl := NewNativeTemplate(0, 0, false)
 		tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
 
-		if err := tmpCcnt.CompileExpression(ccnt, expandedExpr); err != nil {
+		if err := tmpCcnt.CompileExpression(ctctx, expandedExpr); err != nil {
 			return values.WrapForeignErrorf(err, "begin-for-syntax: compilation failed")
 		}
 
@@ -96,7 +96,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ccnt CompileTimeCallCont
 		}
 
 		// Move to next expression
-		cdr := current.Cdr()
+		cdr := current.SyntaxCdr()
 		cdrStx, ok := cdr.(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "begin-for-syntax: invalid cdr")

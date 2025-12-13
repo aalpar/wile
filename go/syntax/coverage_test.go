@@ -15,6 +15,7 @@
 package syntax
 
 import (
+	"context"
 	"wile/values"
 	"testing"
 
@@ -615,7 +616,7 @@ func TestSyntaxPair_ForEach(t *testing.T) {
 
 	count := 0
 	sum := int64(0)
-	list.ForEach(nil, func(i int, hasNext bool, v values.Value) error { //nolint:errcheck
+	list.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error { //nolint:errcheck
 		count++
 		syntaxVal := v.(SyntaxValue)
 		intVal := syntaxVal.UnwrapAll().(*values.Integer)

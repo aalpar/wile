@@ -44,7 +44,7 @@ func PrimAdd(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(nbr)
 		return nil
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, o values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "add: expected a number but got %T", o)

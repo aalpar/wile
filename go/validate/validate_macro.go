@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 	"wile/values"
 )
@@ -23,7 +23,7 @@ import (
 // validateDefineSyntax validates (define-syntax keyword transformer)
 // Returns a ValidatedLiteral wrapping the original form since the compiler
 // has specialized handling for this.
-func validateDefineSyntax(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefineSyntax(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -49,12 +49,12 @@ func validateDefineSyntax(pair *syntax.SyntaxPair, result *ValidationResult) Val
 	// The compiler/expander handles transformer validation
 
 	// Return as literal - compiler handles the rest
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateSyntaxRules(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateSyntaxRules(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -78,7 +78,7 @@ func validateSyntaxRules(pair *syntax.SyntaxPair, result *ValidationResult) Vali
 		}
 		// Validate each literal is a symbol
 		if !literalsPair.IsEmptyList() {
-			_, err := syntax.SyntaxForEach(literalsPair, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+			_, err := syntax.SyntaxForEach(ctx, literalsPair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
 				if _, ok := asSyntaxSymbol(v); !ok {
 					result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
 				}
@@ -112,12 +112,12 @@ func validateSyntaxRules(pair *syntax.SyntaxPair, result *ValidationResult) Vali
 	}
 
 	// Return as literal - compiler handles the rest
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateImport validates (import import-set...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateImport(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateImport(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -141,12 +141,12 @@ func validateImport(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 		}
 	}
 
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateExport validates (export export-spec...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateExport(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateExport(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -171,12 +171,12 @@ func validateExport(pair *syntax.SyntaxPair, result *ValidationResult) Validated
 		result.addErrorf(getSourceContext(spec), "export", "export-spec %d must be a symbol or rename form", i)
 	}
 
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateDefineLibrary validates (define-library (name...) declaration...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateDefineLibrary(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefineLibrary(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -203,7 +203,7 @@ func validateDefineLibrary(pair *syntax.SyntaxPair, result *ValidationResult) Va
 	}
 
 	// Validate library name components are symbols or integers
-	_, err := syntax.SyntaxForEach(namePair, func(i int, hasNext bool, v syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctx, namePair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
 		if _, ok := asSyntaxSymbol(v); ok {
 			return nil
 		}
@@ -220,12 +220,12 @@ func validateDefineLibrary(pair *syntax.SyntaxPair, result *ValidationResult) Va
 		return nil
 	}
 
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateInclude validates (include filename...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateInclude(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateInclude(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -250,12 +250,12 @@ func validateInclude(pair *syntax.SyntaxPair, result *ValidationResult) Validate
 		result.addErrorf(getSourceContext(elements[i]), "include", "include argument %d must be a string", i)
 	}
 
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }
 
 // validateCondExpand validates (cond-expand clause...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateCondExpand(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCondExpand(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -277,5 +277,5 @@ func validateCondExpand(pair *syntax.SyntaxPair, result *ValidationResult) Valid
 		}
 	}
 
-	return &ValidatedLiteral{source: source, Value: pair}
+	return &ValidatedLiteral{source: source, formName: "@literal", Value: pair}
 }

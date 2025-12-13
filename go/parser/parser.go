@@ -124,7 +124,8 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 	q, _, err := p.readSyntax()
 	if err != nil {
 		p.toks = nil
-		return nil, err
+		p.err = err
+		return nil, p.err
 	}
 	// Advance to the next token for the next ReadSyntax() call
 	p.cur, p.err = p.toks.Next()

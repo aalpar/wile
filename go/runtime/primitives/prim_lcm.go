@@ -50,7 +50,7 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewInteger(result))
 		return nil
 	}
-	rest.ForEach(nil, func(i int, hasNext bool, next values.Value) error { //nolint:errcheck
+	rest.ForEach(nil, func(_ context.Context, i int, hasNext bool, next values.Value) error { //nolint:errcheck
 		n, ok := next.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "lcm: expected an integer but got %T", pr.Car())

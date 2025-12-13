@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateBegin validates (begin expr...)
-func validateBegin(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateBegin(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -34,7 +34,7 @@ func validateBegin(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedE
 	// R7RS allows (begin) with no expressions (returns unspecified value)
 	var exprs []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		expr := validateExpr(elements[i], result)
+		expr := validateExpr(ctx, elements[i], result)
 		if expr != nil {
 			exprs = append(exprs, expr)
 		}
@@ -47,7 +47,8 @@ func validateBegin(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedE
 	}
 
 	return &ValidatedBegin{
-		source: source,
-		Exprs:  exprs,
+		formName: "begin",
+		source:   source,
+		Exprs:    exprs,
 	}
 }

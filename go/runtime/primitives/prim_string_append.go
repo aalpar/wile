@@ -35,7 +35,7 @@ func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAString, "string-append: expected a string but got %T", v)

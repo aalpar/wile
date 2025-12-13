@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
+	"context"
 	"testing"
+
+	"wile/environment"
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -178,4 +181,256 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// Tests moved from coverage_additional_test.go
+// TestAllPlatformFeatures tests platformFeatures function
+func TestAllPlatformFeatures(t *testing.T) {
+	features := AllFeatures()
+	qt.Assert(t, len(features) > 0, qt.IsTrue)
+
+	// Check for some expected features
+	found := false
+	for _, f := range features {
+		if f == "r7rs" {
+			found = true
+			break
+		}
+	}
+	qt.Assert(t, found, qt.IsTrue)
+}
+
+// TestPlatformFeaturesAdditional tests the platformFeatures function additional paths
+func TestPlatformFeaturesAdditional(t *testing.T) {
+	features := platformFeatures()
+	// Should contain at least r7rs and some platform features
+	qt.Assert(t, len(features) > 0, qt.IsTrue)
+}
+
+// TestCondExpandWithElse tests cond-expand with else clause
+func TestCondExpandWithElse(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// cond-expand with else clause (should be supported since else is always true)
+	sv := parseSchemeExpr(t, env, `(cond-expand (else 42))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestCondExpandR7RS tests cond-expand with r7rs feature
+func TestCondExpandR7RS(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// cond-expand with r7rs feature (should always be present)
+	sv := parseSchemeExpr(t, env, `(cond-expand (r7rs 100) (else 0))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+}
+
+// TestCondExpandAnd tests cond-expand with and requirement
+func TestCondExpandAnd(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	sv := parseSchemeExpr(t, env, `(cond-expand ((and r7rs) 200) (else 0))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(200))
+}
+
+// TestCondExpandOr tests cond-expand with or requirement
+func TestCondExpandOr(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	sv := parseSchemeExpr(t, env, `(cond-expand ((or r7rs nonexistent-feature) 300) (else 0))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(300))
+}
+
+// TestCondExpandNot tests cond-expand with not requirement
+func TestCondExpandNot(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	sv := parseSchemeExpr(t, env, `(cond-expand ((not nonexistent-feature) 400) (else 0))`)
+	cont, err := newTopLevelThunk(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := NewMachineContext(cont)
+	err = mc.Run(context.Background())
+	if err != nil && err != ErrMachineHalt {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(400))
+}
+
+// TestFeatureRequirementIsSatisfied tests various feature requirements
+func TestFeatureRequirementIsSatisfied(t *testing.T) {
+	registry := NewLibraryRegistry()
+
+	// FeatureIdentifier
+	r7rsFeat := NewFeatureIdentifier("r7rs")
+	qt.Assert(t, r7rsFeat.IsSatisfied(registry), qt.IsTrue)
+
+	nonExistent := NewFeatureIdentifier("nonexistent-feature")
+	qt.Assert(t, nonExistent.IsSatisfied(registry), qt.IsFalse)
+
+	// AndRequirement with single true (variadic function)
+	andReq := NewAndRequirement(r7rsFeat)
+	qt.Assert(t, andReq.IsSatisfied(registry), qt.IsTrue)
+
+	// AndRequirement with one false
+	andReqFail := NewAndRequirement(r7rsFeat, nonExistent)
+	qt.Assert(t, andReqFail.IsSatisfied(registry), qt.IsFalse)
+
+	// OrRequirement
+	orReq := NewOrRequirement(nonExistent, r7rsFeat)
+	qt.Assert(t, orReq.IsSatisfied(registry), qt.IsTrue)
+
+	// NotRequirement
+	notReq := NewNotRequirement(nonExistent)
+	qt.Assert(t, notReq.IsSatisfied(registry), qt.IsTrue)
+
+	// Library requirement
+	libReq := NewLibraryRequirement(NewLibraryName("nonexistent", "lib"))
+	qt.Assert(t, libReq.IsSatisfied(registry), qt.IsFalse)
+}
+
+// TestAllFeaturesFunction tests AllFeatures returns expected features
+func TestAllFeaturesFunction(t *testing.T) {
+	features := AllFeatures()
+	qt.Assert(t, len(features) > 0, qt.IsTrue)
+
+	// Should include r7rs
+	found := false
+	for _, f := range features {
+		if f == "r7rs" {
+			found = true
+			break
+		}
+	}
+	qt.Assert(t, found, qt.IsTrue)
+}
+
+// TestIsFeatureSupportedFunction tests IsFeatureSupported function
+func TestIsFeatureSupportedFunction(t *testing.T) {
+	qt.Assert(t, IsFeatureSupported("r7rs"), qt.IsTrue)
+	qt.Assert(t, IsFeatureSupported("nonexistent-feature"), qt.IsFalse)
+}
+
+// TestFeatureRequirementTypes tests FeatureRequirement type creation
+func TestFeatureRequirementTypes(t *testing.T) {
+	// Test different feature requirement types
+	feat := NewFeatureIdentifier("r7rs")
+	qt.Assert(t, feat, qt.IsNotNil)
+
+	andReq := NewAndRequirement(feat)
+	qt.Assert(t, andReq, qt.IsNotNil)
+
+	orReq := NewOrRequirement(feat)
+	qt.Assert(t, orReq, qt.IsNotNil)
+
+	notReq := NewNotRequirement(feat)
+	qt.Assert(t, notReq, qt.IsNotNil)
+
+	libReq := NewLibraryRequirement(NewLibraryName("scheme", "base"))
+	qt.Assert(t, libReq, qt.IsNotNil)
+}
+
+// TestPlatformFeaturesCoverage tests platformFeatures function coverage
+func TestPlatformFeaturesCoverage(t *testing.T) {
+	features := platformFeatures()
+	// Check for some expected platform-specific features
+	// Should have darwin or linux or windows
+	hasDarwin := false
+	hasLinux := false
+	hasWindows := false
+	for _, f := range features {
+		if f == "darwin" {
+			hasDarwin = true
+		}
+		if f == "linux" {
+			hasLinux = true
+		}
+		if f == "windows" {
+			hasWindows = true
+		}
+	}
+	// At least one platform should be present
+	qt.Assert(t, hasDarwin || hasLinux || hasWindows, qt.IsTrue)
+}
+
+// TestAllFeaturesContainsPlatformFeatures tests that AllFeatures includes platform features
+func TestAllFeaturesContainsPlatformFeatures(t *testing.T) {
+	features := AllFeatures()
+	pf := platformFeatures()
+
+	// All platform features should be in AllFeatures
+	for _, f := range pf {
+		found := false
+		for _, af := range features {
+			if af == f {
+				found = true
+				break
+			}
+		}
+		qt.Assert(t, found, qt.IsTrue, qt.Commentf("platform feature %q not found", f))
+	}
+}
+
+// TestNewFeatureRequirementConstructors tests constructor functions for FeatureRequirement
+func TestNewFeatureRequirementConstructors(t *testing.T) {
+	// Test NewFeatureIdentifier
+	fi := NewFeatureIdentifier("r7rs")
+	qt.Assert(t, fi, qt.IsNotNil)
+
+	// Test NewLibraryRequirement
+	lr := NewLibraryRequirement(NewLibraryName("scheme", "base"))
+	qt.Assert(t, lr, qt.IsNotNil)
+
+	// Test NewAndRequirement
+	ar := NewAndRequirement(fi, lr)
+	qt.Assert(t, ar, qt.IsNotNil)
+
+	// Test NewOrRequirement
+	or := NewOrRequirement(fi, lr)
+	qt.Assert(t, or, qt.IsNotNil)
+
+	// Test NewNotRequirement
+	nr := NewNotRequirement(fi)
+	qt.Assert(t, nr, qt.IsNotNil)
+
+	// Test NewElseRequirement
+	er := NewElseRequirement()
+	qt.Assert(t, er, qt.IsNotNil)
 }

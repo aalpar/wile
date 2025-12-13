@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -21,25 +20,31 @@ import (
 	"wile/values"
 )
 
-// RegisterPrimitiveCompilers binds all primitive compilers in the compile-time
-// environment (env.Compile()). These are looked up during compilation when the
-// compiler encounters a symbol that names a special form like `define`, `lambda`,
-// `if`, etc.
+// RegisterSyntaxCompilers binds all syntax compilers in the compile-time
+// environment (env.Compile()). These are looked up by CompileSyntaxPrimitive()
+// when the compiler encounters a special form.
 //
-// The primitive compilers are bound with BindingTypePrimitive to distinguish them
+// The compiler uses a two-tier dispatch system:
+//
+// Tier 1 (Validated Forms): Core forms like if, define, lambda, set!, quote,
+// quasiquote, begin go through the validation layer which produces type-safe
+// ValidatedExpr types, then compile via compileValidated* methods. These are
+// NOT registered here.
+//
+// Tier 2 (Registry Forms): Extension forms like syntax-case, import, define-syntax
+// pass through validation as ValidatedLiteral, then are dispatched via this
+// registry. This is the single source of truth for these forms.
+//
+// The syntax compilers are bound with BindingTypePrimitive to distinguish them
 // from syntax transformers (BindingTypeSyntax) and regular variables.
-func RegisterPrimitiveCompilers(env *environment.EnvironmentFrame) error {
+func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 	compileEnv := env.Compile()
 
-	// All primitive compilers. Each entry maps a keyword to its compile function.
-	// The compile function is wrapped in a method reference that will be called
-	// with the appropriate CompileTimeContinuation instance.
-	// Primitive compilers for forms that pass through validation as ValidatedLiteral.
-	// Core forms (define, lambda, quote, quasiquote, if, set!, begin) are handled
-	// by compileValidated* methods and are NOT registered here.
-	primitives := []struct {
+	// All syntax compilers for Tier 2 forms.
+	// Each entry maps a keyword to its compile function.
+	compilers := []struct {
 		name string
-		fn   PrimitiveCompilerFunc
+		fn   SyntaxCompilerFunc
 	}{
 		{"syntax", (*CompileTimeContinuation).CompileSyntax},
 		{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
@@ -63,26 +68,26 @@ func RegisterPrimitiveCompilers(env *environment.EnvironmentFrame) error {
 		{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
 	}
 
-	for _, prim := range primitives {
-		sym := env.InternSymbol(values.NewSymbol(prim.name))
-		compiler := NewPrimitiveCompiler(prim.name, prim.fn)
+	for _, comp := range compilers {
+		sym := env.InternSymbol(values.NewSymbol(comp.name))
+		compiler := NewSyntaxCompiler(comp.name, comp.fn)
 
 		// Always set the value - the binding may already exist from runtime primitives
-		// registration, but we still need to set the PrimitiveCompiler value
-		idx, _ := compileEnv.MaybeCreateGlobalBinding(sym, environment.BindingTypePrimitive)
-		compileEnv.SetGlobalValue(idx, compiler) //nolint:errcheck
+		// registration, but we still need to set the SyntaxCompiler value
+		idx, _ := compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
+		compileEnv.SetOwnGlobalValue(idx, compiler) //nolint:errcheck
 	}
 
 	return nil
 }
 
-// LookupPrimitiveCompiler looks up a primitive compiler by symbol in the compile
-// environment. Returns the PrimitiveCompiler if found, or nil if the symbol does
-// not name a primitive compiler.
+// LookupSyntaxCompiler looks up a syntax compiler by symbol in the compile
+// environment. Returns the SyntaxCompiler if found, or nil if the symbol does
+// not name a syntax compiler.
 //
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.
-func LookupPrimitiveCompiler(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *PrimitiveCompiler {
+func LookupSyntaxCompiler(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *SyntaxCompiler {
 	compileEnv := env.Compile()
 
 	// Look up with scopes for hygiene
@@ -91,14 +96,14 @@ func LookupPrimitiveCompiler(env *environment.EnvironmentFrame, sym *values.Symb
 		return nil
 	}
 
-	// Check if it's a primitive compiler binding
+	// Check if it's a syntax compiler binding
 	if bnd.BindingType() != environment.BindingTypePrimitive {
 		return nil
 	}
 
-	// Get the value and check if it's a PrimitiveCompiler
+	// Get the value and check if it's a SyntaxCompiler
 	val := bnd.Value()
-	if pc, ok := val.(*PrimitiveCompiler); ok {
+	if pc, ok := val.(*SyntaxCompiler); ok {
 		return pc
 	}
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Package tokenizer implements lexical analysis for Scheme source code.
 //
 // The tokenizer converts a stream of runes into tokens representing the
@@ -1515,7 +1514,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			// Check for complex number suffix: <real>+<ureal>i or <real>-<ureal>i
 		} else if isExplicitSign(p.curr()) {
 			p.state = TokenizerStateUnsignedComplex
-			p.next() // skip the sign
+			p.next()                                                 // skip the sign
 			p.mayUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
 			if p.err != nil {
 				return p.err

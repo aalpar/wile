@@ -191,9 +191,9 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	return bd
 }
 
-// SetGlobalValue sets the value of the binding for the given GlobalIndex.
+// SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // Returns an error if the binding does not exist.
-func (p *GlobalEnvironmentFrame) SetGlobalValue(gi *GlobalIndex, v values.Value) error {
+func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
 	ge := p
 	i, ok := ge.keys[*gi.Index]
 	if !ok {

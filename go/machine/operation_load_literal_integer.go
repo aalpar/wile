@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
 	"context"
-	"fmt"
 	"wile/values"
 )
 
@@ -38,7 +36,7 @@ func (p *OperationLoadLiteralInteger) Apply(ctx context.Context, mc *MachineCont
 }
 
 func (p *OperationLoadLiteralInteger) SchemeString() string {
-	return fmt.Sprintf("#<machine-operation-load-literal-integer>")
+	return "#<machine-operation-load-literal-integer>"
 }
 
 func (p *OperationLoadLiteralInteger) IsVoid() bool {

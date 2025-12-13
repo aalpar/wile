@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package primitives
 
 func FloorDivide(n0, n1 int64) (q, r int64) {

@@ -943,14 +943,14 @@ func TestTokenizer_StringEscapeBranches(t *testing.T) {
 		val string
 	}{
 		// Supported escape sequences
-		{`"\a"`, "\a"},   // alert
-		{`"\b"`, "\b"},   // backspace
-		{`"\n"`, "\n"},   // newline
-		{`"\r"`, "\r"},   // carriage return
-		{`"\t"`, "\t"},   // tab
-		{`"\\"`, "\\"},   // backslash
-		{`"\""`, "\""},   // double quote
-		{`"|"`, "|"},     // bar (no escape needed)
+		{`"\a"`, "\a"}, // alert
+		{`"\b"`, "\b"}, // backspace
+		{`"\n"`, "\n"}, // newline
+		{`"\r"`, "\r"}, // carriage return
+		{`"\t"`, "\t"}, // tab
+		{`"\\"`, "\\"}, // backslash
+		{`"\""`, "\""}, // double quote
+		{`"|"`, "|"},   // bar (no escape needed)
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
@@ -1021,4 +1021,3 @@ func TestTokenizer_SyntaxQuotation(t *testing.T) {
 		})
 	}
 }
-

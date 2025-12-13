@@ -188,3 +188,70 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 	}
 	qt.Assert(t, cont1.EqualTo(cont6), qt.IsFalse)
 }
+
+// Tests moved from coverage_additional_test.go
+// TestMachineContinuationMethodsAdditional tests MachineContinuation methods
+func TestMachineContinuationMethodsAdditional(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
+	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+
+	cont := NewMachineContinuation(nil, tpl, env)
+
+	qt.Assert(t, cont.IsVoid(), qt.IsFalse)
+	qt.Assert(t, cont.SchemeString(), qt.Contains, "continuation")
+	qt.Assert(t, cont.Template(), qt.Equals, tpl)
+	qt.Assert(t, cont.Parent(), qt.IsNil)
+
+	// Test EqualTo - same object should be equal to itself
+	qt.Assert(t, cont.EqualTo(cont), qt.IsTrue)
+
+	var nilCont *MachineContinuation
+	qt.Assert(t, cont.EqualTo(nilCont), qt.IsFalse)
+}
+
+// TestMachineContinuationFromMachineContext tests creating continuation from context
+func TestMachineContinuationFromMachineContext(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.operations = append(tpl.operations,
+		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(42))),
+		NewOperationRestoreContinuation(),
+	)
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(cont)
+	mc.pc = 0
+
+	// Create continuation from machine context
+	newCont := NewMachineContinuationFromMachineContext(mc, 1)
+	qt.Assert(t, newCont, qt.IsNotNil)
+}
+
+// TestMachineContinuationMethods tests MachineContinuation methods
+func TestMachineContinuationMethods(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	cont := NewMachineContinuation(nil, tpl, env)
+
+	qt.Assert(t, cont.SchemeString(), qt.Contains, "machine-continuation")
+	qt.Assert(t, cont.IsVoid(), qt.IsFalse)
+
+	var nilCont *MachineContinuation
+	qt.Assert(t, nilCont.IsVoid(), qt.IsTrue)
+}
+
+// TestMachineContinuationEqualToDifferentTemplates tests continuation equality with different templates
+func TestMachineContinuationEqualToDifferentTemplates(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+	cont := NewMachineContinuation(nil, tpl, env)
+
+	// Test with different templates
+	tpl2 := NewNativeTemplate(1, 1, true)
+	tpl2.AppendOperations(NewOperationLoadLiteralInteger(1), NewOperationRestoreContinuation())
+	cont2 := NewMachineContinuation(nil, tpl2, env)
+	qt.Assert(t, cont.EqualTo(cont2), qt.IsFalse) // Different templates
+}

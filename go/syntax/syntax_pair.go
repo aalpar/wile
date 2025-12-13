@@ -126,7 +126,7 @@ func (p *SyntaxPair) SyntaxCar() SyntaxValue {
 }
 
 func (p *SyntaxPair) SyntaxCdr() SyntaxValue {
-	return p.Values[0]
+	return p.Values[1]
 }
 
 func (p *SyntaxPair) Car() values.Value {
@@ -177,7 +177,7 @@ func (p *SyntaxPair) IsList() bool {
 	if values.IsVoid(pr) {
 		return false
 	}
-	v, _ := p.SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error {
+	v, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		return nil
 	})
 	return values.IsEmptyList(v)
@@ -239,7 +239,7 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 
 func (p *SyntaxPair) Length() int {
 	q := 0
-	r, _ := p.SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error {
+	r, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		q = i + 1
 		return nil
 	})
@@ -284,7 +284,7 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 	return pr, nil
 }
 
-func (p *SyntaxPair) SyntaxForEach(fn func(i int, hasNext bool, v SyntaxValue) error) (SyntaxValue, error) {
+func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
 	if p == nil {
 		return SyntaxVoid, nil
 	}
@@ -294,7 +294,7 @@ func (p *SyntaxPair) SyntaxForEach(fn func(i int, hasNext bool, v SyntaxValue) e
 	i := 0
 	for pr != nil && !pr.IsEmptyList() {
 		hasNext := !IsSyntaxEmptyList(pr.Cdr().(SyntaxValue))
-		err := fn(i, hasNext, pr.Car().(SyntaxValue))
+		err := fn(ctx, i, hasNext, pr.Car().(SyntaxValue))
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +324,7 @@ func (p *SyntaxPair) SchemeString() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("#'(")
-	cdr, _ := p.SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error {
+	cdr, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -359,7 +359,7 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 		return values.NewVector()
 	}
 	vs := []values.Value{}
-	cdr, err := p.SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error {
+	cdr, err := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		v1, ok := v.(SyntaxValue)
 		if !ok {
 			return values.ErrNotASyntaxValue
@@ -384,7 +384,7 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 		return NewSyntaxVector(p.sourceContext)
 	}
 	vs := []SyntaxValue{}
-	cdr, _ := p.SyntaxForEach(func(i int, hasNext bool, v SyntaxValue) error {
+	cdr, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
 		vs = append(vs, v)
 		return nil
 	})

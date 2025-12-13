@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 import (
+	"context"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"wile/syntax"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestSyntaxMatcher(t *testing.T) {
@@ -69,7 +70,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(pattern)
+		err := compiler.Compile(nil, pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create syntax input
@@ -123,7 +124,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(pattern)
+		err := compiler.Compile(nil, pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
@@ -169,7 +170,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			"x": {},
 		}
 
-		codes, err := CompileSyntaxPattern(pattern, variables)
+		codes, err := CompileSyntaxPattern(context.Background(), pattern, variables)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, codes, qt.IsNotNil)
 		qt.Assert(t, len(codes) > 0, qt.IsTrue)
@@ -195,7 +196,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			"x": {},
 		}
 
-		compiled, err := CompileSyntaxPatternFull(pattern, variables)
+		compiled, err := CompileSyntaxPatternFull(context.Background(), pattern, variables)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, compiled, qt.IsNotNil)
 		qt.Assert(t, compiled.Codes, qt.IsNotNil)
@@ -208,7 +209,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 
 		variables := map[string]struct{}{}
 
-		codes, err := CompileSyntaxPattern(pattern, variables)
+		codes, err := CompileSyntaxPattern(context.Background(), pattern, variables)
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err.Error(), qt.Contains, "must be a list")
 		qt.Assert(t, codes, qt.IsNil)
@@ -366,7 +367,7 @@ func TestExpandWithUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(nil, pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Template source context (where macro is defined)
@@ -453,7 +454,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Source context for the captured value
@@ -513,7 +514,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(nil, pattern)
 	c.Assert(err, qt.IsNil)
 
 	inputSc := syntax.NewSourceContext("(test)", "input.scm",
@@ -552,7 +553,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	pattern := values.List(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(nil, pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -599,7 +600,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	pattern := values.List(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(nil, pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -653,7 +654,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	)
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{"x": {}}
-	err := compiler.Compile(pattern)
+	err := compiler.Compile(nil, pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input with specific source context for the captured value

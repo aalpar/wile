@@ -34,7 +34,7 @@ func PrimReverse(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
 	var result values.Value = values.EmptyList
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		result = values.NewCons(v, result)
 		return nil
 	})

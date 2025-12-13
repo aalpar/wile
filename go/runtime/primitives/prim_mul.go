@@ -43,7 +43,7 @@ func PrimMul(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "mul: expected a list but got %T", pr)
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, o values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "mul: expected a number but got %T", o)

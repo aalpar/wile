@@ -784,11 +784,13 @@ var expandTimePrimitives = []PrimitiveSpec{
 // registerCompileTimePrimitives creates bindings for compile-time primitives in the environment.
 // These primitives (if, lambda, quote, etc.) are handled specially by the compiler and
 // should not have their arguments expanded by the macro expander.
-func registerCompileTimePrimitives(env *environment.EnvironmentFrame, specs []BindingSpec) {
+func registerCompileTimePrimitives(env *environment.EnvironmentFrame, specs []BindingSpec) error {
+	compileEnv := env.Compile()
 	for _, spec := range specs {
-		sym := env.InternSymbol(values.NewSymbol(spec.Name))
-		env.MaybeCreateGlobalBinding(sym, spec.BindingType)
+		sym := compileEnv.InternSymbol(values.NewSymbol(spec.Name))
+		compileEnv.MaybeCreateOwnGlobalBinding(sym, spec.BindingType) // Fixed
 	}
+	return nil
 }
 
 // registerRuntimePrimitives creates bindings and foreign closures for runtime primitives.
@@ -798,12 +800,13 @@ func registerCompileTimePrimitives(env *environment.EnvironmentFrame, specs []Bi
 //
 // The closure is created with the specified parameter count and variadic flag.
 func registerRuntimePrimitives(env *environment.EnvironmentFrame, specs []PrimitiveSpec) error {
+	// Register in TopLevel (which IS the runtime phase) - not env.Runtime() which is a separate meta phase
 	for _, spec := range specs {
 		sym := env.InternSymbol(values.NewSymbol(spec.Name))
-		env.MaybeCreateGlobalBinding(sym, environment.BindingTypeVariable)
+		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 		closure := machine.NewForeignClosure(env, spec.ParamCount, spec.IsVariadic, spec.Impl)
-		if err := env.SetGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
+		if err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
 			return values.WrapForeignErrorf(err, "error registering %s", spec.Name)
 		}
 	}
@@ -823,10 +826,10 @@ func registerExpandTimePrimitives(env *environment.EnvironmentFrame, specs []Pri
 	expandEnv := env.Expand()
 	for _, spec := range specs {
 		sym := expandEnv.InternSymbol(values.NewSymbol(spec.Name))
-		expandEnv.MaybeCreateGlobalBinding(sym, environment.BindingTypeVariable)
+		expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 		closure := machine.NewForeignClosure(expandEnv, spec.ParamCount, spec.IsVariadic, spec.Impl)
-		if err := expandEnv.SetGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
+		if err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
 			return values.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
 		}
 	}
@@ -905,25 +908,35 @@ func NewTopLevelEnvironmentFrameTiny() (*environment.EnvironmentFrame, error) {
 	registerCompileTimePrimitives(env, compileTimePrimitives)
 
 	// Register runtime primitives (bindings + foreign closures)
-	if err := registerRuntimePrimitives(env, runtimePrimitives); err != nil {
+	err := registerRuntimePrimitives(env, runtimePrimitives)
+	if err != nil {
 		return nil, err
 	}
 
 	// Register expand-time primitives for syntax-case fenders
-	if err := registerExpandTimePrimitives(env, expandTimePrimitives); err != nil {
+	err = registerExpandTimePrimitives(env, expandTimePrimitives)
+	if err != nil {
 		return nil, err
 	}
 
 	// Register port parameters as global variables
 	registerPortParameters(env)
 
-	// Register primitive compilers in the compile environment
-	if err := machine.RegisterPrimitiveCompilers(env); err != nil {
-		return nil, values.WrapForeignErrorf(err, "error registering primitive compilers")
+	// Register syntax compilers in the compile environment
+	err = machine.RegisterSyntaxCompilers(env)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error registering syntax compilers")
+	}
+
+	// Register primitive expanders in the expand environment
+	err = machine.RegisterPrimitiveExpanders(env)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error registering primitive expanders")
 	}
 
 	// Load bootstrap macros (and, or, let, let*, letrec, cond, when, unless, parameterize)
-	if err := loadBootstrapMacros(env); err != nil {
+	err = loadBootstrapMacros(env)
+	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
 
@@ -944,7 +957,7 @@ func registerPortParameters(env *environment.EnvironmentFrame) {
 
 	for _, pp := range portParams {
 		sym := env.InternSymbol(values.NewSymbol(pp.name))
-		idx, _ := env.MaybeCreateGlobalBinding(sym, environment.BindingTypeVariable)
-		env.SetGlobalValue(idx, pp.param) //nolint:errcheck
+		idx, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+		env.SetOwnGlobalValue(idx, pp.param) //nolint:errcheck
 	}
 }

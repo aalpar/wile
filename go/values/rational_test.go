@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
 	"math/big"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestRational_EqualTo(t *testing.T) {

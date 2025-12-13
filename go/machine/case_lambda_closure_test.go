@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -24,7 +23,7 @@ import (
 )
 
 func TestCaseLambdaClosure_FindMatchingClause(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Create closures with different arities
 	// Closure 1: fixed arity of 1 parameter
@@ -64,7 +63,7 @@ func TestCaseLambdaClosure_FindMatchingClause(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_FindMatchingClause_Variadic(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Create variadic closure with 2 required params + rest (a b . rest)
 	tpl := NewNativeTemplate(3, 0, true, NewOperationLoadVoid())
@@ -92,7 +91,7 @@ func TestCaseLambdaClosure_FindMatchingClause_Variadic(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_Clauses(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	tpl1 := NewNativeTemplate(1, 0, false)
 	cls1 := NewClosureWithTemplate(tpl1, env)
@@ -109,7 +108,7 @@ func TestCaseLambdaClosure_Clauses(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_IsVoid(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	tpl := NewNativeTemplate(1, 0, false)
 	cls := NewClosureWithTemplate(tpl, env)
@@ -122,7 +121,7 @@ func TestCaseLambdaClosure_IsVoid(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_SchemeString(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	tpl := NewNativeTemplate(1, 0, false)
 	cls := NewClosureWithTemplate(tpl, env)
@@ -132,7 +131,7 @@ func TestCaseLambdaClosure_SchemeString(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_EqualTo(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	tpl1 := NewNativeTemplate(1, 0, false)
 	cls1 := NewClosureWithTemplate(tpl1, env)
@@ -161,7 +160,7 @@ func TestCaseLambdaClosure_EqualTo(t *testing.T) {
 }
 
 func TestOperationMakeCaseLambdaClosure(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Create closures
 	tpl1 := NewNativeTemplate(1, 0, false)
@@ -190,7 +189,7 @@ func TestOperationMakeCaseLambdaClosure(t *testing.T) {
 }
 
 func TestOperationMakeCaseLambdaClosure_Error(t *testing.T) {
-	env := environment.NewTipTopEnvironmentFrame()
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Create machine context with non-closure on stack
 	mc := &MachineContext{
@@ -230,4 +229,73 @@ func TestOperationMakeCaseLambdaClosure_EqualTo(t *testing.T) {
 	var nilOp1 *OperationMakeCaseLambdaClosure
 	var nilOp2 *OperationMakeCaseLambdaClosure
 	qt.Assert(t, nilOp1.EqualTo(nilOp2), qt.IsTrue)
+}
+
+// Tests moved from coverage_additional_test.go
+// TestClausesWrapperAdditional tests the clausesWrapper type
+func TestClausesWrapperAdditional(t *testing.T) {
+	cw := &clausesWrapper{
+		clauses: nil,
+	}
+	qt.Assert(t, cw.IsVoid(), qt.IsFalse)
+	qt.Assert(t, cw.SchemeString(), qt.Contains, "syntax-rules-clauses")
+
+	// EqualTo always returns false because clauses are not comparable
+	qt.Assert(t, cw.EqualTo(cw), qt.IsFalse)
+
+	var nilCw *clausesWrapper
+	qt.Assert(t, cw.EqualTo(nilCw), qt.IsFalse)
+}
+
+// TestClausesWrapperMethods tests clausesWrapper methods
+func TestClausesWrapperMethods(t *testing.T) {
+	cw := &clausesWrapper{
+		clauses: nil,
+	}
+
+	qt.Assert(t, cw.SchemeString(), qt.Contains, "syntax-rules")
+	qt.Assert(t, cw.IsVoid(), qt.IsFalse)
+
+	// Test EqualTo - clausesWrapper always returns false (not comparable)
+	cw2 := &clausesWrapper{clauses: nil}
+	qt.Assert(t, cw.EqualTo(cw2), qt.IsFalse) // clauses are not comparable per implementation
+	qt.Assert(t, cw.EqualTo(values.NewInteger(1)), qt.IsFalse)
+}
+
+// TestCaseLambdaClosureFindMatching tests CaseLambdaClosure.FindMatchingClause
+func TestCaseLambdaClosureFindMatching(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+
+	// Create clauses with different arities
+	tpl1 := NewNativeTemplate(1, 1, false)
+	tpl1.AppendOperations(NewOperationLoadLiteralInteger(1), NewOperationRestoreContinuation())
+	cls1 := NewClosureWithTemplate(tpl1, env)
+
+	tpl2 := NewNativeTemplate(2, 2, false)
+	tpl2.AppendOperations(NewOperationLoadLiteralInteger(2), NewOperationRestoreContinuation())
+	cls2 := NewClosureWithTemplate(tpl2, env)
+
+	caseCls := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
+
+	qt.Assert(t, caseCls.SchemeString(), qt.Contains, "case-lambda")
+	qt.Assert(t, caseCls.IsVoid(), qt.IsFalse)
+
+	// Test clause finding
+	clauses := caseCls.Clauses()
+	qt.Assert(t, len(clauses), qt.Equals, 2)
+
+	// Find matching clause for 1 arg
+	match, found := caseCls.FindMatchingClause(1)
+	qt.Assert(t, found, qt.IsTrue)
+	qt.Assert(t, match, qt.Equals, cls1)
+
+	// Find matching clause for 2 args
+	match, found = caseCls.FindMatchingClause(2)
+	qt.Assert(t, found, qt.IsTrue)
+	qt.Assert(t, match, qt.Equals, cls2)
+
+	// No match for 3 args
+	match, found = caseCls.FindMatchingClause(3)
+	qt.Assert(t, found, qt.IsFalse)
+	qt.Assert(t, match, qt.IsNil)
 }

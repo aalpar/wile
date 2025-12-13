@@ -15,6 +15,7 @@
 package values
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -113,7 +114,7 @@ func Test_ForEach(t *testing.T) {
 	count := 0
 	sum := int64(0)
 
-	tail, err := ForEach(nil, list, func(i int, hasNext bool, v Value) error {
+	tail, err := ForEach(nil, list, func(_ context.Context, i int, hasNext bool, v Value) error {
 		count++
 		if intVal, ok := v.(*Integer); ok {
 			sum += intVal.Value
@@ -129,7 +130,7 @@ func Test_ForEach(t *testing.T) {
 
 func Test_ForEach_NonTuple(t *testing.T) {
 	i := NewInteger(42)
-	tail, err := ForEach(nil, i, func(_ int, _ bool, _ Value) error {
+	tail, err := ForEach(nil, i, func(_ context.Context, _ int, _ bool, _ Value) error {
 		return fmt.Errorf("should not be called")
 	})
 	qt.Assert(t, err, qt.IsNil)

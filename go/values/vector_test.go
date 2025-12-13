@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
@@ -301,10 +300,10 @@ func TestVectorSchemeString(t *testing.T) {
 
 func TestVectorAsList(t *testing.T) {
 	tcs := []struct {
-		name   string
-		in     *Vector
-		out    Tuple
-		isNil  bool
+		name  string
+		in    *Vector
+		out   Tuple
+		isNil bool
 	}{
 		{
 			name:  "nil vector returns nil",

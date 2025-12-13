@@ -33,7 +33,8 @@ import (
 // converted to a syntax object automatically).
 //
 // This is the final phase hook, completing the pipeline:
-//   expand -> compile -> (execute via calling the returned thunk)
+//
+//	expand -> compile -> (execute via calling the returned thunk)
 func PrimCompile(_ context.Context, mc *machine.MachineContext) error {
 	expr := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 

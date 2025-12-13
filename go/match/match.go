@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 // match.go implements the pattern matching VM for syntax-rules.
@@ -52,11 +51,11 @@ type valuePathEntry struct {
 // It executes compiled pattern bytecode against an input form,
 // capturing pattern variable bindings that can be used for template expansion.
 type Matcher struct {
-	variables    map[string]struct{}          // Known pattern variables
-	codes        []SyntaxCommand              // Compiled pattern bytecode
-	captureStack []*captureContext            // Binding capture stack (nesting for ellipsis)
-	valueStack   []valuePathEntry             // Input traversal stack
-	ellipsisVars map[int]map[string]struct{}  // ellipsisID -> captured pattern variables
+	variables    map[string]struct{}         // Known pattern variables
+	codes        []SyntaxCommand             // Compiled pattern bytecode
+	captureStack []*captureContext           // Binding capture stack (nesting for ellipsis)
+	valueStack   []valuePathEntry            // Input traversal stack
+	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 }
 
 func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand) *Matcher {

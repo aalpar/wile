@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
@@ -22,7 +21,7 @@ import (
 var (
 	_ Value  = (*Float)(nil)
 	_ Number = (*Float)(nil)
-	//_ Comparable = (*Float)(nil)
+	// _ Comparable = (*Float)(nil)
 )
 
 type Float struct {

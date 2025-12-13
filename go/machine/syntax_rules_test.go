@@ -73,8 +73,8 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}
@@ -117,8 +117,8 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}
@@ -155,8 +155,8 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}

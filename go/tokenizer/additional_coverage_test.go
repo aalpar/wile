@@ -924,4 +924,3 @@ func TestMayReadPolarPart(t *testing.T) {
 		})
 	}
 }
-

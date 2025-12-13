@@ -56,8 +56,8 @@ func TestDeleteFileErrorWithNonString(t *testing.T) {
 func TestLoad(t *testing.T) {
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
-	f.WriteString("42") //nolint:errcheck
-	f.Close()           //nolint:errcheck
+	f.WriteString("42")       //nolint:errcheck
+	f.Close()                 //nolint:errcheck
 	defer os.Remove(f.Name()) //nolint:errcheck
 
 	code := fmt.Sprintf(`(load "%s")`, f.Name())
@@ -83,8 +83,8 @@ func TestLoadWithMultipleExpressions(t *testing.T) {
 func TestLoadReturnsLastValue(t *testing.T) {
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
-	f.WriteString("1\n2\n3") //nolint:errcheck
-	f.Close()                //nolint:errcheck
+	f.WriteString("1\n2\n3")  //nolint:errcheck
+	f.Close()                 //nolint:errcheck
 	defer os.Remove(f.Name()) //nolint:errcheck
 
 	code := fmt.Sprintf(`(load "%s")`, f.Name())

@@ -67,9 +67,9 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, letMacro)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile let1 macro: %v", err)
 	}
@@ -87,9 +87,9 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the define-syntax for swap!
 	ctc = machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt = machine.NewCompileTimeCallContext(false, false, env)
+	ctctx = machine.NewCompileTimeCallContext(false, false, env)
 	args = extractDefineSyntaxArgs(t, defineSyntaxForm)
-	err = ctc.CompileDefineSyntax(ccnt, args)
+	err = ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile swap! macro: %v", err)
 	}
@@ -114,8 +114,8 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the expanded form
 	ctc2 := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt2 := machine.NewCompileTimeCallContext(false, true, env)
-	err = ctc2.CompileExpression(ccnt2, expanded)
+	ctctx2 := machine.NewCompileTimeCallContext(false, true, env)
+	err = ctc2.CompileExpression(ctctx2, expanded)
 	if err != nil {
 		t.Fatalf("failed to compile: %v", err)
 	}
@@ -136,9 +136,9 @@ func TestLetMacroExpansion(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile my-list macro: %v", err)
 	}
@@ -176,9 +176,9 @@ func TestLetMacroSimple(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile let1 macro: %v", err)
 	}
@@ -213,9 +213,9 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile macro: %v", err)
 	}
@@ -267,9 +267,9 @@ func TestLetMacroFull(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, letMacro)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile let macro: %v", err)
 	}
@@ -304,9 +304,9 @@ func TestScopeCreation(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ccnt := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
-	err := ctc.CompileDefineSyntax(ccnt, args)
+	err := ctc.CompileDefineSyntax(ctctx, args)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use the macro

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -26,9 +25,9 @@ type MachineContinuation struct {
 	parent   *MachineContinuation
 	env      *environment.EnvironmentFrame
 	template *NativeTemplate
-	value MultipleValues
-	evals *Stack
-	pc    int
+	value    MultipleValues
+	evals    *Stack
+	pc       int
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.

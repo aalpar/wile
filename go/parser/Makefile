@@ -1,4 +1,4 @@
-SOURCES := $(wildcard *.go)
+SOURCES := $(shell go list -f '{{range .GoFiles}}{{.}} {{end}}' .)
 
 .PHONY: build
 build: $(SOURCES)

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package tokenizer
 
 import (
@@ -955,7 +954,7 @@ func TestTokenizer_TokenStream(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%s", tc.in), func(c *qt.C) {
+		qt.New(t).Run(tc.in, func(c *qt.C) {
 			ts, err := Tokenize(tc.in, false)
 			c.Check(err, qt.ErrorIs, tc.err1)
 			qt.Assert(c, len(ts), qt.Equals, len(tc.tokens))

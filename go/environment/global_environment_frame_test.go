@@ -48,7 +48,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
 	// Set the initial value of the new binding
-	err := env.SetGlobalValue(gi0, value0)
+	err := env.SetOwnGlobalValue(gi0, value0)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Adding a new binding should create a new index
@@ -57,7 +57,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
 	// Set the initial value of the new binding
-	err = env.SetGlobalValue(gi1, value1)
+	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
 	gb2 := env.GetOwnGlobalBinding(gi0).Value()

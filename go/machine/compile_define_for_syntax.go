@@ -32,7 +32,7 @@ import (
 //
 // Unlike define-syntax (which stores macro transformers), define-for-syntax
 // stores regular values with BindingTypeVariable.
-func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if p.env == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-for-syntax: nil environment")
 	}
@@ -47,13 +47,13 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 	}
 
 	// Get the first element - either a symbol (simple define) or a pair (function define)
-	first := argsPair.Car()
+	first := argsPair.SyntaxCar()
 	if first == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-for-syntax: missing name")
 	}
 
 	// Get the rest (value expression or body)
-	restVal := argsPair.Cdr()
+	restVal := argsPair.SyntaxCdr()
 	restPair, ok := restVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(restPair) {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-for-syntax: missing expression")
@@ -65,7 +65,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 	// Check if it's a function definition: (define-for-syntax (name args...) body...)
 	if firstPair, ok := first.(*syntax.SyntaxPair); ok {
 		// Function shorthand - extract name and build lambda
-		nameStx := firstPair.Car()
+		nameStx := firstPair.SyntaxCar()
 		nameSyntaxSym, ok := nameStx.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol")
@@ -73,7 +73,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
 		// Build (lambda (args...) body...)
-		params, ok := firstPair.Cdr().(syntax.SyntaxValue)
+		params, ok := firstPair.SyntaxCdr().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "define-for-syntax: invalid parameter list")
 		}
@@ -89,7 +89,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
 		// Get the value expression
-		valueExpr, ok = restPair.Car().(syntax.SyntaxValue)
+		valueExpr, ok = restPair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "define-for-syntax: invalid expression")
 		}
@@ -114,7 +114,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 	}
 
 	// Compile the expanded expression
-	if err := tmpCcnt.CompileExpression(ccnt, expandedExpr); err != nil {
+	if err := tmpCcnt.CompileExpression(ctctx, expandedExpr); err != nil {
 		return values.WrapForeignErrorf(err, "define-for-syntax: compilation failed")
 	}
 
@@ -131,9 +131,9 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ccnt CompileTimeCallCon
 	result := mc.GetValue()
 
 	// Store the result in the expand phase environment with BindingTypeVariable
-	globalIndex, _ := expandEnv.MaybeCreateGlobalBinding(nameSym, environment.BindingTypeVariable)
+	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
 	if globalIndex != nil {
-		if err := expandEnv.SetGlobalValue(globalIndex, result); err != nil {
+		if err := expandEnv.SetOwnGlobalValue(globalIndex, result); err != nil {
 			return values.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
 		}
 	}

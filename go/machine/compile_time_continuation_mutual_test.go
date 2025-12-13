@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -67,7 +66,6 @@ func TestCompileContext_CompileDefine_MutualRecursion_NotSupported(t *testing.T)
 	// This SHOULD fail - mutual recursion requires both functions to be pre-declared
 	qt.Assert(t, err, qt.IsNotNil, qt.Commentf("Should fail: forward references not supported"))
 	qt.Assert(t, err.Error(), qt.Contains, "no such binding")
-
 }
 
 func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {

@@ -29,7 +29,7 @@ import (
 // ellipsis patterns capture variable-length lists that must be expanded dynamically.
 //
 // (syntax template) -> syntax-object
-func (p *CompileTimeContinuation) CompileSyntax(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
 	// So expr = (template)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
@@ -38,13 +38,13 @@ func (p *CompileTimeContinuation) CompileSyntax(ccnt CompileTimeCallContext, exp
 	}
 
 	// Get the template (CAR of the args list)
-	template, ok := argsPair.Car().(syntax.SyntaxValue)
+	template, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return values.NewForeignError("syntax: expected syntax template")
 	}
 
 	// Check no extra arguments (CDR should be empty list)
-	rest, ok := argsPair.Cdr().(*syntax.SyntaxPair)
+	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || !rest.IsEmptyList() {
 		return values.NewForeignError("syntax: expected exactly one argument")
 	}
@@ -76,13 +76,13 @@ func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 			return false
 		}
 		// Check car
-		if car, ok := v.Car().(syntax.SyntaxValue); ok {
+		if car, ok := v.SyntaxCar().(syntax.SyntaxValue); ok {
 			if templateContainsEllipsis(car) {
 				return true
 			}
 		}
 		// Check cdr
-		if cdr, ok := v.Cdr().(syntax.SyntaxValue); ok {
+		if cdr, ok := v.SyntaxCdr().(syntax.SyntaxValue); ok {
 			return templateContainsEllipsis(cdr)
 		}
 		return false
@@ -119,7 +119,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 		return nil
 
 	case *syntax.SyntaxPair:
-		if values.IsEmptyList(v) {
+		if syntax.IsSyntaxEmptyList(v) {
 			// Empty list - load as literal
 			litIdx := p.template.MaybeAppendLiteral(v)
 			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
@@ -145,13 +145,13 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 	current := pair
 	isProper := true
 
-	for !values.IsEmptyList(current) {
-		car := current.Car()
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
 		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
 			elements = append(elements, carSyntax)
 		}
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {

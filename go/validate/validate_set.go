@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateSetBang validates (set! name expr)
-func validateSetBang(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateSetBang(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -44,14 +44,15 @@ func validateSetBang(pair *syntax.SyntaxPair, result *ValidationResult) Validate
 	}
 
 	// Validate the value expression
-	value := validateExpr(elements[2], result)
+	value := validateExpr(ctx, elements[2], result)
 	if value == nil {
 		return nil
 	}
 
 	return &ValidatedSetBang{
-		source: source,
-		Name:   name,
-		Value:  value,
+		formName: "set!",
+		source:   source,
+		Name:     name,
+		Value:    value,
 	}
 }

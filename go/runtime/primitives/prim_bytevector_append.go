@@ -35,7 +35,7 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector-append: expected a list but got %T", o)
 	}
 	var result []values.Byte
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)

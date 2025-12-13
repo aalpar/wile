@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -20,56 +19,56 @@ import (
 	"wile/values"
 )
 
-// PrimitiveCompilerFunc is the type for compile-time special form handlers.
-// These functions handle syntax-directed compilation of primitive forms like
+// SyntaxCompilerFunc is the type for compile-time special form handlers.
+// These functions handle syntax-directed compilation of special forms like
 // `define`, `lambda`, `if`, `quote`, etc.
 //
 // Parameters:
 //   - ctc: The compile-time continuation (compiler state)
-//   - ccnt: The compile-time call context (tail position info, etc.)
+//   - ctctx: The compile-time call context (tail position info, etc.)
 //   - expr: The expression arguments (everything after the keyword)
 //
 // The function should emit operations to ctc.template and return nil on success.
-type PrimitiveCompilerFunc func(ctc *CompileTimeContinuation, ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error
+type SyntaxCompilerFunc func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error
 
-// PrimitiveCompiler wraps a PrimitiveCompilerFunc as a values.Value so it can
+// SyntaxCompiler wraps a SyntaxCompilerFunc as a values.Value so it can
 // be stored in the environment.
-type PrimitiveCompiler struct {
+type SyntaxCompiler struct {
 	name string
-	fn   PrimitiveCompilerFunc
+	fn   SyntaxCompilerFunc
 }
 
-// NewPrimitiveCompiler creates a new primitive compiler.
-func NewPrimitiveCompiler(name string, fn PrimitiveCompilerFunc) *PrimitiveCompiler {
-	return &PrimitiveCompiler{name: name, fn: fn}
+// NewSyntaxCompiler creates a new syntax compiler.
+func NewSyntaxCompiler(name string, fn SyntaxCompilerFunc) *SyntaxCompiler {
+	return &SyntaxCompiler{name: name, fn: fn}
 }
 
-// Name returns the name of this primitive compiler.
-func (p *PrimitiveCompiler) Name() string {
+// Name returns the name of this syntax compiler.
+func (p *SyntaxCompiler) Name() string {
 	return p.name
 }
 
-// Compile invokes the primitive compiler function.
-func (p *PrimitiveCompiler) Compile(ctc *CompileTimeContinuation, ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	return p.fn(ctc, ccnt, expr)
+// Compile invokes the syntax compiler function.
+func (p *SyntaxCompiler) Compile(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	return p.fn(ctc, ctctx, expr)
 }
 
 // SchemeString implements values.Value interface.
-func (p *PrimitiveCompiler) SchemeString() string {
-	return "#<primitive-compiler:" + p.name + ">"
+func (p *SyntaxCompiler) SchemeString() string {
+	return "#<syntax-compiler:" + p.name + ">"
 }
 
 // IsVoid implements values.Value interface.
-func (p *PrimitiveCompiler) IsVoid() bool {
+func (p *SyntaxCompiler) IsVoid() bool {
 	return false
 }
 
 // EqualTo implements values.Value interface.
-func (p *PrimitiveCompiler) EqualTo(other values.Value) bool {
+func (p *SyntaxCompiler) EqualTo(other values.Value) bool {
 	if other == nil {
 		return false
 	}
-	otherPC, ok := other.(*PrimitiveCompiler)
+	otherPC, ok := other.(*SyntaxCompiler)
 	if !ok {
 		return false
 	}

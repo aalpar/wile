@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 // syntax_adapter.go bridges between syntax objects (with hygiene info) and
@@ -37,6 +36,7 @@ package match
 // Reference: R7RS Section 4.3.2 (syntax-rules)
 
 import (
+	"context"
 	"errors"
 
 	"wile/syntax"
@@ -330,9 +330,9 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 //   - Scope sets (used for hygiene)
 //
 // The pattern matching VM operates on these raw values because:
-//   1. Pattern matching is structural - it doesn't care about source locations
-//   2. The unhygienic core doesn't need scope information
-//   3. Raw values are simpler and faster to traverse
+//  1. Pattern matching is structural - it doesn't care about source locations
+//  2. The unhygienic core doesn't need scope information
+//  3. Raw values are simpler and faster to traverse
 //
 // After expansion, valueToSyntax re-wraps the result, and the hygiene layer
 // adds intro scopes to the new syntax objects.
@@ -474,8 +474,8 @@ type CompiledPattern struct {
 
 // CompileSyntaxPattern compiles a syntax pattern into bytecode
 // This is a convenience function that unwraps syntax before compilation
-func CompileSyntaxPattern(pattern syntax.SyntaxValue, variables map[string]struct{}) ([]SyntaxCommand, error) {
-	result, err := CompileSyntaxPatternFull(pattern, variables)
+func CompileSyntaxPattern(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) ([]SyntaxCommand, error) {
+	result, err := CompileSyntaxPatternFull(ctx, pattern, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func CompileSyntaxPattern(pattern syntax.SyntaxValue, variables map[string]struc
 
 // CompileSyntaxPatternFull compiles a syntax pattern into bytecode with ellipsis variable mapping.
 // Returns a CompiledPattern containing both the bytecode and the ellipsis variable mapping.
-func CompileSyntaxPatternFull(pattern syntax.SyntaxValue, variables map[string]struct{}) (*CompiledPattern, error) {
+func CompileSyntaxPatternFull(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) (*CompiledPattern, error) {
 	// Convert syntax pattern to raw values
 	rawPattern := syntaxToValue(pattern)
 
@@ -497,7 +497,7 @@ func CompileSyntaxPatternFull(pattern syntax.SyntaxValue, variables map[string]s
 	// Compile using existing compiler
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(pair)
+	err := compiler.Compile(ctx, pair)
 	if err != nil {
 		return nil, err
 	}

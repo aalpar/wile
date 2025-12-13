@@ -181,7 +181,7 @@ func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
 // Helper: convert a Scheme list to a slice of symbols
 func listToSymbols(v values.Value) ([]*values.Symbol, error) {
 	var result []*values.Symbol
-	_, err := values.ForEach(nil, v, func(_ int, _ bool, elem values.Value) error {
+	_, err := values.ForEach(nil, v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		sym, ok := elem.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected a symbol but got %T", elem)

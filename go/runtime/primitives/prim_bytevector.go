@@ -35,7 +35,7 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []values.Byte
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)

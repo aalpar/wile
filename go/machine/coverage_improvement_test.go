@@ -106,7 +106,7 @@ func TestOperationBrk_ValueMethods(t *testing.T) {
 // TestCompileUnquote tests that unquote outside quasiquote errors
 func TestCompileUnquote(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err := RegisterPrimitiveCompilers(env)
+	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	sctx := syntax.NewZeroValueSourceContext()
@@ -121,7 +121,7 @@ func TestCompileUnquote(t *testing.T) {
 // TestCompileUnquoteSplicing tests that unquote-splicing outside quasiquote errors
 func TestCompileUnquoteSplicing(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err := RegisterPrimitiveCompilers(env)
+	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	sctx := syntax.NewZeroValueSourceContext()
@@ -138,12 +138,12 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ccnt := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(false, true, env)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := utils.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
 
-	err := ctc.CompileUnquote(ccnt, expr)
+	err := ctc.CompileUnquote(ctctx, expr)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "unquote")
 }
@@ -153,12 +153,12 @@ func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ccnt := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(false, true, env)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := utils.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
 
-	err := ctc.CompileUnquoteSplicing(ccnt, expr)
+	err := ctc.CompileUnquoteSplicing(ctctx, expr)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "unquote-splicing")
 }
@@ -356,7 +356,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 // TestCompileCondExpand tests cond-expand compilation
 func TestCompileCondExpand(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err := RegisterPrimitiveCompilers(env)
+	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Note: r7rs is already a supported feature by default
@@ -384,7 +384,7 @@ func TestCompileInclude(t *testing.T) {
 
 	// Set up environment with include search path
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err = RegisterPrimitiveCompilers(env)
+	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set SCHEME_INCLUDE_PATH
@@ -414,7 +414,7 @@ func TestCompileIncludeCi(t *testing.T) {
 
 	// Set up environment
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err = RegisterPrimitiveCompilers(env)
+	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set SCHEME_INCLUDE_PATH
@@ -451,7 +451,7 @@ func TestParseFeatureRequirementList(t *testing.T) {
 // TestCompileIncludeError tests include with non-existent file
 func TestCompileIncludeError(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err := RegisterPrimitiveCompilers(env)
+	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	sctx := syntax.NewZeroValueSourceContext()
@@ -485,7 +485,7 @@ func TestCompileIncludeReadError(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
-	err = RegisterPrimitiveCompilers(env)
+	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set SCHEME_INCLUDE_PATH

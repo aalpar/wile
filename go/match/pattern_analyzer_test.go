@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestAnalyzePatternWithLiterals(t *testing.T) {

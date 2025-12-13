@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 // operation_syntax_rules_transform.go implements the runtime behavior of syntax-rules.
@@ -266,15 +265,15 @@ func addScopeToPairSkipFreeIds(pair *syntax.SyntaxPair, scope *syntax.Scope, fre
 // This is the key operation for implementing hygiene in Flatt's "sets of scopes" model.
 // By adding a fresh scope to every identifier in the macro expansion, we ensure that:
 //
-//   1. Identifiers introduced by the macro (like "tmp" in swap!) get a scope
-//      that distinguishes them from identifiers in the macro's use site.
+//  1. Identifiers introduced by the macro (like "tmp" in swap!) get a scope
+//     that distinguishes them from identifiers in the macro's use site.
 //
-//   2. When the compiler resolves variable references, it checks if the binding's
-//      scope set is a subset of the reference's scope set (see ScopesMatch).
+//  2. When the compiler resolves variable references, it checks if the binding's
+//     scope set is a subset of the reference's scope set (see ScopesMatch).
 //
-//   3. A user's "tmp" (with scope set {user-scope}) won't match the macro's "tmp"
-//      binding (with scope set {user-scope, intro-scope}), because the binding
-//      has an extra scope the reference doesn't have.
+//  3. A user's "tmp" (with scope set {user-scope}) won't match the macro's "tmp"
+//     binding (with scope set {user-scope, intro-scope}), because the binding
+//     has an extra scope the reference doesn't have.
 //
 // The AddScope method on each syntax type creates a new syntax object with the
 // additional scope - syntax objects are immutable for this reason.

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
 	"math"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestComplex_NewComplex(t *testing.T) {

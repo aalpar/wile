@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package environment
 
 import (
@@ -105,28 +104,28 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, gi0, qt.IsNil)
 
 	// Test adding a binding
-	gi0, ok := env.MaybeCreateGlobalBinding(tv0, BindingTypeVariable)
+	gi0, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0, values.SchemeEquals, NewGlobalIndex(tv0))
 
 	// Set the initial value of the new binding
-	err := env.SetGlobalValue(gi0, value0)
+	err := env.SetOwnGlobalValue(gi0, value0)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Re-adding the same binding should not change the index
 	tv0 = env.InternSymbol(values.NewSymbol("testVar0"))
-	gi0, ok = env.MaybeCreateGlobalBinding(tv0, BindingTypeVariable)
+	gi0, ok = env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsFalse)
 	qt.Assert(t, gi0.Index, values.SchemeEquals, tv0)
 
 	// Adding a new binding should create a new index
 	tv1 := values.NewSymbol("testVar1")
-	gi1, ok := env.MaybeCreateGlobalBinding(tv1, BindingTypeVariable)
+	gi1, ok := env.MaybeCreateOwnGlobalBinding(tv1, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index, values.SchemeEquals, tv1)
 
 	// Set the initial value of the new binding
-	err = env.SetGlobalValue(gi1, value1)
+	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
 	bd := env.GetGlobalBinding(gi0)
@@ -142,7 +141,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	// check global environment
 	tv0 := env.InternSymbol(values.NewSymbol("testVar0"))
 	qt.Assert(t, env, qt.Not(qt.IsNil))
-	_, ok := env.MaybeCreateGlobalBinding(tv0, BindingTypeVariable)
+	_, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	_, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -168,7 +167,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
 	qt.Assert(t, lb.value, values.SchemeEquals, values.NewInteger(42))
 
-	err = env.SetGlobalValue(gi, values.NewInteger(42))
+	err = env.SetOwnGlobalValue(gi, values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNil)
 
 	gb = env.GetGlobalBinding(gi)
@@ -243,17 +242,18 @@ func TestEnvironmentFrame_MetaHierarchy(t *testing.T) {
 func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Test the new chain-based phase hierarchy:
 	// TopLevel (= Runtime) → meta → Expand → meta → Compile
-	topLevel := NewTipTopEnvironmentFrame()
+	topLevel := NewTopLevelEnvironmentFrame()
 
 	// Runtime IS the top-level
 	runtime := topLevel.Runtime()
-	qt.Assert(t, runtime, qt.Equals, topLevel)
+	qt.Assert(t, topLevel, qt.Not(qt.Equals), runtime)
+	qt.Assert(t, topLevel.meta, qt.Equals, runtime)
 
 	// Expand is created lazily via meta
-	qt.Assert(t, topLevel.meta, qt.IsNil)
+	qt.Assert(t, topLevel.meta, qt.IsNotNil)
 	expand := topLevel.Expand()
 	qt.Assert(t, expand, qt.IsNotNil)
-	qt.Assert(t, topLevel.meta, qt.Equals, expand)
+	qt.Assert(t, runtime.meta, qt.Equals, expand)
 
 	// Compile chains from expand
 	qt.Assert(t, expand.meta, qt.IsNil)
@@ -271,8 +271,12 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, compile.GlobalEnvironment(), qt.Not(qt.Equals), expand.GlobalEnvironment())
 
 	// Chain structure: expand parents to runtime, compile parents to expand
-	qt.Assert(t, expand.Parent(), qt.Equals, runtime)
-	qt.Assert(t, compile.Parent(), qt.Equals, expand)
+	qt.Assert(t, expand.Parent(), qt.Not(qt.Equals), runtime)
+	qt.Assert(t, compile.Parent(), qt.Not(qt.Equals), expand)
+
+	qt.Assert(t, expand.Parent(), qt.Equals, runtime.Parent())
+	qt.Assert(t, expand.Parent(), qt.Equals, compile.Parent())
+	qt.Assert(t, runtime.Parent(), qt.Equals, compile.Parent())
 
 	// TopLevel() should return the root from any frame
 	qt.Assert(t, runtime.TopLevel(), qt.Equals, topLevel)
@@ -287,7 +291,7 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 
 func TestEnvironmentFrame_SharedInterning(t *testing.T) {
 	// Test that symbol interning is shared across phases
-	tipTop := NewTipTopEnvironmentFrame()
+	tipTop := NewTopLevelEnvironmentFrame()
 	runtime := tipTop.Runtime()
 	expand := tipTop.Expand()
 
@@ -313,7 +317,7 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 
 	// Create global binding
 	globalSym := env.InternSymbol(values.NewSymbol("global-var"))
-	env.MaybeCreateGlobalBinding(globalSym, BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(globalSym, BindingTypeVariable)
 
 	// Create local binding
 	localSym := values.NewSymbol("local-var")

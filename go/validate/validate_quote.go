@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateQuote validates (quote datum)
-func validateQuote(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateQuote(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -38,15 +38,16 @@ func validateQuote(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedE
 
 	// The datum can be any syntax value - no further validation needed
 	return &ValidatedQuote{
-		source: source,
-		Datum:  elements[1],
+		formName: "quote",
+		source:   source,
+		Datum:    elements[1],
 	}
 }
 
 // validateQuasiquote validates (quasiquote template)
 // Note: The template is not deeply validated here because quasiquote
 // has complex runtime semantics with nested unquote/unquote-splicing
-func validateQuasiquote(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateQuasiquote(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -64,6 +65,7 @@ func validateQuasiquote(pair *syntax.SyntaxPair, result *ValidationResult) Valid
 
 	// The template is passed through - quasiquote has complex compile-time semantics
 	return &ValidatedQuasiquote{
+		formName: "quasiquote",
 		source:   source,
 		Template: elements[1],
 	}

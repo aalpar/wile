@@ -43,7 +43,7 @@ func TestSourceMap_Add_EmptyRange(t *testing.T) {
 	sm := NewSourceMap()
 
 	source := &syntax.SourceContext{File: "test.scm"}
-	sm.Add(5, 5, source) // Empty range (start == end)
+	sm.Add(5, 5, source)  // Empty range (start == end)
 	sm.Add(10, 5, source) // Invalid range (start > end)
 
 	c.Assert(sm.Len(), qt.Equals, 0)
@@ -141,7 +141,7 @@ func TestSourceMap_Lookup_BinarySearch(t *testing.T) {
 	// Test lookups at various positions
 	c.Assert(sm.Lookup(0), qt.IsNotNil)
 	c.Assert(sm.Lookup(4), qt.IsNotNil)
-	c.Assert(sm.Lookup(5), qt.IsNil)  // Gap
+	c.Assert(sm.Lookup(5), qt.IsNil) // Gap
 	c.Assert(sm.Lookup(10), qt.IsNotNil)
 	c.Assert(sm.Lookup(500), qt.IsNotNil)
 	c.Assert(sm.Lookup(505), qt.IsNil) // Gap

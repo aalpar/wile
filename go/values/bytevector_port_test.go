@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
 	"strings"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestBytevectorInputPort_NewBytevectorInputPort(t *testing.T) {
@@ -119,9 +119,9 @@ func TestBytevectorOutputPort_WriteByte(t *testing.T) {
 
 func TestBytevectorOutputPort_GetBytevector(t *testing.T) {
 	port := NewBytevectorOutputPort()
-	port.Write([]byte{1, 2})   //nolint:errcheck
-	port.WriteByte(3)          //nolint:errcheck
-	port.Write([]byte{4, 5})   //nolint:errcheck
+	port.Write([]byte{1, 2}) //nolint:errcheck
+	port.WriteByte(3)        //nolint:errcheck
+	port.Write([]byte{4, 5}) //nolint:errcheck
 
 	bv := port.GetBytevector()
 	qt.Assert(t, bv, qt.DeepEquals, []byte{1, 2, 3, 4, 5})

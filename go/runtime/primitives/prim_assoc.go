@@ -31,7 +31,7 @@ func PrimAssoc(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected an alist but got %T", alist)
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, elem values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, elem values.Value) error {
 		entry, ok := elem.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)

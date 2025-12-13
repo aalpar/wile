@@ -29,7 +29,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	argsVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 
 	// Create fresh top-level environment
-	newEnv := environment.NewTipTopEnvironmentFrame()
+	newEnv := environment.NewTopLevelEnvironmentFrame()
 
 	// Share the library registry from caller's environment
 	callerEnv := mc.EnvironmentFrame().TopLevel()
@@ -51,7 +51,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Process each import spec
-	_, err := args.ForEach(nil, func(i int, hasNext bool, specVal values.Value) error {
+	_, err := args.ForEach(nil, func(_ context.Context, i int, hasNext bool, specVal values.Value) error {
 		// Parse the import set from datum
 		importSet, err := machine.ParseImportSetFromDatum(specVal)
 		if err != nil {

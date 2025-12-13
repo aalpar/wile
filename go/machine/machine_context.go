@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -224,8 +223,8 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 		env:         p.env.TopLevel(), // share global environment chain
 		value:       nil,
 		evals:       NewStack(),
-		cont:        nil,         // fresh call stack
-		expanderCtx: nil,         // sub-contexts don't inherit expander context by default
+		cont:        nil, // fresh call stack
+		expanderCtx: nil, // sub-contexts don't inherit expander context by default
 	}
 }
 

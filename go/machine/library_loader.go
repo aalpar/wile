@@ -141,7 +141,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, values.NewForeignErrorf("expected define-library form, got %T", stx)
 	}
 
-	carStx := pair.Car()
+	carStx := pair.SyntaxCar()
 	carSym, ok := carStx.(*syntax.SyntaxSymbol)
 	if !ok {
 		return nil, values.NewForeignErrorf("expected define-library, got %T", carStx)

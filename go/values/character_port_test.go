@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
-	qt "github.com/frankban/quicktest"
 	"bytes"
 	"strings"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestCharacterInputPort_NewCharacterInputPort(t *testing.T) {

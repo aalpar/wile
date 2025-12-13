@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package primitives
 
 import (
@@ -37,7 +36,7 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	case 5, 7:
 		// Create a new empty top-level environment with only syntax bindings
 		// For now, we return a fresh top-level environment
-		newEnv := environment.NewTipTopEnvironmentFrame()
+		newEnv := environment.NewTopLevelEnvironmentFrame()
 		mc.SetValue(values.NewSchemeEnvironment("null-environment", newEnv))
 		return nil
 	default:

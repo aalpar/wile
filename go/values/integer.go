@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package values
 
 import (
@@ -23,7 +22,7 @@ import (
 var (
 	_ Value  = (*Integer)(nil)
 	_ Number = (*Integer)(nil)
-	//_ Comparable = (*Integer)(nil)
+	// _ Comparable = (*Integer)(nil)
 )
 
 type Integer struct {

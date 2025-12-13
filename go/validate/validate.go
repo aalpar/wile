@@ -12,34 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
+	"wile/forms"
 	"wile/syntax"
 	"wile/values"
 )
 
 // ValidateExpression validates a syntax expression and returns
 // a validated form or a list of errors
-func ValidateExpression(expr syntax.SyntaxValue) *ValidationResult {
+func ValidateExpression(ctx context.Context, expr syntax.SyntaxValue) *ValidationResult {
 	result := &ValidationResult{}
-	validated := validateExpr(expr, result)
+	validated := validateExpr(ctx, expr, result)
 	result.Expr = validated
 	return result
 }
 
-func validateExpr(expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateExpr(ctx context.Context, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	switch e := expr.(type) {
 	case *syntax.SyntaxPair:
-		return validateForm(e, result)
+		return validateForm(ctx, e, result)
 	case *syntax.SyntaxSymbol:
-		return &ValidatedSymbol{source: e.SourceContext(), Symbol: e}
+		return &ValidatedSymbol{source: e.SourceContext(), formName: "@symbol", Symbol: e}
 	case *syntax.SyntaxObject:
 		return validateSyntaxObject(e, result)
 	default:
 		// Self-evaluating: numbers, strings, booleans, etc.
-		return &ValidatedLiteral{source: nil, Value: expr}
+		return &ValidatedLiteral{source: nil, formName: "@literal", Value: expr}
 	}
 }
 
@@ -53,77 +54,31 @@ func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) Va
 		return nil
 	default:
 		// Self-evaluating literal wrapped in syntax
-		return &ValidatedLiteral{source: obj.SourceContext(), Value: obj}
+		return &ValidatedLiteral{source: obj.SourceContext(), formName: "@literal", Value: obj}
 	}
 }
 
-func validateForm(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	// Get the first element to determine the form type
-	car := pair.Car()
+	car := pair.SyntaxCar()
 
 	// Check if it's a special form by looking at the head
 	if sym, ok := car.(*syntax.SyntaxSymbol); ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
-			switch symVal.Key {
-			case "if":
-				return validateIf(pair, result)
-			case "define":
-				return validateDefine(pair, result)
-			case "lambda":
-				return validateLambda(pair, result)
-			case "case-lambda":
-				return validateCaseLambda(pair, result)
-			case "set!":
-				return validateSetBang(pair, result)
-			case "quote":
-				return validateQuote(pair, result)
-			case "begin":
-				return validateBegin(pair, result)
-			case "quasiquote":
-				return validateQuasiquote(pair, result)
-			// Macro and library forms - structural validation before compiler handles them
-			case "define-syntax":
-				return validateDefineSyntax(pair, result)
-			case "syntax-rules":
-				return validateSyntaxRules(pair, result)
-			case "import":
-				return validateImport(pair, result)
-			case "export":
-				return validateExport(pair, result)
-			case "define-library", "library":
-				return validateDefineLibrary(pair, result)
-			case "include", "include-ci":
-				return validateInclude(pair, result)
-			case "cond-expand":
-				return validateCondExpand(pair, result)
-			case "meta":
-				// Meta passes through to compiler directly
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "syntax":
-				// syntax form passes through to compiler
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "syntax-case":
-				// syntax-case form passes through to compiler
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "quasisyntax":
-				// quasisyntax form passes through to compiler
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "unsyntax":
-				// unsyntax form passes through to compiler (error outside quasisyntax)
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "unsyntax-splicing":
-				// unsyntax-splicing form passes through to compiler (error outside quasisyntax)
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
-			case "with-syntax":
-				// with-syntax form passes through to compiler
-				return &ValidatedLiteral{source: pair.SourceContext(), Value: pair}
+			// Look up the form in the registry
+			if spec := forms.Lookup(symVal.Key); spec != nil && spec.Validate != nil {
+				validated := spec.Validate(ctx, pair, result)
+				if validated == nil {
+					return nil
+				}
+				return validated.(ValidatedExpr)
 			}
 		}
 	}
 
 	// Not a special form - it's a function call
-	return validateCall(pair, result)
+	return validateCall(nil, pair, result)
 }
 
 // collectList converts a syntax list to a slice of elements.

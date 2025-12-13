@@ -19,8 +19,9 @@ import (
 	"os"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestMinMaxWithRationals(t *testing.T) {
@@ -1222,7 +1223,7 @@ func TestCloseInputOutputFile(t *testing.T) {
 	// Test close-output-port with open-output-file
 	tempOut, err := os.CreateTemp("", "test-output-*.txt")
 	qt.Assert(t, err, qt.IsNil)
-	tempOut.Close()                //nolint:errcheck
+	tempOut.Close()                 //nolint:errcheck
 	defer os.Remove(tempOut.Name()) //nolint:errcheck
 
 	code = fmt.Sprintf(`(let ((p (open-output-file "%s")))

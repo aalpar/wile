@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 // syntax_compiler.go compiles R7RS syntax-rules patterns into bytecode.
@@ -48,6 +47,7 @@ package match
 // Reference: R7RS Section 4.3.2 (syntax-rules pattern language)
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"wile/values"
@@ -59,12 +59,12 @@ var (
 )
 
 type syntaxCompilerStackEntry struct {
-	mark              int // position in instructions in which loops will return to
-	lastElementStart  int // position where the last element's bytecode starts
-	lastElement       values.Value // the actual last element value for analysis lookup
-	pr                *values.Pair
-	variables         map[string]struct{}
-	vararg            bool
+	mark             int          // position in instructions in which loops will return to
+	lastElementStart int          // position where the last element's bytecode starts
+	lastElement      values.Value // the actual last element value for analysis lookup
+	pr               *values.Pair
+	variables        map[string]struct{}
+	vararg           bool
 }
 
 type captureContext struct {
@@ -76,107 +76,14 @@ type SyntaxCommand interface {
 	fmt.Stringer
 }
 
-type ByteCodeCompareCar struct {
-	Value values.Value
-}
-
-func (p ByteCodeCompareCar) String() string {
-	return fmt.Sprintf("CompareCar(%s)", p.Value.SchemeString())
-}
-
-type ByteCodeCaptureCar struct {
-	Binding string
-}
-
-func (p ByteCodeCaptureCar) String() string {
-	return fmt.Sprintf("CaptureCar(%s)", p.Binding)
-}
-
-type ByteCodeJump struct {
-	Offset int
-}
-
-func (p ByteCodeJump) String() string {
-	return fmt.Sprintf("Jump(%d)", p.Offset)
-}
-
-type ByteCodeDone struct{}
-
-func (ByteCodeDone) String() string {
-	return "Done"
-}
-
-type ByteCodeVisitCar struct{}
-
-func (ByteCodeVisitCar) String() string {
-	return "VisitCar"
-}
-
-type ByteCodeVisitCdr struct{}
-
-func (ByteCodeVisitCdr) String() string {
-	return "VisitCdr"
-}
-
-// ByteCodePushContext starts a new capture context for an ellipsis iteration.
-// EllipsisID identifies which ellipsis pattern this context belongs to,
-// enabling multiple independent ellipsis patterns in the same clause.
-type ByteCodePushContext struct {
-	EllipsisID int
-}
-
-func (p ByteCodePushContext) String() string {
-	return fmt.Sprintf("PushContext(%d)", p.EllipsisID)
-}
-
-// ByteCodePopContext ends the current capture context.
-type ByteCodePopContext struct {
-	EllipsisID int
-}
-
-func (p ByteCodePopContext) String() string {
-	return fmt.Sprintf("PopContext(%d)", p.EllipsisID)
-}
-
-// ByteCodeSkipIfEmpty implements while-loop semantics for ellipsis patterns.
-//
-// Problem: Without this, ellipsis patterns use do-while semantics, executing
-// the loop body at least once. This breaks patterns like (foo e1 e2 ...)
-// when matching (foo x) - the e2... part should match zero elements.
-//
-// Solution: Check if the list is empty BEFORE entering the loop body.
-// If empty, skip forward by Offset instructions to exit the loop.
-//
-// This is the key fix for zero-iteration ellipsis matching in R7RS.
-type ByteCodeSkipIfEmpty struct {
-	Offset int
-}
-
-// ByteCodeRequireCarEmpty verifies that the car at the current position is an empty list.
-//
-// Problem: Pattern () should only match input (). Without this check,
-// VisitCar + Done would match any list, because Done only checks that CDR is empty.
-//
-// Solution: Generate this instruction instead of VisitCar when the pattern
-// element is (). It verifies the input car is also empty before proceeding.
-type ByteCodeRequireCarEmpty struct{}
-
-func (p ByteCodeSkipIfEmpty) String() string {
-	return fmt.Sprintf("SkipIfEmpty(%d)", p.Offset)
-}
-
-func (p ByteCodeRequireCarEmpty) String() string {
-	return "RequireCarEmpty"
-}
-
 type SyntaxCompiler struct {
 	val            *values.Pair
 	codes          []SyntaxCommand
 	variables      map[string]struct{}
-	literals       map[string]struct{}            // literals to match exactly
-	analysis       *PatternAnalysis               // pattern analysis results
-	nextEllipsisID int                            // counter for assigning unique ellipsis IDs
-	ellipsisVars   map[int]map[string]struct{}   // ellipsisID -> captured pattern variables
+	literals       map[string]struct{}         // literals to match exactly
+	analysis       *PatternAnalysis            // pattern analysis results
+	nextEllipsisID int                         // counter for assigning unique ellipsis IDs
+	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 }
 
 func NewSyntaxCompiler() *SyntaxCompiler {
@@ -188,203 +95,268 @@ func NewSyntaxCompiler() *SyntaxCompiler {
 	return q
 }
 
-func (q *SyntaxCompiler) Compile(pr *values.Pair) error {
+func (q *SyntaxCompiler) Compile(ctx context.Context, pr *values.Pair) error {
 	// Analyze pattern first to identify which subtrees contain variables
 	// Use the pre-set variables for now (from test setup)
 	q.analysis = AnalyzePattern(pr, q.variables)
 
-	compile(q, pr)
+	compile(ctx, q, pr)
 	return nil
 }
 
-func compile(vis *SyntaxCompiler, v0 *values.Pair) bool {
-	// start with original pair as stack
+func compile(ctx context.Context, vis *SyntaxCompiler, v0 *values.Pair) bool {
 	stack := []syntaxCompilerStackEntry{
-		{
-			pr:        v0,
-			variables: map[string]struct{}{},
-		},
+		{pr: v0, variables: map[string]struct{}{}},
 	}
-	// why there are still elements in the stack
+
 	for len(stack) > 0 {
-		l := len(stack)
-		for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
-			// Track where this element's bytecode starts
-			elementStart := len(vis.codes)
+		stack = compileCurrentLevel(ctx, vis, stack)
+	}
+	return true
+}
 
-			v1 := stack[l-1].pr[0]
-			pr, ok := v1.(*values.Pair)
-			if ok {
-				// Check if the nested pair is empty - pattern ()
-				if values.IsEmptyList(pr) {
-					// Generate RequireCarEmpty instead of VisitCar for empty patterns
-					// This verifies the input car is also an empty list
-					vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
-					// Advance to next element
-					stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
-					stack[l-1].lastElement = v1
-					stack[l-1].lastElementStart = elementStart
-					// Don't push onto stack - nothing to process inside ()
-					// Continue to next iteration (skip the VisitCdr handling below)
-					continue
-				} else {
-					vis.codes = append(vis.codes, ByteCodeVisitCar{})
-					// Advance to next element and track the pair as lastElement
-					stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
-					stack[l-1].lastElement = v1
-					stack[l-1].lastElementStart = elementStart
-					// Push new stack for nested processing
-					stack = append(stack, syntaxCompilerStackEntry{
-						pr:        pr,
-						variables: map[string]struct{}{},
-					})
-					l = len(stack)
-					continue
-				}
-			} else {
-				sym, ok := v1.(*values.Symbol)
-				if ok {
-					// it's a symbol
-					if sym.Key == "..." {
-						l = len(stack)
-						// Check if the previous element contains pattern variables
-						// If it does, treat ... as ellipsis; otherwise as literal
-						prevElementHasVars := false
-						if stack[l-1].lastElement != nil {
-							if prevPair, ok := stack[l-1].lastElement.(*values.Pair); ok {
-								prevElementHasVars = vis.analysis.ContainsVariables(prevPair)
-							} else if prevSym, ok := stack[l-1].lastElement.(*values.Symbol); ok {
-								// Check if this symbol is a pattern variable
-								_, isVar := vis.variables[prevSym.Key]
-								prevElementHasVars = isVar
-							}
-						}
+// compileCurrentLevel processes all elements at the current nesting level.
+// Returns the updated stack (with current level popped and Done emitted).
+func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry {
+	l := len(stack)
+	for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
+		elementStart := len(vis.codes)
+		element := stack[l-1].pr[0]
 
-						if prevElementHasVars {
-							stack[l-1].vararg = true
+		// Process the current element and get updated stack
+		var shouldContinue bool
+		stack, shouldContinue = compileElement(vis, stack, element, elementStart)
+		if shouldContinue {
+			l = len(stack)
+			continue
+		}
 
-							// Assign unique ellipsis ID and collect captured variables
-							ellipsisID := vis.nextEllipsisID
-							vis.nextEllipsisID++
+		// Advance to next element in the list (CDR)
+		l = len(stack)
+		if !advanceToNextElement(vis, &stack[l-1], element, elementStart) {
+			break
+		}
+	}
 
-							// Collect variables captured by this ellipsis pattern
-							capturedVars := make(map[string]struct{})
-							if prevPair, ok := stack[l-1].lastElement.(*values.Pair); ok {
-								if vars := vis.analysis.GetVariables(prevPair); vars != nil {
-									for v := range vars {
-										capturedVars[v] = struct{}{}
-									}
-								}
-							} else if prevSym, ok := stack[l-1].lastElement.(*values.Symbol); ok {
-								if _, isVar := vis.variables[prevSym.Key]; isVar {
-									capturedVars[prevSym.Key] = struct{}{}
-								}
-							}
-							vis.ellipsisVars[ellipsisID] = capturedVars
+	// Emit Done for this level and pop stack
+	vis.codes = append(vis.codes, ByteCodeDone{})
+	return stack[:l-1]
+}
 
-							// Need to reorganize bytecode: move the last pattern element inside the loop
-							// The mark shows where the last VisitCdr was added
-							// We need to wrap everything from lastElementStart to before the VisitCdr
+// compileElement compiles a single element (car of current pair).
+// Returns the updated stack and whether the main loop should continue (skip CDR handling).
+func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, element values.Value, elementStart int) ([]syntaxCompilerStackEntry, bool) {
+	l := len(stack)
 
-							patternStart := stack[l-1].lastElementStart
+	// Handle pair elements (nested lists)
+	if pr, ok := element.(*values.Pair); ok {
+		return compilePairElement(vis, stack, pr, element, elementStart)
+	}
 
-							// Find where the last VisitCdr was added (should be at the end)
-							patternEnd := len(vis.codes)
-							// Check if the last instruction is VisitCdr and remove it
-							if patternEnd > 0 {
-								if _, ok := vis.codes[patternEnd-1].(ByteCodeVisitCdr); ok {
-									patternEnd--
-								}
-							}
+	// Handle symbol elements
+	if sym, ok := element.(*values.Symbol); ok {
+		compileSymbolElement(vis, &stack[l-1], sym)
+		return stack, false
+	}
 
-							// Extract the pattern bytecode that needs to repeat
-							patternCodes := []SyntaxCommand{}
-							if patternEnd > patternStart {
-								patternCodes = make([]SyntaxCommand, patternEnd-patternStart)
-								copy(patternCodes, vis.codes[patternStart:patternEnd])
-								// Remove the pattern from its current position
-								vis.codes = vis.codes[:patternStart]
-							}
+	// Handle literal values (numbers, strings, etc.)
+	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: element})
+	return stack, false
+}
 
-							// Build the loop structure with while-loop semantics:
-							// SkipIfEmpty (forward to after loop - skip if nothing to match)
-							// PushContext(ellipsisID)
-							// [pattern bytecode] - this contains the capture/compare operations
-							// VisitCdr (to advance to next element) - only if pattern doesn't auto-advance
-							// PopContext(ellipsisID)
-							// Jump back to SkipIfEmpty
+// compilePairElement handles when the current element is a pair (nested list).
+// For empty pairs, emits RequireCarEmpty. For non-empty, emits VisitCar and pushes to stack.
+func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, pr *values.Pair, element values.Value, elementStart int) ([]syntaxCompilerStackEntry, bool) {
+	l := len(stack)
 
-							loopStart := len(vis.codes)
-							// Placeholder for SkipIfEmpty - will be patched after we know the loop end
-							skipIfEmptyIdx := len(vis.codes)
-							vis.codes = append(vis.codes, ByteCodeSkipIfEmpty{Offset: 0}) // placeholder
+	if values.IsEmptyList(pr) {
+		// Empty pair pattern () - verify input car is also empty
+		vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
+		stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
+		stack[l-1].lastElement = element
+		stack[l-1].lastElementStart = elementStart
+		return stack, true
+	}
 
-							vis.codes = append(vis.codes, ByteCodePushContext{EllipsisID: ellipsisID})
-							vis.codes = append(vis.codes, patternCodes...)
+	// Non-empty nested pair - descend into it
+	vis.codes = append(vis.codes, ByteCodeVisitCar{})
+	stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
+	stack[l-1].lastElement = element
+	stack[l-1].lastElementStart = elementStart
 
-							// Check if pattern is a pair pattern (starts with VisitCar and ends with Done)
-							// If so, Done already advances to the next element, so we don't need VisitCdr
-							isPairPattern := false
-							if len(patternCodes) > 1 {
-								_, startsWithVisitCar := patternCodes[0].(ByteCodeVisitCar)
-								_, endsWithDone := patternCodes[len(patternCodes)-1].(ByteCodeDone)
-								isPairPattern = startsWithVisitCar && endsWithDone
-							}
+	// Push new stack entry for nested processing
+	stack = append(stack, syntaxCompilerStackEntry{
+		pr:        pr,
+		variables: map[string]struct{}{},
+	})
+	return stack, true
+}
 
-							if !isPairPattern {
-								vis.codes = append(vis.codes, ByteCodeVisitCdr{})
-							}
+// compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.
+func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) {
+	switch sym.Key {
+	case "...":
+		compileEllipsis(vis, entry)
+	case "_":
+		// Wildcard - matches anything but doesn't bind (no bytecode emitted)
+	default:
+		compileSymbolOrLiteral(vis, entry, sym)
+	}
+}
 
-							vis.codes = append(vis.codes, ByteCodePopContext{EllipsisID: ellipsisID})
-							jumpOffset := loopStart - len(vis.codes)
-							vis.codes = append(vis.codes, ByteCodeJump{Offset: jumpOffset})
+// compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
+func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) {
+	if _, isVar := vis.variables[sym.Key]; isVar {
+		// Pattern variable - capture it
+		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key})
+		entry.variables[sym.Key] = struct{}{}
+	} else {
+		// Literal symbol - compare exactly
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
+	}
+}
 
-							// Patch the SkipIfEmpty to skip to after the loop
-							loopEnd := len(vis.codes)
-							vis.codes[skipIfEmptyIdx] = ByteCodeSkipIfEmpty{Offset: loopEnd - skipIfEmptyIdx}
-						} else {
-							// No pattern variables declared, treat ... as literal
-							vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
-						}
-					} else {
-						// its not "..."
-						if sym.Key == "_" {
-							// Underscore is a wildcard - matches anything but doesn't bind
-							// Don't emit any bytecode (effectively skips the element)
-						} else {
-							_, ok = vis.variables[sym.Key]
-							if ok {
-								// it's a variable
-								vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key})
-								stack[l-1].variables[sym.Key] = struct{}{}
-							} else {
-								vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
-							}
-						}
-					}
-				} else {
-					// not a symbol
-					vis.codes = append(vis.codes, ByteCodeCompareCar{Value: v1})
-				}
-			}
-			v2 := stack[l-1].pr[1]
-			v2pr, ok := v2.(*values.Pair)
-			if ok {
-				if !values.IsEmptyList(v2pr) {
-					vis.codes = append(vis.codes, ByteCodeVisitCdr{})
-					stack[l-1].lastElementStart = elementStart
-					stack[l-1].lastElement = v1 // Track the element we just processed
-					stack[l-1].mark = len(vis.codes)
-					stack[l-1].pr = v2pr
-				} else {
-					break
-				}
+// compileEllipsis handles the ... pattern, which matches zero or more repetitions.
+// If the previous element contains pattern variables, generates a loop structure.
+// Otherwise, treats ... as a literal symbol.
+func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) {
+	if !previousElementHasVariables(vis, entry) {
+		// No pattern variables - treat ... as literal
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: &values.Symbol{Key: "..."}})
+		return
+	}
+
+	entry.vararg = true
+	ellipsisID := vis.nextEllipsisID
+	vis.nextEllipsisID++
+
+	// Collect variables captured by this ellipsis
+	vis.ellipsisVars[ellipsisID] = collectCapturedVariables(vis, entry)
+
+	// Extract and relocate pattern bytecode into loop structure
+	patternCodes := extractPatternBytecode(vis, entry)
+	emitEllipsisLoop(vis, ellipsisID, patternCodes)
+}
+
+// previousElementHasVariables checks if the element before ... contains pattern variables.
+func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
+	if entry.lastElement == nil {
+		return false
+	}
+
+	if prevPair, ok := entry.lastElement.(*values.Pair); ok {
+		return vis.analysis.ContainsVariables(prevPair)
+	}
+	if prevSym, ok := entry.lastElement.(*values.Symbol); ok {
+		_, isVar := vis.variables[prevSym.Key]
+		return isVar
+	}
+	return false
+}
+
+// collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
+func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) map[string]struct{} {
+	capturedVars := make(map[string]struct{})
+
+	if prevPair, ok := entry.lastElement.(*values.Pair); ok {
+		if vars := vis.analysis.GetVariables(prevPair); vars != nil {
+			for v := range vars {
+				capturedVars[v] = struct{}{}
 			}
 		}
-		vis.codes = append(vis.codes, ByteCodeDone{})
-		stack = stack[:l-1]
-		l = len(stack)
+	} else if prevSym, ok := entry.lastElement.(*values.Symbol); ok {
+		if _, isVar := vis.variables[prevSym.Key]; isVar {
+			capturedVars[prevSym.Key] = struct{}{}
+		}
 	}
+	return capturedVars
+}
+
+// extractPatternBytecode removes the bytecode for the pattern preceding ...
+// and returns it for insertion into the loop structure.
+func extractPatternBytecode(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) []SyntaxCommand {
+	patternStart := entry.lastElementStart
+	patternEnd := len(vis.codes)
+
+	// Remove trailing VisitCdr if present (loop handles advancement)
+	if patternEnd > 0 {
+		if _, ok := vis.codes[patternEnd-1].(ByteCodeVisitCdr); ok {
+			patternEnd--
+		}
+	}
+
+	if patternEnd <= patternStart {
+		return nil
+	}
+
+	// Copy and remove pattern bytecode
+	patternCodes := make([]SyntaxCommand, patternEnd-patternStart)
+	copy(patternCodes, vis.codes[patternStart:patternEnd])
+	vis.codes = vis.codes[:patternStart]
+	return patternCodes
+}
+
+// emitEllipsisLoop generates the loop structure for ellipsis matching:
+//
+//	SkipIfEmpty(exit)   ; Check if list is empty BEFORE loop
+//	PushContext(id)     ; Start capture context for this iteration
+//	[pattern bytecode]  ; Match and capture pattern variables
+//	VisitCdr            ; Advance to next element (if needed)
+//	PopContext(id)      ; Close capture context
+//	Jump(back)          ; Loop to SkipIfEmpty
+//	exit:               ; Continue after loop
+func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []SyntaxCommand) {
+	loopStart := len(vis.codes)
+
+	// Placeholder for SkipIfEmpty - will be patched after loop
+	skipIfEmptyIdx := len(vis.codes)
+	vis.codes = append(vis.codes, ByteCodeSkipIfEmpty{Offset: 0})
+
+	// Loop body
+	vis.codes = append(vis.codes, ByteCodePushContext{EllipsisID: ellipsisID})
+	vis.codes = append(vis.codes, patternCodes...)
+
+	// Add VisitCdr unless pattern already advances (pair patterns end with Done)
+	if !isPairPattern(patternCodes) {
+		vis.codes = append(vis.codes, ByteCodeVisitCdr{})
+	}
+
+	vis.codes = append(vis.codes, ByteCodePopContext{EllipsisID: ellipsisID})
+
+	// Jump back to loop start
+	jumpOffset := loopStart - len(vis.codes)
+	vis.codes = append(vis.codes, ByteCodeJump{Offset: jumpOffset})
+
+	// Patch SkipIfEmpty to jump past loop
+	loopEnd := len(vis.codes)
+	vis.codes[skipIfEmptyIdx] = ByteCodeSkipIfEmpty{Offset: loopEnd - skipIfEmptyIdx}
+}
+
+// isPairPattern checks if bytecode represents a pair pattern (VisitCar...Done).
+// Pair patterns auto-advance, so they don't need an explicit VisitCdr in loops.
+func isPairPattern(codes []SyntaxCommand) bool {
+	if len(codes) < 2 {
+		return false
+	}
+	_, startsWithVisitCar := codes[0].(ByteCodeVisitCar)
+	_, endsWithDone := codes[len(codes)-1].(ByteCodeDone)
+	return startsWithVisitCar && endsWithDone
+}
+
+// advanceToNextElement handles CDR advancement after processing an element.
+// Returns false if at end of list (should break from loop).
+func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, element values.Value, elementStart int) bool {
+	cdr := entry.pr[1]
+	cdrPair, ok := cdr.(*values.Pair)
+	if !ok || values.IsEmptyList(cdrPair) {
+		return false
+	}
+
+	vis.codes = append(vis.codes, ByteCodeVisitCdr{})
+	entry.lastElementStart = elementStart
+	entry.lastElement = element
+	entry.mark = len(vis.codes)
+	entry.pr = cdrPair
 	return true
 }
 

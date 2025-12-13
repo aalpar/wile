@@ -47,7 +47,7 @@ func TestCharPredicate(t *testing.T) {
 			name: "char? with symbol",
 			prog: values.List(values.NewSymbol("char?"),
 				values.List(values.NewSymbol("quote"), values.NewSymbol("a"))),
-			out:  values.FalseValue,
+			out: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {

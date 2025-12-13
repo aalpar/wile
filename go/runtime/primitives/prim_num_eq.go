@@ -37,7 +37,7 @@ func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "eq?: expected a pair but got %T", rest)
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, o values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, o values.Value) error {
 		curr, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "eq?: expected a number but got %T", o)

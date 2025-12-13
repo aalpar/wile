@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 // compile_syntax_rules.go implements R7RS syntax-rules macro compilation.
@@ -33,6 +32,7 @@ package machine
 // Reference: R7RS Section 4.3.2 (syntax-rules)
 
 import (
+	"context"
 	"wile/environment"
 	"wile/match"
 	"wile/syntax"
@@ -42,7 +42,9 @@ import (
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.
 //
 // Per R7RS, a syntax-rules form contains:
-//   (syntax-rules (literal ...) clause ...)
+//
+//	(syntax-rules (literal ...) clause ...)
+//
 // where each clause is (pattern template).
 //
 // The pattern is compiled to bytecode for efficient matching. The template
@@ -52,14 +54,14 @@ import (
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern      syntax.SyntaxValue             // The pattern to match against input
-	template     syntax.SyntaxValue             // The template to expand on match
-	bytecode     []match.SyntaxCommand          // Compiled pattern bytecode
-	matcher      *match.SyntaxMatcher           // Pattern matcher instance
-	patternVars  map[string]struct{}            // Variables extracted from pattern
-	ellipsisVars map[int]map[string]struct{}    // ellipsisID -> captured pattern variables
-	freeIds      map[string]struct{}            // Free identifiers in template (not pattern vars)
-	macroScope   *syntax.Scope                  // Hygiene scope for this macro (Flatt's model)
+	pattern      syntax.SyntaxValue          // The pattern to match against input
+	template     syntax.SyntaxValue          // The template to expand on match
+	bytecode     []match.SyntaxCommand       // Compiled pattern bytecode
+	matcher      *match.SyntaxMatcher        // Pattern matcher instance
+	patternVars  map[string]struct{}         // Variables extracted from pattern
+	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
+	freeIds      map[string]struct{}         // Free identifiers in template (not pattern vars)
+	macroScope   *syntax.Scope               // Hygiene scope for this macro (Flatt's model)
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals
@@ -89,17 +91,17 @@ func (c *clausesWrapper) SchemeString() string {
 // R7RS Form: (syntax-rules (literal ...) (pattern template) ...)
 //
 // The compilation process:
-//   1. Parse the literals list - these symbols are matched literally, not as variables
-//   2. For each clause, identify pattern variables (symbols not in literals list)
-//   3. Compile each pattern to bytecode (see match/syntax_compiler.go)
-//   4. Create a MachineClosure that, when invoked:
-//      - Tries each pattern in order against the input form
-//      - On first match, expands the template with captured bindings
-//      - Adds an "intro scope" to the expansion for hygiene
+//  1. Parse the literals list - these symbols are matched literally, not as variables
+//  2. For each clause, identify pattern variables (symbols not in literals list)
+//  3. Compile each pattern to bytecode (see match/syntax_compiler.go)
+//  4. Create a MachineClosure that, when invoked:
+//     - Tries each pattern in order against the input form
+//     - On first match, expands the template with captured bindings
+//     - Adds an "intro scope" to the expansion for hygiene
 //
 // The returned closure is stored in the environment with BindingTypeSyntax,
 // allowing the expander to recognize it as a macro transformer.
-func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue) (*MachineClosure, error) {
+func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue) (*MachineClosure, error) {
 	// syntaxRulesForm should be (syntax-rules (literals...) clause1 clause2 ...)
 	formPair, ok := syntaxRulesForm.(*syntax.SyntaxPair)
 	if !ok {
@@ -107,7 +109,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 	}
 
 	// Skip 'syntax-rules' keyword
-	cdr := formPair.Cdr()
+	cdr := formPair.SyntaxCdr()
 	if cdr == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: missing literals list and clauses")
 	}
@@ -118,7 +120,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 	}
 
 	// Extract literals list
-	literalsStx := argsPair.Car()
+	literalsStx := argsPair.SyntaxCar()
 	if literalsStx == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: missing literals list")
 	}
@@ -136,7 +138,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 	// Empty literals list is also valid
 
 	// Process clauses
-	clausesCdr := argsPair.Cdr()
+	clausesCdr := argsPair.SyntaxCdr()
 	if clausesCdr == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: no clauses provided")
 	}
@@ -149,7 +151,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 	// Compile each clause
 	var clauses []*SyntaxRulesClause
 	for current := clausesList; current != nil && !syntax.IsSyntaxEmptyList(current); {
-		clause := current.Car()
+		clause := current.SyntaxCar()
 		if clause == nil {
 			return nil, values.NewForeignErrorf("syntax-rules: invalid clause")
 		}
@@ -160,12 +162,12 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 		}
 
 		// Extract pattern and template
-		pattern := clausePair.Car().(syntax.SyntaxValue)
+		pattern := clausePair.SyntaxCar().(syntax.SyntaxValue)
 		if pattern == nil {
 			return nil, values.NewForeignErrorf("syntax-rules: missing pattern in clause")
 		}
 
-		cdrVal := clausePair.Cdr()
+		cdrVal := clausePair.SyntaxCdr()
 		if cdrVal == nil {
 			return nil, values.NewForeignErrorf("syntax-rules: missing template in clause")
 		}
@@ -174,13 +176,13 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 			return nil, values.NewForeignErrorf("syntax-rules: template must be in a list")
 		}
 
-		template := templateCdr.Car().(syntax.SyntaxValue)
+		template := templateCdr.SyntaxCar().(syntax.SyntaxValue)
 		if template == nil {
 			return nil, values.NewForeignErrorf("syntax-rules: missing template in clause")
 		}
 
 		// Compile the pattern
-		compiledClause, err := compileClause(pattern, template, literals)
+		compiledClause, err := compileClause(ctx, pattern, template, literals)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
 		}
@@ -188,7 +190,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 		clauses = append(clauses, compiledClause)
 
 		// Move to the next clause
-		currentCdr := current.Cdr()
+		currentCdr := current.SyntaxCdr()
 		if currentCdr == nil {
 			break
 		}
@@ -207,7 +209,7 @@ func CompileSyntaxRules(env *environment.EnvironmentFrame, syntaxRulesForm synta
 }
 
 // compileClause compiles a single pattern-template pair
-func compileClause(pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
+func compileClause(ctx context.Context, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal or keyword)
 	variables := make(map[string]struct{})
 	err := collectPatternVariables(pattern, literals, true, variables)
@@ -215,7 +217,7 @@ func compileClause(pattern, template syntax.SyntaxValue, literals map[string]str
 		return nil, err
 	}
 	// Compile pattern to bytecode with ellipsis variable mapping
-	compiled, err := match.CompileSyntaxPatternFull(pattern, variables)
+	compiled, err := match.CompileSyntaxPatternFull(ctx, pattern, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -266,13 +268,13 @@ func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(t) {
 			// Recurse into car
-			if car := t.Car(); car != nil {
+			if car := t.SyntaxCar(); car != nil {
 				if carStx, ok := car.(syntax.SyntaxValue); ok {
 					collectFreeIdentifiers(carStx, patternVars, freeIds)
 				}
 			}
 			// Recurse into cdr
-			if cdr := t.Cdr(); cdr != nil {
+			if cdr := t.SyntaxCdr(); cdr != nil {
 				if cdrStx, ok := cdr.(syntax.SyntaxValue); ok {
 					collectFreeIdentifiers(cdrStx, patternVars, freeIds)
 				}
@@ -309,7 +311,7 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 			}
 
 			// Rest of the form
-			if cdr := p.Cdr(); cdr != nil {
+			if cdr := p.SyntaxCdr(); cdr != nil {
 				err = collectPatternVariables(cdr.(syntax.SyntaxValue), literals, false, variables)
 				if err != nil {
 					return err
@@ -331,7 +333,7 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 // extractLiterals extracts literal symbols from the literals list
 func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct{}) error {
 	for current := literalsList; current != nil && !syntax.IsSyntaxEmptyList(current); {
-		literal := current.Car()
+		literal := current.SyntaxCar()
 		if literal == nil {
 			return values.NewForeignErrorf("invalid literal")
 		}
@@ -349,7 +351,7 @@ func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct
 		}
 
 		// Move to next literal
-		cdr := current.Cdr()
+		cdr := current.SyntaxCdr()
 		if cdr == nil {
 			break
 		}

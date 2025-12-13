@@ -50,7 +50,7 @@ func PrimSub(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(nbr2)
 		return nil
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, o values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "sub: expected a number but got %T", o)

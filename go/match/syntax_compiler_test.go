@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package match
 
 import (
@@ -141,7 +140,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			vst.Compile(tc.in) //nolint:errcheck
+			vst.Compile(nil, tc.in) //nolint:errcheck
 			c.Assert(vst.codes, qt.DeepEquals, tc.out)
 		})
 	}
@@ -225,7 +224,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			err := vst.Compile(tc.in)
+			err := vst.Compile(nil, tc.in)
 			c.Assert(err, qt.IsNil)
 			mtc := NewMatcher(vst.variables, vst.codes)
 			err = mtc.Match(tc.target)
@@ -391,5 +390,4 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 			c.Assert(q, qt.DeepEquals, tc.out)
 		})
 	}
-
 }

@@ -1,6 +1,7 @@
 PROJECT=scheme
 SUBDIRS=go
 DIST_DIR=dist
+SOURCES=$(shell cd go && go list -f '{{range .GoFiles}}{{$$.ImportPath}}/{{.}} {{end}}' ./... | sed 's|wile/|go/|g')
 
 .PHONY: build
 build:
@@ -10,6 +11,10 @@ build:
 .PHONY: lint
 lint:
 	cd go && golangci-lint run ./...
+
+.PHONY: lintfix
+lintfix:
+	cd go && golangci-lint run --fix ./...
 
 .PHONY: all
 all: $(SUBDIRS)
@@ -21,6 +26,10 @@ $(SUBDIRS):
 .PHONY: test
 test: $(SUBDIRS)
 	make -C go test
+
+.PHONY: cover
+cover:
+	make -C go cover
 
 .PHONY: clean
 clean:
@@ -35,4 +44,10 @@ modclean:
 tidy:
 	make -C go tidy
 
+.PHONY: fmt
+fmt:
+	make -C go fmt
 
+.PHONY: buildtest
+buildtest:
+	make -C go buildtest

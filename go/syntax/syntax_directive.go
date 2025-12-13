@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package syntax
 
 import (
-	"fmt"
 	"wile/values"
 )
 
@@ -65,5 +63,5 @@ func (p *SyntaxDirective) EqualTo(v values.Value) bool {
 }
 
 func (p *SyntaxDirective) SchemeString() string {
-	return fmt.Sprintf("%s", p.Name)
+	return p.Name
 }

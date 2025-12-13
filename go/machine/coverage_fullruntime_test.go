@@ -62,8 +62,8 @@ func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFram
 	// Compile the expanded expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
-	ccnt := machine.NewCompileTimeCallContext(false, true, env)
-	if err := ctc.CompileExpression(ccnt, expanded); err != nil {
+	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	if err := ctc.CompileExpression(ctctx, expanded); err != nil {
 		return nil, err
 	}
 	// Note: do NOT add RestoreContinuation - the VM naturally halts when operations end

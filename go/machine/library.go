@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 // library.go implements R7RS library support.
@@ -77,11 +76,11 @@ func (n LibraryName) ToFilePath() string {
 
 // CompiledLibrary holds a loaded and compiled library.
 type CompiledLibrary struct {
-	Name       LibraryName                    // Library name
-	Env        *environment.EnvironmentFrame  // Library's private environment
-	Exports    map[string]string              // external-name -> internal-name
-	SourceFile string                         // Path to .sld file (for error messages)
-	Template   *NativeTemplate                // Compiled bytecode (for execution)
+	Name       LibraryName                   // Library name
+	Env        *environment.EnvironmentFrame // Library's private environment
+	Exports    map[string]string             // external-name -> internal-name
+	SourceFile string                        // Path to .sld file (for error messages)
+	Template   *NativeTemplate               // Compiled bytecode (for execution)
 }
 
 // NewCompiledLibrary creates a new compiled library.
@@ -312,10 +311,10 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 
 		// Create binding in the target environment
 		localSym := targetEnv.InternSymbol(values.NewSymbol(localName))
-		_, _ = targetEnv.MaybeCreateGlobalBinding(localSym, libBinding.BindingType())
+		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
 		globalIdx := targetEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
-			if err := targetEnv.SetGlobalValue(globalIdx, libBinding.Value()); err != nil {
+			if err := targetEnv.SetOwnGlobalValue(globalIdx, libBinding.Value()); err != nil {
 				return values.WrapForeignErrorf(err, "failed to set binding for %s", localName)
 			}
 		}
@@ -323,10 +322,10 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 		// If it's a syntax binding, also copy to expand phase
 		if libBinding.BindingType() == environment.BindingTypeSyntax {
 			expandEnv := targetEnv.Expand()
-			_, _ = expandEnv.MaybeCreateGlobalBinding(localSym, environment.BindingTypeSyntax)
+			_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
 			expandIdx := expandEnv.GetGlobalIndex(localSym)
 			if expandIdx != nil {
-				_ = expandEnv.SetGlobalValue(expandIdx, libBinding.Value())
+				_ = expandEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
 			}
 		}
 	}

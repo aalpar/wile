@@ -34,7 +34,7 @@ func PrimListToVector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->vector: expected a list but got %T", o)
 	}
 	var elems values.Vector
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		elems = append(elems, v)
 		return nil
 	})

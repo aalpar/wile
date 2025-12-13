@@ -15,9 +15,11 @@
 package machine
 
 import (
+	"context"
+	"testing"
+
 	"wile/environment"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -93,4 +95,61 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 
 	// Different type
 	qt.Assert(t, cls1.EqualTo(values.NewInteger(42)), qt.IsFalse)
+}
+
+// Tests moved from coverage_additional_test.go
+// TestMachineClosureMethodsAdditional tests MachineClosure methods
+func TestMachineClosureMethodsAdditional(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(1, 0, false)
+	closure := NewClosureWithTemplate(tpl, env)
+
+	qt.Assert(t, closure.IsVoid(), qt.IsFalse)
+	qt.Assert(t, closure.SchemeString(), qt.Contains, "closure")
+	qt.Assert(t, closure.Template(), qt.Equals, tpl)
+
+	// Test EqualTo
+	closure2 := NewClosureWithTemplate(tpl, env)
+	qt.Assert(t, closure.EqualTo(closure2), qt.IsTrue)
+
+	var nilClosure *MachineClosure
+	qt.Assert(t, closure.EqualTo(nilClosure), qt.IsFalse)
+}
+
+// TestMachineClosureMethods tests MachineClosure methods
+func TestMachineClosureMethods(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(2, 1, true)
+	closure := NewClosureWithTemplate(tpl, env)
+
+	qt.Assert(t, closure.SchemeString(), qt.Contains, "#<machine-closure")
+	qt.Assert(t, closure.IsVoid(), qt.IsFalse)
+
+	var nilClosure *MachineClosure
+	qt.Assert(t, nilClosure.IsVoid(), qt.IsTrue)
+}
+
+// TestMachineClosureEqualToNil tests closure equality with nil
+func TestMachineClosureEqualToNil(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(2, 2, true)
+	cls := NewClosureWithTemplate(tpl, env)
+
+	// Test with nil closure
+	var nilCls *MachineClosure
+	qt.Assert(t, nilCls.IsVoid(), qt.IsTrue)
+	qt.Assert(t, cls.EqualTo(nilCls), qt.IsFalse)
+}
+
+// TestForeignClosureSchemeString tests ForeignClosure methods
+func TestForeignClosureSchemeString(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	fn := func(ctx context.Context, mc *MachineContext) error {
+		return nil
+	}
+	cls := NewForeignClosure(env, 2, true, fn)
+
+	// Check that closure was created (can't test ParameterCount/IsVariadic on MachineClosure)
+	qt.Assert(t, cls, qt.IsNotNil)
+	qt.Assert(t, cls.SchemeString(), qt.Contains, "closure")
 }

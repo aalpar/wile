@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package environment
 
 import (
-	"fmt"
 	"wile/syntax"
 	"wile/values"
 	"slices"
@@ -28,8 +26,8 @@ import (
 type Binding struct {
 	value       values.Value
 	bindingType BindingType
-	scopes      []*syntax.Scope        // Scopes associated with this binding
-	source      *syntax.SourceContext  // Where this binding was defined (optional)
+	scopes      []*syntax.Scope       // Scopes associated with this binding
+	source      *syntax.SourceContext // Where this binding was defined (optional)
 }
 
 // NewBinding creates a new binding with the given value and type.
@@ -107,7 +105,7 @@ func (p *Binding) SetSource(source *syntax.SourceContext) {
 
 // SchemeString returns a string representation of this binding.
 func (p *Binding) SchemeString() string {
-	return fmt.Sprintf("#<binding>")
+	return "#<binding>"
 }
 
 // IsVoid returns true if this binding is nil.

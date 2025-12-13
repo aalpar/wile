@@ -17,8 +17,9 @@ package primitives_test
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestNullEnvironment(t *testing.T) {

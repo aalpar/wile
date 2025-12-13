@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package validate
 
 import (
+	"context"
 	"wile/syntax"
 )
 
 // validateCaseLambda validates (case-lambda [clause] ...)
 // Each clause is (params body...) like a lambda without the 'lambda' keyword
-func validateCaseLambda(pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCaseLambda(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -39,7 +39,7 @@ func validateCaseLambda(pair *syntax.SyntaxPair, result *ValidationResult) Valid
 
 	var clauses []*ValidatedCaseLambdaClause
 	for i := 1; i < len(elements); i++ {
-		clause := validateCaseLambdaClause(elements[i], result)
+		clause := validateCaseLambdaClause(nil, elements[i], result)
 		if clause != nil {
 			clauses = append(clauses, clause)
 		}
@@ -51,13 +51,14 @@ func validateCaseLambda(pair *syntax.SyntaxPair, result *ValidationResult) Valid
 	}
 
 	return &ValidatedCaseLambda{
-		source:  source,
-		Clauses: clauses,
+		formName: "case-lambda",
+		source:   source,
+		Clauses:  clauses,
 	}
 }
 
 // validateCaseLambdaClause validates a single case-lambda clause: (params body...)
-func validateCaseLambdaClause(expr syntax.SyntaxValue, result *ValidationResult) *ValidatedCaseLambdaClause {
+func validateCaseLambdaClause(ctx context.Context, expr syntax.SyntaxValue, result *ValidationResult) *ValidatedCaseLambdaClause {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		result.addErrorf(getSourceContext(expr), "case-lambda", "clause must be a list, got %T", expr)
@@ -80,12 +81,12 @@ func validateCaseLambdaClause(expr syntax.SyntaxValue, result *ValidationResult)
 	}
 
 	// Validate parameters
-	params := validateParams(elements[0], "case-lambda", result)
+	params := validateParams(elements[0], result)
 
 	// Validate body - must have at least one expression
 	var body []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		bodyExpr := validateExpr(elements[i], result)
+		bodyExpr := validateExpr(ctx, elements[i], result)
 		if bodyExpr != nil {
 			body = append(body, bodyExpr)
 		}
@@ -97,7 +98,8 @@ func validateCaseLambdaClause(expr syntax.SyntaxValue, result *ValidationResult)
 	}
 
 	return &ValidatedCaseLambdaClause{
-		Params: params,
-		Body:   body,
+		formName: "@clause",
+		Params:   params,
+		Body:     body,
 	}
 }

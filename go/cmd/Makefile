@@ -1,5 +1,5 @@
-SOURCES:=$(shell find . \( -name "*.go" \! -name "*_test.go" -print \) -o \( -name "cmd" -prune \))
-SOURCES_TEST:=$(shell find . \( -name "*_test.go" -print \) -o \( -name "cmd" -prune \))
+SOURCES := $(shell go list -f '{{range .GoFiles}}{{.}} {{end}}' .)
+SOURCES_TEST := $(shell go list -f '{{range .TestGoFiles}}{{.}} {{end}}' .)
 BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell head -1 ../../VERSION)
 SUBDIRS:=$(wildcard */.)

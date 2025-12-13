@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package machine
 
 import (
@@ -84,7 +83,7 @@ func NewCompileTimeCallContext(inTail, inExpression bool, env *environment.Envir
 // Example:
 //
 //	// Compiling (f (g x)) - the call to g is not in tail position
-//	err := p.CompileExpression(ccnt.NotInTail(), argExpr)
+//	err := p.CompileExpression(ctctx.NotInTail(), argExpr)
 func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		env:          p.env,

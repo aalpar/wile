@@ -28,7 +28,7 @@ import (
 //	  ((pattern ...) (let () body ...)))
 //
 // For now, this implements a simple transformation approach.
-func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped).
 	// So expr = (((pattern expr) ...) body ...)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
@@ -37,7 +37,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext,
 	}
 
 	// Get the bindings list (CAR of args)
-	bindingsList, ok := argsPair.Car().(syntax.SyntaxValue)
+	bindingsList, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
 	if !ok {
 		return values.NewForeignError("with-syntax: expected bindings list")
 	}
@@ -48,7 +48,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext,
 	}
 
 	// Get the body (CDR of args)
-	bodyList, ok := argsPair.Cdr().(*syntax.SyntaxPair)
+	bodyList, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || bodyList.IsEmptyList() {
 		return values.NewForeignError("with-syntax: expected body expressions")
 	}
@@ -58,7 +58,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext,
 
 	// If no bindings, just compile the body as a begin
 	if bindingsPair.IsEmptyList() {
-		return p.compileWithSyntaxBody(ccnt, bodyList)
+		return p.compileWithSyntaxBody(ctctx, bodyList)
 	}
 
 	// Build: (syntax-case (list expr ...) () ((pattern ...) (begin body ...)))
@@ -67,34 +67,34 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext,
 	var exprs []syntax.SyntaxValue
 
 	current := bindingsPair
-	for !values.IsEmptyList(current) {
-		binding := current.Car()
+	for !syntax.IsSyntaxEmptyList(current) {
+		binding := current.SyntaxCar()
 		bindingPair, ok := binding.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
 			return values.NewForeignError("with-syntax: each binding must be (pattern expr)")
 		}
 
 		// Get pattern (first element)
-		pattern, ok := bindingPair.Car().(syntax.SyntaxValue)
+		pattern, ok := bindingPair.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.NewForeignError("with-syntax: expected pattern")
 		}
 		patterns = append(patterns, pattern)
 
 		// Get expr (second element)
-		rest, ok := bindingPair.Cdr().(*syntax.SyntaxPair)
+		rest, ok := bindingPair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok || rest.IsEmptyList() {
 			return values.NewForeignError("with-syntax: each binding must be (pattern expr)")
 		}
-		expr, ok := rest.Car().(syntax.SyntaxValue)
+		expr, ok := rest.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.NewForeignError("with-syntax: expected expression")
 		}
 		exprs = append(exprs, expr)
 
 		// Move to next binding
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		current, _ = cdr.(*syntax.SyntaxPair)
@@ -127,34 +127,34 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ccnt CompileTimeCallContext,
 	)
 
 	// Compile the transformed form
-	return p.CompileExpression(ccnt, syntaxCaseForm)
+	return p.CompileExpression(ctctx, syntaxCaseForm)
 }
 
 // compileWithSyntaxBody compiles the body of with-syntax when there are no bindings.
-func (p *CompileTimeContinuation) compileWithSyntaxBody(ccnt CompileTimeCallContext, bodyList *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallContext, bodyList *syntax.SyntaxPair) error {
 	if bodyList.IsEmptyList() {
 		return values.NewForeignError("with-syntax: expected body expressions")
 	}
 
 	// Compile each body expression, the last one in tail position
 	current := bodyList
-	for !values.IsEmptyList(current) {
-		body, ok := current.Car().(syntax.SyntaxValue)
+	for !syntax.IsSyntaxEmptyList(current) {
+		body, ok := current.SyntaxCar().(syntax.SyntaxValue)
 		if !ok {
 			return values.NewForeignError("with-syntax: expected expression in body")
 		}
 
-		cdr := current.Cdr()
-		isLast := values.IsEmptyList(cdr)
+		cdr := current.SyntaxCdr()
+		isLast := syntax.IsSyntaxEmptyList(cdr)
 
-		var ctx CompileTimeCallContext
+		var exprCtx CompileTimeCallContext
 		if isLast {
-			ctx = ccnt
+			exprCtx = ctctx
 		} else {
-			ctx = ccnt.NotInTail()
+			exprCtx = ctctx.NotInTail()
 		}
 
-		err := p.CompileExpression(ctx, body)
+		err := p.CompileExpression(exprCtx, body)
 		if err != nil {
 			return err
 		}
@@ -178,13 +178,13 @@ func (p *CompileTimeContinuation) buildWithSyntaxBegin(srcCtx *syntax.SourceCont
 	elems := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("begin", srcCtx)}
 
 	current := bodyList
-	for !values.IsEmptyList(current) {
-		if body, ok := current.Car().(syntax.SyntaxValue); ok {
+	for !syntax.IsSyntaxEmptyList(current) {
+		if body, ok := current.SyntaxCar().(syntax.SyntaxValue); ok {
 			elems = append(elems, body)
 		}
 
-		cdr := current.Cdr()
-		if values.IsEmptyList(cdr) {
+		cdr := current.SyntaxCdr()
+		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
 		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {

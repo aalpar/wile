@@ -38,7 +38,7 @@ func PrimMax(_ context.Context, mc *machine.MachineContext) error {
 		}
 		return values.WrapForeignErrorf(values.ErrNotAPair, "max: expected a pair but got %T", rest)
 	}
-	v, err := pr.ForEach(nil, func(i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "max: expected a number but got %T", pr.Car())

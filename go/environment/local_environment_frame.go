@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package environment
 
 import (
-	"fmt"
 	"maps"
 	"wile/values"
 	"slices"
@@ -99,7 +97,7 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 
 // SchemeString returns a string representation of this local environment.
 func (p *LocalEnvironmentFrame) SchemeString() string {
-	return fmt.Sprintf("#<Local-environment>")
+	return "#<Local-environment>"
 }
 
 // IsVoid returns true if this local environment frame is nil.

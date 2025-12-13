@@ -217,10 +217,10 @@ func TestExactnessConversions(t *testing.T) {
 
 func TestExactIntegerSqrt(t *testing.T) {
 	tcs := []struct {
-		name  string
-		prog  values.Value
-		out1  values.Value
-		out2  values.Value
+		name string
+		prog values.Value
+		out1 values.Value
+		out2 values.Value
 	}{
 		{
 			name: "exact-integer-sqrt of 16",
