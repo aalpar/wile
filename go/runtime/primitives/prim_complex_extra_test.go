@@ -18,9 +18,9 @@ import (
 	"math"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 // ----------------------------------------------------------------------------
@@ -235,6 +235,7 @@ func TestMakePolarAngleRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a complex number from polar coordinates
 			makePolarCode := "(make-polar " + floatToString(tc.magnitude) + " " + floatToString(tc.angle) + ")"
+			t.Logf("makePolarCode: %s", makePolarCode)
 			resultMakePolar, err := runSchemeCode(t, makePolarCode)
 			qt.Assert(t, err, qt.IsNil)
 

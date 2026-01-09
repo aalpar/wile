@@ -25,7 +25,7 @@ import (
 // Recursively unwraps a syntax object to its underlying datum, stripping
 // all lexical context information.
 func PrimSyntaxToDatum(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 
 	stx, ok := obj.(syntax.SyntaxValue)
 	if !ok {

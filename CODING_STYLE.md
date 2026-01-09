@@ -2,14 +2,20 @@
 
 This document describes the coding conventions used throughout the Wile Scheme interpreter codebase.
 
+## Return Values
+
+| Letter | Usage                                                                                                                                                                                          |
+|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `q`    | Variable name for value that is eventually returned. Only used when returning single value or returning two values value, the first value being `q` and the second value being an `error` type |
+
 ## Receiver Naming
 
 All method receivers use single-letter names:
 
-| Letter | Usage |
-|--------|-------|
-| `p` | Standard receiver for all pointer types |
-| `c` | Compiler-related types (e.g., `*CompileTimeContinuation`) |
+| Letter | Usage                                                     |
+|--------|-----------------------------------------------------------|
+| `p`    | Standard receiver                                         |
+| `c`    | Compiler-related types (e.g., `*CompileTimeContinuation`) |
 
 ```go
 // Standard pattern - always 'p' for pointer receiver
@@ -123,6 +129,49 @@ NewComplexFromParts(realPart, imagPart float64) *Complex
 | `Car()`, `Cdr()` | List accessors (Lisp convention) |
 | `String()` | Go standard stringer interface |
 | `SchemeString()` | Scheme-formatted string representation |
+
+## Control Flow
+
+### If Statement Assignments
+
+**Never** combine assignment and comparison in a single `if` statement. Always separate them:
+
+```go
+// Correct - assignment on separate line
+err := doSomething()
+if err != nil {
+    return err
+}
+
+// Correct - multiple assignments separated
+result, err := process(input)
+if err != nil {
+    return nil, err
+}
+
+// Avoid - combined assignment and comparison
+if err := doSomething(); err != nil {  // DON'T
+    return err
+}
+
+// Avoid - combined with type assertion
+if v, ok := x.(SomeType); ok {  // DON'T
+    // ...
+}
+```
+
+**Rationale:**
+- Improves readability by keeping operations atomic
+- Makes debugging easier (can set breakpoints on assignment)
+- Maintains consistent code structure
+- Variables are available in the outer scope when needed
+
+**Exception:** Short-circuit boolean expressions are acceptable:
+```go
+if x != nil && x.IsValid() {  // OK - no assignment
+    // ...
+}
+```
 
 ## Error Handling
 

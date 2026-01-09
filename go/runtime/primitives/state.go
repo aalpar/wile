@@ -19,6 +19,7 @@ import (
 	"time"
 	"weak"
 
+	"wile/machine"
 	"wile/parser"
 	"wile/tokenizer"
 	"wile/values"
@@ -28,11 +29,11 @@ import (
 // These are lazily initialized on first access.
 var (
 	// currentInputPortParam is the parameter holding the current input port.
-	currentInputPortParam *values.Parameter
+	currentInputPortParam *machine.Parameter
 	// currentOutputPortParam is the parameter holding the current output port.
-	currentOutputPortParam *values.Parameter
+	currentOutputPortParam *machine.Parameter
 	// currentErrorPortParam is the parameter holding the current error port.
-	currentErrorPortParam *values.Parameter
+	currentErrorPortParam *machine.Parameter
 	// Tokenizers caches tokenizers per input port using weak references.
 	Tokenizers map[values.Value]weak.Pointer[tokenizer.Tokenizer]
 	// Parsers caches parsers per input port using weak references.
@@ -56,16 +57,16 @@ func InitState() {
 	Parsers = map[values.Value]weak.Pointer[parser.Parser]{}
 
 	// Initialize port parameters with default values
-	currentInputPortParam = values.NewParameter(
+	currentInputPortParam = machine.NewParameter(
 		values.NewCharacterInputPortFromReader(os.Stdin),
 		nil,
 	)
-	currentOutputPortParam = values.NewParameter(
-		values.NewCharacterOutputPort(os.Stdout),
+	currentOutputPortParam = machine.NewParameter(
+		values.NewCharacterOutputPortFromWriter(os.Stdout),
 		nil,
 	)
-	currentErrorPortParam = values.NewParameter(
-		values.NewCharacterOutputPort(os.Stderr),
+	currentErrorPortParam = machine.NewParameter(
+		values.NewCharacterOutputPortFromWriter(os.Stderr),
 		nil,
 	)
 }
@@ -90,7 +91,7 @@ func GetCurrentInputPort() *values.CharacterInputPort {
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
-func GetCurrentInputPortParam() *values.Parameter {
+func GetCurrentInputPortParam() *machine.Parameter {
 	return currentInputPortParam
 }
 
@@ -111,13 +112,13 @@ func ResetCurrentInputPort() {
 func GetCurrentOutputPort() *values.CharacterOutputPort {
 	if currentOutputPortParam == nil {
 		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPort(os.Stdout)
+		return values.NewCharacterOutputPortFromWriter(os.Stdout)
 	}
 	return currentOutputPortParam.Value().(*values.CharacterOutputPort)
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
-func GetCurrentOutputPortParam() *values.Parameter {
+func GetCurrentOutputPortParam() *machine.Parameter {
 	return currentOutputPortParam
 }
 
@@ -130,7 +131,7 @@ func SetCurrentOutputPort(port *values.CharacterOutputPort) {
 // ResetCurrentOutputPort resets the current output port to stdout. Used for testing.
 func ResetCurrentOutputPort() {
 	if currentOutputPortParam != nil {
-		currentOutputPortParam.SetValue(values.NewCharacterOutputPort(os.Stdout))
+		currentOutputPortParam.SetValue(values.NewCharacterOutputPortFromWriter(os.Stdout))
 	}
 }
 
@@ -138,13 +139,13 @@ func ResetCurrentOutputPort() {
 func GetCurrentErrorPort() *values.CharacterOutputPort {
 	if currentErrorPortParam == nil {
 		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPort(os.Stderr)
+		return values.NewCharacterOutputPortFromWriter(os.Stderr)
 	}
 	return currentErrorPortParam.Value().(*values.CharacterOutputPort)
 }
 
 // GetCurrentErrorPortParam returns the current-error-port parameter object.
-func GetCurrentErrorPortParam() *values.Parameter {
+func GetCurrentErrorPortParam() *machine.Parameter {
 	return currentErrorPortParam
 }
 

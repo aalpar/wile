@@ -24,8 +24,8 @@ import (
 // PrimMakeVector implements the (make-vector) primitive.
 // Creates a vector of the given size, optionally filled with a specified value.
 func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	k := mc.Arg(0)
+	rest := mc.Arg(1)
 	size, ok := k.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "make-vector: expected an integer but got %T", k)

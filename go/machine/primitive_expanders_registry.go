@@ -33,14 +33,7 @@ import (
 //   - lambda, case-lambda: expand body expressions
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
-	expandEnv := env.Expand()
-
-	// All primitive expanders.
-	// Each entry maps a keyword to its expand function.
-	primitives := []struct {
-		name string
-		fn   PrimitiveExpanderFunc
-	}{
+	primitives := []PhaseEntry[PrimitiveExpanderFunc]{
 		// Forms that return unchanged (no expansion)
 		{"quote", (*ExpanderTimeContinuation).expandQuote},
 		{"define-syntax", (*ExpanderTimeContinuation).expandDefineSyntax},
@@ -66,16 +59,10 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"case-lambda", (*ExpanderTimeContinuation).expandCaseLambdaForm},
 	}
 
-	for _, prim := range primitives {
-		sym := env.InternSymbol(values.NewSymbol(prim.name))
-		expander := NewPrimitiveExpander(prim.name, prim.fn)
-
-		// Create binding in expand environment
-		idx, _ := expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
-		expandEnv.SetOwnGlobalValue(idx, expander) //nolint:errcheck
-	}
-
-	return nil
+	return RegisterPhaseBindings(env, env.Expand, primitives,
+		func(name string, fn PrimitiveExpanderFunc) values.Value {
+			return NewPrimitiveExpander(name, fn)
+		})
 }
 
 // LookupPrimitiveExpander looks up a primitive expander by symbol in the expand
@@ -85,24 +72,5 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.
 func LookupPrimitiveExpander(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *PrimitiveExpander {
-	expandEnv := env.Expand()
-
-	// Look up with scopes for hygiene
-	bnd := expandEnv.GetBindingWithScopes(sym, scopes)
-	if bnd == nil {
-		return nil
-	}
-
-	// Check if it's a primitive expander binding
-	if bnd.BindingType() != environment.BindingTypePrimitive {
-		return nil
-	}
-
-	// Get the value and check if it's a PrimitiveExpander
-	val := bnd.Value()
-	if pe, ok := val.(*PrimitiveExpander); ok {
-		return pe
-	}
-
-	return nil
+	return LookupPhaseBinding[*PrimitiveExpander](env.Expand(), sym, scopes)
 }

@@ -25,19 +25,42 @@ var (
 	// _ Comparable = (*Integer)(nil)
 )
 
+// Integer cache for small integers (-32768 to 32767).
+// This avoids allocations for commonly used integer values.
+// Uses 16-bit range to cover most practical small integers.
+const (
+	intCacheMin = -32768
+	intCacheMax = 32767
+)
+
+var intCache [intCacheMax - intCacheMin + 1]*Integer
+
+func init() {
+	for i := int64(intCacheMin); i <= intCacheMax; i++ {
+		intCache[i-intCacheMin] = &Integer{Value: i}
+	}
+}
+
+// Integer represents a Scheme integer value.
 type Integer struct {
 	Value int64
 }
 
+// NewInteger returns an Integer value. Small integers in the range
+// -256 to 255 are cached and return the same pointer for the same value.
 func NewInteger(v int64) *Integer {
-	q := &Integer{Value: v}
-	return q
+	if v >= intCacheMin && v <= intCacheMax {
+		return intCache[v-intCacheMin]
+	}
+	return &Integer{Value: v}
 }
 
+// Datum returns the underlying int64 value.
 func (p *Integer) Datum() int64 {
 	return p.Value
 }
 
+// Add returns the sum of this integer and another number.
 func (p *Integer) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -60,6 +83,7 @@ func (p *Integer) Add(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Subtract returns the difference of this integer and another number.
 func (p *Integer) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -79,6 +103,7 @@ func (p *Integer) Subtract(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Multiply returns the product of this integer and another number.
 func (p *Integer) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -98,6 +123,7 @@ func (p *Integer) Multiply(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Divide returns the quotient of this integer and another number.
 func (p *Integer) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
@@ -121,10 +147,12 @@ func (p *Integer) Divide(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// IsZero returns true if this integer is zero.
 func (p *Integer) IsZero() bool {
 	return p.Value == 0
 }
 
+// LessThan returns true if this integer is less than another number.
 func (p *Integer) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Integer:
@@ -140,10 +168,12 @@ func (p *Integer) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
+// IsVoid returns true if this integer is nil.
 func (p *Integer) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both integers have the same value.
 func (p *Integer) EqualTo(v Value) bool {
 	other, ok := v.(*Integer)
 	if ok {
@@ -152,6 +182,7 @@ func (p *Integer) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of this integer.
 func (p *Integer) SchemeString() string {
 	return strconv.FormatInt(p.Value, 10)
 }

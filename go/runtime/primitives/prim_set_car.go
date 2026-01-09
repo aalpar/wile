@@ -21,9 +21,10 @@ import (
 	"wile/values"
 )
 
+// PrimSetCar implements the Scheme set-car! primitive.
 func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
-	pair := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	pair := mc.Arg(0)
+	val := mc.Arg(1)
 	p, ok := pair.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "set-car!: expected a pair but got %T", pair)

@@ -19,34 +19,39 @@ import (
 	"strings"
 )
 
-var (
-	_ Value = (*StringInputPort)(nil)
-)
+var _ Value = (*StringInputPort)(nil)
 
+// StringInputPort represents a Scheme input port reading from a string.
 type StringInputPort struct {
 	reader *strings.Reader
 }
 
+// NewStringInputPort creates a new input port reading from the given string.
 func NewStringInputPort(s string) *StringInputPort {
 	return &StringInputPort{reader: strings.NewReader(s)}
 }
 
+// ReadRune reads and returns the next rune from the port.
 func (p *StringInputPort) ReadRune() (rune, int, error) {
 	return p.reader.ReadRune()
 }
 
+// UnreadRune unreads the last rune read, allowing it to be read again.
 func (p *StringInputPort) UnreadRune() error {
 	return p.reader.UnreadRune()
 }
 
+// Datum returns the underlying strings.Reader.
 func (p *StringInputPort) Datum() *strings.Reader {
 	return p.reader
 }
 
+// IsVoid returns true if this port is nil.
 func (p *StringInputPort) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both ports share the same reader.
 func (p *StringInputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*StringInputPort); ok {
 		return p.reader == other.reader
@@ -54,6 +59,7 @@ func (p *StringInputPort) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of this port.
 func (p *StringInputPort) SchemeString() string {
 	return fmt.Sprintf("<string-input-port %p>", p.reader)
 }

@@ -50,12 +50,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"wile/values"
 )
 
 var (
+	// ErrUnknownOpCode is returned when an unknown bytecode is encountered.
 	ErrUnknownOpCode = errors.New("unknown op code")
-	ErrNotAMatch     = errors.New("not a match")
+	// ErrNotAMatch is returned when the input does not match the pattern.
+	ErrNotAMatch = errors.New("not a match")
 )
 
 type syntaxCompilerStackEntry struct {
@@ -72,12 +75,13 @@ type captureContext struct {
 	bindings map[string]values.Value
 }
 
+// SyntaxCommand represents a pattern bytecode instruction.
 type SyntaxCommand interface {
 	fmt.Stringer
 }
 
+// SyntaxCompiler compiles pattern syntax into bytecode.
 type SyntaxCompiler struct {
-	val            *values.Pair
 	codes          []SyntaxCommand
 	variables      map[string]struct{}
 	literals       map[string]struct{}         // literals to match exactly
@@ -86,6 +90,7 @@ type SyntaxCompiler struct {
 	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 }
 
+// NewSyntaxCompiler creates a new syntax compiler.
 func NewSyntaxCompiler() *SyntaxCompiler {
 	q := &SyntaxCompiler{
 		variables:    map[string]struct{}{},
@@ -95,6 +100,7 @@ func NewSyntaxCompiler() *SyntaxCompiler {
 	return q
 }
 
+// Compile compiles a pattern pair into bytecode.
 func (q *SyntaxCompiler) Compile(ctx context.Context, pr *values.Pair) error {
 	// Analyze pattern first to identify which subtrees contain variables
 	// Use the pre-set variables for now (from test setup)
@@ -259,13 +265,13 @@ func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEnt
 	capturedVars := make(map[string]struct{})
 
 	if prevPair, ok := entry.lastElement.(*values.Pair); ok {
-		if vars := vis.analysis.GetVariables(prevPair); vars != nil {
-			for v := range vars {
-				capturedVars[v] = struct{}{}
-			}
+		vars := vis.analysis.GetVariables(prevPair)
+		for v := range vars {
+			capturedVars[v] = struct{}{}
 		}
 	} else if prevSym, ok := entry.lastElement.(*values.Symbol); ok {
-		if _, isVar := vis.variables[prevSym.Key]; isVar {
+		_, isVar := vis.variables[prevSym.Key]
+		if isVar {
 			capturedVars[prevSym.Key] = struct{}{}
 		}
 	}
@@ -360,20 +366,22 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	return true
 }
 
+// insert inserts codes into target at index i, adjusting jump offsets as needed.
 func insert(i int, target, codes []SyntaxCommand) []SyntaxCommand {
 	q := append([]SyntaxCommand{}, target[:i]...)
 	q = append(q, codes...)
 	q = append(q, target[i:]...)
 	for j := range q {
 		bc, ok := q[j].(ByteCodeJump)
-		if ok {
-			if j < i && j+bc.Offset >= i {
-				bc.Offset = bc.Offset + len(codes)
-			} else if j > i+len(codes)-1 && j+bc.Offset <= i {
-				bc.Offset = bc.Offset - len(codes)
-			}
-			q[j] = bc
+		if !ok {
+			continue
 		}
+		if j < i && j+bc.Offset >= i {
+			bc.Offset += len(codes)
+		} else if j > i+len(codes)-1 && j+bc.Offset <= i {
+			bc.Offset -= len(codes)
+		}
+		q[j] = bc
 	}
 	return q
 }

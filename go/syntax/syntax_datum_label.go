@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
@@ -24,11 +25,18 @@ var (
 	_ SyntaxValue  = (*SyntaxDatumLabel)(nil)
 )
 
+// SyntaxDatumLabel represents a datum label reference (#n#).
 type SyntaxDatumLabel struct {
 	Label         int
 	sourceContext *SourceContext
 }
 
+// AddScope returns the label unchanged (labels don't participate in hygiene).
+func (p *SyntaxDatumLabel) AddScope(_ *Scope) SyntaxValue {
+	return p
+}
+
+// SourceContext returns the source context of the label.
 func (p *SyntaxDatumLabel) SourceContext() *SourceContext {
 	return p.sourceContext
 }
@@ -37,10 +45,12 @@ func (p *SyntaxDatumLabel) Unwrap() values.Value {
 	return values.NewInteger(int64(p.Label))
 }
 
+// UnwrapAll returns the label number as an integer value.
 func (p *SyntaxDatumLabel) UnwrapAll() values.Value {
 	return values.NewInteger(int64(p.Label))
 }
 
+// NewSyntaxDatumLabel creates a new datum label reference with the given number.
 func NewSyntaxDatumLabel(label int, sctx *SourceContext) *SyntaxDatumLabel {
 	return &SyntaxDatumLabel{
 		Label:         label,
@@ -48,10 +58,12 @@ func NewSyntaxDatumLabel(label int, sctx *SourceContext) *SyntaxDatumLabel {
 	}
 }
 
+// IsVoid returns true if the label is nil.
 func (p *SyntaxDatumLabel) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the labels have the same number.
 func (p *SyntaxDatumLabel) EqualTo(v values.Value) bool {
 	other, ok := v.(*SyntaxDatumLabel)
 	if !ok {
@@ -63,6 +75,7 @@ func (p *SyntaxDatumLabel) EqualTo(v values.Value) bool {
 	return true
 }
 
+// SchemeString returns the label number as a string.
 func (p *SyntaxDatumLabel) SchemeString() string {
 	return fmt.Sprintf("%d", p.Label)
 }

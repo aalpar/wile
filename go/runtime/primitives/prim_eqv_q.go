@@ -30,8 +30,8 @@ import (
 // they are different objects. Unlike equal?, eqv? does not recurse into
 // pairs, vectors, or strings.
 func PrimEqvQ(_ context.Context, mc *machine.MachineContext) error {
-	o0 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o1 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o0 := mc.Arg(0)
+	o1 := mc.Arg(1)
 	mc.SetValue(utils.BoolToBoolean(Eqv(o0, o1)))
 	return nil
 }

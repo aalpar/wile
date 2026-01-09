@@ -23,28 +23,28 @@ import (
 func init() {
 	// Register compilers for core forms (Tier 1 - typed ValidatedExpr)
 	registerTypedCompiler("if", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedIf) error {
-		return ctc.compileValidatedIf(ctctx, formName, v)
+		return ctc.CompileValidatedIf(ctctx, formName, v)
 	})
 	registerTypedCompiler("define", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
-		return ctc.compileValidatedDefine(ctctx, formName, v)
+		return ctc.CompileValidatedDefine(ctctx, formName, v)
 	})
 	registerTypedCompiler("lambda", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
-		return ctc.compileValidatedLambda(ctctx, formName, v)
+		return ctc.CompileValidatedLambda(ctctx, formName, v)
 	})
 	registerTypedCompiler("case-lambda", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
-		return ctc.compileValidatedCaseLambda(ctctx, formName, v)
+		return ctc.CompileValidatedCaseLambda(ctctx, formName, v)
 	})
 	registerTypedCompiler("set!", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
-		return ctc.compileValidatedSetBang(ctctx, formName, v)
+		return ctc.CompileValidatedSetBang(ctctx, formName, v)
 	})
 	registerTypedCompiler("quote", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedQuote) error {
-		return ctc.compileValidatedQuote(ctctx, formName, v)
+		return ctc.CompileValidatedQuote(ctctx, formName, v)
 	})
 	registerTypedCompiler("begin", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedBegin) error {
-		return ctc.compileValidatedBegin(ctctx, formName, v)
+		return ctc.CompileValidatedBegin(ctctx, formName, v)
 	})
 	registerTypedCompiler("quasiquote", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
-		return ctc.compileValidatedQuasiquote(ctctx, formName, v)
+		return ctc.CompileValidatedQuasiquote(ctctx, formName, v)
 	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)

@@ -123,10 +123,10 @@ func TestStringEscapeVariations(t *testing.T) {
 		{input: `"\r"`, expectedVal: "\r"},
 		{input: `"\""`, expectedVal: `"`},
 		{input: `"\\"`, expectedVal: `\`},
-		{input: `"\x00"`, expectedVal: "\x00"},
-		{input: `"\x20"`, expectedVal: " "},
-		{input: `"\x41"`, expectedVal: "A"},
-		{input: `"\x00\x01\x02"`, expectedVal: "\x00\x01\x02"},
+		{input: `"\x00;"`, expectedVal: "\x00"},
+		{input: `"\x20;"`, expectedVal: " "},
+		{input: `"\x41;"`, expectedVal: "A"},
+		{input: `"\x00;\x01;\x02;"`, expectedVal: "\x00\x01\x02"},
 	}
 	for i, tc := range tcs {
 		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
@@ -293,8 +293,8 @@ func TestDatumCommentExtended(t *testing.T) {
 		input        string
 		expectedType TokenizerState
 	}{
-		{input: "#;", expectedType: TokenizerStateDatumComment},
-		{input: "#; ", expectedType: TokenizerStateDatumComment},
+		{input: "#;", expectedType: TokenizerStateDatumCommentBegin},
+		{input: "#; ", expectedType: TokenizerStateDatumCommentBegin},
 	}
 	for i, tc := range tcs {
 		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {

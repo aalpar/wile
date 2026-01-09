@@ -18,13 +18,14 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"strings"
+	"testing"
+
 	"wile/environment"
 	"wile/parser"
 	"wile/syntax"
 	"wile/utils"
 	"wile/values"
-	"strings"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -319,7 +320,8 @@ func evalSchemeString(code string) (values.Value, error) {
 	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Register required primitives
-	if err := RegisterSyntaxCompilers(env); err != nil {
+	err := RegisterSyntaxCompilers(env)
+	if err != nil {
 		return nil, err
 	}
 
@@ -334,18 +336,19 @@ func evalSchemeString(code string) (values.Value, error) {
 			mc.SetValue(o)
 			return nil
 		})
-		if err := env.SetOwnGlobalValue(listIdx, listClosure); err != nil {
+		err = env.SetOwnGlobalValue(listIdx, listClosure)
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Parse and evaluate code
 	reader := bufio.NewReader(strings.NewReader(code))
-	p := parser.NewParser(env, reader)
+	p := parser.NewParser(env, true, reader)
 
-	var lastResult values.Value = values.Void
+	var lastResult = values.Void
 	for {
-		stx, err := p.ReadSyntax(nil)
+		stx, err := p.ReadSyntax(context.TODO())
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -365,13 +368,15 @@ func evalSchemeString(code string) (values.Value, error) {
 		tpl := NewNativeTemplate(0, 0, false)
 		cctx := NewCompiletimeContinuation(tpl, env)
 		cnt := NewCompileTimeCallContext(false, true, env)
-		if err := cctx.CompileExpression(cnt, expanded); err != nil {
+		err = cctx.CompileExpression(cnt, expanded)
+		if err != nil {
 			return nil, err
 		}
 
 		// Run
 		mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
-		if err := mc.Run(ctx); err != nil {
+		err = mc.Run(ctx)
+		if err != nil {
 			return nil, err
 		}
 

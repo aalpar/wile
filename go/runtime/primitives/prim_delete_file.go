@@ -25,12 +25,13 @@ import (
 // PrimDeleteFile implements the (delete-file) primitive.
 // Deletes a file from the filesystem.
 func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	filename, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "delete-file: expected a string but got %T", o)
 	}
-	if err := os.Remove(filename.Value); err != nil {
+	err := os.Remove(filename.Value)
+	if err != nil {
 		return values.WrapForeignErrorf(err, "delete-file: %v", err)
 	}
 	mc.SetValues()

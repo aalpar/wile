@@ -19,6 +19,7 @@ import (
 	"runtime"
 )
 
+// Standard error values for type checking and runtime errors.
 var (
 	ErrNotABoolean                 = NewStaticError("not a boolean")
 	ErrNotAnInputPort              = NewStaticError("not an input port")
@@ -37,6 +38,12 @@ var (
 	ErrNotAGlobalIndex             = NewStaticError("not a global index")
 	ErrNotANumber                  = NewStaticError("not a number")
 	ErrCannotCompare               = NewStaticError("cannot compare values")
+	ErrNotAFixnum                  = NewStaticError("not a fixnum")
+	ErrNotARational                = NewStaticError("not a rational number")
+	ErrNotAReal                    = NewStaticError("not a real number")
+	ErrNotAComplex                 = NewStaticError("not a complex number")
+	ErrNotAFloatingPoint           = NewStaticError("not a floating-point number")
+	ErrNotACexactInteger           = NewStaticError("not a C-exact integer")
 	ErrDivisionByZero              = NewStaticError("division by zero")
 	ErrNotAList                    = NewStaticError("not a list")
 	ErrNotACloseParen              = NewStaticError("not a close parenthesis")
@@ -87,10 +94,12 @@ var (
 	ErrNotAnAtomic           = NewStaticError("not an atomic")
 )
 
+// StaticError represents a compile-time or static error.
 type StaticError struct {
 	message string
 }
 
+// NewStaticError creates a new static error with the given message.
 func NewStaticError(msg string) *StaticError {
 	q := &StaticError{
 		message: msg,
@@ -109,6 +118,7 @@ type ForeignError struct {
 	stack   []uintptr // stack trace
 }
 
+// NewForeignError creates a new foreign error with the given message.
 func NewForeignError(msg string) *ForeignError {
 	pcs := [50]uintptr{}
 	n := runtime.Callers(1, pcs[:])
@@ -119,6 +129,7 @@ func NewForeignError(msg string) *ForeignError {
 	return q
 }
 
+// NewForeignErrorf creates a new foreign error with a formatted message.
 func NewForeignErrorf(msg string, vs ...any) *ForeignError {
 	if len(vs) == 0 {
 		return NewForeignError(msg)
@@ -132,6 +143,7 @@ func NewForeignErrorf(msg string, vs ...any) *ForeignError {
 	return q
 }
 
+// WrapForeignErrorf wraps an existing error with a formatted message.
 func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	if err == nil {
 		return NewForeignErrorf(msg, vs...)
@@ -145,6 +157,7 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	}
 }
 
+// Datum returns the underlying wrapped error.
 func (p *ForeignError) Datum() error {
 	return p.err
 }

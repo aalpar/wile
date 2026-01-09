@@ -24,30 +24,37 @@ var (
 	_ Number = (*Complex)(nil)
 )
 
+// Complex represents a Scheme complex number.
 type Complex struct {
 	Value complex128
 }
 
+// NewComplex creates a new complex number from a complex128 value.
 func NewComplex(v complex128) *Complex {
 	return &Complex{Value: v}
 }
 
+// NewComplexFromParts creates a new complex number from real and imaginary parts.
 func NewComplexFromParts(realPart, imagPart float64) *Complex {
 	return &Complex{Value: complex(realPart, imagPart)}
 }
 
+// Datum returns the underlying complex128 value.
 func (p *Complex) Datum() complex128 {
 	return p.Value
 }
 
+// Real returns the real part of the complex number.
 func (p *Complex) Real() float64 {
 	return real(p.Value)
 }
 
+// Imag returns the imaginary part of the complex number.
 func (p *Complex) Imag() float64 {
 	return imag(p.Value)
 }
 
+// Add returns the sum of this complex number and another number.
 func (p *Complex) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -68,6 +75,7 @@ func (p *Complex) Add(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Subtract returns the difference of this complex number and another number.
 func (p *Complex) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -85,6 +93,7 @@ func (p *Complex) Subtract(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Multiply returns the product of this complex number and another number.
 func (p *Complex) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -102,6 +111,7 @@ func (p *Complex) Multiply(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Divide returns the quotient of this complex number and another number.
 func (p *Complex) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
@@ -119,10 +129,12 @@ func (p *Complex) Divide(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// IsZero returns true if this complex number is zero.
 func (p *Complex) IsZero() bool {
 	return p.Value == 0
 }
 
+// LessThan compares the real parts of the complex numbers.
 func (p *Complex) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Complex:
@@ -137,22 +149,27 @@ func (p *Complex) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
+// IsReal returns true if the imaginary part is zero.
 func (p *Complex) IsReal() bool {
 	return imag(p.Value) == 0
 }
 
+// Magnitude returns the absolute value (modulus) of the complex number.
 func (p *Complex) Magnitude() float64 {
 	return cmplx.Abs(p.Value)
 }
 
+// Phase returns the phase (argument) of the complex number in radians.
 func (p *Complex) Phase() float64 {
 	return cmplx.Phase(p.Value)
 }
 
+// IsVoid returns true if this complex number is nil.
 func (p *Complex) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both complex numbers have the same value.
 func (p *Complex) EqualTo(v Value) bool {
 	other, ok := v.(*Complex)
 	if ok {
@@ -161,6 +178,7 @@ func (p *Complex) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of this complex number.
 func (p *Complex) SchemeString() string {
 	r := real(p.Value)
 	i := imag(p.Value)

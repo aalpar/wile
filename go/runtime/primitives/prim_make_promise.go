@@ -24,7 +24,7 @@ import (
 // PrimMakePromise implements the (make-promise) primitive.
 // Creates a promise from a value, wrapping it if not already a promise.
 func PrimMakePromise(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	// If already a promise, return it unchanged
 	if p, ok := o.(*values.Promise); ok {
 		mc.SetValue(p)

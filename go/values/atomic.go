@@ -63,8 +63,8 @@ func (a *Atomic) Store(v Value) {
 }
 
 // Swap atomically stores new and returns the old value
-func (a *Atomic) Swap(new Value) Value {
-	old := a.value.Swap(new)
+func (a *Atomic) Swap(v Value) Value {
+	old := a.value.Swap(v)
 	if old == nil {
 		return nil
 	}
@@ -73,16 +73,18 @@ func (a *Atomic) Swap(new Value) Value {
 
 // CompareAndSwap atomically compares and swaps if current equals old
 // Returns true if the swap was performed
-func (a *Atomic) CompareAndSwap(old, new Value) bool {
-	return a.value.CompareAndSwap(old, new)
+func (a *Atomic) CompareAndSwap(ol, nw Value) bool {
+	return a.value.CompareAndSwap(ol, nw)
 }
 
 // Value interface implementation
 
+// IsVoid returns true if the atomic is nil.
 func (a *Atomic) IsVoid() bool {
 	return a == nil
 }
 
+// EqualTo returns true if the atomics are the same object.
 func (a *Atomic) EqualTo(v Value) bool {
 	other, ok := v.(*Atomic)
 	if !ok {
@@ -91,6 +93,7 @@ func (a *Atomic) EqualTo(v Value) bool {
 	return a == other
 }
 
+// SchemeString returns the Scheme representation of the atomic.
 func (a *Atomic) SchemeString() string {
 	if a == nil {
 		return "#<atomic:void>"
@@ -109,9 +112,7 @@ type AtomicInt64 struct {
 	value int64
 }
 
-var (
-	_ Value = (*AtomicInt64)(nil)
-)
+var _ Value = (*AtomicInt64)(nil)
 
 // NewAtomicInt64 creates a new AtomicInt64 with the given initial value
 func NewAtomicInt64(initial int64) *AtomicInt64 {
@@ -143,22 +144,24 @@ func (a *AtomicInt64) Add(delta int64) int64 {
 }
 
 // Swap atomically stores new and returns the old value
-func (a *AtomicInt64) Swap(new int64) int64 {
-	return atomic.SwapInt64(&a.value, new)
+func (a *AtomicInt64) Swap(nw int64) int64 {
+	return atomic.SwapInt64(&a.value, nw)
 }
 
 // CompareAndSwap atomically compares and swaps
 // Returns true if the swap was performed
-func (a *AtomicInt64) CompareAndSwap(old, new int64) bool {
-	return atomic.CompareAndSwapInt64(&a.value, old, new)
+func (a *AtomicInt64) CompareAndSwap(ol, nw int64) bool {
+	return atomic.CompareAndSwapInt64(&a.value, ol, nw)
 }
 
 // Value interface implementation
 
+// IsVoid returns true if the atomic int64 is nil.
 func (a *AtomicInt64) IsVoid() bool {
 	return a == nil
 }
 
+// EqualTo returns true if the atomics are the same object.
 func (a *AtomicInt64) EqualTo(v Value) bool {
 	other, ok := v.(*AtomicInt64)
 	if !ok {
@@ -167,6 +170,7 @@ func (a *AtomicInt64) EqualTo(v Value) bool {
 	return a == other
 }
 
+// SchemeString returns the Scheme representation of the atomic int64.
 func (a *AtomicInt64) SchemeString() string {
 	if a == nil {
 		return "#<atomic-int64:void>"

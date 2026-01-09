@@ -24,7 +24,7 @@ import (
 // PrimInputPortOpenQ implements the (input-port-open?) primitive.
 // Returns #t if input port is open.
 func PrimInputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.CharacterInputPort)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "input-port-open?: expected an input port but got %T", o)

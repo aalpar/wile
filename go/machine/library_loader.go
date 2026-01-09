@@ -40,7 +40,7 @@ import (
 // LibraryEnvFactory is a function that creates a new top-level environment for a library.
 // This avoids import cycles between machine and runtime packages.
 // The function should return a fresh environment with primitives registered.
-var LibraryEnvFactory func() (*environment.EnvironmentFrame, error)
+var LibraryEnvFactory func(ctx context.Context) (*environment.EnvironmentFrame, error)
 
 // LoadLibrary loads a library by name, compiling and executing it if not already loaded.
 // Returns the CompiledLibrary which can be used to import bindings.
@@ -64,7 +64,8 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	}
 
 	// Already loaded?
-	if lib := registry.Lookup(name); lib != nil {
+	lib := registry.Lookup(name)
+	if lib != nil {
 		return lib, nil
 	}
 
@@ -84,14 +85,15 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	}
 
 	// Load the library from file
-	lib, err := loadLibraryFromFile(ctx, filePath, name, env)
+	lib, err = loadLibraryFromFile(ctx, filePath, name, env)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err,
 			"error loading library %s from %s", name.SchemeString(), filePath)
 	}
 
 	// Register the library
-	if err := registry.Register(lib); err != nil {
+	err = registry.Register(lib)
+	if err != nil {
 		return nil, values.WrapForeignErrorf(err,
 			"error registering library %s", name.SchemeString())
 	}
@@ -113,7 +115,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	if LibraryEnvFactory == nil {
 		return nil, values.NewForeignErrorf("LibraryEnvFactory not configured")
 	}
-	libEnv, err := LibraryEnvFactory()
+	libEnv, err := LibraryEnvFactory(ctx)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "could not create library environment")
 	}
@@ -124,10 +126,10 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 
 	// Parse the file
 	reader := bufio.NewReader(file)
-	p := parser.NewParserWithFile(libEnv, reader, filePath)
+	p := parser.NewParserWithFile(libEnv, true, reader, filePath)
 
 	// Read the first form - should be define-library
-	stx, err := p.ReadSyntax(nil)
+	stx, err := p.ReadSyntax(context.TODO())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, values.NewForeignErrorf("library file is empty")
@@ -147,7 +149,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, values.NewForeignErrorf("expected define-library, got %T", carStx)
 	}
 
-	symName := carSym.Key
+	symName := carSym.Sym.Key
 	if symName != "define-library" && symName != "library" {
 		return nil, values.NewForeignErrorf("expected define-library, got %s", symName)
 	}
@@ -204,7 +206,8 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	if compiledLib.Template != nil && len(compiledLib.Template.operations) > 0 {
 		cont := NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
 		mc := NewMachineContext(cont)
-		if err := mc.Run(ctx); err != nil {
+		err := mc.Run(ctx)
+		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "error executing library")
 		}
 	}

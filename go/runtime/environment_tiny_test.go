@@ -15,6 +15,7 @@
 package runtime
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,7 +23,7 @@ import (
 
 // TestNewEnvironmentTiny tests that the top-level environment can be created successfully.
 func TestNewEnvironmentTiny(t *testing.T) {
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, env, qt.IsNotNil)
 }

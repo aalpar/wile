@@ -25,7 +25,7 @@ import (
 // PrimPositiveQ implements the (positive?) primitive.
 // Returns #t if number is positive.
 func PrimPositiveQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(utils.BoolToBoolean(v.Value > 0))

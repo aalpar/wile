@@ -44,7 +44,7 @@ import (
 // - Process '(c d): collect [c, d], prepend d then c → result = '(c d e)
 // - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
 func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	args, ok := o.(*values.Pair)
 	if !ok {
 		if values.IsEmptyList(o) {
@@ -56,7 +56,7 @@ func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
 
 	// Collect all argument lists into a vector for random access (right-to-left processing)
 	var lists values.Vector
-	v, err := args.ForEach(nil, func(_ context.Context, i int, hasNext bool, elem values.Value) error {
+	v, err := args.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		lists = append(lists, elem)
 		return nil
 	})
@@ -93,7 +93,7 @@ func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
 		// E.g., for list (a b c), we collect [a, b, c], then prepend c, b, a
 		// to result, yielding (a b c . result).
 		var elems values.Vector
-		v, err = pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, elem values.Value) error {
+		v, err = pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			elems = append(elems, elem)
 			return nil
 		})

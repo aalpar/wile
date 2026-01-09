@@ -37,11 +37,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	}
 
 	// Get the bindings list (CAR of args)
-	bindingsList, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("with-syntax: expected bindings list")
-	}
-
+	bindingsList := argsPair.SyntaxCar()
 	bindingsPair, ok := bindingsList.(*syntax.SyntaxPair)
 	if !ok {
 		return values.NewForeignError("with-syntax: bindings must be a list")
@@ -75,10 +71,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		}
 
 		// Get pattern (first element)
-		pattern, ok := bindingPair.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("with-syntax: expected pattern")
-		}
+		pattern := bindingPair.SyntaxCar()
 		patterns = append(patterns, pattern)
 
 		// Get expr (second element)
@@ -86,10 +79,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		if !ok || rest.IsEmptyList() {
 			return values.NewForeignError("with-syntax: each binding must be (pattern expr)")
 		}
-		expr, ok := rest.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("with-syntax: expected expression")
-		}
+		expr = rest.SyntaxCar()
 		exprs = append(exprs, expr)
 
 		// Move to next binding
@@ -139,11 +129,7 @@ func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallCon
 	// Compile each body expression, the last one in tail position
 	current := bodyList
 	for !syntax.IsSyntaxEmptyList(current) {
-		body, ok := current.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("with-syntax: expected expression in body")
-		}
-
+		body := current.SyntaxCar()
 		cdr := current.SyntaxCdr()
 		isLast := syntax.IsSyntaxEmptyList(cdr)
 
@@ -179,10 +165,8 @@ func (p *CompileTimeContinuation) buildWithSyntaxBegin(srcCtx *syntax.SourceCont
 
 	current := bodyList
 	for !syntax.IsSyntaxEmptyList(current) {
-		if body, ok := current.SyntaxCar().(syntax.SyntaxValue); ok {
-			elems = append(elems, body)
-		}
-
+		body := current.SyntaxCar()
+		elems = append(elems, body)
 		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break

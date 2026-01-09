@@ -22,10 +22,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// SchemeEquals is a quicktest checker for Scheme value equality.
 var SchemeEquals qt.Checker = &schemeEqualsChecker{}
 
-type schemeEqualsChecker struct {
-}
+type schemeEqualsChecker struct{}
 
 func (c *schemeEqualsChecker) ArgNames() []string {
 	return []string{"got", "want"}
@@ -35,7 +35,8 @@ func (c *schemeEqualsChecker) ArgNames() []string {
 func (c *schemeEqualsChecker) Check(got interface{}, args []interface{}, note func(key string, value interface{})) (err error) {
 	defer func() {
 		// A panic is raised when the provided args are not comparable.
-		if r := recover(); r != nil {
+		r := recover()
+		if r != nil {
 			err = fmt.Errorf("%s", r)
 		}
 	}()

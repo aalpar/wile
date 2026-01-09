@@ -24,7 +24,7 @@ import (
 // PrimSymbolToString implements the symbol->string primitive.
 // Converts a symbol to a string.
 func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	sym, ok := o.(*values.Symbol)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASymbol, "symbol->string: expected a symbol but got %T", o)

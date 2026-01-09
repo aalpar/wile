@@ -25,7 +25,7 @@ import (
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
 func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	filename, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "open-binary-output-file: expected a string but got %T", o)

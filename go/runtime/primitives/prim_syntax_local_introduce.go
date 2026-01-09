@@ -38,8 +38,8 @@ import (
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with an introduction scope).
-func PrimSyntaxLocalIntroduce(ctx context.Context, mc *machine.MachineContext) error {
-	stx := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+func PrimSyntaxLocalIntroduce(_ context.Context, mc *machine.MachineContext) error {
+	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {

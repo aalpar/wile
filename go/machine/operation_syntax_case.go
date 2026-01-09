@@ -139,8 +139,12 @@ func (p *OperationBindPatternVars) Apply(ctx context.Context, mctx *MachineConte
 		sym := childEnv.InternSymbol(values.NewSymbol(varName))
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable)
 		stxVal, ok := currentSyntaxCaseBindings[varName]
-		if ok && li != nil {
-			childEnv.SetLocalValue(li, stxVal)
+		if ok && li == nil {
+			continue
+		}
+		err := childEnv.SetLocalValue(li, stxVal)
+		if err != nil {
+			return nil, mctx.WrapError(err, fmt.Sprintf("syntax-case: failed to bind pattern variable %s", varName))
 		}
 	}
 

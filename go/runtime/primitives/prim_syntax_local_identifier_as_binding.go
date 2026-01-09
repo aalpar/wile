@@ -41,8 +41,8 @@ import (
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with a use-site scope).
-func PrimSyntaxLocalIdentifierAsBinding(ctx context.Context, mc *machine.MachineContext) error {
-	id := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+func PrimSyntaxLocalIdentifierAsBinding(_ context.Context, mc *machine.MachineContext) error {
+	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {

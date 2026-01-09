@@ -16,13 +16,13 @@ package machine
 
 import (
 	"context"
+
 	"wile/values"
 )
 
 var _ Operation = (*OperationLoadVoid)(nil)
 
-type OperationLoadVoid struct {
-}
+type OperationLoadVoid struct{}
 
 func NewOperationLoadVoid() *OperationLoadVoid {
 	return &OperationLoadVoid{}
@@ -44,11 +44,5 @@ func (p *OperationLoadVoid) IsVoid() bool {
 
 func (p *OperationLoadVoid) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadVoid)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return true
+	return sameType(p, v, ok)
 }

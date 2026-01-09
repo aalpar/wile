@@ -24,19 +24,23 @@ var (
 	// _ Comparable = (*Float)(nil)
 )
 
+// Float represents a Scheme floating-point number.
 type Float struct {
 	Value float64
 }
 
+// NewFloat creates a new float value.
 func NewFloat(v float64) *Float {
 	q := &Float{Value: v}
 	return q
 }
 
+// Datum returns the underlying float64 value.
 func (p *Float) Datum() float64 {
 	return p.Value
 }
 
+// Add returns the sum of two numbers.
 func (p *Float) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -54,6 +58,7 @@ func (p *Float) Add(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Subtract returns the difference of two numbers.
 func (p *Float) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -71,6 +76,7 @@ func (p *Float) Subtract(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Multiply returns the product of two numbers.
 func (p *Float) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -88,6 +94,7 @@ func (p *Float) Multiply(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Divide returns the quotient of this float and another number.
 func (p *Float) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
@@ -105,10 +112,12 @@ func (p *Float) Divide(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// IsZero returns true if this float is zero.
 func (p *Float) IsZero() bool {
 	return p.Value == 0.0
 }
 
+// LessThan returns true if this float is less than another number.
 func (p *Float) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Integer:
@@ -123,10 +132,12 @@ func (p *Float) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
+// IsVoid returns true if the float is nil.
 func (p *Float) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both floats have the same value.
 func (p *Float) EqualTo(v Value) bool {
 	if other, ok := v.(*Float); ok {
 		return p.Value == other.Value
@@ -134,6 +145,7 @@ func (p *Float) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the float.
 func (p *Float) SchemeString() string {
 	return strconv.FormatFloat(p.Value, 'f', -1, 64)
 }

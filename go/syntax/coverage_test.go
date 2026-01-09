@@ -16,8 +16,9 @@ package syntax
 
 import (
 	"context"
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -616,7 +617,7 @@ func TestSyntaxPair_ForEach(t *testing.T) {
 
 	count := 0
 	sum := int64(0)
-	list.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error { //nolint:errcheck
+	list.ForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, v values.Value) error { //nolint:errcheck
 		count++
 		syntaxVal := v.(SyntaxValue)
 		intVal := syntaxVal.UnwrapAll().(*values.Integer)

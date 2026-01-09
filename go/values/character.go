@@ -19,27 +19,30 @@ import (
 	"unicode/utf8"
 )
 
-var (
-	_ Value = (*Character)(nil)
-)
+var _ Value = (*Character)(nil)
 
+// Character represents a Scheme character value.
 type Character struct {
 	Value rune
 }
 
+// NewCharacter creates a new character from a rune.
 func NewCharacter(v rune) *Character {
 	q := &Character{Value: v}
 	return q
 }
 
+// Datum returns the underlying rune value.
 func (p *Character) Datum() rune {
 	return p.Value
 }
 
+// IsVoid returns true if the character is nil.
 func (p *Character) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both characters have the same rune value.
 func (p *Character) EqualTo(v Value) bool {
 	if other, ok := v.(*Character); ok {
 		return p.Value == other.Value
@@ -47,6 +50,7 @@ func (p *Character) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the character.
 func (p *Character) SchemeString() string {
 	return fmt.Sprintf(`#\%c`, p.Value)
 }

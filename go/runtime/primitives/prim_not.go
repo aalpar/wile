@@ -25,7 +25,7 @@ import (
 // PrimNot implements the not primitive.
 // Returns #t if the argument is #f, #f otherwise.
 func PrimNot(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	// In Scheme, only #f is false; everything else is true
 	mc.SetValue(utils.BoolToBoolean(o == values.FalseValue))
 	return nil

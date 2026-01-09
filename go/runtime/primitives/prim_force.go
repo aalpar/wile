@@ -25,7 +25,7 @@ import (
 // PrimForce implements the (force) primitive.
 // Forces evaluation of a promise.
 func PrimForce(ctx context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	promise, ok := o.(*values.Promise)
 	if !ok {
 		// R7RS says: if not a promise, return the value unchanged
@@ -46,10 +46,12 @@ func PrimForce(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	sub := mc.NewSubContext()
-	if _, err := sub.Apply(mcls); err != nil {
+	_, err := sub.Apply(mcls)
+	if err != nil {
 		return err
 	}
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err

@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 )
 
@@ -32,23 +33,23 @@ func validateBegin(ctx context.Context, pair *syntax.SyntaxPair, result *Validat
 
 	// elements[0] is 'begin', can have zero or more expressions
 	// R7RS allows (begin) with no expressions (returns unspecified value)
-	var exprs []ValidatedExpr
+	var body []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
 		expr := validateExpr(ctx, elements[i], result)
 		if expr != nil {
-			exprs = append(exprs, expr)
+			body = append(body, expr)
 		}
 	}
 
 	// If any validation failed, return nil
 	expectedCount := len(elements) - 1
-	if len(exprs) != expectedCount && expectedCount > 0 {
+	if len(body) != expectedCount && expectedCount > 0 {
 		return nil
 	}
 
 	return &ValidatedBegin{
 		formName: "begin",
 		source:   source,
-		Exprs:    exprs,
+		body:     body,
 	}
 }

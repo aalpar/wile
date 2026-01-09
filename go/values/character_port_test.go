@@ -69,13 +69,13 @@ func TestCharacterInputPort_SchemeString(t *testing.T) {
 
 func TestCharacterOutputPort_NewCharacterOutputPort(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPort(&buf)
+	port := NewCharacterOutputPortFromWriter(&buf)
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestCharacterOutputPort_IsVoid(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPort(&buf)
+	port := NewCharacterOutputPortFromWriter(&buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
 	var nilPort *CharacterOutputPort
@@ -84,16 +84,16 @@ func TestCharacterOutputPort_IsVoid(t *testing.T) {
 
 func TestCharacterOutputPort_Datum(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPort(&buf)
+	port := NewCharacterOutputPortFromWriter(&buf)
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestCharacterOutputPort_EqualTo(t *testing.T) {
 	var buf1 bytes.Buffer
-	port1 := NewCharacterOutputPort(&buf1)
+	port1 := NewCharacterOutputPortFromWriter(&buf1)
 	var buf2 bytes.Buffer
-	port2 := NewCharacterOutputPort(&buf2)
+	port2 := NewCharacterOutputPortFromWriter(&buf2)
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
@@ -101,7 +101,7 @@ func TestCharacterOutputPort_EqualTo(t *testing.T) {
 
 func TestCharacterOutputPort_SchemeString(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPort(&buf)
+	port := NewCharacterOutputPortFromWriter(&buf)
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "character-output-port"), qt.IsTrue)
 }

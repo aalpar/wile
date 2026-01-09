@@ -16,16 +16,18 @@ package machine
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"testing"
+
 	"wile/environment"
 	"wile/parser"
 	"wile/syntax"
 	"wile/utils"
 	"wile/values"
-	"strings"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -198,8 +200,8 @@ func TestParseExportSpec(t *testing.T) {
 
 			// Parse the input
 			reader := bufio.NewReader(strings.NewReader(tc.input))
-			p := parser.NewParser(env, reader)
-			stx, err := p.ReadSyntax(nil)
+			p := parser.NewParser(env, true, reader)
+			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
 			// Call parseExportSpec
@@ -224,8 +226,8 @@ func TestParseImportSetExcept(t *testing.T) {
 	// Parse (except (scheme base) car cdr)
 	input := "(except (scheme base) car cdr)"
 	reader := bufio.NewReader(strings.NewReader(input))
-	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := stx.(*syntax.SyntaxPair)
@@ -247,8 +249,8 @@ func TestParseImportSetRename(t *testing.T) {
 	// Parse (rename (scheme base) (car first) (cdr rest))
 	input := "(rename (scheme base) (car first) (cdr rest))"
 	reader := bufio.NewReader(strings.NewReader(input))
-	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := stx.(*syntax.SyntaxPair)
@@ -335,8 +337,8 @@ func TestParseFeatureRequirement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			env := environment.NewTopLevelEnvironmentFrame()
 			reader := bufio.NewReader(strings.NewReader(tc.input))
-			p := parser.NewParser(env, reader)
-			stx, err := p.ReadSyntax(nil)
+			p := parser.NewParser(env, true, reader)
+			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
 			req, err := parseFeatureRequirement(stx)
@@ -379,7 +381,7 @@ func TestCompileInclude(t *testing.T) {
 	// Create a temporary file with Scheme code
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test.scm")
-	err := os.WriteFile(tmpFile, []byte("42"), 0644)
+	err := os.WriteFile(tmpFile, []byte("42"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set up environment with include search path
@@ -409,7 +411,7 @@ func TestCompileIncludeCi(t *testing.T) {
 	// Create a temporary file with Scheme code
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test.scm")
-	err := os.WriteFile(tmpFile, []byte("42"), 0644)
+	err := os.WriteFile(tmpFile, []byte("42"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set up environment
@@ -439,8 +441,8 @@ func TestParseFeatureRequirementList(t *testing.T) {
 	env := environment.NewTopLevelEnvironmentFrame()
 	input := "(r7rs r6rs (library (scheme base)))"
 	reader := bufio.NewReader(strings.NewReader(input))
-	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	reqs, err := parseFeatureRequirementList(stx)
@@ -481,7 +483,7 @@ func TestCompileIncludeReadError(t *testing.T) {
 	// Create a temporary file with invalid Scheme code
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "bad.scm")
-	err := os.WriteFile(tmpFile, []byte("("), 0644)
+	err := os.WriteFile(tmpFile, []byte("("), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
@@ -539,8 +541,8 @@ func TestParseExportSpecRenameErrors(t *testing.T) {
 			lib := NewCompiledLibrary(NewLibraryName("test"), env)
 
 			reader := bufio.NewReader(strings.NewReader(tc.input))
-			p := parser.NewParser(env, reader)
-			stx, err := p.ReadSyntax(nil)
+			p := parser.NewParser(env, true, reader)
+			stx, err := p.ReadSyntax(context.TODO())
 			if err == io.EOF || err != nil {
 				// Input might be incomplete - that's expected for some cases
 				return

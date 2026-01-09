@@ -25,8 +25,8 @@ import (
 // PrimAtan implements the atan primitive.
 // Returns the arc tangent of a number (one or two arguments).
 func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	rest := mc.Arg(1)
 	y, err := ToFloat64(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "atan: %v", err)

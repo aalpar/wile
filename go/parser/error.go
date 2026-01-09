@@ -15,16 +15,27 @@
 package parser
 
 import (
+	"fmt"
+
 	"wile/tokenizer"
+	"wile/values"
 )
 
+var (
+	// ErrUnknownTokenType is returned when the parser encounters an unrecognized token.
+	ErrUnknownTokenType = values.NewStaticError("unknown token type")
+	ErrAlreadyClosed    = values.NewStaticError("parser already closed")
+)
+
+// ParserError represents an error that occurred during parsing.
 type ParserError struct {
 	err  error
 	mess string
 	tok  tokenizer.Token
 }
 
-func NewTokenizerError(tok tokenizer.Token, mess string) *ParserError {
+// NewParserError creates a new parser error for the given token.
+func NewParserError(tok tokenizer.Token, mess string) *ParserError {
 	q := &ParserError{
 		mess: mess,
 		tok:  tok,
@@ -32,7 +43,14 @@ func NewTokenizerError(tok tokenizer.Token, mess string) *ParserError {
 	return q
 }
 
-func NewTokenizerErrorWithWrap(err error, tok tokenizer.Token, mess string) *ParserError {
+// NewParserErrorf creates a new parser error for the given token.
+func NewParserErrorf(tok tokenizer.Token, mess string, vs ...any) *ParserError {
+	q := NewParserError(tok, fmt.Sprintf(mess, vs...))
+	return q
+}
+
+// NewParserErrorWithWrap creates a new parser error wrapping another error.
+func NewParserErrorWithWrap(err error, tok tokenizer.Token, mess string) *ParserError {
 	q := &ParserError{
 		err:  err,
 		mess: mess,
@@ -41,6 +59,13 @@ func NewTokenizerErrorWithWrap(err error, tok tokenizer.Token, mess string) *Par
 	return q
 }
 
+// NewParserErrorWithWrapf creates a new parser error wrapping another error.
+func NewParserErrorWithWrapf(err error, tok tokenizer.Token, mess string, vs ...any) *ParserError {
+	q := NewParserErrorWithWrap(err, tok, fmt.Sprintf(mess, vs...))
+	return q
+}
+
+// Is implements errors.Is for ParserError.
 func (p *ParserError) Is(err error) bool {
 	_, ok := err.(*ParserError)
 	return ok
@@ -52,4 +77,17 @@ func (p *ParserError) Error() string {
 
 func (p *ParserError) Unwrap() error {
 	return p.err
+}
+
+func (p *ParserError) SchemeString() string {
+	return fmt.Sprintf("ParserError at %s: %s", p.tok.String(), p.mess)
+}
+
+func (p *ParserError) IsVoid() bool {
+	return p == nil
+}
+
+func (p *ParserError) EqualTo(v values.Value) bool {
+	other, ok := v.(*ParserError)
+	return ok && p.mess == other.mess && p.tok == other.tok
 }

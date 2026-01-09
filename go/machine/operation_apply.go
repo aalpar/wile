@@ -22,8 +22,7 @@ import (
 	"wile/values"
 )
 
-type OperationApply struct {
-}
+type OperationApply struct{}
 
 func NewOperationApply() *OperationApply {
 	return &OperationApply{}
@@ -39,13 +38,7 @@ func (p *OperationApply) IsVoid() bool {
 
 func (p *OperationApply) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationApply)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return true
+	return sameType(p, v, ok)
 }
 
 // FIXME: needs unit tests
@@ -56,7 +49,7 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 		return mc.Apply(cls, vs...)
 	case *CaseLambdaClosure:
 		return mc.ApplyCaseLambda(cls, vs...)
-	case *values.Parameter:
+	case *Parameter:
 		return applyParameter(ctx, mc, cls, vs)
 	default:
 		return mc, mc.Error(fmt.Sprintf("expected a closure, got %s", mc.value[0].SchemeString()))
@@ -68,7 +61,7 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 // With 1 arg: sets the value (after applying converter if present).
 // After setting the return value, we restore the saved continuation to return
 // to the caller, just like a closure's RestoreContinuation would do.
-func applyParameter(ctx context.Context, mc *MachineContext, param *values.Parameter, args []values.Value) (*MachineContext, error) {
+func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, args []values.Value) (*MachineContext, error) {
 	switch len(args) {
 	case 0:
 		// Get: return current value
@@ -88,16 +81,14 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *values.Param
 
 		if param.HasConverter() {
 			// Apply the converter using a sub-context
-			converter, ok := param.Converter().(*MachineClosure)
-			if !ok {
-				return mc, mc.Error("parameter: converter is not a procedure")
-			}
-
+			converter := param.Converter()
 			sub := mc.NewSubContext()
-			if _, err := sub.Apply(converter, newVal); err != nil {
+			_, err := sub.Apply(converter, newVal)
+			if err != nil {
 				return mc, mc.WrapError(err, "parameter: failed to apply converter")
 			}
-			if err := sub.Run(ctx); err != nil {
+			err = sub.Run(ctx)
+			if err != nil {
 				if !errors.Is(err, ErrMachineHalt) {
 					return mc, mc.WrapError(err, "parameter: converter error")
 				}

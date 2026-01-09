@@ -24,10 +24,10 @@ import (
 // PrimBytevectorCopyBang implements the bytevector-copy! primitive.
 // Copies bytes between bytevectors.
 func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error {
-	to := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	at := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	from := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(3).Value()
+	to := mc.Arg(0)
+	at := mc.Arg(1)
+	from := mc.Arg(2)
+	rest := mc.Arg(3)
 
 	toBv, ok := to.(*values.ByteVector)
 	if !ok {

@@ -41,6 +41,7 @@ var (
 // ThreadState represents the state of a thread
 type ThreadState int
 
+// ThreadState constants.
 const (
 	ThreadNew        ThreadState = iota // Created but not started
 	ThreadRunnable                      // Running or ready to run
@@ -173,7 +174,8 @@ func (t *Thread) Start() error {
 	go func() {
 		defer close(t.done)
 		defer func() {
-			if r := recover(); r != nil {
+			r := recover()
+			if r != nil {
 				t.mu.Lock()
 				t.state = ThreadTerminated
 				t.exception = fmt.Errorf("thread panic: %v", r)
@@ -263,10 +265,12 @@ func (t *Thread) Done() <-chan struct{} {
 
 // Value interface implementation
 
+// IsVoid returns true if this thread is nil.
 func (t *Thread) IsVoid() bool {
 	return t == nil
 }
 
+// EqualTo returns true if both threads are the same object.
 func (t *Thread) EqualTo(v Value) bool {
 	other, ok := v.(*Thread)
 	if !ok {
@@ -275,6 +279,7 @@ func (t *Thread) EqualTo(v Value) bool {
 	return t == other // Thread identity is reference equality
 }
 
+// SchemeString returns the Scheme representation of this thread.
 func (t *Thread) SchemeString() string {
 	if t == nil {
 		return "#<thread:void>"

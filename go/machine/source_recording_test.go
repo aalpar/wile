@@ -15,10 +15,12 @@
 package machine
 
 import (
-	"wile/environment"
-	"wile/parser"
+	"context"
 	"strings"
 	"testing"
+
+	"wile/environment"
+	"wile/parser"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -27,9 +29,9 @@ import (
 func compileScheme(t *testing.T, code string) *NativeTemplate {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
 	rdr := strings.NewReader(code)
-	p := parser.NewParserWithFile(env, rdr, "test.scm")
+	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 
-	stx, err := p.ReadSyntax(nil)
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
@@ -116,18 +118,20 @@ func TestSourceRecording_Call(t *testing.T) {
 
 	// Define a simple function
 	rdr := strings.NewReader("(define (id x) x)")
-	p := parser.NewParserWithFile(env, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(nil)
+	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
+	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := NewExpandTimeCallContext()
-	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	qt.Assert(t, err, qt.IsNil)
 	cctx := NewCompileTimeCallContext(false, true, env)
-	NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile a call to that function
 	rdr = strings.NewReader("(id 42)")
-	p = parser.NewParserWithFile(env, rdr, "test.scm")
-	stx, err := p.ReadSyntax(nil)
+	p = parser.NewParserWithFile(env, true, rdr, "test.scm")
+	stx, err = p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -147,18 +151,19 @@ func TestSourceRecording_SetBang(t *testing.T) {
 
 	// First compile (define x 1)
 	rdr := strings.NewReader("(define x 1)")
-	p := parser.NewParserWithFile(env, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(nil)
+	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
+	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := NewExpandTimeCallContext()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	cctx := NewCompileTimeCallContext(false, true, env)
-	NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err := NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile (set! x 2)
 	rdr = strings.NewReader("(set! x 2)")
-	p = parser.NewParserWithFile(env, rdr, "test.scm")
-	stx, err := p.ReadSyntax(nil)
+	p = parser.NewParserWithFile(env, true, rdr, "test.scm")
+	stx, err = p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -186,9 +191,9 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
 	rdr := strings.NewReader(code)
-	p := parser.NewParserWithFile(env, rdr, "multiline.scm")
+	p := parser.NewParserWithFile(env, true, rdr, "multiline.scm")
 
-	stx, err := p.ReadSyntax(nil)
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)

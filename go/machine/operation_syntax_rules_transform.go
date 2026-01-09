@@ -102,9 +102,10 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	// Extract macro name from the input form's car for origin tracking
 	macroName := ""
 	if inputPair, ok := input.(*syntax.SyntaxPair); ok {
-		if car := inputPair.Car(); car != nil {
+		car := inputPair.Car()
+		if car != nil {
 			if sym, ok := car.(*syntax.SyntaxSymbol); ok {
-				macroName = sym.Key
+				macroName = sym.Sym.Key
 			}
 		}
 	}
@@ -234,7 +235,8 @@ func addScopeToPairSkipFreeIds(pair *syntax.SyntaxPair, scope *syntax.Scope, fre
 
 	// Process car
 	var newCar syntax.SyntaxValue
-	if car := pair.Car(); car != nil {
+	car := pair.Car()
+	if car != nil {
 		if carStx, ok := car.(syntax.SyntaxValue); ok {
 			newCarVal := addScopeToSyntaxSkipFreeIds(carStx, scope, freeIds)
 			if ncs, ok := newCarVal.(syntax.SyntaxValue); ok {
@@ -245,7 +247,8 @@ func addScopeToPairSkipFreeIds(pair *syntax.SyntaxPair, scope *syntax.Scope, fre
 
 	// Process cdr
 	var newCdr syntax.SyntaxValue
-	if cdr := pair.Cdr(); cdr != nil {
+	cdr := pair.Cdr()
+	if cdr != nil {
 		if cdrStx, ok := cdr.(syntax.SyntaxValue); ok {
 			newCdrVal := addScopeToSyntaxSkipFreeIds(cdrStx, scope, freeIds)
 			if ncs, ok := newCdrVal.(syntax.SyntaxValue); ok {

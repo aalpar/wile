@@ -24,7 +24,7 @@ import (
 // PrimBytevectorAppend implements the bytevector-append primitive.
 // Concatenates bytevectors.
 func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
 		mc.SetValue(&bv)
@@ -35,12 +35,12 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector-append: expected a list but got %T", o)
 	}
 	var result []values.Byte
-	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
 		}
-		result = append(result, (*bv)...)
+		result = append(result, *bv...)
 		return nil
 	})
 	if err != nil {

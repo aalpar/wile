@@ -40,7 +40,7 @@ func PrimMakeWaitGroup(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupQ tests if an object is a WaitGroup
 // (wait-group? obj) -> boolean
 func PrimWaitGroupQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.WaitGroup)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -53,8 +53,8 @@ func PrimWaitGroupQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupAdd adds to the WaitGroup counter
 // (wait-group-add! wg n) -> void
 func PrimWaitGroupAdd(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	nVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	nVal := mc.Arg(1)
 
 	wg, ok := o.(*values.WaitGroup)
 	if !ok {
@@ -74,7 +74,7 @@ func PrimWaitGroupAdd(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupDone decrements the WaitGroup counter
 // (wait-group-done! wg) -> void
 func PrimWaitGroupDone(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	wg, ok := o.(*values.WaitGroup)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAWaitGroup, "wait-group-done!: expected wait-group, got %T", o)
@@ -88,7 +88,7 @@ func PrimWaitGroupDone(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupWait waits for the WaitGroup counter to reach zero
 // (wait-group-wait! wg) -> void
 func PrimWaitGroupWait(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	wg, ok := o.(*values.WaitGroup)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAWaitGroup, "wait-group-wait!: expected wait-group, got %T", o)
@@ -106,7 +106,7 @@ func PrimWaitGroupWait(_ context.Context, mc *machine.MachineContext) error {
 // PrimMakeRWMutex creates a new RWMutex
 // (make-rw-mutex [name]) -> rw-mutex
 func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	restVal := mc.Arg(0)
 
 	name := ""
 	// Parse optional name from rest list
@@ -129,7 +129,7 @@ func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexQ tests if an object is an RWMutex
 // (rw-mutex? obj) -> boolean
 func PrimRWMutexQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.RWMutex)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -142,7 +142,7 @@ func PrimRWMutexQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexReadLock acquires the read lock
 // (rw-mutex-read-lock! rwm) -> void
 func PrimRWMutexReadLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-read-lock!: expected rw-mutex, got %T", o)
@@ -156,7 +156,7 @@ func PrimRWMutexReadLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexReadUnlock releases the read lock
 // (rw-mutex-read-unlock! rwm) -> void
 func PrimRWMutexReadUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-read-unlock!: expected rw-mutex, got %T", o)
@@ -170,7 +170,7 @@ func PrimRWMutexReadUnlock(_ context.Context, mc *machine.MachineContext) error 
 // PrimRWMutexWriteLock acquires the write lock
 // (rw-mutex-write-lock! rwm) -> void
 func PrimRWMutexWriteLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-write-lock!: expected rw-mutex, got %T", o)
@@ -184,7 +184,7 @@ func PrimRWMutexWriteLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexWriteUnlock releases the write lock
 // (rw-mutex-write-unlock! rwm) -> void
 func PrimRWMutexWriteUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-write-unlock!: expected rw-mutex, got %T", o)
@@ -198,7 +198,7 @@ func PrimRWMutexWriteUnlock(_ context.Context, mc *machine.MachineContext) error
 // PrimRWMutexTryReadLock tries to acquire the read lock
 // (rw-mutex-try-read-lock! rwm) -> boolean
 func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-read-lock!: expected rw-mutex, got %T", o)
@@ -215,7 +215,7 @@ func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error
 // PrimRWMutexTryWriteLock tries to acquire the write lock
 // (rw-mutex-try-write-lock! rwm) -> boolean
 func PrimRWMutexTryWriteLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	rwm, ok := o.(*values.RWMutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-write-lock!: expected rw-mutex, got %T", o)
@@ -244,7 +244,7 @@ func PrimMakeOnce(_ context.Context, mc *machine.MachineContext) error {
 // PrimOnceQ tests if an object is a Once
 // (once? obj) -> boolean
 func PrimOnceQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Once)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -257,8 +257,8 @@ func PrimOnceQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimOnceDo executes the thunk only once
 // (once-do! once thunk) -> boolean (true if executed, false if already done)
 func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	thunk := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	thunk := mc.Arg(1)
 
 	once, ok := o.(*values.Once)
 	if !ok {
@@ -293,7 +293,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 // PrimOnceDoneQ tests if the Once has been executed
 // (once-done? once) -> boolean
 func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	once, ok := o.(*values.Once)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAOnce, "once-done?: expected once, got %T", o)
@@ -314,7 +314,7 @@ func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimMakeAtomic creates a new Atomic value
 // (make-atomic initial) -> atomic
 func PrimMakeAtomic(_ context.Context, mc *machine.MachineContext) error {
-	initial := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	initial := mc.Arg(0)
 
 	a := values.NewAtomic(initial)
 	mc.SetValue(a)
@@ -324,7 +324,7 @@ func PrimMakeAtomic(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicQ tests if an object is an Atomic
 // (atomic? obj) -> boolean
 func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Atomic)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -337,7 +337,7 @@ func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicLoad atomically loads the value
 // (atomic-load a) -> value
 func PrimAtomicLoad(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	a, ok := o.(*values.Atomic)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-load: expected atomic, got %T", o)
@@ -355,8 +355,8 @@ func PrimAtomicLoad(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicStore atomically stores a value
 // (atomic-store! a value) -> void
 func PrimAtomicStore(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	a, ok := o.(*values.Atomic)
 	if !ok {
@@ -371,8 +371,8 @@ func PrimAtomicStore(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicSwap atomically swaps and returns the old value
 // (atomic-swap! a new) -> old
 func PrimAtomicSwap(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	newVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	newVal := mc.Arg(1)
 
 	a, ok := o.(*values.Atomic)
 	if !ok {
@@ -391,9 +391,9 @@ func PrimAtomicSwap(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicCompareAndSwap atomically compares and swaps
 // (atomic-compare-and-swap! a old new) -> boolean
 func PrimAtomicCompareAndSwap(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	oldVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	newVal := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
+	o := mc.Arg(0)
+	oldVal := mc.Arg(1)
+	newVal := mc.Arg(2)
 
 	a, ok := o.(*values.Atomic)
 	if !ok {

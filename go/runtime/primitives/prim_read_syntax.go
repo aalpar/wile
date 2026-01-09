@@ -26,7 +26,7 @@ import (
 // PrimReadSyntax implements the (read-syntax) primitive.
 // Reads datum with source information.
 func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair but got %T", o)
@@ -58,10 +58,10 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 
 	prss, ok := Parsers[portKey]
 	if !ok || prss.Value() == nil {
-		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), runeReader))
+		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), true, runeReader))
 		Parsers[portKey] = prss
 	}
-	q, err := prss.Value().ReadSyntax(nil)
+	q, err := prss.Value().ReadSyntax(context.TODO())
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error reading syntax from input port")
 	}

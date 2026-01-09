@@ -15,8 +15,9 @@
 package syntax
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -62,7 +63,7 @@ func (s *SyntaxVectorSuite) TestIsVoid_NotNil(c *qt.C) {
 }
 
 func (s *SyntaxVectorSuite) TestIsVoid_Nil(c *qt.C) {
-	var vec *SyntaxVector = nil
+	var vec *SyntaxVector
 	c.Assert(vec.IsVoid(), qt.IsTrue)
 }
 
@@ -90,7 +91,7 @@ func (s *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
 }
 
 func (s *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
-	var vec *SyntaxVector = nil
+	var vec *SyntaxVector
 	result := vec.Unwrap()
 	c.Assert(result, qt.Equals, values.Void)
 }
@@ -136,7 +137,7 @@ func (s *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
 }
 
 func (s *SyntaxVectorSuite) TestUnwrapAll_Nil(c *qt.C) {
-	var vec *SyntaxVector = nil
+	var vec *SyntaxVector
 	result := vec.UnwrapAll()
 	c.Assert(result, qt.Equals, values.Void)
 }
@@ -155,7 +156,7 @@ func (s *SyntaxVectorSuite) TestSchemeString_WithValues(c *qt.C) {
 }
 
 func (s *SyntaxVectorSuite) TestSchemeString_Nil(c *qt.C) {
-	var vec *SyntaxVector = nil
+	var vec *SyntaxVector
 	c.Assert(vec.SchemeString(), qt.Equals, "#'<void>")
 }
 

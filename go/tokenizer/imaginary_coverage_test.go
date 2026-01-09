@@ -186,7 +186,7 @@ func TestPolarPartVariations(t *testing.T) {
 	}
 }
 
-// TestNumberFractionalVariations tests to improve mayUnsignedFractionalRealNumberOrRationalRealNumber coverage
+// TestNumberFractionalVariations tests to improve mayReadUnsignedFractionalRealNumberOrRationalRealNumber coverage
 func TestNumberFractionalVariations(t *testing.T) {
 	tcs := []struct {
 		input        string

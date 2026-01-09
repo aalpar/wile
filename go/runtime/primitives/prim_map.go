@@ -25,8 +25,8 @@ import (
 // PrimMap implements the (map) primitive.
 // Applies a procedure to elements of one or more lists and returns a list of results.
 func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
-	proc := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	listsVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	proc := mc.Arg(0)
+	listsVal := mc.Arg(1)
 
 	mcls, ok := proc.(*machine.MachineClosure)
 	if !ok {
@@ -85,10 +85,12 @@ func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Apply proc to collected arguments
-		if _, err := sub.Apply(mcls, args...); err != nil {
+		_, err := sub.Apply(mcls, args...)
+		if err != nil {
 			return err
 		}
-		if err := sub.Run(ctx); err != nil {
+		err = sub.Run(ctx)
+		if err != nil {
 			var escapeErr *machine.ErrContinuationEscape
 			if errors.As(err, &escapeErr) {
 				return err

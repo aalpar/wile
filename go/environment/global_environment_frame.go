@@ -17,9 +17,10 @@ package environment
 import (
 	"fmt"
 	"maps"
+	"slices"
+
 	"wile/syntax"
 	"wile/values"
-	"slices"
 )
 
 // GlobalIndex identifies a global binding by its symbol key.

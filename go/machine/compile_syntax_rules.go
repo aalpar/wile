@@ -33,6 +33,7 @@ package machine
 
 import (
 	"context"
+
 	"wile/environment"
 	"wile/match"
 	"wile/syntax"
@@ -150,54 +151,46 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 
 	// Compile each clause
 	var clauses []*SyntaxRulesClause
-	for current := clausesList; current != nil && !syntax.IsSyntaxEmptyList(current); {
-		clause := current.SyntaxCar()
-		if clause == nil {
-			return nil, values.NewForeignErrorf("syntax-rules: invalid clause")
-		}
-
+	v, err := clausesList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return nil, values.NewForeignErrorf("syntax-rules: clause must be a list")
+			return values.NewForeignErrorf("syntax-rules: clause must be a list")
 		}
 
 		// Extract pattern and template
-		pattern := clausePair.SyntaxCar().(syntax.SyntaxValue)
+		pattern := clausePair.SyntaxCar()
 		if pattern == nil {
-			return nil, values.NewForeignErrorf("syntax-rules: missing pattern in clause")
+			return values.NewForeignErrorf("syntax-rules: missing pattern in clause")
 		}
 
 		cdrVal := clausePair.SyntaxCdr()
 		if cdrVal == nil {
-			return nil, values.NewForeignErrorf("syntax-rules: missing template in clause")
+			return values.NewForeignErrorf("syntax-rules: missing template in clause")
 		}
 		templateCdr, ok := cdrVal.(*syntax.SyntaxPair)
 		if !ok {
-			return nil, values.NewForeignErrorf("syntax-rules: template must be in a list")
+			return values.NewForeignErrorf("syntax-rules: template must be in a list")
 		}
 
-		template := templateCdr.SyntaxCar().(syntax.SyntaxValue)
+		template := templateCdr.SyntaxCar()
 		if template == nil {
-			return nil, values.NewForeignErrorf("syntax-rules: missing template in clause")
+			return values.NewForeignErrorf("syntax-rules: missing template in clause")
 		}
 
 		// Compile the pattern
 		compiledClause, err := compileClause(ctx, pattern, template, literals)
 		if err != nil {
-			return nil, values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
+			return values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
 		}
 
 		clauses = append(clauses, compiledClause)
-
-		// Move to the next clause
-		currentCdr := current.SyntaxCdr()
-		if currentCdr == nil {
-			break
-		}
-		current, _ = currentCdr.(*syntax.SyntaxPair)
-		if current == nil {
-			break
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return nil, values.NewForeignErrorf("syntax-rules: expected proper list of clauses")
 	}
 
 	if len(clauses) == 0 {
@@ -268,16 +261,16 @@ func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(t) {
 			// Recurse into car
-			if car := t.SyntaxCar(); car != nil {
-				if carStx, ok := car.(syntax.SyntaxValue); ok {
-					collectFreeIdentifiers(carStx, patternVars, freeIds)
-				}
+			car := t.SyntaxCar()
+			if car != nil {
+				carStx := car
+				collectFreeIdentifiers(carStx, patternVars, freeIds)
 			}
 			// Recurse into cdr
-			if cdr := t.SyntaxCdr(); cdr != nil {
-				if cdrStx, ok := cdr.(syntax.SyntaxValue); ok {
-					collectFreeIdentifiers(cdrStx, patternVars, freeIds)
-				}
+			cdr := t.SyntaxCdr()
+			if cdr != nil {
+				cdrStx := cdr
+				collectFreeIdentifiers(cdrStx, patternVars, freeIds)
 			}
 		}
 
@@ -305,14 +298,15 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(p) {
 			// First element in a form is considered a keyword
-			err := collectPatternVariables(p.Car().(syntax.SyntaxValue), literals, isFirst, variables)
+			err := collectPatternVariables(p.SyntaxCar(), literals, isFirst, variables)
 			if err != nil {
 				return err
 			}
 
 			// Rest of the form
-			if cdr := p.SyntaxCdr(); cdr != nil {
-				err = collectPatternVariables(cdr.(syntax.SyntaxValue), literals, false, variables)
+			cdr := p.SyntaxCdr()
+			if cdr != nil {
+				err = collectPatternVariables(cdr, literals, false, variables)
 				if err != nil {
 					return err
 				}
@@ -332,35 +326,26 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 
 // extractLiterals extracts literal symbols from the literals list
 func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct{}) error {
-	for current := literalsList; current != nil && !syntax.IsSyntaxEmptyList(current); {
-		literal := current.SyntaxCar()
-		if literal == nil {
-			return values.NewForeignErrorf("invalid literal")
-		}
-
+	v, err := literalsList.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {
 		sym, ok := literal.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.NewForeignErrorf("literal must be a symbol")
+			return values.NewForeignErrorf("extractLiterals: literal must be a symbol")
 		}
 
 		symVal := sym.Unwrap()
 		if symbol, ok := symVal.(*values.Symbol); ok {
 			literals[symbol.Key] = struct{}{}
 		} else {
-			return values.NewForeignErrorf("literal must be a symbol")
+			return values.NewForeignErrorf("extractLiterals: literal must be a symbol")
 		}
-
-		// Move to next literal
-		cdr := current.SyntaxCdr()
-		if cdr == nil {
-			break
-		}
-		current, _ = cdr.(*syntax.SyntaxPair)
-		if current == nil {
-			break
-		}
+		return nil
+	})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "extractLiterals: literals must be a symbol")
 	}
-
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.NewForeignErrorf("extractLiterals: literals must be a list")
+	}
 	return nil
 }
 

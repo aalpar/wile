@@ -28,12 +28,15 @@ var (
 	ArrayListEmptyList = NewArrayList(nil, nil)
 )
 
+// ArrayList represents a mutable list backed by a slice.
 type ArrayList []Value
 
+// Datum returns the underlying slice.
 func (p *ArrayList) Datum() []Value {
 	return *p
 }
 
+// AsVector converts the ArrayList to a Vector.
 func (p *ArrayList) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
@@ -44,11 +47,13 @@ func (p *ArrayList) AsVector() *Vector {
 	return q
 }
 
+// NewArrayList creates a new ArrayList from the given values.
 func NewArrayList(vs ...Value) *ArrayList {
 	q := (ArrayList)(slices.Clone(vs))
 	return &q
 }
 
+// Append adds a value to the list and returns a new ArrayList.
 func (p *ArrayList) Append(vs Value) Value {
 	if IsVoid(p) {
 		panic(ErrNotAList)
@@ -67,6 +72,7 @@ func (p *ArrayList) Append(vs Value) Value {
 	return q
 }
 
+// AppendList appends another list to this ArrayList.
 func (p *ArrayList) AppendList(o Value) *ArrayList {
 	if IsVoid(p) {
 		panic(ErrNotAList)
@@ -83,14 +89,15 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 			// FIXME: this is a bit ugly
 			if len(*vs) == 0 {
 				return q
-			} else if len(*vs) == 1 && (*vs)[0] == EmptyList {
-				return q
-			} else if len(*vs) == 2 && IsVoid((*vs)[0]) && IsVoid((*vs)[1]) {
-				return q
-			} else {
-				*q = (*q)[:len(*q)-1]
-				*q = append(*q, (*vs)[:len(*vs)]...)
 			}
+			if len(*vs) == 1 && (*vs)[0] == EmptyList {
+				return q
+			}
+			if len(*vs) == 2 && IsVoid((*vs)[0]) && IsVoid((*vs)[1]) {
+				return q
+			}
+			*q = (*q)[:len(*q)-1]
+			*q = append(*q, (*vs)[:len(*vs)]...)
 		}
 	case *Pair:
 		for v0 := vs; !v0.IsEmptyList(); {
@@ -112,15 +119,18 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 	return q
 }
 
+// Car returns the first element of this ArrayList.
 func (p *ArrayList) Car() Value {
 	return (*p)[0]
 }
 
+// Cdr returns all but the first element of this ArrayList.
 func (p *ArrayList) Cdr() Value {
 	q := (*p)[1:]
 	return &q
 }
 
+// IsList returns true if this ArrayList represents a proper list.
 func (p *ArrayList) IsList() bool {
 	// FIXME: ugly
 	if p == nil {
@@ -138,7 +148,8 @@ func (p *ArrayList) IsList() bool {
 	return (*p)[len(*p)-1] == EmptyList
 }
 
-func (p *ArrayList) Length() int {
+// Len returns the number of elements in this ArrayList.
+func (p *ArrayList) Len() int {
 	if !p.IsList() {
 		panic(ErrNotAList)
 	}
@@ -148,6 +159,7 @@ func (p *ArrayList) Length() int {
 	return len(*p) - 1
 }
 
+// IsEmptyList returns true if this ArrayList represents an empty list.
 func (p *ArrayList) IsEmptyList() bool {
 	if p == nil {
 		return false
@@ -161,6 +173,7 @@ func (p *ArrayList) IsEmptyList() bool {
 	return false
 }
 
+// IsVoid returns true if this ArrayList is void.
 func (p *ArrayList) IsVoid() bool {
 	if p == nil {
 		return true
@@ -174,6 +187,7 @@ func (p *ArrayList) IsVoid() bool {
 	return false
 }
 
+// ForEach iterates over each element in this ArrayList.
 func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return EmptyList, nil
@@ -188,6 +202,7 @@ func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) 
 	return EmptyList, nil
 }
 
+// AsList converts this ArrayList to a Pair-based list.
 func (p *ArrayList) AsList() Value {
 	if IsVoid(p) {
 		return nil
@@ -210,6 +225,7 @@ func (p *ArrayList) AsList() Value {
 	return q
 }
 
+// EqualTo returns true if this ArrayList equals another value.
 func (p *ArrayList) EqualTo(o Value) bool {
 	if p == nil || o == nil {
 		return p == o
@@ -235,6 +251,7 @@ func (p *ArrayList) EqualTo(o Value) bool {
 	return true
 }
 
+// Copy returns a shallow copy of this ArrayList.
 func (p *ArrayList) Copy() *ArrayList {
 	if p == nil {
 		return nil
@@ -245,6 +262,7 @@ func (p *ArrayList) Copy() *ArrayList {
 	return q
 }
 
+// SchemeString returns the Scheme representation of this ArrayList.
 func (p *ArrayList) SchemeString() string {
 	if p == nil || len(*p) == 0 {
 		return "#<void>"

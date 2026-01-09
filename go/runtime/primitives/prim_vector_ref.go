@@ -24,8 +24,8 @@ import (
 // PrimVectorRef implements the vector-ref primitive.
 // Returns the element of a vector at the given index.
 func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
 	v, ok := o.(*values.Vector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-ref: expected a vector but got %T", o)

@@ -14,6 +14,8 @@
 
 package environment
 
+// Environment is the interface for environment frames that support
+// parent traversal and binding storage.
 type Environment interface {
 	Parent() Environment
 	Values() []*Binding
@@ -21,6 +23,8 @@ type Environment interface {
 	Keys() map[string]int
 }
 
+// EnvironmentNavigation is the interface for navigating between
+// environment frames, including meta phases and local/global scopes.
 type EnvironmentNavigation interface {
 	Meta()
 	Parent() Environment

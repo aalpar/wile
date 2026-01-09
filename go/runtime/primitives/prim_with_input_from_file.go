@@ -16,7 +16,6 @@ package primitives
 
 import (
 	"context"
-	"errors"
 	"os"
 
 	"wile/machine"
@@ -27,9 +26,10 @@ import (
 // Opens a file for reading, temporarily sets it as current-input-port,
 // calls the thunk, then restores the previous port and closes the file.
 // (with-input-from-file string thunk)
+// TODO: code here looks duplicated among the I/O primitives; refactor common parts
 func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) error {
-	filenameVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	thunkVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	filenameVal := mc.Arg(0)
+	thunkVal := mc.Arg(1)
 
 	filename, ok := filenameVal.(*values.String)
 	if !ok {
@@ -46,7 +46,7 @@ func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) erro
 	if err != nil {
 		return values.WrapForeignErrorf(err, "with-input-from-file: %v", err)
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	// Save current port and set new one
 	savedPort := GetCurrentInputPort()
@@ -54,22 +54,5 @@ func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) erro
 	SetCurrentInputPort(newPort)
 	defer SetCurrentInputPort(savedPort)
 
-	// Call thunk in sub-context
-	sub := mc.NewSubContext()
-	if _, err := sub.Apply(thunk); err != nil {
-		return err
-	}
-	if err := sub.Run(ctx); err != nil {
-		// Propagate continuation escapes
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
-	}
-
-	mc.SetValue(sub.GetValue())
-	return nil
+	return duplicated1(ctx, mc, thunk)
 }

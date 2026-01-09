@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
@@ -24,6 +25,7 @@ var (
 	_ SyntaxValue  = (*SyntaxObject)(nil)
 )
 
+// ScopeID is a unique identifier for a scope in the hygiene system.
 type ScopeID int64
 
 // Scope represents a single scope in the syntax object.
@@ -60,8 +62,9 @@ func NewSyntaxNil(sctx *SourceContext) *SyntaxPair {
 	return NewSyntaxEmptyList(sctx)
 }
 
+// SyntaxObject wraps a non-compound Scheme value with source context.
 type SyntaxObject struct {
-	Datum         values.Value
+	datum         values.Value
 	sourceContext *SourceContext
 }
 
@@ -69,16 +72,21 @@ type SyntaxObject struct {
 // It panics if the value is already a syntax value to prevent double-wrapping.
 func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 	switch v.(type) {
-	case *SyntaxObject, *SyntaxVector, *SyntaxPair, *SyntaxSymbol:
-		panic(fmt.Sprintf("cannot wrap a %T in another SyntaxObject", v))
-	case *values.Vector, *values.Pair, *values.Symbol:
-		panic(fmt.Sprintf("cannot wrap a %T in another SyntaxObject", v))
+	case *SyntaxObject, *SyntaxVector, *SyntaxPair, *SyntaxSymbol: // prevent double-wrapping
+		panic(values.NewForeignErrorf("cannot wrap a %T in another SyntaxObject", v))
+	case *values.Vector, *values.Pair, *values.Symbol: // special types for these - SyntaxVector, SyntaxPair, SyntaxSymbol
+		panic(values.NewForeignErrorf("cannot wrap a %T in another SyntaxObject", v))
 	}
 	q := &SyntaxObject{
-		Datum:         v,
+		datum:         v,
 		sourceContext: sctx,
 	}
 	return q
+}
+
+// Datum returns the underlying datum of the syntax object.
+func (p *SyntaxObject) Datum() values.Value {
+	return p.datum
 }
 
 // AddScope returns a new SyntaxObject with an additional scope.
@@ -86,14 +94,14 @@ func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 // Returns SyntaxValue interface to support recursive scope propagation.
 func (p *SyntaxObject) AddScope(scope *Scope) SyntaxValue {
 	// If the datum is a syntax value, recursively add scope to it
-	var newDatum = p.Datum
-	if stx, ok := p.Datum.(SyntaxValue); ok {
+	newDatum := p.Datum()
+	if stx, ok := p.Datum().(SyntaxValue); ok {
 		if adder, ok := stx.(interface{ AddScope(*Scope) SyntaxValue }); ok {
 			newDatum = adder.AddScope(scope)
 		}
 	}
 	return &SyntaxObject{
-		Datum:         newDatum,
+		datum:         newDatum,
 		sourceContext: p.sourceContext.WithScope(scope),
 	}
 }
@@ -106,8 +114,9 @@ func (p *SyntaxObject) Scopes() []*Scope {
 	return p.sourceContext.Scopes
 }
 
+// UnwrapAll recursively unwraps all syntax wrappers and returns the underlying value.
 func (p *SyntaxObject) UnwrapAll() values.Value {
-	switch v := p.Datum.(type) {
+	switch v := p.Datum().(type) {
 	case SyntaxValue:
 		return v.UnwrapAll()
 	}
@@ -115,16 +124,18 @@ func (p *SyntaxObject) UnwrapAll() values.Value {
 }
 
 func (p *SyntaxObject) Unwrap() values.Value {
-	return p.Datum
+	return p.datum
 }
 
+// IsPair returns true if the wrapped datum is a pair.
 func (p *SyntaxObject) IsPair() bool {
-	_, ok := p.Datum.(*values.Pair)
+	_, ok := p.Datum().(*values.Pair)
 	return ok
 }
 
+// IsEmptyList returns true if the wrapped datum is the empty list.
 func (p *SyntaxObject) IsEmptyList() bool {
-	q, ok := p.Datum.(*values.Pair)
+	q, ok := p.Datum().(*values.Pair)
 	if !ok {
 		return false
 	}
@@ -134,16 +145,19 @@ func (p *SyntaxObject) IsEmptyList() bool {
 	return true
 }
 
+// SourceContext returns the source context of the syntax object.
 func (p *SyntaxObject) SourceContext() *SourceContext {
 	return p.sourceContext
 }
 
+// IsVoid returns true if the syntax object is nil.
 func (p *SyntaxObject) IsVoid() bool {
 	return p == nil
 }
 
+// SchemeString returns the Scheme representation of the syntax object.
 func (p *SyntaxObject) SchemeString() string {
-	return fmt.Sprintf("#'%s", p.Datum.SchemeString())
+	return fmt.Sprintf("#'%s", p.Datum().SchemeString())
 }
 
 // EqualTo performs pointer comparison only, matching Chez Scheme/Racket behavior.

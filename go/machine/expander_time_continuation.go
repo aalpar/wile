@@ -54,9 +54,9 @@ import (
 // The env field provides access to macro definitions (BindingTypeSyntax bindings).
 type ExpanderTimeContinuation struct {
 	env *environment.EnvironmentFrame
-	mc  *MachineContext // Used to run transformer closures
 }
 
+// NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
 func NewExpanderTimeContinuation(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
 		env: env,
@@ -64,6 +64,7 @@ func NewExpanderTimeContinuation(env *environment.EnvironmentFrame) *ExpanderTim
 	return q
 }
 
+// ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	switch stx := expr.(type) {
 	case *syntax.SyntaxPair:
@@ -71,14 +72,8 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, 
 		if syntax.IsSyntaxEmptyList(stx) {
 			return stx, nil
 		}
-		car, ok := stx.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return nil, fmt.Errorf("expected a syntax value in list expression, got %T", stx.SyntaxCar())
-		}
-		cdr, ok := stx.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok {
-			return nil, fmt.Errorf("expected a list expression expansion, got %T", stx.SyntaxCdr())
-		}
+		car := stx.SyntaxCar()
+		cdr := stx.SyntaxCdr().(*syntax.SyntaxPair)
 		return p.ExpandSyntaxOrProcedureCall(ectx, car, cdr)
 	case *syntax.SyntaxSymbol:
 		return p.ExpandSymbol(ectx, stx)
@@ -89,7 +84,8 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, 
 	return p.ExpandSelfEvaluating(ectx, expr)
 }
 
-func (p *ExpanderTimeContinuation) ExpandSymbol(ectx ExpandTimeCallContext, expr *syntax.SyntaxSymbol) (syntax.SyntaxValue, error) {
+// ExpandSymbol handles a symbol expression.
+func (p *ExpanderTimeContinuation) ExpandSymbol(_ ExpandTimeCallContext, expr *syntax.SyntaxSymbol) (syntax.SyntaxValue, error) {
 	return expr, nil
 }
 
@@ -125,7 +121,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(ectx ExpandTimeCa
 	}
 }
 
-func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+// ExpandSelfEvaluating handles self-evaluating expressions.
+func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(_ ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return expr, nil
 }
 
@@ -140,7 +137,8 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(ectx ExpandTimeCallContex
 	symVal := p.env.InternSymbol(values.NewSymbol(primName))
 	scopes := sym.Scopes()
 
-	if pe := LookupPrimitiveExpander(p.env, symVal, scopes); pe != nil {
+	pe := LookupPrimitiveExpander(p.env, symVal, scopes)
+	if pe != nil {
 		return pe.Expand(p, ectx, sym, expr)
 	}
 	// Unknown primitive - return unchanged (safe default)
@@ -148,74 +146,74 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(ectx ExpandTimeCallContex
 }
 
 // expandQuote returns the form unchanged - quote should not expand its argument.
-func (p *ExpanderTimeContinuation) expandQuote(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandQuote(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandDefineSyntax returns the form unchanged - define-syntax should not expand the transformer.
-func (p *ExpanderTimeContinuation) expandDefineSyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandDefineSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandQuasiquote returns the form unchanged.
 // TODO: quasiquote has special expansion rules (only unquote parts).
-func (p *ExpanderTimeContinuation) expandQuasiquote(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandQuasiquote(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandUnquote returns the form unchanged - only valid inside quasiquote.
-func (p *ExpanderTimeContinuation) expandUnquote(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandUnquote(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandUnquoteSplicing returns the form unchanged - only valid inside quasiquote.
-func (p *ExpanderTimeContinuation) expandUnquoteSplicing(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandUnquoteSplicing(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandInclude returns the form unchanged - files are read at compile time.
-func (p *ExpanderTimeContinuation) expandInclude(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandInclude(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandIncludeCi returns the form unchanged - files are read at compile time.
-func (p *ExpanderTimeContinuation) expandIncludeCi(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandIncludeCi(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandCondExpand returns the form unchanged - feature requirements use and/or/not
 // which are NOT macros in this context, but special syntax.
-func (p *ExpanderTimeContinuation) expandCondExpand(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandCondExpand(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandSyntaxForm returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandSyntaxForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandSyntaxForm(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandSyntaxCase returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandSyntaxCase(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandSyntaxCase(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandQuasisyntax returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandQuasisyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandQuasisyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandUnsyntax returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandUnsyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandUnsyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandUnsyntaxSplicing returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandUnsyntaxSplicing(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandUnsyntaxSplicing(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
 // expandWithSyntax returns the form unchanged - compile-time form.
-func (p *ExpanderTimeContinuation) expandWithSyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandWithSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
@@ -240,10 +238,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ectx ExpandTimeCallContext, sym 
 
 	// Expand test
 	test := pair.SyntaxCar()
-	testStx, ok := test.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("if: invalid test expression")
-	}
+	testStx := test
 	expandedTest, err := p.ExpandExpression(ectx, testStx)
 	if err != nil {
 		return nil, fmt.Errorf("if: failed to expand test: %w", err)
@@ -257,7 +252,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ectx ExpandTimeCallContext, sym 
 	}
 
 	conseq := cdrPair.SyntaxCar()
-	conseqStx, ok := conseq.(syntax.SyntaxValue)
+	conseqStx := conseq
 	if !ok {
 		return nil, fmt.Errorf("if: invalid consequent expression")
 	}
@@ -278,10 +273,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ectx ExpandTimeCallContext, sym 
 
 	// Expand alternative
 	alt := altPair.SyntaxCar()
-	altStx, ok := alt.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("if: invalid alternative expression")
-	}
+	altStx := alt
 	expandedAlt, err := p.ExpandExpression(ectx, altStx)
 	if err != nil {
 		return nil, fmt.Errorf("if: failed to expand alternative: %w", err)
@@ -301,11 +293,7 @@ func (p *ExpanderTimeContinuation) expandSetForm(ectx ExpandTimeCallContext, sym
 
 	// Keep variable unchanged
 	varExpr := pair.SyntaxCar()
-	varStx, ok := varExpr.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("set!: invalid variable")
-	}
-
+	varStx := varExpr
 	// Expand value
 	cdrVal := pair.SyntaxCdr()
 	cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
@@ -314,10 +302,7 @@ func (p *ExpanderTimeContinuation) expandSetForm(ectx ExpandTimeCallContext, sym
 	}
 
 	value := cdrPair.SyntaxCar()
-	valueStx, ok := value.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("set!: invalid value expression")
-	}
+	valueStx := value
 	expandedValue, err := p.ExpandExpression(ectx, valueStx)
 	if err != nil {
 		return nil, fmt.Errorf("set!: failed to expand value: %w", err)
@@ -336,11 +321,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 	}
 
 	first := pair.SyntaxCar()
-	firstStx, ok := first.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("define: invalid first argument")
-	}
-
+	firstStx := first
 	cdrVal := pair.SyntaxCdr()
 	cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
@@ -348,7 +329,8 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 	}
 
 	// Check if it's a function definition (define (name args...) body...)
-	if _, isSymbol := first.(*syntax.SyntaxSymbol); !isSymbol {
+	_, isSymbol := first.(*syntax.SyntaxSymbol)
+	if !isSymbol {
 		// Function definition - first is (name args...)
 		// Expand the body expressions
 		expandedBody, err := p.ExpandSyntaxArgumentList(ectx, cdrPair)
@@ -361,10 +343,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 
 	// Simple definition (define var value)
 	value := cdrPair.SyntaxCar()
-	valueStx, ok := value.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("define: invalid value expression")
-	}
+	valueStx := value
 	expandedValue, err := p.ExpandExpression(ectx, valueStx)
 	if err != nil {
 		return nil, fmt.Errorf("define: failed to expand value: %w", err)
@@ -384,11 +363,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 
 	// Keep formals unchanged
 	formals := pair.SyntaxCar()
-	formalsStx, ok := formals.(syntax.SyntaxValue)
-	if !ok {
-		return nil, fmt.Errorf("lambda: invalid formals")
-	}
-
+	formalsStx := formals
 	// Expand body
 	cdrVal := pair.SyntaxCdr()
 	cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
@@ -418,11 +393,7 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ectx ExpandTimeCallConte
 	current := pair
 	for !syntax.IsSyntaxEmptyList(current) {
 		clauseVal := current.SyntaxCar()
-		clauseStx, ok := clauseVal.(syntax.SyntaxValue)
-		if !ok {
-			return nil, fmt.Errorf("case-lambda: invalid clause")
-		}
-
+		clauseStx := clauseVal
 		// Each clause is (formals body...)
 		clausePair, ok := clauseStx.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(clausePair) {
@@ -431,11 +402,7 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ectx ExpandTimeCallConte
 		} else {
 			// Keep formals unchanged
 			formals := clausePair.SyntaxCar()
-			formalsStx, ok := formals.(syntax.SyntaxValue)
-			if !ok {
-				return nil, fmt.Errorf("case-lambda: invalid formals in clause")
-			}
-
+			formalsStx := formals
 			// Expand body
 			cdrVal := clausePair.SyntaxCdr()
 			cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
@@ -504,12 +471,14 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		// First check for compile-time primitives that don't have runtime bindings
 		// Check for primitive expander in the Expand environment
 		symVal := p.env.InternSymbol(sym0)
-		if pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes()); pe != nil {
+		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
+		if pe != nil {
 			return pe.Expand(p, ectx, sym, expr)
 		}
 
 		// Regular procedure call - expand arguments (they might contain macro calls)
-		if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) {
+		exprPair, ok := expr.(*syntax.SyntaxPair)
+		if ok && !syntax.IsSyntaxEmptyList(exprPair) {
 			expandedArgs, err := p.ExpandSyntaxArgumentList(ectx, exprPair)
 			if err != nil {
 				return nil, fmt.Errorf("failed to expand arguments: %w", err)
@@ -546,7 +515,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return nil, err
 	}
 	// Check if the transformer produced a result
-	if mc.value == nil || len(mc.value) == 0 {
+	if len(mc.value) == 0 {
 		return nil, fmt.Errorf("syntax transformer produced no result")
 	}
 	// The transformer should return the expanded syntax
@@ -559,7 +528,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 	// The expanded result may itself contain macro invocations (especially for
 	// recursive macros like `and`, `or`, `let*`, etc.), so we must recursively
 	// expand it.
-	if stx, ok := result.(syntax.SyntaxValue); ok {
+	stx, ok := result.(syntax.SyntaxValue)
+	if ok {
 		// Recursively expand the result to handle nested macro calls
 		return p.ExpandExpression(ectx, stx)
 	}
@@ -571,7 +541,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 // If the input is a macro call, it expands it once and returns (result, true, nil).
 // If the input is not a macro call, it returns (input, false, nil).
 // Unlike ExpandExpression, this does NOT recursively expand the result.
-func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	// Only pairs can be macro calls
 	stxPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -584,11 +554,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr s
 	}
 
 	// Check if the car is a symbol
-	car, ok := stxPair.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return expr, false, nil
-	}
-
+	car := stxPair.SyntaxCar()
 	sym, ok := car.(*syntax.SyntaxSymbol)
 	if !ok {
 		return expr, false, nil
@@ -640,7 +606,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr s
 	}
 
 	// Check if the transformer produced a result
-	if mc.value == nil || len(mc.value) == 0 {
+	if len(mc.value) == 0 {
 		return nil, false, fmt.Errorf("syntax transformer produced no result")
 	}
 
@@ -650,7 +616,8 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr s
 	}
 
 	// Return the result WITHOUT recursive expansion
-	if stx, ok := result.(syntax.SyntaxValue); ok {
+	stx, ok := result.(syntax.SyntaxValue)
+	if ok {
 		return stx, true, nil
 	}
 
@@ -667,7 +634,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ccnt ExpandTimeCallC
 	// if any error, return error
 	// if not a proper list, return error
 	// finally return the new list
-	tail, err := syntax.SyntaxForEach(nil, args, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(context.TODO(), args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		v0, err := p.ExpandExpression(ccnt, v)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to expand argument list")
@@ -688,11 +655,11 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ccnt ExpandTimeCallC
 }
 
 // ExpandQuasiquote handles the expansion of quasiquoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuasiquote(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandQuasiquote(_ ExpandTimeCallContext, _ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return nil, nil
 }
 
 // ExpandQuote handles the expansion of quoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuote(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandQuote(_ ExpandTimeCallContext, _ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return nil, nil
 }

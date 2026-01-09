@@ -15,27 +15,24 @@
 package primitives
 
 import (
-	"context"
-	"math"
-
 	"wile/machine"
+	"wile/utils"
 	"wile/values"
 )
 
-// PrimTruncate implements the truncate primitive.
-// Truncates a number toward zero, removing any fractional part.
-func PrimTruncate(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(v)
-	case *values.Float:
-		mc.SetValue(values.NewFloat(math.Trunc(v.Value)))
-	case *values.Rational:
-		f := v.Float64()
-		mc.SetValue(values.NewFloat(math.Trunc(f)))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate: expected a real number but got %T", o)
+// charCompare is a helper for character comparison primitives.
+// It extracts two characters from local bindings and applies the comparator.
+func charCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
+	c1 := mc.Arg(0)
+	c2 := mc.Arg(1)
+	ch1, ok := c1.(*values.Character)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
 	}
+	ch2, ok := c2.(*values.Character)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c2)
+	}
+	mc.SetValue(utils.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
 	return nil
 }

@@ -43,8 +43,9 @@ func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 
 // 2-level CxR accessors (caar through cddr)
 
+// PrimCaar implements the Scheme caar primitive.
 func PrimCaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caar", "aa", o)
 	if err != nil {
 		return err
@@ -53,8 +54,9 @@ func PrimCaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCadr implements the Scheme cadr primitive.
 func PrimCadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cadr", "ad", o)
 	if err != nil {
 		return err
@@ -63,8 +65,9 @@ func PrimCadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdar implements the Scheme cdar primitive.
 func PrimCdar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdar", "da", o)
 	if err != nil {
 		return err
@@ -73,8 +76,9 @@ func PrimCdar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCddr implements the Scheme cddr primitive.
 func PrimCddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cddr", "dd", o)
 	if err != nil {
 		return err
@@ -85,8 +89,9 @@ func PrimCddr(_ context.Context, mc *machine.MachineContext) error {
 
 // 3-level CxR accessors (caaar through cdddr)
 
+// PrimCaaar implements the Scheme caaar primitive.
 func PrimCaaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caaar", "aaa", o)
 	if err != nil {
 		return err
@@ -95,8 +100,9 @@ func PrimCaaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaadr implements the Scheme caadr primitive.
 func PrimCaadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caadr", "aad", o)
 	if err != nil {
 		return err
@@ -105,8 +111,9 @@ func PrimCaadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCadar implements the Scheme cadar primitive.
 func PrimCadar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cadar", "ada", o)
 	if err != nil {
 		return err
@@ -115,8 +122,9 @@ func PrimCadar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaddr implements the Scheme caddr primitive.
 func PrimCaddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caddr", "add", o)
 	if err != nil {
 		return err
@@ -125,8 +133,9 @@ func PrimCaddr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdaar implements the Scheme cdaar primitive.
 func PrimCdaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdaar", "daa", o)
 	if err != nil {
 		return err
@@ -135,8 +144,9 @@ func PrimCdaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdadr implements the Scheme cdadr primitive.
 func PrimCdadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdadr", "dad", o)
 	if err != nil {
 		return err
@@ -145,8 +155,9 @@ func PrimCdadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCddar implements the Scheme cddar primitive.
 func PrimCddar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cddar", "dda", o)
 	if err != nil {
 		return err
@@ -155,8 +166,9 @@ func PrimCddar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdddr implements the Scheme cdddr primitive.
 func PrimCdddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdddr", "ddd", o)
 	if err != nil {
 		return err
@@ -167,8 +179,9 @@ func PrimCdddr(_ context.Context, mc *machine.MachineContext) error {
 
 // 4-level CxR accessors (caaaar through cddddr)
 
+// PrimCaaaar implements the Scheme caaaar primitive.
 func PrimCaaaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caaaar", "aaaa", o)
 	if err != nil {
 		return err
@@ -177,8 +190,9 @@ func PrimCaaaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaaadr implements the Scheme caaadr primitive.
 func PrimCaaadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caaadr", "aaad", o)
 	if err != nil {
 		return err
@@ -187,8 +201,9 @@ func PrimCaaadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaadar implements the Scheme caadar primitive.
 func PrimCaadar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caadar", "aada", o)
 	if err != nil {
 		return err
@@ -197,8 +212,9 @@ func PrimCaadar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaaddr implements the Scheme caaddr primitive.
 func PrimCaaddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caaddr", "aadd", o)
 	if err != nil {
 		return err
@@ -207,8 +223,9 @@ func PrimCaaddr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCadaar implements the Scheme cadaar primitive.
 func PrimCadaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cadaar", "adaa", o)
 	if err != nil {
 		return err
@@ -217,8 +234,9 @@ func PrimCadaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCadadr implements the Scheme cadadr primitive.
 func PrimCadadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cadadr", "adad", o)
 	if err != nil {
 		return err
@@ -227,8 +245,9 @@ func PrimCadadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCaddar implements the Scheme caddar primitive.
 func PrimCaddar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("caddar", "adda", o)
 	if err != nil {
 		return err
@@ -237,8 +256,9 @@ func PrimCaddar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCadddr implements the Scheme cadddr primitive.
 func PrimCadddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cadddr", "addd", o)
 	if err != nil {
 		return err
@@ -247,8 +267,9 @@ func PrimCadddr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdaaar implements the Scheme cdaaar primitive.
 func PrimCdaaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdaaar", "daaa", o)
 	if err != nil {
 		return err
@@ -257,8 +278,9 @@ func PrimCdaaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdaadr implements the Scheme cdaadr primitive.
 func PrimCdaadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdaadr", "daad", o)
 	if err != nil {
 		return err
@@ -267,8 +289,9 @@ func PrimCdaadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdadar implements the Scheme cdadar primitive.
 func PrimCdadar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdadar", "dada", o)
 	if err != nil {
 		return err
@@ -277,8 +300,9 @@ func PrimCdadar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdaddr implements the Scheme cdaddr primitive.
 func PrimCdaddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdaddr", "dadd", o)
 	if err != nil {
 		return err
@@ -287,8 +311,9 @@ func PrimCdaddr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCddaar implements the Scheme cddaar primitive.
 func PrimCddaar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cddaar", "ddaa", o)
 	if err != nil {
 		return err
@@ -297,8 +322,9 @@ func PrimCddaar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCddadr implements the Scheme cddadr primitive.
 func PrimCddadr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cddadr", "ddad", o)
 	if err != nil {
 		return err
@@ -307,8 +333,9 @@ func PrimCddadr(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCdddar implements the Scheme cdddar primitive.
 func PrimCdddar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cdddar", "ddda", o)
 	if err != nil {
 		return err
@@ -317,8 +344,9 @@ func PrimCdddar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCddddr implements the Scheme cddddr primitive.
 func PrimCddddr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, err := cxrHelper("cddddr", "dddd", o)
 	if err != nil {
 		return err

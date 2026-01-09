@@ -26,8 +26,8 @@ import (
 // PrimExpt implements the (expt) primitive.
 // Returns base raised to the exponent power.
 func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
-	base := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	exp := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	base := mc.Arg(0)
+	exp := mc.Arg(1)
 	baseNum, ok := base.(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "expt: expected a number but got %T", base)

@@ -15,8 +15,9 @@
 package machine
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -40,10 +41,10 @@ func TestMultipleValues_Length(t *testing.T) {
 		values.NewInteger(2),
 	)
 
-	qt.Assert(t, mv.Length(), qt.Equals, 2)
+	qt.Assert(t, mv.Len(), qt.Equals, 2)
 
 	empty := NewMultipleValues()
-	qt.Assert(t, empty.Length(), qt.Equals, 0)
+	qt.Assert(t, empty.Len(), qt.Equals, 0)
 }
 
 func TestMultipleValues_Copy(t *testing.T) {
@@ -54,7 +55,7 @@ func TestMultipleValues_Copy(t *testing.T) {
 
 	cp := mv.Copy()
 
-	qt.Assert(t, cp.Length(), qt.Equals, 2)
+	qt.Assert(t, cp.Len(), qt.Equals, 2)
 	qt.Assert(t, cp[0], values.SchemeEquals, values.NewInteger(1))
 	qt.Assert(t, cp[1], values.SchemeEquals, values.NewInteger(2))
 	// Verify it's a different slice

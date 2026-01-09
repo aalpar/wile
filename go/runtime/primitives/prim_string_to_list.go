@@ -24,7 +24,7 @@ import (
 // PrimStringToList implements the string->list primitive.
 // Converts a string to a list of characters.
 func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	s, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string->list: expected a string but got %T", o)

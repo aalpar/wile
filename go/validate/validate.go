@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/forms"
 	"wile/syntax"
 	"wile/values"
@@ -67,7 +68,8 @@ func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
 			// Look up the form in the registry
-			if spec := forms.Lookup(symVal.Key); spec != nil && spec.Validate != nil {
+			spec := forms.Lookup(symVal.Key)
+			if spec != nil && spec.Validate != nil {
 				validated := spec.Validate(ctx, pair, result)
 				if validated == nil {
 					return nil
@@ -78,7 +80,7 @@ func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 	}
 
 	// Not a special form - it's a function call
-	return validateCall(nil, pair, result)
+	return validateCall(context.TODO(), pair, result)
 }
 
 // collectList converts a syntax list to a slice of elements.

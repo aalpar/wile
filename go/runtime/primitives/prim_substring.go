@@ -24,9 +24,9 @@ import (
 // PrimSubstring implements the substring primitive.
 // Returns a substring between the given start and end indices.
 func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	start := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	end := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
+	o := mc.Arg(0)
+	start := mc.Arg(1)
+	end := mc.Arg(2)
 	s, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "substring: expected a string but got %T", o)

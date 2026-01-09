@@ -19,9 +19,9 @@ import (
 	"os"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestDeleteFile(t *testing.T) {

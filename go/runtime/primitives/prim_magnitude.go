@@ -26,7 +26,7 @@ import (
 // PrimMagnitude implements the (magnitude) primitive.
 // Returns the magnitude (absolute value) of a complex number.
 func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))

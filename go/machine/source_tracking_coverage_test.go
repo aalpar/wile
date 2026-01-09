@@ -16,12 +16,13 @@ package machine
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"wile/environment"
 	"wile/parser"
 	"wile/syntax"
 	"wile/values"
-	"strings"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -546,8 +547,8 @@ func TestSourceRecording_Symbol(t *testing.T) {
 
 	// First define x
 	rdr := strings.NewReader("(define x 42)")
-	p := parser.NewParserWithFile(env, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(nil)
+	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
+	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := NewExpandTimeCallContext()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
@@ -556,8 +557,8 @@ func TestSourceRecording_Symbol(t *testing.T) {
 
 	// Now reference x
 	rdr = strings.NewReader("x")
-	p = parser.NewParserWithFile(env, rdr, "ref.scm")
-	stx, err := p.ReadSyntax(nil)
+	p = parser.NewParserWithFile(env,  true, rdr, "ref.scm")
+	stx, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -580,8 +581,8 @@ func TestSourceRecording_Literal(t *testing.T) {
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
 	rdr := strings.NewReader("42")
-	p := parser.NewParserWithFile(env, rdr, "literal.scm")
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParserWithFile(env, true, rdr, "literal.scm")
+	stx, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)

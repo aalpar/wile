@@ -19,14 +19,14 @@ import (
 	"io"
 )
 
-var (
-	_ Value = (*BinaryOutputPort)(nil)
-)
+var _ Value = (*BinaryOutputPort)(nil)
 
+// BinaryOutputPort represents a Scheme binary output port.
 type BinaryOutputPort struct {
 	Value io.Writer
 }
 
+// NewBinaryOutputPort creates a new binary output port wrapping the given writer.
 func NewBinaryOutputPort(wrt io.Writer) *BinaryOutputPort {
 	return &BinaryOutputPort{Value: wrt}
 }
@@ -35,14 +35,17 @@ func (p *BinaryOutputPort) Write(buf []byte) (int, error) {
 	return p.Value.Write(buf)
 }
 
+// Datum returns the underlying io.Writer.
 func (p *BinaryOutputPort) Datum() io.Writer {
 	return p.Value
 }
 
+// IsVoid returns true if the port is nil.
 func (p *BinaryOutputPort) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both ports wrap the same writer.
 func (p *BinaryOutputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*BinaryOutputPort); ok {
 		return p.Value == other.Value
@@ -50,6 +53,7 @@ func (p *BinaryOutputPort) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the port.
 func (p *BinaryOutputPort) SchemeString() string {
 	return fmt.Sprintf("<binary-output-port %p>", p.Value)
 }

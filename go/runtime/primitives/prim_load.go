@@ -29,7 +29,7 @@ import (
 // PrimLoad implements the (load) primitive.
 // Loads and evaluates a Scheme source file.
 func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
-	filenameVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	filenameVal := mc.Arg(0)
 	filename, ok := filenameVal.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "load: expected a string but got %T", filenameVal)
@@ -47,12 +47,12 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Create parser (which creates its own tokenizer internally)
 	rdr := bufio.NewReader(f)
-	p := parser.NewParser(env, rdr)
+	p := parser.NewParser(env, true, rdr)
 
 	// Read and evaluate each expression
-	var lastValue values.Value = values.Void
+	var lastValue = values.Void
 	for {
-		stx, err := p.ReadSyntax(nil)
+		stx, err := p.ReadSyntax(context.TODO())
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -78,7 +78,8 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		// Run the compiled code
 		cont := machine.NewMachineContinuation(nil, tpl, env)
 		sub := machine.NewMachineContext(cont)
-		if err := sub.Run(ctx); err != nil {
+		err = sub.Run(ctx)
+		if err != nil {
 			var escapeErr *machine.ErrContinuationEscape
 			if errors.As(err, &escapeErr) {
 				return err

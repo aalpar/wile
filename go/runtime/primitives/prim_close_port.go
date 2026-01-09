@@ -25,17 +25,19 @@ import (
 // PrimClosePort implements the (close-port) primitive.
 // Closes an input or output port.
 func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch p := o.(type) {
 	case *values.CharacterInputPort:
 		if closer, ok := p.Value.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+			err := closer.Close()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "close-port: %v", err)
 			}
 		}
 	case *values.CharacterOutputPort:
 		if closer, ok := p.Value.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+			err := closer.Close()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "close-port: %v", err)
 			}
 		}
@@ -49,13 +51,15 @@ func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
 		// Bytevector ports don't need closing, just no-op
 	case *values.BinaryInputPort:
 		if closer, ok := p.Value.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+			err := closer.Close()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "close-port: %v", err)
 			}
 		}
 	case *values.BinaryOutputPort:
 		if closer, ok := p.Value.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+			err := closer.Close()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "close-port: %v", err)
 			}
 		}

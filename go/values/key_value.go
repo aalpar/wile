@@ -14,11 +14,13 @@
 
 package values
 
+// KeyValue represents a key-value pair.
 type KeyValue struct {
 	Key   string
 	Value Value
 }
 
+// NewKeyValue creates a new key-value pair.
 func NewKeyValue(key string, value Value) *KeyValue {
 	return &KeyValue{
 		Key:   key,
@@ -26,6 +28,7 @@ func NewKeyValue(key string, value Value) *KeyValue {
 	}
 }
 
+// Datum returns the key-value as a map.
 func (p *KeyValue) Datum() map[string]Value {
 	return map[string]Value{p.Key: p.Value}
 }

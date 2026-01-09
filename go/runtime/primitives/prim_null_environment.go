@@ -25,7 +25,7 @@ import (
 // PrimNullEnvironment implements the null-environment primitive.
 // Returns an empty R5RS environment with no bindings.
 func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
-	version := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	version := mc.Arg(0)
 	versionInt, ok := version.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnInteger, "null-environment: expected an integer but got %T", version)

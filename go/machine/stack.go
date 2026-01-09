@@ -15,27 +15,32 @@
 package machine
 
 import (
-	"wile/values"
 	"slices"
 	"strings"
+
+	"wile/values"
 )
 
 type Stack values.Vector
 
+// NewStack creates a new stack with the given initial values.
 func NewStack(vs ...values.Value) *Stack {
 	return (*Stack)(&vs)
 }
 
+// Push adds a value to the top of the stack.
 func (p *Stack) Push(v values.Value) {
 	*p = append(*p, v)
 }
 
+// Pull removes and returns the bottom value from the stack.
 func (p *Stack) Pull() values.Value {
 	q := (*p)[0]
 	*p = (*p)[1:]
 	return q
 }
 
+// Pop removes and returns the top value from the stack.
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
 	if l == 0 {
@@ -63,70 +68,76 @@ func (p Stack) AsList() values.Tuple {
 	return result
 }
 
+// PushAll pushes all values from the slice onto the stack.
 func (p *Stack) PushAll(vs []values.Value) {
 	*p = append(*p, vs...)
 }
 
-func (s *Stack) PopAll() []values.Value {
-	q := s.Copy()
-	s.Clear()
+// PopAll removes and returns all values from the stack.
+func (p *Stack) PopAll() []values.Value {
+	q := p.Copy()
+	p.Clear()
 	return *q
 }
 
-func (s Stack) PeekK(i int) values.Value {
-	l := len(s)
-	v := (s)[l-(i+1)]
+// PeekK returns the kth value from the top of the stack without removing it.
+// `K` is zero-based, so PeekK(0) returns the top value. `K` is used for methods that need a numeric index.
+func (p Stack) PeekK(i int) values.Value {
+	l := len(p)
+	v := (p)[l-(i+1)]
 	return v
 }
 
-func (s Stack) Copy() *Stack {
-	newStack := slices.Clone(s)
+// Copy creates a shallow copy of the stack.
+func (p Stack) Copy() *Stack {
+	newStack := slices.Clone(p)
 	return &newStack
 }
 
-func (s *Stack) Clear() {
-	if s == nil {
+// Clear removes all elements from the stack.
+func (p *Stack) Clear() {
+	if p == nil {
 		return
 	}
-	*s = (*s)[:0]
+	*p = (*p)[:0]
 }
 
-func (s Stack) Length() int {
-	if s == nil {
+// Len returns the number of elements in the stack.
+func (p Stack) Len() int {
+	if p == nil {
 		return 0
 	}
-	return len(s)
+	return len(p)
 }
 
-func (s Stack) SchemeString() string {
+// SchemeString returns a Scheme-like string representation of the stack.
+func (p Stack) SchemeString() string {
 	str := strings.Builder{}
 	str.WriteString("#<stack (")
-	if s != nil {
-		for i, v := range s {
-			if i > 0 {
-				str.WriteString(" ")
-			}
-			str.WriteString(v.SchemeString())
+	for i, v := range p {
+		if i > 0 {
+			str.WriteString(" ")
 		}
+		str.WriteString(v.SchemeString())
 	}
 	str.WriteString(")>")
 	return str.String()
 }
 
-func (s Stack) IsVoid() bool {
-	return s == nil
+// IsVoid returns true if the stack is nil.
+func (p Stack) IsVoid() bool {
+	return p == nil
 }
 
-func (s Stack) String() string {
+// String returns a string representation of the stack.
+func (p Stack) String() string {
 	str := strings.Builder{}
 	str.WriteString("[")
-	if s != nil {
-		for i, v := range s {
-			if i > 0 {
-				str.WriteString(" ")
-			}
-			str.WriteString(v.SchemeString())
+	for i, v := range p {
+		if i > 0 {
+			str.WriteString(" ")
 		}
+		str.WriteString(v.SchemeString())
 	}
 	str.WriteString("]")
 	return str.String()

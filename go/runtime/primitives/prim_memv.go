@@ -24,8 +24,8 @@ import (
 // PrimMemv implements the memv primitive.
 // Finds an element in a list using eqv? for comparison.
 func PrimMemv(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	lst := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	obj := mc.Arg(0)
+	lst := mc.Arg(1)
 	for !values.IsEmptyList(lst) {
 		pr, ok := lst.(*values.Pair)
 		if !ok {

@@ -15,9 +15,10 @@
 package machine
 
 import (
+	"slices"
+
 	"wile/syntax"
 	"wile/values"
-	"slices"
 )
 
 type LiteralIndex int
@@ -98,47 +99,69 @@ func (p *NativeTemplate) findLiteral(v values.Value) values.Value {
 	return nil
 }
 
-func (p *NativeTemplate) internLiteral(v values.Value) values.Value {
-	if existing := p.findLiteral(v); existing != nil {
+func (p *NativeTemplate) deduplicateLiteral(v values.Value) values.Value {
+	existing := p.findLiteral(v)
+	if existing != nil {
 		return existing
 	}
 	p.literals = append(p.literals, v)
 	return v
 }
 
+// deduplicateVector deduplicates all elements in the given vector
+// using the template's literal pool.
+// Returns a new vector if any elements were changed, or the original vector otherwise.
+// TODO: optimize for the common case where no elements change.  consider in place modification?
+func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
+	if v == nil || len(*v) == 0 {
+		return v
+	}
+	changed := false
+	newElements := values.NewVectorWithLength(v.Len())
+	for i, elem := range *v {
+		deduped := p.DeduplicateLiteral(elem)
+		(*newElements)[i] = deduped
+		if deduped != elem {
+			changed = true
+		}
+	}
+	// No changes, return original vector
+	// this avoids unnecessary pointer changes in the caller
+	if !changed {
+		return v
+	}
+	return newElements
+}
+
+// deduplicatePair deduplicates all elements in the given pair
+// using the template's literal pool.
+// Returns a new pair if any elements were changed, or the original pair otherwise.
+// TODO: optimize for the common case where no elements change.  consider in place modification?
+func (p *NativeTemplate) deduplicatePair(v *values.Pair) *values.Pair {
+	if v == nil || v == values.EmptyList {
+		return v
+	}
+	car := p.DeduplicateLiteral(v.Car())
+	cdr := p.DeduplicateLiteral(v.Cdr())
+	// No changes, return original pair
+	// this avoids unnecessary pointer changes in the caller
+	if car == v.Car() && cdr == v.Cdr() {
+		return v
+	}
+	return values.NewCons(car, cdr)
+}
+
+// DeduplicateLiteral deduplicates the given value using the template's literal pool.
+// For composite values (pairs and vectors), all elements are deduplicated recursively.
+// Returns the deduplicated value.
 func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
 	switch val := v.(type) {
-	case *values.Symbol:
-		return p.internLiteral(val)
-	case *values.Integer:
-		return p.internLiteral(val)
+	case *values.Symbol, *values.Integer:
+		return p.deduplicateLiteral(val)
 	case *values.Pair:
-		if val == nil || val == values.EmptyList {
-			return val
-		}
-		car := p.DeduplicateLiteral(val.Car())
-		cdr := p.DeduplicateLiteral(val.Cdr())
-		if car == val.Car() && cdr == val.Cdr() {
-			return val
-		}
-		return values.NewCons(car, cdr)
+		return p.deduplicatePair(val)
 	case *values.Vector:
-		if val == nil || len(*val) == 0 {
-			return val
-		}
-		changed := false
-		newElements := make([]values.Value, len(*val))
-		for i, elem := range *val {
-			deduped := p.DeduplicateLiteral(elem)
-			newElements[i] = deduped
-			if deduped != elem {
-				changed = true
-			}
-		}
-		if !changed {
-			return val
-		}
-		return values.NewVector(newElements...)
+		return p.deduplicateVector(val)
 	default:
 		return v
 	}

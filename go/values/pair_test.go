@@ -172,7 +172,8 @@ func TestPair_IsList(t *testing.T) {
 		{in: NewCons(NewInteger(10), EmptyList), out: true},
 		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: true},
 		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: true},
-		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+		{
+			in:  NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
 			out: false,
 		},
 	}
@@ -190,14 +191,17 @@ func TestPair_Length(t *testing.T) {
 		out          int
 		panicMatches string
 	}{
-		{in: nil,
+		{
+			in:           nil,
 			panicMatches: "not a list",
-			out:          -1},
+			out:          -1,
+		},
 		{in: EmptyList, out: 0},
 		{in: NewCons(NewInteger(10), EmptyList), out: 1},
 		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: 1},
 		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: 2},
-		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+		{
+			in:           NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
 			panicMatches: "not a list",
 			out:          -1,
 		},
@@ -205,9 +209,9 @@ func TestPair_Length(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
 			if tc.panicMatches != "" {
-				qt.Assert(t, func() { tc.in.Length() }, qt.PanicMatches, tc.panicMatches)
+				qt.Assert(t, func() { tc.in.Len() }, qt.PanicMatches, tc.panicMatches)
 			} else {
-				got := tc.in.Length()
+				got := tc.in.Len()
 				qt.Assert(t, got, qt.Equals, tc.out)
 			}
 		})

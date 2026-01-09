@@ -25,8 +25,8 @@ import (
 // PrimWrite implements the write primitive.
 // Writes a machine-readable representation of an object to the current output port or to the specified port.
 func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	obj := mc.Arg(0)
+	o := mc.Arg(1)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair but got %T", o)

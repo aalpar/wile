@@ -31,6 +31,7 @@ var (
 // MutexState represents the state of a mutex
 type MutexState int
 
+// MutexState constants.
 const (
 	MutexUnlocked       MutexState = iota // Not locked
 	MutexLockedOwned                      // Locked with owner
@@ -260,10 +261,12 @@ func (m *Mutex) MarkAbandoned() {
 
 // Value interface implementation
 
+// IsVoid returns true if the mutex is nil.
 func (m *Mutex) IsVoid() bool {
 	return m == nil
 }
 
+// EqualTo returns true if the mutexes are the same object.
 func (m *Mutex) EqualTo(v Value) bool {
 	other, ok := v.(*Mutex)
 	if !ok {
@@ -272,6 +275,7 @@ func (m *Mutex) EqualTo(v Value) bool {
 	return m == other // Mutex identity is reference equality
 }
 
+// SchemeString returns the Scheme representation of the mutex.
 func (m *Mutex) SchemeString() string {
 	if m == nil {
 		return "#<mutex:void>"

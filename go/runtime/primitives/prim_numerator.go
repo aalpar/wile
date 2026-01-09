@@ -25,7 +25,7 @@ import (
 // PrimNumerator implements the numerator primitive.
 // Returns the numerator of a rational number.
 func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(v)

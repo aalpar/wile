@@ -23,11 +23,7 @@ import (
 )
 
 func TestCxR2Level(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		// 2-level accessors
 		{
 			name:     "caar",
@@ -61,11 +57,7 @@ func TestCxR2Level(t *testing.T) {
 }
 
 func TestCxR3Level(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		// 3-level accessors
 		{
 			name:     "caaar",
@@ -119,11 +111,7 @@ func TestCxR3Level(t *testing.T) {
 }
 
 func TestCxR4Level(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		// 4-level accessors
 		{
 			name:     "caaaar",
@@ -217,10 +205,7 @@ func TestCxR4Level(t *testing.T) {
 }
 
 func TestCxRErrors(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "caaar on non-pair",
 			code: `(caaar 'not-a-pair)`,

@@ -314,7 +314,8 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
 		globalIdx := targetEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
-			if err := targetEnv.SetOwnGlobalValue(globalIdx, libBinding.Value()); err != nil {
+			err := targetEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
+			if err != nil {
 				return values.WrapForeignErrorf(err, "failed to set binding for %s", localName)
 			}
 		}

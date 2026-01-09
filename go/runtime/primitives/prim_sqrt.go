@@ -26,7 +26,7 @@ import (
 // PrimSqrt implements the (sqrt) primitive.
 // Returns the square root of a number.
 func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		if v.Value < 0 {

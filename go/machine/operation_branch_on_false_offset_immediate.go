@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"fmt"
+
 	"wile/values"
 )
 
@@ -40,13 +41,7 @@ func (p *OperationBranchOnFalseOffsetImmediate) IsVoid() bool {
 
 func (p *OperationBranchOnFalseOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationBranchOnFalseOffsetImmediate)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.Offset == v.Offset
+	return fieldMatches(p, v, ok, func(op *OperationBranchOnFalseOffsetImmediate) int { return op.Offset })
 }
 
 func (p *OperationBranchOnFalseOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {

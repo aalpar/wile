@@ -95,8 +95,6 @@ func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 	}
 
 	switch s := stx.(type) {
-	case *SyntaxSymbol:
-		return flipScopeOnSymbol(s, scope)
 	case *SyntaxPair:
 		return flipScopeOnPair(s, scope)
 	case *SyntaxObject:
@@ -104,26 +102,6 @@ func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 	default:
 		return stx
 	}
-}
-
-// flipScopeOnSymbol flips a scope on a SyntaxSymbol.
-func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
-	if sym == nil {
-		return nil
-	}
-	sctx := sym.SourceContext()
-	if sctx == nil {
-		sctx = &SourceContext{}
-	}
-	newScopes := FlipScopeInSet(sctx.Scopes, scope)
-	newSctx := &SourceContext{
-		Text:   sctx.Text,
-		File:   sctx.File,
-		Start:  sctx.Start,
-		End:    sctx.End,
-		Scopes: newScopes,
-	}
-	return NewSyntaxSymbol(sym.Key, newSctx)
 }
 
 // flipScopeOnPair recursively flips a scope on a SyntaxPair.
@@ -134,7 +112,8 @@ func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
 
 	// Recursively flip on car
 	var newCar SyntaxValue
-	if car := pair.Car(); car != nil {
+	car := pair.Car()
+	if car != nil {
 		if carStx, ok := car.(SyntaxValue); ok {
 			newCar = FlipScope(carStx, scope)
 		}
@@ -142,7 +121,8 @@ func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
 
 	// Recursively flip on cdr
 	var newCdr SyntaxValue
-	if cdr := pair.Cdr(); cdr != nil {
+	cdr := pair.Cdr()
+	if cdr != nil {
 		if cdrStx, ok := cdr.(SyntaxValue); ok {
 			newCdr = FlipScope(cdrStx, scope)
 		}
@@ -168,7 +148,7 @@ func flipScopeOnObject(obj *SyntaxObject, scope *Scope) *SyntaxObject {
 		End:    sctx.End,
 		Scopes: newScopes,
 	}
-	return NewSyntaxObject(obj.Datum, newSctx)
+	return NewSyntaxObject(obj.Datum(), newSctx)
 }
 
 // AddScopeToSyntax adds a scope to a syntax object.

@@ -17,11 +17,12 @@ package machine
 import (
 	"bufio"
 	"context"
+	"strings"
+	"testing"
+
 	"wile/environment"
 	"wile/parser"
 	"wile/syntax"
-	"strings"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,8 +30,8 @@ import (
 // parseSchemeExpr is a test helper to parse Scheme code into syntax.
 func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
 	reader := bufio.NewReader(strings.NewReader(code))
-	p := parser.NewParser(env, reader)
-	sv, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	sv, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }

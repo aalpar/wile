@@ -15,8 +15,9 @@
 package machine
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )

@@ -25,7 +25,7 @@ import (
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
 func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	filename, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "open-binary-input-file: expected a string but got %T", o)

@@ -15,9 +15,10 @@
 package define_syntax
 
 import (
+	"testing"
+
 	"wile/match"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )

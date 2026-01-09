@@ -19,14 +19,14 @@ import (
 	"fmt"
 )
 
-var (
-	_ Value = (*BytevectorInputPort)(nil)
-)
+var _ Value = (*BytevectorInputPort)(nil)
 
+// BytevectorInputPort represents a Scheme input port reading from a byte slice.
 type BytevectorInputPort struct {
 	reader *bytes.Reader
 }
 
+// NewBytevectorInputPort creates a new input port reading from the given byte slice.
 func NewBytevectorInputPort(data []byte) *BytevectorInputPort {
 	return &BytevectorInputPort{reader: bytes.NewReader(data)}
 }
@@ -35,22 +35,27 @@ func (p *BytevectorInputPort) Read(data []byte) (int, error) {
 	return p.reader.Read(data)
 }
 
+// ReadByte reads and returns the next byte from the port.
 func (p *BytevectorInputPort) ReadByte() (byte, error) {
 	return p.reader.ReadByte()
 }
 
+// UnreadByte unreads the last byte read, allowing it to be read again.
 func (p *BytevectorInputPort) UnreadByte() error {
 	return p.reader.UnreadByte()
 }
 
+// Datum returns the underlying bytes.Reader.
 func (p *BytevectorInputPort) Datum() *bytes.Reader {
 	return p.reader
 }
 
+// IsVoid returns true if this port is nil.
 func (p *BytevectorInputPort) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both ports share the same reader.
 func (p *BytevectorInputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*BytevectorInputPort); ok {
 		return p.reader == other.reader
@@ -58,6 +63,7 @@ func (p *BytevectorInputPort) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of this port.
 func (p *BytevectorInputPort) SchemeString() string {
 	return fmt.Sprintf("<bytevector-input-port %p>", p.reader)
 }

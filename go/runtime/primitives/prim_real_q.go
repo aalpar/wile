@@ -24,7 +24,7 @@ import (
 // PrimRealQ implements the (real?) primitive.
 // Returns #t if argument is a real number.
 func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer, *values.Float, *values.Rational:
 		mc.SetValue(values.TrueValue)

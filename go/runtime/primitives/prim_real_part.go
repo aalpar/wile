@@ -24,7 +24,7 @@ import (
 // PrimRealPart implements the (real-part) primitive.
 // Returns real part of complex number.
 func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(real(v.Value)))

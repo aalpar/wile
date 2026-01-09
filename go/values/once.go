@@ -64,10 +64,12 @@ func (o *Once) Done() bool {
 
 // Value interface implementation
 
+// IsVoid returns true if the once is nil.
 func (o *Once) IsVoid() bool {
 	return o == nil
 }
 
+// EqualTo returns true if the onces are the same object.
 func (o *Once) EqualTo(v Value) bool {
 	other, ok := v.(*Once)
 	if !ok {
@@ -76,6 +78,7 @@ func (o *Once) EqualTo(v Value) bool {
 	return o == other
 }
 
+// SchemeString returns the Scheme representation of the once.
 func (o *Once) SchemeString() string {
 	if o == nil {
 		return "#<once:void>"

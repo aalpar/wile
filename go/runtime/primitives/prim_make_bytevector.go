@@ -24,8 +24,8 @@ import (
 // PrimMakeBytevector implements the (make-bytevector) primitive.
 // Creates a bytevector of the given size, optionally filled with a specified byte value.
 func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	k := mc.Arg(0)
+	rest := mc.Arg(1)
 	size, ok := k.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: expected an integer but got %T", k)

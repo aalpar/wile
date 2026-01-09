@@ -71,12 +71,12 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 		}
 		return &vt
 	case *syntax.SyntaxObject:
-		if bx, ok := v.Datum.(*values.Box); ok {
+		if bx, ok := v.Datum().(*values.Box); ok {
 			return values.NewBox(SyntaxValueToDatum(bx.Unbox()))
 		}
-		return v.Datum
+		return v.Datum()
 	case *syntax.SyntaxSymbol:
-		return values.NewSymbol(v.Key)
+		return v.Datum()
 	case values.Value:
 		return v
 	default:
@@ -105,23 +105,22 @@ func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.Synta
 		if !ok {
 			// If the cdr is not a Pair, we create a new Pair with an empty list as the cdr.
 			return syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, v.Cdr()), sctx)
-		} else {
-			var v0 values.Value
-			var pr *syntax.SyntaxPair
-			pr0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
-			pr = pr0stx
-			v0, _ = pr1.ForEach(nil, func(_ context.Context, i int, hasNext bool, v1 values.Value) error {
-				pr.SetCdr(
-					syntax.NewSyntaxCons(
-						DatumToSyntaxValue(sctx, v1),
-						DatumToSyntaxValue(sctx, values.EmptyList),
-						sctx))
-				pr = pr.Cdr().(*syntax.SyntaxPair)
-				return nil
-			})
-			pr.SetCdr(DatumToSyntaxValue(sctx, v0))
-			return pr0stx
 		}
+		var v0 values.Value
+		var pr *syntax.SyntaxPair
+		pr0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
+		pr = pr0stx
+		v0, _ = pr1.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v1 values.Value) error {
+			pr.SetCdr(
+				syntax.NewSyntaxCons(
+					DatumToSyntaxValue(sctx, v1),
+					DatumToSyntaxValue(sctx, values.EmptyList),
+					sctx))
+			pr = pr.Cdr().(*syntax.SyntaxPair)
+			return nil
+		})
+		pr.SetCdr(DatumToSyntaxValue(sctx, v0))
+		return pr0stx
 	case *values.Box:
 		bx0 := values.NewBox(DatumToSyntaxValue(sctx, v.Unbox()))
 		return syntax.NewSyntaxObject(bx0, sctx)
@@ -138,4 +137,13 @@ func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.Synta
 		// If the datum is not a Datum, we convert it to a Datum first.
 		return syntax.NewSyntaxObject(v, sctx)
 	}
+}
+
+// IsSyntaxComment returns true if the given value is a SyntaxComment.
+func IsSyntaxComment(v values.Value) bool {
+	switch v.(type) {
+	case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
+		return true
+	}
+	return false
 }

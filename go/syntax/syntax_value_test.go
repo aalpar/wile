@@ -15,8 +15,9 @@
 package syntax
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"

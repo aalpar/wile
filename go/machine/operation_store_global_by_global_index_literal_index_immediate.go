@@ -17,18 +17,22 @@ package machine
 import (
 	"context"
 	"fmt"
+
 	"wile/environment"
 	"wile/values"
 )
 
+// OperationStoreGlobalByGlobalIndexLiteralIndexImmediate stores a value to a global variable using an index from the literals pool.
 type OperationStoreGlobalByGlobalIndexLiteralIndexImmediate struct {
 	LiteralIndex LiteralIndex
 }
 
+// NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate creates a new global store operation.
 func NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti LiteralIndex) *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate {
 	return &OperationStoreGlobalByGlobalIndexLiteralIndexImmediate{LiteralIndex: liti}
 }
 
+// SchemeString returns the Scheme representation of the operation.
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-store-global-by-global-index-literal-immediate %d>", p.LiteralIndex)
 }
@@ -39,13 +43,7 @@ func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) IsVoid() bool {
 
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationStoreGlobalByGlobalIndexLiteralIndexImmediate)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.LiteralIndex == v.LiteralIndex
+	return fieldMatches(p, v, ok, func(op *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
 }
 
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {

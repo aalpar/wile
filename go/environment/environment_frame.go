@@ -37,7 +37,7 @@ import (
 //	│           │   meta: → Compile
 //	│                       global: compile-time procedures
 //
-// Each phase has its own GlobalEnvironmentFrame. Symbol/syntax interning maps
+// Each phase has its own GlobalEnvironmentFrame. Sym/syntax interning maps
 // are shared from TopLevel's GlobalEnvironmentFrame.
 //
 // Binding lookup is two-phase: first all locals up parent chain, then all globals.
@@ -50,10 +50,6 @@ type EnvironmentFrame struct {
 	global *GlobalEnvironmentFrame
 	// meta links to next phase environment (Expand from Runtime, Compile from Expand)
 	meta *EnvironmentFrame
-	// Library support (future use)
-	aliases map[values.Symbol]values.Symbol
-	exports map[values.Symbol]struct{}
-	imports map[values.Symbol]struct{}
 }
 
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.

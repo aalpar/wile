@@ -15,9 +15,10 @@
 package environment
 
 import (
+	"testing"
+
 	"wile/syntax"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )

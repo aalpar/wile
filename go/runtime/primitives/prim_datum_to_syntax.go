@@ -28,8 +28,8 @@ import (
 //
 // (datum->syntax template-id datum) -> syntax-object
 func PrimDatumToSyntax(_ context.Context, mc *machine.MachineContext) error {
-	templateArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	datum := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	templateArg := mc.Arg(0)
+	datum := mc.Arg(1)
 
 	// Get source context from template identifier
 	var sctx *syntax.SourceContext

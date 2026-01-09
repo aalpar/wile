@@ -25,8 +25,8 @@ import (
 // PrimCallWithValues implements the call-with-values primitive.
 // Calls producer, passes results to consumer.
 func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
-	producer := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	consumer := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	producer := mc.Arg(0)
+	consumer := mc.Arg(1)
 
 	producerCls, ok := producer.(*machine.MachineClosure)
 	if !ok {
@@ -40,10 +40,12 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call producer with no arguments
 	sub := mc.NewSubContext()
-	if _, err := sub.Apply(producerCls); err != nil {
+	_, err := sub.Apply(producerCls)
+	if err != nil {
 		return err
 	}
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err
@@ -58,10 +60,12 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call consumer with all produced values as arguments
 	sub2 := mc.NewSubContext()
-	if _, err := sub2.Apply(consumerCls, producedValues...); err != nil {
+	_, err = sub2.Apply(consumerCls, producedValues...)
+	if err != nil {
 		return err
 	}
-	if err := sub2.Run(ctx); err != nil {
+	err = sub2.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err

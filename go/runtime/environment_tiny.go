@@ -806,7 +806,8 @@ func registerRuntimePrimitives(env *environment.EnvironmentFrame, specs []Primit
 		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 		closure := machine.NewForeignClosure(env, spec.ParamCount, spec.IsVariadic, spec.Impl)
-		if err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
+		err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "error registering %s", spec.Name)
 		}
 	}
@@ -829,7 +830,8 @@ func registerExpandTimePrimitives(env *environment.EnvironmentFrame, specs []Pri
 		expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 		closure := machine.NewForeignClosure(expandEnv, spec.ParamCount, spec.IsVariadic, spec.Impl)
-		if err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure); err != nil {
+		err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
 		}
 	}
@@ -845,13 +847,12 @@ func registerExpandTimePrimitives(env *environment.EnvironmentFrame, specs []Pri
 //  2. Macro-expanded (which is a no-op for define-syntax at top level)
 //  3. Compiled to bytecode
 //  4. Executed to register the syntax transformer
-func loadBootstrapMacros(env *environment.EnvironmentFrame) error {
-	ctx := context.Background()
+func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame) error {
 	rdr := strings.NewReader(bootstrapMacros)
-	p := parser.NewParser(env, rdr)
+	p := parser.NewParser(env, true, rdr)
 
 	for {
-		stx, err := p.ReadSyntax(nil)
+		stx, err := p.ReadSyntax(ctx)
 		if err == io.EOF {
 			break
 		}
@@ -898,17 +899,20 @@ func loadBootstrapMacros(env *environment.EnvironmentFrame) error {
 //
 // The resulting environment is ready for parsing, expanding, compiling, and executing
 // Scheme programs.
-func NewTopLevelEnvironmentFrameTiny() (*environment.EnvironmentFrame, error) {
+func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
 	// Initialize primitives package state
 	primitives.InitState()
 
 	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Register compile-time primitives (bindings only, no values)
-	registerCompileTimePrimitives(env, compileTimePrimitives)
+	err := registerCompileTimePrimitives(env, compileTimePrimitives)
+	if err != nil {
+		return nil, err
+	}
 
 	// Register runtime primitives (bindings + foreign closures)
-	err := registerRuntimePrimitives(env, runtimePrimitives)
+	err = registerRuntimePrimitives(env, runtimePrimitives)
 	if err != nil {
 		return nil, err
 	}
@@ -935,7 +939,7 @@ func NewTopLevelEnvironmentFrameTiny() (*environment.EnvironmentFrame, error) {
 	}
 
 	// Load bootstrap macros (and, or, let, let*, letrec, cond, when, unless, parameterize)
-	err = loadBootstrapMacros(env)
+	err = loadBootstrapMacros(ctx, env)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
@@ -948,7 +952,7 @@ func NewTopLevelEnvironmentFrameTiny() (*environment.EnvironmentFrame, error) {
 func registerPortParameters(env *environment.EnvironmentFrame) {
 	portParams := []struct {
 		name  string
-		param *values.Parameter
+		param *machine.Parameter
 	}{
 		{"current-input-port", primitives.GetCurrentInputPortParam()},
 		{"current-output-port", primitives.GetCurrentOutputPortParam()},

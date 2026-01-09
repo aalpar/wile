@@ -38,6 +38,7 @@ package match
 import (
 	"errors"
 	"fmt"
+
 	"wile/values"
 )
 
@@ -58,6 +59,7 @@ type Matcher struct {
 	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 }
 
+// NewMatcher creates a new pattern matcher.
 func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand) *Matcher {
 	return NewMatcherWithEllipsisVars(variables, codes, nil)
 }
@@ -73,6 +75,7 @@ func NewMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCom
 	return q
 }
 
+// Match runs the pattern matcher against the target.
 func (p *Matcher) Match(target *values.Pair) error {
 	p.valueStack = []valuePathEntry{
 		{
@@ -149,8 +152,8 @@ func (p *Matcher) Match(target *values.Pair) error {
 			// then extra siblings means the pattern doesn't match
 			if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
 				if i+1 < len(p.codes) {
-					switch p.codes[i+1].(type) {
-					case ByteCodeDone:
+					_, ok = p.codes[i+1].(ByteCodeDone)
+					if ok {
 						// Pattern expects no more elements but input has more
 						return ErrNotAMatch
 					}
@@ -322,10 +325,8 @@ func (p *Matcher) expandEllipsis(pattern values.Value, rest values.Value, ctx *c
 	for _, childCtx := range children {
 		// Create a new ellipsis variable set for this expansion
 		newEllipsisVars := make(map[string]struct{})
-		if ellipsisVars != nil {
-			for k, v := range ellipsisVars {
-				newEllipsisVars[k] = v
-			}
+		for k, v := range ellipsisVars {
+			newEllipsisVars[k] = v
 		}
 		for v := range patternVars {
 			newEllipsisVars[v] = struct{}{}

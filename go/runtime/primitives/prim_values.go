@@ -25,7 +25,7 @@ import (
 // Returns multiple values as specified by R7RS. With no arguments returns no values.
 // With one or more arguments, returns all arguments as multiple values.
 func PrimValues(_ context.Context, mc *machine.MachineContext) error {
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	restVal := mc.Arg(0)
 
 	// restVal is a list of all arguments (variadic)
 	if values.IsEmptyList(restVal) {

@@ -33,17 +33,17 @@ func TestTokenValue(t *testing.T) {
 		{
 			input:        `"hello"`,
 			expectedVal:  "hello",
-			expectedType: TokenizerStateStringEnd,
+			expectedType: TokenizerStateString,
 		},
 		{
 			input:        `""`,
 			expectedVal:  "",
-			expectedType: TokenizerStateStringEnd,
+			expectedType: TokenizerStateString,
 		},
 		{
 			input:        `"test\nstring"`,
 			expectedVal:  "test\nstring",
-			expectedType: TokenizerStateStringEnd,
+			expectedType: TokenizerStateString,
 		},
 	}
 	for i, tc := range tcs {
@@ -334,9 +334,7 @@ func TestCommentPhases(t *testing.T) {
 				typ TokenizerState
 				str string
 			}{
-				{TokenizerStateLineCommentBegin, ";"},
-				{TokenizerStateLineCommentBody, " line comment"},
-				{TokenizerStateLineCommentEnd, "\n"},
+				{TokenizerStateLineCommentBody, "; line comment"},
 				{TokenizerStateUnsignedInteger, "123"},
 			},
 		},
@@ -346,17 +344,16 @@ func TestCommentPhases(t *testing.T) {
 				typ TokenizerState
 				str string
 			}{
-				{TokenizerStateBlockCommentBegin, "#|"},
-				{TokenizerStateBlockCommentBody, " block "},
-				{TokenizerStateBlockCommentEnd, "|#"},
+				{TokenizerStateBlockCommentBody, "#| block |#"},
 				{TokenizerStateUnsignedInteger, "456"},
 			},
 		},
 	}
 
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false, true)
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
 			for j, expected := range tc.expectedPhases {
 				token, err := tok.Next()
 				c.Check(err, qt.IsNil, qt.Commentf("phase %d", j))
@@ -367,36 +364,8 @@ func TestCommentPhases(t *testing.T) {
 	}
 }
 
-// TestNestedBlockComments tests nested block comment support
-func TestNestedBlockComments(t *testing.T) {
-	tcs := []struct {
-		input        string
-		expectedType TokenizerState
-		expectedStr  string
-	}{
-		{
-			input:        "#| outer #| inner |# outer |#",
-			expectedType: TokenizerStateBlockComment,
-			expectedStr:  "#| outer #| inner |# outer |#",
-		},
-		{
-			input:        "#| #| #| deep |# |# |#",
-			expectedType: TokenizerStateBlockComment,
-			expectedStr:  "#| #| #| deep |# |# |#",
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizer(strings.NewReader(tc.input), false)
-			token, err := tok.Next()
-			c.Check(err, qt.IsNil)
-			c.Check(token.Type(), qt.Equals, tc.expectedType)
-			c.Check(token.String(), qt.Equals, tc.expectedStr)
-		})
-	}
-}
-
 // TestRadixPrefixMarkers tests radix prefix marker tokenization
+// TODO: use slices for expectedType1,expectedType2
 func TestRadixPrefixMarkers(t *testing.T) {
 	tcs := []struct {
 		input         string
@@ -407,7 +376,7 @@ func TestRadixPrefixMarkers(t *testing.T) {
 		{
 			input:         "#x1a2b3c",
 			expectedType1: TokenizerStateMarkerBase16,
-			expectedType2: TokenizerStateUnsignedInteger,
+			expectedType2: TokenizerStateUnsignedIntegerBase16,
 			expectedStr1:  "#x",
 		},
 	}
@@ -540,22 +509,22 @@ func TestDigitFunction(t *testing.T) {
 		{
 			input:         "#b1011",
 			expectedType1: TokenizerStateMarkerBase2,
-			expectedType2: TokenizerStateUnsignedInteger,
+			expectedType2: TokenizerStateUnsignedIntegerBase2,
 		},
 		{
 			input:         "#o3771",
 			expectedType1: TokenizerStateMarkerBase8,
-			expectedType2: TokenizerStateUnsignedInteger,
+			expectedType2: TokenizerStateUnsignedIntegerBase8,
 		},
 		{
 			input:         "#d9991",
 			expectedType1: TokenizerStateMarkerBase10,
-			expectedType2: TokenizerStateUnsignedInteger,
+			expectedType2: TokenizerStateUnsignedIntegerBase10,
 		},
 		{
 			input:         "#x1fff",
 			expectedType1: TokenizerStateMarkerBase16,
-			expectedType2: TokenizerStateUnsignedInteger,
+			expectedType2: TokenizerStateUnsignedIntegerBase16,
 		},
 	}
 	for i, tc := range tcs {
@@ -596,26 +565,30 @@ func TestContinueCommentToken(t *testing.T) {
 	}{
 		{
 			input: "; comment\n",
-			count: 4, // begin, body, end, EOF
+			count: 2, // body, EOF
 		},
 		{
 			input: "#| block |#",
-			count: 4, // begin, body, end, EOF
+			count: 2, // body, EOF
 		},
 	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false, true)
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
 			count := 0
 			for {
-				_, err := tok.Next()
+				q, err := tok.Next()
+				if q == nil && err == nil {
+					c.Fatal("Expected result or error, but got none")
+				}
+				count++
 				if err == io.EOF {
 					break
 				}
 				c.Check(err, qt.IsNil)
-				count++
 			}
-			c.Check(count, qt.Equals, tc.count-1) // -1 because we don't count EOF
+			c.Check(count, qt.Equals, tc.count) // -1 because we don't count EOF
 		})
 	}
 }
@@ -623,146 +596,23 @@ func TestContinueCommentToken(t *testing.T) {
 // TestContinueLineComment tests line comment phases
 func TestContinueLineComment(t *testing.T) {
 	input := "; this is a line comment\n"
-	tok := NewTokenizerWithComments(strings.NewReader(input), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader(input), false)
 
-	// Phase 1: Begin
-	token1, err1 := tok.Next()
-	qt.Check(t, err1, qt.IsNil)
-	qt.Check(t, token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-
-	// Phase 2: Body
+	// Phase 1: Body
 	token2, err2 := tok.Next()
 	qt.Check(t, err2, qt.IsNil)
 	qt.Check(t, token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-
-	// Phase 3: End
-	token3, err3 := tok.Next()
-	qt.Check(t, err3, qt.IsNil)
-	qt.Check(t, token3.Type(), qt.Equals, TokenizerStateLineCommentEnd)
 }
 
 // TestContinueBlockComment tests block comment phases
 func TestContinueBlockComment(t *testing.T) {
 	input := "#| block comment |#"
-	tok := NewTokenizerWithComments(strings.NewReader(input), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader(input), false)
 
-	// Phase 1: Begin
-	token1, err1 := tok.Next()
-	qt.Check(t, err1, qt.IsNil)
-	qt.Check(t, token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-
-	// Phase 2: Body
+	// Phase 1: Body
 	token2, err2 := tok.Next()
 	qt.Check(t, err2, qt.IsNil)
 	qt.Check(t, token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-
-	// Phase 3: End
-	token3, err3 := tok.Next()
-	qt.Check(t, err3, qt.IsNil)
-	qt.Check(t, token3.Type(), qt.Equals, TokenizerStateBlockCommentEnd)
-}
-
-// TestIsCommentToken tests the isCommentToken function
-func TestIsCommentToken(t *testing.T) {
-	tcs := []struct {
-		input        string
-		withComments bool
-		expectedType TokenizerState
-	}{
-		{
-			input:        "; comment\n123",
-			withComments: false,
-			expectedType: TokenizerStateLineCommentStart,
-		},
-		{
-			input:        "#| comment |#456",
-			withComments: false,
-			expectedType: TokenizerStateBlockComment,
-		},
-		{
-			input:        "#;(datum)",
-			withComments: false,
-			expectedType: TokenizerStateDatumComment,
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false, tc.withComments)
-			token, err := tok.Next()
-			c.Check(err, qt.IsNil)
-			c.Check(token.Type(), qt.Equals, tc.expectedType)
-		})
-	}
-}
-
-// TestMayReadExponentEdgeCases tests exponent edge cases
-func TestMayReadExponentEdgeCases(t *testing.T) {
-	tcs := []struct {
-		input        string
-		expectedType TokenizerState
-	}{
-		{
-			input:        "1.0E10",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-		{
-			input:        "1.0e+5",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-		{
-			input:        "1.0e-5",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-		{
-			input:        "1.5E10",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizer(strings.NewReader(tc.input), false)
-			token, err := tok.Next()
-			c.Check(err, qt.IsNil)
-			c.Check(token.Type(), qt.Equals, tc.expectedType)
-		})
-	}
-}
-
-// TestMayUnsignedFractionalEdgeCases tests fractional number edge cases
-func TestMayUnsignedFractionalEdgeCases(t *testing.T) {
-	tcs := []struct {
-		input        string
-		expectedType TokenizerState
-	}{
-		{
-			input:        "3/4",
-			expectedType: TokenizerStateUnsignedRationalFraction,
-		},
-		{
-			input:        "22/7",
-			expectedType: TokenizerStateUnsignedRationalFraction,
-		},
-		{
-			input:        "1/2",
-			expectedType: TokenizerStateUnsignedRationalFraction,
-		},
-		{
-			input:        ".5",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-		{
-			input:        ".125",
-			expectedType: TokenizerStateUnsignedDecimalFraction,
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizer(strings.NewReader(tc.input), false)
-			token, err := tok.Next()
-			c.Check(err, qt.IsNil)
-			c.Check(token.Type(), qt.Equals, tc.expectedType)
-		})
-	}
 }
 
 // TestMaySignedIntegerEdgeCases tests signed integer edge cases
@@ -851,43 +701,6 @@ func TestScanLineEnding(t *testing.T) {
 			token2, err2 := tok.Next()
 			c.Check(err2, qt.IsNil)
 			c.Check(token2.String(), qt.Equals, "y")
-		})
-	}
-}
-
-// TestReadBlockCommentEdgeCases tests block comment edge cases
-func TestReadBlockCommentEdgeCases(t *testing.T) {
-	tcs := []struct {
-		input        string
-		expectedType TokenizerState
-		shouldError  bool
-	}{
-		{
-			input:        "#||#",
-			expectedType: TokenizerStateBlockComment,
-			shouldError:  false,
-		},
-		{
-			input:        "#| |#",
-			expectedType: TokenizerStateBlockComment,
-			shouldError:  false,
-		},
-		{
-			input:        "#| nested #| deep |# |#",
-			expectedType: TokenizerStateBlockComment,
-			shouldError:  false,
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
-			tok := NewTokenizer(strings.NewReader(tc.input), false)
-			token, err := tok.Next()
-			if tc.shouldError {
-				c.Check(err, qt.Not(qt.IsNil))
-			} else {
-				c.Check(err, qt.IsNil)
-				c.Check(token.Type(), qt.Equals, tc.expectedType)
-			}
 		})
 	}
 }

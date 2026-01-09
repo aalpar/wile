@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"fmt"
+
 	"wile/values"
 )
 
@@ -44,11 +45,5 @@ func (p *OperationPeekK) IsVoid() bool {
 
 func (p *OperationPeekK) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPeekK)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.Depth == v.Depth
+	return fieldMatches(p, v, ok, func(op *OperationPeekK) int { return op.Depth })
 }

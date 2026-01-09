@@ -16,12 +16,11 @@ package syntax
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
-var (
-	_ values.Value = (*SourceContext)(nil)
-)
+var _ values.Value = (*SourceContext)(nil)
 
 // OriginInfo tracks macro expansion chains for better error reporting.
 // Each OriginInfo represents one macro expansion in the chain.
@@ -40,6 +39,7 @@ func (o *OriginInfo) Depth() int {
 	return depth
 }
 
+// SourceContext holds source location and hygiene information for a syntax object.
 type SourceContext struct {
 	Text   string
 	File   string
@@ -49,6 +49,7 @@ type SourceContext struct {
 	Origin *OriginInfo // Macro expansion origin chain (nil if not from macro)
 }
 
+// NewSourceContext creates a new source context with the given location info.
 func NewSourceContext(text, file string, start, end SourceIndexes) *SourceContext {
 	q := &SourceContext{
 		Text:  text,
@@ -59,19 +60,23 @@ func NewSourceContext(text, file string, start, end SourceIndexes) *SourceContex
 	return q
 }
 
+// NewZeroValueSourceContext creates an empty source context.
 func NewZeroValueSourceContext() *SourceContext {
 	q := &SourceContext{}
 	return q
 }
 
+// SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
 	return fmt.Sprintf("<source-context %s:%d-%d>", p.File, p.Start, p.End)
 }
 
+// IsVoid returns true if the source context is nil.
 func (p *SourceContext) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if this source context equals the given value.
 func (p *SourceContext) EqualTo(value values.Value) bool {
 	v, ok := value.(*SourceContext)
 	if !ok {

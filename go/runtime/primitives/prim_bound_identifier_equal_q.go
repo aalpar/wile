@@ -27,8 +27,8 @@ import (
 // Returns #t if two identifiers have the same name AND the same scope sets,
 // meaning they would create the same binding if used as binding occurrences.
 func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) error {
-	o0 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o1 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o0 := mc.Arg(0)
+	o1 := mc.Arg(1)
 
 	id0, ok0 := o0.(*syntax.SyntaxSymbol)
 	if !ok0 {
@@ -40,7 +40,7 @@ func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) er
 	}
 
 	// Same name?
-	if id0.Key != id1.Key {
+	if id0.Sym.Key != id1.Sym.Key {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}

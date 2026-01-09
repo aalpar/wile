@@ -24,8 +24,8 @@ import (
 // PrimStringToUtf8 implements the string->utf8 primitive.
 // Converts a string to a UTF-8 encoded bytevector with optional start and end indices.
 func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	rest := mc.Arg(1)
 	str, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string->utf8: expected a string but got %T", o)

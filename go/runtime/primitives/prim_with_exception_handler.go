@@ -26,8 +26,8 @@ import (
 // (with-exception-handler handler thunk)
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) error {
-	handler := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	thunk := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	handler := mc.Arg(0)
+	thunk := mc.Arg(1)
 
 	// Push handler onto exception handler stack
 	mc.PushExceptionHandler(handler)

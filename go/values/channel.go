@@ -172,10 +172,12 @@ func (c *Channel) Chan() chan Value {
 
 // Value interface implementation
 
+// IsVoid returns true if this channel is nil.
 func (c *Channel) IsVoid() bool {
 	return c == nil
 }
 
+// EqualTo returns true if both channels are the same object.
 func (c *Channel) EqualTo(v Value) bool {
 	other, ok := v.(*Channel)
 	if !ok {
@@ -184,6 +186,7 @@ func (c *Channel) EqualTo(v Value) bool {
 	return c == other // Identity is reference equality
 }
 
+// SchemeString returns the Scheme representation of this channel.
 func (c *Channel) SchemeString() string {
 	if c == nil {
 		return "#<channel:void>"

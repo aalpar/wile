@@ -16,13 +16,14 @@ package primitives_test
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"wile/machine"
 	"wile/parser"
 	"wile/runtime"
 	"wile/runtime/primitives"
 	"wile/values"
-	"strings"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -161,7 +162,7 @@ func TestCallCCWithHigherOrderFunctions(t *testing.T) {
 }
 
 func TestNewEscapeContinuationClosure(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Create a mock continuation
@@ -611,7 +612,7 @@ func TestDynamicWind(t *testing.T) {
 // TestDynamicWindEscape tests that after is called on continuation escape.
 // This test uses runSchemeCodeWithEnv to load bootstrap macros for 'let'.
 func TestDynamicWindEscape(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Parse and run:
@@ -630,8 +631,8 @@ func TestDynamicWindEscape(t *testing.T) {
 				(lambda () (vector-set! v 0 2)))))
 		(vector-ref v 0))`
 
-	p := parser.NewParser(env, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(prog))
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := machine.NewExpandTimeCallContext()

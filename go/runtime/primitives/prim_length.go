@@ -24,7 +24,7 @@ import (
 // PrimLength implements the (length) primitive.
 // Returns the length of a proper list.
 func PrimLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewInteger(0))
 		return nil
@@ -34,7 +34,7 @@ func PrimLength(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a list but got %T", o)
 	}
 	count := int64(0)
-	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
 		count++
 		return nil
 	})

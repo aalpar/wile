@@ -32,8 +32,8 @@ import (
 //
 // If the binding is a CompileTimeValue, it returns the unwrapped value.
 // This allows define-for-syntax bindings to be accessed from macro transformers.
-func PrimSyntaxLocalValue(ctx context.Context, mc *machine.MachineContext) error {
-	id := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
+	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {

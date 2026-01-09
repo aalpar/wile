@@ -26,7 +26,7 @@ import (
 // PrimFiniteQ implements the (finite?) primitive.
 // Returns #t if number is finite.
 func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(values.TrueValue)

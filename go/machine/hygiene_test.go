@@ -15,6 +15,7 @@
 package machine_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -31,8 +32,8 @@ import (
 // Using the same environment ensures symbols are interned consistently.
 func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
-	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -343,7 +344,8 @@ func TestScopeCreation(t *testing.T) {
 	_ = closure // We can't access private fields, but at least verify it's the right type
 
 	defer func() {
-		if r := recover(); r != nil {
+		r := recover()
+		if r != nil {
 			t.Fatalf("panic during expansion: %v", r)
 		}
 	}()

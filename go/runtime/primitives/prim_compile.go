@@ -36,7 +36,7 @@ import (
 //
 //	expand -> compile -> (execute via calling the returned thunk)
 func PrimCompile(_ context.Context, mc *machine.MachineContext) error {
-	expr := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	expr := mc.Arg(0)
 
 	// Accept either syntax object or datum
 	var syntaxVal syntax.SyntaxValue

@@ -25,8 +25,8 @@ import (
 // PrimMakeRecordType implements the (make-record-type name field-names) primitive.
 // Creates a new record type descriptor.
 func PrimMakeRecordType(_ context.Context, mc *machine.MachineContext) error {
-	nameArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	fieldNamesArg := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	nameArg := mc.Arg(0)
+	fieldNamesArg := mc.Arg(1)
 
 	name, ok := nameArg.(*values.Symbol)
 	if !ok {
@@ -45,7 +45,7 @@ func PrimMakeRecordType(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimIsRecordType implements the (record-type? obj) primitive.
 func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	_, ok := obj.(*values.RecordType)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -57,7 +57,7 @@ func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimIsRecord implements the (record? obj) primitive.
 func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	_, ok := obj.(*values.Record)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -70,7 +70,7 @@ func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
 func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	rec, ok := obj.(*values.Record)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotARecord, "record-type: expected a record but got %T", obj)
@@ -82,8 +82,8 @@ func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordConstructor implements the (record-constructor rt field-tags) primitive.
 // Returns a constructor procedure for the record type.
 func PrimRecordConstructor(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	fieldTagsArg := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	rtArg := mc.Arg(0)
+	fieldTagsArg := mc.Arg(1)
 
 	rt, ok := rtArg.(*values.RecordType)
 	if !ok {
@@ -114,7 +114,7 @@ func PrimRecordConstructor(_ context.Context, mc *machine.MachineContext) error 
 // PrimRecordPredicate implements the (record-predicate rt) primitive.
 // Returns a predicate procedure for the record type.
 func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	rtArg := mc.Arg(0)
 
 	rt, ok := rtArg.(*values.RecordType)
 	if !ok {
@@ -129,8 +129,8 @@ func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordAccessor implements the (record-accessor rt field-tag) primitive.
 // Returns an accessor procedure for the specified field.
 func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	fieldTagArg := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	rtArg := mc.Arg(0)
+	fieldTagArg := mc.Arg(1)
 
 	rt, ok := rtArg.(*values.RecordType)
 	if !ok {
@@ -155,8 +155,8 @@ func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordModifier implements the (record-modifier rt field-tag) primitive.
 // Returns a modifier procedure for the specified field.
 func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	fieldTagArg := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	rtArg := mc.Arg(0)
+	fieldTagArg := mc.Arg(1)
 
 	rt, ok := rtArg.(*values.RecordType)
 	if !ok {
@@ -181,7 +181,7 @@ func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
 // Helper: convert a Scheme list to a slice of symbols
 func listToSymbols(v values.Value) ([]*values.Symbol, error) {
 	var result []*values.Symbol
-	_, err := values.ForEach(nil, v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	_, err := values.ForEach(context.TODO(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		sym, ok := elem.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected a symbol but got %T", elem)

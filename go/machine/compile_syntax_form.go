@@ -29,7 +29,7 @@ import (
 // ellipsis patterns capture variable-length lists that must be expanded dynamically.
 //
 // (syntax template) -> syntax-object
-func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
 	// So expr = (template)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
@@ -38,10 +38,7 @@ func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, ex
 	}
 
 	// Get the template (CAR of the args list)
-	template, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("syntax: expected syntax template")
-	}
+	template := argsPair.SyntaxCar()
 
 	// Check no extra arguments (CDR should be empty list)
 	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -66,7 +63,8 @@ func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, ex
 func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
-		if sym, ok := v.Unwrap().(*values.Symbol); ok {
+		sym, ok := v.Unwrap().(*values.Symbol)
+		if ok {
 			return sym.Key == "..."
 		}
 		return false
@@ -76,16 +74,13 @@ func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 			return false
 		}
 		// Check car
-		if car, ok := v.SyntaxCar().(syntax.SyntaxValue); ok {
-			if templateContainsEllipsis(car) {
-				return true
-			}
+		car := v.SyntaxCar()
+		if templateContainsEllipsis(car) {
+			return true
 		}
 		// Check cdr
-		if cdr, ok := v.SyntaxCdr().(syntax.SyntaxValue); ok {
-			return templateContainsEllipsis(cdr)
-		}
-		return false
+		cdr := v.SyntaxCdr()
+		return templateContainsEllipsis(cdr)
 
 	default:
 		return false
@@ -143,25 +138,22 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 	// First, collect all elements to count them
 	var elements []syntax.SyntaxValue
 	current := pair
-	isProper := true
 
 	for !syntax.IsSyntaxEmptyList(current) {
 		car := current.SyntaxCar()
-		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
-			elements = append(elements, carSyntax)
-		}
+		carSyntax := car
+		elements = append(elements, carSyntax)
 		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			// Improper list - the last cdr is not a pair
-			isProper = false
-			if cdrSyntax, ok := cdr.(syntax.SyntaxValue); ok {
-				elements = append(elements, cdrSyntax)
-			}
+			cdrSyntax := cdr
+			elements = append(elements, cdrSyntax)
 			break
 		}
 	}
@@ -176,14 +168,6 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 	}
 
 	// Build the list
-	if isProper {
-		p.AppendOperations(NewOperationBuildSyntaxList(len(elements)))
-	} else {
-		// For improper lists, the last element becomes the cdr
-		// We need a different operation for improper lists
-		// For now, just build as proper list (this is a simplification)
-		p.AppendOperations(NewOperationBuildSyntaxList(len(elements)))
-	}
-
+	p.AppendOperations(NewOperationBuildSyntaxList(len(elements)))
 	return nil
 }

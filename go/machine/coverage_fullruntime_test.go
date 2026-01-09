@@ -36,15 +36,15 @@ import (
 // parseSchemeExprExt parses a Scheme expression
 func parseSchemeExprExt(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
 	reader := bufio.NewReader(strings.NewReader(code))
-	p := parser.NewParser(env, reader)
-	sv, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	sv, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }
 
 // newFullRuntimeEnv creates a full runtime environment with all primitives
 func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }
@@ -63,7 +63,8 @@ func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFram
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
 	ctctx := machine.NewCompileTimeCallContext(false, true, env)
-	if err := ctc.CompileExpression(ctctx, expanded); err != nil {
+	err = ctc.CompileExpression(ctctx, expanded)
+	if err != nil {
 		return nil, err
 	}
 	// Note: do NOT add RestoreContinuation - the VM naturally halts when operations end

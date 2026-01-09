@@ -16,7 +16,6 @@
 package values
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -35,6 +34,23 @@ type Vector []Value
 func NewVector(vs ...Value) *Vector {
 	q := (*Vector)(&vs)
 	return q
+}
+
+// NewVectorWithLength creates a new Vector of the given length,
+// with all elements initialized to the specified fill value.
+func NewVectorWithLength(length int) *Vector {
+	slice := make([]Value, length)
+	q := Vector(slice)
+	return &q
+}
+
+// Len returns the number of elements in the vector.
+// Returns 0 if the vector is void (nil pointer).
+func (p *Vector) Len() int {
+	if p.IsVoid() {
+		return 0
+	}
+	return len(*p)
 }
 
 // Datum returns the underlying slice of values.
@@ -110,10 +126,10 @@ func (p *Vector) SchemeString() string {
 	if len(*p) > 0 {
 		q.WriteString(" ")
 		v := (*p)[0]
-		q.WriteString(fmt.Sprintf("%s", v.SchemeString()))
+		q.WriteString(v.SchemeString())
 		for _, v = range (*p)[1:] {
 			q.WriteString(" ")
-			q.WriteString(fmt.Sprintf("%s", v.SchemeString()))
+			q.WriteString(v.SchemeString())
 		}
 		q.WriteString(" ")
 	}

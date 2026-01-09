@@ -31,7 +31,7 @@ import (
 // runProgram is a helper to compile and run a Scheme program from a values.Value AST.
 func runProgram(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func runProgramWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog val
 // runSchemeCode parses and runs Scheme source code string.
 func runSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -71,8 +71,8 @@ func runSchemeCode(t *testing.T, code string) (values.Value, error) {
 // runSchemeCodeWithEnv parses and runs Scheme source code with the given environment.
 func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	t.Helper()
-	p := parser.NewParser(env, strings.NewReader(code))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(code))
+	stx, err := p.ReadSyntax(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -97,4 +97,19 @@ func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code 
 		return nil, err
 	}
 	return mc.GetValue(), nil
+}
+
+// schemeCodeTestCase is the common struct for table-driven tests that run Scheme code
+// and compare against an expected value.
+type schemeCodeTestCase struct {
+	name     string
+	code     string
+	expected values.Value
+}
+
+// schemeCodeErrorTestCase is the common struct for table-driven tests that run Scheme code
+// and expect an error (or just verify execution without checking the result).
+type schemeCodeErrorTestCase struct {
+	name string
+	code string
 }

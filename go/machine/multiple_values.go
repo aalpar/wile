@@ -15,27 +15,33 @@
 package machine
 
 import (
-	"wile/values"
 	"slices"
 	"strings"
+
+	"wile/values"
 )
 
+// MultipleValues represents multiple return values from a function.
 type MultipleValues []values.Value
 
+// NewMultipleValues creates a new MultipleValues from the given values.
 func NewMultipleValues(values ...values.Value) MultipleValues {
 	return values
 }
 
-func (p MultipleValues) Length() int {
+// Len returns the number of values in the MultipleValues.
+func (p MultipleValues) Len() int {
 	return len(p)
 }
 
+// Copy creates a copy of the MultipleValues.
 func (p MultipleValues) Copy() MultipleValues {
 	return slices.Clone(p)
 }
 
+// IsVoid returns true if the MultipleValues represents 'void' - either
 func (p MultipleValues) IsVoid() bool {
-	if p == nil || len(p) == 0 {
+	if len(p) == 0 {
 		return true
 	}
 	if len(p) == 1 && values.IsVoid(p[0]) {
@@ -44,6 +50,7 @@ func (p MultipleValues) IsVoid() bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the MultipleValues.
 func (p MultipleValues) SchemeString() string {
 	q := strings.Builder{}
 	if len(p) == 0 {
@@ -62,6 +69,7 @@ func (p MultipleValues) SchemeString() string {
 	return q.String()
 }
 
+// EqualTo checks if the MultipleValues is equal to another value.
 func (p MultipleValues) EqualTo(o values.Value) bool {
 	v, ok := o.(MultipleValues)
 	if !ok {

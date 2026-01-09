@@ -25,11 +25,7 @@ import (
 )
 
 func TestMinMaxWithRationals(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "min with rational",
 			code:     `(min 1/2 3/4 1/4)`,
@@ -62,11 +58,7 @@ func TestMinMaxWithRationals(t *testing.T) {
 }
 
 func TestRationalQExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "rational? on positive integer",
 			code:     `(rational? 42)`,
@@ -138,10 +130,7 @@ func TestStringAppendExtended(t *testing.T) {
 }
 
 func TestReadSyntaxFromStringPort(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "read-syntax from string port",
 			code: `(let ((p (open-input-string "(+ 1 2)")))
@@ -164,10 +153,7 @@ func TestReadSyntaxFromStringPort(t *testing.T) {
 }
 
 func TestReadTokenFromStringPort(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "read-token identifier",
 			code: `(let ((p (open-input-string "hello")))
@@ -190,10 +176,7 @@ func TestReadTokenFromStringPort(t *testing.T) {
 }
 
 func TestClosePortExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "close-port on string input port",
 			code: `(let ((p (open-input-string "hello")))
@@ -230,11 +213,7 @@ func TestClosePortExtended(t *testing.T) {
 }
 
 func TestEvalExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "eval subtraction",
 			code:     `(eval '(- 10 3) (interaction-environment))`,
@@ -262,10 +241,7 @@ func TestEvalExtended(t *testing.T) {
 }
 
 func TestAddWithComplexAndRationals(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "add with complex",
 			code: `(+ 1+2i 3+4i)`,
@@ -290,11 +266,7 @@ func TestAddWithComplexAndRationals(t *testing.T) {
 }
 
 func TestListOperationsExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "list-ref first",
 			code:     `(list-ref '(a b c d) 0)`,
@@ -350,11 +322,7 @@ func TestDynamicWindBasic(t *testing.T) {
 }
 
 func TestCallWithValuesExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "call-with-values single value",
 			code:     `(call-with-values (lambda () 42) (lambda (x) x))`,
@@ -377,10 +345,7 @@ func TestCallWithValuesExtended(t *testing.T) {
 }
 
 func TestExactInexactExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "exact on rational",
 			code: `(exact 1/2)`,
@@ -409,10 +374,7 @@ func TestExactInexactExtended(t *testing.T) {
 }
 
 func TestMakeRectangularExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "make-rectangular with integers",
 			code: `(make-rectangular 3 4)`,
@@ -454,11 +416,7 @@ func TestMinMaxWithFloats(t *testing.T) {
 }
 
 func TestRationalQWithMoreTypes(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "rational? on symbol",
 			code:     `(rational? 'hello)`,
@@ -481,10 +439,7 @@ func TestRationalQWithMoreTypes(t *testing.T) {
 }
 
 func TestBytevectorU8RefSet(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "bytevector-u8-ref",
 			code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-ref bv 1))`,
@@ -505,10 +460,7 @@ func TestBytevectorU8RefSet(t *testing.T) {
 }
 
 func TestDenominatorNumeratorExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "denominator of float",
 			code: `(denominator 2.5)`,
@@ -529,10 +481,7 @@ func TestDenominatorNumeratorExtended(t *testing.T) {
 }
 
 func TestDivisionWithRationals(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "divide rationals",
 			code: `(/ 1/2 1/4)`,
@@ -553,10 +502,7 @@ func TestDivisionWithRationals(t *testing.T) {
 }
 
 func TestMagnitudeExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "magnitude of rational",
 			code: `(magnitude 3/4)`,
@@ -577,10 +523,7 @@ func TestMagnitudeExtended(t *testing.T) {
 }
 
 func TestGcdLcmExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "gcd with rationals",
 			code: `(gcd 6 9 12)`,
@@ -601,10 +544,7 @@ func TestGcdLcmExtended(t *testing.T) {
 }
 
 func TestExactIntegerSqrtMore(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "exact-integer-sqrt perfect square",
 			code: `(exact-integer-sqrt 16)`,
@@ -638,10 +578,7 @@ func TestNewlineExtended(t *testing.T) {
 }
 
 func TestFloorDivQuotientRemainder(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "floor/ basic",
 			code: `(floor/ 10 3)`,
@@ -678,11 +615,7 @@ func TestFloorDivQuotientRemainder(t *testing.T) {
 }
 
 func TestApplyExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "apply with prefix args",
 			code:     `(apply + 1 2 '(3 4))`,
@@ -705,10 +638,7 @@ func TestApplyExtended(t *testing.T) {
 }
 
 func TestAppendExtended(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "append three lists",
 			code: `(append '(a b) '(c d) '(e f))`,
@@ -729,10 +659,7 @@ func TestAppendExtended(t *testing.T) {
 }
 
 func TestAssocAssqAssv(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "assoc found",
 			code: `(assoc 'b '((a 1) (b 2) (c 3)))`,
@@ -760,10 +687,7 @@ func TestAssocAssqAssv(t *testing.T) {
 }
 
 func TestMemberMemqMemv(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "member found",
 			code: `(member 2 '(1 2 3))`,
@@ -792,10 +716,7 @@ func TestMemberMemqMemv(t *testing.T) {
 
 // TestClosePortMoreCases tests additional close-port scenarios
 func TestClosePortMoreCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "close string input port",
 			code: `(close-port (open-input-string "hello"))`,
@@ -824,10 +745,7 @@ func TestClosePortMoreCases(t *testing.T) {
 
 // TestMinMaxErrorCases tests error cases for min and max
 func TestMinMaxErrorCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "min with single number",
 			code: `(min 42)`,
@@ -864,11 +782,7 @@ func TestMinMaxErrorCases(t *testing.T) {
 
 // TestRationalQMoreCases tests additional rational? edge cases
 func TestRationalQMoreCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "rational? on integer",
 			code:     `(rational? 42)`,
@@ -937,10 +851,7 @@ func TestRationalQMoreCases(t *testing.T) {
 
 // TestNewlineMoreCases tests newline with different port types
 func TestNewlineMoreCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "newline to string output port",
 			code: `(let ((p (open-output-string)))
@@ -965,11 +876,7 @@ func TestNewlineMoreCases(t *testing.T) {
 
 // TestEvalMoreCases tests eval with different environment cases
 func TestEvalMoreCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "eval simple addition",
 			code:     `(eval '(+ 2 3) (interaction-environment))`,
@@ -998,10 +905,7 @@ func TestEvalMoreCases(t *testing.T) {
 
 // TestRationalizeMoreCases tests rationalize with edge cases
 func TestRationalizeMoreCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "rationalize integer",
 			code: `(rationalize 5 0)`,
@@ -1034,11 +938,7 @@ func TestRationalizeMoreCases(t *testing.T) {
 
 // TestCallWithValuesMoreCases tests call-with-values edge cases
 func TestCallWithValuesMoreCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "call-with-values returning no values",
 			code:     `(call-with-values (lambda () (values)) (lambda () 'done))`,
@@ -1067,10 +967,7 @@ func TestCallWithValuesMoreCases(t *testing.T) {
 
 // TestTrigWithRationals tests trig functions with rational numbers
 func TestTrigWithRationals(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "sin with rational",
 			code: `(sin 1/2)`,
@@ -1123,10 +1020,7 @@ func TestTrigWithRationals(t *testing.T) {
 
 // TestExactMoreCases tests exact with more numeric types
 func TestExactMoreCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "exact with integer",
 			code: `(exact 42)`,
@@ -1151,11 +1045,7 @@ func TestExactMoreCases(t *testing.T) {
 
 // TestListToStringExtended tests list->string with more cases
 func TestListToStringExtended(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "list->string empty",
 			code:     `(list->string '())`,
@@ -1184,10 +1074,7 @@ func TestListToStringExtended(t *testing.T) {
 
 // TestDynamicWindCases tests dynamic-wind behavior
 func TestDynamicWindCases(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "dynamic-wind simple",
 			code: `(let ((x 0))

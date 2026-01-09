@@ -24,7 +24,7 @@ import (
 // PrimInexact implements the (inexact) primitive.
 // Converts exact number to inexact.
 func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(values.NewFloat(float64(v.Value)))

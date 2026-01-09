@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+
 	"wile/values"
 )
 
@@ -45,11 +46,5 @@ func (p *OperationLoadLiteralInteger) IsVoid() bool {
 
 func (p *OperationLoadLiteralInteger) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadLiteralInteger)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return true
+	return sameType(p, v, ok)
 }

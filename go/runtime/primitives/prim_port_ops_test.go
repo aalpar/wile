@@ -20,9 +20,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestOpenInputFile(t *testing.T) {

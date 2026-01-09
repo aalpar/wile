@@ -15,6 +15,7 @@
 package validate
 
 import (
+	"context"
 	"testing"
 
 	"wile/syntax"
@@ -26,6 +27,14 @@ import (
 
 func makeSyntax(v values.Value) syntax.SyntaxValue {
 	return utils.DatumToSyntaxValue(syntax.NewZeroValueSourceContext(), v)
+}
+
+// validationTestCase is the common struct for table-driven validation tests
+// that check if a form validates successfully.
+type validationTestCase struct {
+	name   string
+	input  values.Value
+	wantOk bool
 }
 
 // TestValidateIf tests the if form validator
@@ -63,7 +72,7 @@ func TestValidateIf(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				c.Assert(result.Expr, qt.IsNotNil)
@@ -116,7 +125,7 @@ func TestValidateDefine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				def, ok := result.Expr.(*ValidatedDefine)
@@ -131,11 +140,7 @@ func TestValidateDefine(t *testing.T) {
 
 // TestValidateLambda tests the lambda form validator
 func TestValidateLambda(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name:   "single param",
 			input:  values.List(values.NewSymbol("lambda"), values.NewSymbol("x"), values.NewSymbol("x")),
@@ -161,7 +166,7 @@ func TestValidateLambda(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLambda)
@@ -175,11 +180,7 @@ func TestValidateLambda(t *testing.T) {
 
 // TestValidateSetBang tests the set! form validator
 func TestValidateSetBang(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name:   "valid set!",
 			input:  values.List(values.NewSymbol("set!"), values.NewSymbol("x"), values.NewInteger(42)),
@@ -200,7 +201,7 @@ func TestValidateSetBang(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedSetBang)
@@ -214,11 +215,7 @@ func TestValidateSetBang(t *testing.T) {
 
 // TestValidateQuote tests the quote form validator
 func TestValidateQuote(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name:   "quote symbol",
 			input:  values.List(values.NewSymbol("quote"), values.NewSymbol("x")),
@@ -244,7 +241,7 @@ func TestValidateQuote(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedQuote)
@@ -287,12 +284,12 @@ func TestValidateBegin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				b, ok := result.Expr.(*ValidatedBegin)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(len(b.Exprs), qt.Equals, tt.exprCount)
+				c.Assert(len(b.Body()), qt.Equals, tt.exprCount)
 			} else {
 				c.Assert(result.Ok(), qt.IsFalse)
 			}
@@ -337,12 +334,12 @@ func TestValidateCall(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				call, ok := result.Expr.(*ValidatedCall)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(len(call.Args), qt.Equals, tt.argCount)
+				c.Assert(len(call.Body()), qt.Equals, tt.argCount)
 			} else {
 				c.Assert(result.Ok(), qt.IsFalse)
 			}
@@ -353,7 +350,7 @@ func TestValidateCall(t *testing.T) {
 // TestValidateSymbol tests symbol validation
 func TestValidateSymbol(t *testing.T) {
 	c := qt.New(t)
-	result := ValidateExpression(nil, makeSyntax(values.NewSymbol("foo")))
+	result := ValidateExpression(context.TODO(), makeSyntax(values.NewSymbol("foo")))
 	c.Assert(result.Ok(), qt.IsTrue)
 	sym, ok := result.Expr.(*ValidatedSymbol)
 	c.Assert(ok, qt.IsTrue)
@@ -376,7 +373,7 @@ func TestValidateLiteral(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			c.Assert(result.Ok(), qt.IsTrue)
 			_, ok := result.Expr.(*ValidatedLiteral)
 			c.Assert(ok, qt.IsTrue)
@@ -396,7 +393,7 @@ func TestValidateNestedExpressions(t *testing.T) {
 		values.List(values.NewSymbol("-"), values.NewSymbol("x"), values.NewInteger(1)),
 	)
 
-	result := ValidateExpression(nil, makeSyntax(input))
+	result := ValidateExpression(context.TODO(), makeSyntax(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	ifExpr, ok := result.Expr.(*ValidatedIf)
@@ -478,12 +475,12 @@ func TestValidateCaseLambda(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				caseLambda, ok := result.Expr.(*ValidatedCaseLambda)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(len(caseLambda.Clauses), qt.Equals, tt.clauseCount)
+				c.Assert(len(caseLambda.Clauses()), qt.Equals, tt.clauseCount)
 			} else {
 				c.Assert(result.Ok(), qt.IsFalse)
 			}
@@ -493,11 +490,7 @@ func TestValidateCaseLambda(t *testing.T) {
 
 // TestValidateQuasiquote tests the quasiquote form validator
 func TestValidateQuasiquote(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name:   "simple quasiquote",
 			input:  values.List(values.NewSymbol("quasiquote"), values.NewSymbol("x")),
@@ -530,7 +523,7 @@ func TestValidateQuasiquote(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedQuasiquote)
@@ -544,11 +537,7 @@ func TestValidateQuasiquote(t *testing.T) {
 
 // TestValidateDefineSyntax tests the define-syntax form validator
 func TestValidateDefineSyntax(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid define-syntax",
 			input: values.List(
@@ -587,7 +576,7 @@ func TestValidateDefineSyntax(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -601,11 +590,7 @@ func TestValidateDefineSyntax(t *testing.T) {
 
 // TestValidateSyntaxRules tests the syntax-rules form validator
 func TestValidateSyntaxRules(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid syntax-rules with empty literals",
 			input: values.List(
@@ -657,7 +642,7 @@ func TestValidateSyntaxRules(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -671,11 +656,7 @@ func TestValidateSyntaxRules(t *testing.T) {
 
 // TestValidateImport tests the import form validator
 func TestValidateImport(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid import with library name",
 			input: values.List(
@@ -710,7 +691,7 @@ func TestValidateImport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -724,11 +705,7 @@ func TestValidateImport(t *testing.T) {
 
 // TestValidateExport tests the export form validator
 func TestValidateExport(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid export with symbols",
 			input: values.List(
@@ -764,7 +741,7 @@ func TestValidateExport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -778,11 +755,7 @@ func TestValidateExport(t *testing.T) {
 
 // TestValidateDefineLibrary tests the define-library form validator
 func TestValidateDefineLibrary(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid define-library",
 			input: values.List(
@@ -826,7 +799,7 @@ func TestValidateDefineLibrary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -840,11 +813,7 @@ func TestValidateDefineLibrary(t *testing.T) {
 
 // TestValidateInclude tests the include form validator
 func TestValidateInclude(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid include",
 			input: values.List(
@@ -880,7 +849,7 @@ func TestValidateInclude(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -894,11 +863,7 @@ func TestValidateInclude(t *testing.T) {
 
 // TestValidateCondExpand tests the cond-expand form validator
 func TestValidateCondExpand(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "valid cond-expand",
 			input: values.List(
@@ -925,7 +890,7 @@ func TestValidateCondExpand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 				_, ok := result.Expr.(*ValidatedLiteral)
@@ -942,7 +907,7 @@ func TestValidationErrorFormatting(t *testing.T) {
 	c := qt.New(t)
 
 	// Single error
-	result := ValidateExpression(nil, makeSyntax(values.List(values.NewSymbol("if"))))
+	result := ValidateExpression(context.TODO(), makeSyntax(values.List(values.NewSymbol("if"))))
 	c.Assert(result.Ok(), qt.IsFalse)
 	c.Assert(len(result.Errors), qt.Equals, 1)
 	errStr := result.Error()
@@ -954,7 +919,7 @@ func TestValidationErrorFormatting(t *testing.T) {
 		values.NewInteger(1),
 		values.NewInteger(2),
 	)
-	result2 := ValidateExpression(nil, makeSyntax(badCaseLambda))
+	result2 := ValidateExpression(context.TODO(), makeSyntax(badCaseLambda))
 	c.Assert(result2.Ok(), qt.IsFalse)
 	c.Assert(len(result2.Errors) > 1, qt.IsTrue)
 	errStr2 := result2.Error()
@@ -965,8 +930,6 @@ func TestValidationErrorFormatting(t *testing.T) {
 
 // TestValidatedFormSources tests that all validated forms have Source() methods
 func TestValidatedFormSources(t *testing.T) {
-	c := qt.New(t)
-
 	tests := []struct {
 		name  string
 		input values.Value
@@ -992,7 +955,8 @@ func TestValidatedFormSources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 			c.Assert(result.Expr, qt.IsNotNil)
 			// Source() should not panic
@@ -1043,8 +1007,6 @@ func TestValidateSyntaxObject(t *testing.T) {
 
 // TestValidateExprEdgeCases tests edge cases in validateExpr
 func TestValidateExprEdgeCases(t *testing.T) {
-	c := qt.New(t)
-
 	// Test with different literal types
 	tests := []struct {
 		name  string
@@ -1059,7 +1021,8 @@ func TestValidateExprEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 			_, ok := result.Expr.(*ValidatedLiteral)
 			c.Assert(ok, qt.IsTrue)
@@ -1075,7 +1038,7 @@ func TestValidateMetaForm(t *testing.T) {
 		values.NewSymbol("meta"),
 		values.NewSymbol("some-metadata"),
 	)
-	result := ValidateExpression(nil, makeSyntax(metaForm))
+	result := ValidateExpression(context.TODO(), makeSyntax(metaForm))
 	c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 	_, ok := result.Expr.(*ValidatedLiteral)
 	c.Assert(ok, qt.IsTrue)
@@ -1112,13 +1075,7 @@ func TestValidationErrorWithSource(t *testing.T) {
 
 // TestValidateParamsEdgeCases tests edge cases in parameter validation
 func TestValidateParamsEdgeCases(t *testing.T) {
-	c := qt.New(t)
-
-	tests := []struct {
-		name   string
-		input  values.Value
-		wantOk bool
-	}{
+	tests := []validationTestCase{
 		{
 			name: "duplicate parameters",
 			input: values.List(
@@ -1171,7 +1128,8 @@ func TestValidateParamsEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ValidateExpression(nil, makeSyntax(tt.input))
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
 			} else {
@@ -1186,7 +1144,7 @@ func TestValidateSyntaxRulesEdgeCases(t *testing.T) {
 	c := qt.New(t)
 
 	// Test with literals not being a list
-	result := ValidateExpression(nil, makeSyntax(
+	result := ValidateExpression(context.TODO(), makeSyntax(
 		values.List(
 			values.NewSymbol("syntax-rules"),
 			values.NewInteger(42),
@@ -1195,7 +1153,7 @@ func TestValidateSyntaxRulesEdgeCases(t *testing.T) {
 	c.Assert(result.Ok(), qt.IsFalse)
 
 	// Test with improper literals list
-	result2 := ValidateExpression(nil, makeSyntax(
+	result2 := ValidateExpression(context.TODO(), makeSyntax(
 		values.List(
 			values.NewSymbol("syntax-rules"),
 			values.NewCons(values.NewSymbol("else"), values.NewInteger(42)),
@@ -1204,7 +1162,7 @@ func TestValidateSyntaxRulesEdgeCases(t *testing.T) {
 	c.Assert(result2.Ok(), qt.IsFalse)
 
 	// Test with clause not being a pair
-	result3 := ValidateExpression(nil, makeSyntax(
+	result3 := ValidateExpression(context.TODO(), makeSyntax(
 		values.List(
 			values.NewSymbol("syntax-rules"),
 			values.EmptyList,
@@ -1214,7 +1172,7 @@ func TestValidateSyntaxRulesEdgeCases(t *testing.T) {
 	c.Assert(result3.Ok(), qt.IsFalse)
 
 	// Test with improper clause list
-	result4 := ValidateExpression(nil, makeSyntax(
+	result4 := ValidateExpression(context.TODO(), makeSyntax(
 		values.List(
 			values.NewSymbol("syntax-rules"),
 			values.EmptyList,

@@ -21,9 +21,10 @@ import (
 	"wile/values"
 )
 
+// PrimSetCdr implements the Scheme set-cdr! primitive.
 func PrimSetCdr(_ context.Context, mc *machine.MachineContext) error {
-	pair := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	pair := mc.Arg(0)
+	val := mc.Arg(1)
 	p, ok := pair.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "set-cdr!: expected a pair but got %T", pair)

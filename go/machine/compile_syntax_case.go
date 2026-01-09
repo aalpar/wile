@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"sort"
 
 	"wile/environment"
@@ -50,10 +51,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Get the input expression (CAR of args)
-	inputExpr, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("syntax-case: expected expression")
-	}
+	inputExpr := argsPair.SyntaxCar()
 
 	// Get the rest ((literals) clause ...)
 	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -62,15 +60,13 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Extract literals list (CAR of rest)
-	literalsExpr, ok := rest.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("syntax-case: expected literals list")
-	}
+	literalsExpr := rest.SyntaxCar()
 
 	literals := make(map[string]struct{})
 	if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
 		if !literalsPair.IsEmptyList() {
-			if err := extractLiterals(literalsPair, literals); err != nil {
+			err := extractLiterals(literalsPair, literals)
+			if err != nil {
 				return values.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}
 		}
@@ -96,25 +92,14 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	var failJumps []jumpPatch    // Jumps to next clause on match failure
 
 	clauseIndex := 0
-	for current := clausesCdr; current != nil && !current.IsEmptyList(); {
-		clauseStart := len(p.template.operations)
-		_ = clauseStart // Used for patching
-
-		clauseVal, ok := current.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("syntax-case: expected clause")
-		}
-
+	v, err := clausesCdr.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, clauseVal syntax.SyntaxValue) error {
 		clausePair, ok := clauseVal.(*syntax.SyntaxPair)
 		if !ok || clausePair.IsEmptyList() {
 			return values.NewForeignError("syntax-case: clause must be a list")
 		}
 
 		// Extract pattern
-		pattern, ok := clausePair.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("syntax-case: expected pattern")
-		}
+		pattern := clausePair.SyntaxCar()
 
 		// Get the rest (body or fender + body)
 		clauseRest, ok := clausePair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -126,19 +111,13 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		var fender syntax.SyntaxValue
 		var body syntax.SyntaxValue
 
-		bodyOrFender, ok := clauseRest.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.NewForeignError("syntax-case: expected body or fender")
-		}
+		bodyOrFender := clauseRest.SyntaxCar()
 
 		restAfterFirst, ok := clauseRest.SyntaxCdr().(*syntax.SyntaxPair)
 		if ok && !restAfterFirst.IsEmptyList() {
 			// There's a fender
 			fender = bodyOrFender
-			body, ok = restAfterFirst.SyntaxCar().(syntax.SyntaxValue)
-			if !ok {
-				return values.NewForeignError("syntax-case: expected body after fender")
-			}
+			body = restAfterFirst.SyntaxCar()
 		} else {
 			// No fender, just body
 			body = bodyOrFender
@@ -151,13 +130,13 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		}
 
 		clauseIndex++
-
-		// Move to next clause
-		currentCdr := current.SyntaxCdr()
-		if currentCdr == nil {
-			break
-		}
-		current, _ = currentCdr.(*syntax.SyntaxPair)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.NewForeignError("syntax-case: expected proper list of clauses")
 	}
 
 	// Add error operation for when no clause matches

@@ -22,10 +22,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// SyntaxEquals is a quicktest checker that compares syntax values.
 var SyntaxEquals qt.Checker = &syntaxEqualsChecker{}
 
-type syntaxEqualsChecker struct {
-}
+type syntaxEqualsChecker struct{}
 
 func (c *syntaxEqualsChecker) ArgNames() []string {
 	return []string{"got", "want"}
@@ -35,7 +35,8 @@ func (c *syntaxEqualsChecker) ArgNames() []string {
 func (c *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note func(key string, value interface{})) (err error) {
 	defer func() {
 		// A panic is raised when the provided args are not comparable.
-		if r := recover(); r != nil {
+		r := recover()
+		if r != nil {
 			err = fmt.Errorf("%s", r)
 		}
 	}()

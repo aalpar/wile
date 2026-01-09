@@ -24,9 +24,10 @@ import (
 	"wile/environment"
 	"wile/machine"
 	"wile/parser"
-	schemertime "wile/runtime"
 	"wile/syntax"
 	"wile/values"
+
+	schemertime "wile/runtime"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -40,8 +41,8 @@ func getTestdataPath() string {
 // parseLibrarySyntax is a helper to parse a string into syntax for library tests
 func parseLibrarySyntax(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
-	p := parser.NewParser(env, reader)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -301,7 +302,7 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
 
 	// Create the top-level environment
-	env, err := schemertime.NewTopLevelEnvironmentFrameTiny()
+	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}

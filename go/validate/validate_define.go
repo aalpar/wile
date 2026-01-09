@@ -16,13 +16,14 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 	"wile/values"
 )
 
 // validateDefine validates both forms:
 // (define name expr) and (define (name params...) body...)
-func validateDefine(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefine(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -44,11 +45,11 @@ func validateDefine(ctx context.Context, pair *syntax.SyntaxPair, result *Valida
 	switch s := second.(type) {
 	case *syntax.SyntaxSymbol:
 		// (define name expr) - simple variable definition
-		return validateDefineVariable(nil, source, s, elements, result)
+		return validateDefineVariable(context.TODO(), source, s, elements, result)
 
 	case *syntax.SyntaxPair:
 		// (define (name params...) body...) - function definition
-		return validateDefineFunction(nil, source, s, elements, result)
+		return validateDefineFunction(context.TODO(), source, s, elements, result)
 
 	default:
 		result.addErrorf(source, "define", "expected symbol or list after define, got %T", second)
@@ -71,8 +72,8 @@ func validateDefineVariable(ctx context.Context, source *syntax.SourceContext, n
 	return &ValidatedDefine{
 		formName:   "define",
 		source:     source,
-		Name:       name,
-		Value:      value,
+		name:       name,
+		subExp:     value,
 		IsFunction: false,
 	}
 }
@@ -117,10 +118,10 @@ func validateDefineFunction(ctx context.Context, source *syntax.SourceContext, n
 	return &ValidatedDefine{
 		formName:   "define",
 		source:     source,
-		Name:       name,
+		name:       name,
 		IsFunction: true,
-		Params:     params,
-		Body:       body,
+		params:     params,
+		body:       body,
 	}
 }
 

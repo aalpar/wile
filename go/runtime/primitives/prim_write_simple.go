@@ -27,8 +27,8 @@ import (
 // for shared or circular structure. This is the same as write for non-circular data.
 // (write-simple obj) or (write-simple obj port)
 func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	obj := mc.Arg(0)
+	o := mc.Arg(1)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "write-simple: expected a pair but got %T", o)

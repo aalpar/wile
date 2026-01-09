@@ -61,10 +61,12 @@ func (wg *WaitGroup) Wait() {
 
 // Value interface implementation
 
+// IsVoid returns true if the wait group is nil.
 func (wg *WaitGroup) IsVoid() bool {
 	return wg == nil
 }
 
+// EqualTo returns true if the wait groups are the same object.
 func (wg *WaitGroup) EqualTo(v Value) bool {
 	other, ok := v.(*WaitGroup)
 	if !ok {
@@ -73,6 +75,7 @@ func (wg *WaitGroup) EqualTo(v Value) bool {
 	return wg == other
 }
 
+// SchemeString returns the Scheme representation of the wait group.
 func (wg *WaitGroup) SchemeString() string {
 	if wg == nil {
 		return "#<wait-group:void>"

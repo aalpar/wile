@@ -145,7 +145,8 @@ func TestArrayList_IsList(t *testing.T) {
 		{in: NewArrayList(NewInteger(10), EmptyList), out: true},
 		{in: NewArrayList(NewArrayList(NewInteger(10), EmptyList), EmptyList), out: true},
 		{in: NewArrayList(NewInteger(10), NewInteger(20), EmptyList), out: true},
-		{in: NewArrayList(NewInteger(10), NewInteger(20), NewInteger(30)),
+		{
+			in:  NewArrayList(NewInteger(10), NewInteger(20), NewInteger(30)),
 			out: false,
 		},
 	}
@@ -163,14 +164,17 @@ func TestArrayLis_Length(t *testing.T) {
 		out          int
 		panicMatches string
 	}{
-		{in: nil,
+		{
+			in:           nil,
 			panicMatches: "not a list",
-			out:          -1},
+			out:          -1,
+		},
 		{in: NewArrayList(nil, nil), out: 0},
 		{in: NewArrayList(NewInteger(10), EmptyList), out: 1},
 		{in: NewArrayList(NewArrayList(NewInteger(10), EmptyList), EmptyList), out: 1},
 		{in: NewArrayList(NewInteger(10), NewInteger(20), EmptyList), out: 2},
-		{in: NewArrayList(NewInteger(10), NewInteger(20), NewInteger(30)),
+		{
+			in:           NewArrayList(NewInteger(10), NewInteger(20), NewInteger(30)),
 			panicMatches: "not a list",
 			out:          -1,
 		},
@@ -178,9 +182,9 @@ func TestArrayLis_Length(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
 			if tc.panicMatches != "" {
-				qt.Assert(t, func() { tc.in.Length() }, qt.PanicMatches, tc.panicMatches)
+				qt.Assert(t, func() { tc.in.Len() }, qt.PanicMatches, tc.panicMatches)
 			} else {
-				got := tc.in.Length()
+				got := tc.in.Len()
 				qt.Assert(t, got, qt.Equals, tc.out)
 			}
 		})
@@ -333,7 +337,7 @@ func TestArrayList_ForEach(t *testing.T) {
 	a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
 	count := 0
 	sum := int64(0)
-	a.ForEach(nil, func(_ context.Context, i int, hasNext bool, v Value) error { //nolint:errcheck
+	a.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error { //nolint:errcheck
 		count++
 		if intVal, ok := v.(*Integer); ok {
 			sum += intVal.Value

@@ -23,6 +23,7 @@ var (
 	_ Number = (*Rational)(nil)
 )
 
+// Rational represents a Scheme rational number (exact fraction).
 type Rational struct {
 	value *big.Rat
 }
@@ -83,6 +84,7 @@ func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
 }
 
+// Add returns the sum of two numbers.
 func (p *Rational) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -106,6 +108,7 @@ func (p *Rational) Add(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Subtract returns the difference of two numbers.
 func (p *Rational) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -126,6 +129,7 @@ func (p *Rational) Subtract(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Multiply returns the product of two numbers.
 func (p *Rational) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -146,6 +150,7 @@ func (p *Rational) Multiply(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// Divide returns the quotient of two numbers.
 func (p *Rational) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
@@ -166,10 +171,12 @@ func (p *Rational) Divide(o Number) Number {
 	panic(ErrNotANumber)
 }
 
+// IsZero returns true if the rational equals zero.
 func (p *Rational) IsZero() bool {
 	return p.value.Sign() == 0
 }
 
+// LessThan returns true if this rational is less than another number.
 func (p *Rational) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Rational:
@@ -185,10 +192,12 @@ func (p *Rational) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
+// IsVoid returns true if the rational is nil.
 func (p *Rational) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the rationals have equal values.
 func (p *Rational) EqualTo(v Value) bool {
 	if other, ok := v.(*Rational); ok {
 		return p.value.Cmp(other.value) == 0
@@ -196,6 +205,7 @@ func (p *Rational) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the rational.
 func (p *Rational) SchemeString() string {
 	return p.value.RatString()
 }

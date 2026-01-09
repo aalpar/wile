@@ -47,7 +47,7 @@ import (
 //
 // It provides the bridge between:
 //   - Syntax objects (SyntaxPair, SyntaxSymbol) with source locations and scopes
-//   - Raw values (Pair, Symbol) that the pattern matching VM operates on
+//   - Raw values (Pair, Sym) that the pattern matching VM operates on
 //
 // The separation allows the pattern matcher to be simple and efficient,
 // while syntax/scope handling is done in the adapter layer.
@@ -151,35 +151,40 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 
 	switch s := stx.(type) {
 	case *syntax.SyntaxPair:
-		if s == nil || s.IsEmptyList() {
+		if s == nil || syntax.IsSyntaxEmptyList(s) {
 			result = values.EmptyList
 		} else {
 			// Recursively unwrap car and cdr, building the map
 			var car values.Value
-			if carVal := s.Car(); carVal != nil {
-				if carSyntax, ok := carVal.(syntax.SyntaxValue); ok {
-					car = sm.syntaxToValueWithMap(carSyntax)
-				} else {
-					car = carVal.(values.Value)
-				}
+			carVal := s.SyntaxCar()
+			if carVal != nil {
+				carSyntax := carVal
+				car = sm.syntaxToValueWithMap(carSyntax)
+				//				} else {
+				//					car = carVal
+				//				}
 			}
 
 			var cdr values.Value
-			if cdrVal := s.Cdr(); cdrVal != nil {
-				if cdrSyntax, ok := cdrVal.(syntax.SyntaxValue); ok {
-					cdr = sm.syntaxToValueWithMap(cdrSyntax)
-				} else {
-					cdr = cdrVal.(values.Value)
-				}
+			cdrVal := s.SyntaxCdr()
+			if cdrVal != nil {
+				cdrSyntax := cdrVal
+				cdr = sm.syntaxToValueWithMap(cdrSyntax)
+				//				} else {
+				//					cdr = cdrVal
+				//				}
 			}
 
 			// Build the result pair
 			if cdr == nil || values.IsEmptyList(cdr) {
 				result = values.NewCons(car, values.EmptyList)
-			} else if cdrPair, ok := cdr.(*values.Pair); ok {
-				result = values.NewCons(car, cdrPair)
 			} else {
-				result = values.NewCons(car, cdr)
+				cdrPair, ok := cdr.(*values.Pair)
+				if ok {
+					result = values.NewCons(car, cdrPair)
+				} else {
+					result = values.NewCons(car, cdr)
+				}
 			}
 		}
 
@@ -190,9 +195,11 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 		result = s.Unwrap()
 
 	default:
-		if unwrapper, ok := stx.(interface{ Unwrap() values.Value }); ok {
+		unwrapper, ok := stx.(interface{ Unwrap() values.Value })
+		if ok {
 			result = unwrapper.Unwrap()
-		} else if val, ok := stx.(values.Value); ok {
+		} else {
+			val := stx
 			result = val
 		}
 	}
@@ -204,13 +211,6 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 	}
 
 	return result
-}
-
-// valueToSyntaxWithMap wraps raw values back into syntax objects,
-// using the syntax map to preserve original syntax objects from captured
-// pattern variables. This is essential for hygiene.
-func (sm *SyntaxMatcher) valueToSyntaxWithMap(val values.Value, templateStx syntax.SyntaxValue) syntax.SyntaxValue {
-	return sm.valueToSyntaxWithIntroScope(val, templateStx, nil, nil)
 }
 
 // valueToSyntaxWithIntroScope wraps raw values back into syntax objects,
@@ -293,7 +293,8 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		// 2. This is NOT a free identifier
 		if introScope != nil {
 			if freeIds != nil {
-				if _, isFree := freeIds[v.Key]; !isFree {
+				_, isFree := freeIds[v.Key]
+				if !isFree {
 					sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
 				}
 			} else {
@@ -348,8 +349,10 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 		}
 		// Recursively unwrap car and cdr
 		var car values.Value
-		if carVal := s.Car(); carVal != nil {
-			if carSyntax, ok := carVal.(syntax.SyntaxValue); ok {
+		carVal := s.Car()
+		if carVal != nil {
+			carSyntax, ok := carVal.(syntax.SyntaxValue)
+			if ok {
 				car = syntaxToValue(carSyntax)
 			} else {
 				// If it's already a value, use it directly
@@ -358,13 +361,14 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 		}
 
 		var cdr values.Value
-		if cdrVal := s.Cdr(); cdrVal != nil {
-			if cdrSyntax, ok := cdrVal.(syntax.SyntaxValue); ok {
-				cdr = syntaxToValue(cdrSyntax)
-			} else {
-				// If it's already a value, use it directly
-				cdr = cdrVal.(values.Value)
-			}
+		cdrVal := s.SyntaxCdr()
+		if cdrVal != nil {
+			cdrSyntax := cdrVal
+			cdr = syntaxToValue(cdrSyntax)
+			// } else {
+			// If it's already a value, use it directly
+			//	cdr = cdrVal.(values.Value)
+			//}
 		}
 
 		// Handle proper lists and improper lists
@@ -390,10 +394,8 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 			return unwrapper.Unwrap()
 		}
 		// If it's already a value, return as-is
-		if val, ok := stx.(values.Value); ok {
-			return val
-		}
-		return nil
+		val := stx
+		return val
 	}
 }
 
@@ -444,21 +446,6 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, srcCtx)
-
-	case *values.Integer:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Float:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.String:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Boolean:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Character:
-		return syntax.NewSyntaxObject(v, srcCtx)
 
 	default:
 		// For any other value type, wrap in generic syntax object

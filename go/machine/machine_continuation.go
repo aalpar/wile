@@ -16,9 +16,10 @@ package machine
 
 import (
 	"fmt"
+	"slices"
+
 	"wile/environment"
 	"wile/values"
-	"slices"
 )
 
 type MachineContinuation struct {

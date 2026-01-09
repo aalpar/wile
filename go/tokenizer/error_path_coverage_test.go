@@ -167,28 +167,28 @@ func TestNonDecimalRadixNumbers(t *testing.T) {
 		expectedType2 TokenizerState
 	}{
 		// Binary
-		{input: "#b0", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#b1", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#b10", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#b11", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#b101010", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#b0", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
+		{input: "#b1", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
+		{input: "#b10", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
+		{input: "#b11", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
+		{input: "#b101010", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
 
 		// Octal
-		{input: "#o0", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#o7", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#o10", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#o77", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#o777", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#o0", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
+		{input: "#o7", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
+		{input: "#o10", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
+		{input: "#o77", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
+		{input: "#o777", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
 
 		// Hexadecimal (must start with digit)
-		{input: "#x0", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x9", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x10", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x100", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x1a", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x1f", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x1ff", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
-		{input: "#x123abc", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x0", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x9", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x10", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x100", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x1a", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x1f", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x1ff", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x123abc", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
 	}
 	for i, tc := range tcs {
 		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {

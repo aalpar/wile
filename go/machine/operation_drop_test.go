@@ -79,13 +79,13 @@ func TestOperationDrop_Apply(t *testing.T) {
 
 	// Push value to stack
 	mc.evals.Push(values.NewInteger(42))
-	c.Assert(mc.evals.Length(), qt.Equals, 1)
+	c.Assert(mc.evals.Len(), qt.Equals, 1)
 
 	op := NewOperationDrop()
 	result, err := op.Apply(context.Background(), mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.evals.Length(), qt.Equals, 0)
+	c.Assert(mc.evals.Len(), qt.Equals, 0)
 	c.Assert(mc.pc, qt.Equals, 1)
 }

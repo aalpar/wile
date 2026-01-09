@@ -27,11 +27,13 @@ type OperationBuildSyntaxList struct {
 	Count int
 }
 
+// NewOperationBuildSyntaxList creates a new OperationBuildSyntaxList.
 func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
 	return &OperationBuildSyntaxList{Count: count}
 }
 
-func (p *OperationBuildSyntaxList) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+// Apply implements the Operation interface.
+func (p *OperationBuildSyntaxList) Apply(_ context.Context, mctx *MachineContext) (*MachineContext, error) {
 	// Pop elements from stack in reverse order and build a list
 	var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(nil)
 
@@ -39,12 +41,12 @@ func (p *OperationBuildSyntaxList) Apply(ctx context.Context, mctx *MachineConte
 		elem := mctx.evals.Pop()
 		// Wrap non-syntax values
 		var stx syntax.SyntaxValue
-		if s, ok := elem.(syntax.SyntaxValue); ok {
+		s, ok := elem.(syntax.SyntaxValue)
+		if ok {
 			stx = s
-		} else if v, ok := elem.(values.Value); ok {
-			stx = syntax.NewSyntaxObject(v, nil)
 		} else {
-			return nil, values.NewForeignErrorf("build-syntax-list: unexpected element type %T", elem)
+			v := elem
+			stx = syntax.NewSyntaxObject(v, nil)
 		}
 		result = syntax.NewSyntaxCons(stx, result, nil)
 	}

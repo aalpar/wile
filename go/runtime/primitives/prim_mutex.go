@@ -28,7 +28,7 @@ import (
 // PrimMutexQ tests if an object is a mutex
 // (mutex? obj) -> boolean
 func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Mutex)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -41,7 +41,7 @@ func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimMakeMutex creates a new mutex
 // (make-mutex [name]) -> mutex
 func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	restVal := mc.Arg(0)
 
 	name := ""
 	// Parse optional name from rest list
@@ -64,7 +64,7 @@ func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexName returns the mutex's name
 // (mutex-name mutex) -> string or symbol
 func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	mutex, ok := o.(*values.Mutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-name: expected mutex, got %T", o)
@@ -76,7 +76,7 @@ func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexSpecific returns the mutex's specific field
 // (mutex-specific mutex) -> value
 func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	mutex, ok := o.(*values.Mutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-specific: expected mutex, got %T", o)
@@ -93,8 +93,8 @@ func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexSpecificSet sets the mutex's specific field
 // (mutex-specific-set! mutex obj) -> void
 func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	mutex, ok := o.(*values.Mutex)
 	if !ok {
@@ -110,7 +110,7 @@ func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
 // (mutex-state mutex) -> symbol or thread
 // Returns: 'not-owned, 'abandoned, 'not-abandoned, or the owner thread
 func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	mutex, ok := o.(*values.Mutex)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-state: expected mutex, got %T", o)
@@ -123,8 +123,8 @@ func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
 // Returns #t if acquired, #f if timeout
 func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	mutex, ok := o.(*values.Mutex)
 	if !ok {
@@ -132,7 +132,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	var timeout *time.Duration
-	var owner = currentThread
+	owner := currentThread
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {
@@ -199,8 +199,8 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexUnlock releases the mutex
 // (mutex-unlock! mutex [condition-variable [timeout]]) -> boolean
 func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	mutex, ok := o.(*values.Mutex)
 	if !ok {

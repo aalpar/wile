@@ -32,7 +32,8 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 		// Use element's source context if available, otherwise fall back to sc
 		elemSc := sc
 		if os[0] != nil {
-			if esc := os[0].SourceContext(); esc != nil {
+			esc := os[0].SourceContext()
+			if esc != nil {
 				elemSc = esc
 			}
 		}
@@ -44,7 +45,8 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 	// Use first element's source context for the head pair
 	headSc := sc
 	if os[0] != nil {
-		if esc := os[0].SourceContext(); esc != nil {
+		esc := os[0].SourceContext()
+		if esc != nil {
 			headSc = esc
 		}
 	}
@@ -59,7 +61,8 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 		curr.SetCdr(&SyntaxPair{})
 		// Use element's source context for this pair
 		if v != nil {
-			if esc := v.SourceContext(); esc != nil {
+			esc := v.SourceContext()
+			if esc != nil {
 				curr.sourceContext = esc
 			}
 		}
@@ -68,6 +71,7 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 	return q
 }
 
+// SyntaxForEach iterates over a syntax tuple, calling fn for each element.
 func SyntaxForEach(ctx context.Context, o SyntaxValue, fn func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error) (SyntaxValue, error) {
 	pr, ok := o.(SyntaxTuple)
 	if ok {
@@ -76,6 +80,7 @@ func SyntaxForEach(ctx context.Context, o SyntaxValue, fn func(ctx context.Conte
 	return o, nil
 }
 
+// EqualTo compares two syntax values for equality, handling nil and pointer identity.
 func EqualTo(a, b SyntaxValue) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
@@ -91,6 +96,7 @@ func EqualTo(a, b SyntaxValue) bool {
 	return a.EqualTo(b)
 }
 
+// IsSyntaxList returns true if the value is a proper syntax list.
 func IsSyntaxList(v SyntaxValue) bool {
 	if v == nil {
 		return false
@@ -102,10 +108,12 @@ func IsSyntaxList(v SyntaxValue) bool {
 	return false
 }
 
+// IsSyntaxVoid returns true if the value is nil or void.
 func IsSyntaxVoid(v SyntaxValue) bool {
 	return v == nil || v.IsVoid()
 }
 
+// IsSyntaxEmptyList returns true if the value is the empty syntax list.
 func IsSyntaxEmptyList(v SyntaxValue) bool {
 	if v == nil {
 		return false

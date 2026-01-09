@@ -26,7 +26,7 @@ import (
 // PrimCallCC implements the call/cc primitive.
 // Captures current continuation and passes to procedure.
 func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
-	proc := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	proc := mc.Arg(0)
 
 	mcls, ok := proc.(*machine.MachineClosure)
 	if !ok {
@@ -46,10 +46,12 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call the procedure with the continuation closure
 	sub := mc.NewSubContext()
-	if _, err := sub.Apply(mcls, contClosure); err != nil {
+	_, err := sub.Apply(mcls, contClosure)
+	if err != nil {
 		return err
 	}
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		// Check if this is a continuation escape
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
@@ -70,6 +72,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// NewEscapeContinuationClosure creates a closure that escapes to the captured continuation when called.
 func NewEscapeContinuationClosure(env *environment.EnvironmentFrame, cont *machine.MachineContinuation) *machine.MachineClosure {
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
 		// Get the value passed to the continuation (from the closure's argument)

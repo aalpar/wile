@@ -24,7 +24,7 @@ import (
 // PrimCar implements the car primitive.
 // Returns the first element of a pair.
 func PrimCar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "car: expected a pair but got %T", o)

@@ -15,8 +15,9 @@
 package machine
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,27 +30,27 @@ func TestNewStack(t *testing.T) {
 
 func TestStack_Push(t *testing.T) {
 	q := NewStack()
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 	qt.Assert(t, func() { q.Pop() }, qt.PanicMatches, "stack underflow.*")
 	q.Push(values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 1)
+	qt.Assert(t, q.Len(), qt.Equals, 1)
 	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
 func TestStack_Clear(t *testing.T) {
 	q := NewStack()
 	q.Push(values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 1)
+	qt.Assert(t, q.Len(), qt.Equals, 1)
 	q.Clear()
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
 func TestStack_Pop(t *testing.T) {
 	q := NewStack()
 	q.Push(values.NewInteger(10))
 	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
 func TestStack_Copy(t *testing.T) {
@@ -57,22 +58,22 @@ func TestStack_Copy(t *testing.T) {
 	q.Push(values.NewInteger(10))
 	r := q.Copy()
 	r.Push(values.NewInteger(20))
-	qt.Assert(t, q.Length(), qt.Equals, 1)
-	qt.Assert(t, r.Length(), qt.Equals, 2)
+	qt.Assert(t, q.Len(), qt.Equals, 1)
+	qt.Assert(t, r.Len(), qt.Equals, 2)
 	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 	qt.Assert(t, r.Pop(), values.SchemeEquals, values.NewInteger(20))
 	qt.Assert(t, r.Pop(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
 func TestStack_Length(t *testing.T) {
 	q := NewStack()
-	qt.Assert(t, q.Length(), qt.Equals, 0)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
 	q.Push(values.NewInteger(10))
-	qt.Assert(t, q.Length(), qt.Equals, 1)
+	qt.Assert(t, q.Len(), qt.Equals, 1)
 	q.Push(values.NewInteger(20))
-	qt.Assert(t, q.Length(), qt.Equals, 2)
+	qt.Assert(t, q.Len(), qt.Equals, 2)
 }
 
 func TestStack_PopAll(t *testing.T) {
@@ -90,7 +91,7 @@ func TestStack_Pull(t *testing.T) {
 	q.Push(values.NewInteger(10))
 	q.Push(values.NewInteger(20))
 	r := q.Pull()
-	qt.Assert(t, q.Length(), qt.Equals, 1)
+	qt.Assert(t, q.Len(), qt.Equals, 1)
 	qt.Assert(t, (*q)[0], values.SchemeEquals, values.NewInteger(20))
 	qt.Assert(t, r, values.SchemeEquals, values.NewInteger(10))
 }
@@ -140,7 +141,7 @@ func TestStackOperations(t *testing.T) {
 
 	// Test Clear
 	s.Clear()
-	qt.Assert(t, s.Length(), qt.Equals, 0)
+	qt.Assert(t, s.Len(), qt.Equals, 0)
 
 	// AsList on empty stack
 	emptyList := s.AsList()
@@ -160,20 +161,20 @@ func TestStackMoreOperations(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		s.Push(values.NewInteger(int64(i)))
 	}
-	qt.Assert(t, s.Length(), qt.Equals, 10)
+	qt.Assert(t, s.Len(), qt.Equals, 10)
 
 	// Pop all
 	for i := 9; i >= 0; i-- {
 		v := s.Pop()
 		qt.Assert(t, v, values.SchemeEquals, values.NewInteger(int64(i)))
 	}
-	qt.Assert(t, s.Length(), qt.Equals, 0)
+	qt.Assert(t, s.Len(), qt.Equals, 0)
 
 	// PeekK to peek at stack
 	s.Push(values.NewInteger(42))
 	v := s.PeekK(0) // PeekK(0) gets top of stack
 	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(42))
-	qt.Assert(t, s.Length(), qt.Equals, 1) // Still there
+	qt.Assert(t, s.Len(), qt.Equals, 1) // Still there
 }
 
 // TestCopyStack tests stack copy
@@ -184,12 +185,12 @@ func TestCopyStack(t *testing.T) {
 
 	// Copy
 	cpy := s.Copy()
-	qt.Assert(t, cpy.Length(), qt.Equals, 2)
+	qt.Assert(t, cpy.Len(), qt.Equals, 2)
 
 	// Modify original doesn't affect copy
 	s.Push(values.NewInteger(3))
-	qt.Assert(t, s.Length(), qt.Equals, 3)
-	qt.Assert(t, cpy.Length(), qt.Equals, 2)
+	qt.Assert(t, s.Len(), qt.Equals, 3)
+	qt.Assert(t, cpy.Len(), qt.Equals, 2)
 }
 
 // TestStackPull tests stack Pull operation
@@ -202,7 +203,7 @@ func TestStackPull(t *testing.T) {
 	// Pull removes from front (FIFO)
 	v := s.Pull()
 	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, s.Length(), qt.Equals, 2)
+	qt.Assert(t, s.Len(), qt.Equals, 2)
 }
 
 // TestStackPopAll tests stack PopAll operation
@@ -214,7 +215,7 @@ func TestStackPopAll(t *testing.T) {
 
 	vs := s.PopAll()
 	qt.Assert(t, len(vs), qt.Equals, 3)
-	qt.Assert(t, s.Length(), qt.Equals, 0) // Stack is empty after PopAll
+	qt.Assert(t, s.Len(), qt.Equals, 0) // Stack is empty after PopAll
 }
 
 // TestStackClear tests stack Clear operation
@@ -222,10 +223,10 @@ func TestStackClear(t *testing.T) {
 	s := NewStack()
 	s.Push(values.NewInteger(1))
 	s.Push(values.NewInteger(2))
-	qt.Assert(t, s.Length(), qt.Equals, 2)
+	qt.Assert(t, s.Len(), qt.Equals, 2)
 
 	s.Clear()
-	qt.Assert(t, s.Length(), qt.Equals, 0)
+	qt.Assert(t, s.Len(), qt.Equals, 0)
 
 	// Clear on nil should not panic
 	var nilStack *Stack
@@ -318,7 +319,7 @@ func TestStackPushAll(t *testing.T) {
 		values.NewInteger(2),
 		values.NewInteger(3),
 	})
-	qt.Assert(t, s.Length(), qt.Equals, 3)
+	qt.Assert(t, s.Len(), qt.Equals, 3)
 }
 
 // TestStackPeekKMultiple tests PeekK at different positions
@@ -339,7 +340,7 @@ func TestStackPeekKMultiple(t *testing.T) {
 // TestStackNilLength tests Length on nil stack
 func TestStackNilLength(t *testing.T) {
 	var s Stack
-	qt.Assert(t, s.Length(), qt.Equals, 0)
+	qt.Assert(t, s.Len(), qt.Equals, 0)
 }
 
 // TestStackCopyMethod tests Stack.Copy more thoroughly
@@ -347,12 +348,12 @@ func TestStackCopyMethod(t *testing.T) {
 	s := NewStack(values.NewInteger(1), values.NewInteger(2))
 	copied := s.Copy()
 
-	qt.Assert(t, s.Length(), qt.Equals, copied.Length())
+	qt.Assert(t, s.Len(), qt.Equals, copied.Len())
 
 	// Modify original, copied should be unchanged
 	s.Push(values.NewInteger(3))
-	qt.Assert(t, s.Length(), qt.Equals, 3)
-	qt.Assert(t, copied.Length(), qt.Equals, 2)
+	qt.Assert(t, s.Len(), qt.Equals, 3)
+	qt.Assert(t, copied.Len(), qt.Equals, 2)
 }
 
 // TestStackPeekKBoundary tests Stack.PeekK edge cases

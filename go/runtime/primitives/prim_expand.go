@@ -26,7 +26,7 @@ import (
 // Fully expands a syntax object and returns the expanded syntax.
 // (expand stx) -> expanded-stx
 func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
-	stx := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {

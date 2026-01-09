@@ -22,8 +22,19 @@ import (
 type ValidatedExpr interface {
 	SetFormName(name string)
 	FormName() string
-	validatedExpr()
 	Source() *syntax.SourceContext // Original source for error messages
+}
+
+// ValidatedProcedure represents a validated procedure form with parameters and body.
+type ValidatedProcedure interface {
+	ValidatedExpr
+	ValidatedBodyAndParams
+}
+
+// ValidatedBodyAndParams provides access to parameters and body for procedure forms.
+type ValidatedBodyAndParams interface {
+	Params() *ValidatedParams
+	Body() []ValidatedExpr
 }
 
 // ValidatedIf represents (if test conseq [alt])
@@ -35,9 +46,17 @@ type ValidatedIf struct {
 	Alt      ValidatedExpr // nil if no alternative (will produce void)
 }
 
-func (v *ValidatedIf) FormName() string      { return v.formName }
-func (v *ValidatedIf) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedIf) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedIf) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedIf) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedIf) Source() *syntax.SourceContext {
 	return v.source
 }
@@ -47,33 +66,79 @@ func (v *ValidatedIf) Source() *syntax.SourceContext {
 type ValidatedDefine struct {
 	formName   string
 	source     *syntax.SourceContext
-	Name       *syntax.SyntaxSymbol
-	Value      ValidatedExpr    // For (define name expr), nil for function form
-	IsFunction bool             // True for (define (name ...) ...)
-	Params     *ValidatedParams // For function form, nil for value form
-	Body       []ValidatedExpr  // For function form, nil for value form
+	params     *ValidatedParams // For function form, nil for value form
+	body       []ValidatedExpr  // For function form, nil for value form
+	name       *syntax.SyntaxSymbol
+	subExp     ValidatedExpr // For (define name expr), nil for function form
+	IsFunction bool          // True for (define (name ...) ...)
 }
 
-func (v *ValidatedDefine) FormName() string      { return v.formName }
-func (v *ValidatedDefine) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedDefine) validatedExpr()          {}
+// Name returns the name being defined.
+func (v *ValidatedDefine) Name() *syntax.SyntaxSymbol {
+	return v.name
+}
+
+// FormName returns the name of the form for error messages.
+func (v *ValidatedDefine) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedDefine) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedDefine) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// Params returns the parameter list for function definitions.
+func (v *ValidatedDefine) Params() *ValidatedParams {
+	return v.params
+}
+
+// Body returns the body expressions for function definitions.
+func (v *ValidatedDefine) Body() []ValidatedExpr {
+	return v.body
+}
+
+// SubExp returns the value expression for simple definitions.
+func (v *ValidatedDefine) SubExp() ValidatedExpr {
+	return v.subExp
 }
 
 // ValidatedLambda represents (lambda (params...) body...)
 type ValidatedLambda struct {
 	formName string
 	source   *syntax.SourceContext
-	Params   *ValidatedParams
-	Body     []ValidatedExpr // At least one expression required
+	params   *ValidatedParams
+	body     []ValidatedExpr // At least one expression required
 }
 
-func (v *ValidatedLambda) FormName() string      { return v.formName }
-func (v *ValidatedLambda) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedLambda) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedLambda) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedLambda) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedLambda) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// Params returns the parameter list for this lambda.
+func (v *ValidatedLambda) Params() *ValidatedParams {
+	return v.params
+}
+
+// Body returns the body expressions for this lambda.
+func (v *ValidatedLambda) Body() []ValidatedExpr {
+	return v.body
 }
 
 // ValidatedParams represents a parameter list
@@ -89,14 +154,27 @@ type ValidatedSetBang struct {
 	formName string
 	source   *syntax.SourceContext
 	Name     *syntax.SyntaxSymbol
-	Value    ValidatedExpr
+	subExp   ValidatedExpr
 }
 
-func (v *ValidatedSetBang) FormName() string      { return v.formName }
-func (v *ValidatedSetBang) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedSetBang) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedSetBang) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedSetBang) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedSetBang) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// SubExp returns the value expression to be assigned.
+func (v *ValidatedSetBang) SubExp() ValidatedExpr {
+	return v.subExp
 }
 
 // ValidatedQuote represents (quote datum)
@@ -106,9 +184,17 @@ type ValidatedQuote struct {
 	Datum    syntax.SyntaxValue
 }
 
-func (v *ValidatedQuote) FormName() string      { return v.formName }
-func (v *ValidatedQuote) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedQuote) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedQuote) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedQuote) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedQuote) Source() *syntax.SourceContext {
 	return v.source
 }
@@ -117,29 +203,60 @@ func (v *ValidatedQuote) Source() *syntax.SourceContext {
 type ValidatedBegin struct {
 	formName string
 	source   *syntax.SourceContext
-	Exprs    []ValidatedExpr
+	body     []ValidatedExpr
 }
 
-func (v *ValidatedBegin) FormName() string      { return v.formName }
-func (v *ValidatedBegin) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedBegin) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedBegin) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedBegin) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedBegin) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// Body returns the sequence of expressions in this begin form.
+func (v *ValidatedBegin) Body() []ValidatedExpr {
+	return v.body
 }
 
 // ValidatedCall represents (proc arg...)
 type ValidatedCall struct {
 	formName string // does not have a specific form name
 	source   *syntax.SourceContext
-	Proc     ValidatedExpr
-	Args     []ValidatedExpr
+	proc     ValidatedExpr
+	args     []ValidatedExpr
 }
 
-func (v *ValidatedCall) FormName() string      { return v.formName }
-func (v *ValidatedCall) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedCall) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedCall) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedCall) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedCall) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// Proc returns the procedure expression being called.
+func (v *ValidatedCall) Proc() ValidatedExpr {
+	return v.proc
+}
+
+// Body returns the argument expressions for this call.
+func (v *ValidatedCall) Body() []ValidatedExpr {
+	return v.args
 }
 
 // ValidatedSymbol represents a variable reference
@@ -149,9 +266,17 @@ type ValidatedSymbol struct {
 	Symbol   *syntax.SyntaxSymbol
 }
 
-func (v *ValidatedSymbol) FormName() string      { return v.formName }
-func (v *ValidatedSymbol) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedSymbol) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedSymbol) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedSymbol) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedSymbol) Source() *syntax.SourceContext {
 	return v.source
 }
@@ -164,9 +289,17 @@ type ValidatedLiteral struct {
 	Value    syntax.SyntaxValue
 }
 
-func (v *ValidatedLiteral) FormName() string      { return v.formName }
-func (v *ValidatedLiteral) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedLiteral) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedLiteral) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedLiteral) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedLiteral) Source() *syntax.SourceContext {
 	return v.source
 }
@@ -178,9 +311,17 @@ type ValidatedQuasiquote struct {
 	Template syntax.SyntaxValue // The raw template - quasiquote has complex runtime semantics
 }
 
-func (v *ValidatedQuasiquote) FormName() string      { return v.formName }
-func (v *ValidatedQuasiquote) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedQuasiquote) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedQuasiquote) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedQuasiquote) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedQuasiquote) Source() *syntax.SourceContext {
 	return v.source
 }
@@ -188,20 +329,53 @@ func (v *ValidatedQuasiquote) Source() *syntax.SourceContext {
 // ValidatedCaseLambdaClause represents a single clause in case-lambda
 type ValidatedCaseLambdaClause struct {
 	formName string
-	Params   *ValidatedParams
-	Body     []ValidatedExpr
+	params   *ValidatedParams
+	body     []ValidatedExpr
+}
+
+// Params returns the parameter list for this clause.
+func (v *ValidatedCaseLambdaClause) Params() *ValidatedParams {
+	return v.params
+}
+
+// FormName returns the name of the form for error messages.
+func (v *ValidatedCaseLambdaClause) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedCaseLambdaClause) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Body returns the body expressions for this clause.
+func (v *ValidatedCaseLambdaClause) Body() []ValidatedExpr {
+	return v.body
 }
 
 // ValidatedCaseLambda represents (case-lambda [clause] ...)
 type ValidatedCaseLambda struct {
 	formName string
 	source   *syntax.SourceContext
-	Clauses  []*ValidatedCaseLambdaClause
+	clauses  []*ValidatedCaseLambdaClause
 }
 
-func (v *ValidatedCaseLambda) FormName() string      { return v.formName }
-func (v *ValidatedCaseLambda) SetFormName(nm string) { v.formName = nm }
-func (*ValidatedCaseLambda) validatedExpr()          {}
+// FormName returns the name of the form for error messages.
+func (v *ValidatedCaseLambda) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedCaseLambda) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
 func (v *ValidatedCaseLambda) Source() *syntax.SourceContext {
 	return v.source
+}
+
+// Clauses returns the list of case-lambda clauses.
+func (v *ValidatedCaseLambda) Clauses() []*ValidatedCaseLambdaClause {
+	return v.clauses
 }

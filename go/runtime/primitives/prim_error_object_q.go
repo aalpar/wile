@@ -25,7 +25,7 @@ import (
 // Returns #t if the argument is an error object created by (error ...),
 // #f otherwise.
 func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	_, ok := obj.(*values.ErrorObject)
 	if ok {
 		mc.SetValue(values.TrueValue)

@@ -21,8 +21,9 @@ import (
 	"wile/values"
 )
 
+// PrimGetOutputString implements the Scheme get-output-string primitive.
 func PrimGetOutputString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	p, ok := o.(*values.StringOutputPort)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAStringOutputPort, "get-output-string: expected a string output port but got %T", o)

@@ -63,6 +63,7 @@ func (p *BigFloat) Float64() float64 {
 	return f
 }
 
+// Add returns the sum of this BigFloat and another number.
 func (p *BigFloat) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -92,6 +93,7 @@ func (p *BigFloat) Add(o Number) Number {
 	return nil
 }
 
+// Subtract returns the difference of this BigFloat and another number.
 func (p *BigFloat) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -118,6 +120,7 @@ func (p *BigFloat) Subtract(o Number) Number {
 	return nil
 }
 
+// Multiply returns the product of this BigFloat and another number.
 func (p *BigFloat) Multiply(o Number) Number {
 	if o.IsZero() {
 		return NewBigFloatFromFloat64(0)
@@ -147,6 +150,7 @@ func (p *BigFloat) Multiply(o Number) Number {
 	return nil
 }
 
+// Divide returns the quotient of this BigFloat and another number.
 func (p *BigFloat) Divide(o Number) Number {
 	if o.IsZero() {
 		return nil // Division by zero
@@ -173,30 +177,37 @@ func (p *BigFloat) Divide(o Number) Number {
 	return nil
 }
 
+// Negate returns the negation of this BigFloat.
 func (p *BigFloat) Negate() Number {
 	return &BigFloat{value: new(big.Float).Neg(p.value)}
 }
 
+// IsZero returns true if this BigFloat is zero.
 func (p *BigFloat) IsZero() bool {
 	return p.value.Sign() == 0
 }
 
+// LessThan returns true if this BigFloat is less than another number.
 func (p *BigFloat) LessThan(o Number) bool {
 	return p.Compare(o) < 0
 }
 
+// IsNegative returns true if this BigFloat is negative.
 func (p *BigFloat) IsNegative() bool {
 	return p.value.Sign() < 0
 }
 
+// IsPositive returns true if this BigFloat is positive.
 func (p *BigFloat) IsPositive() bool {
 	return p.value.Sign() > 0
 }
 
+// IsExact returns false since BigFloat is always inexact.
 func (p *BigFloat) IsExact() bool {
 	return false // BigFloat is inexact
 }
 
+// ToExact converts this BigFloat to an exact Rational.
 func (p *BigFloat) ToExact() Number {
 	// Convert to Rational for exact representation
 	r, _ := p.value.Rat(nil)
@@ -206,10 +217,12 @@ func (p *BigFloat) ToExact() Number {
 	return NewRationalFromRat(r)
 }
 
+// ToInexact returns this BigFloat unchanged since it's already inexact.
 func (p *BigFloat) ToInexact() Number {
 	return p
 }
 
+// Compare compares this BigFloat with another number.
 func (p *BigFloat) Compare(o Number) int {
 	switch v := o.(type) {
 	case *BigFloat:
@@ -230,14 +243,17 @@ func (p *BigFloat) Compare(o Number) int {
 	return 0
 }
 
+// SchemeString returns the Scheme representation of this BigFloat.
 func (p *BigFloat) SchemeString() string {
 	return p.value.Text('g', -1)
 }
 
+// IsVoid returns true if this BigFloat is nil.
 func (p *BigFloat) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if this BigFloat equals another value.
 func (p *BigFloat) EqualTo(o Value) bool {
 	v, ok := o.(*BigFloat)
 	if !ok {

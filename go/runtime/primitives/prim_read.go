@@ -26,7 +26,7 @@ import (
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 func PrimRead(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair but got %T", o)
@@ -58,10 +58,10 @@ func PrimRead(_ context.Context, mc *machine.MachineContext) error {
 
 	prss, ok := Parsers[portKey]
 	if !ok || prss.Value() == nil {
-		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), runeReader))
+		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), true, runeReader))
 		Parsers[portKey] = prss
 	}
-	syn, err := prss.Value().ReadSyntax(nil)
+	syn, err := prss.Value().ReadSyntax(context.TODO())
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error reading from input port")
 	}

@@ -16,9 +16,7 @@ package values
 
 import "fmt"
 
-var (
-	_ Value = (*SchemeEnvironment)(nil)
-)
+var _ Value = (*SchemeEnvironment)(nil)
 
 // SchemeEnvironment represents a first-class environment for use with eval.
 // It wraps an environment frame for use as a Scheme value.
@@ -30,6 +28,7 @@ type SchemeEnvironment struct {
 	Frame interface{}
 }
 
+// NewSchemeEnvironment creates a new scheme environment.
 func NewSchemeEnvironment(name string, frame interface{}) *SchemeEnvironment {
 	return &SchemeEnvironment{
 		Name:  name,
@@ -37,10 +36,12 @@ func NewSchemeEnvironment(name string, frame interface{}) *SchemeEnvironment {
 	}
 }
 
+// IsVoid returns true if the environment is nil.
 func (e *SchemeEnvironment) IsVoid() bool {
 	return e == nil
 }
 
+// EqualTo returns true if the environments are the same object.
 func (e *SchemeEnvironment) EqualTo(v Value) bool {
 	other, ok := v.(*SchemeEnvironment)
 	if !ok {
@@ -49,6 +50,7 @@ func (e *SchemeEnvironment) EqualTo(v Value) bool {
 	return e == other // Environments are compared by identity
 }
 
+// SchemeString returns the Scheme representation of the environment.
 func (e *SchemeEnvironment) SchemeString() string {
 	if e.Name != "" {
 		return fmt.Sprintf("#<environment %s>", e.Name)

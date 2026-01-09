@@ -70,7 +70,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(nil, pattern)
+		err := compiler.Compile(context.TODO(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create syntax input
@@ -124,7 +124,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(nil, pattern)
+		err := compiler.Compile(context.TODO(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
@@ -217,7 +217,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 }
 
 func TestSyntaxToValue(t *testing.T) {
-	t.Run("SyntaxSymbol to Symbol", func(t *testing.T) {
+	t.Run("SyntaxSymbol to Sym", func(t *testing.T) {
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		stx := syntax.NewSyntaxSymbol("foo", srcCtx)
 
@@ -272,13 +272,13 @@ func TestSyntaxToValue(t *testing.T) {
 func TestValueToSyntax(t *testing.T) {
 	srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 
-	t.Run("Symbol to SyntaxSymbol", func(t *testing.T) {
+	t.Run("Sym to SyntaxSymbol", func(t *testing.T) {
 		val := values.NewSymbol("foo")
 		stx := valueToSyntax(val, syntax.NewSyntaxSymbol("template", srcCtx))
 
 		sym, ok := stx.(*syntax.SyntaxSymbol)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, sym.Key, qt.Equals, "foo")
+		qt.Assert(t, sym.Sym.Key, qt.Equals, "foo")
 	})
 
 	t.Run("Pair to SyntaxPair", func(t *testing.T) {
@@ -296,7 +296,7 @@ func TestValueToSyntax(t *testing.T) {
 
 		obj, ok := stx.(*syntax.SyntaxObject)
 		qt.Assert(t, ok, qt.IsTrue)
-		num, ok := obj.Datum.(*values.Integer)
+		num, ok := obj.Datum().(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, num.Value, qt.Equals, int64(42))
 	})
@@ -307,7 +307,7 @@ func TestValueToSyntax(t *testing.T) {
 
 		obj, ok := stx.(*syntax.SyntaxObject)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, obj.Datum, qt.IsNotNil)
+		qt.Assert(t, obj.Datum(), qt.IsNotNil)
 	})
 
 	t.Run("String to SyntaxObject", func(t *testing.T) {
@@ -316,7 +316,7 @@ func TestValueToSyntax(t *testing.T) {
 
 		obj, ok := stx.(*syntax.SyntaxObject)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, obj.Datum, qt.IsNotNil)
+		qt.Assert(t, obj.Datum(), qt.IsNotNil)
 	})
 
 	t.Run("Boolean to SyntaxObject", func(t *testing.T) {
@@ -367,7 +367,7 @@ func TestExpandWithUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(nil, pattern)
+	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Template source context (where macro is defined)
@@ -514,7 +514,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(nil, pattern)
+	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	inputSc := syntax.NewSourceContext("(test)", "input.scm",
@@ -553,7 +553,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	pattern := values.List(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(nil, pattern)
+	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -600,7 +600,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	pattern := values.List(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(nil, pattern)
+	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -654,7 +654,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	)
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{"x": {}}
-	err := compiler.Compile(nil, pattern)
+	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input with specific source context for the captured value

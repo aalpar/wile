@@ -33,8 +33,8 @@ import (
 //
 // (write-shared obj) or (write-shared obj port)
 func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	obj := mc.Arg(0)
+	o := mc.Arg(1)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "write-shared: expected a pair but got %T", o)

@@ -61,11 +61,5 @@ func (p *OperationMakeCaseLambdaClosure) IsVoid() bool {
 
 func (p *OperationMakeCaseLambdaClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationMakeCaseLambdaClosure)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.closureCount == v.closureCount
+	return fieldMatches(p, v, ok, func(op *OperationMakeCaseLambdaClosure) int { return op.closureCount })
 }

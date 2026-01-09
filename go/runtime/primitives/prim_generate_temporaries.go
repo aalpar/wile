@@ -33,14 +33,10 @@ var gensymCounter uint64
 //
 // (generate-temporaries stx-list) -> list of identifiers
 func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) error {
-	arg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	arg := mc.Arg(0)
 
 	// Count the length of the list
-	count, err := listLength(arg)
-	if err != nil {
-		return values.WrapForeignErrorf(err, "generate-temporaries")
-	}
-
+	count := arg.(values.Tuple).Len()
 	// Generate fresh identifiers
 	result := values.EmptyList
 	for i := count - 1; i >= 0; i-- {
@@ -52,31 +48,4 @@ func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) erro
 
 	mc.SetValue(result)
 	return nil
-}
-
-// listLength returns the length of a list, handling both regular and syntax lists.
-func listLength(v values.Value) (int, error) {
-	count := 0
-	current := v
-
-	for {
-		switch p := current.(type) {
-		case *values.Pair:
-			if p.IsEmptyList() {
-				return count, nil
-			}
-			count++
-			current = p.Cdr()
-
-		case *syntax.SyntaxPair:
-			if p.IsEmptyList() {
-				return count, nil
-			}
-			count++
-			current = p.Cdr()
-
-		default:
-			return 0, values.NewForeignError("expected a proper list")
-		}
-	}
 }

@@ -1,53 +1,57 @@
-PROJECT=scheme
-SUBDIRS=go
+COVER_DIR=cover
 DIST_DIR=dist
-SOURCES=$(shell cd go && go list -f '{{range .GoFiles}}{{$$.ImportPath}}/{{.}} {{end}}' ./... | sed 's|wile/|go/|g')
+TEST_DIR=test
+SUBDIRS=$(shell cd go && go list -f '{{.Dir}}' ./...)
 
 .PHONY: build
 build:
-	@mkdir -p $(DIST_DIR)
-	cd go && go build -o ../$(DIST_DIR)/$(PROJECT) ./cmd
+	$(MAKE) -C go
+
+.PHONY: buildtest
+buildtest: go
+	$(MAKE) -C $< $@
+
+.PHONY: test
+test: go
+	mkdir -p $(TEST_DIR)
+	$(MAKE) -C $< $@
+
+.PHONY: cover
+cover: go
+	mkdir -p $(COVER_DIR)
+	$(MAKE) -C $< $@
+
+.PHONY: fix
+fix:
+	$(MAKE) -C go $@
 
 .PHONY: lint
 lint:
-	cd go && golangci-lint run ./...
+	$(MAKE) -C go $@
 
-.PHONY: lintfix
-lintfix:
-	cd go && golangci-lint run --fix ./...
-
-.PHONY: all
-all: $(SUBDIRS)
-
-.PHONY: $(SUBDIRS)
-$(SUBDIRS):
-	$(MAKE) -C $@
-
-.PHONY: test
-test: $(SUBDIRS)
-	make -C go test
-
-.PHONY: cover
-cover:
-	make -C go cover
+.PHONY: format
+format:
+	$(MAKE) -C go $@
 
 .PHONY: clean
-clean:
-	make -C go clean
-	rm -rf $(DIST_DIR)
+clean: buildclean testclean modclean
+	for dir in "$(COVER_DIR)" "$(DIST_DIR)" "$(TEST_DIR)"; do \
+		if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
+	done
+
+.PHONY: buildclean
+buildclean:
+	$(MAKE) -C go $@
+
+.PHONY: testclean
+testclean:
+	$(MAKE) -C go $@
 
 .PHONY: modclean
 modclean:
-	make -C go modclean
+	$(MAKE) -C go $@
 
 .PHONY: tidy
 tidy:
-	make -C go tidy
+	$(MAKE) -C go $@
 
-.PHONY: fmt
-fmt:
-	make -C go fmt
-
-.PHONY: buildtest
-buildtest:
-	make -C go buildtest

@@ -25,9 +25,9 @@ import (
 // PrimDynamicWind implements the (dynamic-wind) primitive.
 // Calls a thunk with before and after handlers that execute on entry and exit.
 func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
-	before := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	thunk := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	after := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
+	before := mc.Arg(0)
+	thunk := mc.Arg(1)
+	after := mc.Arg(2)
 
 	beforeCls, ok := before.(*machine.MachineClosure)
 	if !ok {
@@ -46,10 +46,12 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call before thunk
 	sub := mc.NewSubContext()
-	if _, err := sub.Apply(beforeCls); err != nil {
+	_, err := sub.Apply(beforeCls)
+	if err != nil {
 		return err
 	}
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err
@@ -61,7 +63,8 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call main thunk
 	sub2 := mc.NewSubContext()
-	if _, err := sub2.Apply(thunkCls); err != nil {
+	_, err = sub2.Apply(thunkCls)
+	if err != nil {
 		return err
 	}
 	thunkErr := sub2.Run(ctx)
@@ -69,10 +72,12 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Always call after thunk, even if main thunk escaped
 	sub3 := mc.NewSubContext()
-	if _, err := sub3.Apply(afterCls); err != nil {
+	_, err = sub3.Apply(afterCls)
+	if err != nil {
 		return err
 	}
-	if err := sub3.Run(ctx); err != nil {
+	err = sub3.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err

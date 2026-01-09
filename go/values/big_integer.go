@@ -60,6 +60,7 @@ func (p *BigInteger) Int64() int64 {
 	return p.value.Int64()
 }
 
+// Add returns the sum of this BigInteger and another number.
 func (p *BigInteger) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -86,6 +87,7 @@ func (p *BigInteger) Add(o Number) Number {
 	return nil
 }
 
+// Subtract returns the difference of this BigInteger and another number.
 func (p *BigInteger) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -108,6 +110,7 @@ func (p *BigInteger) Subtract(o Number) Number {
 	return nil
 }
 
+// Multiply returns the product of this BigInteger and another number.
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
 		return NewBigIntegerFromInt64(0)
@@ -133,6 +136,7 @@ func (p *BigInteger) Multiply(o Number) Number {
 	return nil
 }
 
+// Divide returns the quotient of this BigInteger and another number.
 func (p *BigInteger) Divide(o Number) Number {
 	if o.IsZero() {
 		return nil // Division by zero
@@ -156,39 +160,48 @@ func (p *BigInteger) Divide(o Number) Number {
 	return nil
 }
 
+// Negate returns the negation of this BigInteger.
 func (p *BigInteger) Negate() Number {
 	return &BigInteger{value: new(big.Int).Neg(p.value)}
 }
 
+// IsZero returns true if this BigInteger is zero.
 func (p *BigInteger) IsZero() bool {
 	return p.value.Sign() == 0
 }
 
+// LessThan returns true if this BigInteger is less than another number.
 func (p *BigInteger) LessThan(o Number) bool {
 	return p.Compare(o) < 0
 }
 
+// IsNegative returns true if this BigInteger is negative.
 func (p *BigInteger) IsNegative() bool {
 	return p.value.Sign() < 0
 }
 
+// IsPositive returns true if this BigInteger is positive.
 func (p *BigInteger) IsPositive() bool {
 	return p.value.Sign() > 0
 }
 
+// IsExact returns true as BigInteger is always exact.
 func (p *BigInteger) IsExact() bool {
 	return true
 }
 
+// ToExact returns this BigInteger as an exact number.
 func (p *BigInteger) ToExact() Number {
 	return p
 }
 
+// ToInexact returns this BigInteger converted to an inexact float.
 func (p *BigInteger) ToInexact() Number {
 	f, _ := new(big.Float).SetInt(p.value).Float64()
 	return NewFloat(f)
 }
 
+// Compare compares this BigInteger with another number.
 func (p *BigInteger) Compare(o Number) int {
 	switch v := o.(type) {
 	case *BigInteger:
@@ -210,14 +223,17 @@ func (p *BigInteger) Compare(o Number) int {
 	return 0
 }
 
+// SchemeString returns the Scheme representation of this BigInteger.
 func (p *BigInteger) SchemeString() string {
 	return p.value.String()
 }
 
+// IsVoid returns true if this BigInteger is nil.
 func (p *BigInteger) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if this BigInteger equals another value.
 func (p *BigInteger) EqualTo(o Value) bool {
 	v, ok := o.(*BigInteger)
 	if !ok {

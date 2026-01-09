@@ -25,8 +25,8 @@ import (
 // PrimApply implements the apply primitive.
 // Applies a procedure to a list of arguments.
 func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
-	proc := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	proc := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	mcls, ok := proc.(*machine.MachineClosure)
 	if !ok {
@@ -64,7 +64,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
-		v, err := finalPair.ForEach(nil, func(_ context.Context, i int, hasNext bool, elem values.Value) error {
+		v, err := finalPair.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
 			return nil
 		})
@@ -77,10 +77,12 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	sub := mc.NewSubContext()
-	if _, err := sub.Apply(mcls, prefixArgs...); err != nil {
+	_, err := sub.Apply(mcls, prefixArgs...)
+	if err != nil {
 		return err
 	}
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		// Propagate continuation escapes
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {

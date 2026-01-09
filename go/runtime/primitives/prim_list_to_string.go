@@ -24,7 +24,7 @@ import (
 // PrimListToString implements the (list->string) primitive.
 // Converts a list of characters to a string.
 func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewString(""))
 		return nil
@@ -34,7 +34,7 @@ func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
-	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotACharacter, "list->string: expected a character but got %T", v)

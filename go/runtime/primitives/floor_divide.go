@@ -14,6 +14,7 @@
 
 package primitives
 
+// FloorDivide performs floor division, returning quotient and remainder.
 func FloorDivide(n0, n1 int64) (q, r int64) {
 	q = n0 / n1
 	r = n0 % n1
@@ -26,6 +27,7 @@ func FloorDivide(n0, n1 int64) (q, r int64) {
 	return q, r
 }
 
+// GcdInt returns the greatest common divisor of two integers.
 func GcdInt(a, b int64) int64 {
 	for b != 0 {
 		a, b = b, a%b

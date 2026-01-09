@@ -23,11 +23,18 @@ var (
 	_ SyntaxValue  = (*SyntaxDirective)(nil)
 )
 
+// SyntaxDirective represents a reader directive (#!fold-case, etc.).
 type SyntaxDirective struct {
 	Name          string
 	sourceContext *SourceContext
 }
 
+// AddScope returns the directive unchanged (directives don't participate in hygiene).
+func (p *SyntaxDirective) AddScope(_ *Scope) SyntaxValue {
+	return p
+}
+
+// SourceContext returns the source context of the directive.
 func (p *SyntaxDirective) SourceContext() *SourceContext {
 	return p.sourceContext
 }
@@ -36,10 +43,12 @@ func (p *SyntaxDirective) Unwrap() values.Value {
 	return values.NewString(p.Name)
 }
 
+// UnwrapAll returns the directive name as a string value.
 func (p *SyntaxDirective) UnwrapAll() values.Value {
 	return values.NewString(p.Name)
 }
 
+// NewSyntaxDirective creates a new reader directive with the given name.
 func NewSyntaxDirective(name string, sctx *SourceContext) *SyntaxDirective {
 	return &SyntaxDirective{
 		Name:          name,
@@ -47,10 +56,12 @@ func NewSyntaxDirective(name string, sctx *SourceContext) *SyntaxDirective {
 	}
 }
 
+// IsVoid returns true if the directive is nil.
 func (p *SyntaxDirective) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both directives have the same name.
 func (p *SyntaxDirective) EqualTo(v values.Value) bool {
 	other, ok := v.(*SyntaxDirective)
 	if !ok {
@@ -62,6 +73,7 @@ func (p *SyntaxDirective) EqualTo(v values.Value) bool {
 	return true
 }
 
+// SchemeString returns the directive name.
 func (p *SyntaxDirective) SchemeString() string {
 	return p.Name
 }

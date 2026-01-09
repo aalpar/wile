@@ -25,7 +25,7 @@ import (
 // PrimTan implements the tan primitive.
 // Returns the tangent of a number in radians.
 func PrimTan(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	x, err := ToFloat64(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "tan: %v", err)

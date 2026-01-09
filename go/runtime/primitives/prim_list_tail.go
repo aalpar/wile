@@ -24,8 +24,8 @@ import (
 // PrimListTail implements the (list-tail) primitive.
 // Returns the sublist starting at the given index.
 func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
 	idx, ok := k.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "list-tail: expected an integer index but got %T", k)

@@ -83,7 +83,7 @@ func TestTemplateContainsEllipsis_NoEllipsis(t *testing.T) {
 func TestTemplateContainsEllipsis_WithEllipsis(t *testing.T) {
 	c := qt.New(t)
 
-	// Symbol named "..."
+	// Sym named "..."
 	stx := syntax.NewSyntaxSymbol("...", nil)
 	c.Assert(templateContainsEllipsis(stx), qt.IsTrue)
 }

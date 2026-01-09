@@ -16,9 +16,10 @@ package machine
 
 import (
 	"context"
+	"testing"
+
 	"wile/environment"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -485,7 +486,7 @@ func TestOperations_Copy(t *testing.T) {
 
 	copied := ops.Copy()
 	qt.Assert(t, copied, qt.IsNotNil)
-	qt.Assert(t, copied.Length(), qt.Equals, 3)
+	qt.Assert(t, copied.Len(), qt.Equals, 3)
 	qt.Assert(t, copied[0], values.SchemeEquals, ops[0])
 	qt.Assert(t, copied[1], values.SchemeEquals, ops[1])
 	qt.Assert(t, copied[2], values.SchemeEquals, ops[2])
@@ -526,10 +527,10 @@ func TestOperations_IsVoid(t *testing.T) {
 
 func TestOperations_Length(t *testing.T) {
 	ops := NewOperations(NewOperationPush(), NewOperationPop(), NewOperationLoadVoid())
-	qt.Assert(t, ops.Length(), qt.Equals, 3)
+	qt.Assert(t, ops.Len(), qt.Equals, 3)
 
 	emptyOps := NewOperations()
-	qt.Assert(t, emptyOps.Length(), qt.Equals, 0)
+	qt.Assert(t, emptyOps.Len(), qt.Equals, 0)
 }
 
 // Tests moved from coverage_additional_test.go
@@ -850,7 +851,7 @@ func TestNativeTemplateOperationsArray(t *testing.T) {
 	tpl.operations = append(tpl.operations, NewOperationPush())
 	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
 
-	qt.Assert(t, tpl.operations.Length(), qt.Equals, 3)
+	qt.Assert(t, tpl.operations.Len(), qt.Equals, 3)
 }
 
 // TestMultipleValuesOperationMethods tests MultipleValues methods
@@ -894,10 +895,10 @@ func TestOperationsLength(t *testing.T) {
 		NewOperationLoadVoid(),
 		NewOperationPush(),
 	}
-	qt.Assert(t, ops.Length(), qt.Equals, 2)
+	qt.Assert(t, ops.Len(), qt.Equals, 2)
 
 	var nilOps Operations
-	qt.Assert(t, nilOps.Length(), qt.Equals, 0)
+	qt.Assert(t, nilOps.Len(), qt.Equals, 0)
 }
 
 // TestOperationsCopy tests Operations Copy method
@@ -907,12 +908,12 @@ func TestOperationsCopy(t *testing.T) {
 		NewOperationPush(),
 	}
 	cpy := ops.Copy()
-	qt.Assert(t, cpy.Length(), qt.Equals, 2)
+	qt.Assert(t, cpy.Len(), qt.Equals, 2)
 
 	// Modifying copy shouldn't affect original
 	cpy = append(cpy, NewOperationPop())
-	qt.Assert(t, ops.Length(), qt.Equals, 2)
-	qt.Assert(t, cpy.Length(), qt.Equals, 3)
+	qt.Assert(t, ops.Len(), qt.Equals, 2)
+	qt.Assert(t, cpy.Len(), qt.Equals, 3)
 }
 
 // TestOperationForeignFunctionCallSimple tests foreign function call

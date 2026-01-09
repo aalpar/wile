@@ -25,7 +25,7 @@ import (
 // PrimExactIntegerSqrt implements the (exact-integer-sqrt) primitive.
 // Returns the integer square root and remainder as two values.
 func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, ok := o.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "exact-integer-sqrt: expected an exact integer but got %T", o)

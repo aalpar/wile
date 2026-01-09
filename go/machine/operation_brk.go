@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+
 	"wile/values"
 )
 
@@ -43,11 +44,5 @@ func (p *OperationBrk) IsVoid() bool {
 
 func (p *OperationBrk) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationBrk)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return true
+	return sameType(p, v, ok)
 }

@@ -25,8 +25,8 @@ import (
 // PrimMakePolar implements the (make-polar) primitive.
 // Creates a complex number from magnitude and angle (in radians).
 func PrimMakePolar(_ context.Context, mc *machine.MachineContext) error {
-	r := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	theta := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	r := mc.Arg(0)
+	theta := mc.Arg(1)
 	var mag, angle float64
 	switch v := r.(type) {
 	case *values.Integer:

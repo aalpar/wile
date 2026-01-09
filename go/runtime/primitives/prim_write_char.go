@@ -27,7 +27,7 @@ import (
 // PrimWriteChar implements the write-char primitive.
 // Writes a character to the current output port or to the specified output port.
 func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	ch, ok := obj.(*values.Character)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "expected a character but got %T", obj)

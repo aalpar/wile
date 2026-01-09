@@ -16,9 +16,10 @@ package machine
 
 import (
 	"errors"
-	"wile/syntax"
 	"strings"
 	"testing"
+
+	"wile/syntax"
 
 	qt "github.com/frankban/quicktest"
 )

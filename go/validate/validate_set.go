@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 )
 
@@ -53,6 +54,6 @@ func validateSetBang(ctx context.Context, pair *syntax.SyntaxPair, result *Valid
 		formName: "set!",
 		source:   source,
 		Name:     name,
-		Value:    value,
+		subExp:   value,
 	}
 }

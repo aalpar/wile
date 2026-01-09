@@ -16,11 +16,11 @@ package machine
 
 import (
 	"context"
+
 	"wile/values"
 )
 
-type OperationRestoreContinuation struct {
-}
+type OperationRestoreContinuation struct{}
 
 func NewOperationRestoreContinuation() *OperationRestoreContinuation {
 	return &OperationRestoreContinuation{}

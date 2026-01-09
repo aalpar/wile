@@ -25,7 +25,7 @@ import (
 // Raises a continuable exception with obj as the condition.
 // If the handler returns, its return value becomes the value of raise-continuable.
 func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 
 	return &machine.ErrExceptionEscape{
 		Condition:    obj,

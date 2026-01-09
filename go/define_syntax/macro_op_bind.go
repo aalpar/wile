@@ -14,8 +14,6 @@
 
 package define_syntax
 
-import "wile/values"
-
 // MacroOpBind binds a captured value to a pattern variable.
 //
 // This operation associates a pattern variable with a value captured during
@@ -37,9 +35,7 @@ import "wile/values"
 //
 // During template expansion, references to 'name', 'val', and 'body' would
 // be replaced with their bound values.
-type MacroOpBind struct {
-	key *values.Symbol
-}
+type MacroOpBind struct{}
 
 // NewMacroOpBind creates a new MacroOpBind operation.
 // The key parameter (currently unused) would specify the pattern variable name.

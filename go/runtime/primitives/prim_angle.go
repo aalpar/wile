@@ -26,7 +26,7 @@ import (
 // PrimAngle implements the angle primitive.
 // Returns the angle of a complex number in polar form.
 func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))

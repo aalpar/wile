@@ -24,7 +24,7 @@ import (
 // PrimSquare implements the (square) primitive.
 // Returns the square of a number.
 func PrimSquare(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	n, ok := o.(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "square: expected a number but got %T", o)

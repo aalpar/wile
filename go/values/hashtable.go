@@ -18,14 +18,14 @@ import (
 	"fmt"
 )
 
-var (
-	_ Value = (*Hashtable)(nil)
-)
+var _ Value = (*Hashtable)(nil)
 
+// Hashtable represents a Scheme hash table mapping strings to values.
 type Hashtable struct {
 	Value map[string]Value
 }
 
+// NewHashtable creates a new hash table from the given map.
 func NewHashtable(v map[string]Value) *Hashtable {
 	q := &Hashtable{
 		Value: v,
@@ -33,14 +33,17 @@ func NewHashtable(v map[string]Value) *Hashtable {
 	return q
 }
 
+// Datum returns the underlying map.
 func (p *Hashtable) Datum() map[string]Value {
 	return p.Value
 }
 
+// IsVoid returns true if this hash table is nil.
 func (p *Hashtable) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both hash tables have equal contents.
 func (p *Hashtable) EqualTo(o Value) bool {
 	v, ok := o.(*Hashtable)
 	if !ok {
@@ -69,6 +72,7 @@ func (p *Hashtable) EqualTo(o Value) bool {
 	return true
 }
 
+// SchemeString returns the Scheme representation of this hash table.
 func (p *Hashtable) SchemeString() string {
 	return fmt.Sprintf("%v", p.Value)
 }

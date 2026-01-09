@@ -14,10 +14,12 @@
 
 package environment
 
+// MetaFrame represents a meta-level frame for phase separation.
 type MetaFrame struct {
 	parent *MetaFrame
 }
 
+// NewMetaFrame creates a new meta frame with no parent.
 func NewMetaFrame() *MetaFrame {
 	q := &MetaFrame{}
 	return q

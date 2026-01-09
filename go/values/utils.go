@@ -140,7 +140,7 @@ func VectorToList(vs *Vector) *Pair {
 	if IsVoid(vs) {
 		return EmptyList
 	}
-	var q = EmptyList
+	q := EmptyList
 	for j := len(*vs) - 1; j >= 0; j-- {
 		q = NewCons((*vs)[j], q)
 	}

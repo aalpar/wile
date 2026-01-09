@@ -24,7 +24,7 @@ import (
 // PrimBytevector implements the bytevector primitive.
 // Creates bytevector from byte arguments.
 func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
 		mc.SetValue(&bv)
@@ -35,7 +35,7 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []values.Byte
-	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)

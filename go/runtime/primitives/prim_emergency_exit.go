@@ -25,7 +25,7 @@ import (
 // PrimEmergencyExit implements the (emergency-exit) primitive.
 // Exits the program immediately without cleanup or finalization.
 func PrimEmergencyExit(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	rest := mc.Arg(0)
 	code := 0
 	if rest != values.EmptyList {
 		if pr, ok := rest.(*values.Pair); ok && !values.IsEmptyList(pr) {

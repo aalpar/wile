@@ -24,8 +24,8 @@ import (
 // PrimModulo implements the modulo primitive.
 // Returns the modulo of two integers with the sign of the divisor.
 func PrimModulo(_ context.Context, mc *machine.MachineContext) error {
-	o0 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o1 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o0 := mc.Arg(0)
+	o1 := mc.Arg(1)
 	n0, ok := o0.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "modulo: expected an integer but got %T", o0)

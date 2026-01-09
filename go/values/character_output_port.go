@@ -19,27 +19,34 @@ import (
 	"io"
 )
 
-var (
-	_ Value = (*CharacterOutputPort)(nil)
-)
+var _ Value = (*CharacterOutputPort)(nil)
 
+// need to be implemented here so that we have a custom interface that can be used without calling Datum() and doing type assertions elsewhere.
+// _ Port  = (Port)(*CharacterInputPort)(nil)
+
+// CharacterOutputPort represents a Scheme textual output port.
 type CharacterOutputPort struct {
 	Value io.Writer
 }
 
-func NewCharacterOutputPort(wrt io.Writer) *CharacterOutputPort {
+// NewCharacterOutputPortFromWriter creates a new character output port wrapping the given writer.
+func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
 	q := &CharacterOutputPort{Value: wrt}
 	return q
 }
 
-func (q *CharacterOutputPort) Datum() io.Writer {
-	return q.Value
+// Datum returns the underlying data of the CharacterOutputPort as an io.Writer.
+// there is no RunWriter interface in the standard library, so we just use io.Writer here.
+func (p *CharacterOutputPort) Datum() io.Writer {
+	return p.Value
 }
 
+// IsVoid returns true if the port is nil.
 func (p *CharacterOutputPort) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both ports wrap the same writer.
 func (p *CharacterOutputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*CharacterOutputPort); ok {
 		return p.Value == other.Value
@@ -47,6 +54,7 @@ func (p *CharacterOutputPort) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the port.
 func (p *CharacterOutputPort) SchemeString() string {
 	return fmt.Sprintf("<character-output-port %p>", p.Value)
 }

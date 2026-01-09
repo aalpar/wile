@@ -2,15 +2,15 @@ version: "2"
 
 run:
   timeout: 5m
-  go: "1.21"
+  go: "1.25"
 
 linters:
   enable:
     - errcheck
+    - dupl
     - govet
     - ineffassign
     - staticcheck
-    - unused
     - misspell
     - unconvert
     - unparam
@@ -21,7 +21,6 @@ linters:
 
 formatters:
   enable:
-    - gofmt
     - goimports
   settings:
     goimports:
@@ -29,6 +28,8 @@ formatters:
         - wile
 
 linters-settings:
+  dupl:
+    threshold: 5
   govet:
     enable-all: true
     disable:

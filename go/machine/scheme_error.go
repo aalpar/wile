@@ -16,9 +16,10 @@ package machine
 
 import (
 	"fmt"
+	"strings"
+
 	"wile/syntax"
 	"wile/values"
-	"strings"
 )
 
 // SchemeError is a runtime error with Scheme-level stack trace.

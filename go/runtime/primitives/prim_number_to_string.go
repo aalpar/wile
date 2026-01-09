@@ -25,8 +25,8 @@ import (
 // PrimNumberToString implements the number->string primitive.
 // Converts a number to its string representation with optional radix.
 func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
-	n := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	n := mc.Arg(0)
+	rest := mc.Arg(1)
 	radix := 10
 	if !values.IsEmptyList(rest) {
 		pr, ok := rest.(*values.Pair)

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package machine
 
-var (
-	_ Value = (*Parameter)(nil)
-)
+import "wile/values"
+
+var _ values.Value = (*Parameter)(nil)
 
 // Parameter represents an R7RS parameter object.
 // Parameters are dynamically-scoped variables that can be temporarily
@@ -24,14 +24,14 @@ var (
 //   - (param) returns the current value
 //   - (param val) sets the current value (after applying converter if present)
 type Parameter struct {
-	value     Value // current value
-	converter Value // optional converter procedure (MachineClosure), or nil
+	value     values.Value    // current value
+	converter *MachineClosure // optional converter procedure (MachineClosure), or nil
 }
 
 // NewParameter creates a new parameter with the given initial value and optional converter.
 // The converter should be a procedure that takes one argument and returns the converted value.
 // Pass nil for converter if no conversion is needed.
-func NewParameter(init Value, converter Value) *Parameter {
+func NewParameter(init values.Value, converter *MachineClosure) *Parameter {
 	return &Parameter{
 		value:     init,
 		converter: converter,
@@ -39,19 +39,19 @@ func NewParameter(init Value, converter Value) *Parameter {
 }
 
 // Value returns the current value of the parameter.
-func (p *Parameter) Value() Value {
+func (p *Parameter) Value() values.Value {
 	return p.value
 }
 
 // SetValue sets the current value of the parameter.
 // Note: This does NOT apply the converter. The caller is responsible for
 // converting the value before calling SetValue.
-func (p *Parameter) SetValue(v Value) {
+func (p *Parameter) SetValue(v values.Value) {
 	p.value = v
 }
 
 // Converter returns the converter procedure, or nil if none.
-func (p *Parameter) Converter() Value {
+func (p *Parameter) Converter() *MachineClosure {
 	return p.converter
 }
 
@@ -60,13 +60,14 @@ func (p *Parameter) HasConverter() bool {
 	return p.converter != nil
 }
 
+// IsVoid returns true if the parameter is nil.
 func (p *Parameter) IsVoid() bool {
 	return p == nil
 }
 
 // EqualTo uses identity comparison for parameters.
 // Two parameters are equal only if they are the same object.
-func (p *Parameter) EqualTo(v Value) bool {
+func (p *Parameter) EqualTo(v values.Value) bool {
 	other, ok := v.(*Parameter)
 	if !ok {
 		return false
@@ -74,6 +75,7 @@ func (p *Parameter) EqualTo(v Value) bool {
 	return p == other
 }
 
+// SchemeString returns the Scheme representation of the parameter.
 func (p *Parameter) SchemeString() string {
 	return "#<parameter>"
 }

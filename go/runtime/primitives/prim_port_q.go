@@ -24,7 +24,7 @@ import (
 // PrimPortQ implements the port? primitive.
 // Returns #t if the argument is a port (input or output), #f otherwise.
 func PrimPortQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch o.(type) {
 	case *values.CharacterInputPort, *values.CharacterOutputPort,
 		*values.StringInputPort, *values.StringOutputPort,

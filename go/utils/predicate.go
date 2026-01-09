@@ -16,6 +16,7 @@ package utils
 
 import "wile/values"
 
+// BoolToBoolean converts a Go bool to a Scheme boolean value.
 func BoolToBoolean(b bool) *values.Boolean {
 	if b {
 		return values.TrueValue

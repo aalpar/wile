@@ -22,33 +22,33 @@ import (
 	"wile/values"
 )
 
+// OperationLoadGlobalByGlobalIndexLiteralIndexImmediate loads a global variable using an index from the literals pool.
 type OperationLoadGlobalByGlobalIndexLiteralIndexImmediate struct {
 	LiteralIndex LiteralIndex
 }
 
+// NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate creates a new global load operation.
 func NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(li LiteralIndex) *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate {
 	return &OperationLoadGlobalByGlobalIndexLiteralIndexImmediate{LiteralIndex: li}
 }
 
+// SchemeString returns the Scheme representation of the operation.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-load-global-by-global-index-literal-index-immediate %d>", p.LiteralIndex)
 }
 
+// IsVoid returns true if the operation is nil.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both operations have the same literal index.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadGlobalByGlobalIndexLiteralIndexImmediate)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.LiteralIndex == v.LiteralIndex
+	return fieldMatches(p, v, ok, func(op *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
 }
 
+// Apply executes the operation, loading the global variable's value.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	o := mc.template.literals[p.LiteralIndex]
 	if o == nil {

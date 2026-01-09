@@ -17,10 +17,12 @@ package tokenizer
 import (
 	"fmt"
 	"io"
-	"wile/syntax"
+	"math"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"wile/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -67,37 +69,44 @@ func TestTokenizer_scan(t *testing.T) {
 		erris0 error
 		erris1 error
 		nis    int
+		cur    rune
 	}{
 		{
 			in:   "this",
 			scan: "th",
 			nis:  0,
+			cur:  'i',
 		},
 		{
 			in:     "this",
 			scan:   "this",
 			nis:    0,
 			erris1: io.EOF,
+			cur:    utf8.RuneError,
 		},
 		{
 			in:   "thiss",
 			scan: "this",
 			nis:  0,
+			cur:  's',
 		},
 		{
 			in:   "tiss",
 			scan: "this",
 			nis:  3,
+			cur:  'i',
 		},
 		{
 			in:   "tiss",
 			scan: "xis",
 			nis:  3,
+			cur:  't',
 		},
 		{
 			in:   "xiss",
 			scan: "this",
 			nis:  4,
+			cur:  'x',
 		},
 		{
 			in:     "",
@@ -105,21 +114,25 @@ func TestTokenizer_scan(t *testing.T) {
 			nis:    4,
 			erris0: io.EOF,
 			erris1: io.EOF,
+			cur:    utf8.RuneError,
 		},
 		{
 			in:     "t",
 			scan:   "this",
 			nis:    3,
 			erris1: io.EOF,
+			cur:    utf8.RuneError,
 		},
 	}
-	for i, tc := range tcs {
-		t.Run(fmt.Sprintf("%d: %q", i, tc.in), func(t *testing.T) {
+	for _, tc := range tcs {
+		t.Run(tc.in, func(t *testing.T) {
+			c := qt.New(t)
 			p := NewTokenizer(strings.NewReader(tc.in), false)
-			qt.Check(t, p.err, qt.ErrorIs, tc.erris0)
-			n, _ = p.scan([]byte(tc.scan))
-			qt.Check(t, p.err, qt.ErrorIs, tc.erris1)
-			qt.Check(t, n, qt.Equals, tc.nis)
+			c.Check(p.err, qt.ErrorIs, tc.erris0)
+			n = p.scan([]byte(tc.scan))
+			c.Check(p.err, qt.ErrorIs, tc.erris1)
+			c.Check(n, qt.Equals, tc.nis)
+			c.Check(p.cur, qt.Equals, tc.cur, qt.Commentf("want '%c' but got '%c' instead", tc.cur, p.cur))
 		})
 	}
 }
@@ -160,7 +173,7 @@ func TestTokenizer_Next(t *testing.T) {
 	a, err := p.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(a.Type(), qt.Equals, TokenizerStateSymbol)
-	a, err = p.Next()
+	_, err = p.Next()
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -237,293 +250,253 @@ func TestTokenizer_TokenStream(t *testing.T) {
 		in     string
 		tokens []TokenizerState
 		src    []string
-		err0   error
-		err1   error
+		err    error
 	}{
 		{
 			in:     "`",
 			tokens: []TokenizerState{TokenizerStateQuasiquote},
 			src:    []string{"`"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ",",
 			tokens: []TokenizerState{TokenizerStateUnquote},
 			src:    []string{","},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".",
 			tokens: []TokenizerState{TokenizerStateCons},
 			src:    []string{"."},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "..",
 			tokens: []TokenizerState{TokenizerStateSymbol},
 			src:    []string{".."},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "...",
 			tokens: []TokenizerState{TokenizerStateSymbol},
 			src:    []string{"..."},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "....",
 			tokens: []TokenizerState{TokenizerStateSymbol},
 			src:    []string{"...."},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ",@",
 			tokens: []TokenizerState{TokenizerStateUnquoteSplicing},
 			src:    []string{",@"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `#\c`,
 			tokens: []TokenizerState{TokenizerStateCharGraphic},
 			src:    []string{"#\\c"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `#\space`,
 			tokens: []TokenizerState{TokenizerStateCharMnemonic},
 			src:    []string{`#\space`},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "'",
 			tokens: []TokenizerState{TokenizerStateQuote},
 			src:    []string{"'"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "4",
 			tokens: []TokenizerState{TokenizerStateUnsignedInteger},
 			src:    []string{"4"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "40",
 			tokens: []TokenizerState{TokenizerStateUnsignedInteger},
 			src:    []string{"40"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-40",
 			tokens: []TokenizerState{TokenizerStateSignedInteger},
 			src:    []string{"-40"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+40",
 			tokens: []TokenizerState{TokenizerStateSignedInteger},
 			src:    []string{"+40"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+3.24",
 			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
 			src:    []string{"+3.24"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-3.24",
 			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
 			src:    []string{"-3.24"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "3.24",
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
 			src:    []string{"3.24"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".24",
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
 			src:    []string{".24"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".024",
 			src:    []string{".024"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "0.024",
 			src:    []string{"0.024"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "0.024e+10",
 			src:    []string{"0.024e+10"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// R7RS conformance: signed integers with exponents
 		{
 			in:     "+1e10",
 			src:    []string{"+1e10"},
-			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			err:    io.EOF,
 		},
 		{
 			in:     "-1e10",
 			src:    []string{"-1e10"},
-			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			err:    io.EOF,
 		},
 		{
 			in:     "+1E10",
 			src:    []string{"+1E10"},
-			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			err:    io.EOF,
 		},
 		{
 			in:     "-1e+10",
 			src:    []string{"-1e+10"},
-			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			err:    io.EOF,
 		},
 		{
 			in:     "+1e-10",
 			src:    []string{"+1e-10"},
-			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			err:    io.EOF,
 		},
 		// R7RS conformance: trailing dot with exponent
 		{
 			in:     "1.e10",
 			src:    []string{"1.e10"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "1.e+10",
 			src:    []string{"1.e+10"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "1.e-10",
 			src:    []string{"1.e-10"},
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+1.e10",
 			src:    []string{"+1.e10"},
 			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-1.e10",
 			src:    []string{"-1.e10"},
 			tokens: []TokenizerState{TokenizerStateSignedDecimalFraction},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".a",
 			tokens: []TokenizerState{TokenizerStateSymbol},
 			src:    []string{".a"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#x10",
-			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedInteger},
+			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedIntegerBase16},
 			src:    []string{"#x", "10"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "''",
 			tokens: []TokenizerState{TokenizerStateQuote, TokenizerStateQuote},
 			src:    []string{"'", "'"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#i4",
 			tokens: []TokenizerState{TokenizerStateMarkerNumberInexact, TokenizerStateUnsignedInteger},
 			src:    []string{"#i", "4"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#e4",
 			tokens: []TokenizerState{TokenizerStateMarkerNumberExact, TokenizerStateUnsignedInteger},
 			src:    []string{"#e", "4"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#x4",
-			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedInteger},
+			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedIntegerBase16},
 			src:    []string{"#x", "4"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "((",
 			tokens: []TokenizerState{TokenizerStateOpenParen, TokenizerStateOpenParen},
 			src:    []string{"(", "("},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "()",
 			tokens: []TokenizerState{TokenizerStateEmptyList},
 			src:    []string{"()"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in: "( #t )",
 			tokens: []TokenizerState{
 				TokenizerStateOpenParen,
 				TokenizerStateMarkerBooleanTrue,
-				TokenizerStateCloseParen},
-			src:  []string{"(", "#t", ")"},
-			err0: nil,
-			err1: io.EOF,
+				TokenizerStateCloseParen,
+			},
+			src: []string{"(", "#t", ")"},
+			err: io.EOF,
 		},
 		{
 			in: "( #t . #f )",
@@ -532,10 +505,10 @@ func TestTokenizer_TokenStream(t *testing.T) {
 				TokenizerStateMarkerBooleanTrue,
 				TokenizerStateCons,
 				TokenizerStateMarkerBooleanFalse,
-				TokenizerStateCloseParen},
-			src:  []string{"(", "#t", ".", "#f", ")"},
-			err0: nil,
-			err1: io.EOF,
+				TokenizerStateCloseParen,
+			},
+			src: []string{"(", "#t", ".", "#f", ")"},
+			err: io.EOF,
 		},
 		{
 			in: "( . #f )",
@@ -543,420 +516,366 @@ func TestTokenizer_TokenStream(t *testing.T) {
 				TokenizerStateOpenParen,
 				TokenizerStateCons,
 				TokenizerStateMarkerBooleanFalse,
-				TokenizerStateCloseParen},
-			src:  []string{"(", ".", "#f", ")"},
-			err0: nil,
-			err1: io.EOF,
+				TokenizerStateCloseParen,
+			},
+			src: []string{"(", ".", "#f", ")"},
+			err: io.EOF,
 		},
 		{
 			in: "( . )",
 			tokens: []TokenizerState{
 				TokenizerStateOpenParen,
 				TokenizerStateCons,
-				TokenizerStateCloseParen},
-			src:  []string{"(", ".", ")"},
-			err0: nil,
-			err1: io.EOF,
+				TokenizerStateCloseParen,
+			},
+			src: []string{"(", ".", ")"},
+			err: io.EOF,
 		},
 		{
 			in:     "'hello",
 			tokens: []TokenizerState{TokenizerStateQuote, TokenizerStateSymbol},
 			src:    []string{"'", "hello"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#t #f",
 			tokens: []TokenizerState{TokenizerStateMarkerBooleanTrue, TokenizerStateMarkerBooleanFalse},
 			src:    []string{"#t", "#f"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#fart",
 			tokens: []TokenizerState{TokenizerStateMarker},
 			src:    []string{"#fart"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#(1 2)",
 			tokens: []TokenizerState{TokenizerStateOpenVector, TokenizerStateUnsignedInteger, TokenizerStateUnsignedInteger, TokenizerStateCloseParen},
 			src:    []string{"#(", "1", "2", ")"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 
 		{
 			in:     "(())",
 			tokens: []TokenizerState{TokenizerStateOpenParen, TokenizerStateEmptyList, TokenizerStateCloseParen},
 			src:    []string{"(", "()", ")"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "'(hello this)",
 			tokens: []TokenizerState{TokenizerStateQuote, TokenizerStateOpenParen, TokenizerStateSymbol, TokenizerStateSymbol, TokenizerStateCloseParen},
 			src:    []string{"'", "(", "hello", "this", ")"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "'(hello 1.20)",
 			tokens: []TokenizerState{TokenizerStateQuote, TokenizerStateOpenParen, TokenizerStateSymbol, TokenizerStateUnsignedDecimalFraction, TokenizerStateCloseParen},
 			src:    []string{"'", "(", "hello", "1.20", ")"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".20",
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
 			src:    []string{".20"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ".02",
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
 			src:    []string{".02"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "'(+ 1.20 2)",
 			tokens: []TokenizerState{TokenizerStateQuote, TokenizerStateOpenParen, TokenizerStateSymbol, TokenizerStateUnsignedDecimalFraction, TokenizerStateUnsignedInteger, TokenizerStateCloseParen},
 			src:    []string{"'", "(", "+", "1.20", "2", ")"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     ``,
 			tokens: []TokenizerState{},
 			src:    []string{},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `;`,
-			tokens: []TokenizerState{TokenizerStateLineCommentStart},
+			tokens: []TokenizerState{TokenizerStateLineCommentBody},
 			src:    []string{";"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `;;;`,
-			tokens: []TokenizerState{TokenizerStateLineCommentStart},
+			tokens: []TokenizerState{TokenizerStateLineCommentBody},
 			src:    []string{";;;"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `; this that`,
-			tokens: []TokenizerState{TokenizerStateLineCommentStart},
+			tokens: []TokenizerState{TokenizerStateLineCommentBody},
 			src:    []string{"; this that"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in: `; this
                  ; that`,
-			tokens: []TokenizerState{TokenizerStateLineCommentStart, TokenizerStateLineCommentStart},
+			tokens: []TokenizerState{TokenizerStateLineCommentBody, TokenizerStateLineCommentBody},
 			src:    []string{"; this", "; that"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `#!fold`,
 			tokens: []TokenizerState{TokenizerStateDirective},
 			src:    []string{"#!fold"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `#| foo |#`,
-			tokens: []TokenizerState{TokenizerStateBlockComment},
+			tokens: []TokenizerState{TokenizerStateBlockCommentBody},
 			src:    []string{"#| foo |#"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `#'foo`,
 			tokens: []TokenizerState{TokenizerStateSyntax, TokenizerStateSymbol},
 			src:    []string{"#'", "foo"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#`foo",
 			tokens: []TokenizerState{TokenizerStateQuasisyntax, TokenizerStateSymbol},
 			src:    []string{"#`", "foo"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#,foo",
 			tokens: []TokenizerState{TokenizerStateUnsyntax, TokenizerStateSymbol},
 			src:    []string{"#,", "foo"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#,@foo",
 			tokens: []TokenizerState{TokenizerStateUnsyntaxSplicing, TokenizerStateSymbol},
 			src:    []string{"#,@", "foo"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#10='foo",
 			tokens: []TokenizerState{TokenizerStateLabelAssignment, TokenizerStateQuote, TokenizerStateSymbol},
 			src:    []string{"#10=", "'", "foo"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#10#",
 			tokens: []TokenizerState{TokenizerStateLabelReference},
 			src:    []string{"#10#"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "#;",
-			tokens: []TokenizerState{TokenizerStateDatumComment},
+			tokens: []TokenizerState{TokenizerStateDatumCommentBegin},
 			src:    []string{"#;"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `"hello"`,
-			tokens: []TokenizerState{TokenizerStateStringEnd},
+			tokens: []TokenizerState{TokenizerStateString},
 			src:    []string{`"hello"`},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `"hello \"there\"!"`,
-			tokens: []TokenizerState{TokenizerStateStringEnd},
+			tokens: []TokenizerState{TokenizerStateString},
 			src:    []string{`"hello \"there\"!"`},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     `"Use #\\Control-q to quit."`,
-			tokens: []TokenizerState{TokenizerStateStringEnd},
+			tokens: []TokenizerState{TokenizerStateString},
 			src:    []string{`"Use #\\Control-q to quit."`},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Pure imaginary numbers
 		{
 			in:     "+i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginary},
 			src:    []string{"+i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginary},
 			src:    []string{"-i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+3i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginary},
 			src:    []string{"+3i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-3.5i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginary},
 			src:    []string{"-3.5i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Imaginary infinity and NaN
 		{
 			in:     "+inf.0i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginaryInf},
 			src:    []string{"+inf.0i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-inf.0i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginaryInf},
 			src:    []string{"-inf.0i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+nan.0i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginaryNan},
 			src:    []string{"+nan.0i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-nan.0i",
 			tokens: []TokenizerState{TokenizerStateSignedImaginaryNan},
 			src:    []string{"-nan.0i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Real infinity and NaN
 		{
 			in:     "+inf.0",
 			tokens: []TokenizerState{TokenizerStateSignedInf},
 			src:    []string{"+inf.0"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-inf.0",
 			tokens: []TokenizerState{TokenizerStateSignedInf},
 			src:    []string{"-inf.0"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+nan.0",
 			tokens: []TokenizerState{TokenizerStateSignedNan},
 			src:    []string{"+nan.0"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-nan.0",
 			tokens: []TokenizerState{TokenizerStateSignedNan},
 			src:    []string{"-nan.0"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Complex numbers (rectangular form) - unsigned real
 		{
 			in:     "1+2i",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplex},
 			src:    []string{"1+2i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "3-4i",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplex},
 			src:    []string{"3-4i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "1.5+2.5i",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplex},
 			src:    []string{"1.5+2.5i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "1+i",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplex},
 			src:    []string{"1+i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "5-i",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplex},
 			src:    []string{"5-i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Complex numbers (rectangular form) - signed real
 		{
 			in:     "-1+2i",
 			tokens: []TokenizerState{TokenizerStateSignedComplex},
 			src:    []string{"-1+2i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+1+2i",
 			tokens: []TokenizerState{TokenizerStateSignedComplex},
 			src:    []string{"+1+2i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-3-4i",
 			tokens: []TokenizerState{TokenizerStateSignedComplex},
 			src:    []string{"-3-4i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-1+i",
 			tokens: []TokenizerState{TokenizerStateSignedComplex},
 			src:    []string{"-1+i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+5-i",
 			tokens: []TokenizerState{TokenizerStateSignedComplex},
 			src:    []string{"+5-i"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Complex numbers (polar form) - unsigned magnitude
 		{
 			in:     "1@1.5708",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplexPolar},
 			src:    []string{"1@1.5708"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "3.5@0.785",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplexPolar},
 			src:    []string{"3.5@0.785"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "1@0",
 			tokens: []TokenizerState{TokenizerStateUnsignedComplexPolar},
 			src:    []string{"1@0"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		// Complex numbers (polar form) - signed magnitude
 		{
 			in:     "-1@1.5708",
 			tokens: []TokenizerState{TokenizerStateSignedComplexPolar},
 			src:    []string{"-1@1.5708"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "+1@1.5708",
 			tokens: []TokenizerState{TokenizerStateSignedComplexPolar},
 			src:    []string{"+1@1.5708"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 		{
 			in:     "-3.5@0.785",
 			tokens: []TokenizerState{TokenizerStateSignedComplexPolar},
 			src:    []string{"-3.5@0.785"},
-			err0:   nil,
-			err1:   io.EOF,
+			err:    io.EOF,
 		},
 	}
 	for _, tc := range tcs {
-		qt.New(t).Run(tc.in, func(c *qt.C) {
+		t.Run(tc.in, func(t *testing.T) {
+			c := qt.New(t)
 			ts, err := Tokenize(tc.in, false)
-			c.Check(err, qt.ErrorIs, tc.err1)
+			c.Check(err, qt.ErrorIs, tc.err)
 			qt.Assert(c, len(ts), qt.Equals, len(tc.tokens))
 			qt.Assert(c, len(ts), qt.Equals, len(tc.src))
 			for i := range ts {
@@ -1204,9 +1123,10 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateUnsignedRationalFraction,
 		},
 		{
+			// R7RS: <decimal 10> → <digit 10>+ . <digit 10>* allows zero digits after dot
+			// "2." is valid decimal fraction, "/10" is next token (identifier)
 			bs:    "2./10",
 			scan:  "2.",
-			err0:  &TokenizerError{mess: MessageExpectingNumber},
 			state: TokenizerStateUnsignedDecimalFraction,
 		},
 		{
@@ -1226,6 +1146,18 @@ func TestTokenizer_read(t *testing.T) {
 			scan:  "34e10",
 			err0:  io.EOF,
 			state: TokenizerStateUnsignedInteger,
+		},
+		{
+			bs:    "-34e10",
+			scan:  "-34e10",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
+		},
+		{
+			bs:    "+34e10",
+			scan:  "+34e10",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
 		},
 		{
 			bs:    ".34e10",
@@ -1477,14 +1409,14 @@ func TestTokenizer_read(t *testing.T) {
 			bs:    `"hello"`,
 			scan:  `"hello"`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		{
 			// string with escape
 			bs:    `"hello\nworld"`,
 			scan:  `"hello\nworld"`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// Vector
 		{
@@ -1500,20 +1432,20 @@ func TestTokenizer_read(t *testing.T) {
 			bs:    "#| comment |#",
 			scan:  "#| comment |#",
 			err0:  io.EOF,
-			state: TokenizerStateBlockComment,
+			state: TokenizerStateBlockCommentBody,
 		},
 		{
 			// datum comment
 			bs:    "#;",
 			scan:  "#;",
 			err0:  io.EOF,
-			state: TokenizerStateDatumComment,
+			state: TokenizerStateDatumCommentBegin,
 		},
 		{
 			// line comment
 			bs:    "; comment\n",
 			scan:  "; comment",
-			state: TokenizerStateLineCommentStart,
+			state: TokenizerStateLineCommentBody,
 		},
 		// === EDGE CASES ===
 		// Numbers with leading zeros
@@ -1625,6 +1557,30 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateUnsignedInteger,
 		},
 		{
+			bs:    "-1e-0",
+			scan:  "-1e-0",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
+		},
+		{
+			bs:    "-1e+0",
+			scan:  "-1e+0",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
+		},
+		{
+			bs:    "+1e-0",
+			scan:  "+1e-0",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
+		},
+		{
+			bs:    "+1e+0",
+			scan:  "+1e+0",
+			err0:  io.EOF,
+			state: TokenizerStateSignedInteger,
+		},
+		{
 			bs:    ".5e0",
 			scan:  ".5e0",
 			err0:  io.EOF,
@@ -1635,35 +1591,35 @@ func TestTokenizer_read(t *testing.T) {
 			bs:    `""`,
 			scan:  `""`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// String with only escape sequences
 		{
 			bs:    `"\n\t\r"`,
 			scan:  `"\n\t\r"`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// String with hex escape
 		{
 			bs:    `"\x41;"`,
 			scan:  `"\x41;"`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// String with embedded quote
 		{
 			bs:    `"say \"hello\""`,
 			scan:  `"say \"hello\""`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// String with backslash escape
 		{
 			bs:    `"path\\to\\file"`,
 			scan:  `"path\\to\\file"`,
 			err0:  io.EOF,
-			state: TokenizerStateStringEnd,
+			state: TokenizerStateString,
 		},
 		// Character edge cases
 		{
@@ -1736,7 +1692,7 @@ func TestTokenizer_read(t *testing.T) {
 			err0:  io.EOF,
 			state: TokenizerStateCharHexEscape,
 		},
-		// Symbol edge cases
+		// Sym edge cases
 		{
 			// peculiar identifier: just +
 			bs:    "+ ",
@@ -1833,21 +1789,21 @@ func TestTokenizer_read(t *testing.T) {
 			// empty line comment
 			bs:    ";\n",
 			scan:  ";",
-			state: TokenizerStateLineCommentStart,
+			state: TokenizerStateLineCommentBody,
 		},
 		{
 			// empty block comment
 			bs:    "#||#",
 			scan:  "#||#",
 			err0:  io.EOF,
-			state: TokenizerStateBlockComment,
+			state: TokenizerStateBlockCommentBody,
 		},
 		{
 			// nested block comment
 			bs:    "#| outer #| inner |# outer |#",
 			scan:  "#| outer #| inner |# outer |#",
 			err0:  io.EOF,
-			state: TokenizerStateBlockComment,
+			state: TokenizerStateBlockCommentBody,
 		},
 		// Boolean edge cases - R7RS requires case-insensitive booleans
 		// (tokenizer handles this regardless of ci flag)
@@ -1993,8 +1949,9 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateLabelAssignment,
 		},
 	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.bs), func(c *qt.C) {
+	for _, tc := range tcs {
+		t.Run(tc.bs, func(t *testing.T) {
+			c := qt.New(t)
 			p := NewTokenizer(strings.NewReader(tc.bs), tc.ci)
 			p.mark()
 			p.read()
@@ -2004,43 +1961,6 @@ func TestTokenizer_read(t *testing.T) {
 			c.Check(err, qt.ErrorIs, tc.err0)
 			c.Check(state, qt.Equals, tc.state)
 			c.Check(p.span(), qt.Equals, tc.scan)
-		})
-	}
-}
-
-func TestTokenizer_readBase10Integer(t *testing.T) {
-	tcs := []struct {
-		n     int
-		bs    string
-		value string
-		err   error
-	}{
-		{
-			n:     4,
-			bs:    "10",
-			value: "10",
-			err:   io.EOF,
-		},
-		{
-			n:     4,
-			bs:    "123456789",
-			value: "1234",
-		},
-		{
-			n:     4,
-			bs:    "12ABC",
-			value: "12",
-		},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.bs), func(c *qt.C) {
-			p := NewTokenizer(strings.NewReader(tc.bs), false)
-			p.mark()
-			_, err := p.readBaseNInteger(10, tc.n)
-			p.term()
-			val := string(p.text)
-			c.Check(err, qt.ErrorIs, tc.err)
-			c.Check(val, qt.Equals, tc.value)
 		})
 	}
 }
@@ -2187,7 +2107,7 @@ func TestTokenizer_scanLineEnding(t *testing.T) {
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.name, func(c *qt.C) {
 			p := NewTokenizer(strings.NewReader(tc.input), false)
-			ok, _ := p.scanLineEnding()
+			ok := p.scanLineEnding()
 			c.Assert(ok, qt.Equals, tc.expected)
 		})
 	}
@@ -2243,8 +2163,7 @@ func TestTokenizer_isEOF(t *testing.T) {
 func TestTokenizer_this(t *testing.T) {
 	c := qt.New(t)
 	p := NewTokenizer(strings.NewReader("abc"), false)
-	r, err := p.this()
-	c.Assert(err, qt.IsNil)
+	r := p.this()
 	c.Assert(r, qt.Equals, 'a')
 }
 
@@ -2258,9 +2177,9 @@ func TestTokenizer_TokenStream_EdgeCases(t *testing.T) {
 		{"+", []TokenizerState{TokenizerStateSymbol}},
 		{"-", []TokenizerState{TokenizerStateSymbol}},
 		// Various radix markers
-		{"#b101", []TokenizerState{TokenizerStateMarkerBase2, TokenizerStateUnsignedInteger}},
-		{"#o777", []TokenizerState{TokenizerStateMarkerBase8, TokenizerStateUnsignedInteger}},
-		{"#d123", []TokenizerState{TokenizerStateMarkerBase10, TokenizerStateUnsignedInteger}},
+		{"#b101", []TokenizerState{TokenizerStateMarkerBase2, TokenizerStateUnsignedIntegerBase2}},
+		{"#o777", []TokenizerState{TokenizerStateMarkerBase8, TokenizerStateUnsignedIntegerBase8}},
+		{"#d123", []TokenizerState{TokenizerStateMarkerBase10, TokenizerStateUnsignedIntegerBase10}},
 		// Whitespace handling
 		{"  \t\n  foo", []TokenizerState{TokenizerStateSymbol}},
 	}
@@ -2278,12 +2197,12 @@ func TestTokenizer_TokenStream_EdgeCases(t *testing.T) {
 // Test helper functions
 func TestIsLetter(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(isLetter('a'), qt.IsTrue)
-	c.Assert(isLetter('z'), qt.IsTrue)
-	c.Assert(isLetter('A'), qt.IsTrue)
-	c.Assert(isLetter('Z'), qt.IsTrue)
-	c.Assert(isLetter('0'), qt.IsFalse)
-	c.Assert(isLetter('-'), qt.IsFalse)
+	c.Assert(isUnicodeLetter('a'), qt.IsTrue)
+	c.Assert(isUnicodeLetter('z'), qt.IsTrue)
+	c.Assert(isUnicodeLetter('A'), qt.IsTrue)
+	c.Assert(isUnicodeLetter('Z'), qt.IsTrue)
+	c.Assert(isUnicodeLetter('0'), qt.IsFalse)
+	c.Assert(isUnicodeLetter('-'), qt.IsFalse)
 }
 
 func TestIsDigit(t *testing.T) {
@@ -2408,26 +2327,6 @@ func TestIsSubsequent(t *testing.T) {
 
 // Tests for complex tokenization scenarios to improve coverage
 
-func TestBlockComments(t *testing.T) {
-	tcs := []struct {
-		bs    string
-		state TokenizerState
-	}{
-		// Block comment as single token
-		{bs: "#| block comment |#", state: TokenizerStateBlockComment},
-		// Nested block comments
-		{bs: "#| outer #| inner |# outer |#", state: TokenizerStateBlockComment},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.bs), func(c *qt.C) {
-			tok := NewTokenizer(strings.NewReader(tc.bs), false)
-			token, err := tok.Next()
-			c.Check(err, qt.IsNil)
-			c.Check(token.Type(), qt.Equals, tc.state)
-		})
-	}
-}
-
 func TestPeculiarIdentifiers(t *testing.T) {
 	c := qt.New(t)
 
@@ -2459,7 +2358,7 @@ func TestRadixPrefixes(t *testing.T) {
 	c.Assert(token.Type(), qt.Equals, TokenizerStateMarkerBase2)
 	token1b, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1b.Type(), qt.Equals, TokenizerStateUnsignedInteger)
+	c.Assert(token1b.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase2)
 	c.Assert(token1b.String(), qt.Equals, "101")
 
 	// Octal number
@@ -2519,21 +2418,21 @@ func TestStringEscapes(t *testing.T) {
 		state TokenizerState
 	}{
 		// Hex escape
-		{bs: `"\x41;"`, scan: `"\x41;"`, state: TokenizerStateStringEnd},
+		{bs: `"\x41;"`, scan: `"\x41;"`, state: TokenizerStateString},
 		// Tab escape \t
-		{bs: `"\t"`, scan: `"\t"`, state: TokenizerStateStringEnd},
+		{bs: `"\t"`, scan: `"\t"`, state: TokenizerStateString},
 		// Newline escape \n
-		{bs: `"\n"`, scan: `"\n"`, state: TokenizerStateStringEnd},
+		{bs: `"\n"`, scan: `"\n"`, state: TokenizerStateString},
 		// Return escape \r
-		{bs: `"\r"`, scan: `"\r"`, state: TokenizerStateStringEnd},
+		{bs: `"\r"`, scan: `"\r"`, state: TokenizerStateString},
 		// Backslash escape \\
-		{bs: `"\\"`, scan: `"\\"`, state: TokenizerStateStringEnd},
+		{bs: `"\\"`, scan: `"\\"`, state: TokenizerStateString},
 		// Quote escape \"
-		{bs: `"\""`, scan: `"\""`, state: TokenizerStateStringEnd},
+		{bs: `"\""`, scan: `"\""`, state: TokenizerStateString},
 		// Bell escape \a
-		{bs: `"\a"`, scan: `"\a"`, state: TokenizerStateStringEnd},
+		{bs: `"\a"`, scan: `"\a"`, state: TokenizerStateString},
 		// Backspace escape \b
-		{bs: `"\b"`, scan: `"\b"`, state: TokenizerStateStringEnd},
+		{bs: `"\b"`, scan: `"\b"`, state: TokenizerStateString},
 	}
 	for i, tc := range tcs {
 		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.bs), func(c *qt.C) {
@@ -2626,7 +2525,7 @@ func TestDatumComment(t *testing.T) {
 	tok := NewTokenizer(strings.NewReader("#;"), false)
 	token, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token.Type(), qt.Equals, TokenizerStateDatumComment)
+	c.Assert(token.Type(), qt.Equals, TokenizerStateDatumCommentBegin)
 }
 
 func TestVector(t *testing.T) {
@@ -2666,43 +2565,17 @@ func TestComplexNumbers(t *testing.T) {
 // Comment Tokenization Tests (emitComments=true)
 // ============================================================================
 
-func TestNewTokenizerWithComments(t *testing.T) {
-	c := qt.New(t)
-
-	// Test constructor with emitComments=true
-	tok := NewTokenizerWithComments(strings.NewReader("test"), false, true)
-	c.Assert(tok, qt.Not(qt.IsNil))
-	c.Assert(tok.emitComments, qt.IsTrue)
-
-	// Test constructor with emitComments=false
-	tok2 := NewTokenizerWithComments(strings.NewReader("test"), false, false)
-	c.Assert(tok2, qt.Not(qt.IsNil))
-	c.Assert(tok2.emitComments, qt.IsFalse)
-}
-
 func TestLineCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Simple line comment: ; comment
-	tok := NewTokenizerWithComments(strings.NewReader("; this is a comment\n"), false, true)
-
-	// Should get LineCommentBegin (the semicolons)
-	token1, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-	c.Assert(token1.String(), qt.Equals, ";")
+	tok := NewTokenizerWithComments(strings.NewReader("; this is a comment\n"), false)
 
 	// Should get LineCommentBody (the comment content)
-	token2, err := tok.Next()
+	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-	c.Assert(token2.String(), qt.Equals, " this is a comment")
-
-	// Should get LineCommentEnd (the newline)
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateLineCommentEnd)
-	c.Assert(token3.String(), qt.Equals, "\n")
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBody)
+	c.Assert(token1.String(), qt.Equals, "; this is a comment")
 
 	// Should get EOF
 	_, err = tok.Next()
@@ -2713,37 +2586,24 @@ func TestLineCommentMultipleSemicolons(t *testing.T) {
 	c := qt.New(t)
 
 	// Multiple semicolons: ;;; comment
-	tok := NewTokenizerWithComments(strings.NewReader(";;; triple\n"), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader(";;; triple\n"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-	c.Assert(token1.String(), qt.Equals, ";;;")
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-	c.Assert(token2.String(), qt.Equals, " triple")
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateLineCommentEnd)
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBody)
+	c.Assert(token1.String(), qt.Equals, ";;; triple")
 }
 
 func TestLineCommentAtEOF(t *testing.T) {
 	c := qt.New(t)
 
 	// Comment without trailing newline (EOF terminates)
-	tok := NewTokenizerWithComments(strings.NewReader("; no newline"), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader("; no newline"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-	c.Assert(token2.String(), qt.Equals, " no newline")
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBody)
+	c.Assert(token1.String(), qt.Equals, "; no newline")
 
 	// No End token at EOF - just returns EOF directly
 	_, err = tok.Next()
@@ -2754,123 +2614,70 @@ func TestLineCommentEmpty(t *testing.T) {
 	c := qt.New(t)
 
 	// Empty comment (just semicolon and newline)
-	tok := NewTokenizerWithComments(strings.NewReader(";\n"), false, true)
-
-	token1, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-	c.Assert(token1.String(), qt.Equals, ";")
-
+	tok := NewTokenizerWithComments(strings.NewReader(";\n"), false)
 	token2, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-	c.Assert(token2.String(), qt.Equals, "")
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateLineCommentEnd)
+	c.Assert(token2.String(), qt.Equals, ";")
 }
 
 func TestBlockCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Simple block comment: #| comment |#
-	tok := NewTokenizerWithComments(strings.NewReader("#| block comment |#"), false, true)
-
-	// Should get BlockCommentBegin (#|)
-	token1, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-	c.Assert(token1.String(), qt.Equals, "#|")
+	tok := NewTokenizerWithComments(strings.NewReader("#| block comment |#"), false)
 
 	// Should get BlockCommentBody (the content)
 	token2, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-	c.Assert(token2.String(), qt.Equals, " block comment ")
-
-	// Should get BlockCommentEnd (|#)
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateBlockCommentEnd)
-	c.Assert(token3.String(), qt.Equals, "|#")
+	c.Assert(token2.String(), qt.Equals, "#| block comment |#")
 }
 
 func TestBlockCommentEmpty(t *testing.T) {
 	c := qt.New(t)
 
 	// Empty block comment: #||#
-	tok := NewTokenizerWithComments(strings.NewReader("#||#"), false, true)
-
+	tok := NewTokenizerWithComments(strings.NewReader("#||#"), false)
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-	c.Assert(token2.String(), qt.Equals, "")
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateBlockCommentEnd)
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
+	c.Assert(token1.String(), qt.Equals, "#||#")
 }
 
 func TestBlockCommentMultiline(t *testing.T) {
 	c := qt.New(t)
 
 	// Multiline block comment
-	tok := NewTokenizerWithComments(strings.NewReader("#| line1\nline2\nline3 |#"), false, true)
-
+	tok := NewTokenizerWithComments(strings.NewReader("#| line1\nline2\nline3 |#"), false)
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-	c.Assert(token2.String(), qt.Equals, " line1\nline2\nline3 ")
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateBlockCommentEnd)
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
+	c.Assert(token1.String(), qt.Equals, "#| line1\nline2\nline3 |#")
 }
 
 func TestBlockCommentNested(t *testing.T) {
 	c := qt.New(t)
 
 	// Nested block comment: #| outer #| inner |# outer |#
-	tok := NewTokenizerWithComments(strings.NewReader("#| outer #| inner |# outer |#"), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader("#| outer #| inner |# outer |#"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-	c.Assert(token2.String(), qt.Equals, " outer #| inner |# outer ")
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateBlockCommentEnd)
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
+	c.Assert(token1.String(), qt.Equals, "#| outer #| inner |# outer |#")
 }
 
 func TestBlockCommentUnclosed(t *testing.T) {
 	c := qt.New(t)
 
 	// Unclosed block comment (EOF before |#)
-	tok := NewTokenizerWithComments(strings.NewReader("#| unclosed"), false, true)
-
+	tok := NewTokenizerWithComments(strings.NewReader("#| unclosed"), false)
+	// Body ends at EOF, no End token
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBegin)
-
-	// Body ends at EOF, no End token
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateBlockCommentBody)
-	c.Assert(token2.String(), qt.Equals, " unclosed")
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
+	c.Assert(token1.String(), qt.Equals, "#| unclosed")
 
 	// Next call should return EOF
 	_, err = tok.Next()
@@ -2881,7 +2688,7 @@ func TestDatumCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Datum comment: #; datum
-	tok := NewTokenizerWithComments(strings.NewReader("#;42"), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader("#;42"), false)
 
 	// Should get DatumCommentBegin
 	token1, err := tok.Next()
@@ -2900,43 +2707,17 @@ func TestCommentFollowedByCode(t *testing.T) {
 	c := qt.New(t)
 
 	// Comment followed by code
-	tok := NewTokenizerWithComments(strings.NewReader("; comment\n42"), false, true)
+	tok := NewTokenizerWithComments(strings.NewReader("; comment\n42"), false)
 
-	// Line comment sequence
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBegin)
-
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
-
-	token3, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token3.Type(), qt.Equals, TokenizerStateLineCommentEnd)
+	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentBody)
 
 	// Then the code
 	token4, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token4.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 	c.Assert(token4.String(), qt.Equals, "42")
-}
-
-func TestCommentEmitFalseBackwardCompatible(t *testing.T) {
-	c := qt.New(t)
-
-	// With emitComments=false, should use old behavior
-	tok := NewTokenizerWithComments(strings.NewReader("; comment\n42"), false, false)
-
-	// Should get old-style LineCommentStart
-	token1, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token1.Type(), qt.Equals, TokenizerStateLineCommentStart)
-
-	// Then the code
-	token2, err := tok.Next()
-	c.Assert(err, qt.IsNil)
-	c.Assert(token2.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 }
 
 // ============================================================================
@@ -3145,6 +2926,1393 @@ func TestSignedRealComplexNumbers(t *testing.T) {
 			}
 			c.Check(token.Type(), qt.Equals, tc.state)
 			c.Check(token.String(), qt.Equals, tc.scan)
+		})
+	}
+}
+
+// ============================================================================
+// R7RS Compliance Bug Fix Tests
+// ============================================================================
+
+func TestEmptyExponentError(t *testing.T) {
+	// Bug 2: Empty exponent should produce error, not be silently accepted
+	// Uses read() directly to test error, matching existing test patterns
+	tcs := []struct {
+		name  string
+		input string
+	}{
+		{"bare exponent", "1e"},
+		{"exponent with plus", "1e+"},
+		{"exponent with minus", "1e-"},
+		{"decimal with exponent", "1.5e"},
+		{"decimal with exponent plus", "1.5e+"},
+		{"leading dot with exponent", ".5e"},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.name, func(c *qt.C) {
+			p := NewTokenizer(strings.NewReader(tc.input), false)
+			p.mark()
+			p.read()
+			c.Assert(p.err, qt.Not(qt.IsNil), qt.Commentf("expected error for input %q", tc.input))
+			var tokErr *TokenizerError
+			c.Assert(p.err, qt.ErrorAs, &tokErr)
+		})
+	}
+}
+
+func TestInvalidHashSequenceError(t *testing.T) {
+	// Bug 3: Invalid # sequences should produce error, not panic
+	// Uses read() directly to test error, matching existing test patterns
+	tcs := []struct {
+		name  string
+		input string
+	}{
+		{"hash bracket", "#["},
+		{"hash curly", "#{"},
+		{"hash dollar", "#$"},
+		{"hash percent", "#%"},
+		{"hash caret", "#^"},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.name, func(c *qt.C) {
+			p := NewTokenizer(strings.NewReader(tc.input), false)
+			p.mark()
+			p.read()
+			c.Assert(p.err, qt.Not(qt.IsNil), qt.Commentf("expected error for input %q", tc.input))
+			var tokErr *TokenizerError
+			c.Assert(p.err, qt.ErrorAs, &tokErr)
+		})
+	}
+}
+
+func TestTrailingDotDecimals(t *testing.T) {
+	// Bug 1: R7RS allows trailing dot decimals like "1."
+	tcs := []struct {
+		name  string
+		input string
+		state TokenizerState
+	}{
+		{"unsigned trailing dot", "1.", TokenizerStateUnsignedDecimalFraction},
+		{"positive trailing dot", "+1.", TokenizerStateSignedDecimalFraction},
+		{"negative trailing dot", "-1.", TokenizerStateSignedDecimalFraction},
+		{"trailing dot with exponent", "1.e2", TokenizerStateUnsignedDecimalFraction},
+		{"trailing dot followed by paren", "1.(", TokenizerStateUnsignedDecimalFraction},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.name, func(c *qt.C) {
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Assert(err, qt.IsNil, qt.Commentf("unexpected error for input %q", tc.input))
+			c.Assert(token.Type(), qt.Equals, tc.state)
+		})
+	}
+}
+
+// TestR7RSUnicodeIdentifiers tests R7RS Section 7.1.1 Unicode identifier support.
+// R7RS specifies:
+//   - <letter> includes Unicode categories Lu, Ll, Lt, Lm, Lo, and Nl
+//   - <subsequent> additionally allows Nd, Mc, and Me categories
+//
+// These tests are expected to FAIL until Unicode category support is implemented.
+func TestR7RSUnicodeIdentifiers(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		state TokenizerState
+		value string // expected processed value
+	}{
+		// Category Nl (Number, Letter) - valid as initial per R7RS
+		{
+			name:  "Roman numeral XII as identifier",
+			input: "Ⅻ", // U+216B ROMAN NUMERAL TWELVE (category Nl)
+			state: TokenizerStateSymbol,
+			value: "Ⅻ",
+		},
+		{
+			name:  "Roman numeral as initial with letter subsequent",
+			input: "Ⅻfoo", // Roman numeral followed by letters
+			state: TokenizerStateSymbol,
+			value: "Ⅻfoo",
+		},
+		// Category Nd (Number, Decimal Digit) - valid as subsequent per R7RS
+		// Note: ASCII digits 0-9 already work; testing Unicode Nd
+		{
+			name:  "Arabic-Indic digit as subsequent",
+			input: "foo٣", // U+0663 ARABIC-INDIC DIGIT THREE (category Nd)
+			state: TokenizerStateSymbol,
+			value: "foo٣",
+		},
+		{
+			name:  "Devanagari digit as subsequent",
+			input: "bar५", // U+096B DEVANAGARI DIGIT FIVE (category Nd)
+			state: TokenizerStateSymbol,
+			value: "bar५",
+		},
+		// Category Mc (Mark, Spacing Combining) - valid as subsequent per R7RS
+		{
+			name:  "Devanagari vowel sign as subsequent",
+			input: "xा", // U+093E DEVANAGARI VOWEL SIGN AA (category Mc)
+			state: TokenizerStateSymbol,
+			value: "xा",
+		},
+		// Category Me (Mark, Enclosing) - valid as subsequent per R7RS
+		{
+			name:  "Combining enclosing circle as subsequent",
+			input: "x⃝", // U+20DD COMBINING ENCLOSING CIRCLE (category Me)
+			state: TokenizerStateSymbol,
+			value: "x⃝",
+		},
+		// Combined test: Nl initial with Nd/Mc/Me subsequents
+		{
+			name:  "Complex Unicode identifier",
+			input: "Ⅻ٣ा⃝", // Nl + Nd + Mc + Me
+			state: TokenizerStateSymbol,
+			value: "Ⅻ٣ा⃝",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Assert(err, qt.IsNil, qt.Commentf("unexpected error for input %q", tc.input))
+			c.Assert(token.Type(), qt.Equals, tc.state, qt.Commentf("wrong token type for %q", tc.input))
+			c.Assert(token.String(), qt.Equals, tc.value, qt.Commentf("wrong value for %q", tc.input))
+		})
+	}
+}
+
+// TestStringLineContinuation tests R7RS string line continuation escape sequences.
+// R7RS Section 6.7 specifies that within strings:
+//
+//	\<intraline whitespace>*<line ending><intraline whitespace>*
+//
+// is replaced by nothing (allows splitting long strings across lines).
+func TestStringLineContinuation(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		value string // expected processed value (escapes converted)
+	}{
+		{
+			name:  "simple line continuation",
+			input: "\"hello\\\nworld\"",
+			value: "helloworld", // backslash-newline removed
+		},
+		{
+			name:  "line continuation with trailing spaces before newline",
+			input: "\"hello\\   \nworld\"",
+			value: "helloworld", // backslash, spaces, newline all removed
+		},
+		{
+			name:  "line continuation with leading spaces after newline",
+			input: "\"hello\\\n   world\"",
+			value: "helloworld", // backslash, newline, leading spaces removed
+		},
+		{
+			name:  "line continuation with spaces on both sides",
+			input: "\"hello\\  \n  world\"",
+			value: "helloworld", // all continuation whitespace removed
+		},
+		{
+			name:  "line continuation with CRLF",
+			input: "\"hello\\\r\nworld\"",
+			value: "helloworld", // works with CRLF line ending
+		},
+		{
+			name:  "line continuation with CR only",
+			input: "\"hello\\\rworld\"",
+			value: "helloworld", // works with CR line ending
+		},
+		{
+			name:  "line continuation with tabs",
+			input: "\"hello\\\t\n\tworld\"",
+			value: "helloworld", // tabs are intraline whitespace
+		},
+		{
+			name:  "multiple line continuations",
+			input: "\"one\\\ntwo\\\nthree\"",
+			value: "onetwothree",
+		},
+		{
+			name:  "line continuation preserves other content",
+			input: "\"prefix\\\nsuffix more\"",
+			value: "prefixsuffix more",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Assert(err, qt.IsNil, qt.Commentf("unexpected error for input %q", tc.input))
+			c.Assert(token.Type(), qt.Equals, TokenizerStateString, qt.Commentf("expected string token for %q", tc.input))
+			c.Assert(token.Value(), qt.Equals, tc.value, qt.Commentf("wrong processed value for %q", tc.input))
+		})
+	}
+}
+
+// TODO: Some test cases here are duplicated with TestTokenizer_readBaseNInteger.
+// Since readBaseNInteger delegates to readUnsignedBaseNInteger, these tests
+// should be refactored to avoid redundancy. Keep unsigned-specific cases here,
+// move sign-handling cases to the signed test, and share common infrastructure.
+func TestTokenizer_readUnsignedBaseNInteger(t *testing.T) {
+	tcs := []struct {
+		name      string
+		input     string
+		radix     int
+		maxn      int
+		wantVal   int64
+		wantCount int
+		wantErr   error
+		remaining rune
+	}{
+		// Empty input / no digits
+		{
+			name:      "empty input",
+			input:     "",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "non-digit first char",
+			input:     "abc",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			remaining: 'a',
+		},
+		{
+			name:      "whitespace only",
+			input:     "   ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			remaining: ' ',
+		},
+
+		// Base 10 - basic cases (when input ends at EOF, function returns 0)
+		{
+			name:      "base10 single digit with trailing space",
+			input:     "5 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   5,
+			wantCount: 1,
+			remaining: ' ',
+		},
+		{
+			name:      "base10 single digit at EOF",
+			input:     "5",
+			radix:     10,
+			maxn:      0,
+			wantVal:   5,
+			wantCount: 1,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "base10 multiple digits with trailing space",
+			input:     "12345 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   12345,
+			wantCount: 5,
+			remaining: ' ',
+		},
+		{
+			name:      "base10 multiple digits at EOF",
+			input:     "12345",
+			radix:     10,
+			maxn:      0,
+			wantVal:   12345,
+			wantCount: 5,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "base10 leading zeros",
+			input:     "00123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 5,
+			remaining: ' ',
+		},
+		{
+			name:      "base10 all zeros",
+			input:     "0000 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "base10 terminated by letter",
+			input:     "123abc",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: 'a',
+		},
+
+		// Base 2 (binary)
+		{
+			name:      "base2 single digit 0",
+			input:     "0 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			remaining: ' ',
+		},
+		{
+			name:      "base2 single digit 1",
+			input:     "1 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   1,
+			wantCount: 1,
+			remaining: ' ',
+		},
+		{
+			name:      "base2 binary pattern",
+			input:     "10110 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   22,
+			wantCount: 5,
+			remaining: ' ',
+		},
+		{
+			name:      "base2 invalid digit 2 terminates",
+			input:     "1012",
+			radix:     2,
+			maxn:      0,
+			wantVal:   5,
+			wantCount: 3,
+			remaining: '2',
+		},
+		{
+			name:      "base2 invalid digit 9 terminates",
+			input:     "119",
+			radix:     2,
+			maxn:      0,
+			wantVal:   3,
+			wantCount: 2,
+			remaining: '9',
+		},
+
+		// Base 8 (octal)
+		{
+			name:      "base8 single digit",
+			input:     "7 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   7,
+			wantCount: 1,
+			remaining: ' ',
+		},
+		{
+			name:      "base8 octal pattern",
+			input:     "755 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   493,
+			wantCount: 3,
+			remaining: ' ',
+		},
+		{
+			name:      "base8 invalid digit 8 terminates",
+			input:     "128",
+			radix:     8,
+			maxn:      0,
+			wantVal:   10,
+			wantCount: 2,
+			remaining: '8',
+		},
+		{
+			name:      "base8 invalid digit 9 terminates",
+			input:     "179",
+			radix:     8,
+			maxn:      0,
+			wantVal:   15,
+			wantCount: 2,
+			remaining: '9',
+		},
+
+		// Base 16 (hex)
+		{
+			name:      "base16 digits only",
+			input:     "123 ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   291,
+			wantCount: 3,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 lowercase letters",
+			input:     "abc ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 3,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 uppercase letters",
+			input:     "ABC ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 3,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 mixed case",
+			input:     "aBcDeF ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   11259375,
+			wantCount: 6,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 invalid letter g terminates",
+			input:     "1fg",
+			radix:     16,
+			maxn:      0,
+			wantVal:   31,
+			wantCount: 2,
+			remaining: 'g',
+		},
+		{
+			name:      "base16 invalid letter G terminates",
+			input:     "ABCG",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 3,
+			remaining: 'G',
+		},
+
+		// maxn limiting (leaves remaining input, so no EOF)
+		{
+			name:      "maxn limits to 1 digit",
+			input:     "12345",
+			radix:     10,
+			maxn:      1,
+			wantVal:   1,
+			wantCount: 1,
+			remaining: '2',
+		},
+		{
+			name:      "maxn limits to 3 digits",
+			input:     "12345",
+			radix:     10,
+			maxn:      3,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: '4',
+		},
+		{
+			name:      "maxn exceeds available digits",
+			input:     "12 ",
+			radix:     10,
+			maxn:      5,
+			wantVal:   12,
+			wantCount: 2,
+			remaining: ' ',
+		},
+		{
+			name:      "maxn exceeds available digits",
+			input:     "12",
+			radix:     10,
+			maxn:      5,
+			wantVal:   12,
+			wantCount: 2,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "maxn zero means unlimited",
+			input:     "1234567890 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   1234567890,
+			wantCount: 10,
+			remaining: ' ',
+		},
+		{
+			name:      "maxn negative means unlimited",
+			input:     "12345 ",
+			radix:     10,
+			maxn:      -1,
+			wantVal:   12345,
+			wantCount: 5,
+			remaining: ' ',
+		},
+		{
+			name:      "maxn with base16",
+			input:     "abcdef",
+			radix:     16,
+			maxn:      4,
+			wantVal:   43981,
+			wantCount: 4,
+			remaining: 'e',
+		},
+
+		// Radix 0 acts like radix 10
+		{
+			name:      "radix 0 acts like 10",
+			input:     "42 ",
+			radix:     0,
+			maxn:      0,
+			wantVal:   42,
+			wantCount: 2,
+			remaining: ' ',
+		},
+
+		// Overflow cases (with trailing char to avoid EOF masking the overflow error)
+		{
+			name:      "max int64",
+			input:     "9223372036854775807 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   math.MaxInt64,
+			wantCount: 19,
+			remaining: ' ',
+		},
+		{
+			name:      "overflow int64 at EOF",
+			input:     "9223372036854775808",
+			radix:     10,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 19,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "large overflow at EOF",
+			input:     "99999999999999999999",
+			radix:     10,
+			maxn:      0,
+			wantVal:   math.MaxInt64,
+			wantCount: 20,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "hex max int64",
+			input:     "7fffffffffffffff ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   math.MaxInt64,
+			wantCount: 16,
+			remaining: ' ',
+		},
+		{
+			name:      "hex overflow at EOF",
+			input:     "8000000000000000",
+			radix:     16,
+			maxn:      0,
+			wantVal:   math.MaxInt64,
+			wantCount: 16,
+			wantErr:   io.EOF,
+		},
+
+		// Unicode / special characters
+		{
+			name:      "unicode after digits",
+			input:     "123日本語",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: '日',
+		},
+
+		// Overflow with trailing delimiter (tests parse error detection)
+		// Note: strconv.ParseInt returns math.MaxInt64 on overflow, so value is non-zero
+		{
+			name:      "overflow int64 with trailing space",
+			input:     "9223372036854775808 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 19,
+			wantErr:   &TokenizerError{},
+		},
+		{
+			name:      "large overflow with trailing space",
+			input:     "99999999999999999999 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 20,
+			wantErr:   &TokenizerError{},
+		},
+		{
+			name:      "hex overflow with trailing space",
+			input:     "8000000000000000 ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 16,
+			wantErr:   &TokenizerError{},
+		},
+
+		// Binary boundary cases
+		{
+			name:      "binary max int64",
+			input:     "111111111111111111111111111111111111111111111111111111111111111 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 63,
+			remaining: ' ',
+		},
+		{
+			name:      "binary overflow",
+			input:     "1000000000000000000000000000000000000000000000000000000000000000 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 64,
+			wantErr:   &TokenizerError{},
+		},
+
+		// Octal boundary cases
+		{
+			name:      "octal max int64",
+			input:     "777777777777777777777 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 21,
+			remaining: ' ',
+		},
+		{
+			name:      "octal overflow",
+			input:     "1000000000000000000000 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 22,
+			wantErr:   &TokenizerError{},
+		},
+
+		// Zero handling
+		{
+			name:      "single zero base10",
+			input:     "0 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			remaining: ' ',
+		},
+		{
+			name:      "single zero base16",
+			input:     "0 ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			remaining: ' ',
+		},
+
+		// Delimiter variations
+		{
+			name:      "terminated by paren",
+			input:     "123)",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: ')',
+		},
+		{
+			name:      "terminated by newline",
+			input:     "123\n",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: '\n',
+		},
+		{
+			name:      "terminated by tab",
+			input:     "123\t",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: '\t',
+		},
+
+		// Edge cases for maxn
+		{
+			name:      "maxn exactly matches input length",
+			input:     "12345",
+			radix:     10,
+			maxn:      5,
+			wantVal:   12345,
+			wantCount: 5,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "maxn is 1 with single digit",
+			input:     "9",
+			radix:     10,
+			maxn:      1,
+			wantVal:   9,
+			wantCount: 1,
+			wantErr:   io.EOF,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+
+			val, count := tok.readUnsignedBaseNInteger(tc.radix, tc.maxn)
+
+			c.Assert(count, qt.Equals, tc.wantCount, qt.Commentf("digit count mismatch"))
+			c.Assert(val, qt.Equals, tc.wantVal, qt.Commentf("value mismatch"))
+
+			switch tc.wantErr.(type) {
+			case nil:
+				c.Assert(tok.err, qt.IsNil, qt.Commentf("unexpected error: %v", tok.err))
+			case *TokenizerError:
+				var tokErr *TokenizerError
+				c.Assert(tok.err, qt.ErrorAs, &tokErr, qt.Commentf("expected TokenizerError"))
+			default:
+				c.Assert(tok.err, qt.ErrorIs, tc.wantErr)
+			}
+
+			if tc.remaining != 0 {
+				c.Assert(tok.curr(), qt.Equals, tc.remaining,
+					qt.Commentf("remaining input mismatch"))
+			}
+		})
+	}
+}
+
+// TODO: Some test cases here are duplicated with TestTokenizer_readUnsignedBaseNInteger.
+// Since readBaseNInteger delegates to readUnsignedBaseNInteger, these tests
+// should be refactored to avoid redundancy. Keep sign-handling cases here,
+// and rely on the unsigned test for comprehensive digit/radix coverage.
+func TestTokenizer_readBaseNInteger(t *testing.T) {
+	tcs := []struct {
+		name      string
+		input     string
+		radix     int
+		maxn      int
+		wantVal   int64
+		wantCount int
+		wantErr   error
+		remaining rune
+	}{
+		// No sign - behaves like unsigned
+		{
+			name:      "no sign base10",
+			input:     "123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: ' ',
+		},
+		{
+			name:      "no sign base10 at EOF",
+			input:     "123",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 3,
+			wantErr:   io.EOF,
+		},
+
+		// Positive sign
+		{
+			name:      "positive sign base10",
+			input:     "+123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "positive sign base10 at EOF",
+			input:     "+123",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 4,
+			wantErr:   io.EOF,
+		},
+
+		// Negative sign
+		{
+			name:      "negative sign base10",
+			input:     "-123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -123,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "negative sign base10 at EOF",
+			input:     "-123",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -123,
+			wantCount: 4,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "negative zero",
+			input:     "-0 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 2,
+			remaining: ' ',
+		},
+
+		// Sign only (no digits)
+		{
+			name:      "plus sign only at EOF",
+			input:     "+",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "minus sign only at EOF",
+			input:     "-",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "plus sign followed by non-digit",
+			input:     "+abc",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			remaining: 'a',
+		},
+		{
+			name:      "minus sign followed by non-digit",
+			input:     "-xyz",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 1,
+			remaining: 'x',
+		},
+
+		// Non-base character termination (base 10)
+		{
+			name:      "base10 terminated by A",
+			input:     "10A",
+			radix:     10,
+			maxn:      0,
+			wantVal:   10,
+			wantCount: 2,
+			remaining: 'A',
+		},
+		{
+			name:      "base10 terminated by lowercase a",
+			input:     "99a",
+			radix:     10,
+			maxn:      0,
+			wantVal:   99,
+			wantCount: 2,
+			remaining: 'a',
+		},
+		{
+			name:      "base10 signed terminated by letter",
+			input:     "+10A",
+			radix:     10,
+			maxn:      0,
+			wantVal:   10,
+			wantCount: 3,
+			remaining: 'A',
+		},
+		{
+			name:      "base10 negative terminated by letter",
+			input:     "-10A",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -10,
+			wantCount: 3,
+			remaining: 'A',
+		},
+
+		// Non-base character termination (base 2)
+		{
+			name:      "base2 terminated by 2",
+			input:     "1012",
+			radix:     2,
+			maxn:      0,
+			wantVal:   5,
+			wantCount: 3,
+			remaining: '2',
+		},
+		{
+			name:      "base2 terminated by 9",
+			input:     "1109",
+			radix:     2,
+			maxn:      0,
+			wantVal:   6,
+			wantCount: 3,
+			remaining: '9',
+		},
+		{
+			name:      "base2 signed terminated by invalid",
+			input:     "+1102",
+			radix:     2,
+			maxn:      0,
+			wantVal:   6,
+			wantCount: 4,
+			remaining: '2',
+		},
+		{
+			name:      "base2 negative terminated by invalid",
+			input:     "-1012",
+			radix:     2,
+			maxn:      0,
+			wantVal:   -5,
+			wantCount: 4,
+			remaining: '2',
+		},
+
+		// Non-base character termination (base 8)
+		{
+			name:      "base8 terminated by 8",
+			input:     "178",
+			radix:     8,
+			maxn:      0,
+			wantVal:   15,
+			wantCount: 2,
+			remaining: '8',
+		},
+		{
+			name:      "base8 terminated by 9",
+			input:     "779",
+			radix:     8,
+			maxn:      0,
+			wantVal:   63,
+			wantCount: 2,
+			remaining: '9',
+		},
+		{
+			name:      "base8 terminated by A",
+			input:     "77A",
+			radix:     8,
+			maxn:      0,
+			wantVal:   63,
+			wantCount: 2,
+			remaining: 'A',
+		},
+		{
+			name:      "base8 signed terminated by invalid",
+			input:     "+128",
+			radix:     8,
+			maxn:      0,
+			wantVal:   10,
+			wantCount: 3,
+			remaining: '8',
+		},
+
+		// Non-base character termination (base 16)
+		{
+			name:      "base16 terminated by G",
+			input:     "ABCG",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 3,
+			remaining: 'G',
+		},
+		{
+			name:      "base16 terminated by lowercase g",
+			input:     "abcg",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 3,
+			remaining: 'g',
+		},
+		{
+			name:      "base16 terminated by Z",
+			input:     "FFZ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   255,
+			wantCount: 2,
+			remaining: 'Z',
+		},
+		{
+			name:      "base16 signed terminated by invalid",
+			input:     "+1FG",
+			radix:     16,
+			maxn:      0,
+			wantVal:   31,
+			wantCount: 3,
+			remaining: 'G',
+		},
+		{
+			name:      "base16 negative terminated by invalid",
+			input:     "-FFG",
+			radix:     16,
+			maxn:      0,
+			wantVal:   -255,
+			wantCount: 3,
+			remaining: 'G',
+		},
+
+		// Base 2 (binary) with signs
+		{
+			name:      "base2 positive",
+			input:     "+10110 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   22,
+			wantCount: 6,
+			remaining: ' ',
+		},
+		{
+			name:      "base2 negative",
+			input:     "-10110 ",
+			radix:     2,
+			maxn:      0,
+			wantVal:   -22,
+			wantCount: 6,
+			remaining: ' ',
+		},
+
+		// Base 8 (octal) with signs
+		{
+			name:      "base8 positive",
+			input:     "+755 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   493,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "base8 negative",
+			input:     "-755 ",
+			radix:     8,
+			maxn:      0,
+			wantVal:   -493,
+			wantCount: 4,
+			remaining: ' ',
+		},
+
+		// Base 16 (hex) with signs
+		{
+			name:      "base16 positive uppercase",
+			input:     "+ABC ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   2748,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 negative lowercase",
+			input:     "-abc ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   -2748,
+			wantCount: 4,
+			remaining: ' ',
+		},
+		{
+			name:      "base16 mixed case",
+			input:     "+aBcDeF ",
+			radix:     16,
+			maxn:      0,
+			wantVal:   11259375,
+			wantCount: 7,
+			remaining: ' ',
+		},
+
+		// maxn with sign (maxn applies to digits only, not sign)
+		{
+			name:      "maxn with positive sign",
+			input:     "+12345",
+			radix:     10,
+			maxn:      3,
+			wantVal:   123,
+			wantCount: 4,
+			remaining: '4',
+		},
+		{
+			name:      "maxn with negative sign",
+			input:     "-12345",
+			radix:     10,
+			maxn:      3,
+			wantVal:   -123,
+			wantCount: 4,
+			remaining: '4',
+		},
+		{
+			name:      "maxn without sign",
+			input:     "12345",
+			radix:     10,
+			maxn:      3,
+			wantVal:   123,
+			wantCount: 3,
+			remaining: '4',
+		},
+
+		// Empty/whitespace input
+		{
+			name:      "empty input",
+			input:     "",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			wantErr:   io.EOF,
+		},
+		{
+			name:      "whitespace only",
+			input:     "   ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			remaining: ' ',
+		},
+		{
+			name:      "non-digit non-sign first",
+			input:     "abc",
+			radix:     10,
+			maxn:      0,
+			wantVal:   0,
+			wantCount: 0,
+			remaining: 'a',
+		},
+
+		// Overflow cases
+		{
+			name:      "positive max int64",
+			input:     "+9223372036854775807 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 20,
+			remaining: ' ',
+		},
+		{
+			name:      "negative overflow gives negated max",
+			input:     "-9223372036854775808 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -9223372036854775807,
+			wantCount: 20,
+			wantErr:   &TokenizerError{},
+		},
+		{
+			name:      "positive overflow gives max",
+			input:     "+9223372036854775808 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   9223372036854775807,
+			wantCount: 20,
+			wantErr:   &TokenizerError{},
+		},
+
+		// Delimiter variations
+		{
+			name:      "terminated by paren",
+			input:     "-123)",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -123,
+			wantCount: 4,
+			remaining: ')',
+		},
+		{
+			name:      "terminated by newline",
+			input:     "+456\n",
+			radix:     10,
+			maxn:      0,
+			wantVal:   456,
+			wantCount: 4,
+			remaining: '\n',
+		},
+
+		// Unicode termination
+		{
+			name:      "unicode after signed digits",
+			input:     "-123日本語",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -123,
+			wantCount: 4,
+			remaining: '日',
+		},
+
+		// Radix 0 acts like radix 10
+		{
+			name:      "radix 0 with sign",
+			input:     "-42 ",
+			radix:     0,
+			maxn:      0,
+			wantVal:   -42,
+			wantCount: 3,
+			remaining: ' ',
+		},
+
+		// Leading zeros with sign
+		{
+			name:      "positive with leading zeros",
+			input:     "+00123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   123,
+			wantCount: 6,
+			remaining: ' ',
+		},
+		{
+			name:      "negative with leading zeros",
+			input:     "-00123 ",
+			radix:     10,
+			maxn:      0,
+			wantVal:   -123,
+			wantCount: 6,
+			remaining: ' ',
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+
+			val, count := tok.readBaseNInteger(tc.radix, tc.maxn)
+
+			c.Assert(count, qt.Equals, tc.wantCount, qt.Commentf("digit count mismatch"))
+			c.Assert(val, qt.Equals, tc.wantVal, qt.Commentf("value mismatch"))
+
+			switch tc.wantErr.(type) {
+			case nil:
+				c.Assert(tok.err, qt.IsNil, qt.Commentf("unexpected error: %v", tok.err))
+			case *TokenizerError:
+				var tokErr *TokenizerError
+				c.Assert(tok.err, qt.ErrorAs, &tokErr, qt.Commentf("expected TokenizerError"))
+			default:
+				c.Assert(tok.err, qt.ErrorIs, tc.wantErr)
+			}
+
+			if tc.remaining != 0 {
+				c.Assert(tok.curr(), qt.Equals, tc.remaining,
+					qt.Commentf("remaining input mismatch"))
+			}
+		})
+	}
+}
+
+// TestIsCommentToken tests the isCommentToken function
+func TestIsCommentToken(t *testing.T) {
+	tcs := []struct {
+		input        string
+		expectedType TokenizerState
+	}{
+		{
+			input:        "; comment\n123",
+			expectedType: TokenizerStateLineCommentBody,
+		},
+		{
+			input:        "#| comment |#456",
+			expectedType: TokenizerStateBlockCommentBody,
+		},
+		{
+			input:        "#;(datum)",
+			expectedType: TokenizerStateDatumCommentBegin,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Check(err, qt.IsNil)
+			c.Check(token.Type(), qt.Equals, tc.expectedType)
+		})
+	}
+}
+
+// TestMayReadExponentEdgeCases tests exponent edge cases
+func TestMayReadExponentEdgeCases(t *testing.T) {
+	tcs := []struct {
+		input        string
+		expectedType TokenizerState
+	}{
+		{
+			input:        "1.0E10",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+		{
+			input:        "1.0e+5",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+		{
+			input:        "1.0e-5",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+		{
+			input:        "1.5E10",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+		{
+			input:        "3/4",
+			expectedType: TokenizerStateUnsignedRationalFraction,
+		},
+		{
+			input:        "22/7",
+			expectedType: TokenizerStateUnsignedRationalFraction,
+		},
+		{
+			input:        "1/2",
+			expectedType: TokenizerStateUnsignedRationalFraction,
+		},
+		{
+			input:        ".5",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+		{
+			input:        ".125",
+			expectedType: TokenizerStateUnsignedDecimalFraction,
+		},
+	}
+	for i, tc := range tcs {
+		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Check(err, qt.IsNil)
+			c.Check(token.Type(), qt.Equals, tc.expectedType)
 		})
 	}
 }

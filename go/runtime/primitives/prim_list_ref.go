@@ -24,8 +24,8 @@ import (
 // PrimListRef implements the (list-ref) primitive.
 // Returns the element at the given index in a list.
 func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
 	idx, ok := k.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "list-ref: expected an integer index but got %T", k)

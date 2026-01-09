@@ -15,8 +15,9 @@
 package syntax
 
 import (
-	"wile/values"
 	"strings"
+
+	"wile/values"
 )
 
 var (
@@ -24,11 +25,18 @@ var (
 	_ SyntaxValue  = (*SyntaxVector)(nil)
 )
 
+// SyntaxVector wraps a Scheme vector with source context.
 type SyntaxVector struct {
 	Values        []SyntaxValue
 	sourceContext *SourceContext
 }
 
+// AddScope returns the vector unchanged as vectors do not track scopes.
+func (p *SyntaxVector) AddScope(_ *Scope) SyntaxValue {
+	return p
+}
+
+// NewSyntaxVector creates a new syntax vector with the given source context and elements.
 func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 	q := &SyntaxVector{
 		Values:        vs,
@@ -37,10 +45,12 @@ func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 	return q
 }
 
+// SourceContext returns the source context for this syntax vector.
 func (p *SyntaxVector) SourceContext() *SourceContext {
 	return p.sourceContext
 }
 
+// UnwrapAll recursively unwraps all elements to produce a plain values.Vector.
 func (p *SyntaxVector) UnwrapAll() values.Value {
 	if p.IsVoid() {
 		return values.Void
@@ -64,10 +74,12 @@ func (p *SyntaxVector) Unwrap() values.Value {
 	return q
 }
 
+// IsVoid returns true if the syntax vector is nil.
 func (p *SyntaxVector) IsVoid() bool {
 	return p == nil
 }
 
+// SchemeString returns the Scheme representation of the syntax vector.
 func (p *SyntaxVector) SchemeString() string {
 	if p.IsVoid() {
 		return "#'<void>"

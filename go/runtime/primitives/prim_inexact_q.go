@@ -24,7 +24,7 @@ import (
 // PrimInexactQ implements the (inexact?) primitive.
 // Returns #t if number is inexact.
 func PrimInexactQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch o.(type) {
 	case *values.Float, *values.Complex:
 		mc.SetValue(values.TrueValue)

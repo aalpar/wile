@@ -24,8 +24,8 @@ import (
 // PrimBytevectorCopy implements the bytevector-copy primitive.
 // Returns a copy of a bytevector.
 func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	rest := mc.Arg(1)
 	bv, ok := o.(*values.ByteVector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy: expected a bytevector but got %T", o)

@@ -66,11 +66,12 @@ func (sm *SourceMap) Lookup(pc int) *syntax.SourceContext {
 	for lo < hi {
 		mid := (lo + hi) / 2
 		entry := &sm.entries[mid]
-		if pc < entry.StartPC {
+		switch {
+		case pc < entry.StartPC:
 			hi = mid
-		} else if pc >= entry.EndPC {
+		case pc >= entry.EndPC:
 			lo = mid + 1
-		} else {
+		default:
 			return entry.Source
 		}
 	}

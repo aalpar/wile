@@ -16,7 +16,6 @@ package primitives
 
 import (
 	"context"
-	"errors"
 	"os"
 
 	"wile/machine"
@@ -28,8 +27,8 @@ import (
 // calls the thunk, then restores the previous port and closes the file.
 // (with-output-to-file string thunk)
 func PrimWithOutputToFile(ctx context.Context, mc *machine.MachineContext) error {
-	filenameVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	thunkVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	filenameVal := mc.Arg(0)
+	thunkVal := mc.Arg(1)
 
 	filename, ok := filenameVal.(*values.String)
 	if !ok {
@@ -46,30 +45,13 @@ func PrimWithOutputToFile(ctx context.Context, mc *machine.MachineContext) error
 	if err != nil {
 		return values.WrapForeignErrorf(err, "with-output-to-file: %v", err)
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	// Save current port and set new one
 	savedPort := GetCurrentOutputPort()
-	newPort := values.NewCharacterOutputPort(file)
+	newPort := values.NewCharacterOutputPortFromWriter(file)
 	SetCurrentOutputPort(newPort)
 	defer SetCurrentOutputPort(savedPort)
 
-	// Call thunk in sub-context
-	sub := mc.NewSubContext()
-	if _, err := sub.Apply(thunk); err != nil {
-		return err
-	}
-	if err := sub.Run(ctx); err != nil {
-		// Propagate continuation escapes
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
-	}
-
-	mc.SetValue(sub.GetValue())
-	return nil
+	return duplicated1(ctx, mc, thunk)
 }

@@ -23,10 +23,7 @@ import (
 )
 
 func TestNullEnvironment(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "null-environment version 5",
 			code: `(null-environment 5)`,
@@ -50,10 +47,7 @@ func TestNullEnvironment(t *testing.T) {
 }
 
 func TestSchemeReportEnvironment(t *testing.T) {
-	tests := []struct {
-		name string
-		code string
-	}{
+	tests := []schemeCodeErrorTestCase{
 		{
 			name: "scheme-report-environment version 5",
 			code: `(scheme-report-environment 5)`,
@@ -86,11 +80,7 @@ func TestEnvironmentPrimitiveError(t *testing.T) {
 }
 
 func TestEvalWithEnvironments(t *testing.T) {
-	tests := []struct {
-		name     string
-		code     string
-		expected values.Value
-	}{
+	tests := []schemeCodeTestCase{
 		{
 			name:     "eval with scheme-report-environment",
 			code:     `(eval '(+ 1 2) (scheme-report-environment 5))`,

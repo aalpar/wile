@@ -16,11 +16,14 @@ package syntax
 
 import (
 	"context"
+
 	"wile/values"
 )
 
+// SyntaxForEachFunc is the callback type for iterating over syntax tuples.
 type SyntaxForEachFunc func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error
 
+// SyntaxTuple is the interface for syntax lists (pairs and vectors).
 type SyntaxTuple interface {
 	values.Tuple
 	SyntaxValue

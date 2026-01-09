@@ -25,8 +25,8 @@ import (
 // PrimStringToNumber implements the string->number primitive.
 // Parses a string as a number with optional radix. Returns #f on parse failure.
 func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	s := mc.Arg(0)
+	rest := mc.Arg(1)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string->number: expected a string but got %T", s)

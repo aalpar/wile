@@ -38,14 +38,7 @@ import (
 // The syntax compilers are bound with BindingTypePrimitive to distinguish them
 // from syntax transformers (BindingTypeSyntax) and regular variables.
 func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
-	compileEnv := env.Compile()
-
-	// All syntax compilers for Tier 2 forms.
-	// Each entry maps a keyword to its compile function.
-	compilers := []struct {
-		name string
-		fn   SyntaxCompilerFunc
-	}{
+	compilers := []PhaseEntry[SyntaxCompilerFunc]{
 		{"syntax", (*CompileTimeContinuation).CompileSyntax},
 		{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
 		{"meta", (*CompileTimeContinuation).CompileMeta},
@@ -68,17 +61,10 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 		{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
 	}
 
-	for _, comp := range compilers {
-		sym := env.InternSymbol(values.NewSymbol(comp.name))
-		compiler := NewSyntaxCompiler(comp.name, comp.fn)
-
-		// Always set the value - the binding may already exist from runtime primitives
-		// registration, but we still need to set the SyntaxCompiler value
-		idx, _ := compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
-		compileEnv.SetOwnGlobalValue(idx, compiler) //nolint:errcheck
-	}
-
-	return nil
+	return RegisterPhaseBindings(env, env.Compile, compilers,
+		func(name string, fn SyntaxCompilerFunc) values.Value {
+			return NewSyntaxCompiler(name, fn)
+		})
 }
 
 // LookupSyntaxCompiler looks up a syntax compiler by symbol in the compile
@@ -88,24 +74,5 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.
 func LookupSyntaxCompiler(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *SyntaxCompiler {
-	compileEnv := env.Compile()
-
-	// Look up with scopes for hygiene
-	bnd := compileEnv.GetBindingWithScopes(sym, scopes)
-	if bnd == nil {
-		return nil
-	}
-
-	// Check if it's a syntax compiler binding
-	if bnd.BindingType() != environment.BindingTypePrimitive {
-		return nil
-	}
-
-	// Get the value and check if it's a SyntaxCompiler
-	val := bnd.Value()
-	if pc, ok := val.(*SyntaxCompiler); ok {
-		return pc
-	}
-
-	return nil
+	return LookupPhaseBinding[*SyntaxCompiler](env.Compile(), sym, scopes)
 }

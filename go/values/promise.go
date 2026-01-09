@@ -14,9 +14,7 @@
 
 package values
 
-var (
-	_ Value = (*Promise)(nil)
-)
+var _ Value = (*Promise)(nil)
 
 // Promise represents a delayed computation (R7RS lazy evaluation).
 // A promise contains either an unevaluated thunk or a cached result.
@@ -49,10 +47,12 @@ func NewForcedPromise(value Value) *Promise {
 	}
 }
 
+// IsVoid returns true if the promise is nil.
 func (p *Promise) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the promises are the same object.
 func (p *Promise) EqualTo(v Value) bool {
 	other, ok := v.(*Promise)
 	if !ok {
@@ -61,6 +61,7 @@ func (p *Promise) EqualTo(v Value) bool {
 	return p == other // Promises are compared by identity
 }
 
+// SchemeString returns the Scheme representation of the promise.
 func (p *Promise) SchemeString() string {
 	if p.Forced {
 		return "#<promise (forced)>"

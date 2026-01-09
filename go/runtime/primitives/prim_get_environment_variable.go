@@ -25,7 +25,7 @@ import (
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
 // Gets environment variable value.
 func PrimGetEnvironmentVariable(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	name, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "get-environment-variable: expected a string but got %T", o)

@@ -56,7 +56,7 @@ func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadQ tests if an object is a thread
 // (thread? obj) -> boolean
 func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Thread)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -69,8 +69,8 @@ func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimMakeThread creates a new thread
 // (make-thread thunk [name]) -> thread
 func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
-	thunk := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	thunk := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	name := ""
 	// Parse optional name from rest list
@@ -120,7 +120,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadName returns the thread's name
 // (thread-name thread) -> string or symbol
 func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	thread, ok := o.(*values.Thread)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-name: expected thread, got %T", o)
@@ -132,7 +132,7 @@ func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSpecific returns the thread's specific field
 // (thread-specific thread) -> value
 func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	thread, ok := o.(*values.Thread)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-specific: expected thread, got %T", o)
@@ -149,8 +149,8 @@ func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSpecificSet sets the thread's specific field
 // (thread-specific-set! thread obj) -> void
 func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	thread, ok := o.(*values.Thread)
 	if !ok {
@@ -165,7 +165,7 @@ func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
 func PrimThreadStart(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	thread, ok := o.(*values.Thread)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-start!: expected thread, got %T", o)
@@ -192,7 +192,7 @@ func PrimThreadYield(_ context.Context, mc *machine.MachineContext) error {
 // (thread-sleep! timeout) -> void
 // timeout can be a time object or a number (seconds)
 func PrimThreadSleep(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 
 	var d time.Duration
 
@@ -219,7 +219,7 @@ func PrimThreadSleep(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadTerminate forcefully terminates a thread
 // (thread-terminate! thread) -> void
 func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	thread, ok := o.(*values.Thread)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-terminate!: expected thread, got %T", o)
@@ -233,8 +233,8 @@ func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadJoin waits for a thread to terminate
 // (thread-join! thread [timeout [timeout-val]]) -> value
 func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	thread, ok := o.(*values.Thread)
 	if !ok {

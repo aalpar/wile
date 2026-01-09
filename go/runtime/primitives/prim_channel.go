@@ -27,7 +27,7 @@ import (
 // PrimMakeChannel creates a new channel
 // (make-channel [buffer-size]) -> channel
 func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	restVal := mc.Arg(0)
 
 	bufferSize := 0
 	// Parse optional buffer-size from rest list
@@ -50,7 +50,7 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelQ tests if an object is a channel
 // (channel? obj) -> boolean
 func PrimChannelQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Channel)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -63,8 +63,8 @@ func PrimChannelQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelSend sends a value on the channel (blocking)
 // (channel-send! ch value) -> void
 func PrimChannelSend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	ch, ok := o.(*values.Channel)
 	if !ok {
@@ -83,7 +83,7 @@ func PrimChannelSend(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelReceive receives a value from the channel (blocking)
 // (channel-receive ch) -> value
 func PrimChannelReceive(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-receive: expected channel, got %T", o)
@@ -104,8 +104,8 @@ func PrimChannelReceive(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelTrySend attempts to send without blocking
 // (channel-try-send! ch value) -> boolean
 func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	ch, ok := o.(*values.Channel)
 	if !ok {
@@ -128,7 +128,7 @@ func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelTryReceive attempts to receive without blocking
 // (channel-try-receive ch) -> (values value received? open?)
 func PrimChannelTryReceive(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-try-receive: expected channel, got %T", o)
@@ -165,7 +165,7 @@ func PrimChannelTryReceive(_ context.Context, mc *machine.MachineContext) error 
 // PrimChannelClose closes the channel
 // (channel-close! ch) -> void
 func PrimChannelClose(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-close!: expected channel, got %T", o)
@@ -183,7 +183,7 @@ func PrimChannelClose(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelClosedQ tests if a channel is closed
 // (channel-closed? ch) -> boolean
 func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-closed?: expected channel, got %T", o)
@@ -200,7 +200,7 @@ func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelLength returns the number of elements in the channel buffer
 // (channel-length ch) -> integer
 func PrimChannelLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-length: expected channel, got %T", o)
@@ -213,7 +213,7 @@ func PrimChannelLength(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelCapacity returns the channel's buffer capacity
 // (channel-capacity ch) -> integer
 func PrimChannelCapacity(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Channel)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-capacity: expected channel, got %T", o)

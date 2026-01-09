@@ -21,8 +21,9 @@ import (
 	"wile/values"
 )
 
+// PrimOpenInputBytevector implements the Scheme open-input-bytevector primitive.
 func PrimOpenInputBytevector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	bv, ok := o.(*values.ByteVector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "open-input-bytevector: expected a bytevector but got %T", o)

@@ -31,28 +31,28 @@ import (
 // If a converter is provided, it is applied to the initial value and to
 // any value passed when setting the parameter.
 func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
-	init := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	init := mc.Arg(0)
+	rest := mc.Arg(1)
 
-	var converter values.Value
+	var converterCls *machine.MachineClosure
 
 	// Check for optional converter in rest args
 	if !values.IsEmptyList(rest) {
 		if pr, ok := rest.(*values.Pair); ok && !values.IsEmptyList(pr) {
-			converter = pr.Car()
-
 			// Validate converter is a procedure
-			converterCls, ok := converter.(*machine.MachineClosure)
+			converterCls, ok = pr.Car().(*machine.MachineClosure)
 			if !ok {
 				return values.NewForeignError("make-parameter: converter must be a procedure")
 			}
 
 			// Apply converter to initial value
 			sub := mc.NewSubContext()
-			if _, err := sub.Apply(converterCls, init); err != nil {
+			_, err := sub.Apply(converterCls, init)
+			if err != nil {
 				return values.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
 			}
-			if err := sub.Run(ctx); err != nil {
+			err = sub.Run(ctx)
+			if err != nil {
 				if !errors.Is(err, machine.ErrMachineHalt) {
 					return values.WrapForeignErrorf(err, "make-parameter: converter error")
 				}
@@ -61,7 +61,7 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	param := values.NewParameter(init, converter)
+	param := machine.NewParameter(init, converterCls)
 	mc.SetValue(param)
 	return nil
 }

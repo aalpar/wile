@@ -1,10 +1,16 @@
-PROJECT=scheme
-SOURCES := $(shell go list -f '{{range .GoFiles}}{{$$.Dir}}/{{.}} {{end}}' ./...)
-SOURCES_TEST := $(shell go list -f '{{range .TestGoFiles}}{{$$.Dir}}/{{.}} {{end}}' ./...)
-SUBDIRS=cmd define_syntax environment forms machine match parser runtime syntax tokenizer utils values
+SOURCES=$(shell find . -type f -name "*.go" -print)
+DIST_DIR=../dist
+MY_BIN=scheme
 
-.PHONY: all
-all: $(SUBDIRS)
+.PHONY: build
+build: $(DIST_DIR)/$(MY_BIN)
+
+$(DIST_DIR)/$(MY_BIN): $(SOURCES)
+	go build -o $(DIST_DIR)/$(MY_BIN) -ldflags "-X main.BuildSHA=$(BUILD_SHA) -X main.BuildVersion=$(BUILD_VERSION)" ./cmd
+
+.PHONY: buildtest
+buildtest:
+	go test -v -c -o $(DIST_DIR)/$(MY_BIN) ./...
 
 .PHONY: test
 test:
@@ -12,48 +18,33 @@ test:
 
 .PHONY: cover
 cover:
-	mkdir -p /Users/aalpar/projects/wile/cover
-	go test -coverprofile=/Users/aalpar/projects/wile/cover/coverage.out ./...
-	go tool cover -html=/Users/aalpar/projects/wile/cover/coverage.out -o /Users/aalpar/projects/wile/cover/coverage.html
-
-go.sum: go.mod $(SOURCES)
-	touch $@
-	go mod tidy
-
-.PHONY: $(SUBDIRS)
-$(SUBDIRS):
-	$(MAKE) -C $@
-
-.PHONY: build
-build: $(SOURCES)
-	go build -v ./...
+	go test -cover -v ./...
 
 .PHONY: lint
 lint:
-	golangci-lint run ./...
+	golangci-lint -v run
 
-.PHONY: lintfix
-lintfix:
-	golangci-lint run --fix ./...
+.PHONY: fix
+fix:
+	golangci-lint -v run --fix
 
-.PHONY: clean
-clean:
-	go clean -x -cache -fuzzcache -testcache
-
-.PHONY: modclean
-modclean:
-	go clean -x -modcache
+.PHONY: format
+format:
+	golangci-lint -v fmt
 
 .PHONY: tidy
 tidy:
-	go mod tidy -x
+	go mod tidy -e -x
 
-.PHONY: fmt
-fmt:
-	gofmt -w $(SOURCES); \
+.PHONY: buildclean
+buildclean:
+	go clean -cache
 
-.PHONY: buildtest
-buildtest:
-	@for pkg in $$(go list ./...); do \
-		go test -c -o /dev/null $$pkg 2>&1 || exit 1; \
-	done
+.PHONY: testclean
+testclean:
+	go clean -testcache -fuzzcache
+
+.PHONY: modclean
+modclean:
+	go clean -modcache 
+

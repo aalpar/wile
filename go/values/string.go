@@ -14,30 +14,58 @@
 
 package values
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 var (
 	_ Value        = (*String)(nil)
 	_ fmt.Stringer = (*String)(nil)
 )
 
+// String interning for commonly used strings.
+// Short strings (up to 64 characters) are automatically interned.
+const stringInternMaxLen = 64
+
+var stringInterns sync.Map // map[string]*String
+
+// String represents a Scheme string value.
 type String struct {
 	Value string
 }
 
+// NewString returns a String value. Short strings (up to 64 characters)
+// are automatically interned and return the same pointer for the same value.
 func NewString(str string) *String {
-	q := &String{Value: str}
-	return q
+	if len(str) <= stringInternMaxLen {
+		return InternString(str)
+	}
+	return &String{Value: str}
 }
 
+// InternString returns an interned String for the given value.
+// Multiple calls with the same string value return the same pointer.
+func InternString(str string) *String {
+	if existing, ok := stringInterns.Load(str); ok {
+		return existing.(*String)
+	}
+	newStr := &String{Value: str}
+	actual, _ := stringInterns.LoadOrStore(str, newStr)
+	return actual.(*String)
+}
+
+// Datum returns the underlying string value.
 func (p *String) Datum() string {
 	return p.Value
 }
 
+// IsVoid returns true if the string is nil.
 func (p *String) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the strings have equal values.
 func (p *String) EqualTo(v Value) bool {
 	if other, ok := v.(*String); ok {
 		return p.Value == other.Value
@@ -45,6 +73,7 @@ func (p *String) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the string.
 func (p *String) SchemeString() string {
 	return fmt.Sprintf("%q", p.Value)
 }

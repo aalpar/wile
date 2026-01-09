@@ -32,7 +32,7 @@ import (
 // When syntax-local-value retrieves a CompileTimeValue, it automatically unwraps
 // it to return the underlying value.
 func PrimMakeCompileTimeValue(ctx context.Context, mc *machine.MachineContext) error {
-	v := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	v := mc.Arg(0)
 
 	ctv := values.NewCompileTimeValue(v)
 	mc.SetValue(ctv)

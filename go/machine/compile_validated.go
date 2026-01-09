@@ -25,19 +25,46 @@ import (
 // compileValidated dispatches compilation based on the validated expression type.
 // Each ValidatedExpr type has a corresponding compile method that can assume
 // the expression structure has already been validated.
+//
+// This is the main entry point for compiling validated IR. The validation phase
+// has already verified syntax structure and produced type-safe ValidatedExpr nodes,
+// so compilation can focus on bytecode generation without re-checking structure.
+//
+// Dispatch strategy:
+//  1. Form-name lookup: Special forms (if, define, lambda, etc.) carry a formName
+//     that maps to a registered compiler in the forms registry.
+//  2. Type switch fallback: Expressions without form names (symbols, calls, literals)
+//     are dispatched by their concrete ValidatedExpr type.
 func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext, expr validate.ValidatedExpr) error {
-	// Look up compiler by form name
+	// Strategy 1: Form-name based dispatch via the forms registry.
+	// Special forms like "if", "define", "lambda", "begin", "quote", etc. have
+	// their formName set during validation. The forms registry maps these names
+	// to compiler functions (e.g., "if" -> CompileValidatedIf).
 	if expr.FormName() != "" {
-		if spec := forms.Lookup(expr.FormName()); spec != nil && spec.Compile != nil {
+		spec := forms.Lookup(expr.FormName())
+		if spec != nil && spec.Compile != nil {
+			// Found a registered compiler for this form - invoke it.
+			// The compiler receives the validated expression with guaranteed structure.
 			return spec.Compile(p, ctctx, expr)
 		}
+		// Form name present but no compiler registered - fall through to type switch.
+		// This can happen for forms that pass through validation without deep checking.
 	}
 
-	// Handle non-form expressions (symbols, calls, literals without form name)
+	// Strategy 2: Type-based dispatch for non-form expressions.
+	// These are expressions that don't have a special form name:
+	// - ValidatedCall: procedure application like (foo x y)
+	// - ValidatedSymbol: variable reference like x
+	// - ValidatedLiteral: self-evaluating values like 42, "hello", #t
 	switch v := expr.(type) {
 	case *validate.ValidatedCall:
-		return p.compileValidatedCall(ctctx, expr.FormName(), v)
+		// Procedure call: (proc arg1 arg2 ...)
+		// Compiles proc and args, then emits Apply operation.
+		return p.compileValidatedCall(ctctx, v)
+
 	case *validate.ValidatedSymbol:
+		// Variable reference: looks up binding and emits load operation.
+		// May be local (stack-relative) or global (environment lookup).
 		startPC := len(p.template.operations)
 		err := p.CompileSymbol(ctctx, v.Symbol)
 		if err != nil {
@@ -45,17 +72,25 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		}
 		p.recordSource(startPC, v.Source())
 		return nil
+
 	case *validate.ValidatedLiteral:
-		// Self-evaluating literal (formName is empty)
+		// Self-evaluating literal or passthrough form.
+		// Numbers, strings, booleans, etc. compile to literal loads.
+		// Some forms (define-syntax, define-library) pass through as literals
+		// and are handled by the legacy compilation path.
 		return p.compileValidatedLiteral(ctctx, v)
+
 	default:
+		// Exhaustiveness check: all ValidatedExpr types should be handled above.
+		// This error indicates a new validated type was added without updating
+		// this switch statement.
 		return values.NewForeignErrorf("unknown validated expression type: %T", expr)
 	}
 }
 
-// compileValidatedIf compiles a validated (if test conseq [alt]) form.
+// CompileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
-func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedIf) error {
+func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedIf) error {
 	startPC := len(p.template.operations)
 
 	// Compile the test condition (not in tail position)
@@ -66,7 +101,7 @@ func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContex
 	p.template.AppendOperations(NewOperationPush())
 
 	// Set up branch-on-false to skip consequent
-	branchOnFalseIndex := p.template.operations.Length()
+	branchOnFalseIndex := p.template.operations.Len()
 	p.template.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Compile consequent (inherits tail position)
@@ -76,11 +111,11 @@ func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContex
 	}
 
 	// Set up unconditional branch to skip alternative
-	branchToEndIndex := p.template.operations.Length()
+	branchToEndIndex := p.template.operations.Len()
 	p.template.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Target for branch-on-false
-	altStart := p.template.operations.Length()
+	altStart := p.template.operations.Len()
 
 	// Compile alternative (or load void if none)
 	if v.Alt != nil {
@@ -95,7 +130,7 @@ func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContex
 	}
 
 	// Fix up branch targets
-	endIndex := p.template.operations.Length()
+	endIndex := p.template.operations.Len()
 	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseOffsetImmediate(altStart - branchOnFalseIndex)
 	p.template.operations[branchToEndIndex] = NewOperationBranchOffsetImmediate(endIndex - branchToEndIndex)
 
@@ -103,314 +138,433 @@ func (p *CompileTimeContinuation) compileValidatedIf(ctctx CompileTimeCallContex
 	return nil
 }
 
-// compileValidatedDefine compiles a validated define form.
-func (p *CompileTimeContinuation) compileValidatedDefine(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
+// CompileValidatedDefine compiles a validated define form.
+func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
 	if v.IsFunction {
 		// (define (name params...) body...) - compile as lambda then define
-		return p.compileValidatedDefineFn(ctctx, formName, v)
+		return p.CompileValidatedDefineFn(ctctx, formName, v)
 	}
 	// (define name expr) - compile value then store
-	return p.compileValidatedDefineVar(ctctx, formName, v)
+	return p.compileValidatedDefineVar(ctctx, v)
 }
 
-func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
-	startPC := len(p.template.operations)
-
-	// Get the symbol for the name
-	sym, ok := v.Name.Unwrap().(*values.Symbol)
-	if !ok {
-		return values.ErrNotASymbol
-	}
-	sym = p.env.InternSymbol(sym)
-	symbolScopes := v.Name.Scopes()
-
+// declareDefineBinding creates the binding for a define form before compiling its value.
+// This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
+// Returns the interned symbol for use by the caller when storing the compiled value.
+func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) (*values.Symbol, error) {
+	// Get the interned symbol for the name (validator guarantees it's a SyntaxSymbol)
+	sym := p.env.InternSymbol(v.Name().Sym)
+	symbolScopes := v.Name().Scopes()
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
 		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
-	} else {
-		gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
-		if created && symbolScopes != nil {
-			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil {
-				binding.SetScopes(symbolScopes)
-			}
-		}
+		return sym, nil
 	}
+	gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+	if created && symbolScopes == nil {
+		return sym, nil
+	}
+	binding := p.env.GetGlobalBinding(gi)
+	if binding == nil {
+		return sym, nil
+	}
+	binding.SetScopes(symbolScopes)
+	return sym, nil
+}
 
-	// Compile the value expression
-	err := p.compileValidated(ctctx.NotInTail(), v.Value)
+// compileValidatedDefineVar compiles the simple variable form of define.
+//
+// Usage: (define name expr)
+//
+// Examples:
+//
+//	(define x 42)                    ; bind x to 42
+//	(define pi 3.14159)              ; bind pi to a float
+//	(define greet (lambda (n) ...))  ; bind greet to a lambda (not function shorthand)
+//
+// Unlike the function shorthand (define (name ...) ...), this form does NOT
+// create the binding before evaluating expr. This means self-reference in expr
+// will fail: (define x (+ x 1)) is an error if x is not already defined.
+//
+// For the function shorthand form, see CompileValidatedDefineFn.
+func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
+	// Record start PC for source mapping (associates bytecode range with source location).
+	startPC := len(p.template.operations)
+
+	// Step 1: Declare the binding in the environment.
+	// For variable defines, this still happens early, but since the value expression
+	// cannot reference itself (unlike function defines), the order is less critical.
+	// The binding is created but not yet populated with a value.
+	sym, err := p.declareDefineBinding(v)
 	if err != nil {
 		return err
 	}
 
-	// Store the value
+	// Step 2: Compile the value expression.
+	// The expression is NOT in tail position because define is a definition, not
+	// an expression that returns a meaningful value. The result goes into the
+	// value register, ready to be stored.
+	err = p.compileValidated(ctctx.NotInTail(), v.SubExp())
+	if err != nil {
+		return err
+	}
+
+	// Step 3: Store the compiled value into the binding and load void.
+	// After this, the binding holds the value and the value register contains void
+	// (since define returns an unspecified value per R7RS).
+	err = p.emitDefineStore(startPC, sym, v)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// emitDefineStore emits bytecode to store the compiled value into the defined binding.
+// Assumes the value to store is in the value register. Emits push, store (local or global),
+// and loads void since define returns an unspecified value per R7RS.
+//
+// This is the final phase of define compilation, shared by both compileValidatedDefineVar
+// and CompileValidatedDefineFn. The caller has already:
+//  1. Declared the binding via declareDefineBinding
+//  2. Compiled the value expression (leaving result in value register)
+func (p *CompileTimeContinuation) emitDefineStore(startPC int, sym *values.Symbol, v *validate.ValidatedDefine) error {
+	// Push the value from the value register to the eval stack.
+	// Store operations consume from the stack, not the value register.
 	p.template.AppendOperations(NewOperationPush())
+
 	if p.env.LocalEnvironment() != nil {
+		// Local context (inside a lambda body): store to local variable slot.
+		// CreateLocalBinding returns the slot index; the binding was already
+		// declared by declareDefineBinding, so this just retrieves the index.
 		li, _ := p.env.CreateLocalBinding(sym, environment.BindingTypeVariable)
 		p.template.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 	} else {
+		// Global context (top-level): store to global environment.
+		// Global indices are stored in the literals pool since they're runtime values.
+		// The operation loads the index from literals and stores the value there.
 		gi, _ := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.template.AppendOperations(NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
 	}
 
-	// define returns void
+	// Load void into the value register as define's return value.
+	// Per R7RS 5.3.1: "The result of a definition is unspecified."
+	// We use void to represent this unspecified value.
 	p.template.AppendOperations(NewOperationLoadVoid())
 
+	// Record source location for the entire define form (from startPC to current PC).
+	// This enables source mapping for debugging and error messages.
 	p.recordSource(startPC, v.Source())
 	return nil
 }
 
-func (p *CompileTimeContinuation) compileValidatedDefineFn(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
+// CompileValidatedDefineFn compiles the function shorthand form of define.
+//
+// Usage: (define (name param ...) body ...)
+//
+//	(define (name param ... . rest) body ...)
+//
+// This is syntactic sugar equivalent to:
+//
+//	(define name (lambda (param ...) body ...))
+//
+// Examples:
+//
+//	(define (square x) (* x x))           ; fixed arity
+//	(define (sum . args) (apply + args))  ; variadic (all args)
+//	(define (sum x . rest) (apply + x rest))  ; variadic (1+ args)
+//
+// The function name is bound before compiling the body to enable self-recursion:
+//
+//	(define (fact n) (if (<= n 1) 1 (* n (fact (- n 1)))))
+func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDefine) error {
 	startPC := len(p.template.operations)
 
-	// Get the symbol for the name
-	sym, ok := v.Name.Unwrap().(*values.Symbol)
+	// Step 1: Declare the binding early for self-recursion support.
+	// This must happen before compiling the body so that references to the
+	// function name within the body resolve correctly.
+	sym, err := p.declareDefineBinding(v)
+	if err != nil {
+		return err
+	}
+
+	// Step 2: Set up the closure's environment and bytecode template.
+	// The local environment holds parameter bindings; the child environment
+	// frame links it to the current lexical scope for closure capture.
+	lenv := environment.NewLocalEnvironment(0)
+	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Record the function name for stack traces and debugging.
+	// This makes error messages show "(fact)" instead of "(anonymous)".
+	tpl.SetName(sym.Key)
+
+	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
+	// After this, the closure is in the value register ready to be stored.
+	err = p.compileClosure(ctctx, childEnv, tpl, lenv, v)
+	if err != nil {
+		return err
+	}
+
+	// Step 4: Store the closure in the binding and load void as the result.
+	// define returns an unspecified value per R7RS; we use void.
+	err = p.emitDefineStore(startPC, sym, v)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// setScopesOnLastBinding attaches hygiene scopes to the most recently created local binding.
+//
+// This function is called after CreateLocalBinding to preserve macro hygiene information.
+// CreateLocalBinding doesn't accept scopes as a parameter, so scopes must be attached
+// separately. The scopes track which macro expansion introduced the binding, enabling
+// hygienic macro expansion per R6RS/R7RS.
+//
+// Usage: Called after each parameter binding is created in compileClosure and bindRestParameter.
+//
+// Example flow:
+//
+//	lenv.CreateLocalBinding(param, BindingTypeVariable)  // creates binding without scopes
+//	setScopesOnLastBinding(paramScopes, lenv)            // attaches scopes to that binding
+//
+// If scopes is nil or empty, this is a no-op (the binding came from source code, not a macro).
+func setScopesOnLastBinding(scopes []*syntax.Scope, lenv *environment.LocalEnvironmentFrame) {
+	if len(scopes) == 0 {
+		return
+	}
+	bindings := lenv.Bindings()
+	if len(bindings) == 0 {
+		return
+	}
+	binding := bindings[len(bindings)-1]
+	if binding != nil {
+		binding.SetScopes(scopes)
+	}
+}
+
+// compileClosure compiles a complete closure (lambda or define-fn body).
+// It binds required and rest parameters to the local environment, compiles body expressions,
+// and emits MakeClosure operations. Used by both lambda and function-style define.
+func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure) error {
+	// Phase 1: Bind required parameters to the local environment.
+	// Each parameter becomes a local variable slot that the VM will populate
+	// with argument values when the closure is called. Parameters are processed
+	// in order, matching the left-to-right argument passing convention.
+	for _, paramSym := range v.Params().Required {
+		// Intern the symbol to ensure consistent identity across the compilation.
+		// This is necessary because symbols must be interned before comparison or storage.
+		param := p.env.InternSymbol(paramSym.Sym)
+		paramScopes := paramSym.Scopes()
+
+		// Create a local binding slot for this parameter. The binding index
+		// corresponds to the argument position at runtime.
+		_, ok := lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in lambda", param.Key)
+		}
+
+		// Preserve hygiene information from the source. Scopes track which
+		// macro expansion introduced this binding, enabling hygienic macro
+		// expansion per R6RS/R7RS.
+		setScopesOnLastBinding(paramScopes, lenv)
+
+		// Track parameter count in the template. The VM uses this to validate
+		// argument counts and set up the local environment frame at call time.
+		tpl.parameterCount++
+	}
+
+	// Phase 2: Bind the rest parameter (if any) for variadic functions.
+	// For (lambda (a b . rest) ...), this binds 'rest' to receive excess arguments as a list.
+	err := bindRestParameter(v, p, lenv, tpl)
+	if err != nil {
+		return err
+	}
+
+	// Phase 3: Register the template and environment in the parent's literals pool.
+	// These will be loaded at runtime to construct the closure. The literals pool
+	// deduplicates values, so repeated closures can share template references.
+	tpli := p.template.MaybeAppendLiteral(tpl)
+	envi := p.template.MaybeAppendLiteral(childEnv)
+
+	// Phase 4: Compile the body expressions into the child template.
+	// Body compilation happens in the child environment where parameters are bound.
+	// The last expression is compiled in tail position for proper tail-call optimization.
+	err = p.compileBody(ctctx, v, childEnv, tpl)
+	if err != nil {
+		return err
+	}
+
+	// Phase 5: Emit bytecode to construct the closure at runtime.
+	// The closure captures the current environment (for lexical scoping) and
+	// references the compiled template. The sequence is:
+	//   1. Load template from literals → value register
+	//   2. Push template to eval stack
+	//   3. Load child environment from literals → value register
+	//   4. Push environment to eval stack
+	//   5. MakeClosure pops both and creates closure → value register
+	p.template.AppendOperations(
+		NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
+		NewOperationPush(),
+		NewOperationLoadLiteralByLiteralIndexImmediate(envi),
+		NewOperationPush(),
+		NewOperationMakeClosure(),
+	)
+
+	return nil
+}
+
+// CompileValidatedLambda compiles a validated (lambda params body...) form.
+func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedLambda) error {
+	startPC := len(p.template.operations)
+
+	// Create child environment and template for lambda body
+	lenv := environment.NewLocalEnvironment(0)
+	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	err := p.compileClosure(ctctx, childEnv, tpl, lenv, v)
+	if err != nil {
+		return err
+	}
+	p.recordSource(startPC, v.Source())
+	return nil
+}
+
+// compileBody compiles a sequence of body expressions for a lambda or case-lambda clause.
+// The last expression is compiled in tail position per R7RS 3.5. Appends RestoreContinuation
+// at the end to return from the closure.
+//
+// This function is called after parameters have been bound to the local environment.
+// The body expressions are compiled into the child template (tpl), not the parent's template.
+func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
+	// Create a new compiler continuation that emits bytecode into the child template.
+	// This is separate from the parent's compiler (p) because lambda bodies live in
+	// their own bytecode templates, executed when the closure is called.
+	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
+
+	// Create the call context for body expressions. Key settings:
+	// - inTail=true: the context starts in tail position (lambda body is a tail context)
+	// - inExpression: inherited from parent (affects how definitions are handled)
+	// - env: the child environment where parameters are bound
+	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
+
+	// Compile each body expression in sequence.
+	// Per R7RS 3.5, only the LAST expression in a lambda body is in tail position.
+	// This enables tail-call optimization: (lambda (x) (setup) (tail-call x))
+	for i, bodyExpr := range clause.Body() {
+		isLast := i == len(clause.Body())-1
+
+		// Non-last expressions: force out of tail position.
+		// Their values are discarded (overwritten by subsequent expressions).
+		bodyCtx := lambdaBodyContext.NotInTail()
+		if isLast {
+			// Last expression: keep in tail position from lambdaBodyContext.
+			// If this expression is a call, it becomes a tail call (no stack growth).
+			bodyCtx = lambdaBodyContext
+		}
+
+		err := childCompiler.compileValidated(bodyCtx, bodyExpr)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Append the return operation to complete the closure's bytecode.
+	// RestoreContinuation pops the saved continuation from the call stack and
+	// jumps back to the caller. The value register contains the result of the
+	// last body expression, which becomes the closure's return value.
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+	return nil
+}
+
+// bindRestParameter binds the rest parameter (if any) to the local environment.
+// For forms like (lambda (a b . rest) ...), this binds 'rest' and marks the template as variadic.
+//
+// In Scheme, the dotted tail notation indicates a variadic function:
+//   - (lambda (a b . rest) ...) takes 2+ args; excess args become a list bound to 'rest'
+//   - (lambda args ...) takes 0+ args; all args become a list bound to 'args'
+//
+// At runtime, the VM collects excess arguments into a list and stores it in the
+// rest parameter's local slot, after storing the required arguments in their slots.
+func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinuation, lenv *environment.LocalEnvironmentFrame, tpl *NativeTemplate) error {
+	// Early exit if no rest parameter. Most lambdas are fixed-arity.
+	if v.Params().Rest == nil {
+		return nil
+	}
+
+	// Intern the rest parameter symbol for consistent identity.
+	rest := p.env.InternSymbol(v.Params().Rest.Sym)
+	restScopes := v.Params().Rest.Scopes()
+
+	// Create a local binding slot for the rest parameter. This slot comes after
+	// all required parameter slots. The VM knows to populate it with a list of
+	// excess arguments because tpl.isVariadic is set below.
+	_, ok := lenv.CreateLocalBinding(rest, environment.BindingTypeVariable)
 	if !ok {
-		return values.ErrNotASymbol
-	}
-	sym = p.env.InternSymbol(sym)
-	symbolScopes := v.Name.Scopes()
-
-	// Declare the function name first for recursion support
-	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
-	} else {
-		gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
-		if created && symbolScopes != nil {
-			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil {
-				binding.SetScopes(symbolScopes)
-			}
-		}
+		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
+		return values.ErrDuplicateBinding
 	}
 
-	// Create child environment and template for lambda body
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
-	tpl := NewNativeTemplate(0, 0, false)
-	tpl.SetName(sym.Key) // Set function name for stack traces
+	// Preserve hygiene scopes for the rest parameter, same as required parameters.
+	// This ensures macro-introduced rest parameters maintain proper lexical identity.
+	setScopesOnLastBinding(restScopes, lenv)
 
-	// Add parameters to the environment
-	for _, paramSym := range v.Params.Required {
-		param, ok := paramSym.Unwrap().(*values.Symbol)
-		if !ok {
-			return values.ErrNotASymbol
-		}
-		param = p.env.InternSymbol(param)
-		paramScopes := paramSym.Scopes()
-		_, ok = lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in lambda", param.Key)
-		}
-		if paramScopes != nil && len(paramScopes) > 0 {
-			bindings := lenv.Bindings()
-			if len(bindings) > 0 {
-				binding := bindings[len(bindings)-1]
-				if binding != nil {
-					binding.SetScopes(paramScopes)
-				}
-			}
-		}
-		tpl.parameterCount++
-	}
+	// The rest parameter counts toward the total parameter count. For (lambda (a b . rest) ...),
+	// parameterCount becomes 3 (a, b, rest). The VM uses parameterCount together with
+	// isVariadic to determine: minimum required args = parameterCount - 1 when variadic.
+	tpl.parameterCount++
 
-	// Handle rest parameter
-	if v.Params.Rest != nil {
-		rest, ok := v.Params.Rest.Unwrap().(*values.Symbol)
-		if !ok {
-			return values.ErrNotASymbol
-		}
-		rest = p.env.InternSymbol(rest)
-		restScopes := v.Params.Rest.Scopes()
-		_, ok = lenv.CreateLocalBinding(rest, environment.BindingTypeVariable)
-		if !ok {
-			return values.ErrDuplicateBinding
-		}
-		if restScopes != nil && len(restScopes) > 0 {
-			bindings := lenv.Bindings()
-			if len(bindings) > 0 {
-				binding := bindings[len(bindings)-1]
-				if binding != nil {
-					binding.SetScopes(restScopes)
-				}
-			}
-		}
-		tpl.parameterCount++ // Rest parameter counts toward parameter count
-		tpl.isVariadic = true
-	}
+	// Mark the template as variadic. This flag tells the VM to:
+	//   1. Accept any number of arguments >= (parameterCount - 1)
+	//   2. Collect excess arguments into a list
+	//   3. Store that list in the last local slot (the rest parameter)
+	tpl.isVariadic = true
 
-	// Add template and environment to literals
-	tpli := p.template.MaybeAppendLiteral(tpl)
-	envi := p.template.MaybeAppendLiteral(childEnv)
-
-	// Create compiler continuation for the body
-	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-
-	// Compile body expressions (last one in tail position)
-	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
-	for i, bodyExpr := range v.Body {
-		isLast := i == len(v.Body)-1
-		bodyCtx := lambdaBodyContext.NotInTail()
-		if isLast {
-			bodyCtx = lambdaBodyContext
-		}
-		err := childCompiler.compileValidated(bodyCtx, bodyExpr)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Add return operation
-	tpl.AppendOperations(NewOperationRestoreContinuation())
-
-	// Emit MakeClosure operations in parent
-	p.template.AppendOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
-		NewOperationPush(),
-		NewOperationLoadLiteralByLiteralIndexImmediate(envi),
-		NewOperationPush(),
-		NewOperationMakeClosure(),
-	)
-
-	// Store in variable
-	p.template.AppendOperations(NewOperationPush())
-	if p.env.LocalEnvironment() != nil {
-		li, _ := p.env.CreateLocalBinding(sym, environment.BindingTypeVariable)
-		p.template.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
-	} else {
-		gi, _ := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
-		liti := p.template.MaybeAppendLiteral(gi)
-		p.template.AppendOperations(NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
-	}
-
-	// define returns void
-	p.template.AppendOperations(NewOperationLoadVoid())
-
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
-// compileValidatedLambda compiles a validated (lambda params body...) form.
-func (p *CompileTimeContinuation) compileValidatedLambda(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedLambda) error {
+// CompileValidatedCaseLambda compiles a validated (case-lambda [clause] ...) form.
+//
+// case-lambda (R7RS 4.2.9) creates a procedure that dispatches to different
+// implementations based on the number of arguments. For example:
+//
+//	(case-lambda
+//	  ((x) (* x x))           ; 1 arg: square
+//	  ((x y) (* x y))         ; 2 args: multiply
+//	  ((x y . rest) (apply + x y rest)))  ; 2+ args: sum all
+//
+// At runtime, the VM selects the first clause whose arity matches the call.
+func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedCaseLambda) error {
 	startPC := len(p.template.operations)
 
-	// Create child environment and template for lambda body
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
-	tpl := NewNativeTemplate(0, 0, false)
-
-	// Add parameters to the environment
-	for _, paramSym := range v.Params.Required {
-		param, ok := paramSym.Unwrap().(*values.Symbol)
-		if !ok {
-			return values.ErrNotASymbol
-		}
-		param = p.env.InternSymbol(param)
-		paramScopes := paramSym.Scopes()
-		_, ok = lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in lambda", param.Key)
-		}
-		if paramScopes != nil && len(paramScopes) > 0 {
-			bindings := lenv.Bindings()
-			if len(bindings) > 0 {
-				binding := bindings[len(bindings)-1]
-				if binding != nil {
-					binding.SetScopes(paramScopes)
-				}
-			}
-		}
-		tpl.parameterCount++
-	}
-
-	// Handle rest parameter
-	if v.Params.Rest != nil {
-		rest, ok := v.Params.Rest.Unwrap().(*values.Symbol)
-		if !ok {
-			return values.ErrNotASymbol
-		}
-		rest = p.env.InternSymbol(rest)
-		restScopes := v.Params.Rest.Scopes()
-		_, ok = lenv.CreateLocalBinding(rest, environment.BindingTypeVariable)
-		if !ok {
-			return values.ErrDuplicateBinding
-		}
-		if restScopes != nil && len(restScopes) > 0 {
-			bindings := lenv.Bindings()
-			if len(bindings) > 0 {
-				binding := bindings[len(bindings)-1]
-				if binding != nil {
-					binding.SetScopes(restScopes)
-				}
-			}
-		}
-		tpl.parameterCount++ // Rest parameter counts toward parameter count
-		tpl.isVariadic = true
-	}
-
-	// Add template and environment to literals
-	tpli := p.template.MaybeAppendLiteral(tpl)
-	envi := p.template.MaybeAppendLiteral(childEnv)
-
-	// Create compiler continuation for the body
-	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-
-	// Compile body expressions (last one in tail position)
-	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
-	for i, bodyExpr := range v.Body {
-		isLast := i == len(v.Body)-1
-		bodyCtx := lambdaBodyContext.NotInTail()
-		if isLast {
-			bodyCtx = lambdaBodyContext
-		}
-		err := childCompiler.compileValidated(bodyCtx, bodyExpr)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Add return operation
-	tpl.AppendOperations(NewOperationRestoreContinuation())
-
-	// Emit MakeClosure operations for compileValidatedLambda
-	p.template.AppendOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
-		NewOperationPush(),
-		NewOperationLoadLiteralByLiteralIndexImmediate(envi),
-		NewOperationPush(),
-		NewOperationMakeClosure(),
-	)
-
-	p.recordSource(startPC, v.Source())
-	return nil
-}
-
-// compileValidatedCaseLambda compiles a validated (case-lambda [clause] ...) form.
-func (p *CompileTimeContinuation) compileValidatedCaseLambda(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedCaseLambda) error {
-	startPC := len(p.template.operations)
-
-	// Compile each clause as a separate closure and push to stack
-	for _, clause := range v.Clauses {
-		// Create child environment and template for this clause
+	// Phase 1: Compile each clause as a separate closure.
+	// Unlike regular lambda which produces one closure, case-lambda produces
+	// multiple closures (one per clause) that are combined into a dispatch structure.
+	// Each clause closure is pushed to the eval stack for later combination.
+	for _, clause := range v.Clauses() {
+		// Each clause gets its own environment and template, since each has
+		// independent parameters and body. This is similar to compiling separate lambdas.
 		lenv := environment.NewLocalEnvironment(0)
 		childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 		tpl := NewNativeTemplate(0, 0, false)
 
-		// Add parameters to the environment
-		if clause.Params != nil {
-			for _, paramSym := range clause.Params.Required {
-				param, ok := paramSym.Unwrap().(*values.Symbol)
-				if !ok {
-					return values.ErrNotASymbol
-				}
-				param = p.env.InternSymbol(param)
+		// Bind parameters for this clause. The parameter list determines which
+		// argument counts this clause will match at runtime.
+		if clause.Params() != nil {
+			// Bind required parameters, same as in compileClosure.
+			for _, paramSym := range clause.Params().Required {
+				param := p.env.InternSymbol(paramSym.Sym)
 				paramScopes := paramSym.Scopes()
-				_, ok = lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
+				_, ok := lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
 				if !ok {
 					return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in case-lambda clause", param.Key)
 				}
-				if paramScopes != nil && len(paramScopes) > 0 {
+				// Preserve hygiene scopes for macro-introduced parameters.
+				if len(paramScopes) > 0 {
 					bindings := lenv.Bindings()
 					if len(bindings) > 0 {
 						binding := bindings[len(bindings)-1]
@@ -422,90 +576,59 @@ func (p *CompileTimeContinuation) compileValidatedCaseLambda(ctctx CompileTimeCa
 				tpl.parameterCount++
 			}
 
-			// Handle rest parameter
-			if clause.Params.Rest != nil {
-				rest, ok := clause.Params.Rest.Unwrap().(*values.Symbol)
-				if !ok {
-					return values.ErrNotASymbol
-				}
-				rest = p.env.InternSymbol(rest)
-				restScopes := clause.Params.Rest.Scopes()
-				_, ok = lenv.CreateLocalBinding(rest, environment.BindingTypeVariable)
-				if !ok {
-					return values.ErrDuplicateBinding
-				}
-				if restScopes != nil && len(restScopes) > 0 {
-					bindings := lenv.Bindings()
-					if len(bindings) > 0 {
-						binding := bindings[len(bindings)-1]
-						if binding != nil {
-							binding.SetScopes(restScopes)
-						}
-					}
-				}
-				tpl.parameterCount++
-				tpl.isVariadic = true
-			}
-		}
-
-		// Add template and environment to literals
-		tpli := p.template.MaybeAppendLiteral(tpl)
-		envi := p.template.MaybeAppendLiteral(childEnv)
-
-		// Create compiler continuation for the body
-		childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-
-		// Compile body expressions (last one in tail position)
-		lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
-		for i, bodyExpr := range clause.Body {
-			isLast := i == len(clause.Body)-1
-			bodyCtx := lambdaBodyContext.NotInTail()
-			if isLast {
-				bodyCtx = lambdaBodyContext
-			}
-			err := childCompiler.compileValidated(bodyCtx, bodyExpr)
+			// Bind rest parameter if present. A clause with rest parameter like
+			// ((x . rest) ...) matches 1 or more arguments.
+			err := bindRestParameter(clause, p, lenv, tpl)
 			if err != nil {
 				return err
 			}
 		}
+		// Note: clause.Params() == nil represents a clause that takes no arguments: (() ...)
 
-		// Add return operation
-		tpl.AppendOperations(NewOperationRestoreContinuation())
+		// Register the clause's template and environment in the literals pool.
+		tpli := p.template.MaybeAppendLiteral(tpl)
+		envi := p.template.MaybeAppendLiteral(childEnv)
 
-		// Emit MakeClosure and push to stack
+		// Compile the clause body into its template.
+		err := p.compileBody(ctctx, clause, childEnv, tpl)
+		if err != nil {
+			return err
+		}
+
+		// Emit bytecode to construct this clause's closure and push it to the stack.
+		// After processing all clauses, the stack will contain [clause0, clause1, ...].
 		p.template.AppendOperations(
 			NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 			NewOperationPush(),
 			NewOperationLoadLiteralByLiteralIndexImmediate(envi),
 			NewOperationPush(),
 			NewOperationMakeClosure(),
-			NewOperationPush(),
+			NewOperationPush(), // Push this closure to stack (unlike regular lambda)
 		)
 	}
 
-	// Create the case-lambda closure from all the clause closures
+	// Phase 2: Combine all clause closures into a single case-lambda dispatch structure.
+	// MakeCaseLambdaClosure pops N closures from the stack (in reverse order) and
+	// creates a CaseLambdaClosure that, when called, dispatches to the appropriate
+	// clause based on argument count. Clauses are tried in order; first match wins.
 	p.template.AppendOperations(
-		NewOperationMakeCaseLambdaClosure(len(v.Clauses)),
+		NewOperationMakeCaseLambdaClosure(len(v.Clauses())),
 	)
 
 	p.recordSource(startPC, v.Source())
 	return nil
 }
 
-// compileValidatedSetBang compiles a validated (set! name expr) form.
-func (p *CompileTimeContinuation) compileValidatedSetBang(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedSetBang) error {
+// CompileValidatedSetBang compiles a validated (set! name expr) form.
+func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedSetBang) error {
 	startPC := len(p.template.operations)
 
-	// Get the symbol
-	sym, ok := v.Name.Unwrap().(*values.Symbol)
-	if !ok {
-		return values.ErrNotASymbol
-	}
-	sym = p.env.InternSymbol(sym)
+	// Get the interned symbol (validator guarantees it's a SyntaxSymbol)
+	sym := p.env.InternSymbol(v.Name.Sym)
 	symbolScopes := v.Name.Scopes()
 
 	// Compile the value expression
-	err := p.compileValidated(ctctx.NotInTail(), v.Value)
+	err := p.compileValidated(ctctx.NotInTail(), v.SubExp())
 	if err != nil {
 		return err
 	}
@@ -538,8 +661,8 @@ func (p *CompileTimeContinuation) compileValidatedSetBang(ctctx CompileTimeCallC
 	return nil
 }
 
-// compileValidatedQuote compiles a validated (quote datum) form.
-func (p *CompileTimeContinuation) compileValidatedQuote(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedQuote) error {
+// CompileValidatedQuote compiles a validated (quote datum) form.
+func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, _ string, v *validate.ValidatedQuote) error {
 	startPC := len(p.template.operations)
 
 	// Unwrap all syntax and intern symbols in the global environment.
@@ -549,14 +672,13 @@ func (p *CompileTimeContinuation) compileValidatedQuote(ctctx CompileTimeCallCon
 	interned := p.internSymbolsInValue(unwrapped)
 	litIdx := p.template.MaybeAppendLiteral(interned)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-
 	p.recordSource(startPC, v.Source())
 	return nil
 }
 
-// compileValidatedQuasiquote compiles a validated (quasiquote template) form.
+// CompileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
-func (p *CompileTimeContinuation) compileValidatedQuasiquote(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedQuasiquote) error {
+func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedQuasiquote) error {
 	startPC := len(p.template.operations)
 
 	// The existing quasiquote compiler expects the raw syntax template
@@ -564,21 +686,36 @@ func (p *CompileTimeContinuation) compileValidatedQuasiquote(ctctx CompileTimeCa
 	if err != nil {
 		return err
 	}
-
 	p.recordSource(startPC, v.Source())
 	return nil
 }
 
-// compileValidatedBegin compiles a validated (begin expr...) form.
-func (p *CompileTimeContinuation) compileValidatedBegin(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedBegin) error {
+// CompileValidatedBegin compiles a validated (begin expr...) form.
+//
+// begin (R7RS 4.2.3) sequences expressions for side effects. All expressions
+// are evaluated left-to-right; the value of the last expression becomes
+// the value of the entire begin form.
+//
+// Example: (begin (display "hello") (newline) 42) => 42 (after printing)
+func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedBegin) error {
 	startPC := len(p.template.operations)
 
-	for i, expr := range v.Exprs {
-		isLast := i == len(v.Exprs)-1
+	// Compile each expression in sequence. The key consideration is tail position:
+	// only the LAST expression can be in tail position per R7RS 3.5.
+	// Earlier expressions are evaluated for side effects; their values are discarded.
+	for i, expr := range v.Body() {
+		isLast := i == len(v.Body())-1
+
+		// Non-last expressions: force out of tail position.
+		// Their return values are implicitly discarded (overwritten by next expression).
 		exprCtx := ctctx.NotInTail()
 		if isLast {
-			exprCtx = ctctx // Last expression inherits tail position
+			// Last expression: inherit the tail position from the enclosing context.
+			// If begin is in tail position, so is its last expression. This enables
+			// tail-call optimization for patterns like: (begin (setup) (tail-call))
+			exprCtx = ctctx
 		}
+
 		err := p.compileValidated(exprCtx, expr)
 		if err != nil {
 			return err
@@ -590,26 +727,26 @@ func (p *CompileTimeContinuation) compileValidatedBegin(ctctx CompileTimeCallCon
 }
 
 // compileValidatedCall compiles a validated function call (proc args...).
-func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedCall) error {
+func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
 	startPC := len(p.template.operations)
 
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
-		operationSaveContinuationIndex = p.template.operations.Length()
+		operationSaveContinuationIndex = p.template.operations.Len()
 		p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
 	}
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
 	// Compile the procedure expression
-	err := p.compileValidated(ctctx.NotInTail(), v.Proc)
+	err := p.compileValidated(ctctx.NotInTail(), v.Proc())
 	if err != nil {
 		return err
 	}
 	p.AppendOperations(NewOperationPush())
 
 	// Compile arguments in order, pushing each to the stack
-	for _, arg := range v.Args {
+	for _, arg := range v.Body() {
 		err := p.compileValidated(ctctx.NotInTail(), arg)
 		if err != nil {
 			return err
@@ -625,7 +762,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 
 	if !ctctx.inTail {
 		// Patch the SaveContinuation offset for non-tail calls
-		l := p.template.operations.Length()
+		l := p.template.operations.Len()
 		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
 	}
 

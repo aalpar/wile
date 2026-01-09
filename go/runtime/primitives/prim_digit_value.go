@@ -24,7 +24,7 @@ import (
 // PrimDigitValue implements the (digit-value) primitive.
 // Returns the numeric value of a digit character, or #f if not a digit.
 func PrimDigitValue(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Character)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "digit-value: expected a character but got %T", o)

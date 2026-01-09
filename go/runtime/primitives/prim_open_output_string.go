@@ -21,6 +21,7 @@ import (
 	"wile/values"
 )
 
+// PrimOpenOutputString implements the Scheme open-output-string primitive.
 func PrimOpenOutputString(_ context.Context, mc *machine.MachineContext) error {
 	mc.SetValue(values.NewStringOutputPort())
 	return nil

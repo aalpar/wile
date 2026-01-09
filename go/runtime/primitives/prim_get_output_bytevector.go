@@ -21,8 +21,9 @@ import (
 	"wile/values"
 )
 
+// PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
 func PrimGetOutputBytevector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	p, ok := o.(*values.BytevectorOutputPort)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotABytevectorOutputPort, "get-output-bytevector: expected a bytevector output port but got %T", o)

@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
@@ -24,21 +25,44 @@ var (
 	_ SyntaxValue  = (*SyntaxSymbol)(nil)
 )
 
+// SymbolInterner is an interface for interning symbols.
+// This allows SyntaxSymbol to cache interned symbols without importing
+// the environment package (which would create a circular dependency).
+type SymbolInterner interface {
+	InternSymbol(*values.Symbol) *values.Symbol
+}
+
+// SyntaxSymbol wraps a Scheme symbol with source context and hygiene scopes.
 type SyntaxSymbol struct {
-	Key           string
+	Sym           *values.Symbol
 	sourceContext *SourceContext
 }
 
+// NewSyntaxSymbol creates a new syntax symbol from a key string.
 func NewSyntaxSymbol(key string, sctx *SourceContext) *SyntaxSymbol {
+	q := NewSyntaxSymbolForSymbol(values.NewSymbol(key), sctx)
+	return q
+}
+
+// NewSyntaxSymbolForSymbol creates a new syntax symbol from an existing symbol.
+func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
-		Key:           key,
+		Sym:           sym,
+		sourceContext: sctx,
+	}
+	return q
+}
+
+// NewSyntaxSymbolForSyntaxSymbol creates a new syntax symbol with a different source context.
+func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *SyntaxSymbol {
+	q := &SyntaxSymbol{
+		Sym:           sym.Sym,
 		sourceContext: sctx,
 	}
 	return q
 }
 
 // AddScope returns a new SyntaxSymbol with an additional scope.
-//
 // This is the core operation for implementing hygiene in Flatt's "sets of scopes"
 // model. When a macro expands, an "intro scope" is added to all identifiers in
 // the expansion. This scope distinguishes macro-introduced identifiers from
@@ -53,7 +77,7 @@ func NewSyntaxSymbol(key string, sctx *SourceContext) *SyntaxSymbol {
 // distinguished during variable resolution (see ScopesMatch in scope_utils.go).
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 	return &SyntaxSymbol{
-		Key:           p.Key,
+		Sym:           p.Sym,
 		sourceContext: p.sourceContext.WithScope(scope),
 	}
 }
@@ -66,13 +90,15 @@ func (p *SyntaxSymbol) Scopes() []*Scope {
 	return p.sourceContext.Scopes
 }
 
+// Datum returns the underlying symbol.
 func (p *SyntaxSymbol) Datum() *values.Symbol {
 	if p.IsVoid() {
 		return nil
 	}
-	return values.NewSymbol(p.Key)
+	return p.Sym
 }
 
+// UnwrapAll returns the underlying symbol value.
 func (p *SyntaxSymbol) UnwrapAll() values.Value {
 	return p.Unwrap()
 }
@@ -81,22 +107,25 @@ func (p *SyntaxSymbol) Unwrap() values.Value {
 	if p.IsVoid() {
 		return values.Void
 	}
-	return values.NewSymbol(p.Key)
+	return p.Sym
 }
 
+// SourceContext returns the source context of the symbol.
 func (p *SyntaxSymbol) SourceContext() *SourceContext {
 	return p.sourceContext
 }
 
+// IsVoid returns true if the syntax symbol is nil.
 func (p *SyntaxSymbol) IsVoid() bool {
 	return p == nil
 }
 
+// SchemeString returns a string representation of the syntax symbol.
 func (p *SyntaxSymbol) SchemeString() string {
 	if p.IsVoid() {
 		return "#'<void>"
 	}
-	return fmt.Sprintf("#'%s", p.Key)
+	return fmt.Sprintf("#'%s", p.Sym.Key)
 }
 
 // EqualTo performs pointer comparison only, matching Chez Scheme/Racket behavior.

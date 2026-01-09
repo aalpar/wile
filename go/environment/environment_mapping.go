@@ -16,13 +16,16 @@ package environment
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
+// ExportSpec is the interface for export directives in library definitions.
 type ExportSpec interface {
 	Next() ExportSpec
 }
 
+// ImportSpec is the interface for import directives in library definitions.
 type ImportSpec interface {
 	Next() ImportSpec
 }
@@ -34,16 +37,19 @@ type OnlyExportDirective struct {
 	only values.Symbol
 }
 
+// Next returns the next export spec in the chain.
 func (p *OnlyExportDirective) Next() ExportSpec {
 	return p.next
 }
 
+// RenameExportDirective indicates that an identifier should be exported under a different name.
 type RenameExportDirective struct {
 	next ExportSpec
 	from values.Symbol
 	to   values.Symbol
 }
 
+// Next returns the next export spec in the chain.
 func (p *RenameExportDirective) Next() ExportSpec {
 	return p.next
 }
@@ -55,6 +61,7 @@ type LibraryImportDirective struct {
 	library values.Symbol
 }
 
+// Next returns the next import spec in the chain.
 func (p *LibraryImportDirective) Next() ImportSpec {
 	return p.next
 }
@@ -66,6 +73,7 @@ type OnlyImportDirective struct {
 	only values.Symbol
 }
 
+// Next returns the next import spec in the chain.
 func (p *OnlyImportDirective) Next() ImportSpec {
 	return p.next
 }
@@ -77,6 +85,7 @@ type ExceptImportDirective struct {
 	except values.Symbol
 }
 
+// Next returns the next import spec in the chain.
 func (p *ExceptImportDirective) Next() ImportSpec {
 	return p.next
 }
@@ -88,28 +97,30 @@ type PrefixImportDirective struct {
 	prefix values.Symbol
 }
 
+// Next returns the next import spec in the chain.
 func (p *PrefixImportDirective) Next() ImportSpec {
 	return p.next
 }
 
+// RenameImportDirective indicates that an identifier should be imported under a different name.
 type RenameImportDirective struct {
 	next ImportSpec
 	from values.Symbol
 	to   values.Symbol
 }
 
+// Next returns the next import spec in the chain.
 func (p *RenameImportDirective) Next() ImportSpec {
 	return p.next
 }
 
-type ExportSet struct {
-	exports map[values.Symbol]values.Symbol
-}
+// ExportSet holds the resolved export mappings for a library.
+type ExportSet struct{}
 
-type ImportSet struct {
-	imports map[values.Symbol]values.Symbol
-}
+// ImportSet holds the resolved import mappings for a library.
+type ImportSet struct{}
 
+// NewExportSet creates an ExportSet from a chain of export specs.
 func NewExportSet(spec ExportSpec) (*ExportSet, error) {
 	q := &ExportSet{}
 	for spec != nil {
@@ -124,6 +135,7 @@ func NewExportSet(spec ExportSpec) (*ExportSet, error) {
 	return q, nil
 }
 
+// NewImportSet creates an ImportSet from a chain of import specs.
 func NewImportSet(spec ImportSpec) (*ImportSet, error) {
 	q := &ImportSet{}
 	for spec != nil {

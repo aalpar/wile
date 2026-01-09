@@ -24,7 +24,7 @@ import (
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
 func PrimErrorObjectMessage(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.ErrorObject)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnErrorObject,

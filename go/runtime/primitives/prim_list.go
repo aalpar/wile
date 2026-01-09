@@ -23,7 +23,7 @@ import (
 // PrimList implements the (list) primitive.
 // Creates a list from the given arguments.
 func PrimList(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	// The variadic args come as a list - just return them
 	mc.SetValue(o)
 	return nil

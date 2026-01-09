@@ -25,8 +25,8 @@ import (
 // PrimRationalize implements the (rationalize) primitive.
 // Returns simplest rational within tolerance.
 func PrimRationalize(_ context.Context, mc *machine.MachineContext) error {
-	xArg := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	yArg := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	xArg := mc.Arg(0)
+	yArg := mc.Arg(1)
 
 	var x, y *big.Rat
 	var xExact, yExact bool
@@ -71,21 +71,21 @@ func PrimRationalize(_ context.Context, mc *machine.MachineContext) error {
 
 	result := rationalizeSternBrocot(x, y)
 
-	if xExact && yExact {
-		if result.IsInt() {
-			num := result.Num()
-			if num.IsInt64() {
-				mc.SetValue(values.NewInteger(num.Int64()))
-			} else {
-				mc.SetValue(values.NewRationalFromRat(result))
-			}
-		} else {
-			mc.SetValue(values.NewRationalFromRat(result))
-		}
-	} else {
+	if !xExact || !yExact {
 		f, _ := result.Float64()
 		mc.SetValue(values.NewFloat(f))
+		return nil
 	}
+	if !result.IsInt() {
+		mc.SetValue(values.NewRationalFromRat(result))
+		return nil
+	}
+	num := result.Num()
+	if num.IsInt64() {
+		mc.SetValue(values.NewInteger(num.Int64()))
+		return nil
+	}
+	mc.SetValue(values.NewRationalFromRat(result))
 	return nil
 }
 
@@ -99,14 +99,14 @@ func rationalizeSternBrocot(x, y *big.Rat) *big.Rat {
 
 	if lo.Sign() > 0 {
 		return rationalizePositive(lo, hi)
-	} else if hi.Sign() < 0 {
+	}
+	if hi.Sign() < 0 {
 		negHi := new(big.Rat).Neg(hi)
 		negLo := new(big.Rat).Neg(lo)
 		result := rationalizePositive(negHi, negLo)
 		return new(big.Rat).Neg(result)
-	} else {
-		return big.NewRat(0, 1)
 	}
+	return big.NewRat(0, 1)
 }
 
 func rationalizePositive(lo, hi *big.Rat) *big.Rat {

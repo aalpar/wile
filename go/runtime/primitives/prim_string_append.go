@@ -25,7 +25,7 @@ import (
 // PrimStringAppend implements the (string-append) primitive.
 // Concatenates strings.
 func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		if values.IsEmptyList(o) {
@@ -35,7 +35,7 @@ func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
-	v, err := pr.ForEach(nil, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAString, "string-append: expected a string but got %T", v)

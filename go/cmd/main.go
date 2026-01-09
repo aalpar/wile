@@ -22,12 +22,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
+	gruntime "runtime"
+	"strings"
+	"syscall"
+
 	"wile/environment"
 	"wile/machine"
 	"wile/parser"
 	"wile/runtime"
 	"wile/syntax"
-	"strings"
 
 	"github.com/ergochat/readline"
 	"github.com/jessevdk/go-flags"
@@ -94,7 +98,8 @@ func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	registry := machine.NewLibraryRegistry()
 
 	// Add environment variable paths (after defaults)
-	if envPath := os.Getenv(SchemeLibraryPathEnv); envPath != "" {
+	envPath := os.Getenv(SchemeLibraryPathEnv)
+	if envPath != "" {
 		for _, p := range strings.Split(envPath, string(os.PathListSeparator)) {
 			if p != "" {
 				registry.AddSearchPath(p)
@@ -114,7 +119,33 @@ func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	return registry
 }
 
+func setupSignals() {
+	sigChan := make(chan os.Signal, 1)
+	// Notify the channel about SIGQUIT signals
+	signal.Notify(sigChan, syscall.SIGQUIT)
+
+	go func() {
+		for range sigChan {
+			// Allocate a buffer and write all goroutine stacks to it
+			stacktrace := make([]byte, 1<<20)
+			length := gruntime.Stack(stacktrace, true) // `true` means dump all goroutines
+			for length >= len(stacktrace) {
+				stacktrace = make([]byte, len(stacktrace)*2)
+				length = gruntime.Stack(stacktrace, true)
+			}
+			fmt.Println("=== GOROUTINE STACK DUMP ===")
+			fmt.Println(string(stacktrace[:length]))
+			fmt.Println("=== END OF DUMP ===")
+			// The program continues running after this point
+		}
+	}()
+
+	// ... rest of your program ...
+	fmt.Println("Program running, send SIGQUIT (Ctrl+\\\\) to dump stacks.")
+}
+
 func main() {
+	setupSignals()
 	var fin io.RuneReader
 	var fd *os.File
 
@@ -124,7 +155,8 @@ func main() {
 
 	args, err := parser.Parse()
 	if err != nil {
-		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
+		flagsErr, ok := err.(*flags.Error)
+		if ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
 		os.Exit(1)
@@ -140,13 +172,13 @@ func main() {
 		opts.File = args[0]
 	}
 
-	env, err0 := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err0 := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err0 != nil {
 		Failf(err0, "Cannot create top-level environment")
 	}
 
 	// Initialize library registry with search paths and attach to environment
-	registry := initLibraryRegistry(nil)
+	registry := initLibraryRegistry(context.TODO())
 	env.SetLibraryRegistry(registry)
 
 	// Set up the library environment factory (avoids import cycle)
@@ -171,8 +203,8 @@ func main() {
 
 // runFile processes a Scheme file, exiting on errors
 func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.RuneReader, filename string) {
-	p := parser.NewParserWithFile(env, fin, filename)
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParserWithFile(env, true, fin, filename)
+	stx, err := p.ReadSyntax(context.TODO())
 	for err == nil {
 		tpl, err2 := compile(env, stx)
 		if err2 != nil {
@@ -184,7 +216,7 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 		} else if err2 != nil {
 			Failf(err2)
 		}
-		stx, err = p.ReadSyntax(nil)
+		stx, err = p.ReadSyntax(context.TODO())
 	}
 	if !errors.Is(err, io.EOF) {
 		Failf(err)
@@ -215,13 +247,15 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		debugCtx.SetCurrentMC(mc)
 		if bp != nil {
 			fmt.Printf("\nBreakpoint %d hit", bp.ID)
-			if source := mc.CurrentSource(); source != nil {
+			source := mc.CurrentSource()
+			if source != nil {
 				fmt.Printf(" at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
 			}
 			fmt.Println()
 		} else {
 			fmt.Print("\nStepped")
-			if source := mc.CurrentSource(); source != nil {
+			source := mc.CurrentSource()
+			if source != nil {
 				fmt.Printf(" to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
 			}
 			fmt.Println()
@@ -265,9 +299,9 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		// Try to parse the accumulated input
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		p := parser.NewParser(env, rdr)
+		p := parser.NewParser(env, true, rdr)
 
-		stx, parseErr := p.ReadSyntax(nil)
+		stx, parseErr := p.ReadSyntax(context.TODO())
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
 				// Incomplete expression - prompt for more input
@@ -326,9 +360,9 @@ func runSimpleREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 		inputBuffer.WriteString(line)
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		p := parser.NewParser(env, rdr)
+		p := parser.NewParser(env, true, rdr)
 
-		stx, parseErr := p.ReadSyntax(nil)
+		stx, parseErr := p.ReadSyntax(context.TODO())
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
 				Printf("  ")

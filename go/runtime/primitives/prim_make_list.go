@@ -21,9 +21,10 @@ import (
 	"wile/values"
 )
 
+// PrimMakeList implements the Scheme make-list primitive.
 func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
-	kVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	kVal := mc.Arg(0)
+	restVal := mc.Arg(1)
 
 	k, ok := kVal.(*values.Integer)
 	if !ok {

@@ -25,7 +25,7 @@ import (
 // PrimDenominator implements the (denominator) primitive.
 // Returns the denominator of a rational number.
 func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(values.NewInteger(1))

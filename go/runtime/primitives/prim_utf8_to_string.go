@@ -24,8 +24,8 @@ import (
 // PrimUtf8ToString implements the utf8->string primitive.
 // Converts a UTF-8 encoded bytevector to a string with optional start and end indices.
 func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	rest := mc.Arg(1)
 	bv, ok := o.(*values.ByteVector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "utf8->string: expected a bytevector but got %T", o)

@@ -19,10 +19,10 @@ import (
 	"log"
 	"testing"
 
+	"wile/values"
+
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
-
-	"wile/values"
 )
 
 func TestUtilsMatchSuites(t *testing.T) {
@@ -30,8 +30,7 @@ func TestUtilsMatchSuites(t *testing.T) {
 	qtsuite.Run(c, UtilsMatchSuite{})
 }
 
-type UtilsMatchSuite struct {
-}
+type UtilsMatchSuite struct{}
 
 func (UtilsMatchSuite) TestMatch(c *qt.C) {
 	tcs := []struct {

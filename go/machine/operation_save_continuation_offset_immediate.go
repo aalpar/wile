@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"fmt"
+
 	"wile/values"
 )
 
@@ -47,11 +48,5 @@ func (p *OperationSaveContinuationOffsetImmediate) IsVoid() bool {
 
 func (p *OperationSaveContinuationOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationSaveContinuationOffsetImmediate)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.Offset == v.Offset
+	return fieldMatches(p, v, ok, func(op *OperationSaveContinuationOffsetImmediate) int { return op.Offset })
 }

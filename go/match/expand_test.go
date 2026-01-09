@@ -15,6 +15,7 @@
 package match
 
 import (
+	"context"
 	"testing"
 
 	"wile/values"
@@ -128,7 +129,7 @@ func TestMatchAndExpand(t *testing.T) {
 			// Compile pattern
 			compiler := NewSyntaxCompiler()
 			compiler.variables = tc.variables
-			err := compiler.Compile(nil, tc.pattern)
+			err := compiler.Compile(context.TODO(), tc.pattern)
 			qt.Assert(t, err, qt.IsNil)
 
 			// Match against input
@@ -212,7 +213,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 		// Compile pattern with ellipsis variable mapping
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(nil, pattern)
+		err := compiler.Compile(context.TODO(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Verify we have multiple ellipsis IDs
@@ -250,7 +251,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 		// Compile pattern
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(nil, pattern)
+		err := compiler.Compile(context.TODO(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		// This pattern is tricky - both a and b consume from the same list

@@ -24,7 +24,7 @@ import (
 // PrimVectorToList implements the vector->list primitive.
 // Converts a vector to a list with the same elements in the same order.
 func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	v, ok := o.(*values.Vector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAVector, "vector->list: expected a vector but got %T", o)

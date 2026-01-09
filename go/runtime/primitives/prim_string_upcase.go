@@ -22,8 +22,9 @@ import (
 	"wile/values"
 )
 
+// PrimStringUpcase implements the Scheme string-upcase primitive.
 func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-upcase: expected a string but got %T", s)

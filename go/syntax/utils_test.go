@@ -34,7 +34,7 @@ func Test_SyntaxForEach(t *testing.T) {
 	var hasNextValues []bool
 
 	// Call SyntaxForEach
-	_, err := SyntaxForEach(context.Background(), list, func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	_, err := SyntaxForEach(context.Background(), list, func(_ context.Context, i int, hasNext bool, v SyntaxValue) error {
 		indices = append(indices, i)
 		hasNextValues = append(hasNextValues, hasNext)
 		items = append(items, v)
@@ -50,7 +50,7 @@ func Test_SyntaxForEach(t *testing.T) {
 
 	// Test with non-list value
 	nonList := NewSyntaxSymbol("symbol", nil)
-	result, err := SyntaxForEach(context.Background(), nonList, func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	result, err := SyntaxForEach(context.Background(), nonList, func(_ context.Context, _ int, _ bool, _ SyntaxValue) error {
 		t.Fatalf("Should not be called for non-list")
 		return nil
 	})
@@ -106,8 +106,9 @@ func Test_EqualTo(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			result := EqualTo(tc.a, tc.b)
-			qt.Assert(t, result, qt.Equals, tc.expect)
+			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -147,8 +148,9 @@ func Test_IsSyntaxList(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			result := IsSyntaxList(tc.value)
-			qt.Assert(t, result, qt.Equals, tc.expect)
+			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -183,8 +185,9 @@ func Test_IsSyntaxVoid(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			result := IsSyntaxVoid(tc.value)
-			qt.Assert(t, result, qt.Equals, tc.expect)
+			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -219,8 +222,9 @@ func Test_IsSyntaxEmptyList(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			result := IsSyntaxEmptyList(tc.value)
-			qt.Assert(t, result, qt.Equals, tc.expect)
+			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -270,7 +274,8 @@ func Test_SyntaxList(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, tc.in.UnwrapAll().EqualTo(tc.out.UnwrapAll()), qt.Equals, tc.expect)
+			c := qt.New(t)
+			c.Assert(tc.in.UnwrapAll().EqualTo(tc.out.UnwrapAll()), qt.Equals, tc.expect)
 		})
 	}
 }

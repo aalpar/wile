@@ -24,8 +24,8 @@ import (
 // PrimBytevectorU8Ref implements the bytevector-u8-ref primitive.
 // Returns byte at index.
 func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
 	bv, ok := o.(*values.ByteVector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-u8-ref: expected a bytevector but got %T", o)

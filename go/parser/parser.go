@@ -20,15 +20,22 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
+	"wile/environment"
+	"wile/syntax"
 	"wile/tokenizer"
+	"wile/values"
 )
 
+const (
+	ParserNumberDefaultBase = 10
+)
+
+// Quote form identifiers.
 const (
 	ConstQuote            = "quote"
 	ConstQuasiquote       = "quasiquote"
@@ -40,6 +47,7 @@ const (
 	ConstUnsyntaxSplicing = "unsyntax-splicing"
 )
 
+// Character mnemonic runes.
 const (
 	RuneAlarm       = rune('\a')
 	RuneSpace       = rune(' ')
@@ -54,10 +62,6 @@ const (
 	RuneVerticalTab = rune('\v')
 )
 
-var (
-	ErrUnknownTokenType = values.NewStaticError("unknown token type")
-)
-
 // Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
 	rdr         io.RuneReader // the rune reader
@@ -69,21 +73,17 @@ type Parser struct {
 	file        string // source file name for error reporting
 }
 
-// Parse reads a single syntax value from the given rune reader in the context of the given environment.
-func Parse(env *environment.EnvironmentFrame, rdr io.RuneReader) (syntax.SyntaxValue, error) {
-	p := NewParser(env, rdr)
-	return p.ReadSyntax(nil)
+// NewParser creates a new parser for the given reader and environment.
+func NewParser(env *environment.EnvironmentFrame, skipComments bool, rdr io.RuneReader) *Parser {
+	return NewParserWithFile(env, skipComments, rdr, "")
 }
 
-func NewParser(env *environment.EnvironmentFrame, rdr io.RuneReader) *Parser {
-	return NewParserWithFile(env, rdr, "")
-}
-
-func NewParserWithFile(env *environment.EnvironmentFrame, rdr io.RuneReader, file string) *Parser {
+// NewParserWithFile creates a new parser with a specified source filename.
+func NewParserWithFile(env *environment.EnvironmentFrame, skipComments bool, rdr io.RuneReader, file string) *Parser {
 	q := &Parser{
 		env:         env,
 		rdr:         rdr,
-		skipComment: true,
+		skipComment: skipComments,
 		file:        file,
 	}
 	return q
@@ -93,68 +93,67 @@ func (p *Parser) curr() tokenizer.Token {
 	return p.cur
 }
 
-// func (p *Parser) next() (tokenizer.Token, error) {
-func (p *Parser) next() {
-brk:
-	for p.skipComment && p.err == nil {
-		switch p.curr().Type() {
-		case tokenizer.TokenizerStateBlockComment, tokenizer.TokenizerStateLineCommentStart:
-			p.cur, p.err = p.toks.Next()
-		case tokenizer.TokenizerStateDatumComment:
-			p.cur, p.err = p.toks.Next()
-		default:
-			break brk
-		}
-	}
-	p.cur, p.err = p.toks.Next()
-}
-
+// Text returns the current text being parsed.
 func (p *Parser) Text() string {
 	return p.toks.Text()
 }
 
+// ReadSyntax reads and returns the next syntax value from the input.
 func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 	if p.toks == nil {
-		p.toks = tokenizer.NewTokenizerWithComments(p.rdr, false, !p.skipComment)
+		p.toks = tokenizer.NewTokenizerWithComments(p.rdr, false)
 		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
+	}
+	if p.err != nil {
+		return nil, p.err
+	}
+	var (
+		q   syntax.SyntaxValue
+		err error
+	)
+
+	for {
+		q, _, err = p.readSyntax()
+		if err != nil {
+			p.toks = nil
+			p.err = err
 			return nil, p.err
 		}
+		// Advance to the next token for the next ReadSyntax() call
+		p.cur, p.err = p.toks.Next()
+		// EOF is fine - it means there's nothing more to read
+		if p.err != nil && p.err != io.EOF {
+			p.toks = nil
+			return nil, p.err
+		}
+		if !p.skipComment {
+			return q, nil
+		}
+		switch q.(type) {
+		case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
+		default:
+			return q, nil
+		}
 	}
-	q, _, err := p.readSyntax()
-	if err != nil {
-		p.toks = nil
-		p.err = err
-		return nil, p.err
-	}
-	// Advance to the next token for the next ReadSyntax() call
-	p.cur, p.err = p.toks.Next()
-	// EOF is fine - it means there's nothing more to read
-	if p.err != nil && p.err != io.EOF {
-		p.toks = nil
-		return nil, p.err
-	}
-	return q, nil
+}
+
+// newSourceContext creates a SourceContext from a token.
+func (p *Parser) newSourceContext(t tokenizer.Token) *syntax.SourceContext {
+	return syntax.NewSourceContext(t.String(), p.file, t.Start(), t.End())
 }
 
 func (p *Parser) wrapSyntax(o values.Value, t tokenizer.Token) *syntax.SyntaxObject {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	return syntax.NewSyntaxObject(o, sc)
+	return syntax.NewSyntaxObject(o, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxSymbol(o string, t tokenizer.Token) *syntax.SyntaxSymbol {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	return syntax.NewSyntaxSymbol(o, sc)
+	// Intern the symbol at parse time, colocating interning with syntax occurrence
+	sym := p.env.InternSymbol(values.NewSymbol(o))
+	return syntax.NewSyntaxSymbolForSymbol(sym, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxVector(os []values.Value, t tokenizer.Token) *syntax.SyntaxVector {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
+	sc := p.newSourceContext(t)
 	svs := make([]syntax.SyntaxValue, len(os))
 	for i, v := range os {
 		svs[i] = p.wrapSyntax(v, t)
@@ -163,151 +162,115 @@ func (p *Parser) wrapSyntaxVector(os []values.Value, t tokenizer.Token) *syntax.
 }
 
 func (p *Parser) wrapSyntaxEmptyList(t tokenizer.Token) *syntax.SyntaxPair {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxEmptyList(sc)
-	return q
+	return syntax.NewSyntaxEmptyList(p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxPair(v0, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxPair {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxCons(v0, v1, sc)
-	return q
+	return syntax.NewSyntaxCons(v0, v1, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxComment(v0 string, t tokenizer.Token) *syntax.SyntaxComment {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxComment(v0, sc)
-	return q
+	return syntax.NewSyntaxComment(v0, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxDatumComment(v0 string, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumComment {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxDatumComment(v0, v1, sc)
-	return q
+	return syntax.NewSyntaxDatumComment(v0, v1, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxDatumLabel(v0 int, t tokenizer.Token) *syntax.SyntaxDatumLabel {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxDatumLabel(v0, sc)
-	return q
+	return syntax.NewSyntaxDatumLabel(v0, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumLabelAssignment {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxDatumLabelAssignment(v0, v1, sc)
-	return q
+	return syntax.NewSyntaxDatumLabelAssignment(v0, v1, p.newSourceContext(t))
 }
 
 func (p *Parser) wrapSyntaxDirective(v0 string, t tokenizer.Token) *syntax.SyntaxDirective {
-	sti := t.Start()
-	eni := t.End()
-	sc := syntax.NewSourceContext(t.String(), p.file, sti, eni)
-	q := syntax.NewSyntaxDirective(v0, sc)
-	return q
+	return syntax.NewSyntaxDirective(v0, p.newSourceContext(t))
+}
+
+// readQuoteForm reads a quote-like form (quote, unquote, quasiquote, etc.).
+// It advances the tokenizer, reads the next datum, and wraps it in a list
+// with the given keyword symbol.
+func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.Token, error) {
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	q, _, err := p.readSyntax()
+	if err != nil {
+		return nil, p.cur, err
+	}
+	sym := p.wrapSyntaxSymbol(keyword, p.cur)
+	result := p.listSyntax(p.cur, sym, q)
+	return result, p.cur, nil
+}
+
+// parseIntegerWithBase parses the current token as an integer with the given base.
+func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	a, err := strconv.ParseInt(p.cur.String(), base, 64)
+	if err != nil {
+		return nil, p.cur, err
+	}
+	q := p.wrapSyntax(values.NewInteger(a), p.cur)
+	return q, p.cur, nil
+}
+
+// parseBigIntegerWithBase parses the current token as a big integer with the given base.
+// It strips the #z or #Z prefix before parsing.
+func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := TrimPrefix(p.cur.String(), "#z")
+	s = TrimPrefix(s, "#Z")
+	q1 := values.NewBigIntegerFromString(s, base)
+	if q1 == nil {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid big integer: %s", p.cur.String())
+	}
+	q := p.wrapSyntax(q1, p.cur)
+	return q, p.cur, nil
 }
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
-	if p.err != nil {
-		return nil, nil, p.err
-	}
 	cur := p.curr()
 	switch cur.Type() {
 	case tokenizer.TokenizerStateCons:
-		return nil, p.cur, values.ErrNotACons
+		return nil, p.cur, NewParserErrorWithWrap(values.ErrNotACons, p.cur, "unexpected '.' token")
 	case tokenizer.TokenizerStateLabelAssignment:
-		s := strings.TrimPrefix(p.cur.String(), "#")
+		s := TrimPrefix(p.cur.String(), "#")
 		is := strings.TrimSuffix(s, "=")
 		var i int64
-		i, err := strconv.ParseInt(is, 10, bits.UintSize)
-		if err != nil {
-			return nil, p.cur, err
+		i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		v, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
+		var v syntax.SyntaxValue
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q0 := p.wrapSyntaxDatumLabelAssignment(int(i), v, p.cur)
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateLabelReference:
 		s := strings.Trim(p.cur.String(), "#")
 		var i int64
-		i, err := strconv.ParseInt(s, 10, bits.UintSize)
-		if err != nil {
-			return nil, p.cur, err
+		i, p.err = strconv.ParseInt(s, 10, bits.UintSize)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntaxDatumLabel(int(i), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDirective:
-		q = p.wrapSyntaxDirective(strings.TrimPrefix(p.cur.String(), "#!"), p.cur)
+		q = p.wrapSyntaxDirective(TrimPrefix(p.cur.String(), "#!"), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateLineCommentStart:
-		q = p.wrapSyntaxComment(strings.TrimPrefix(p.cur.String(), ";"), p.cur)
+	case tokenizer.TokenizerStateLineCommentBody:
+		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateLineCommentBegin:
-		beginTok := p.cur
-		body := ""
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.Type() == tokenizer.TokenizerStateLineCommentBody {
-			body = p.cur.String()
-			p.cur, p.err = p.toks.Next()
-			// EOF is acceptable here - the comment ended at EOF without a newline
-			if p.err != nil && p.err != io.EOF {
-				return nil, p.cur, p.err
-			}
-		}
-		// End token is present but we don't advance past it here
-		q = p.wrapSyntaxComment(body, beginTok)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateBlockComment:
-		q = p.wrapSyntaxComment(strings.TrimPrefix(p.cur.String(), "#|"), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateBlockCommentBegin:
-		beginTok := p.cur
-		body := ""
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.Type() == tokenizer.TokenizerStateBlockCommentBody {
-			body = p.cur.String()
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-		}
-		// End token is present but we don't advance past it here
-		q = p.wrapSyntaxComment(body, beginTok)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateDatumComment:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		v, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q = p.wrapSyntaxDatumComment(p.cur.String(), v, p.cur)
+	case tokenizer.TokenizerStateBlockCommentBody:
+		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDatumCommentBegin:
 		beginTok := p.cur
@@ -317,9 +280,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, p.err
 		}
 		// Read the syntax value being commented
-		v, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
+		var v syntax.SyntaxValue
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
 		q = p.wrapSyntaxDatumComment(beginTok.String(), v, p.cur)
@@ -334,9 +298,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q0 := pr
 		pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
 		for p.cur.Type() != tokenizer.TokenizerStateCloseParen && p.cur.Type() != tokenizer.TokenizerStateCons {
-			v, _, err := p.readSyntax()
-			if err != nil {
-				return nil, p.cur, err
+			var v syntax.SyntaxValue
+			v, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
 			}
 			pr0 = pr.(*syntax.SyntaxPair)
 			pr0.SetCar(v)
@@ -354,9 +319,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 				return nil, p.cur, p.err
 			}
 			// read first value in list
-			v, _, err := p.readSyntax()
-			if err != nil {
-				return nil, p.cur, err
+			var v syntax.SyntaxValue
+			v, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
 			}
 			pr = v.(syntax.SyntaxValue)
 			// ??
@@ -365,7 +331,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 				return nil, p.cur, p.err
 			}
 			if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
-				return nil, p.cur, values.ErrNotACloseParen
+				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotACloseParen, p.cur, "expected close parenthesis after dotted pair, got %s", p.cur.String())
 			}
 			pr0.SetCdr(pr)
 		} else {
@@ -381,9 +347,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		v, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		for p.err == nil && p.curr().Type() != tokenizer.TokenizerStateCloseParen {
 			q0.Values = append(q0.Values, v)
@@ -391,9 +357,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			v, _, err = p.readSyntax()
-			if err != nil {
-				return nil, p.cur, err
+			v, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
 			}
 		}
 		if p.err != nil {
@@ -407,9 +373,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		stx, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
+		stx, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 			break
@@ -417,16 +383,16 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		i, ok := stx.Unwrap().(*values.Integer)
 		for {
 			if !ok {
-				return nil, p.cur, values.ErrNotAnInteger
+				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
 			}
 			*q0 = append(*q0, *values.NewByte(uint8(i.Value)))
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			stx, _, err = p.readSyntax()
-			if err != nil {
-				return nil, p.cur, err
+			stx, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
 			}
 			if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 				break
@@ -439,166 +405,90 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q0, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnquote:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstUnquote, p.cur)
-		q2 := p.listSyntax(p.cur, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstUnquote)
 	case tokenizer.TokenizerStateQuasiquote:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q0, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q2 := p.wrapSyntaxSymbol(ConstQuasiquote, p.cur)
-		q3 := p.listSyntax(p.cur, q2, q0)
-		return q3, p.cur, nil
+		return p.readQuoteForm(ConstQuasiquote)
 	case tokenizer.TokenizerStateUnquoteSplicing:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q0, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q2 := p.wrapSyntaxSymbol(ConstUnquoteSplicing, p.cur)
-		q3 := p.listSyntax(p.cur, q2, q0)
-		return q3, p.cur, nil
+		return p.readQuoteForm(ConstUnquoteSplicing)
 	case tokenizer.TokenizerStateQuote:
+		// Quote uses the pre-advance token for source location
 		t := p.curr()
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
+		q, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := p.wrapSyntaxSymbol(ConstQuote, t)
 		q2 := p.listSyntax(t, q1, q)
 		return q2, p.cur, nil
 	case tokenizer.TokenizerStateUnsyntax:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstUnsyntax, p.cur)
-		q2 := p.listSyntax(p.cur, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstUnsyntax)
 	case tokenizer.TokenizerStateQuasisyntax:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstQuasisyntax, p.cur)
-		q2 := p.listSyntax(p.cur, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstQuasisyntax)
 	case tokenizer.TokenizerStateUnsyntaxSplicing:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstUnsyntaxSplicing, p.cur)
-		q2 := p.listSyntax(p.cur, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstUnsyntaxSplicing)
 	case tokenizer.TokenizerStateSyntax:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, err := p.readSyntax()
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstSyntax, p.cur)
-		q2 := p.listSyntax(p.cur, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstSyntax)
 	case tokenizer.TokenizerStateSymbol:
 		q = p.wrapSyntaxSymbol(p.cur.String(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedInteger:
 		var a int64
-		a, err := strconv.ParseInt(p.cur.String(), 10, 64)
-		if err != nil {
-			return nil, p.cur, err
+		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedDecimalFraction:
 		var a float64
-		a, err := strconv.ParseFloat(p.cur.String(), 64)
-		if err != nil {
-			return nil, p.cur, err
+		a, p.err = strconv.ParseFloat(p.cur.String(), 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewFloat(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedInteger:
 		// Signed integers like "-40", "+40"
-		a, err := strconv.ParseInt(p.cur.String(), 10, 64)
-		if err != nil {
-			return nil, p.cur, err
+		var a int64
+		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedDecimalFraction:
 		// Signed decimal fractions like "-3.24", "+3.24"
-		a, err := strconv.ParseFloat(p.cur.String(), 64)
-		if err != nil {
-			return nil, p.cur, err
+		var a float64
+		a, p.err = strconv.ParseFloat(p.cur.String(), 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewFloat(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedRationalFraction:
 		// Unsigned rational fractions like "3/4"
-		q1, err := p.parseRational(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Rational
+		q1, p.err = p.parseRational(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedRationalFraction:
 		// Signed rational fractions like "-1/2", "+3/4"
-		q1, err := p.parseRational(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Rational
+		q1, p.err = p.parseRational(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateIntegerBase2, tokenizer.TokenizerStateIntegerBase8,
-		tokenizer.TokenizerStateIntegerBase10, tokenizer.TokenizerStateIntegerBase16:
-		// Base-prefixed integers - the base is already set in the tokenizer
-		// For now, just parse as base 10 since the prefix is handled separately
-		a, err := strconv.ParseInt(p.cur.String(), 10, 64)
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := values.NewInteger(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBase2:
@@ -607,9 +497,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		a, err := strconv.ParseInt(p.cur.String(), 2, 64)
-		if err != nil {
-			return nil, p.cur, err
+		var a int64
+		a, p.err = strconv.ParseInt(p.cur.String(), 2, 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
 		q = p.wrapSyntax(q1, p.cur)
@@ -620,9 +511,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		a, err := strconv.ParseInt(p.cur.String(), 8, 64)
-		if err != nil {
-			return nil, p.cur, err
+		var a int64
+		a, p.err = strconv.ParseInt(p.cur.String(), 8, 64)
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
 		q = p.wrapSyntax(q1, p.cur)
@@ -640,13 +532,15 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		a, err := strconv.ParseInt(p.cur.String(), 16, 64)
-		if err != nil {
-			return nil, p.cur, err
-		}
-		q1 := values.NewInteger(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+		return p.parseIntegerWithBase(16)
+	case tokenizer.TokenizerStateSignedIntegerBase2, tokenizer.TokenizerStateUnsignedIntegerBase2:
+		return p.parseIntegerWithBase(2)
+	case tokenizer.TokenizerStateSignedIntegerBase8, tokenizer.TokenizerStateUnsignedIntegerBase8:
+		return p.parseIntegerWithBase(8)
+	case tokenizer.TokenizerStateSignedIntegerBase10, tokenizer.TokenizerStateUnsignedIntegerBase10:
+		return p.parseIntegerWithBase(10)
+	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
+		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
 		// +inf.0 or -inf.0
 		s := p.cur.String()
@@ -666,22 +560,23 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginary:
 		// Pure imaginary numbers like +3i, -2i, +i, -i
-		q1, err := p.parseImaginary(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Complex
+		q1, p.err = p.parseImaginary(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginaryInf:
 		// +inf.0i or -inf.0i
 		s := p.cur.String()
-		var imag float64
+		var img float64
 		if strings.HasPrefix(s, "-") {
-			imag = math.Inf(-1)
+			img = math.Inf(-1)
 		} else {
-			imag = math.Inf(1)
+			img = math.Inf(1)
 		}
-		q1 := values.NewComplexFromParts(0, imag)
+		q1 := values.NewComplexFromParts(0, img)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginaryNan:
@@ -691,38 +586,41 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		// Full complex numbers like 1+2i, 3-4i, 1.5+2.5i, +1+2i, -3-4i
-		q1, err := p.parseComplex(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Complex
+		q1, p.err = p.parseComplex(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
 		// Polar complex numbers like 1@1.5708, +2@0.5, -3@1.0
-		q1, err := p.parsePolarComplex(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Complex
+		q1, p.err = p.parsePolarComplex(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginary:
 		// Pure imaginary numbers (unsigned, typically after radix prefix)
-		q1, err := p.parseImaginary(p.cur.String())
-		if err != nil {
-			return nil, p.cur, err
+		var q1 *values.Complex
+		q1, p.err = p.parseImaginary(p.cur.String())
+		if p.err != nil {
+			return nil, p.cur, p.err
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginaryInf:
 		// Unsigned imaginary infinity (typically after radix prefix)
 		s := p.cur.String()
-		var imag float64
+		var img float64
 		if strings.HasPrefix(s, "-") {
-			imag = math.Inf(-1)
+			img = math.Inf(-1)
 		} else {
-			imag = math.Inf(1)
+			img = math.Inf(1)
 		}
-		q1 := values.NewComplexFromParts(0, imag)
+		q1 := values.NewComplexFromParts(0, img)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginaryNan:
@@ -738,23 +636,23 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, p.err
 		}
 		return p.readSyntax()
-	case tokenizer.TokenizerStateBigInteger:
-		// #m prefix for arbitrary-precision integer
-		s := strings.TrimPrefix(p.cur.String(), "#m")
-		s = strings.TrimPrefix(s, "#M")
-		q1 := values.NewBigIntegerFromString(s, 10)
-		if q1 == nil {
-			return nil, p.cur, values.NewForeignError("invalid big integer: " + p.cur.String())
-		}
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+	case tokenizer.TokenizerStateBigIntegerDefaultBase:
+		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
+	case tokenizer.TokenizerStateBigIntegerBase10:
+		return p.parseBigIntegerWithBase(10)
+	case tokenizer.TokenizerStateBigIntegerBase16:
+		return p.parseBigIntegerWithBase(16)
+	case tokenizer.TokenizerStateBigIntegerBase8:
+		return p.parseBigIntegerWithBase(8)
+	case tokenizer.TokenizerStateBigIntegerBase2:
+		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
-		// #z prefix for arbitrary-precision float
-		s := strings.TrimPrefix(p.cur.String(), "#z")
-		s = strings.TrimPrefix(s, "#Z")
+		// #M prefix for arbitrary-precision float
+		s := TrimPrefix(p.cur.String(), "#m")
+		s = TrimPrefix(s, "#M")
 		q1 := values.NewBigFloatFromString(s)
 		if q1 == nil {
-			return nil, p.cur, values.NewForeignError("invalid big float: " + p.cur.String())
+			return nil, p.cur, NewParserErrorf(cur, "invalid big float: %s", p.cur.String())
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -770,14 +668,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntaxEmptyList(p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharGraphic:
-		s := strings.TrimPrefix(p.cur.String(), "#\\")
+		s := TrimPrefix(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
 		q1 := values.NewCharacter(rs[0])
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
 		var q0 *values.Character
-		s := strings.TrimPrefix(p.cur.String(), "#\\")
+		s := TrimPrefix(p.cur.String(), values.PrefixCharacter)
 		switch s {
 		case "alarm":
 			q0 = values.NewCharacter(RuneAlarm)
@@ -802,20 +700,21 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		case "vertical-tab":
 			q0 = values.NewCharacter(RuneVerticalTab)
 		default:
-			return nil, nil, values.ErrUnknownCharacterMnemonic
+			return nil, nil, NewParserErrorWithWrapf(values.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
 		}
 		q = p.wrapSyntax(q0, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharHexEscape:
-		s := strings.TrimPrefix(p.cur.String(), "#\\x")
-		i, err := strconv.ParseInt(s, 16, 32)
-		if err != nil {
-			return nil, p.cur, err
+		s := TrimPrefix(p.cur.String(), "#\\x")
+		var i int64
+		i, p.err = strconv.ParseInt(s, 16, 32)
+		if p.err != nil {
+			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
 		}
 		q1 := values.NewCharacter(rune(i))
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateStringEnd:
+	case tokenizer.TokenizerStateString:
 		// Use Value() to get the processed string (escapes converted, quotes stripped)
 		q1 := values.NewString(p.cur.Value())
 		q = p.wrapSyntax(q1, p.cur)
@@ -823,7 +722,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCloseParen:
 		return q, p.cur, nil
 	}
-	return q, nil, ErrUnknownTokenType
+	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %s", p.cur.String())
 }
 
 func (p *Parser) listSyntax(t tokenizer.Token, os ...syntax.SyntaxValue) syntax.SyntaxValue {
@@ -845,13 +744,10 @@ func (p *Parser) listSyntax(t tokenizer.Token, os ...syntax.SyntaxValue) syntax.
 	return q
 }
 
-var (
-	ErrAlreadyClosed = values.NewStaticError("parser already closed")
-)
-
+// Close closes the parser and releases resources.
 func (p *Parser) Close() error {
 	if p.toks == nil {
-		return ErrAlreadyClosed
+		return NewParserErrorWithWrapf(ErrAlreadyClosed, nil, "parser already closed")
 	}
 	err := p.toks.Close()
 	p.toks = nil
@@ -863,7 +759,7 @@ func (p *Parser) parseRational(s string) (*values.Rational, error) {
 	r := new(big.Rat)
 	_, ok := r.SetString(s)
 	if !ok {
-		return nil, values.NewForeignErrorf("invalid rational number: %s", s)
+		return nil, NewParserErrorf(p.cur, "invalid rational number: %s", s)
 	}
 	return values.NewRationalFromRat(r), nil
 }
@@ -895,7 +791,7 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	// Find the @ separator
 	atPos := strings.Index(s, "@")
 	if atPos == -1 {
-		return nil, values.NewForeignErrorf("invalid polar complex number: %s (no @ separator found)", s)
+		return nil, NewParserErrorf(p.cur, "invalid polar complex number: %s (no @ separator found)", s)
 	}
 
 	// Split into magnitude and angle parts
@@ -903,35 +799,15 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	anglePart := s[atPos+1:]
 
 	// Parse magnitude
-	mag, err := strconv.ParseFloat(magPart, 64)
+	mag, err := parseFloatOrInfnan(magPart)
 	if err != nil {
-		// Try parsing as inf/nan
-		switch magPart {
-		case "+inf.0":
-			mag = math.Inf(1)
-		case "-inf.0":
-			mag = math.Inf(-1)
-		case "+nan.0", "-nan.0":
-			mag = math.NaN()
-		default:
-			return nil, values.NewForeignErrorf("invalid magnitude in polar complex: %s", magPart)
-		}
+		return nil, NewParserErrorf(p.cur, "invalid magnitude in polar complex: %s", magPart)
 	}
 
 	// Parse angle
-	angle, err := strconv.ParseFloat(anglePart, 64)
+	angle, err := parseFloatOrInfnan(anglePart)
 	if err != nil {
-		// Try parsing as inf/nan
-		switch anglePart {
-		case "+inf.0":
-			angle = math.Inf(1)
-		case "-inf.0":
-			angle = math.Inf(-1)
-		case "+nan.0", "-nan.0":
-			angle = math.NaN()
-		default:
-			return nil, values.NewForeignErrorf("invalid angle in polar complex: %s", anglePart)
-		}
+		return nil, NewParserErrorf(p.cur, "invalid angle in polar complex: %s", anglePart)
 	}
 
 	// Convert polar to rectangular: real = r*cos(θ), imag = r*sin(θ)
@@ -974,7 +850,7 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	}
 
 	if signPos == -1 {
-		return nil, values.NewForeignErrorf("invalid complex number: %s (no sign separator found)", s+"i")
+		return nil, NewParserErrorf(p.cur, "invalid complex number: %s (no sign separator found)", s+"i")
 	}
 
 	// Split into real and imaginary parts
@@ -984,20 +860,20 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	// Parse real part
 	real, err := p.parseRealPart(realPart)
 	if err != nil {
-		return nil, values.NewForeignErrorf("invalid real part in complex number: %s", realPart)
+		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
 
 	// Parse imaginary part
 	imag, err := p.parseImagPart(imagPart)
 	if err != nil {
-		return nil, values.NewForeignErrorf("invalid imaginary part in complex number: %s", imagPart)
+		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
 	}
 
 	return values.NewComplexFromParts(real, imag), nil
 }
 
-// parseRealPart parses a real number that may be a float or infnan
-func (p *Parser) parseRealPart(s string) (float64, error) {
+// parseFloatOrInfnan parses a float that may be inf.0 or nan.0
+func parseFloatOrInfnan(s string) (float64, error) {
 	switch s {
 	case "+inf.0":
 		return math.Inf(1), nil
@@ -1007,6 +883,11 @@ func (p *Parser) parseRealPart(s string) (float64, error) {
 		return math.NaN(), nil
 	}
 	return strconv.ParseFloat(s, 64)
+}
+
+// parseRealPart parses a real number that may be a float or infnan
+func (p *Parser) parseRealPart(s string) (float64, error) {
+	return parseFloatOrInfnan(s)
 }
 
 // parseImagPart parses an imaginary coefficient that may be a float, infnan, or just a sign
@@ -1016,12 +897,58 @@ func (p *Parser) parseImagPart(s string) (float64, error) {
 		return 1, nil
 	case "-":
 		return -1, nil
-	case "+inf.0":
-		return math.Inf(1), nil
-	case "-inf.0":
-		return math.Inf(-1), nil
-	case "+nan.0", "-nan.0":
-		return math.NaN(), nil
 	}
-	return strconv.ParseFloat(s, 64)
+	return parseFloatOrInfnan(s)
+}
+
+// runesEqualFold returns true if two runes are equal under case-folding.
+// Returns false if either rune is an error.
+func runesEqualFold(r0, r1 rune) bool {
+	return r0 != utf8.RuneError && r1 != utf8.RuneError &&
+		unicode.ToLower(r0) == unicode.ToLower(r1)
+}
+
+// TrimPrefix performs a case-insensitive trim of the specified prefix from the string s.
+// If s does not start with the prefix (case-insensitive), s is returned unchanged.
+// functionally,its identical to strings.TrimPrefix but case-insensitive.
+func TrimPrefix(s, prefix string) string {
+	if len(prefix) == 0 || len(prefix) > len(s) {
+		return s
+	}
+	i := 0
+	j := 0
+	for j < len(prefix) {
+		if i >= len(s) {
+			return s
+		}
+		r0, n0 := utf8.DecodeRuneInString(s[i:])
+		r1, n1 := utf8.DecodeRuneInString(prefix[j:])
+		if !runesEqualFold(r0, r1) {
+			return s
+		}
+		i += n0
+		j += n1
+	}
+	return s[i:]
+}
+
+// TrimSuffix performs a case-insensitive trim of the specified suffix from the string s.
+// If s does not end with the suffix (case-insensitive), s is returned unchanged.
+// functionally,its identical to strings.TrimSuffix but case-insensitive.
+func TrimSuffix(s, suffix string) string {
+	if len(suffix) > len(s) || len(suffix) == 0 {
+		return s
+	}
+	lasti := len(s)
+	lastj := len(suffix)
+	for lastj > 0 {
+		r0, n0 := utf8.DecodeLastRuneInString(s[:lasti])
+		r1, n1 := utf8.DecodeLastRuneInString(suffix[:lastj])
+		if !runesEqualFold(r0, r1) {
+			return s
+		}
+		lasti -= n0
+		lastj -= n1
+	}
+	return s[:lasti]
 }

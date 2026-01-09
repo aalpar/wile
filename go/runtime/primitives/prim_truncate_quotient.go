@@ -24,8 +24,8 @@ import (
 // PrimTruncateQuotient implements the truncate-quotient primitive.
 // Returns the truncated quotient of dividing two integers.
 func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
-	o0 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	o1 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o0 := mc.Arg(0)
+	o1 := mc.Arg(1)
 	n0, ok := o0.(*values.Integer)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate-quotient: expected an integer but got %T", o0)

@@ -16,27 +16,30 @@ package values
 
 import "fmt"
 
-var (
-	_ Value = (*Byte)(nil)
-)
+var _ Value = (*Byte)(nil)
 
+// Byte represents a Scheme byte value (0-255).
 type Byte struct {
 	Value uint8
 }
 
+// NewByte creates a new byte value.
 func NewByte(v uint8) *Byte {
 	q := &Byte{Value: v}
 	return q
 }
 
+// Datum returns the underlying byte value.
 func (p *Byte) Datum() uint8 {
 	return p.Value
 }
 
+// IsVoid returns true if the byte is nil.
 func (p *Byte) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the bytes have equal values.
 func (p *Byte) EqualTo(v Value) bool {
 	if other, ok := v.(*Byte); ok {
 		return p.Value == other.Value
@@ -44,6 +47,7 @@ func (p *Byte) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the byte.
 func (p *Byte) SchemeString() string {
 	return fmt.Sprintf("%d", p.Value)
 }

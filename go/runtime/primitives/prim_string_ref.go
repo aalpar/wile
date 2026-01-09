@@ -24,8 +24,8 @@ import (
 // PrimStringRef implements the string-ref primitive.
 // Returns the character at the given index in the string.
 func PrimStringRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
 	s, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-ref: expected a string but got %T", o)

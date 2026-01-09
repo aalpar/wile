@@ -16,8 +16,9 @@ package machine
 
 import (
 	"fmt"
-	"wile/syntax"
 	"strings"
+
+	"wile/syntax"
 )
 
 // StackFrame represents one frame in a Scheme stack trace.

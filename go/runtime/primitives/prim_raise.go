@@ -24,7 +24,7 @@ import (
 // (raise obj)
 // Raises a non-continuable exception with obj as the condition.
 func PrimRaise(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 
 	return &machine.ErrExceptionEscape{
 		Condition:   obj,

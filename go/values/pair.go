@@ -24,10 +24,12 @@ var (
 	_ Value = (*Pair)(nil)
 	_ Tuple = (*Pair)(nil)
 
+	// EmptyList is the singleton empty list (nil, nil).
 	// FIXME: consider using types for EmptyList and Void
 	EmptyList = NewCons(nil, nil)
 )
 
+// Pair represents a Scheme cons cell.
 type Pair [2]Value
 
 // NewCons creates a new Pair with the given car and cdr Values.
@@ -67,7 +69,7 @@ func (p *Pair) IsList() bool {
 	if IsVoid(pr) {
 		return false
 	}
-	v, _ := p.ForEach(nil, func(_ context.Context, _ int, hasNext bool, _ Value) error {
+	v, _ := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ Value) error {
 		return nil
 	})
 	return IsEmptyList(v)
@@ -80,9 +82,6 @@ func (p *Pair) Append(vs Value) Value {
 		panic(ErrNotAList)
 	}
 	if IsEmptyList(vs) {
-		if p.IsVoid() || p.IsEmptyList() {
-			return p
-		}
 		return p
 	}
 	if IsEmptyList(p) || IsVoid(p) {
@@ -103,11 +102,11 @@ func (p *Pair) Append(vs Value) Value {
 	return p
 }
 
-// Length returns the length of the list represented by the Pair.
+// Len returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
-func (p *Pair) Length() int {
+func (p *Pair) Len() int {
 	q := 0
-	r, _ := p.ForEach(nil, func(_ context.Context, i int, _ bool, _ Value) error {
+	r, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1
 		return nil
 	})
@@ -190,10 +189,7 @@ func (p *Pair) EqualTo(o Value) bool {
 		p0 = pv0
 		v0 = vv0
 	}
-	if p0.IsEmptyList() != v0.IsEmptyList() {
-		return false
-	}
-	return true
+	return p0.IsEmptyList() == v0.IsEmptyList()
 }
 
 // IsVoid checks if the Pair is void (nil).
@@ -211,7 +207,7 @@ func (p *Pair) SchemeString() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(nil, func(_ context.Context, i int, _ bool, v Value) error {
+	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -249,7 +245,7 @@ func (p *Pair) String() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(nil, func(ctx context.Context, i int, hasNext bool, v Value) error {
+	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -274,7 +270,7 @@ func (p *Pair) AsVector() *Vector {
 		return NewVector()
 	}
 	vs := []Value{}
-	cdr, _ := p.ForEach(nil, func(_ context.Context, _ int, _ bool, v Value) error {
+	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {
 		vs = append(vs, v)
 		return nil
 	})

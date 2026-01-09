@@ -16,6 +16,7 @@ package primitives
 
 import "wile/values"
 
+// ToFloat64 converts a Scheme number to a Go float64.
 func ToFloat64(v values.Value) (float64, error) {
 	switch n := v.(type) {
 	case *values.Integer:

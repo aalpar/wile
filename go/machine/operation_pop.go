@@ -16,11 +16,11 @@ package machine
 
 import (
 	"context"
+
 	"wile/values"
 )
 
-type OperationPop struct {
-}
+type OperationPop struct{}
 
 func NewOperationPop() *OperationPop {
 	return &OperationPop{}
@@ -42,11 +42,5 @@ func (p *OperationPop) IsVoid() bool {
 
 func (p *OperationPop) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPop)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return true
+	return sameType(p, v, ok)
 }

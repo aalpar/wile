@@ -16,12 +16,13 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 )
 
 // validateCaseLambda validates (case-lambda [clause] ...)
 // Each clause is (params body...) like a lambda without the 'lambda' keyword
-func validateCaseLambda(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCaseLambda(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -39,7 +40,7 @@ func validateCaseLambda(ctx context.Context, pair *syntax.SyntaxPair, result *Va
 
 	var clauses []*ValidatedCaseLambdaClause
 	for i := 1; i < len(elements); i++ {
-		clause := validateCaseLambdaClause(nil, elements[i], result)
+		clause := validateCaseLambdaClause(context.TODO(), elements[i], result)
 		if clause != nil {
 			clauses = append(clauses, clause)
 		}
@@ -53,7 +54,7 @@ func validateCaseLambda(ctx context.Context, pair *syntax.SyntaxPair, result *Va
 	return &ValidatedCaseLambda{
 		formName: "case-lambda",
 		source:   source,
-		Clauses:  clauses,
+		clauses:  clauses,
 	}
 }
 
@@ -99,7 +100,7 @@ func validateCaseLambdaClause(ctx context.Context, expr syntax.SyntaxValue, resu
 
 	return &ValidatedCaseLambdaClause{
 		formName: "@clause",
-		Params:   params,
-		Body:     body,
+		params:   params,
+		body:     body,
 	}
 }

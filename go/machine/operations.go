@@ -18,15 +18,37 @@ import (
 	"wile/values"
 )
 
+var (
+	_ values.Value      = Operations{}
+	_ values.Collection = Operations{}
+	_ values.Set        = Operations{}
+)
+
 type Operations []Operation
+
+func (p Operations) AsList() values.Tuple {
+	if len(p) == 0 {
+		return nil // or return EmptyList depending on your API
+	}
+
+	// Build the list from the end backwards
+	var result values.Value = values.EmptyList
+
+	for i := len(p) - 1; i >= 0; i-- {
+		result = &values.Pair{p[i], result}
+	}
+
+	return result.(*values.Pair)
+}
 
 func NewOperations(ops ...Operation) Operations {
 	return ops
 }
 
-func (p Operations) Length() int {
+func (p Operations) Len() int {
 	return len(p)
 }
+
 func (p Operations) SchemeString() string {
 	return "#<machine-operations>"
 }

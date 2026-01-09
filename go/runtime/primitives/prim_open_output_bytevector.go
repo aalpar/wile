@@ -21,6 +21,7 @@ import (
 	"wile/values"
 )
 
+// PrimOpenOutputBytevector implements the Scheme open-output-bytevector primitive.
 func PrimOpenOutputBytevector(_ context.Context, mc *machine.MachineContext) error {
 	mc.SetValue(values.NewBytevectorOutputPort())
 	return nil

@@ -25,7 +25,7 @@ import (
 // PrimCharDowncase implements the (char-downcase) primitive.
 // Returns the lowercase version of the character.
 func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	ch, ok := o.(*values.Character)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-downcase: expected a character but got %T", o)

@@ -24,7 +24,7 @@ import (
 // PrimOutputPortOpenQ implements the output-port-open? primitive.
 // Returns #t if the output port is open, #f otherwise.
 func PrimOutputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.CharacterOutputPort)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "output-port-open?: expected an output port but got %T", o)

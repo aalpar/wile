@@ -60,18 +60,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 
 	// Process each expression
 	current := exprPair
-	for !syntax.IsSyntaxEmptyList(current) {
-		// Get current expression
-		exprVal := current.SyntaxCar()
-		if exprVal == nil {
-			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "begin-for-syntax: nil expression")
-		}
-
-		stxVal, ok := exprVal.(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "begin-for-syntax: invalid expression")
-		}
-
+	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, stxVal syntax.SyntaxValue) error {
 		// Expand the expression (it may contain macros)
 		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
 		if err != nil {
@@ -82,32 +71,27 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 		tmpTpl := NewNativeTemplate(0, 0, false)
 		tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
 
-		if err := tmpCcnt.CompileExpression(ctctx, expandedExpr); err != nil {
+		err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "begin-for-syntax: compilation failed")
 		}
 
 		// Execute the compiled code at compile time
 		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
 		mc := NewMachineContext(cont)
-		if err := mc.Run(context.Background()); err != nil {
+		err = mc.Run(context.Background())
+		if err != nil {
 			if !errors.Is(err, ErrMachineHalt) {
 				return values.WrapForeignErrorf(err, "begin-for-syntax: evaluation failed")
 			}
 		}
-
-		// Move to next expression
-		cdr := current.SyntaxCdr()
-		cdrStx, ok := cdr.(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "begin-for-syntax: invalid cdr")
-		}
-		if syntax.IsSyntaxEmptyList(cdrStx) {
-			break
-		}
-		current, ok = cdr.(*syntax.SyntaxPair)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "begin-for-syntax: improper list")
-		}
+		return nil
+	})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "begin-for-syntax: error processing expressions")
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "begin-for-syntax: expected a proper list of expressions")
 	}
 
 	// begin-for-syntax has no runtime effect - don't emit any operations

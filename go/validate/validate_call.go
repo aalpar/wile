@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 )
 
@@ -57,7 +58,7 @@ func validateCall(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 	return &ValidatedCall{
 		formName: "@call",
 		source:   source,
-		Proc:     proc,
-		Args:     args,
+		proc:     proc,
+		args:     args,
 	}
 }

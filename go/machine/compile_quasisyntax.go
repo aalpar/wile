@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"context"
+
 	"wile/syntax"
 	"wile/values"
 )
@@ -37,10 +39,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 	}
 
 	// Get the template (CAR of the args list)
-	template, ok := argsPair.SyntaxCar().(syntax.SyntaxValue)
-	if !ok {
-		return values.NewForeignError("quasisyntax: expected syntax template")
-	}
+	template := argsPair.SyntaxCar()
 
 	// Check no extra arguments
 	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -95,17 +94,17 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 					return true
 				}
 				// At depth > 1, check the argument at depth-1
-				if v.Length() == 2 {
+				if v.Len() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar().(syntax.SyntaxValue)
+					arg := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntime(arg, depth-1)
 				}
 				return false
 			case "quasisyntax":
 				// Nested quasisyntax - check body at depth+1
-				if v.Length() == 2 {
+				if v.Len() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					body := cdr.SyntaxCar().(syntax.SyntaxValue)
+					body := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntime(body, depth+1)
 				}
 				return false
@@ -116,16 +115,16 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 		current := v
 		for !syntax.IsSyntaxEmptyList(current) {
 			car := current.SyntaxCar()
-			if carSyntax, ok := car.(syntax.SyntaxValue); ok {
-				if p.quasisyntaxNeedsRuntime(carSyntax, depth) {
-					return true
-				}
+			carSyntax := car
+			if p.quasisyntaxNeedsRuntime(carSyntax, depth) {
+				return true
 			}
 			cdr := current.SyntaxCdr()
 			if syntax.IsSyntaxEmptyList(cdr) {
 				break
 			}
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
 			} else {
 				break
@@ -158,15 +157,15 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 			case "unsyntax":
 				if depth == 1 {
 					// At depth 1, evaluate the expression
-					if v.Length() == 2 {
+					if v.Len() == 2 {
 						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-						return cdr.SyntaxCar().(syntax.SyntaxValue)
+						return cdr.SyntaxCar()
 					}
 				}
 				// At depth > 1, produce literal unsyntax form with processed arg
-				if v.Length() == 2 {
+				if v.Len() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar().(syntax.SyntaxValue)
+					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(arg, depth-1)
 					// Build: (list (syntax unsyntax) <processedArg>)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
@@ -184,9 +183,9 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 				)
 
 			case "unsyntax-splicing":
-				if depth > 1 && v.Length() == 2 {
+				if depth > 1 && v.Len() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar().(syntax.SyntaxValue)
+					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(arg, depth-1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -205,9 +204,9 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 
 			case "quasisyntax":
 				// Nested quasisyntax - process body at depth+1
-				if v.Length() == 2 {
+				if v.Len() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					body := cdr.SyntaxCar().(syntax.SyntaxValue)
+					body := cdr.SyntaxCar()
 					processedBody := p.expandQuasisyntax(body, depth+1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -229,7 +228,7 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 		return p.expandQuasisyntaxList(v, depth)
 
 	case *syntax.SyntaxSymbol:
-		// Symbol - wrap in syntax
+		// Sym - wrap in syntax
 		return p.buildQuasiquoteSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("syntax", srcCtx),
 			v,
@@ -251,30 +250,25 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 	// Check if any element is unsyntax-splicing at depth 1
 	hasSplice := false
 	current := pair
-	for !syntax.IsSyntaxEmptyList(current) {
-		car := current.SyntaxCar()
-		carSyntax, ok := car.(syntax.SyntaxValue)
-		if ok {
-			carPair, ok := carSyntax.(*syntax.SyntaxPair)
-			if ok {
-				carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
-				if ok {
-					if carSymName == "unsyntax-splicing" && depth == 1 {
-						hasSplice = true
-						break
-					}
-				}
-			}
+	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, carSyntax syntax.SyntaxValue) error {
+		carPair, ok := carSyntax.(*syntax.SyntaxPair)
+		if !ok {
+			return nil
 		}
-		cdr := current.SyntaxCdr()
-		if syntax.IsSyntaxEmptyList(cdr) {
-			break
+		carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
+		if !ok {
+			return nil
 		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
-			current = nextPair
-		} else {
-			break
+		if carSymName == "unsyntax-splicing" && depth == 1 {
+			hasSplice = true
 		}
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		panic("expandQuasisyntaxList: unexpected improper list during splice check")
 	}
 
 	if !hasSplice {
@@ -282,25 +276,24 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 		var elems []syntax.SyntaxValue
 		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
 
-		current := pair
+		current = pair
 		for !syntax.IsSyntaxEmptyList(current) {
 			car := current.SyntaxCar()
-			if carSyntax, ok := car.(syntax.SyntaxValue); ok {
-				elems = append(elems, p.expandQuasisyntax(carSyntax, depth))
-			}
+			carSyntax := car
+			elems = append(elems, p.expandQuasisyntax(carSyntax, depth))
 			cdr := current.SyntaxCdr()
 			if values.IsEmptyList(cdr) {
 				break
 			}
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
 			} else {
 				// Improper list - handle dotted pair
 				// (list* elem1 elem2 ... cdr)
 				elems[0] = syntax.NewSyntaxSymbol("list*", srcCtx)
-				if cdrSyntax, ok := cdr.(syntax.SyntaxValue); ok {
-					elems = append(elems, p.expandQuasisyntax(cdrSyntax, depth))
-				}
+				cdrSyntax := cdr
+				elems = append(elems, p.expandQuasisyntax(cdrSyntax, depth))
 				break
 			}
 		}
@@ -314,28 +307,19 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 	current = pair
 	for !syntax.IsSyntaxEmptyList(current) {
 		car := current.SyntaxCar()
-		carSyntax, ok := car.(syntax.SyntaxValue)
+		carSyntax := car
+		carPair, ok := carSyntax.(*syntax.SyntaxPair)
 		if ok {
-			carPair, ok := carSyntax.(*syntax.SyntaxPair)
-			if ok {
-				carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
-				if ok && carSymName == "unsyntax-splicing" && depth == 1 {
-					// unsyntax-splicing at depth 1 - splice the value directly
-					if carPair.Length() == 2 {
-						cdr := carPair.SyntaxCdr().(*syntax.SyntaxPair)
-						arg := cdr.SyntaxCar().(syntax.SyntaxValue)
-						appendArgs = append(appendArgs, arg)
-					}
-				} else {
-					// Regular element - wrap in (list ...)
-					appendArgs = append(appendArgs,
-						p.buildQuasiquoteSyntaxList(srcCtx,
-							syntax.NewSyntaxSymbol("list", srcCtx),
-							p.expandQuasisyntax(carSyntax, depth),
-						),
-					)
+			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
+			if ok && carSymName == "unsyntax-splicing" && depth == 1 {
+				// unsyntax-splicing at depth 1 - splice the value directly
+				if carPair.Len() == 2 {
+					cdr := carPair.SyntaxCdr().(*syntax.SyntaxPair)
+					arg := cdr.SyntaxCar()
+					appendArgs = append(appendArgs, arg)
 				}
 			} else {
+				// Regular element - wrap in (list ...)
 				appendArgs = append(appendArgs,
 					p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
@@ -343,6 +327,13 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 					),
 				)
 			}
+		} else {
+			appendArgs = append(appendArgs,
+				p.buildQuasiquoteSyntaxList(srcCtx,
+					syntax.NewSyntaxSymbol("list", srcCtx),
+					p.expandQuasisyntax(carSyntax, depth),
+				),
+			)
 		}
 		cdr := current.SyntaxCar()
 		if syntax.IsSyntaxEmptyList(cdr) {
@@ -359,11 +350,11 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 }
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax
-func (p *CompileTimeContinuation) CompileUnsyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileUnsyntax(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
 	return values.NewForeignError("unsyntax: not in quasisyntax context")
 }
 
 // CompileUnsyntaxSplicing errors - unsyntax-splicing outside of quasisyntax
-func (p *CompileTimeContinuation) CompileUnsyntaxSplicing(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileUnsyntaxSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
 	return values.NewForeignError("unsyntax-splicing: not in quasisyntax context")
 }

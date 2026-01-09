@@ -21,8 +21,9 @@ import (
 	"wile/values"
 )
 
+// PrimOpenInputString implements the Scheme open-input-string primitive.
 func PrimOpenInputString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	s, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "open-input-string: expected a string but got %T", o)

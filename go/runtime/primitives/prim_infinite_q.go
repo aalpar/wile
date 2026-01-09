@@ -26,7 +26,7 @@ import (
 // PrimInfiniteQ implements the (infinite?) primitive.
 // Returns #t if number is infinite.
 func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(values.FalseValue)

@@ -15,9 +15,10 @@
 package utils
 
 import (
+	"testing"
+
 	"wile/syntax"
 	"wile/values"
-	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -34,7 +35,7 @@ type SyntaxValueToDatumSuite struct {
 	sctx *syntax.SourceContext
 }
 
-func (s *SyntaxValueToDatumSuite) Init(c *qt.C) {
+func (s *SyntaxValueToDatumSuite) Init(_ *qt.C) {
 	s.sctx = makeSourceContext()
 }
 
@@ -165,7 +166,7 @@ type DatumToSyntaxValueSuite struct {
 	sctx *syntax.SourceContext
 }
 
-func (s *DatumToSyntaxValueSuite) Init(c *qt.C) {
+func (s *DatumToSyntaxValueSuite) Init(_ *qt.C) {
 	s.sctx = makeSourceContext()
 }
 
@@ -184,7 +185,7 @@ func (s *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 	result := DatumToSyntaxValue(s.sctx, sym)
 	synSym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(synSym.Key, qt.Equals, "foo")
+	c.Assert(synSym.Sym.Key, qt.Equals, "foo")
 }
 
 func (s *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {
@@ -235,7 +236,7 @@ func (s *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
-	resultBox, ok := synObj.Datum.(*values.Box)
+	resultBox, ok := synObj.Datum().(*values.Box)
 	c.Assert(ok, qt.IsTrue)
 	// The box contents should be wrapped in syntax
 	_, ok = resultBox.Unbox().(syntax.SyntaxValue)
@@ -254,7 +255,7 @@ func (s *DatumToSyntaxValueSuite) TestInteger(c *qt.C) {
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(synObj.Datum, values.SchemeEquals, num)
+	c.Assert(synObj.Datum(), values.SchemeEquals, num)
 }
 
 func (s *DatumToSyntaxValueSuite) TestNestedList(c *qt.C) {
@@ -278,7 +279,7 @@ type RoundTripSuite struct {
 	sctx *syntax.SourceContext
 }
 
-func (s *RoundTripSuite) Init(c *qt.C) {
+func (s *RoundTripSuite) Init(_ *qt.C) {
 	s.sctx = makeSourceContext()
 }
 

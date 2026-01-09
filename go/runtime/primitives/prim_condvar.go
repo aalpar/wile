@@ -27,7 +27,7 @@ import (
 // PrimConditionVariableQ tests if an object is a condition variable
 // (condition-variable? obj) -> boolean
 func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.ConditionVariable)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -40,7 +40,7 @@ func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error
 // PrimMakeConditionVariable creates a new condition variable
 // (make-condition-variable [name]) -> condition-variable
 func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) error {
-	restVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	restVal := mc.Arg(0)
 
 	name := ""
 	// Parse optional name from rest list
@@ -63,7 +63,7 @@ func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) er
 // PrimConditionVariableName returns the condition variable's name
 // (condition-variable-name cv) -> string or symbol
 func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	cv, ok := o.(*values.ConditionVariable)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-name: expected condition-variable, got %T", o)
@@ -75,7 +75,7 @@ func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) er
 // PrimConditionVariableSpecific returns the condition variable's specific field
 // (condition-variable-specific cv) -> value
 func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	cv, ok := o.(*values.ConditionVariable)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-specific: expected condition-variable, got %T", o)
@@ -92,8 +92,8 @@ func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext
 // PrimConditionVariableSpecificSet sets the condition variable's specific field
 // (condition-variable-specific-set! cv obj) -> void
 func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	val := mc.Arg(1)
 
 	cv, ok := o.(*values.ConditionVariable)
 	if !ok {
@@ -108,7 +108,7 @@ func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineCont
 // PrimConditionVariableSignal signals one waiting thread
 // (condition-variable-signal! cv) -> void
 func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	cv, ok := o.(*values.ConditionVariable)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-signal!: expected condition-variable, got %T", o)
@@ -121,7 +121,7 @@ func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) 
 // PrimConditionVariableBroadcast signals all waiting threads
 // (condition-variable-broadcast! cv) -> void
 func PrimConditionVariableBroadcast(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	cv, ok := o.(*values.ConditionVariable)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-broadcast!: expected condition-variable, got %T", o)

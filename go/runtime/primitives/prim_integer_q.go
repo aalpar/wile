@@ -25,7 +25,7 @@ import (
 // Returns #t if the argument is an integer (exact or inexact).
 // Inexact integers are floating-point numbers with zero fractional part.
 func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(values.TrueValue)

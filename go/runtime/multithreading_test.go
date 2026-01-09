@@ -19,19 +19,19 @@ import (
 	"strings"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/environment"
 	"wile/machine"
 	"wile/parser"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 // Helper to run scheme code and return the result
 func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	t.Helper()
-	p := parser.NewParser(env, strings.NewReader(code))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(code))
+	stx, err := p.ReadSyntax(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (v
 
 func TestChannelBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Test make-channel and channel?
@@ -80,7 +80,7 @@ func TestChannelBasic(t *testing.T) {
 
 func TestChannelWithBufferSize(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Test buffered channel
@@ -94,7 +94,7 @@ func TestChannelWithBufferSize(t *testing.T) {
 
 func TestChannelTrySendReceive(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Test try-send on buffered channel
@@ -116,7 +116,7 @@ func TestChannelTrySendReceive(t *testing.T) {
 
 func TestChannelLength(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -131,7 +131,7 @@ func TestChannelLength(t *testing.T) {
 
 func TestChannelClose(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -156,7 +156,7 @@ func TestChannelClose(t *testing.T) {
 
 func TestMutexBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Test make-mutex and mutex?
@@ -171,7 +171,7 @@ func TestMutexBasic(t *testing.T) {
 
 func TestMutexWithName(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -186,7 +186,7 @@ func TestMutexWithName(t *testing.T) {
 
 func TestMutexSpecific(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -204,7 +204,7 @@ func TestMutexSpecific(t *testing.T) {
 
 func TestConditionVariableBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(condition-variable? (make-condition-variable))`)
@@ -218,7 +218,7 @@ func TestConditionVariableBasic(t *testing.T) {
 
 func TestConditionVariableWithName(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -233,7 +233,7 @@ func TestConditionVariableWithName(t *testing.T) {
 
 func TestConditionVariableSpecific(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -253,7 +253,7 @@ func TestConditionVariableSpecific(t *testing.T) {
 
 func TestTimeBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(time? (current-time))`)
@@ -267,7 +267,7 @@ func TestTimeBasic(t *testing.T) {
 
 func TestTimeConversion(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(time? (seconds->time 1000))`)
@@ -285,7 +285,7 @@ func TestTimeConversion(t *testing.T) {
 
 func TestWaitGroupBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(wait-group? (make-wait-group))`)
@@ -303,7 +303,7 @@ func TestWaitGroupBasic(t *testing.T) {
 
 func TestRWMutexBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(rw-mutex? (make-rw-mutex))`)
@@ -317,7 +317,7 @@ func TestRWMutexBasic(t *testing.T) {
 
 func TestRWMutexWithName(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Just test creation with a name doesn't error
@@ -328,7 +328,7 @@ func TestRWMutexWithName(t *testing.T) {
 
 func TestRWMutexTryLock(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Try acquiring a read lock should succeed
@@ -354,7 +354,7 @@ func TestRWMutexTryLock(t *testing.T) {
 
 func TestOnceBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(once? (make-once))`)
@@ -368,7 +368,7 @@ func TestOnceBasic(t *testing.T) {
 
 func TestOnceDone(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Fresh once should not be done
@@ -386,7 +386,7 @@ func TestOnceDone(t *testing.T) {
 
 func TestAtomicBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(atomic? (make-atomic 0))`)
@@ -400,7 +400,7 @@ func TestAtomicBasic(t *testing.T) {
 
 func TestAtomicLoadStore(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -421,7 +421,7 @@ func TestAtomicLoadStore(t *testing.T) {
 
 func TestAtomicSwap(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -434,7 +434,7 @@ func TestAtomicSwap(t *testing.T) {
 
 func TestAtomicCompareAndSwap(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// CAS succeeds when comparing with the same reference
@@ -449,12 +449,13 @@ func TestAtomicCompareAndSwap(t *testing.T) {
 
 	// CAS fails when comparing with a different reference (even if same value)
 	// This is expected behavior for Go's atomic.Value
+	// Note: Use 100000 (outside integer cache range -32768 to 32767) to ensure different references
 	result, err = evalScheme(t, env, `
-		(let ((a (make-atomic 42)))
-		  (atomic-compare-and-swap! a 42 100))
+		(let ((a (make-atomic 100000)))
+		  (atomic-compare-and-swap! a 100000 100))
 	`)
 	c.Assert(err, qt.IsNil)
-	// This should fail because 42 is a new integer object, not the same reference
+	// This should fail because 100000 is a new integer object, not the same reference
 	c.Assert(result, qt.Equals, values.FalseValue)
 }
 
@@ -464,7 +465,7 @@ func TestAtomicCompareAndSwap(t *testing.T) {
 
 func TestThreadBasic(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(thread? (make-thread (lambda () 42)))`)
@@ -478,7 +479,7 @@ func TestThreadBasic(t *testing.T) {
 
 func TestThreadWithName(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -493,7 +494,7 @@ func TestThreadWithName(t *testing.T) {
 
 func TestThreadSpecific(t *testing.T) {
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `
@@ -512,7 +513,7 @@ func TestThreadSpecific(t *testing.T) {
 // ===========================================================================
 
 func TestChannelTypeErrors(t *testing.T) {
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +531,7 @@ func TestChannelTypeErrors(t *testing.T) {
 }
 
 func TestMutexTypeErrors(t *testing.T) {
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +543,7 @@ func TestMutexTypeErrors(t *testing.T) {
 }
 
 func TestAtomicTypeErrors(t *testing.T) {
-	env, err := NewTopLevelEnvironmentFrameTiny()
+	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}

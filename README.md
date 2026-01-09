@@ -1,10 +1,10 @@
-# wile
+# Wile
 
 A Scheme interpreter/compiler in Go with hygienic macros.
 
 ## Overview
 
-wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` macros with a "sets of scopes" hygiene model.
+Wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` macros with a "sets of scopes" hygiene model.
 
 ## Features
 
@@ -78,7 +78,7 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 
 ## Hygiene Model
 
-wile uses the "sets of scopes" approach from Flatt's 2016 paper. Each identifier carries a set of scopes, and variable resolution checks that the binding's scopes are a subset of the use site's scopes:
+Wile uses the "sets of scopes" approach from Flatt's 2016 paper. Each identifier carries a set of scopes, and variable resolution checks that the binding's scopes are a subset of the use site's scopes:
 
 ```
 bindingScopes ⊆ useScopes
@@ -111,6 +111,3 @@ This prevents unintended variable capture in macros:
 - [Binding as Sets of Scopes](https://www.cs.utah.edu/plt/scope-sets/) - Flatt (2016)
 - [R7RS Scheme](https://small.r7rs.org/) - Language specification
 
-## License
-
-MIT

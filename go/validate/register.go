@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/forms"
 	"wile/syntax"
 )
@@ -69,7 +70,7 @@ func registerValidator(name string, fn validatorFunc) {
 
 // registerPassthrough registers a form that passes through as ValidatedLiteral.
 func registerPassthrough(name string) {
-	forms.RegisterValidator(name, func(ctx context.Context, pair any, result any) any {
+	forms.RegisterValidator(name, func(_ context.Context, pair any, _ any) any {
 		p := pair.(*syntax.SyntaxPair)
 		return &ValidatedLiteral{source: p.SourceContext(), formName: "@literal", Value: p}
 	})

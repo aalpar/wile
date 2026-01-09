@@ -24,8 +24,8 @@ import (
 // PrimMakeRectangular implements make-rectangular.
 // Creates a complex number from real and imaginary parts: x+yi
 func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
-	r := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	i := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	r := mc.Arg(0)
+	i := mc.Arg(1)
 	var realPart, imagPart float64
 	switch v := r.(type) {
 	case *values.Integer:

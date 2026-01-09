@@ -15,11 +15,13 @@
 package parser
 
 import (
+	"context"
 	"math/big"
-	"wile/environment"
-	"wile/values"
 	"strings"
 	"testing"
+
+	"wile/environment"
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,23 +31,23 @@ func TestReadSyntaxBigInteger(t *testing.T) {
 		input  string
 		expect string
 	}{
-		{"#m123", "123"},
-		{"#M456", "456"},
-		{"#m-789", "-789"},
-		{"#m+42", "42"},
-		{"#m0", "0"},
-		{"#m12345678901234567890", "12345678901234567890"},
-		{"#m-12345678901234567890", "-12345678901234567890"},
-		{"#m99999999999999999999999999999999999999999999999999", "99999999999999999999999999999999999999999999999999"},
+		{"#z123", "123"},
+		{"#Z456", "456"},
+		{"#z-789", "-789"},
+		{"#z+42", "42"},
+		{"#z0", "0"},
+		{"#z12345678901234567890", "12345678901234567890"},
+		{"#z-12345678901234567890", "-12345678901234567890"},
+		{"#z99999999999999999999999999999999999999999999999999", "99999999999999999999999999999999999999999999999999"},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironmentFrame()
-			p := NewParser(env, strings.NewReader(tc.input))
+			p := NewParser(env, true, strings.NewReader(tc.input))
 
-			syn, err := p.ReadSyntax(nil)
+			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
 
 			obj := syn.Unwrap()
@@ -64,24 +66,24 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 		input  string
 		expect string
 	}{
-		{"#z3.14159265358979323846", "3.14159265358979323846"},
-		{"#Z2.71828182845904523536", "2.71828182845904523536"},
-		{"#z-1.5", "-1.5"},
-		{"#z+42.0", "42.0"},
-		{"#z123", "123"},
-		{"#z0.0", "0.0"},
-		{"#z1e10", "1e10"},
-		{"#z1.5e-10", "1.5e-10"},
-		{"#z3.14E+20", "3.14E+20"},
+		{"#m3.14159265358979323846", "3.14159265358979323846"},
+		{"#M2.71828182845904523536", "2.71828182845904523536"},
+		{"#m-1.5", "-1.5"},
+		{"#m+42.0", "42.0"},
+		{"#m123", "123"},
+		{"#m0.0", "0.0"},
+		{"#m1e10", "1e10"},
+		{"#m1.5e-10", "1.5e-10"},
+		{"#m3.14E+20", "3.14E+20"},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironmentFrame()
-			p := NewParser(env, strings.NewReader(tc.input))
+			p := NewParser(env, true, strings.NewReader(tc.input))
 
-			syn, err := p.ReadSyntax(nil)
+			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
 
 			obj := syn.Unwrap()
@@ -97,9 +99,9 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 func TestReadSyntaxBigIntegerInList(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironmentFrame()
-	p := NewParser(env, strings.NewReader("(#m123 #m456 #m789)"))
+	p := NewParser(env, true, strings.NewReader("(#z123 #z456 #z789)"))
 
-	syn, err := p.ReadSyntax(nil)
+	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -116,9 +118,9 @@ func TestReadSyntaxBigIntegerInList(t *testing.T) {
 func TestReadSyntaxBigFloatInList(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironmentFrame()
-	p := NewParser(env, strings.NewReader("(#z1.5 #z2.5 #z3.5)"))
+	p := NewParser(env, true, strings.NewReader("(#m1.5 #m2.5 #m3.5)"))
 
-	syn, err := p.ReadSyntax(nil)
+	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -135,9 +137,9 @@ func TestReadSyntaxBigFloatInList(t *testing.T) {
 func TestReadSyntaxMixedBigNumbers(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironmentFrame()
-	p := NewParser(env, strings.NewReader("(#m100 #z1.5 42 3.14)"))
+	p := NewParser(env, true, strings.NewReader("(#z100 #m1.5 42 3.14)"))
 
-	syn, err := p.ReadSyntax(nil)
+	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -154,9 +156,9 @@ func TestReadSyntaxMixedBigNumbers(t *testing.T) {
 func TestReadSyntaxBigIntegerInVector(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironmentFrame()
-	p := NewParser(env, strings.NewReader("#(#m100 #m200)"))
+	p := NewParser(env, true, strings.NewReader("#(#z100 #z200)"))
 
-	syn, err := p.ReadSyntax(nil)
+	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 

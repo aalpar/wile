@@ -19,21 +19,11 @@ import (
 	"strings"
 
 	"wile/machine"
-	"wile/utils"
-	"wile/values"
 )
 
+// PrimStringCiLe implements the string-ci<=? primitive.
 func PrimStringCiLe(_ context.Context, mc *machine.MachineContext) error {
-	s1 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	s2 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	str1, ok := s1.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-ci<=?: expected a string but got %T", s1)
-	}
-	str2, ok := s2.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-ci<=?: expected a string but got %T", s2)
-	}
-	mc.SetValue(utils.BoolToBoolean(strings.ToLower(str1.Value) <= strings.ToLower(str2.Value)))
-	return nil
+	return stringCompare(mc, "string-ci<=?", func(a, b string) bool {
+		return strings.ToLower(a) <= strings.ToLower(b)
+	})
 }

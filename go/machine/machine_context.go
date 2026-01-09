@@ -107,6 +107,10 @@ func (p *MachineContext) EnvironmentFrame() *environment.EnvironmentFrame {
 	return p.env
 }
 
+func (p *MachineContext) Arg(index int) values.Value {
+	return p.env.GetLocalBindingByIndex(index).Value()
+}
+
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.env = cont.env
 	p.template = cont.template
@@ -198,7 +202,8 @@ func (p *MachineContext) Run(ctx context.Context) error {
 	for mc.pc < len(mc.template.operations) {
 		// Check for debugger breaks
 		if mc.debugger != nil {
-			if bp := mc.debugger.CheckBreakpoint(mc); bp != nil {
+			bp := mc.debugger.CheckBreakpoint(mc)
+			if bp != nil {
 				mc.debugger.TriggerBreak(mc, bp)
 			} else if mc.debugger.ShouldStep(mc) {
 				mc.debugger.TriggerBreak(mc, nil)

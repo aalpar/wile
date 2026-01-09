@@ -27,7 +27,7 @@ import (
 // expanded syntax and a boolean indicating whether expansion occurred.
 // (expand-once stx) -> (values expanded-stx did-expand?)
 func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
-	stx := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {

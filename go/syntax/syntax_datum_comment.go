@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+
 	"wile/values"
 )
 
@@ -24,16 +25,14 @@ var (
 	_ SyntaxValue  = (*SyntaxDatumComment)(nil)
 )
 
+// SyntaxDatumComment represents a datum comment (#;datum).
 type SyntaxDatumComment struct {
 	Label         string
 	Value         SyntaxValue
 	sourceContext *SourceContext
 }
 
-func (p *SyntaxDatumComment) SourceContext() *SourceContext {
-	return p.sourceContext
-}
-
+// NewSyntaxDatumComment creates a new datum comment.
 func NewSyntaxDatumComment(label string, value SyntaxValue, sctx *SourceContext) *SyntaxDatumComment {
 	return &SyntaxDatumComment{
 		Label:         label,
@@ -42,6 +41,17 @@ func NewSyntaxDatumComment(label string, value SyntaxValue, sctx *SourceContext)
 	}
 }
 
+// AddScope returns the comment unchanged (comments don't participate in hygiene).
+func (p *SyntaxDatumComment) AddScope(_ *Scope) SyntaxValue {
+	return p
+}
+
+// SourceContext returns the source context of the comment.
+func (p *SyntaxDatumComment) SourceContext() *SourceContext {
+	return p.sourceContext
+}
+
+// IsVoid returns true if the comment is nil.
 func (p *SyntaxDatumComment) IsVoid() bool {
 	return p == nil
 }
@@ -50,14 +60,13 @@ func (p *SyntaxDatumComment) Unwrap() values.Value {
 	return p.Value
 }
 
+// UnwrapAll recursively unwraps the commented value.
 func (p *SyntaxDatumComment) UnwrapAll() values.Value {
-	sv, ok := p.Value.(SyntaxValue)
-	if ok {
-		return sv.UnwrapAll()
-	}
-	return p.Value
+	sv := p.Value
+	return sv.UnwrapAll()
 }
 
+// EqualTo compares datum comments by label and value.
 func (p *SyntaxDatumComment) EqualTo(v values.Value) bool {
 	other, ok := v.(*SyntaxDatumComment)
 	if !ok {
@@ -69,6 +78,7 @@ func (p *SyntaxDatumComment) EqualTo(v values.Value) bool {
 	return p.Value.UnwrapAll().EqualTo(other.Value.UnwrapAll())
 }
 
+// SchemeString returns a string representation of the datum comment.
 func (p *SyntaxDatumComment) SchemeString() string {
 	return fmt.Sprintf("%s %s", p.Label, p.Value.SchemeString())
 }

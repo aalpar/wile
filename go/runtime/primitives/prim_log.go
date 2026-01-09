@@ -25,8 +25,8 @@ import (
 // PrimLog implements the (log) primitive.
 // Returns the natural logarithm of a number, optionally with a specified base.
 func PrimLog(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	rest := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	o := mc.Arg(0)
+	rest := mc.Arg(1)
 	x, err := ToFloat64(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "log: %v", err)

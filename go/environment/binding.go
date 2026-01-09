@@ -15,9 +15,10 @@
 package environment
 
 import (
+	"slices"
+
 	"wile/syntax"
 	"wile/values"
-	"slices"
 )
 
 // Binding represents a variable binding in the environment.

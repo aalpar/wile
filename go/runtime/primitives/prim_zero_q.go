@@ -25,7 +25,7 @@ import (
 // PrimZeroQ implements the zero? primitive.
 // Returns #t if the number is zero, #f otherwise.
 func PrimZeroQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	n, ok := o.(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "zero?: expected a number but got %T", o)

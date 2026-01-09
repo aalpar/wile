@@ -15,16 +15,15 @@
 package values
 
 import (
-	"fmt"
 	"strings"
 )
 
-var (
-	_ Value = (*ByteVector)(nil)
-)
+var _ Value = (*ByteVector)(nil)
 
+// ByteVector represents a Scheme bytevector.
 type ByteVector []Byte
 
+// NewByteVector creates a new bytevector from integer values.
 func NewByteVector(vs ...*Integer) *ByteVector {
 	if len(vs) == 0 {
 		return &ByteVector{}
@@ -38,14 +37,17 @@ func NewByteVector(vs ...*Integer) *ByteVector {
 	return &q
 }
 
+// Datum returns the underlying byte slice.
 func (p *ByteVector) Datum() []Byte {
 	return *p
 }
 
+// IsVoid returns true if the bytevector is nil.
 func (p *ByteVector) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the bytevectors have equal contents.
 func (p *ByteVector) EqualTo(v Value) bool {
 	other, ok := v.(*ByteVector)
 	if !ok {
@@ -62,15 +64,16 @@ func (p *ByteVector) EqualTo(v Value) bool {
 	return true
 }
 
+// SchemeString returns the Scheme representation of the bytevector.
 func (p *ByteVector) SchemeString() string {
 	q := &strings.Builder{}
 	q.WriteString("#u8(")
 	if len(*p) > 0 {
 		q.WriteString(" ")
-		q.WriteString(fmt.Sprintf("%s", (*p)[0].SchemeString()))
+		q.WriteString((*p)[0].SchemeString())
 		for _, v := range (*p)[1:] {
 			q.WriteString(" ")
-			q.WriteString(fmt.Sprintf("%s", v.SchemeString()))
+			q.WriteString(v.SchemeString())
 		}
 		q.WriteString(" ")
 	}

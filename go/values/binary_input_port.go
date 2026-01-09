@@ -19,14 +19,14 @@ import (
 	"io"
 )
 
-var (
-	_ Value = (*BinaryInputPort)(nil)
-)
+var _ Value = (*BinaryInputPort)(nil)
 
+// BinaryInputPort represents a Scheme binary input port.
 type BinaryInputPort struct {
 	Value io.Reader
 }
 
+// NewBinaryInputPort creates a new binary input port wrapping the given reader.
 func NewBinaryInputPort(rdr io.Reader) *BinaryInputPort {
 	return &BinaryInputPort{Value: rdr}
 }
@@ -35,14 +35,17 @@ func (p *BinaryInputPort) Read(buf []byte) (int, error) {
 	return p.Value.Read(buf)
 }
 
+// Datum returns the underlying io.Reader.
 func (p *BinaryInputPort) Datum() io.Reader {
 	return p.Value
 }
 
+// IsVoid returns true if the port is nil.
 func (p *BinaryInputPort) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if both ports wrap the same reader.
 func (p *BinaryInputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*BinaryInputPort); ok {
 		return p.Value == other.Value
@@ -50,6 +53,7 @@ func (p *BinaryInputPort) EqualTo(v Value) bool {
 	return false
 }
 
+// SchemeString returns the Scheme representation of the port.
 func (p *BinaryInputPort) SchemeString() string {
 	return fmt.Sprintf("<binary-input-port %p>", p.Value)
 }

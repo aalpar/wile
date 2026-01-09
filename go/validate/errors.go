@@ -60,6 +60,7 @@ type ValidationResult struct {
 	Errors []ValidationError // All errors encountered
 }
 
+// Ok returns true if no validation errors were encountered.
 func (r *ValidationResult) Ok() bool {
 	return len(r.Errors) == 0
 }

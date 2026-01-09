@@ -57,12 +57,9 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	}
 
 	// Get the phase list
-	phasesExpr := argsPair.Car()
-	phasesStx, ok := phasesExpr.(syntax.SyntaxValue)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "eval-when: phase list must be syntax")
-	}
-	phases, err := p.parseEvalWhenPhases(nil, phasesStx)
+	phasesExpr := argsPair.SyntaxCar()
+	phasesStx := phasesExpr
+	phases, err := p.parseEvalWhenPhases(context.TODO(), phasesStx)
 	if err != nil {
 		return err
 	}
@@ -80,14 +77,16 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 
 	// If expand phase, evaluate at compile time
 	if hasExpand {
-		if err := p.evalWhenExecuteAtCompileTime(ctctx, bodyPair); err != nil {
+		err := p.evalWhenExecuteAtCompileTime(ctctx, bodyPair)
+		if err != nil {
 			return err
 		}
 	}
 
 	// If run phase, compile for runtime execution
 	if hasRun {
-		if err := p.evalWhenCompileForRuntime(ctctx, bodyPair); err != nil {
+		err := p.evalWhenCompileForRuntime(ctctx, bodyPair)
+		if err != nil {
 			return err
 		}
 	} else {
@@ -105,7 +104,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 // Returns a map of phase names to booleans.
 // Accepts both (expand run) and (expand compile run) forms.
 // Also accepts R6RS-style phase names: load, eval, visit.
-func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phasesExpr syntax.SyntaxValue) (map[string]bool, error) {
+func (p *CompileTimeContinuation) parseEvalWhenPhases(_ context.Context, phasesExpr syntax.SyntaxValue) (map[string]bool, error) {
 	phases := make(map[string]bool)
 
 	phasesPair, ok := phasesExpr.(*syntax.SyntaxPair)
@@ -120,13 +119,13 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 
 	// Iterate through phase symbols
 	current := phasesPair
-	v, err := current.ForEach(nil, func(ctx context.Context, i int, hasNext bool, phaseVal values.Value) error {
+	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, phaseVal syntax.SyntaxValue) error {
 		phaseSym, ok := phaseVal.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "eval-when: phase must be a symbol")
 		}
 
-		phaseName := phaseSym.Key
+		phaseName := phaseSym.Sym.Key
 		switch phaseName {
 		case "expand", "compile", "run", "load", "eval", "visit":
 			phases[phaseName] = true
@@ -138,8 +137,8 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 	if err != nil {
 		return nil, err
 	}
-	if !values.IsEmptyList(v) {
-		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: improper phase list")
+	if !syntax.IsSyntaxEmptyList(v) {
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper phase list")
 	}
 	return phases, nil
 }
@@ -161,16 +160,12 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 
 	// Process each expression
 	current := bodyPair
-	v, err := current.SyntaxForEach(nil, func(ctx context.Context, i int, hasNext bool, exprVal syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(context.TODO(), func(ctx context.Context, _ int, _ bool, exprVal syntax.SyntaxValue) error {
 		if exprVal == nil {
 			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil expression")
 		}
 
-		stxVal, ok := exprVal.(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "eval-when: invalid expression")
-		}
-
+		stxVal := exprVal
 		// Expand the expression (it may contain macros)
 		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
 		if err != nil {
@@ -181,7 +176,8 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 		tmpTpl := NewNativeTemplate(0, 0, false)
 		tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
 
-		if err := tmpCcnt.CompileExpression(ctctx, expandedExpr); err != nil {
+		err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "eval-when: compilation failed")
 		}
 
@@ -199,8 +195,8 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval-when: error processing body expressions")
 	}
-	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: improper body expressions list")
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper body expressions list")
 	}
 
 	return nil
@@ -224,32 +220,15 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 	// Collect all expressions
 	var exprs []syntax.SyntaxValue
 	current := bodyPair
-	for !syntax.IsSyntaxEmptyList(current) {
-		exprVal := current.SyntaxCar()
-		if exprVal == nil {
-			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil expression")
-		}
-
-		stxVal, ok := exprVal.(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "eval-when: invalid expression")
-		}
-
+	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
 		exprs = append(exprs, stxVal)
-
-		// Move to next
-		cdr := current.SyntaxCdr()
-		cdrStx, ok := cdr.(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "eval-when: invalid cdr")
-		}
-		if syntax.IsSyntaxEmptyList(cdrStx) {
-			break
-		}
-		current, ok = cdr.(*syntax.SyntaxPair)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: improper list")
-		}
+		return nil
+	})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "eval-when: error processing body expressions")
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper body expressions list")
 	}
 
 	// Compile each expression, only the last one in tail position
@@ -269,7 +248,8 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		}
 
 		// Compile the expression
-		if err := p.CompileExpression(exprCcnt, expandedExpr); err != nil {
+		err = p.CompileExpression(exprCcnt, expandedExpr)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "eval-when: compilation failed")
 		}
 

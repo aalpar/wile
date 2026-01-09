@@ -52,9 +52,9 @@ func TestNewMachineContext(t *testing.T) {
 	qt.Assert(t, mc.template, qt.Equals, tpl)
 	qt.Assert(t, mc.cont, qt.Equals, parentCont) // cont field should be cont.parent
 	qt.Assert(t, mc.pc, qt.Equals, 5)
-	qt.Assert(t, mc.value.Length(), qt.Equals, 1)
+	qt.Assert(t, mc.value.Len(), qt.Equals, 1)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
-	qt.Assert(t, mc.evals.Length(), qt.Equals, 2)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 2)
 }
 
 func TestNewMachineContext_NilParent(t *testing.T) {
@@ -114,8 +114,8 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
 	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
-	qt.Assert(t, mc.value.Length(), qt.Equals, 0)
-	qt.Assert(t, mc.evals.Length(), qt.Equals, 0)
+	qt.Assert(t, mc.value.Len(), qt.Equals, 0)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
 }
 
 func TestMachineContext_PushContinuation_1(t *testing.T) {
@@ -129,8 +129,8 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
 	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
-	qt.Assert(t, mc.value.Length(), qt.Equals, 0)
-	qt.Assert(t, mc.evals.Length(), qt.Equals, 0)
+	qt.Assert(t, mc.value.Len(), qt.Equals, 0)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
 }
 
 func TestMachineContext_PushContinuation_2(t *testing.T) {
@@ -166,7 +166,7 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 	// Test SetValues and GetValues
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	vs := mc.GetValues()
-	qt.Assert(t, vs.Length(), qt.Equals, 3)
+	qt.Assert(t, vs.Len(), qt.Equals, 3)
 	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(1))
 	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(2))
 	qt.Assert(t, vs[2], values.SchemeEquals, values.NewInteger(3))
@@ -176,7 +176,7 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 
 	// Test empty values
 	mc.SetValues()
-	qt.Assert(t, mc.GetValues().Length(), qt.Equals, 0)
+	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.Void)
 }
 
@@ -214,7 +214,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 	qt.Assert(t, subCtx.template, qt.IsNil)
 	qt.Assert(t, subCtx.pc, qt.Equals, 0)
 	qt.Assert(t, subCtx.value, qt.IsNil)
-	qt.Assert(t, subCtx.evals.Length(), qt.Equals, 0)
+	qt.Assert(t, subCtx.evals.Len(), qt.Equals, 0)
 	qt.Assert(t, subCtx.cont, qt.IsNil)
 	// But shares top-level environment
 	qt.Assert(t, subCtx.env, qt.Equals, env.TopLevel())
@@ -248,7 +248,7 @@ func TestMachineContext_Restore(t *testing.T) {
 	qt.Assert(t, mc.template, qt.Equals, tpl2)
 	qt.Assert(t, mc.pc, qt.Equals, 10)
 	qt.Assert(t, mc.cont, qt.Equals, parent)
-	qt.Assert(t, mc.evals.Length(), qt.Equals, 1)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 1)
 }
 
 func TestMachineContext_Apply_FixedArity(t *testing.T) {

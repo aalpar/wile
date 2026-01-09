@@ -20,8 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/machine"
 	"wile/parser"
 	"wile/runtime"
@@ -29,6 +27,8 @@ import (
 	"wile/syntax"
 	"wile/utils"
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestNewline(t *testing.T) {
@@ -61,9 +61,9 @@ func TestDisplayWithBuffer(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -89,9 +89,9 @@ func TestWriteWithBuffer(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -117,9 +117,9 @@ func TestWriteCharWithBuffer(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -145,9 +145,9 @@ func TestNewlineWithBuffer(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -175,7 +175,7 @@ func TestReadToken(t *testing.T) {
 	input := strings.NewReader("hello 42")
 	primitives.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -205,7 +205,7 @@ func TestReadSyntax(t *testing.T) {
 	input := strings.NewReader("(+ 1 2)")
 	primitives.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -236,7 +236,7 @@ func TestRead(t *testing.T) {
 	input := strings.NewReader("(a b c)")
 	primitives.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -264,7 +264,7 @@ func TestReadWithPort(t *testing.T) {
 	input := strings.NewReader("42")
 	port := values.NewCharacterInputPortFromReader(input)
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// We need to test read with an explicit port - use lambda to capture port
@@ -298,9 +298,9 @@ func TestDisplayWithSymbol(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -327,9 +327,9 @@ func TestWriteWithString(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -355,9 +355,9 @@ func TestWriteCharWithUnicode(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -385,7 +385,7 @@ func TestReadMultipleTokens(t *testing.T) {
 	input := strings.NewReader("foo bar 123")
 	primitives.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Read first token
@@ -413,9 +413,9 @@ func TestDisplayWithInteger(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -441,9 +441,9 @@ func TestDisplayWithBoolean(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -469,9 +469,9 @@ func TestWriteWithSymbol(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -518,9 +518,9 @@ func TestDisplayWithList(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -548,9 +548,9 @@ func TestWriteWithList(t *testing.T) {
 
 	// Create a buffer to capture output
 	buf := &bytes.Buffer{}
-	primitives.SetCurrentOutputPort(values.NewCharacterOutputPort(buf))
+	primitives.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -572,7 +572,7 @@ func TestWriteWithList(t *testing.T) {
 }
 
 func TestStringPorts(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test string output port round-trip:
@@ -585,8 +585,8 @@ func TestStringPorts(t *testing.T) {
 		(display " world" out)
 		(get-output-string out))`
 
-	p := parser.NewParser(env, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(prog))
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := machine.NewExpandTimeCallContext()
@@ -607,7 +607,7 @@ func TestStringPorts(t *testing.T) {
 }
 
 func TestStringInputPort(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test string input port:
@@ -616,8 +616,8 @@ func TestStringInputPort(t *testing.T) {
 	prog := `(let ((in (open-input-string "(+ 1 2)")))
 		(read in))`
 
-	p := parser.NewParser(env, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(prog))
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := machine.NewExpandTimeCallContext()
@@ -640,7 +640,7 @@ func TestStringInputPort(t *testing.T) {
 }
 
 func TestBytevectorPorts(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test bytevector output port:
@@ -651,8 +651,8 @@ func TestBytevectorPorts(t *testing.T) {
 		(display "AB" out)
 		(get-output-bytevector out))`
 
-	p := parser.NewParser(env, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(prog))
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := machine.NewExpandTimeCallContext()
@@ -675,15 +675,15 @@ func TestBytevectorPorts(t *testing.T) {
 }
 
 func TestBytevectorInputPort(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test bytevector input port with open-input-bytevector and input-port?:
 	// (input-port? (open-input-bytevector #u8(65 66 67)))
 	prog := `(input-port? (open-input-bytevector #u8(65 66 67)))`
 
-	p := parser.NewParser(env, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(nil)
+	p := parser.NewParser(env, true, strings.NewReader(prog))
+	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := machine.NewExpandTimeCallContext()
@@ -762,11 +762,11 @@ func TestPortPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+			env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
-			p := parser.NewParser(env, strings.NewReader(tc.prog))
-			stx, err := p.ReadSyntax(nil)
+			p := parser.NewParser(env, true, strings.NewReader(tc.prog))
+			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
 			ectx := machine.NewExpandTimeCallContext()

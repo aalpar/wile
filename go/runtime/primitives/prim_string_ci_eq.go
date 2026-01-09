@@ -19,21 +19,9 @@ import (
 	"strings"
 
 	"wile/machine"
-	"wile/utils"
-	"wile/values"
 )
 
+// PrimStringCiEq implements the string-ci=? primitive.
 func PrimStringCiEq(_ context.Context, mc *machine.MachineContext) error {
-	s1 := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	s2 := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	str1, ok := s1.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-ci=?: expected a string but got %T", s1)
-	}
-	str2, ok := s2.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-ci=?: expected a string but got %T", s2)
-	}
-	mc.SetValue(utils.BoolToBoolean(strings.EqualFold(str1.Value, str2.Value)))
-	return nil
+	return stringCompare(mc, "string-ci=?", strings.EqualFold)
 }

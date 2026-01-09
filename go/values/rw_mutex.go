@@ -88,10 +88,12 @@ func (m *RWMutex) TryRLock() bool {
 
 // Value interface implementation
 
+// IsVoid returns true if the RWMutex is nil.
 func (m *RWMutex) IsVoid() bool {
 	return m == nil
 }
 
+// EqualTo returns true if the RWMutexes are the same object.
 func (m *RWMutex) EqualTo(v Value) bool {
 	other, ok := v.(*RWMutex)
 	if !ok {
@@ -100,6 +102,7 @@ func (m *RWMutex) EqualTo(v Value) bool {
 	return m == other
 }
 
+// SchemeString returns the Scheme representation of the RWMutex.
 func (m *RWMutex) SchemeString() string {
 	if m == nil {
 		return "#<rw-mutex:void>"

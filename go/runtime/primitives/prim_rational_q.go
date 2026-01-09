@@ -24,7 +24,7 @@ import (
 // PrimRationalQ implements the (rational?) primitive.
 // Returns #t if argument is rational number.
 func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer, *values.Rational:
 		mc.SetValue(values.TrueValue)

@@ -28,8 +28,8 @@ import (
 // PrimEval implements the (eval) primitive.
 // Evaluates an expression in a given environment.
 func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
-	expr := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	envSpec := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
+	expr := mc.Arg(0)
+	envSpec := mc.Arg(1)
 
 	// Get the environment frame from the SchemeEnvironment
 	schemeEnv, ok := envSpec.(*values.SchemeEnvironment)
@@ -64,7 +64,8 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	// Run the compiled code in a sub-context
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	sub := machine.NewMachineContext(cont)
-	if err := sub.Run(ctx); err != nil {
+	err = sub.Run(ctx)
+	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			return err

@@ -34,7 +34,7 @@ func PrimCurrentTime(_ context.Context, mc *machine.MachineContext) error {
 // PrimTimeQ tests if an object is a time
 // (time? obj) -> boolean
 func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	_, ok := o.(*values.Time)
 	if ok {
 		mc.SetValue(values.TrueValue)
@@ -47,7 +47,7 @@ func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimTimeToSeconds converts a time to seconds
 // (time->seconds time) -> number
 func PrimTimeToSeconds(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	t, ok := o.(*values.Time)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotATime, "time->seconds: expected time, got %T", o)
@@ -59,7 +59,7 @@ func PrimTimeToSeconds(_ context.Context, mc *machine.MachineContext) error {
 // PrimSecondsToTime converts seconds to a time
 // (seconds->time x) -> time
 func PrimSecondsToTime(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 
 	var seconds float64
 	switch v := o.(type) {

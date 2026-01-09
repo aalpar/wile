@@ -16,8 +16,9 @@ package environment
 
 import (
 	"maps"
-	"wile/values"
 	"slices"
+
+	"wile/values"
 )
 
 // LocalEnvironmentFrame stores local variable bindings for a single scope.

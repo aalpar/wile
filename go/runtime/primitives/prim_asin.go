@@ -25,7 +25,7 @@ import (
 // PrimAsin implements the asin primitive.
 // Returns the arc sine of a number.
 func PrimAsin(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	x, err := ToFloat64(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "asin: %v", err)

@@ -15,8 +15,9 @@
 package syntax
 
 import (
-	"wile/values"
 	"testing"
+
+	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -95,7 +96,8 @@ func TestSyntaxPair_IsList(t *testing.T) {
 		// List with nested cons as first element: ((10) 20) - proper list
 		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil), nil), out: true},
 		// Improper list: (10 20 . 30)
-		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
+		{
+			in:  NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
 			out: false,
 		},
 	}
@@ -113,14 +115,17 @@ func TestSyntaxPair_Length(t *testing.T) {
 		out          int
 		panicMatches string
 	}{
-		{in: nil,
+		{
+			in:           nil,
 			panicMatches: "not a list",
-			out:          -1},
+			out:          -1,
+		},
 		{in: NewSyntaxEmptyList(nil), out: 0},
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), out: 1},
 		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxEmptyList(nil), nil), out: 1},
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil), nil), out: 2},
-		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
+		{
+			in:           NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
 			panicMatches: "not a list",
 			out:          -1,
 		},
@@ -128,9 +133,9 @@ func TestSyntaxPair_Length(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
 			if tc.panicMatches != "" {
-				qt.Assert(t, func() { tc.in.Length() }, qt.PanicMatches, tc.panicMatches)
+				qt.Assert(t, func() { tc.in.Len() }, qt.PanicMatches, tc.panicMatches)
 			} else {
-				got := tc.in.Length()
+				got := tc.in.Len()
 				qt.Assert(t, got, qt.Equals, tc.out)
 			}
 		})

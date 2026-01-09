@@ -75,7 +75,7 @@ func TestStringValueWithoutStringer(t *testing.T) {
 	// Test StringValue with a type that doesn't implement fmt.Stringer
 	// CharacterOutputPort implements values.Value but not fmt.Stringer
 	buf := &bytes.Buffer{}
-	port := values.NewCharacterOutputPort(buf)
+	port := values.NewCharacterOutputPortFromWriter(buf)
 	result := primitives.StringValue(port)
 	// Should use SchemeString() instead
 	qt.Assert(t, result, qt.Equals, port.SchemeString())

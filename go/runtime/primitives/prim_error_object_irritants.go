@@ -24,7 +24,7 @@ import (
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
 func PrimErrorObjectIrritants(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.ErrorObject)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnErrorObject,

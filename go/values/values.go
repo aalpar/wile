@@ -16,6 +16,7 @@ package values
 
 import "context"
 
+// Prefix constants for Scheme value representations.
 const (
 	PrefixCharacter    = `#\`
 	PrefixSyntax       = `#'`
@@ -53,22 +54,39 @@ func (eofType) EqualTo(v Value) bool {
 // EofObject is the singleton EOF value.
 var EofObject Value = eofType{}
 
+// Table represents a key-value mapping interface.
+type Table interface {
+	HasKey(Value) bool
+	Get(Value) (Value, bool)
+	Set(Value, Value)
+	Keys() Tuple
+	Values() Tuple
+}
+
+// Wrapped represents a value that wraps another value.
 type Wrapped interface {
 	Value
 	Unwrap() Value
 	Wrap(Value)
 }
 
+// Collection represents a container that can be converted to a list.
 type Collection interface {
+	AsList() Tuple
+}
+
+// Set represents an unordered collection of unique values.
+type Set interface {
 	AsList() Tuple
 }
 
 // ForEachFunc is the type of function called for each element in the Pair list.
 type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
 
+// Tuple represents a list-like sequence of values.
 type Tuple interface {
 	Value
-	Length() int
+	Len() int
 	Append(value Value) Value
 	ForEach(ctx context.Context, fn ForEachFunc) (Value, error)
 	IsEmptyList() bool
@@ -79,6 +97,7 @@ type Tuple interface {
 	Cdr() Value
 }
 
+// SourceLocation represents a position in source code.
 type SourceLocation interface {
 	Value
 	Index() int
@@ -86,17 +105,25 @@ type SourceLocation interface {
 	Line() int
 }
 
+// Port represents an I/O port with source location tracking.
+type Port interface {
+	SourceLocation
+}
+
+// Value is the base interface for all Scheme values.
 type Value interface {
 	SchemeString() string
 	IsVoid() bool
 	EqualTo(Value) bool
 }
 
+// Comparable represents a value that can be compared for ordering.
 type Comparable interface {
 	Value
 	CompareTo(Value) int
 }
 
+// Number represents a numeric value in the Scheme numeric tower.
 type Number interface {
 	Value
 	Add(Number) Number

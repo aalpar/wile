@@ -26,7 +26,7 @@ import (
 // PrimFileExistsQ implements the (file-exists?) primitive.
 // Returns #t if file exists.
 func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	filename, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "file-exists?: expected a string but got %T", o)

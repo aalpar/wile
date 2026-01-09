@@ -16,9 +16,7 @@ package values
 
 import "fmt"
 
-var (
-	_ Value = (*CompileTimeValue)(nil)
-)
+var _ Value = (*CompileTimeValue)(nil)
 
 // CompileTimeValue wraps a value that is stored in the expand phase
 // but accessible during macro expansion. This enables compile-time
@@ -27,6 +25,7 @@ type CompileTimeValue struct {
 	Value Value
 }
 
+// NewCompileTimeValue creates a new compile-time value.
 func NewCompileTimeValue(v Value) *CompileTimeValue {
 	return &CompileTimeValue{
 		Value: v,
@@ -37,10 +36,12 @@ func (p *CompileTimeValue) Unwrap() Value {
 	return p.Value
 }
 
+// IsVoid returns true if the compile-time value is nil.
 func (p *CompileTimeValue) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the compile-time values are equal.
 func (p *CompileTimeValue) EqualTo(v Value) bool {
 	other, ok := v.(*CompileTimeValue)
 	if !ok {
@@ -64,6 +65,7 @@ func (p *CompileTimeValue) EqualTo(v Value) bool {
 	return p.Value.EqualTo(other.Value)
 }
 
+// SchemeString returns the Scheme representation of the compile-time value.
 func (p *CompileTimeValue) SchemeString() string {
 	return fmt.Sprintf("#<compile-time-value %s>", p.Value.SchemeString())
 }

@@ -1,3 +1,6 @@
+# Private docs
+docs/
+
 # Build outputs
 dist/
 
@@ -18,4 +21,6 @@ cover.html
 Thumbs.db
 
 # Temporary files
+*.tmp
+*.bak
 *.txt

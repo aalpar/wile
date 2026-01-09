@@ -23,11 +23,26 @@ var (
 	_ SyntaxValue  = (*SyntaxComment)(nil)
 )
 
+// SyntaxComment represents a source comment (line or block) with source location.
 type SyntaxComment struct {
 	Text          string
 	sourceContext *SourceContext
 }
 
+// NewSyntaxComment creates a new syntax comment with the given text and source context.
+func NewSyntaxComment(text string, sctx *SourceContext) *SyntaxComment {
+	return &SyntaxComment{
+		Text:          text,
+		sourceContext: sctx,
+	}
+}
+
+// AddScope returns the comment unchanged (comments don't participate in hygiene).
+func (p *SyntaxComment) AddScope(scope *Scope) SyntaxValue {
+	return p
+}
+
+// SourceContext returns the source context of the comment.
 func (p *SyntaxComment) SourceContext() *SourceContext {
 	return p.sourceContext
 }
@@ -36,21 +51,17 @@ func (p *SyntaxComment) Unwrap() values.Value {
 	return values.NewString(p.Text)
 }
 
+// UnwrapAll returns the comment text as a string value.
 func (p *SyntaxComment) UnwrapAll() values.Value {
 	return values.NewString(p.Text)
 }
 
-func NewSyntaxComment(text string, sctx *SourceContext) *SyntaxComment {
-	return &SyntaxComment{
-		Text:          text,
-		sourceContext: sctx,
-	}
-}
-
+// IsVoid returns true if the comment is nil.
 func (p *SyntaxComment) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the comments have the same text.
 func (p *SyntaxComment) EqualTo(v values.Value) bool {
 	other, ok := v.(*SyntaxComment)
 	if !ok {
@@ -62,6 +73,7 @@ func (p *SyntaxComment) EqualTo(v values.Value) bool {
 	return true
 }
 
+// SchemeString returns the comment text.
 func (p *SyntaxComment) SchemeString() string {
 	return p.Text
 }

@@ -21,10 +21,11 @@ import (
 	"wile/values"
 )
 
+// PrimListSet implements the Scheme list-set! primitive.
 func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
-	listVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	idxVal := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	val := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
+	listVal := mc.Arg(0)
+	idxVal := mc.Arg(1)
+	val := mc.Arg(2)
 
 	p, ok := listVal.(*values.Pair)
 	if !ok {

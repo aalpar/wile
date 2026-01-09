@@ -18,9 +18,9 @@ import (
 	"math"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	"wile/values"
+
+	qt "github.com/frankban/quicktest"
 )
 
 // ----------------------------------------------------------------------------

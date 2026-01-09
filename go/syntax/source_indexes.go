@@ -16,20 +16,21 @@ package syntax
 
 import (
 	"fmt"
-	"wile/values"
 	"strings"
+
+	"wile/values"
 )
 
-var (
-	_ values.Value = SourceIndexes{}
-)
+var _ values.Value = SourceIndexes{}
 
+// SourceIndexes tracks position within a source file (index, column, line).
 type SourceIndexes struct {
 	index  int
 	column int
 	line   int
 }
 
+// NewSourceIndexes creates a new SourceIndexes with the given position.
 func NewSourceIndexes(index, column, line int) SourceIndexes {
 	q := SourceIndexes{
 		index:  index,
@@ -39,24 +40,29 @@ func NewSourceIndexes(index, column, line int) SourceIndexes {
 	return q
 }
 
+// Index returns the absolute byte position in the source.
 func (i SourceIndexes) Index() int {
 	return i.index
 }
 
+// Column returns the column number within the current line (0-based).
 func (i SourceIndexes) Column() int {
 	return i.column
 }
 
+// Line returns the line number (1-based).
 func (i SourceIndexes) Line() int {
 	return i.line
 }
 
+// Inc advances the position by n characters on the same line.
 func (i *SourceIndexes) Inc(n int) int {
 	i.index += n
 	i.column += n
 	return i.index
 }
 
+// NewLine advances to the start of a new line.
 func (i *SourceIndexes) NewLine() int {
 	i.index++
 	i.column = 0
@@ -64,6 +70,14 @@ func (i *SourceIndexes) NewLine() int {
 	return i.index
 }
 
+// Tab advances the position by n tab stops on the same line.
+func (i *SourceIndexes) Tab() int {
+	i.index++
+	i.column += 8 - (i.column % 8)
+	return i.index
+}
+
+// SchemeString returns a string representation of the position.
 func (i SourceIndexes) SchemeString() string {
 	q := &strings.Builder{}
 	q.WriteString("<indexes ")
@@ -72,10 +86,12 @@ func (i SourceIndexes) SchemeString() string {
 	return q.String()
 }
 
+// IsVoid returns false; SourceIndexes is never void.
 func (p SourceIndexes) IsVoid() bool {
 	return false
 }
 
+// EqualTo returns true if the positions are equal.
 func (i SourceIndexes) EqualTo(o values.Value) bool {
 	v, ok := o.(SourceIndexes)
 	if !ok {

@@ -25,7 +25,7 @@ import (
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
 func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair but got %T", o)

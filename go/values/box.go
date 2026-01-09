@@ -16,14 +16,14 @@ package values
 
 import "fmt"
 
-var (
-	_ Value = (*Box)(nil)
-)
+var _ Value = (*Box)(nil)
 
+// Box represents a mutable Scheme box (container).
 type Box struct {
 	Value Value
 }
 
+// NewBox creates a new box containing the given value.
 func NewBox(v Value) *Box {
 	q := &Box{
 		Value: v,
@@ -31,18 +31,22 @@ func NewBox(v Value) *Box {
 	return q
 }
 
+// Datum returns the boxed value.
 func (p *Box) Datum() Value {
 	return p.Value
 }
 
+// Unbox returns the boxed value.
 func (p *Box) Unbox() Value {
 	return p.Value
 }
 
+// IsVoid returns true if the box is nil.
 func (p *Box) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the boxes contain equal values.
 func (p *Box) EqualTo(v Value) bool {
 	other, ok := v.(*Box)
 	if !ok {
@@ -66,6 +70,7 @@ func (p *Box) EqualTo(v Value) bool {
 	return p.Value.EqualTo(other.Value)
 }
 
+// SchemeString returns the Scheme representation of the box.
 func (p *Box) SchemeString() string {
 	return fmt.Sprintf("#&%s", p.Value.SchemeString())
 }

@@ -16,8 +16,9 @@ package syntax
 
 import (
 	"context"
-	"wile/values"
 	"strings"
+
+	"wile/values"
 )
 
 var (
@@ -25,10 +26,12 @@ var (
 	_ values.Tuple = (*SyntaxPair)(nil)
 	_ SyntaxTuple  = (*SyntaxPair)(nil)
 
+	// SyntaxEmptyList is the empty list sentinel value.
 	// FIXME: consider using types for EmptyList and Void
 	SyntaxEmptyList = &SyntaxPair{Values: [2]SyntaxValue{}}
 )
 
+// SyntaxPair wraps a Scheme pair (cons cell) with source context.
 type SyntaxPair struct {
 	Values        [2]SyntaxValue
 	sourceContext *SourceContext
@@ -89,6 +92,7 @@ func (p *SyntaxPair) Scopes() []*Scope {
 	return p.sourceContext.Scopes
 }
 
+// NewSyntaxEmptyList creates a syntax empty list with the given source context.
 func NewSyntaxEmptyList(sctx *SourceContext) *SyntaxPair {
 	q := &SyntaxPair{
 		Values:        [2]SyntaxValue{nil, nil},
@@ -97,6 +101,7 @@ func NewSyntaxEmptyList(sctx *SourceContext) *SyntaxPair {
 	return q
 }
 
+// NewSyntaxCons creates a new syntax pair (cons cell).
 func NewSyntaxCons(v0, v1 SyntaxValue, sctx *SourceContext) *SyntaxPair {
 	q := &SyntaxPair{
 		Values:        [2]SyntaxValue{v0, v1},
@@ -105,42 +110,52 @@ func NewSyntaxCons(v0, v1 SyntaxValue, sctx *SourceContext) *SyntaxPair {
 	return q
 }
 
+// SetSyntaxCar sets the car of the pair to a syntax value.
 func (p *SyntaxPair) SetSyntaxCar(v SyntaxValue) {
 	p.Values[0] = v
 }
 
+// SetSyntaxCdr sets the cdr of the pair to a syntax value.
 func (p *SyntaxPair) SetSyntaxCdr(v SyntaxValue) {
 	p.Values[1] = v
 }
 
+// SetCar sets the car of the pair.
 func (p *SyntaxPair) SetCar(v values.Value) {
 	p.Values[0] = v.(SyntaxValue)
 }
 
+// SetCdr sets the cdr of the pair.
 func (p *SyntaxPair) SetCdr(v values.Value) {
 	p.Values[1] = v.(SyntaxValue)
 }
 
+// SyntaxCar returns the car as a syntax value.
 func (p *SyntaxPair) SyntaxCar() SyntaxValue {
 	return p.Values[0]
 }
 
+// SyntaxCdr returns the cdr as a syntax value.
 func (p *SyntaxPair) SyntaxCdr() SyntaxValue {
 	return p.Values[1]
 }
 
+// Car returns the car of the pair.
 func (p *SyntaxPair) Car() values.Value {
 	return p.Values[0]
 }
 
+// Cdr returns the cdr of the pair.
 func (p *SyntaxPair) Cdr() values.Value {
 	return p.Values[1]
 }
 
+// SourceContext returns the source context of the pair.
 func (p *SyntaxPair) SourceContext() *SourceContext {
 	return p.sourceContext
 }
 
+// UnwrapAll recursively unwraps the pair and returns a regular Scheme pair.
 func (p *SyntaxPair) UnwrapAll() values.Value {
 	if p.IsVoid() {
 		return values.Void
@@ -162,6 +177,7 @@ func (p *SyntaxPair) UnwrapAll() values.Value {
 	return q
 }
 
+// Unwrap returns a regular Scheme pair without recursively unwrapping.
 func (p *SyntaxPair) Unwrap() values.Value {
 	if p.IsVoid() {
 		return values.Void
@@ -172,17 +188,19 @@ func (p *SyntaxPair) Unwrap() values.Value {
 	return values.NewCons(p.Car(), p.Cdr())
 }
 
+// IsList returns true if the pair forms a proper list.
 func (p *SyntaxPair) IsList() bool {
 	pr := p
 	if values.IsVoid(pr) {
 		return false
 	}
-	v, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	v, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, _ SyntaxValue) error {
 		return nil
 	})
 	return values.IsEmptyList(v)
 }
 
+// Append appends a value to the end of the list.
 func (p *SyntaxPair) Append(vs values.Value) values.Value {
 	if p.IsVoid() {
 		panic(values.ErrNotAList)
@@ -212,6 +230,7 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 	return p
 }
 
+// SyntaxAppend appends a syntax value to the end of the list.
 func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	if p.IsVoid() {
 		panic(values.ErrNotAList)
@@ -237,9 +256,10 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	return p
 }
 
-func (p *SyntaxPair) Length() int {
+// Len returns the length of the list.
+func (p *SyntaxPair) Len() int {
 	q := 0
-	r, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	r, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, _ SyntaxValue) error {
 		q = i + 1
 		return nil
 	})
@@ -249,6 +269,7 @@ func (p *SyntaxPair) Length() int {
 	return q
 }
 
+// IsEmptyList returns true if the pair represents an empty list.
 func (p *SyntaxPair) IsEmptyList() bool {
 	if p == nil {
 		return false
@@ -256,10 +277,12 @@ func (p *SyntaxPair) IsEmptyList() bool {
 	return p.Values[0] == nil && p.Values[1] == nil
 }
 
+// IsVoid returns true if the pair is nil.
 func (p *SyntaxPair) IsVoid() bool {
 	return p == nil
 }
 
+// ForEach iterates over the elements of the list.
 func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
 	if p == nil {
 		return values.Void, nil
@@ -284,6 +307,7 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 	return pr, nil
 }
 
+// SyntaxForEach iterates over the syntax elements of the list.
 func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
 	if p == nil {
 		return SyntaxVoid, nil
@@ -308,10 +332,12 @@ func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (S
 	return pr, nil
 }
 
+// IsPair returns true; SyntaxPair is always a pair.
 func (p *SyntaxPair) IsPair() bool {
 	return true
 }
 
+// SchemeString returns a string representation of the syntax pair.
 func (p *SyntaxPair) SchemeString() string {
 	if p == nil {
 		return "#<syntax-void>"
@@ -324,7 +350,7 @@ func (p *SyntaxPair) SchemeString() string {
 	}
 	q := &strings.Builder{}
 	q.WriteString("#'(")
-	cdr, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	cdr, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, v SyntaxValue) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
@@ -359,11 +385,8 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 		return values.NewVector()
 	}
 	vs := []values.Value{}
-	cdr, err := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
-		v1, ok := v.(SyntaxValue)
-		if !ok {
-			return values.ErrNotASyntaxValue
-		}
+	cdr, err := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
+		v1 := v
 		vs = append(vs, v1.UnwrapAll())
 		return nil
 	})
@@ -376,6 +399,7 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 	return values.NewVector(vs...)
 }
 
+// AsSyntaxVector converts the list to a syntax vector.
 func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 	if p.IsVoid() {
 		return nil
@@ -384,7 +408,7 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 		return NewSyntaxVector(p.sourceContext)
 	}
 	vs := []SyntaxValue{}
-	cdr, _ := p.SyntaxForEach(context.Background(), func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+	cdr, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
 		vs = append(vs, v)
 		return nil
 	})

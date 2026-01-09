@@ -15,6 +15,7 @@
 package primitives_test
 
 import (
+	"context"
 	"testing"
 
 	"wile/runtime"
@@ -87,7 +88,7 @@ func TestBoundIdentifierEqualQ(t *testing.T) {
 			// (This tests the underlying logic used by primBoundIdentifierEqualQ)
 
 			// Same name?
-			if tc.id1.Key != tc.id2.Key {
+			if tc.id1.Sym.Key != tc.id2.Sym.Key {
 				qt.Assert(t, tc.want, qt.IsFalse)
 				return
 			}
@@ -145,13 +146,13 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+			env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
 			// Test free-identifier=? by checking binding resolution
 			// (This tests the underlying logic used by primFreeIdentifierEqualQ)
-			sym1 := env.InternSymbol(values.NewSymbol(tc.id1.Key))
-			sym2 := env.InternSymbol(values.NewSymbol(tc.id2.Key))
+			sym1 := env.InternSymbol(values.NewSymbol(tc.id1.Sym.Key))
+			sym2 := env.InternSymbol(values.NewSymbol(tc.id2.Sym.Key))
 
 			binding1 := env.GetBindingWithScopes(sym1, tc.id1.Scopes())
 			binding2 := env.GetBindingWithScopes(sym2, tc.id2.Scopes())
@@ -159,7 +160,7 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 			var result bool
 			if binding1 == nil && binding2 == nil {
 				// Both unbound → compare names
-				result = tc.id1.Key == tc.id2.Key
+				result = tc.id1.Sym.Key == tc.id2.Sym.Key
 			} else if binding1 == nil || binding2 == nil {
 				// One bound, one unbound → not equal
 				result = false
@@ -174,7 +175,7 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 }
 
 func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the bound-identifier=? primitive exists
@@ -184,7 +185,7 @@ func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
 }
 
 func TestFreeIdentifierEqualQPrimitiveExists(t *testing.T) {
-	env, err := runtime.NewTopLevelEnvironmentFrameTiny()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the free-identifier=? primitive exists

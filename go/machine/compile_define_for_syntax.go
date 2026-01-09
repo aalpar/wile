@@ -73,10 +73,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
 		// Build (lambda (args...) body...)
-		params, ok := firstPair.SyntaxCdr().(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "define-for-syntax: invalid parameter list")
-		}
+		params := firstPair.SyntaxCdr()
 		lambdaSym := syntax.NewSyntaxSymbol("lambda", nameSyntaxSym.SourceContext())
 		lambdaArgs := syntax.NewSyntaxCons(params, restPair, nameSyntaxSym.SourceContext())
 		valueExpr = syntax.NewSyntaxCons(lambdaSym, lambdaArgs, nameSyntaxSym.SourceContext())
@@ -89,10 +86,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
 		// Get the value expression
-		valueExpr, ok = restPair.SyntaxCar().(syntax.SyntaxValue)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxValue, "define-for-syntax: invalid expression")
-		}
+		valueExpr = restPair.SyntaxCar()
 	}
 
 	// Intern the symbol
@@ -114,14 +108,16 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// Compile the expanded expression
-	if err := tmpCcnt.CompileExpression(ctctx, expandedExpr); err != nil {
+	err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
+	if err != nil {
 		return values.WrapForeignErrorf(err, "define-for-syntax: compilation failed")
 	}
 
 	// Execute the compiled code at compile time
 	cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
 	mc := NewMachineContext(cont)
-	if err := mc.Run(context.Background()); err != nil {
+	err = mc.Run(context.Background())
+	if err != nil {
 		if !errors.Is(err, ErrMachineHalt) {
 			return values.WrapForeignErrorf(err, "define-for-syntax: evaluation failed")
 		}
@@ -133,7 +129,8 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Store the result in the expand phase environment with BindingTypeVariable
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
 	if globalIndex != nil {
-		if err := expandEnv.SetOwnGlobalValue(globalIndex, result); err != nil {
+		err = expandEnv.SetOwnGlobalValue(globalIndex, result)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
 		}
 	}

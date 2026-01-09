@@ -22,8 +22,9 @@ import (
 
 	"wile/machine"
 	"wile/parser"
-	schemertime "wile/runtime"
 	"wile/values"
+
+	schemertime "wile/runtime"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -31,17 +32,17 @@ import (
 // evalScheme evaluates a Scheme expression string and returns the result
 func evalScheme(t *testing.T, code string) values.Value {
 	t.Helper()
-	env, err := schemertime.NewTopLevelEnvironmentFrameTiny()
+	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ctx := context.Background()
 	rdr := strings.NewReader(code)
-	p := parser.NewParser(env, rdr)
+	p := parser.NewParser(env, true, rdr)
 
-	var lastValue values.Value = values.Void
+	var lastValue = values.Void
 
 	for {
-		stx, err := p.ReadSyntax(nil)
+		stx, err := p.ReadSyntax(context.TODO())
 		if err == io.EOF {
 			break
 		}

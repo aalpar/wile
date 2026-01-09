@@ -18,8 +18,11 @@ import (
 	"wile/syntax"
 )
 
+// ErrorCode represents a tokenizer error classification.
 type ErrorCode int
 
+// TokenizerError represents an error that occurred during tokenization,
+// with source location information.
 type TokenizerError struct {
 	err   error
 	start syntax.SourceIndexes
@@ -27,6 +30,7 @@ type TokenizerError struct {
 	mess  string
 }
 
+// NewTokenizerError creates a new tokenizer error with the given message and source location.
 func NewTokenizerError(mess string, start, end syntax.SourceIndexes) *TokenizerError {
 	q := &TokenizerError{
 		start: start,
@@ -36,6 +40,7 @@ func NewTokenizerError(mess string, start, end syntax.SourceIndexes) *TokenizerE
 	return q
 }
 
+// NewTokenizerErrorWithWrap creates a new tokenizer error that wraps another error.
 func NewTokenizerErrorWithWrap(err error, mess string, start, end syntax.SourceIndexes) *TokenizerError {
 	q := &TokenizerError{
 		err:   err,
@@ -46,6 +51,7 @@ func NewTokenizerErrorWithWrap(err error, mess string, start, end syntax.SourceI
 	return q
 }
 
+// Is implements errors.Is for TokenizerError.
 func (p *TokenizerError) Is(err error) bool {
 	_, ok := err.(*TokenizerError)
 	return ok

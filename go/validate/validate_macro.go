@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 	"wile/values"
 )
@@ -23,7 +24,7 @@ import (
 // validateDefineSyntax validates (define-syntax keyword transformer)
 // Returns a ValidatedLiteral wrapping the original form since the compiler
 // has specialized handling for this.
-func validateDefineSyntax(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefineSyntax(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -78,7 +79,7 @@ func validateSyntaxRules(ctx context.Context, pair *syntax.SyntaxPair, result *V
 		}
 		// Validate each literal is a symbol
 		if !literalsPair.IsEmptyList() {
-			_, err := syntax.SyntaxForEach(ctx, literalsPair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
+			_, err := syntax.SyntaxForEach(ctx, literalsPair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 				if _, ok := asSyntaxSymbol(v); !ok {
 					result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
 				}
@@ -117,7 +118,7 @@ func validateSyntaxRules(ctx context.Context, pair *syntax.SyntaxPair, result *V
 
 // validateImport validates (import import-set...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateImport(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateImport(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -146,7 +147,7 @@ func validateImport(ctx context.Context, pair *syntax.SyntaxPair, result *Valida
 
 // validateExport validates (export export-spec...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateExport(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateExport(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -203,7 +204,7 @@ func validateDefineLibrary(ctx context.Context, pair *syntax.SyntaxPair, result 
 	}
 
 	// Validate library name components are symbols or integers
-	_, err := syntax.SyntaxForEach(ctx, namePair, func(ctx context.Context, i int, hasNext bool, v syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctx, namePair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		if _, ok := asSyntaxSymbol(v); ok {
 			return nil
 		}
@@ -225,7 +226,7 @@ func validateDefineLibrary(ctx context.Context, pair *syntax.SyntaxPair, result 
 
 // validateInclude validates (include filename...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateInclude(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateInclude(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -255,7 +256,7 @@ func validateInclude(ctx context.Context, pair *syntax.SyntaxPair, result *Valid
 
 // validateCondExpand validates (cond-expand clause...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateCondExpand(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCondExpand(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)

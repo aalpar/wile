@@ -16,10 +16,11 @@ package main
 
 import (
 	"fmt"
-	"wile/machine"
 	"sort"
 	"strconv"
 	"strings"
+
+	"wile/machine"
 )
 
 // DebugContext holds the state for debug commands

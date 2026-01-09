@@ -22,8 +22,9 @@ import (
 	"wile/values"
 )
 
+// PrimStringDowncase implements the Scheme string-downcase primitive.
 func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-downcase: expected a string but got %T", s)

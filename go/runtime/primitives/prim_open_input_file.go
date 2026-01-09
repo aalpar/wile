@@ -25,7 +25,7 @@ import (
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
 func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	filename, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "open-input-file: expected a string but got %T", o)

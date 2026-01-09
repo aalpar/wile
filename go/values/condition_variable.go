@@ -94,7 +94,7 @@ func (cv *ConditionVariable) Broadcast() {
 // Wait waits on the condition variable
 // The mutex must be held when calling Wait
 // Returns true if signaled, false if timeout
-func (cv *ConditionVariable) Wait(mutex *Mutex, timeout *time.Duration) bool {
+func (cv *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 	cv.mu.Lock()
 	cv.waiters++
 	cv.mu.Unlock()
@@ -153,10 +153,12 @@ func (cv *ConditionVariable) WaiterCount() int {
 
 // Value interface implementation
 
+// IsVoid returns true if the condition variable is nil.
 func (cv *ConditionVariable) IsVoid() bool {
 	return cv == nil
 }
 
+// EqualTo returns true if the condition variables are the same object.
 func (cv *ConditionVariable) EqualTo(v Value) bool {
 	other, ok := v.(*ConditionVariable)
 	if !ok {
@@ -165,6 +167,7 @@ func (cv *ConditionVariable) EqualTo(v Value) bool {
 	return cv == other // Identity is reference equality
 }
 
+// SchemeString returns the Scheme representation of this condition variable.
 func (cv *ConditionVariable) SchemeString() string {
 	if cv == nil {
 		return "#<condition-variable:void>"

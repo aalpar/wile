@@ -15,13 +15,14 @@
 package match
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"wile/values"
+
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
-
-	"wile/values"
 )
 
 func TestUtilsMatcherSuites(t *testing.T) {
@@ -29,8 +30,7 @@ func TestUtilsMatcherSuites(t *testing.T) {
 	qtsuite.Run(c, UtilsMatcherSuite{})
 }
 
-type UtilsMatcherSuite struct {
-}
+type UtilsMatcherSuite struct{}
 
 func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 	tcs := []struct {
@@ -140,7 +140,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			vst.Compile(nil, tc.in) //nolint:errcheck
+			vst.Compile(context.TODO(), tc.in) //nolint:errcheck
 			c.Assert(vst.codes, qt.DeepEquals, tc.out)
 		})
 	}
@@ -224,7 +224,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			err := vst.Compile(nil, tc.in)
+			err := vst.Compile(context.TODO(), tc.in)
 			c.Assert(err, qt.IsNil)
 			mtc := NewMatcher(vst.variables, vst.codes)
 			err = mtc.Match(tc.target)

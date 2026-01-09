@@ -24,9 +24,9 @@ import (
 // PrimVectorSet implements the vector-set! primitive.
 // Sets the element of a vector at the given index to a new value.
 func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-	k := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
-	obj := mc.EnvironmentFrame().GetLocalBindingByIndex(2).Value()
+	o := mc.Arg(0)
+	k := mc.Arg(1)
+	obj := mc.Arg(2)
 	v, ok := o.(*values.Vector)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-set!: expected a vector but got %T", o)

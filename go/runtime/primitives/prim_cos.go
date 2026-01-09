@@ -25,7 +25,7 @@ import (
 // PrimCos implements the (cos) primitive.
 // Returns the cosine of the argument in radians.
 func PrimCos(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	o := mc.Arg(0)
 	x, err := ToFloat64(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "cos: %v", err)

@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+
 	"wile/syntax"
 )
 
@@ -56,7 +57,7 @@ func validateLambda(ctx context.Context, pair *syntax.SyntaxPair, result *Valida
 	return &ValidatedLambda{
 		formName: "lambda",
 		source:   source,
-		Params:   params,
-		Body:     body,
+		params:   params,
+		body:     body,
 	}
 }

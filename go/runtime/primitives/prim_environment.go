@@ -26,7 +26,7 @@ import (
 // Constructs a new environment from import specifiers.
 func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
-	argsVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+	argsVal := mc.Arg(0)
 
 	// Create fresh top-level environment
 	newEnv := environment.NewTopLevelEnvironmentFrame()
@@ -51,7 +51,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Process each import spec
-	_, err := args.ForEach(nil, func(_ context.Context, i int, hasNext bool, specVal values.Value) error {
+	v, err := args.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
 		importSet, err := machine.ParseImportSetFromDatum(specVal)
 		if err != nil {
@@ -73,16 +73,19 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Copy bindings to new environment
-		if err := machine.CopyLibraryBindingsToEnv(lib, bindings, newEnv); err != nil {
+		err = machine.CopyLibraryBindingsToEnv(lib, bindings, newEnv)
+		if err != nil {
 			return values.WrapForeignErrorf(err, "environment: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+	if !values.IsEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "environment: improper import spec list")
 	}
 
 	mc.SetValue(values.NewSchemeEnvironment("environment", newEnv))

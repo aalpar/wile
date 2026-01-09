@@ -19,9 +19,7 @@ import (
 	"time"
 )
 
-var (
-	_ Value = (*Time)(nil)
-)
+var _ Value = (*Time)(nil)
 
 // Time represents a point in time (SRFI-18)
 type Time struct {
@@ -75,17 +73,19 @@ func (t *Time) After(other *Time) bool {
 	return t.t.After(other.t)
 }
 
-// Duration returns a duration from this time to now
+// DurationFromNow returns the duration from now until this time.
 func (t *Time) DurationFromNow() time.Duration {
 	return time.Until(t.t)
 }
 
 // Value interface implementation
 
+// IsVoid returns true if the time is nil.
 func (t *Time) IsVoid() bool {
 	return t == nil
 }
 
+// EqualTo returns true if both times represent the same instant.
 func (t *Time) EqualTo(v Value) bool {
 	other, ok := v.(*Time)
 	if !ok {
@@ -100,6 +100,7 @@ func (t *Time) EqualTo(v Value) bool {
 	return t.t.Equal(other.t)
 }
 
+// SchemeString returns the Scheme representation of the time.
 func (t *Time) SchemeString() string {
 	if t == nil {
 		return "#<time:void>"
