@@ -1026,6 +1026,10 @@ func (p *CompileTimeContinuation) processLibraryExport(lib *CompiledLibrary, arg
 //   - (rename <internal> <external>) : export with different names
 func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	switch s := spec.(type) {
+	case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
+		// Skip comments in export lists
+		return nil
+
 	case *syntax.SyntaxSymbol:
 		// Simple export: symbol name
 		name := s.Unwrap().(*values.Symbol).Key

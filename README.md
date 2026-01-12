@@ -2,9 +2,25 @@
 
 A Scheme interpreter/compiler in Go with hygienic macros.
 
+The name is a play on "scheme" (as in "wiles" - cunning stratagems) and a nod to Wile E. Coyote, the cartoon schemer.
+
 ## Overview
 
 Wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` macros with a "sets of scopes" hygiene model.
+
+## Background
+
+Wile was originally a Lisp interpreter (compiler and VM) used for scripting block-based storage systems (databases, pipelines, search, etc.). It's been recently expanded to the Scheme R7RS standard in the hopes that it will be of use to someone who wants to use Lisp/Scheme in Go.
+
+### Why Another Scheme Implementation?
+
+The world isn't really in need of another Scheme implementation - there are plenty out there. The primary use of this implementation is for embedding into Go. Go was seen as a good candidate for embedding Scheme because it's already got garbage collection (saving the need to implement garbage collection for Scheme), and Go's use in many server-side applications - such as web-servers and database servers.
+
+Foreign functions from Scheme to Go were easy to implement as well as conventions for linking in dynamic libraries.
+
+### Use of AI
+
+Anthropic's Claude Code was used to help document, fill out the primitive library, and diagnose bugs. The `CLAUDE.md` file is committed to help others get started.
 
 ## Features
 
@@ -101,7 +117,7 @@ This prevents unintended variable capture in macros:
 
 ## Documentation
 
-- `CLAUDE.md` - Development guide and architecture overview
+- `INTRO.md` - Development guide and architecture overview
 - `go/DESIGN.md` - Detailed macro system design
 - `BIBLIOGRAPHY.md` - Academic references
 - `go/TODO.md` - Implementation status and pending tasks
@@ -110,4 +126,8 @@ This prevents unintended variable capture in macros:
 
 - [Binding as Sets of Scopes](https://www.cs.utah.edu/plt/scope-sets/) - Flatt (2016)
 - [R7RS Scheme](https://small.r7rs.org/) - Language specification
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 

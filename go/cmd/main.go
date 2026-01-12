@@ -43,13 +43,17 @@ type Options struct {
 	Version     bool   `short:"v" long:"version" description:"Print version information and exit"`
 }
 
-var opts Options
+var (
+	// BuildSHA is the git SHA of the current build
+	BuildSHA string
+	// BuildVersion is the current version of the Scheme interpreter
+	BuildVersion string
+	opts         Options
+)
 
 const (
 	// SchemeLibraryPathEnv is the environment variable for library search paths
 	SchemeLibraryPathEnv = "SCHEME_LIBRARY_PATH"
-	// Version is the current version of the Scheme interpreter
-	Version = "0.1.0"
 )
 
 func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
@@ -163,7 +167,7 @@ func main() {
 	}
 
 	if opts.Version {
-		fmt.Printf("Wile Scheme %s\n", Version)
+		fmt.Printf("Wile Scheme %s\n", BuildVersion)
 		os.Exit(0)
 	}
 

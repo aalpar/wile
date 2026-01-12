@@ -44,6 +44,7 @@ func (e *ErrContinuationEscape) Error() string {
 // It holds the current environment, values, evaluation stack, continuation, and program counter.
 // It is created from a MachineContinuation and can be modified during execution.
 type MachineContext struct {
+	ctx              context.Context
 	env              *environment.EnvironmentFrame
 	value            MultipleValues
 	evals            *Stack               // evaluation stack, holds intermediate values during execution
@@ -58,6 +59,7 @@ type MachineContext struct {
 // NewMachineContext creates a new machine context with the given continuation and initial values.
 func NewMachineContext(cont *MachineContinuation) *MachineContext {
 	q := &MachineContext{
+		ctx:      context.Background(),
 		env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
 		template: cont.template, // not needed to copy, templates are immutable
 		cont:     cont.parent,
@@ -223,6 +225,7 @@ func (p *MachineContext) Run(ctx context.Context) error {
 // This allows foreign functions to call Scheme closures without corrupting the parent context's state.
 func (p *MachineContext) NewSubContext() *MachineContext {
 	return &MachineContext{
+		ctx:         p.ctx,
 		template:    nil,
 		pc:          0,
 		env:         p.env.TopLevel(), // share global environment chain
@@ -314,18 +317,21 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 		depth++
 	}
 
-	if cont != nil {
-		remaining := countFrames(cont)
-		if remaining > 0 {
-			trace = append(trace, StackFrame{
-				FunctionName: fmt.Sprintf("... %d more frames ...", remaining),
-			})
-		}
+	if cont == nil {
+		return trace
+	}
+
+	remaining := countFrames(cont)
+	if remaining > 0 {
+		trace = append(trace, StackFrame{
+			FunctionName: fmt.Sprintf("... %d more frames ...", remaining),
+		})
 	}
 
 	return trace
 }
 
+// countFrames counts the number of frames in the continuation chain.
 func countFrames(cont *MachineContinuation) int {
 	count := 0
 	for cont != nil {

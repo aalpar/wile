@@ -25,7 +25,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - wile
+        - skeme
 
 linters-settings:
   dupl:

@@ -51,7 +51,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Process each import spec
-	v, err := args.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
+	v, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
 		importSet, err := machine.ParseImportSetFromDatum(specVal)
 		if err != nil {

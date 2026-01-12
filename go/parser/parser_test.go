@@ -576,7 +576,6 @@ func TestParser_Read(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironmentFrame()
 			p := NewParser(env, false, strings.NewReader(tc.in))
-			p.skipComment = false
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.ErrorIs, tc.err)
 			if err != nil {
@@ -2694,7 +2693,7 @@ func TestTrimPrefix(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := TrimPrefix(tc.s, tc.prefix)
+			result := TrimPrefixFolded(tc.s, tc.prefix)
 			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}
@@ -2764,7 +2763,7 @@ func TestTrimSuffix(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := TrimSuffix(tc.s, tc.suffix)
+			result := TrimSuffixFolded(tc.s, tc.suffix)
 			c.Assert(result, qt.Equals, tc.expect)
 		})
 	}

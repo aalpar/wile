@@ -122,6 +122,7 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		// Advance to the next token for the next ReadSyntax() call
 		p.cur, p.err = p.toks.Next()
 		// EOF is fine - it means there's nothing more to read
+		// FIXME: rework error return.
 		if p.err != nil && p.err != io.EOF {
 			p.toks = nil
 			return nil, p.err
@@ -131,6 +132,10 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		}
 		switch q.(type) {
 		case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
+			if p.err == io.EOF {
+				return nil, p.err
+			}
+			continue
 		default:
 			return q, nil
 		}
@@ -219,8 +224,8 @@ func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.T
 // parseBigIntegerWithBase parses the current token as a big integer with the given base.
 // It strips the #z or #Z prefix before parsing.
 func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := TrimPrefix(p.cur.String(), "#z")
-	s = TrimPrefix(s, "#Z")
+	s := TrimPrefixFolded(p.cur.String(), "#z")
+	s = TrimPrefixFolded(s, "#Z")
 	q1 := values.NewBigIntegerFromString(s, base)
 	if q1 == nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid big integer: %s", p.cur.String())
@@ -236,7 +241,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCons:
 		return nil, p.cur, NewParserErrorWithWrap(values.ErrNotACons, p.cur, "unexpected '.' token")
 	case tokenizer.TokenizerStateLabelAssignment:
-		s := TrimPrefix(p.cur.String(), "#")
+		s := TrimPrefixFolded(p.cur.String(), "#")
 		is := strings.TrimSuffix(s, "=")
 		var i int64
 		i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
@@ -264,7 +269,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntaxDatumLabel(int(i), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDirective:
-		q = p.wrapSyntaxDirective(TrimPrefix(p.cur.String(), "#!"), p.cur)
+		q = p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateLineCommentBody:
 		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
@@ -648,8 +653,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
 		// #M prefix for arbitrary-precision float
-		s := TrimPrefix(p.cur.String(), "#m")
-		s = TrimPrefix(s, "#M")
+		s := TrimPrefixFolded(p.cur.String(), "#m")
+		s = TrimPrefixFolded(s, "#M")
 		q1 := values.NewBigFloatFromString(s)
 		if q1 == nil {
 			return nil, p.cur, NewParserErrorf(cur, "invalid big float: %s", p.cur.String())
@@ -668,14 +673,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntaxEmptyList(p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharGraphic:
-		s := TrimPrefix(p.cur.String(), values.PrefixCharacter)
+		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
 		q1 := values.NewCharacter(rs[0])
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
 		var q0 *values.Character
-		s := TrimPrefix(p.cur.String(), values.PrefixCharacter)
+		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
 		switch s {
 		case "alarm":
 			q0 = values.NewCharacter(RuneAlarm)
@@ -705,7 +710,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q0, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharHexEscape:
-		s := TrimPrefix(p.cur.String(), "#\\x")
+		s := TrimPrefixFolded(p.cur.String(), "#\\x")
 		var i int64
 		i, p.err = strconv.ParseInt(s, 16, 32)
 		if p.err != nil {
@@ -858,18 +863,18 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	imagPart := s[signPos:] // includes the sign
 
 	// Parse real part
-	real, err := p.parseRealPart(realPart)
+	rel, err := p.parseRealPart(realPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
 
 	// Parse imaginary part
-	imag, err := p.parseImagPart(imagPart)
+	img, err := p.parseImagPart(imagPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
 	}
 
-	return values.NewComplexFromParts(real, imag), nil
+	return values.NewComplexFromParts(rel, img), nil
 }
 
 // parseFloatOrInfnan parses a float that may be inf.0 or nan.0
@@ -904,14 +909,16 @@ func (p *Parser) parseImagPart(s string) (float64, error) {
 // runesEqualFold returns true if two runes are equal under case-folding.
 // Returns false if either rune is an error.
 func runesEqualFold(r0, r1 rune) bool {
-	return r0 != utf8.RuneError && r1 != utf8.RuneError &&
-		unicode.ToLower(r0) == unicode.ToLower(r1)
+	if r0 == utf8.RuneError || r1 == utf8.RuneError {
+		return false
+	}
+	return unicode.ToLower(r0) == unicode.ToLower(r1)
 }
 
-// TrimPrefix performs a case-insensitive trim of the specified prefix from the string s.
+// TrimPrefixFolded performs a case-insensitive trim of the specified prefix from the string s.
 // If s does not start with the prefix (case-insensitive), s is returned unchanged.
 // functionally,its identical to strings.TrimPrefix but case-insensitive.
-func TrimPrefix(s, prefix string) string {
+func TrimPrefixFolded(s, prefix string) string {
 	if len(prefix) == 0 || len(prefix) > len(s) {
 		return s
 	}
@@ -932,10 +939,10 @@ func TrimPrefix(s, prefix string) string {
 	return s[i:]
 }
 
-// TrimSuffix performs a case-insensitive trim of the specified suffix from the string s.
+// TrimSuffixFolded performs a case-insensitive trim of the specified suffix from the string s.
 // If s does not end with the suffix (case-insensitive), s is returned unchanged.
 // functionally,its identical to strings.TrimSuffix but case-insensitive.
-func TrimSuffix(s, suffix string) string {
+func TrimSuffixFolded(s, suffix string) string {
 	if len(suffix) > len(s) || len(suffix) == 0 {
 		return s
 	}

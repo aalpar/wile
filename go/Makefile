@@ -1,6 +1,9 @@
 SOURCES=$(shell find . -type f -name "*.go" -print)
+BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
+BUILD_VERSION:=$(shell cat ../VERSION 2>/dev/null || echo "0.0.0")
 DIST_DIR=../dist
 MY_BIN=scheme
+
 
 .PHONY: build
 build: $(DIST_DIR)/$(MY_BIN)

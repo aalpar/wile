@@ -46,16 +46,16 @@ func TestGetEnvironmentVariableWithPATH(t *testing.T) {
 }
 
 func TestGetEnvironmentVariableWithNonexistentVar(t *testing.T) {
-	result, err := runSchemeCode(t, `(get-environment-variable "SKEME_NONEXISTENT_VAR_12345")`)
+	result, err := runSchemeCode(t, `(get-environment-variable "WILE_NONEXISTENT_VAR_12345")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
 }
 
 func TestGetEnvironmentVariableWithTestVar(t *testing.T) {
-	os.Setenv("SKEME_TEST_VAR", "test_value") //nolint:errcheck
-	defer os.Unsetenv("SKEME_TEST_VAR")       //nolint:errcheck
+	os.Setenv("WILE_TEST_VAR", "test_value") //nolint:errcheck
+	defer os.Unsetenv("WILE_TEST_VAR")       //nolint:errcheck
 
-	result, err := runSchemeCode(t, `(get-environment-variable "SKEME_TEST_VAR")`)
+	result, err := runSchemeCode(t, `(get-environment-variable "WILE_TEST_VAR")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.NewString("test_value"))
 }

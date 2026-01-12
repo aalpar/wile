@@ -1,5 +1,5 @@
 # Private docs
-docs/
+private/
 
 # Build outputs
 dist/
@@ -7,6 +7,7 @@ dist/
 # IDE and editor directories
 .idea/
 .vscode/
+.run/
 *.swp
 *.swo
 *~
