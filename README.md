@@ -16,8 +16,6 @@ Wile was originally a Lisp interpreter (compiler and VM) used for scripting bloc
 
 The world isn't really in need of another Scheme implementation - there are plenty out there. The primary use of this implementation is for embedding into Go. Go was seen as a good candidate for embedding Scheme because it's already got garbage collection (saving the need to implement garbage collection for Scheme), and Go's use in many server-side applications - such as web-servers and database servers.
 
-Foreign functions from Scheme to Go were easy to implement as well as conventions for linking in dynamic libraries.
-
 ### Use of AI
 
 Anthropic's Claude Code was used to help document, fill out the primitive library, and diagnose bugs. The `CLAUDE.md` file is committed to help others get started.
