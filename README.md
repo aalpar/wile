@@ -1,6 +1,6 @@
 # Wile
 
-A Scheme interpreter/compiler in Go with hygienic macros.
+A R7RS Scheme interpreter/compiler in Go with hygienic macros.
 
 The name is a play on "scheme" (as in "wiles" - cunning stratagems) and a nod to Wile E. Coyote, the cartoon schemer.
 
