@@ -1,0 +1,693 @@
+# Wile Primitives Reference
+
+Complete list of supported types, primitives, and special forms in Wile.
+
+## Types
+
+### Core Types
+
+| Type | Description |
+|------|-------------|
+| Boolean | Truth values `#t` and `#f` |
+| Character | Unicode character, e.g., `#\a`, `#\newline` |
+| Symbol | Interned identifier name |
+| Pair | Cons cell with car and cdr, basis for lists |
+| Null | Empty list `()` |
+| Vector | Fixed-size mutable array, e.g., `#(1 2 3)` |
+| String | Immutable UTF-8 text |
+| Bytevector | Fixed-size byte array, e.g., `#u8(0 1 2)` |
+| Procedure | Lambda or primitive function |
+
+### Numeric Types
+
+| Type | Description |
+|------|-------------|
+| Integer | Exact 64-bit signed integer |
+| Big-Integer | Exact arbitrary-precision integer, e.g., `#z12345678901234567890` |
+| Float | Inexact IEEE 754 double-precision number |
+| Big-Real | Inexact arbitrary-precision floating-point number, e.g., `#m3.14159265358979323846` |
+| Rational | Exact fraction with arbitrary precision |
+| Complex | Complex number with real and imaginary parts |
+
+### I/O Port Types
+
+| Type | Description |
+|------|-------------|
+| Character Input Port | Text input stream for reading characters |
+| Character Output Port | Text output stream for writing characters |
+| Binary Input Port | Byte input stream for reading bytes |
+| Binary Output Port | Byte output stream for writing bytes |
+| String Port | Port backed by a string buffer |
+| Bytevector Port | Port backed by a bytevector buffer |
+
+### Record Types
+
+| Type | Description |
+|------|-------------|
+| Record Type | Descriptor defining a record's structure |
+| Record | Instance of a user-defined record type |
+
+### Control Flow Types
+
+| Type | Description |
+|------|-------------|
+| Promise | Delayed computation for lazy evaluation |
+| Continuation | Captured execution context |
+
+### Error Types
+
+| Type | Description |
+|------|-------------|
+| Error Object | Exception with message and irritants |
+| EOF Object | End-of-file marker `#!eof` |
+
+### Threading Types (SRFI-18)
+
+| Type | Description |
+|------|-------------|
+| Thread | Concurrent thread of execution |
+| Mutex | Mutual exclusion lock |
+| Condition Variable | Thread synchronization primitive |
+| Time | Point in time for timeouts |
+
+### Go Concurrency Types
+
+| Type | Description |
+|------|-------------|
+| Channel | Go channel for message passing |
+| WaitGroup | Counter for waiting on goroutines |
+| RWMutex | Read-write mutual exclusion lock |
+| Once | Ensures function runs exactly once |
+| Atomic | Thread-safe mutable value |
+
+### Meta Types
+
+| Type | Description |
+|------|-------------|
+| Syntax Object | Datum with lexical context information |
+| Environment | First-class evaluation environment |
+| Compile-Time Value | Value available during macro expansion |
+| Void | Absence of a meaningful value `#!void` |
+
+## Special Forms (Compile-Time)
+
+| Form | Description |
+|------|-------------|
+| `if` | Conditional expression |
+| `lambda` | Create a procedure |
+| `case-lambda` | Create a procedure with multiple arities |
+| `quote` | Return datum without evaluation |
+| `define` | Define a variable or procedure |
+| `define-syntax` | Define a syntax transformer |
+| `set!` | Mutate a variable binding |
+| `begin` | Sequence expressions |
+| `include` | Include source file contents |
+| `include-ci` | Include source file with case-insensitive symbols |
+| `quasiquote` | Template with unquote escapes |
+| `unquote` | Escape from quasiquote |
+| `unquote-splicing` | Splice escape from quasiquote |
+| `cond-expand` | Conditional expansion based on features |
+| `define-for-syntax` | Define binding for macro expansion phase |
+| `begin-for-syntax` | Sequence expressions at macro expansion phase |
+| `eval-when` | Control evaluation timing |
+
+## Derived Forms (Macros)
+
+| Form | Description |
+|------|-------------|
+| `and` | Short-circuit logical and |
+| `or` | Short-circuit logical or |
+| `let` | Local bindings (parallel) |
+| `let*` | Local bindings (sequential) |
+| `letrec` | Recursive local bindings |
+| `cond` | Multi-way conditional |
+| `when` | One-armed conditional with implicit begin |
+| `unless` | Negated one-armed conditional |
+| `delay` | Create a promise (lazy evaluation) |
+| `delay-force` | Create a promise that forces its result |
+| `parameterize` | Dynamic binding for parameters |
+| `guard` | Exception handling with condition clauses |
+| `define-record-type` | Define a record type with constructor and accessors |
+| `let-values` | Bind multiple values |
+| `let*-values` | Bind multiple values sequentially |
+| `do` | Iteration construct |
+
+## Arithmetic
+
+| Primitive | Description |
+|-----------|-------------|
+| `+` | Add numbers |
+| `-` | Subtract numbers |
+| `*` | Multiply numbers |
+| `/` | Divide numbers |
+
+## Numeric Comparisons
+
+| Primitive | Description |
+|-----------|-------------|
+| `=` | Numeric equality |
+| `<` | Less than |
+| `>` | Greater than |
+| `<=` | Less than or equal |
+| `>=` | Greater than or equal |
+
+## Type Predicates
+
+| Primitive | Description |
+|-----------|-------------|
+| `null?` | Test for empty list |
+| `pair?` | Test for pair |
+| `number?` | Test for number |
+| `boolean?` | Test for boolean |
+| `string?` | Test for string |
+| `symbol?` | Test for symbol |
+| `procedure?` | Test for procedure |
+| `vector?` | Test for vector |
+| `char?` | Test for character |
+| `port?` | Test for port |
+| `list?` | Test for proper list |
+
+## Numeric Type Predicates
+
+| Primitive | Description |
+|-----------|-------------|
+| `integer?` | Test for integer |
+| `real?` | Test for real number |
+| `rational?` | Test for rational number |
+| `complex?` | Test for complex number |
+| `exact?` | Test for exact number |
+| `inexact?` | Test for inexact number |
+| `exact-integer?` | Test for exact integer |
+| `zero?` | Test if number is zero |
+| `positive?` | Test if number is positive |
+| `negative?` | Test if number is negative |
+| `odd?` | Test if integer is odd |
+| `even?` | Test if integer is even |
+
+## Boolean Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `not` | Logical negation |
+
+## Equality Predicates
+
+| Primitive | Description |
+|-----------|-------------|
+| `eq?` | Identity comparison |
+| `eqv?` | Equivalence comparison |
+| `equal?` | Recursive structural equality |
+
+## Identifier Comparison
+
+| Primitive | Description |
+|-----------|-------------|
+| `bound-identifier=?` | Compare identifiers by binding |
+| `free-identifier=?` | Compare identifiers by free reference |
+
+## Syntax Objects
+
+| Primitive | Description |
+|-----------|-------------|
+| `identifier?` | Test for identifier syntax object |
+| `syntax->datum` | Convert syntax object to datum |
+| `datum->syntax` | Convert datum to syntax object |
+| `generate-temporaries` | Generate unique temporary identifiers |
+
+## Pairs and Lists
+
+| Primitive | Description |
+|-----------|-------------|
+| `car` | First element of pair |
+| `cdr` | Rest of pair |
+| `set-car!` | Mutate car of pair |
+| `set-cdr!` | Mutate cdr of pair |
+| `cons` | Construct a pair |
+| `list` | Construct a list |
+| `make-list` | Create list of given length |
+| `append` | Concatenate lists |
+| `length` | Length of list |
+| `reverse` | Reverse a list |
+| `list-ref` | Get element by index |
+| `list-set!` | Set element by index |
+| `list-tail` | Get tail starting at index |
+| `memq` | Find element using eq? |
+| `memv` | Find element using eqv? |
+| `member` | Find element using equal? |
+| `assq` | Association list lookup using eq? |
+| `assv` | Association list lookup using eqv? |
+| `assoc` | Association list lookup using equal? |
+
+## CxR Accessors (2-level)
+
+| Primitive | Description |
+|-----------|-------------|
+| `caar` | (car (car x)) |
+| `cadr` | (car (cdr x)) |
+| `cdar` | (cdr (car x)) |
+| `cddr` | (cdr (cdr x)) |
+
+## CxR Accessors (3-level)
+
+| Primitive | Description |
+|-----------|-------------|
+| `caaar` | (car (car (car x))) |
+| `caadr` | (car (car (cdr x))) |
+| `cadar` | (car (cdr (car x))) |
+| `caddr` | (car (cdr (cdr x))) |
+| `cdaar` | (cdr (car (car x))) |
+| `cdadr` | (cdr (car (cdr x))) |
+| `cddar` | (cdr (cdr (car x))) |
+| `cdddr` | (cdr (cdr (cdr x))) |
+
+## CxR Accessors (4-level)
+
+| Primitive | Description |
+|-----------|-------------|
+| `caaaar` | (car (car (car (car x)))) |
+| `caaadr` | (car (car (car (cdr x)))) |
+| `caadar` | (car (car (cdr (car x)))) |
+| `caaddr` | (car (car (cdr (cdr x)))) |
+| `cadaar` | (car (cdr (car (car x)))) |
+| `cadadr` | (car (cdr (car (cdr x)))) |
+| `caddar` | (car (cdr (cdr (car x)))) |
+| `cadddr` | (car (cdr (cdr (cdr x)))) |
+| `cdaaar` | (cdr (car (car (car x)))) |
+| `cdaadr` | (cdr (car (car (cdr x)))) |
+| `cdadar` | (cdr (car (cdr (car x)))) |
+| `cdaddr` | (cdr (car (cdr (cdr x)))) |
+| `cddaar` | (cdr (cdr (car (car x)))) |
+| `cddadr` | (cdr (cdr (car (cdr x)))) |
+| `cdddar` | (cdr (cdr (cdr (car x)))) |
+| `cddddr` | (cdr (cdr (cdr (cdr x)))) |
+
+## Numeric Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `abs` | Absolute value |
+| `max` | Maximum of numbers |
+| `min` | Minimum of numbers |
+| `floor` | Round toward negative infinity |
+| `ceiling` | Round toward positive infinity |
+| `truncate` | Round toward zero |
+| `round` | Round to nearest integer |
+| `quotient` | Integer division |
+| `remainder` | Integer division remainder |
+| `modulo` | Modular arithmetic |
+| `floor/` | Floor division returning two values |
+| `floor-quotient` | Quotient from floor division |
+| `floor-remainder` | Remainder from floor division |
+| `truncate/` | Truncate division returning two values |
+| `truncate-quotient` | Quotient from truncate division |
+| `truncate-remainder` | Remainder from truncate division |
+| `gcd` | Greatest common divisor |
+| `lcm` | Least common multiple |
+| `expt` | Exponentiation |
+| `square` | Square a number |
+| `sqrt` | Square root |
+| `exact-integer-sqrt` | Exact integer square root |
+| `exact` | Convert to exact number |
+| `inexact` | Convert to inexact number |
+| `numerator` | Numerator of rational |
+| `denominator` | Denominator of rational |
+| `rationalize` | Find rational approximation |
+
+## Transcendental Functions
+
+| Primitive | Description |
+|-----------|-------------|
+| `exp` | Exponential function |
+| `log` | Natural logarithm |
+| `sin` | Sine |
+| `cos` | Cosine |
+| `tan` | Tangent |
+| `asin` | Arcsine |
+| `acos` | Arccosine |
+| `atan` | Arctangent |
+| `finite?` | Test for finite number |
+| `infinite?` | Test for infinity |
+| `nan?` | Test for NaN |
+
+## Complex Numbers
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-rectangular` | Create complex from real and imaginary parts |
+| `make-polar` | Create complex from magnitude and angle |
+| `real-part` | Real part of complex |
+| `imag-part` | Imaginary part of complex |
+| `magnitude` | Magnitude of complex |
+| `angle` | Angle of complex |
+
+## String Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `string-length` | Length of string |
+| `string-ref` | Character at index |
+| `string-append` | Concatenate strings |
+| `string=?` | String equality |
+| `string<?` | String less than |
+| `string>?` | String greater than |
+| `string<=?` | String less than or equal |
+| `string>=?` | String greater than or equal |
+| `string-ci=?` | Case-insensitive string equality |
+| `string-ci<?` | Case-insensitive string less than |
+| `string-ci>?` | Case-insensitive string greater than |
+| `string-ci<=?` | Case-insensitive string less than or equal |
+| `string-ci>=?` | Case-insensitive string greater than or equal |
+| `string-upcase` | Convert string to uppercase |
+| `string-downcase` | Convert string to lowercase |
+| `substring` | Extract substring |
+| `number->string` | Convert number to string |
+| `string->number` | Parse number from string |
+| `symbol->string` | Convert symbol to string |
+| `string->symbol` | Convert string to symbol |
+| `string->list` | Convert string to list of characters |
+| `list->string` | Convert list of characters to string |
+
+## Character Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `char=?` | Character equality |
+| `char<?` | Character less than |
+| `char>?` | Character greater than |
+| `char<=?` | Character less than or equal |
+| `char>=?` | Character greater than or equal |
+| `char->integer` | Convert character to integer code point |
+| `integer->char` | Convert integer code point to character |
+| `char-alphabetic?` | Test for alphabetic character |
+| `char-numeric?` | Test for numeric character |
+| `char-whitespace?` | Test for whitespace character |
+| `char-upper-case?` | Test for uppercase character |
+| `char-lower-case?` | Test for lowercase character |
+| `char-upcase` | Convert character to uppercase |
+| `char-downcase` | Convert character to lowercase |
+| `char-foldcase` | Convert character for case-insensitive comparison |
+| `digit-value` | Numeric value of digit character |
+
+## Vector Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-vector` | Create vector of given length |
+| `vector` | Create vector from arguments |
+| `vector-length` | Length of vector |
+| `vector-ref` | Element at index |
+| `vector-set!` | Set element at index |
+| `vector->list` | Convert vector to list |
+| `list->vector` | Convert list to vector |
+
+## Bytevector Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `bytevector?` | Test for bytevector |
+| `make-bytevector` | Create bytevector of given length |
+| `bytevector` | Create bytevector from arguments |
+| `bytevector-length` | Length of bytevector |
+| `bytevector-u8-ref` | Get byte at index |
+| `bytevector-u8-set!` | Set byte at index |
+| `bytevector-copy` | Copy bytevector |
+| `bytevector-copy!` | Copy bytes into bytevector |
+| `bytevector-append` | Concatenate bytevectors |
+| `utf8->string` | Decode UTF-8 bytevector to string |
+| `string->utf8` | Encode string to UTF-8 bytevector |
+
+## Input/Output
+
+| Primitive | Description |
+|-----------|-------------|
+| `read-token` | Read a single token |
+| `read-syntax` | Read datum as syntax object |
+| `read` | Read a datum |
+| `newline` | Write newline |
+| `write` | Write datum in machine-readable form |
+| `write-char` | Write a character |
+| `display` | Write datum in human-readable form |
+| `current-input-port` | Parameter for current input port |
+| `current-output-port` | Parameter for current output port |
+| `current-error-port` | Parameter for current error port |
+
+## File I/O
+
+| Primitive | Description |
+|-----------|-------------|
+| `open-input-file` | Open file for reading |
+| `open-output-file` | Open file for writing |
+| `close-port` | Close a port |
+| `close-input-port` | Close an input port |
+| `close-output-port` | Close an output port |
+| `input-port?` | Test for input port |
+| `output-port?` | Test for output port |
+| `input-port-open?` | Test if input port is open |
+| `output-port-open?` | Test if output port is open |
+| `file-exists?` | Test if file exists |
+| `delete-file` | Delete a file |
+| `eof-object` | Return the EOF object |
+| `eof-object?` | Test for EOF object |
+| `call-with-input-file` | Call procedure with input file port |
+| `call-with-output-file` | Call procedure with output file port |
+| `open-binary-input-file` | Open binary file for reading |
+| `open-binary-output-file` | Open binary file for writing |
+| `with-input-from-file` | Execute with file as current input |
+| `with-output-to-file` | Execute with file as current output |
+| `write-simple` | Write datum without shared structure |
+| `write-shared` | Write datum showing shared structure |
+
+## String and Bytevector Ports
+
+| Primitive | Description |
+|-----------|-------------|
+| `open-input-string` | Create input port from string |
+| `open-output-string` | Create output string port |
+| `get-output-string` | Get accumulated string from output port |
+| `open-input-bytevector` | Create input port from bytevector |
+| `open-output-bytevector` | Create output bytevector port |
+| `get-output-bytevector` | Get accumulated bytevector from output port |
+
+## Process Context
+
+| Primitive | Description |
+|-----------|-------------|
+| `command-line` | Get command-line arguments |
+| `exit` | Exit with status code |
+| `emergency-exit` | Exit immediately without cleanup |
+| `get-environment-variable` | Get environment variable value |
+| `get-environment-variables` | Get all environment variables |
+
+## Time
+
+| Primitive | Description |
+|-----------|-------------|
+| `current-second` | Current time in seconds since epoch |
+| `current-jiffy` | Current time in jiffies |
+| `jiffies-per-second` | Number of jiffies per second |
+
+## Higher-Order Functions
+
+| Primitive | Description |
+|-----------|-------------|
+| `apply` | Apply procedure to argument list |
+| `map` | Apply procedure to each element |
+| `for-each` | Apply procedure for side effects |
+
+## Continuations
+
+| Primitive | Description |
+|-----------|-------------|
+| `call-with-current-continuation` | Capture current continuation |
+| `call/cc` | Alias for call-with-current-continuation |
+| `dynamic-wind` | Establish before/after thunks |
+
+## Multiple Values
+
+| Primitive | Description |
+|-----------|-------------|
+| `values` | Return multiple values |
+| `call-with-values` | Receive multiple values |
+
+## Exception Handling
+
+| Primitive | Description |
+|-----------|-------------|
+| `error-object?` | Test for error object |
+| `error-object-message` | Get error message |
+| `error-object-irritants` | Get error irritants |
+| `with-exception-handler` | Install exception handler |
+| `raise` | Raise an exception |
+| `raise-continuable` | Raise a continuable exception |
+| `error` | Signal an error |
+
+## Feature Detection
+
+| Primitive | Description |
+|-----------|-------------|
+| `features` | List of supported features |
+
+## Promises
+
+| Primitive | Description |
+|-----------|-------------|
+| `promise?` | Test for promise |
+| `make-promise` | Create an already-forced promise |
+| `force` | Force evaluation of promise |
+
+## Evaluation
+
+| Primitive | Description |
+|-----------|-------------|
+| `eval` | Evaluate expression in environment |
+| `interaction-environment` | Get interactive environment |
+| `scheme-report-environment` | Get R5RS environment |
+| `null-environment` | Get minimal environment |
+| `environment` | Create environment from library specs |
+
+## Loading
+
+| Primitive | Description |
+|-----------|-------------|
+| `load` | Load and execute a file |
+
+## Expansion and Compilation
+
+| Primitive | Description |
+|-----------|-------------|
+| `expand` | Fully expand an expression |
+| `expand-once` | Expand one level of macros |
+| `syntax-local-value` | Get compile-time value of binding |
+| `make-compile-time-value` | Create a compile-time value |
+| `syntax-local-introduce` | Introduce syntax marks |
+| `syntax-local-identifier-as-binding` | Convert identifier to binding form |
+| `compile` | Compile an expression |
+
+## Parameters
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-parameter` | Create a parameter object |
+| `parameter?` | Test for parameter |
+
+## Records
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-record-type` | Create a new record type |
+| `record-type?` | Test for record type |
+| `record?` | Test for record instance |
+| `record-type` | Get type of record |
+| `record-constructor` | Get record constructor |
+| `record-predicate` | Get record predicate |
+| `record-accessor` | Get record field accessor |
+| `record-modifier` | Get record field modifier |
+
+## Threads (SRFI-18)
+
+| Primitive | Description |
+|-----------|-------------|
+| `current-thread` | Get current thread |
+| `thread?` | Test for thread |
+| `make-thread` | Create a new thread |
+| `thread-name` | Get thread name |
+| `thread-specific` | Get thread-specific data |
+| `thread-specific-set!` | Set thread-specific data |
+| `thread-start!` | Start a thread |
+| `thread-yield!` | Yield to other threads |
+| `thread-sleep!` | Sleep for duration |
+| `thread-terminate!` | Terminate a thread |
+| `thread-join!` | Wait for thread completion |
+
+## Mutexes (SRFI-18)
+
+| Primitive | Description |
+|-----------|-------------|
+| `mutex?` | Test for mutex |
+| `make-mutex` | Create a new mutex |
+| `mutex-name` | Get mutex name |
+| `mutex-specific` | Get mutex-specific data |
+| `mutex-specific-set!` | Set mutex-specific data |
+| `mutex-state` | Get mutex state |
+| `mutex-lock!` | Lock a mutex |
+| `mutex-unlock!` | Unlock a mutex |
+
+## Condition Variables (SRFI-18)
+
+| Primitive | Description |
+|-----------|-------------|
+| `condition-variable?` | Test for condition variable |
+| `make-condition-variable` | Create a condition variable |
+| `condition-variable-name` | Get condition variable name |
+| `condition-variable-specific` | Get condition variable-specific data |
+| `condition-variable-specific-set!` | Set condition variable-specific data |
+| `condition-variable-signal!` | Signal one waiting thread |
+| `condition-variable-broadcast!` | Signal all waiting threads |
+
+## Time Objects (SRFI-18)
+
+| Primitive | Description |
+|-----------|-------------|
+| `current-time` | Get current time object |
+| `time?` | Test for time object |
+| `time->seconds` | Convert time to seconds |
+| `seconds->time` | Convert seconds to time |
+
+## Go Channels
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-channel` | Create a Go channel |
+| `channel?` | Test for channel |
+| `channel-send!` | Send value to channel (blocking) |
+| `channel-receive` | Receive value from channel (blocking) |
+| `channel-try-send!` | Send value to channel (non-blocking) |
+| `channel-try-receive` | Receive value from channel (non-blocking) |
+| `channel-close!` | Close a channel |
+| `channel-closed?` | Test if channel is closed |
+| `channel-length` | Number of elements in channel buffer |
+| `channel-capacity` | Channel buffer capacity |
+
+## Go WaitGroup
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-wait-group` | Create a WaitGroup |
+| `wait-group?` | Test for WaitGroup |
+| `wait-group-add!` | Add to WaitGroup counter |
+| `wait-group-done!` | Decrement WaitGroup counter |
+| `wait-group-wait!` | Wait for WaitGroup to reach zero |
+
+## Go RWMutex
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-rw-mutex` | Create a read-write mutex |
+| `rw-mutex?` | Test for RWMutex |
+| `rw-mutex-read-lock!` | Acquire read lock |
+| `rw-mutex-read-unlock!` | Release read lock |
+| `rw-mutex-write-lock!` | Acquire write lock |
+| `rw-mutex-write-unlock!` | Release write lock |
+| `rw-mutex-try-read-lock!` | Try to acquire read lock |
+| `rw-mutex-try-write-lock!` | Try to acquire write lock |
+
+## Go Once
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-once` | Create a Once object |
+| `once?` | Test for Once |
+| `once-do!` | Execute function exactly once |
+| `once-done?` | Test if Once has executed |
+
+## Go Atomic
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-atomic` | Create an atomic value |
+| `atomic?` | Test for atomic value |
+| `atomic-load` | Load atomic value |
+| `atomic-store!` | Store atomic value |
+| `atomic-swap!` | Swap atomic value, return old |
+| `atomic-compare-and-swap!` | Compare and swap atomically |
+
