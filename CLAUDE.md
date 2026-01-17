@@ -101,3 +101,15 @@ if err := doSomething(); err != nil { ... }
 - `PRIMITIVES.md` - Complete primitives reference
 - `go/DESIGN.md` - Macro system design details
 - `BIBLIOGRAPHY.md` - Academic references (Flatt 2016, R7RS)
+
+## R7RS Conformance
+
+This project aims to implement R7RS-small. Key resources:
+
+| Source | URL |
+|--------|-----|
+| R7RS-small PDF | https://small.r7rs.org/attachment/r7rs.pdf |
+| R7RS Corrected (HTML) | https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-8.html |
+| R7RS-large Wiki (in progress) | https://codeberg.org/scheme/r7rs/wiki |
+
+**Testing policy**: Tests that conform to R7RS must not be removed or reverted. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed—not the test. See `go/runtime/primitives/CLAUDE.md` for detailed type requirements.
