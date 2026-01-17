@@ -122,7 +122,6 @@ func (p *BigInteger) Subtract(o Number) Number {
 	switch v := o.(type) {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}
-		//return &BigInteger{value: new(big.Int).Sub(p.value, v.value)}
 	case *Integer:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, big.NewInt(v.Value))}
 	case *Float:
