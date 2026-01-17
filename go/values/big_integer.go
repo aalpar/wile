@@ -111,6 +111,12 @@ func (p *BigInteger) Subtract(o Number) Number {
 }
 
 // Multiply returns the product of this BigInteger and another number.
+//
+// R7RS §6.2.6: The * procedure returns the product of its arguments.
+// R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
+// Exception: Exact zero dominates—(* 0 x) may return exact 0 even when
+// x is inexact. Zero is an exact value when the result is mathematically
+// unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
 		return NewBigIntegerFromInt64(0)
