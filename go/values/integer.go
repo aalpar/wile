@@ -42,6 +42,12 @@ func init() {
 }
 
 // Integer represents a Scheme integer value.
+//
+// R7RS §6.2.1: Integers are exact numbers in the numeric tower hierarchy:
+//   number ⊃ complex ⊃ real ⊃ rational ⊃ integer
+//
+// R7RS §6.2.2: Integer is always exact. Operations on exact numbers
+// produce exact results when mathematically well-defined.
 type Integer struct {
 	Value int64
 }
@@ -61,6 +67,11 @@ func (p *Integer) Datum() int64 {
 }
 
 // Add returns the sum of this integer and another number.
+//
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
+// When adding Integer + BigInteger, result is BigInteger (exact).
+// When adding Integer + Float/Complex, result is Float/Complex (inexact).
 func (p *Integer) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -71,8 +82,11 @@ func (p *Integer) Add(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewInteger(p.Value + v.Value)
+	case *BigInteger:
+		result := newBigIntFromOp((*big.Int).Add, big.NewInt(p.Value), v.value)
+		return &BigInteger{value: result}
 	case *Float:
-		return NewFloat(float64(p.Value) + float64(v.Value))
+		return NewFloat(float64(p.Value) + v.Value)
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		result := new(big.Rat).Add(self, v.Rat())
@@ -84,6 +98,9 @@ func (p *Integer) Add(o Number) Number {
 }
 
 // Subtract returns the difference of this integer and another number.
+//
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *Integer) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -91,6 +108,9 @@ func (p *Integer) Subtract(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewInteger(p.Value - v.Value)
+	case *BigInteger:
+		result := newBigIntFromOp((*big.Int).Sub, big.NewInt(p.Value), v.value)
+		return &BigInteger{value: result}
 	case *Float:
 		return NewFloat(float64(p.Value) - v.Value)
 	case *Rational:
@@ -104,6 +124,9 @@ func (p *Integer) Subtract(o Number) Number {
 }
 
 // Multiply returns the product of this integer and another number.
+//
+// R7RS §6.2.6: The * procedure returns the product of its arguments.
+// R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
 func (p *Integer) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -111,6 +134,9 @@ func (p *Integer) Multiply(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewInteger(p.Value * v.Value)
+	case *BigInteger:
+		result := newBigIntFromOp((*big.Int).Mul, big.NewInt(p.Value), v.value)
+		return &BigInteger{value: result}
 	case *Float:
 		return NewFloat(float64(p.Value) * v.Value)
 	case *Rational:
@@ -124,6 +150,14 @@ func (p *Integer) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of this integer and another number.
+//
+// R7RS §6.2.6: The / procedure returns the quotient of its arguments.
+// For exact arguments, / may return a non-integer (Rational) when the
+// mathematical result is not an integer. Returns Integer only when
+// the division is exact.
+//
+// R7RS §6.2.2 Exactness: exact / exact = exact (Integer or Rational),
+// exact / inexact = inexact (Float or Complex).
 func (p *Integer) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
@@ -135,6 +169,8 @@ func (p *Integer) Divide(o Number) Number {
 			return NewInteger(result.NumInt64())
 		}
 		return result
+	case *BigInteger:
+		return NewRationalFromBigInt(big.NewInt(p.Value), v.value)
 	case *Float:
 		return NewFloat(float64(p.Value) / v.Value)
 	case *Rational:
@@ -153,10 +189,15 @@ func (p *Integer) IsZero() bool {
 }
 
 // LessThan returns true if this integer is less than another number.
+//
+// R7RS §6.2.6: The < procedure returns #t if its arguments are monotonically
+// increasing. Comparison across numeric types uses mathematical value.
 func (p *Integer) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Integer:
 		return p.Value < v.Value
+	case *BigInteger:
+		return big.NewInt(p.Value).Cmp(v.BigInt()) < 0
 	case *Float:
 		return float64(p.Value) < v.Value
 	case *Rational:
@@ -174,6 +215,9 @@ func (p *Integer) IsVoid() bool {
 }
 
 // EqualTo returns true if both integers have the same value.
+//
+// R7RS §6.2.6: The = procedure compares numerical values for equality.
+// This implements structural equality for the Integer type specifically.
 func (p *Integer) EqualTo(v Value) bool {
 	other, ok := v.(*Integer)
 	if ok {
