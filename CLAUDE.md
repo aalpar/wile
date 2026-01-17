@@ -101,3 +101,51 @@ if err := doSomething(); err != nil { ... }
 - `PRIMITIVES.md` - Complete primitives reference
 - `go/DESIGN.md` - Macro system design details
 - `BIBLIOGRAPHY.md` - Academic references (Flatt 2016, R7RS)
+
+## R7RS Conformance
+
+This project aims to implement R7RS-small. Key resources:
+
+| Source | URL |
+|--------|-----|
+| R7RS-small PDF | https://small.r7rs.org/attachment/r7rs.pdf |
+| R7RS Corrected (HTML) | https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-8.html |
+| R7RS-large Wiki (in progress) | https://codeberg.org/scheme/r7rs/wiki |
+
+**Testing policy**: Tests that conform to R7RS must not be removed or reverted. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed—not the test. See `go/runtime/primitives/CLAUDE.md` for detailed type requirements.
+
+### R7RS Specification Comments
+
+Functions implementing R7RS-specified behavior must include comments citing the relevant specification section. This ensures traceability and helps maintain conformance.
+
+**Format**: Use `R7RS §X.Y.Z` notation in doc comments.
+
+**Example**:
+```go
+// Add returns the sum of this integer and another number.
+//
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
+func (p *Integer) Add(o Number) Number {
+```
+
+**When to include R7RS citations**:
+- Type definitions for Scheme value types (Integer, Pair, etc.)
+- Arithmetic and comparison operations
+- Type predicates and conversions (exact, inexact, integer?, etc.)
+- Primitive procedure implementations
+- Exactness preservation/contagion behavior
+- Any behavior specified by R7RS sections 4-6
+
+**Key R7RS sections**:
+| Section | Topic |
+|---------|-------|
+| §4.1-4.3 | Expressions, syntax |
+| §5.1-5.5 | Program structure, definitions |
+| §6.1 | Equivalence predicates |
+| §6.2 | Numbers (tower, exactness, operations) |
+| §6.3 | Booleans, pairs, lists, symbols, characters, strings, vectors |
+| §6.4 | Bytevectors |
+| §6.5 | Control features |
+| §6.6 | Exceptions |
+| §6.7-6.13 | Environments, I/O, system interface |

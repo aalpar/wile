@@ -1,6 +1,6 @@
 # Wile
 
-A Scheme interpreter/compiler in Go with hygienic macros.
+A R7RS Scheme interpreter/compiler in Go with hygienic macros.
 
 The name is a play on "scheme" (as in "wiles" - cunning stratagems) and a nod to Wile E. Coyote, the cartoon schemer.
 
@@ -15,8 +15,6 @@ Wile was originally a Lisp interpreter (compiler and VM) used for scripting bloc
 ### Why Another Scheme Implementation?
 
 The world isn't really in need of another Scheme implementation - there are plenty out there. The primary use of this implementation is for embedding into Go. Go was seen as a good candidate for embedding Scheme because it's already got garbage collection (saving the need to implement garbage collection for Scheme), and Go's use in many server-side applications - such as web-servers and database servers.
-
-Foreign functions from Scheme to Go were easy to implement as well as conventions for linking in dynamic libraries.
 
 ### Use of AI
 

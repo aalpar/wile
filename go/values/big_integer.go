@@ -24,7 +24,17 @@ var (
 )
 
 // BigInteger represents an arbitrary-precision integer.
-// Created with the #m prefix in Scheme (e.g., #m12345678901234567890).
+// Created with the #z prefix in Scheme (e.g., #z12345678901234567890).
+//
+// R7RS §6.2.1: Integers are exact numbers in the numeric tower hierarchy:
+//
+//	number ⊃ complex ⊃ real ⊃ rational ⊃ integer
+//
+// R7RS §6.2.2: BigInteger is always exact. Operations on exact numbers
+// produce exact results when mathematically well-defined.
+//
+// R7RS §6.2.3: Implementations may support arbitrarily large exact integers.
+// BigInteger provides this capability using Go's math/big.Int.
 type BigInteger struct {
 	value *big.Int
 }
@@ -50,6 +60,15 @@ func NewBigIntegerFromString(s string, base int) *BigInteger {
 	return &BigInteger{value: v}
 }
 
+func newBigIntFromOp(fn func(p0, v0, v1 *big.Int) *big.Int, v0, v1 *big.Int) *big.Int {
+	return fn(new(big.Int), v0, v1)
+}
+
+func float64FromBigInt(bi *big.Int) float64 {
+	f, _ := new(big.Float).SetInt(bi).Float64()
+	return f
+}
+
 // BigInt returns the underlying big.Int value.
 func (p *BigInteger) BigInt() *big.Int {
 	return p.value
@@ -61,6 +80,10 @@ func (p *BigInteger) Int64() int64 {
 }
 
 // Add returns the sum of this BigInteger and another number.
+//
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
+// exact + inexact = inexact (Float/Complex).
 func (p *BigInteger) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -70,41 +93,47 @@ func (p *BigInteger) Add(o Number) Number {
 	}
 	switch v := o.(type) {
 	case *BigInteger:
-		return &BigInteger{value: new(big.Int).Add(p.value, v.value)}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: new(big.Int).Add(p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, big.NewInt(v.Value))}
 	case *Float:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		// no constructor for big.Float from big.Int, so convert via float64
+		f := float64FromBigInt(p.value)
 		return NewFloat(f + v.Value)
 	case *Rational:
 		// Convert BigInteger to Rational and add
 		pRat := new(big.Rat).SetInt(p.value)
 		return NewRationalFromRat(new(big.Rat).Add(pRat, v.Rat()))
 	case *Complex:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
+		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) + v.Datum())
 	}
 	return nil
 }
 
 // Subtract returns the difference of this BigInteger and another number.
+//
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *BigInteger) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
 	}
 	switch v := o.(type) {
 	case *BigInteger:
-		return &BigInteger{value: new(big.Int).Sub(p.value, v.value)}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: new(big.Int).Sub(p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, big.NewInt(v.Value))}
 	case *Float:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		return NewFloat(f - v.Value)
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return NewRationalFromRat(new(big.Rat).Sub(pRat, v.Rat()))
 	case *Complex:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
+		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) - v.Datum())
 	}
 	return nil
@@ -126,41 +155,59 @@ func (p *BigInteger) Multiply(o Number) Number {
 	}
 	switch v := o.(type) {
 	case *BigInteger:
-		return &BigInteger{value: new(big.Int).Mul(p.value, v.value)}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: new(big.Int).Mul(p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, big.NewInt(v.Value))}
 	case *Float:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		return NewFloat(f * v.Value)
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return NewRationalFromRat(new(big.Rat).Mul(pRat, v.Rat()))
 	case *Complex:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) * v.Datum())
 	}
 	return nil
 }
 
 // Divide returns the quotient of this BigInteger and another number.
+//
+// R7RS §6.2.6: The / procedure returns the quotient of its arguments.
+// For exact arguments, / may return a non-integer (Rational) when the
+// mathematical result is not an integer. Returns BigInteger only when
+// the division is exact (remainder is zero).
+//
+// R7RS §6.2.2 Exactness: exact / exact = exact (BigInteger or Rational),
+// exact / inexact = inexact (Float or Complex).
 func (p *BigInteger) Divide(o Number) Number {
 	if o.IsZero() {
 		return nil // Division by zero
 	}
 	switch v := o.(type) {
 	case *BigInteger:
-		// Return rational for exact division
+		// Check if division is exact
+		quo, rem := new(big.Int).QuoRem(p.value, v.value, new(big.Int))
+		if rem.Sign() == 0 {
+			return &BigInteger{value: quo}
+		}
 		return NewRationalFromBigInt(p.value, v.value)
 	case *Integer:
-		return NewRationalFromBigInt(p.value, big.NewInt(v.Value))
+		// Check if division is exact
+		divisor := big.NewInt(v.Value)
+		quo, rem := new(big.Int).QuoRem(p.value, divisor, new(big.Int))
+		if rem.Sign() == 0 {
+			return &BigInteger{value: quo}
+		}
+		return NewRationalFromBigInt(p.value, divisor)
 	case *Float:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		return NewFloat(f / v.Value)
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return NewRationalFromRat(new(big.Rat).Quo(pRat, v.Rat()))
 	case *Complex:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) / v.Datum())
 	}
 	return nil
@@ -177,6 +224,9 @@ func (p *BigInteger) IsZero() bool {
 }
 
 // LessThan returns true if this BigInteger is less than another number.
+//
+// R7RS §6.2.6: The < procedure returns #t if its arguments are monotonically
+// increasing. Comparison across numeric types uses mathematical value.
 func (p *BigInteger) LessThan(o Number) bool {
 	return p.Compare(o) < 0
 }
@@ -192,22 +242,36 @@ func (p *BigInteger) IsPositive() bool {
 }
 
 // IsExact returns true as BigInteger is always exact.
+//
+// R7RS §6.2.2: Integers (including BigInteger) are always exact.
 func (p *BigInteger) IsExact() bool {
 	return true
 }
 
 // ToExact returns this BigInteger as an exact number.
+//
+// R7RS §6.2.6: exact returns an exact representation of its argument.
+// Since BigInteger is already exact, it returns itself.
 func (p *BigInteger) ToExact() Number {
 	return p
 }
 
 // ToInexact returns this BigInteger converted to an inexact float.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+// Converts to Float (float64), which may lose precision for large values.
+//
+// R7RS §6.2.3: The inexact representation may have limited precision,
+// but the conversion should be as close as practical.
 func (p *BigInteger) ToInexact() Number {
-	f, _ := new(big.Float).SetInt(p.value).Float64()
+	f := float64FromBigInt(p.value)
 	return NewFloat(f)
 }
 
 // Compare compares this BigInteger with another number.
+//
+// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of
+// exactness. Returns -1, 0, or 1 for less than, equal, or greater than.
 func (p *BigInteger) Compare(o Number) int {
 	switch v := o.(type) {
 	case *BigInteger:
@@ -215,7 +279,7 @@ func (p *BigInteger) Compare(o Number) int {
 	case *Integer:
 		return p.value.Cmp(big.NewInt(v.Value))
 	case *Float:
-		f, _ := new(big.Float).SetInt(p.value).Float64()
+		f := float64FromBigInt(p.value)
 		if f < v.Value {
 			return -1
 		} else if f > v.Value {
@@ -240,6 +304,9 @@ func (p *BigInteger) IsVoid() bool {
 }
 
 // EqualTo returns true if this BigInteger equals another value.
+//
+// R7RS §6.2.6: The = procedure compares numerical values for equality.
+// BigInteger also compares equal to Integer when values match.
 func (p *BigInteger) EqualTo(o Value) bool {
 	v, ok := o.(*BigInteger)
 	if !ok {
