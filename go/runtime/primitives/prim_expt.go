@@ -17,6 +17,7 @@ package primitives
 import (
 	"context"
 	"math"
+	"math/big"
 	"math/cmplx"
 
 	"wile/machine"
@@ -36,13 +37,16 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "expt: expected a number but got %T", exp)
 	}
-	// Special case: integer exponents on integers
-	if baseInt, ok := baseNum.(*values.Integer); ok {
-		if expInt, ok := expNum.(*values.Integer); ok {
-			if expInt.Value >= 0 {
+
+	// Handle integer exponent cases for exactness preservation
+	if expInt, ok := expNum.(*values.Integer); ok {
+		e := expInt.Value
+
+		// Integer base with integer exponent
+		if baseInt, ok := baseNum.(*values.Integer); ok {
+			if e >= 0 {
 				result := int64(1)
 				b := baseInt.Value
-				e := expInt.Value
 				for e > 0 {
 					if e%2 == 1 {
 						result *= b
@@ -53,12 +57,68 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 				mc.SetValue(values.NewInteger(result))
 				return nil
 			}
-			// Negative exponent: return float
-			mc.SetValue(values.NewFloat(math.Pow(float64(baseInt.Value), float64(expInt.Value))))
+			// Negative exponent: return exact Rational 1/base^|exp|
+			result := int64(1)
+			b := baseInt.Value
+			absE := -e
+			for absE > 0 {
+				if absE%2 == 1 {
+					result *= b
+				}
+				b *= b
+				absE /= 2
+			}
+			mc.SetValue(values.NewRational(1, result))
+			return nil
+		}
+
+		// BigInteger base with integer exponent
+		if baseBig, ok := baseNum.(*values.BigInteger); ok {
+			if e >= 0 {
+				result := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(e), nil)
+				mc.SetValue(values.NewBigInteger(result))
+				return nil
+			}
+			// Negative exponent: return exact Rational 1/base^|exp|
+			absE := -e
+			denom := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(absE), nil)
+			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
+			return nil
+		}
+
+		// Rational base with integer exponent
+		if baseRat, ok := baseNum.(*values.Rational); ok {
+			num := baseRat.Num()
+			denom := baseRat.Denom()
+			if e >= 0 {
+				// (num/denom)^e = num^e / denom^e
+				numResult := new(big.Int).Exp(num, big.NewInt(e), nil)
+				denomResult := new(big.Int).Exp(denom, big.NewInt(e), nil)
+				result := values.NewRationalFromBigInt(numResult, denomResult)
+				// Simplify to Integer if possible
+				if result.IsInteger() {
+					mc.SetValue(values.NewInteger(result.NumInt64()))
+					return nil
+				}
+				mc.SetValue(result)
+				return nil
+			}
+			// Negative exponent: (num/denom)^-e = denom^|e| / num^|e|
+			absE := -e
+			numResult := new(big.Int).Exp(denom, big.NewInt(absE), nil)
+			denomResult := new(big.Int).Exp(num, big.NewInt(absE), nil)
+			result := values.NewRationalFromBigInt(numResult, denomResult)
+			// Simplify to Integer if possible
+			if result.IsInteger() {
+				mc.SetValue(values.NewInteger(result.NumInt64()))
+				return nil
+			}
+			mc.SetValue(result)
 			return nil
 		}
 	}
-	// General case: use float math
+
+	// General case: use float/complex math
 	switch b := baseNum.(type) {
 	case *values.Complex:
 		switch e := expNum.(type) {
@@ -76,6 +136,8 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 		switch v := baseNum.(type) {
 		case *values.Integer:
 			bf = float64(v.Value)
+		case *values.BigInteger:
+			bf, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 		case *values.Float:
 			bf = v.Value
 		case *values.Rational:

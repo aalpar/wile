@@ -16,6 +16,7 @@ package primitives
 
 import (
 	"context"
+	"math"
 
 	"wile/machine"
 	"wile/values"
@@ -24,6 +25,7 @@ import (
 // numericExtremum is a helper for min/max primitives.
 // First arg at index 0, rest at index 1. Returns the extremum value
 // where isBetter returns true if candidate should replace current.
+// Per R7RS, if any argument is inexact, the result is inexact.
 func numericExtremum(
 	mc *machine.MachineContext,
 	name string,
@@ -34,21 +36,45 @@ func numericExtremum(
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, first)
 	}
+
+	// Track if any argument is inexact
+	hasInexact := isInexact(best)
+
+	// Check if first is NaN
+	if f, ok := best.(*values.Float); ok && math.IsNaN(f.Value) {
+		mc.SetValue(best)
+		return nil
+	}
+
 	rest := mc.Arg(1)
 	pr, ok := rest.(*values.Pair)
 	if !ok {
 		if values.IsEmptyList(rest) {
-			mc.SetValue(best)
+			mc.SetValue(maybeToInexact(best, hasInexact))
 			return nil
 		}
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, rest)
 	}
+
+	foundNaN := false
 	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)
 		}
-		if isBetter(curr, best) {
+
+		if isInexact(curr) {
+			hasInexact = true
+		}
+
+		// Check for NaN - if any argument is NaN, result is NaN
+		if f, ok := curr.(*values.Float); ok && math.IsNaN(f.Value) {
+			foundNaN = true
+			best = curr
+			return nil
+		}
+
+		if !foundNaN && isBetter(curr, best) {
 			best = curr
 		}
 		return nil
@@ -59,6 +85,47 @@ func numericExtremum(
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
 	}
-	mc.SetValue(best)
+
+	// If NaN was found, return it directly
+	if foundNaN {
+		mc.SetValue(best)
+		return nil
+	}
+
+	mc.SetValue(maybeToInexact(best, hasInexact))
 	return nil
+}
+
+// isInexact returns true if the number is inexact (Float or Complex)
+func isInexact(n values.Number) bool {
+	switch n.(type) {
+	case *values.Float, *values.Complex:
+		return true
+	default:
+		return false
+	}
+}
+
+// maybeToInexact converts an exact number to inexact (Float) if needed.
+// If the number is already inexact or hasInexact is false, returns it unchanged.
+func maybeToInexact(n values.Number, hasInexact bool) values.Value {
+	if !hasInexact {
+		return n
+	}
+	// If already inexact, return as-is
+	if isInexact(n) {
+		return n
+	}
+	// Convert exact to inexact
+	switch v := n.(type) {
+	case *values.Integer:
+		return values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := v.ToInexact().(*values.Float)
+		return f
+	case *values.Rational:
+		return values.NewFloat(v.Float64())
+	default:
+		return n
+	}
 }

@@ -113,3 +113,45 @@ type schemeCodeErrorTestCase struct {
 	name string
 	code string
 }
+
+// runSchemeCodeExpectError runs code and expects an error (including panics).
+func runSchemeCodeExpectError(t *testing.T, code string) (err error) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			// Panic was expected, convert to error
+			if e, ok := r.(error); ok {
+				err = e
+			}
+		}
+	}()
+	_, err = runSchemeCode(t, code)
+	if err == nil {
+		t.Errorf("expected error but got none for: %s", code)
+	}
+	return err
+}
+
+// runSchemeCodeExpectTrue is a shorthand for boolean true result.
+func runSchemeCodeExpectTrue(t *testing.T, code string) {
+	t.Helper()
+	result, err := runSchemeCode(t, code)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != values.TrueValue {
+		t.Errorf("expected #t but got %v for: %s", result, code)
+	}
+}
+
+// runSchemeCodeExpectFalse is a shorthand for boolean false result.
+func runSchemeCodeExpectFalse(t *testing.T, code string) {
+	t.Helper()
+	result, err := runSchemeCode(t, code)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != values.FalseValue {
+		t.Errorf("expected #f but got %v for: %s", result, code)
+	}
+}

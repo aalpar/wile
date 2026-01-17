@@ -23,6 +23,10 @@ import (
 // PrimLcm implements the lcm primitive.
 func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 	return integerFold(mc, "lcm", 1, func(acc, val int64) int64 {
-		return acc / GcdInt(acc, val) * val
+		g := GcdInt(acc, val)
+		if g == 0 {
+			return 0 // lcm(0, 0) = 0
+		}
+		return acc / g * val
 	})
 }

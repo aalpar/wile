@@ -49,9 +49,10 @@ func TestMinExtended(t *testing.T) {
 			out:  values.NewFloat(1.5),
 		},
 		{
+			// Per R7RS, if any argument is inexact, the result is inexact
 			name: "min of integer and float",
 			code: "(min 1 2.5)",
-			out:  values.NewInteger(1),
+			out:  values.NewFloat(1.0),
 		},
 		{
 			name: "min of two rationals",
