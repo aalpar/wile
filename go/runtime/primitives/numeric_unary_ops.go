@@ -24,10 +24,11 @@ import (
 )
 
 type realNumberOp struct {
-	name       string
-	integerOp  func(*values.Integer) values.Value
-	floatOp    func(float64) float64
-	rationalOp func(*values.Rational) values.Value
+	name         string
+	integerOp    func(*values.Integer) values.Value
+	bigIntegerOp func(*values.BigInteger) values.Value
+	floatOp      func(float64) float64
+	rationalOp   func(*values.Rational) values.Value
 }
 
 func makeRealNumberPrimitive(op realNumberOp) func(context.Context, *machine.MachineContext) error {
@@ -36,6 +37,13 @@ func makeRealNumberPrimitive(op realNumberOp) func(context.Context, *machine.Mac
 		switch v := o.(type) {
 		case *values.Integer:
 			mc.SetValue(op.integerOp(v))
+		case *values.BigInteger:
+			if op.bigIntegerOp != nil {
+				mc.SetValue(op.bigIntegerOp(v))
+			} else {
+				// Default: convert to float
+				mc.SetValue(values.NewFloat(op.floatOp(v.ToInexact().(*values.Float).Datum())))
+			}
 		case *values.Float:
 			mc.SetValue(values.NewFloat(op.floatOp(v.Value)))
 		case *values.Rational:
@@ -87,6 +95,12 @@ var PrimAbs = makeRealNumberPrimitive(realNumberOp{
 	integerOp: func(v *values.Integer) values.Value {
 		if v.Value < 0 {
 			return values.NewInteger(-v.Value)
+		}
+		return v
+	},
+	bigIntegerOp: func(v *values.BigInteger) values.Value {
+		if v.IsNegative() {
+			return v.Negate()
 		}
 		return v
 	},
