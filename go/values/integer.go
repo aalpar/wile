@@ -44,7 +44,8 @@ func init() {
 // Integer represents a Scheme integer value.
 //
 // R7RS §6.2.1: Integers are exact numbers in the numeric tower hierarchy:
-//   number ⊃ complex ⊃ real ⊃ rational ⊃ integer
+//
+//	number ⊃ complex ⊃ real ⊃ rational ⊃ integer
 //
 // R7RS §6.2.2: Integer is always exact. Operations on exact numbers
 // produce exact results when mathematically well-defined.
@@ -127,6 +128,9 @@ func (p *Integer) Subtract(o Number) Number {
 //
 // R7RS §6.2.6: The * procedure returns the product of its arguments.
 // R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
+// Exception: Exact zero dominates—(* 0 x) may return exact 0 even when
+// x is inexact. Zero is an exact value when the result is mathematically
+// unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Integer) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o

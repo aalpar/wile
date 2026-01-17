@@ -27,7 +27,8 @@ var (
 // Created with the #z prefix in Scheme (e.g., #z12345678901234567890).
 //
 // R7RS §6.2.1: Integers are exact numbers in the numeric tower hierarchy:
-//   number ⊃ complex ⊃ real ⊃ rational ⊃ integer
+//
+//	number ⊃ complex ⊃ real ⊃ rational ⊃ integer
 //
 // R7RS §6.2.2: BigInteger is always exact. Operations on exact numbers
 // produce exact results when mathematically well-defined.
@@ -142,6 +143,9 @@ func (p *BigInteger) Subtract(o Number) Number {
 //
 // R7RS §6.2.6: The * procedure returns the product of its arguments.
 // R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
+// Exception: Exact zero dominates—(* 0 x) may return exact 0 even when
+// x is inexact. Zero is an exact value when the result is mathematically
+// unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
 		return NewBigIntegerFromInt64(0)
