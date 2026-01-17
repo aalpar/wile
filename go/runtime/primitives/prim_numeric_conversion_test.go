@@ -161,9 +161,10 @@ func TestExptExtended(t *testing.T) {
 	t.Run("expt with negative integer exponent", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(expt 2 -1)")
 		qt.Assert(t, err, qt.IsNil)
-		floatResult, ok := result.(*values.Float)
+		// R7RS: exact inputs should give exact output
+		ratResult, ok := result.(*values.Rational)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, floatResult.Value, qt.Equals, 0.5)
+		qt.Assert(t, ratResult.Float64(), qt.Equals, 0.5)
 	})
 
 	t.Run("expt with float base", func(t *testing.T) {
@@ -202,9 +203,10 @@ func TestExptExtended(t *testing.T) {
 	t.Run("expt with rational base", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(expt 1/2 2)")
 		qt.Assert(t, err, qt.IsNil)
-		floatResult, ok := result.(*values.Float)
+		// R7RS: exact inputs should give exact output
+		ratResult, ok := result.(*values.Rational)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, floatResult.Value, qt.Equals, 0.25)
+		qt.Assert(t, ratResult.Float64(), qt.Equals, 0.25)
 	})
 
 	t.Run("expt with large exponent", func(t *testing.T) {
