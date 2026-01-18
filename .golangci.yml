@@ -4,6 +4,14 @@ run:
   timeout: 5m
   go: "1.25"
 
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - wile
+
 linters:
   enable:
     - errcheck
@@ -18,14 +26,6 @@ linters:
     - revive
     - nilerr
     - whitespace
-
-formatters:
-  enable:
-    - goimports
-  settings:
-    goimports:
-      local-prefixes:
-        - skeme
 
 linters-settings:
   dupl:

@@ -557,7 +557,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 
 	// Now reference x
 	rdr = strings.NewReader("x")
-	p = parser.NewParserWithFile(env,  true, rdr, "ref.scm")
+	p = parser.NewParserWithFile(env, true, rdr, "ref.scm")
 	stx, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 

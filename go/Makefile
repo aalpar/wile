@@ -32,15 +32,15 @@ cover:
 
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) -v run
+	$(GOLANGCI_LINT) -v run ./...
 
 .PHONY: fix
 fix:
-	$(GOLANGCI_LINT) -v run --fix
+	$(GOLANGCI_LINT) -v run --fix ./...
 
 .PHONY: format
 format:
-	$(GOLANGCI_LINT) -v fmt
+	$(GOLANGCI_LINT) -v fmt -v ./...
 
 .PHONY: tidy
 tidy:

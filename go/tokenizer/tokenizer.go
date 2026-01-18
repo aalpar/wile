@@ -446,7 +446,6 @@ func (p *Tokenizer) continueBlockComment() Token {
 
 		default:
 			p.next()
-
 		}
 	}
 	// EOF before closing - emit Body token, no End will follow
@@ -755,7 +754,6 @@ func (p *Tokenizer) readBlockComment() {
 		default:
 			p.next()
 			// Other characters within comment text
-
 		}
 	}
 }
@@ -857,7 +855,6 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 	default:
 		p.err = NewTokenizerError("invalid character after #", p.tokenStart, p.tokenEnd)
 		return
-
 	}
 }
 
@@ -1050,7 +1047,6 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		qrune = p.curr()
 		p.next()
 		return qrune
-
 	}
 	p.err = NewTokenizerError(MessageExpectingCharacterMnemonicOrHexEscape, p.tokenStart, p.tokenEnd)
 	return utf8.RuneError
