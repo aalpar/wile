@@ -28,14 +28,6 @@ import (
 	"wile/values"
 )
 
-// runProgram parses and runs a Scheme source code string.
-// This is the primary test helper - it takes a string of Scheme code,
-// parses it, expands macros, compiles it, and runs it.
-func runProgram(t *testing.T, code string) (values.Value, error) {
-	t.Helper()
-	return runSchemeCode(t, code)
-}
-
 // runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
 // This is the legacy version that accepts a pre-built AST.
 func runProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
