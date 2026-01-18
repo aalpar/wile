@@ -88,7 +88,7 @@ func TestCallCC(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -154,7 +154,7 @@ func TestCallCCWithHigherOrderFunctions(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -267,7 +267,7 @@ func TestMapMultipleLists(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -320,7 +320,7 @@ func TestForEachMultipleLists(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runProgram(t, tc.prog)
+			_, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 		})
 	}
@@ -384,7 +384,7 @@ func TestApplyMultipleArgs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -420,7 +420,7 @@ func TestValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -509,7 +509,7 @@ func TestCallWithValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -602,7 +602,7 @@ func TestDynamicWind(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})

@@ -56,7 +56,7 @@ func TestStringEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -102,7 +102,7 @@ func TestStringLessThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -143,7 +143,7 @@ func TestStringGreaterThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -184,7 +184,7 @@ func TestStringLessThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -225,7 +225,7 @@ func TestStringGreaterThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})

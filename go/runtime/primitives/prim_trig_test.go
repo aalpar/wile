@@ -61,7 +61,7 @@ func TestSin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -99,7 +99,7 @@ func TestCos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -131,7 +131,7 @@ func TestTan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -169,7 +169,7 @@ func TestAsin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -207,7 +207,7 @@ func TestAcos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -251,7 +251,7 @@ func TestAtan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -289,7 +289,7 @@ func TestExp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -332,7 +332,7 @@ func TestLog(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)

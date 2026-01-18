@@ -33,14 +33,14 @@ import (
 
 func TestNewline(t *testing.T) {
 	prog := values.List(values.NewSymbol("newline"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
 func TestCurrentInputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-input-port"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterInputPort)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -48,7 +48,7 @@ func TestCurrentInputPort(t *testing.T) {
 
 func TestCurrentOutputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-output-port"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterOutputPort)
 	qt.Assert(t, ok, qt.IsTrue)

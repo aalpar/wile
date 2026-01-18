@@ -191,7 +191,7 @@ func TestTypePredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -271,7 +271,7 @@ func TestNumericPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})

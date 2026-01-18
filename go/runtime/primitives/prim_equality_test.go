@@ -52,7 +52,7 @@ func TestNumericEquality(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -92,7 +92,7 @@ func TestEqQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -128,7 +128,7 @@ func TestEqualQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -143,7 +143,7 @@ func TestEqQWithDifferentPairs(t *testing.T) {
 			values.List(values.NewInteger(1), values.NewInteger(2))),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewInteger(3), values.NewInteger(4))))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// Two different pairs should not be eq?
 	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
@@ -156,7 +156,7 @@ func TestEqualQWithLists(t *testing.T) {
 			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// equal? compares by value, so equivalent lists should be equal?
 	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
@@ -407,7 +407,7 @@ func TestEqvQPrimitive(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
