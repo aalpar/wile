@@ -286,6 +286,9 @@ func (p *BigInteger) Compare(o Number) int {
 			return 1
 		}
 		return 0
+	case *BigFloat:
+		self := new(big.Float).SetInt(p.value)
+		return self.Cmp(v.BigFloatValue())
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return pRat.Cmp(v.Rat())

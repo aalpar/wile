@@ -22,7 +22,7 @@ import (
 
 // PrimLcm implements the lcm primitive.
 func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
-	return integerFold(mc, "lcm", 1, func(acc, val int64) int64 {
+	return integerFold(mc, FoldOpLCM, 1, func(acc, val int64) int64 {
 		g := GcdInt(acc, val)
 		if g == 0 {
 			return 0 // lcm(0, 0) = 0

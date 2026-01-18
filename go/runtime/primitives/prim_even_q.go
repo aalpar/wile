@@ -16,6 +16,8 @@ package primitives
 
 import (
 	"context"
+	"math"
+	"math/big"
 
 	"wile/machine"
 	"wile/utils"
@@ -23,13 +25,38 @@ import (
 )
 
 // PrimEvenQ implements the (even?) primitive.
-// Returns #t if the integer is even.
+//
+// R7RS §6.2.6: Returns #t if the integer is even, #f otherwise.
+// Accepts any integer, including inexact integers (e.g., 4.0).
 func PrimEvenQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	v, ok := o.(*values.Integer)
-	if !ok {
+	switch v := o.(type) {
+	case *values.Integer:
+		mc.SetValue(utils.BoolToBoolean(v.Value%2 == 0))
+	case *values.BigInteger:
+		// Check if the last bit is unset (even)
+		mc.SetValue(utils.BoolToBoolean(v.BigInt().Bit(0) == 0))
+	case *values.Float:
+		// Must be an integer value (no fractional part)
+		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.Value)
+		}
+		if math.Floor(v.Value) != v.Value {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.Value)
+		}
+		// Convert to big.Int for reliable even check on large floats
+		bf := new(big.Float).SetFloat64(v.Value)
+		bi, _ := bf.Int(nil)
+		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 0))
+	case *values.BigFloat:
+		// Must be an integer value
+		if !v.BigFloatValue().IsInt() {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.BigFloatValue())
+		}
+		bi, _ := v.BigFloatValue().Int(nil)
+		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 0))
+	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %T", o)
 	}
-	mc.SetValue(utils.BoolToBoolean(v.Value%2 == 0))
 	return nil
 }

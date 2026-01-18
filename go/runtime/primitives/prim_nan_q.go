@@ -24,13 +24,13 @@ import (
 )
 
 // PrimNanQ implements the nan? primitive.
-// Returns #t if the number is NaN, #f otherwise.
+//
+// R7RS §6.2.6: Returns #t if the number is NaN.
 func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(values.FalseValue)
-	case *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+		// Exact numbers and BigFloat are never NaN
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsNaN(v.Value)))

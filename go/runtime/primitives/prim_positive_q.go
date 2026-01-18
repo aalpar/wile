@@ -23,12 +23,17 @@ import (
 )
 
 // PrimPositiveQ implements the (positive?) primitive.
-// Returns #t if number is positive.
+//
+// R7RS §6.2.6: Returns #t if the real number is positive.
 func PrimPositiveQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
 		mc.SetValue(utils.BoolToBoolean(v.Value > 0))
+	case *values.BigInteger:
+		mc.SetValue(utils.BoolToBoolean(v.IsPositive()))
+	case *values.BigFloat:
+		mc.SetValue(utils.BoolToBoolean(v.IsPositive()))
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(v.Value > 0))
 	case *values.Rational:

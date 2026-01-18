@@ -24,13 +24,13 @@ import (
 )
 
 // PrimFiniteQ implements the (finite?) primitive.
-// Returns #t if number is finite.
+//
+// R7RS §6.2.6: Returns #t if the number is finite.
 func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(values.TrueValue)
-	case *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+		// Exact numbers and BigFloat are always finite
 		mc.SetValue(values.TrueValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(!math.IsInf(v.Value, 0) && !math.IsNaN(v.Value)))

@@ -184,8 +184,14 @@ func (p *Rational) LessThan(o Number) bool {
 	case *Integer:
 		other := big.NewRat(v.Value, 1)
 		return p.value.Cmp(other) < 0
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.BigInt())
+		return p.value.Cmp(other) < 0
 	case *Float:
 		return p.Float64() < v.Value
+	case *BigFloat:
+		self := new(big.Float).SetRat(p.value)
+		return self.Cmp(v.BigFloatValue()) < 0
 	case *Complex:
 		return p.Float64() < real(v.Value)
 	}

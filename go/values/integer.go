@@ -204,6 +204,9 @@ func (p *Integer) LessThan(o Number) bool {
 		return big.NewInt(p.Value).Cmp(v.BigInt()) < 0
 	case *Float:
 		return float64(p.Value) < v.Value
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return self.Cmp(v.BigFloatValue()) < 0
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		return self.Cmp(v.Rat()) < 0

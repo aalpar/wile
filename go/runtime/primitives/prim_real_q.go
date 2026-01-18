@@ -22,11 +22,13 @@ import (
 )
 
 // PrimRealQ implements the (real?) primitive.
-// Returns #t if argument is a real number.
+//
+// R7RS §6.2.6: Returns #t if the argument is a real number.
+// Rationals (including integers and BigInteger) are a subset of reals.
 func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.Float, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
 		mc.SetValue(values.TrueValue)
 	case *values.Complex:
 		if imag(v.Value) == 0 {

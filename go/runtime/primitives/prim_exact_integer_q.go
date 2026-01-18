@@ -18,15 +18,19 @@ import (
 	"context"
 
 	"wile/machine"
-	"wile/utils"
 	"wile/values"
 )
 
 // PrimExactIntegerQ implements the (exact-integer?) primitive.
-// Returns #t if the argument is an exact integer.
+//
+// R7RS §6.2.6: Returns #t if the argument is both exact and an integer.
 func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	_, ok := o.(*values.Integer)
-	mc.SetValue(utils.BoolToBoolean(ok))
+	switch o.(type) {
+	case *values.Integer, *values.BigInteger:
+		mc.SetValue(values.TrueValue)
+	default:
+		mc.SetValue(values.FalseValue)
+	}
 	return nil
 }

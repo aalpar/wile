@@ -22,17 +22,26 @@ import (
 	"wile/values"
 )
 
+type foldOp int
+
+const (
+	FoldOpGCD foldOp = iota
+	FoldOpLCM
+)
+
 // integerFold is a helper for integer fold operations (gcd, lcm).
 // Takes rest args at index 0, applies absolute value, then folds with combiner.
 //
 // The fold pattern combines a list into a single value using a binary operation:
-//   fold(f, identity, [a, b, c]) = f(f(f(identity, a), b), c)
+//
+//	fold(f, identity, [a, b, c]) = f(f(f(identity, a), b), c)
 //
 // See SRFI-1 (List Library) for the canonical Scheme definition of fold:
-//   https://srfi.schemers.org/srfi-1/srfi-1.html
+//
+//	https://srfi.schemers.org/srfi-1/srfi-1.html
 func integerFold(
 	mc *machine.MachineContext,
-	name string,
+	op foldOp,
 	identity int64,
 	combiner func(acc, val int64) int64,
 ) error {
@@ -43,7 +52,7 @@ func integerFold(
 			mc.SetValue(values.NewInteger(identity))
 			return nil
 		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a list but got %T", name, o)
+		return values.WrapForeignErrorf(values.ErrNotAPair, "%d: expected a list but got %T", op, o)
 	}
 	if values.IsEmptyList(pr) {
 		mc.SetValue(values.NewInteger(identity))
@@ -54,13 +63,14 @@ func integerFold(
 	hasBigInt := false
 	current := pr
 	for !values.IsEmptyList(current) {
+		// 611: would be better outside the loop.
 		switch current.Car().(type) {
 		case *values.BigInteger:
 			hasBigInt = true
 		case *values.Integer:
 			// ok
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, current.Car())
 		}
 		next, ok := current.Cdr().(*values.Pair)
 		if !ok {
@@ -70,13 +80,13 @@ func integerFold(
 	}
 
 	if hasBigInt {
-		return integerFoldBig(mc, name, identity, pr)
+		return integerFoldBig(mc, op, identity, pr)
 	}
 
 	// All integers are small, use int64 path
 	first, ok := pr.Car().(*values.Integer)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
+		return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, pr.Car())
 	}
 	result := first.Value
 	if result < 0 {
@@ -90,7 +100,7 @@ func integerFold(
 	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		n, ok := next.(*values.Integer)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, next)
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, next)
 		}
 		val := n.Value
 		if val < 0 {
@@ -103,7 +113,7 @@ func integerFold(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%d: not a proper list", op)
 	}
 	mc.SetValue(values.NewInteger(result))
 	return nil
@@ -112,8 +122,8 @@ func integerFold(
 // integerFoldBig handles gcd/lcm with BigInteger support using big.Int.
 func integerFoldBig(
 	mc *machine.MachineContext,
-	name string,
-	identity int64,
+	op foldOp,
+	_ int64,
 	pr *values.Pair,
 ) error {
 	// Get the first value
@@ -124,7 +134,7 @@ func integerFoldBig(
 	case *values.BigInteger:
 		result = new(big.Int).Set(v.BigInt())
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
+		return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, pr.Car())
 	}
 	result.Abs(result)
 
@@ -136,19 +146,22 @@ func integerFoldBig(
 
 	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		var val *big.Int
+		// 611: would be better outside the loop.
 		switch n := next.(type) {
 		case *values.Integer:
 			val = big.NewInt(n.Value)
 		case *values.BigInteger:
 			val = new(big.Int).Set(n.BigInt())
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, next)
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, next)
 		}
 		val.Abs(val)
 
-		if name == "gcd" {
+		// 611: would be better outside the loop.
+		switch op {
+		case FoldOpGCD:
 			result.GCD(nil, nil, result, val)
-		} else if name == "lcm" {
+		case FoldOpLCM:
 			// lcm(a, b) = |a * b| / gcd(a, b)
 			g := new(big.Int).GCD(nil, nil, result, val)
 			if g.Sign() == 0 {
@@ -164,7 +177,7 @@ func integerFoldBig(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%d: not a proper list", op)
 	}
 
 	// Return BigInteger for the result

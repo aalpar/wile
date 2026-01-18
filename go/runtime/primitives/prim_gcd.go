@@ -22,5 +22,5 @@ import (
 
 // PrimGcd implements the gcd primitive.
 func PrimGcd(_ context.Context, mc *machine.MachineContext) error {
-	return integerFold(mc, "gcd", 0, GcdInt)
+	return integerFold(mc, FoldOpGCD, 0, GcdInt)
 }

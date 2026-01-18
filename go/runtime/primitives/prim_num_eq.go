@@ -16,14 +16,39 @@ package primitives
 
 import (
 	"context"
+	"math"
 
 	"wile/machine"
 	"wile/values"
 )
 
+// numericEquals compares two numbers for equality.
+//
+// R7RS §6.2.5: The = procedure returns #t if its arguments are numerically
+// equal. For IEEE 754 floats: infinities of the same sign are equal,
+// NaN is not equal to anything (including itself).
+func numericEquals(a, b values.Number) bool {
+	// Handle Float specially due to IEEE 754 infinity and NaN
+	af, aIsFloat := a.(*values.Float)
+	bf, bIsFloat := b.(*values.Float)
+	if aIsFloat && bIsFloat {
+		// NaN != NaN per IEEE 754
+		if math.IsNaN(af.Value) || math.IsNaN(bf.Value) {
+			return false
+		}
+		// Direct comparison handles infinities correctly
+		return af.Value == bf.Value
+	}
+	// For mixed types or non-Float, use subtraction
+	// (works correctly except for Float infinities, already handled)
+	return a.Subtract(b).IsZero()
+}
+
 // PrimNumEq implements the = primitive.
+//
+// R7RS §6.2.6: Returns #t if its arguments are numerically equal.
 func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
 	return numericChainCompare(mc, "=", func(prev, curr values.Number) bool {
-		return !prev.Subtract(curr).IsZero()
+		return !numericEquals(prev, curr)
 	})
 }

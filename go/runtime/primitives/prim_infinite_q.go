@@ -24,13 +24,13 @@ import (
 )
 
 // PrimInfiniteQ implements the (infinite?) primitive.
-// Returns #t if number is infinite.
+//
+// R7RS §6.2.6: Returns #t if the number is infinite.
 func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(values.FalseValue)
-	case *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+		// Exact numbers and BigFloat are never infinite
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsInf(v.Value, 0)))

@@ -22,12 +22,13 @@ import (
 )
 
 // PrimIntegerQ implements the integer? predicate.
-// Returns #t if the argument is an integer (exact or inexact).
+//
+// R7RS §6.2.6: Returns #t if the argument is an integer (exact or inexact).
 // Inexact integers are floating-point numbers with zero fractional part.
 func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer:
+	case *values.Integer, *values.BigInteger:
 		mc.SetValue(values.TrueValue)
 	case *values.Rational:
 		if v.IsInteger() {
@@ -38,6 +39,12 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		f := v.Value
 		if f == float64(int64(f)) {
+			mc.SetValue(values.TrueValue)
+		} else {
+			mc.SetValue(values.FalseValue)
+		}
+	case *values.BigFloat:
+		if v.BigFloatValue().IsInt() {
 			mc.SetValue(values.TrueValue)
 		} else {
 			mc.SetValue(values.FalseValue)

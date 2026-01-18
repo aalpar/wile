@@ -22,11 +22,14 @@ import (
 )
 
 // PrimRationalQ implements the (rational?) primitive.
-// Returns #t if argument is rational number.
+//
+// R7RS §6.2.6: Returns #t if the argument is a rational number.
+// Integers (including BigInteger) are a subset of rationals.
 func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+		// BigFloat is always finite, so always rational
 		mc.SetValue(values.TrueValue)
 	case *values.Float:
 		// Float is rational if it's finite (not NaN or Inf)

@@ -22,13 +22,14 @@ import (
 )
 
 // PrimExactQ implements the (exact?) primitive.
-// Returns #t if the number is exact.
+//
+// R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
 func PrimExactQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.Integer, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.Rational:
 		mc.SetValue(values.TrueValue)
-	case *values.Float, *values.Complex:
+	case *values.Float, *values.BigFloat, *values.Complex:
 		mc.SetValue(values.FalseValue)
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "exact?: expected a number but got %T", o)

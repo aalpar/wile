@@ -22,8 +22,15 @@ import (
 )
 
 // PrimNumGe implements the >= primitive.
+//
+// R7RS §6.2.6: Returns #t if its arguments are monotonically nonincreasing.
+// IEEE 754: Any comparison with NaN returns #f.
 func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 	return numericChainCompare(mc, ">=", func(prev, curr values.Number) bool {
+		// NaN fails all comparisons per IEEE 754
+		if isNaN(prev) || isNaN(curr) {
+			return true // fails the comparison
+		}
 		return prev.LessThan(curr)
 	})
 }

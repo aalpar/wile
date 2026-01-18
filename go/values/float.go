@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math/big"
 	"strconv"
 )
 
@@ -127,8 +128,15 @@ func (p *Float) LessThan(o Number) bool {
 	switch v := o.(type) {
 	case *Integer:
 		return p.Value < float64(v.Value)
+	case *BigInteger:
+		self := new(big.Float).SetFloat64(p.Value)
+		other := new(big.Float).SetInt(v.BigInt())
+		return self.Cmp(other) < 0
 	case *Float:
 		return p.Value < v.Value
+	case *BigFloat:
+		self := new(big.Float).SetFloat64(p.Value)
+		return self.Cmp(v.BigFloatValue()) < 0
 	case *Rational:
 		return p.Value < v.Float64()
 	case *Complex:

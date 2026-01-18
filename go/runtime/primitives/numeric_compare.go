@@ -17,10 +17,17 @@ package primitives
 import (
 	"context"
 	"errors"
+	"math"
 
 	"wile/machine"
 	"wile/values"
 )
+
+// isNaN returns true if the number is a NaN float.
+func isNaN(n values.Number) bool {
+	f, ok := n.(*values.Float)
+	return ok && math.IsNaN(f.Value)
+}
 
 // numericChainCompare is a helper for numeric chain comparison primitives.
 // First arg at index 0, rest at index 1. Returns true if all consecutive

@@ -30,9 +30,10 @@ R7RS defines a hierarchy: `number ⊃ complex ⊃ real ⊃ rational ⊃ integer`
 | R7RS Type | Go Type(s) | Exactness | Notes |
 |-----------|------------|-----------|-------|
 | integer | Integer, BigInteger | exact | Arbitrary precision via BigInteger |
-| integer | Float | inexact | When `(= x (round x))`, e.g., `7.0` |
+| integer | Float, BigFloat | inexact | When `(= x (round x))`, e.g., `7.0` |
 | rational | Rational | exact | Numerator/denominator as big.Rat |
 | real | Float | inexact | IEEE 754 float64 |
+| real | BigFloat | inexact | Arbitrary precision via big.Float (`#m` prefix) |
 | complex | Complex | inexact | Real and imaginary as float64 |
 
 ### Exactness Properties
@@ -43,7 +44,19 @@ R7RS defines a hierarchy: `number ⊃ complex ⊃ real ⊃ rational ⊃ integer`
 | BigInteger | #t | #f | Always exact |
 | Rational | #t | #f | Always exact |
 | Float | #f | #t | Always inexact |
+| BigFloat | #f | #t | Always inexact, arbitrary precision |
 | Complex | #f | #t | Always inexact |
+
+### Special Value Properties
+
+| Type | `finite?` | `infinite?` | `nan?` | Notes |
+|------|-----------|-------------|--------|-------|
+| Integer | #t | #f | #f | Always finite |
+| BigInteger | #t | #f | #f | Always finite |
+| Rational | #t | #f | #f | Always finite |
+| Float | varies | varies | varies | IEEE 754 supports ±inf, NaN |
+| BigFloat | #t | #f | #f | big.Float has no Inf/NaN |
+| Complex | varies | varies | varies | Follows Float rules |
 
 ### Type Predicates
 
@@ -80,6 +93,19 @@ BigInteger division returns exact types when possible:
 |-----------|--------|
 | `#z100 / #z10` | BigInteger (10) - exact division |
 | `#z100 / #z3` | Rational (100/3) - inexact division |
+
+## Cross-Type Comparison
+
+All numeric types support `LessThan` comparison with all other numeric types:
+
+| Type | Can Compare With |
+|------|------------------|
+| Integer | Integer, BigInteger, Float, BigFloat, Rational, Complex |
+| BigInteger | Integer, BigInteger, Float, BigFloat, Rational |
+| Float | Integer, BigInteger, Float, BigFloat, Rational, Complex |
+| BigFloat | Integer, BigInteger, Float, BigFloat, Rational |
+| Rational | Integer, BigInteger, Float, BigFloat, Rational, Complex |
+| Complex | Integer, Float, Rational, Complex (compares real parts only) |
 
 ## Gotchas
 

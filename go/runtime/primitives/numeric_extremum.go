@@ -96,10 +96,10 @@ func numericExtremum(
 	return nil
 }
 
-// isInexact returns true if the number is inexact (Float or Complex)
+// isInexact returns true if the number is inexact (Float, BigFloat, or Complex)
 func isInexact(n values.Number) bool {
 	switch n.(type) {
-	case *values.Float, *values.Complex:
+	case *values.Float, *values.BigFloat, *values.Complex:
 		return true
 	default:
 		return false

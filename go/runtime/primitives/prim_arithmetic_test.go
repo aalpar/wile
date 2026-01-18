@@ -936,6 +936,11 @@ func TestMax(t *testing.T) {
 
 		// BigInteger operations
 		{"max of bigintegers", `(max #z10000000000000000000 #z20000000000000000000)`, values.NewBigIntegerFromString("20000000000000000000", 10)},
+
+		// BigFloat operations (always inexact)
+		{"max of bigfloats", `(max #m3.5 #m2.5)`, values.NewBigFloatFromString("3.5")},
+		{"max bigfloat and integer", `(max #m2.5 3)`, values.NewFloat(3.0)}, // Integer wins but becomes inexact
+		{"max integer and bigfloat", `(max 3 #m2.5)`, values.NewFloat(3.0)}, // Integer wins but becomes inexact
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1001,6 +1006,11 @@ func TestMin(t *testing.T) {
 
 		// BigInteger operations
 		{"min of bigintegers", `(min #z10000000000000000000 #z20000000000000000000)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
+
+		// BigFloat operations (always inexact)
+		{"min of bigfloats", `(min #m3.5 #m2.5)`, values.NewBigFloatFromString("2.5")},
+		{"min bigfloat and integer", `(min #m2.5 3)`, values.NewBigFloatFromString("2.5")}, // BigFloat wins, stays BigFloat
+		{"min integer and bigfloat", `(min 2 #m3.5)`, values.NewFloat(2.0)},               // Integer wins but becomes inexact
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

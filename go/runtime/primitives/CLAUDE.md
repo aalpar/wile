@@ -84,11 +84,13 @@ number (z)
 
 | Symbol | Type | Go Types |
 |--------|------|----------|
-| **z** | complex (any number) | Integer, BigInteger, Float, Rational, Complex |
-| **x** | real | Integer, BigInteger, Float, Rational |
-| **q** | rational | Integer, BigInteger, Rational |
-| **n** | integer (exact OR inexact) | Integer, BigInteger, Float (if integral) |
+| **z** | complex (any number) | Integer, BigInteger, Float, BigFloat, Rational, Complex |
+| **x** | real | Integer, BigInteger, Float, BigFloat, Rational |
+| **q** | rational | Integer, BigInteger, BigFloat, Rational |
+| **n** | integer (exact OR inexact) | Integer, BigInteger, Float (if integral), BigFloat (if integral) |
 | **k** | exact integer only | Integer, BigInteger |
+
+**Note**: BigFloat (`#m` prefix) is always inexact and always finite (no Inf/NaN support).
 
 ## R7RS Arithmetic Primitive Type Requirements
 
@@ -151,12 +153,17 @@ Use for primitives accepting integers (n) - handles exact and inexact integers u
 ### Exactness Tracking (`numeric_extremum.go`)
 
 ```go
-// isInexact returns true if the number is inexact (Float or Complex)
+// isInexact returns true if the number is inexact (Float, BigFloat, or Complex)
 isInexact(n values.Number) bool
 
 // maybeToInexact converts exact to Float if hasInexact is true
 maybeToInexact(n values.Number, hasInexact bool) values.Value
 ```
+
+### BigFloat Integer Checking (`prim_odd_q.go`, `prim_even_q.go`)
+
+For `odd?` and `even?` with BigFloat, use `v.BigFloatValue().IsInt()` to verify the value
+represents an integer before checking parity.
 
 Use for implementing exactness contagion in primitives like max/min.
 
