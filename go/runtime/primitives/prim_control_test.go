@@ -652,3 +652,72 @@ func TestDynamicWindEscape(t *testing.T) {
 	// After should have run, setting v[0] to 2
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
 }
+
+func TestDynamicWindBasic(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((result '()))
+			(dynamic-wind
+				(lambda () (set! result (cons 'before result)))
+				(lambda () (set! result (cons 'during result)) 42)
+				(lambda () (set! result (cons 'after result))))
+			result)
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.IsNotNil)
+}
+
+func TestCallWithValuesExtended(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "call-with-values single value",
+			code:     `(call-with-values (lambda () 42) (lambda (x) x))`,
+			expected: values.NewInteger(42),
+		},
+		{
+			name:     "call-with-values two values",
+			code:     `(call-with-values (lambda () (values 1 2)) (lambda (x y) (+ x y)))`,
+			expected: values.NewInteger(3),
+		},
+		{
+			name:     "call-with-values returning no values",
+			code:     `(call-with-values (lambda () (values)) (lambda () 'done))`,
+			expected: values.NewSymbol("done"),
+		},
+		{
+			name:     "call-with-values returning three values",
+			code:     `(call-with-values (lambda () (values 1 2 3)) (lambda (a b c) (+ a b c)))`,
+			expected: values.NewInteger(6),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestApplyExtended(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "apply with prefix args",
+			code:     `(apply + 1 2 '(3 4))`,
+			expected: values.NewInteger(10),
+		},
+		{
+			name:     "apply with empty list",
+			code:     `(apply + '())`,
+			expected: values.NewInteger(0),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}

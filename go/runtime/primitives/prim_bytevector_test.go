@@ -410,3 +410,24 @@ func TestBytevectorRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestBytevectorU8RefSet(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "bytevector-u8-ref",
+			code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-ref bv 1))`,
+		},
+		{
+			name: "bytevector-u8-set!",
+			code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 1 99) (bytevector-u8-ref bv 1))`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.IsNotNil)
+		})
+	}
+}
