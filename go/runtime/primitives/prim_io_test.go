@@ -33,14 +33,14 @@ import (
 
 func TestNewline(t *testing.T) {
 	prog := values.List(values.NewSymbol("newline"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
 func TestCurrentInputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-input-port"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterInputPort)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -48,7 +48,7 @@ func TestCurrentInputPort(t *testing.T) {
 
 func TestCurrentOutputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-output-port"))
-	result, err := runProgram(t, prog)
+	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterOutputPort)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -786,4 +786,63 @@ func TestPortPredicates(t *testing.T) {
 			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.out)
 		})
 	}
+}
+
+func TestReadSyntaxFromStringPort(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "read-syntax from string port",
+			code: `(let ((p (open-input-string "(+ 1 2)")))
+				(read-syntax p))`,
+		},
+		{
+			name: "read-syntax simple symbol",
+			code: `(let ((p (open-input-string "hello")))
+				(read-syntax p))`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.IsNotNil)
+		})
+	}
+}
+
+func TestReadTokenFromStringPort(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "read-token identifier",
+			code: `(let ((p (open-input-string "hello")))
+				(read-token p))`,
+		},
+		{
+			name: "read-token number",
+			code: `(let ((p (open-input-string "42")))
+				(read-token p))`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.IsNotNil)
+		})
+	}
+}
+
+func TestNewlineToStringPort(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(newline p)
+			(newline p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, s.Value, qt.Equals, "\n\n")
 }

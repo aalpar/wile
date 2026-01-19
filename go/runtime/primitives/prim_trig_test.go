@@ -61,7 +61,7 @@ func TestSin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -99,7 +99,7 @@ func TestCos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -131,7 +131,7 @@ func TestTan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -169,7 +169,7 @@ func TestAsin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -207,7 +207,7 @@ func TestAcos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -251,7 +251,7 @@ func TestAtan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -289,7 +289,7 @@ func TestExp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -332,13 +332,65 @@ func TestLog(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
 				qt.Assert(t, result, values.SchemeEquals, tc.out)
 			}
+		})
+	}
+}
+
+func TestTrigWithRationals(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "sin with rational",
+			code: `(sin 1/2)`,
+		},
+		{
+			name: "cos with rational",
+			code: `(cos 1/2)`,
+		},
+		{
+			name: "tan with rational",
+			code: `(tan 1/4)`,
+		},
+		{
+			name: "asin with rational",
+			code: `(asin 1/2)`,
+		},
+		{
+			name: "acos with rational",
+			code: `(acos 1/2)`,
+		},
+		{
+			name: "atan with rational",
+			code: `(atan 1/2)`,
+		},
+		{
+			name: "atan2 with rationals",
+			code: `(atan 1/2 3/4)`,
+		},
+		{
+			name: "log with rational",
+			code: `(log 1/2)`,
+		},
+		{
+			name: "log with rational base",
+			code: `(log 8 2)`,
+		},
+		{
+			name: "exp with rational",
+			code: `(exp 1/2)`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
 		})
 	}
 }

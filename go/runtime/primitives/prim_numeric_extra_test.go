@@ -79,7 +79,7 @@ func TestExactnessPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -157,7 +157,7 @@ func TestSpecialValuePredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -204,7 +204,7 @@ func TestExactnessConversions(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -255,7 +255,7 @@ func TestExactIntegerSqrt(t *testing.T) {
 				values.List(values.NewSymbol("lambda"), values.EmptyList, tc.prog),
 				values.NewSymbol("list"),
 			)
-			result, err := runProgram(t, prog)
+			result, err := runProgramAST(t, prog)
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
@@ -292,7 +292,7 @@ func TestRationalize(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -343,7 +343,7 @@ func TestFloorDivision(t *testing.T) {
 				values.List(values.NewSymbol("lambda"), values.EmptyList, tc.prog),
 				values.NewSymbol("list"),
 			)
-			result, err := runProgram(t, prog)
+			result, err := runProgramAST(t, prog)
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
@@ -371,7 +371,7 @@ func TestFloorQuotient(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -397,7 +397,7 @@ func TestFloorRemainder(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -448,7 +448,7 @@ func TestTruncateDivision(t *testing.T) {
 				values.List(values.NewSymbol("lambda"), values.EmptyList, tc.prog),
 				values.NewSymbol("list"),
 			)
-			result, err := runProgram(t, prog)
+			result, err := runProgramAST(t, prog)
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
@@ -476,7 +476,7 @@ func TestTruncateQuotient(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
 		})
@@ -502,9 +502,70 @@ func TestTruncateRemainder(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgram(t, tc.prog)
+			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+func TestRationalizeMoreCases(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "rationalize integer",
+			code: `(rationalize 5 0)`,
+		},
+		{
+			name: "rationalize float",
+			code: `(rationalize 3.14159 0.001)`,
+		},
+		{
+			name: "rationalize with larger tolerance",
+			code: `(rationalize 3.14159 0.5)`,
+		},
+		{
+			name: "rationalize negative",
+			code: `(rationalize -3.14159 0.001)`,
+		},
+		{
+			name: "rationalize zero",
+			code: `(rationalize 0 0.1)`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+		})
+	}
+}
+
+func TestExactInexactExtended(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "exact on rational",
+			code: `(exact 1/2)`,
+		},
+		{
+			name: "exact on integer",
+			code: `(exact 42)`,
+		},
+		{
+			name: "inexact on integer",
+			code: `(inexact 42)`,
+		},
+		{
+			name: "inexact on rational",
+			code: `(inexact 1/2)`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.IsNotNil)
 		})
 	}
 }

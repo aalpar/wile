@@ -28,18 +28,19 @@ import (
 	"wile/values"
 )
 
-// runProgram is a helper to compile and run a Scheme program from a values.Value AST.
-func runProgram(t *testing.T, prog values.Value) (values.Value, error) {
+// runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
+// This is the legacy version that accepts a pre-built AST.
+func runProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
 	env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}
-	return runProgramWithEnv(t, env, prog)
+	return runProgramASTWithEnv(t, env, prog)
 }
 
-// runProgramWithEnv runs a program with the given environment.
-func runProgramWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog values.Value) (values.Value, error) {
+// runProgramASTWithEnv runs a program AST with the given environment.
+func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog values.Value) (values.Value, error) {
 	t.Helper()
 	cctx := machine.NewCompileTimeCallContext(false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)

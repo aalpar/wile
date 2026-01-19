@@ -318,3 +318,40 @@ func TestRounding(t *testing.T) {
 		})
 	}
 }
+
+func TestFloorDivQuotientRemainder(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "floor/ basic",
+			code: `(floor/ 10 3)`,
+		},
+		{
+			name: "floor-quotient",
+			code: `(floor-quotient 10 3)`,
+		},
+		{
+			name: "floor-remainder",
+			code: `(floor-remainder 10 3)`,
+		},
+		{
+			name: "truncate/",
+			code: `(truncate/ 10 3)`,
+		},
+		{
+			name: "truncate-quotient",
+			code: `(truncate-quotient 10 3)`,
+		},
+		{
+			name: "truncate-remainder",
+			code: `(truncate-remainder 10 3)`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.IsNotNil)
+		})
+	}
+}

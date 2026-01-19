@@ -6,6 +6,7 @@ GO_CLEAN=$(GO) clean
 GO_MOD=$(GO) mod
 
 SOURCES=$(shell find . -type f -name "*.go" -print)
+SOURCE_DIRS=$(shell go list -f "{{.Dir}}" ./...)
 BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell cat ../VERSION 2>/dev/null || echo "0.0.0")
 DIST_DIR=../dist
@@ -20,7 +21,11 @@ $(DIST_DIR)/$(MY_BIN): $(SOURCES)
 
 .PHONY: buildtest
 buildtest:
-	$(GO_TEST) -v -c -o $(DIST_DIR)/$(MY_BIN) ./...
+	for dir in $(SOURCE_DIRS); do \
+        if [ -d "$$dir" ]; then \
+	   		$(GO_TEST) -c -o /dev/null $$dir/...; \
+		fi \
+    done
 
 .PHONY: test
 test:

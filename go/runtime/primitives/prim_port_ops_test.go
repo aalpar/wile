@@ -130,3 +130,40 @@ func TestClosePortWithFileOutputPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, string(content), qt.Equals, "test")
 }
+
+func TestClosePortExtended(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "close-port on string input port",
+			code: `(let ((p (open-input-string "hello")))
+				(close-port p)
+				#t)`,
+		},
+		{
+			name: "close-port on string output port",
+			code: `(let ((p (open-output-string)))
+				(close-port p)
+				#t)`,
+		},
+		{
+			name: "close-port on bytevector input port",
+			code: `(let ((p (open-input-bytevector (bytevector 1 2 3))))
+				(close-port p)
+				#t)`,
+		},
+		{
+			name: "close-port on bytevector output port",
+			code: `(let ((p (open-output-bytevector)))
+				(close-port p)
+				#t)`,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.Equals, values.TrueValue)
+		})
+	}
+}

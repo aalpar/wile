@@ -65,3 +65,31 @@ func TestInteractionEnvironment(t *testing.T) {
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 }
+
+func TestEvalExtended(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "eval subtraction",
+			code:     `(eval '(- 10 3) (interaction-environment))`,
+			expected: values.NewInteger(7),
+		},
+		{
+			name:     "eval nested expression",
+			code:     `(eval '(+ (* 2 3) 4) (interaction-environment))`,
+			expected: values.NewInteger(10),
+		},
+		{
+			name:     "eval if expression",
+			code:     `(eval '(if (> 5 3) 1 2) (interaction-environment))`,
+			expected: values.NewInteger(1),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
