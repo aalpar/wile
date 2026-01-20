@@ -91,14 +91,10 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("string-copy!: destination index out of bounds")
 	}
 
-	// Perform the copy
+	// Perform the copy using Go's optimized copy function
 	toRunes := to.Runes()
 	fromRunes := from.Runes()
-
-	// Copy characters from source to destination
-	for i := 0; i < copyLen; i++ {
-		toRunes[at+i] = fromRunes[start+i]
-	}
+	copy(toRunes[at:], fromRunes[start:end])
 	to.SetValue(string(toRunes))
 
 	mc.SetValue(values.Void)
