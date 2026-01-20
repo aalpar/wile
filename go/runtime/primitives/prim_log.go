@@ -16,33 +16,35 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimLog implements the (log) primitive.
-// Returns the natural logarithm of a number, optionally with a specified base.
+// PrimLog implements the (log z) and (log z1 z2) primitives.
+// Returns the natural logarithm of z, or log base z2 of z1.
+// Accepts all numeric types per R7RS. Returns complex for negative reals.
 func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "log: %v", err)
 	}
 	if rest == values.EmptyList {
-		mc.SetValue(values.NewFloat(math.Log(x)))
+		mc.SetValue(ComplexOrFloat(cmplx.Log(z)))
 	} else {
 		baseArg, ok := rest.(*values.Pair)
 		if !ok {
 			return values.NewForeignError("log: expected a list for rest arguments")
 		}
-		base, err := ToFloat64(baseArg.Car())
+		base, err := ToComplex128(baseArg.Car())
 		if err != nil {
 			return values.WrapForeignErrorf(err, "log: %v", err)
 		}
-		mc.SetValue(values.NewFloat(math.Log(x) / math.Log(base)))
+		// log_base(z) = log(z) / log(base)
+		mc.SetValue(ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
 	}
 	return nil
 }

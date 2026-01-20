@@ -16,20 +16,20 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimExp implements the (exp) primitive.
-// Returns e raised to the given power.
+// PrimExp implements the (exp z) primitive.
+// Returns e raised to the power z. Accepts all numeric types per R7RS.
 func PrimExp(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "exp: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Exp(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Exp(z)))
 	return nil
 }

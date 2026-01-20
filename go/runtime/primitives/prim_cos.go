@@ -16,20 +16,20 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimCos implements the (cos) primitive.
-// Returns the cosine of the argument in radians.
+// PrimCos implements the (cos z) primitive.
+// Returns the cosine of z. Accepts all numeric types per R7RS.
 func PrimCos(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "cos: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Cos(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Cos(z)))
 	return nil
 }

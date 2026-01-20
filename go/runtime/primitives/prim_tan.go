@@ -16,20 +16,20 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimTan implements the tan primitive.
-// Returns the tangent of a number in radians.
+// PrimTan implements the (tan z) primitive.
+// Returns the tangent of z. Accepts all numeric types per R7RS.
 func PrimTan(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "tan: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Tan(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Tan(z)))
 	return nil
 }
