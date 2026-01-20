@@ -25,6 +25,7 @@ Package `primitives` implements all R7RS Scheme built-in procedures.
 | `prim_string_ci_variadic.go` | Case-insensitive string comparisons (string-ci=?, etc.) |
 | `call_with_file.go` | File I/O wrapper with cleanup |
 | `eqv.go` | Equality semantics for memv/assv |
+| `to_complex128.go` | Complex number conversion helpers for transcendental functions |
 
 ## Primitive Implementation Pattern
 
@@ -96,6 +97,7 @@ This package uses **thematic consolidation** for test files rather than 1:1 mapp
 | `prim_string_test.go` | String operations |
 | `prim_list_test.go` | List/pair operations |
 | `prim_vector_test.go` | Vector operations |
+| `prim_trig_test.go` | Transcendental functions (exp, log, sin, cos, tan, asin, acos, atan) |
 | `prim_*_extra_test.go` | Additional coverage for specific primitives |
 
 When adding new primitive tests:
@@ -230,6 +232,58 @@ For `odd?` and `even?` with BigFloat, use `v.BigFloatValue().IsInt()` to verify 
 represents an integer before checking parity.
 
 Use for implementing exactness contagion in primitives like max/min.
+
+### Complex Number Conversion (`to_complex128.go`)
+
+```go
+// ToComplex128 converts any Scheme number to Go complex128
+ToComplex128(v values.Value) (complex128, error)
+
+// ComplexOrFloat returns Float if imaginary part is zero, otherwise Complex
+ComplexOrFloat(c complex128) values.Value
+```
+
+Use for transcendental functions that accept complex inputs per R7RS.
+
+## Transcendental Functions - Implementation Details
+
+All transcendental functions (`exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`) use Go's `math/cmplx` package and accept complex number inputs per R7RS.
+
+### Branch Cut Conventions
+
+R7RS does **not** mandate specific branch cut conventions for complex functions - these are implementation-defined. This implementation uses Go's `math/cmplx` conventions:
+
+| Function | Go's Branch Cut Convention | Example |
+|----------|---------------------------|---------|
+| `asin(z)` | Cut along real axis outside [-1, 1] | `(asin 2)` → `1.5708+1.3170i` |
+| `acos(z)` | Cut along real axis outside [-1, 1] | `(acos 2)` → `0-1.3170i` |
+| `atan(z)` | Cut along imaginary axis outside [-i, i] | `(atan 0+2i)` → `-1.5708+0.5493i` |
+| `log(z)` | Cut along negative real axis | `(log -1)` → `0+πi` |
+
+**Note**: Other Scheme implementations may use different branch cuts. Both conventions are mathematically valid - they represent different branches of multivalued complex functions.
+
+### Special Value Handling
+
+R7RS does not specify behavior for infinity/NaN inputs to transcendental functions. This implementation:
+
+| Expression | Result | Notes |
+|------------|--------|-------|
+| `(sin +inf.0)` | `+nan.0` | Mathematically undefined |
+| `(cos +inf.0)` | `+nan.0` | Mathematically undefined |
+| `(tan +inf.0)` | `+nan.0` | Mathematically undefined |
+| `(log 0)` | `-inf.0` | Limit as x→0⁺ |
+| `(log -1)` | `0+πi` | Complex per R7RS |
+| `(asin 2)` | Complex | Per R7RS (not NaN) |
+| `(exp +inf.0)` | `+inf.0` | Correct limit |
+| `(exp -inf.0)` | `0.0` | Correct limit |
+
+### NaN Propagation
+
+When Go's `cmplx` functions return `NaN+NaNi` (e.g., `sin(+inf)`), `ComplexOrFloat` returns `Float(NaN)` rather than `Complex(NaN+NaNi)`. This preserves real-valued semantics for real inputs with undefined results.
+
+### Two-Argument atan (atan2)
+
+The two-argument form `(atan y x)` computes the angle from the positive x-axis to point (x, y). Per R7RS, this form only accepts **real** arguments (not complex). Uses `math.Atan2` directly.
 
 ## R7RS Normative Sources
 

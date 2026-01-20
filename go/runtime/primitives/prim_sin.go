@@ -16,20 +16,20 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimSin implements the (sin) primitive.
-// Returns the sine of a number.
+// PrimSin implements the (sin z) primitive.
+// Returns the sine of z. Accepts all numeric types per R7RS.
 func PrimSin(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "sin: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Sin(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Sin(z)))
 	return nil
 }

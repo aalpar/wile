@@ -17,23 +17,33 @@ package primitives
 import (
 	"context"
 	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimAtan implements the atan primitive.
-// Returns the arc tangent of a number (one or two arguments).
+// PrimAtan implements the (atan z) and (atan y x) primitives.
+// One-argument form: Returns the arc tangent of z. Accepts all numeric types per R7RS.
+// Two-argument form: Returns the angle in radians from the positive x-axis to (x, y).
+// The two-argument form only accepts real numbers (per R7RS).
 func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
-	y, err := ToFloat64(o)
-	if err != nil {
-		return values.WrapForeignErrorf(err, "atan: %v", err)
-	}
+
 	if rest == values.EmptyList {
-		mc.SetValue(values.NewFloat(math.Atan(y)))
+		// One-argument form: complex atan
+		z, err := ToComplex128(o)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "atan: %v", err)
+		}
+		mc.SetValue(ComplexOrFloat(cmplx.Atan(z)))
 	} else {
+		// Two-argument form: atan2(y, x) - only accepts real numbers
+		y, err := ToFloat64(o)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "atan: %v", err)
+		}
 		xArg, ok := rest.(*values.Pair)
 		if !ok {
 			return values.NewForeignError("atan: expected a list for rest arguments")

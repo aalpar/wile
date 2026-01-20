@@ -16,20 +16,21 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimAcos implements the acos primitive.
-// Returns the arc cosine of a number.
+// PrimAcos implements the (acos z) primitive.
+// Returns the arc cosine of z. Accepts all numeric types per R7RS.
+// For values outside [-1, 1], returns a complex number.
 func PrimAcos(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "acos: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Acos(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Acos(z)))
 	return nil
 }

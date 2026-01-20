@@ -16,20 +16,21 @@ package primitives
 
 import (
 	"context"
-	"math"
+	"math/cmplx"
 
 	"wile/machine"
 	"wile/values"
 )
 
-// PrimAsin implements the asin primitive.
-// Returns the arc sine of a number.
+// PrimAsin implements the (asin z) primitive.
+// Returns the arc sine of z. Accepts all numeric types per R7RS.
+// For values outside [-1, 1], returns a complex number.
 func PrimAsin(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	x, err := ToFloat64(o)
+	z, err := ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "asin: %v", err)
 	}
-	mc.SetValue(values.NewFloat(math.Asin(x)))
+	mc.SetValue(ComplexOrFloat(cmplx.Asin(z)))
 	return nil
 }

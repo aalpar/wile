@@ -425,20 +425,32 @@ Tests are distributed across:
 
 ---
 
-### Phase 6: Transcendental Functions (Priority: Medium)
+### Phase 6: Transcendental Functions (Priority: Medium) ✅ COMPLETE
 **Estimated time: 1-2 days**
-**Files: 8**
+**Files: 1 (consolidated in prim_trig_test.go)**
+**Status: Complete - 150+ test cases covering all transcendental functions**
 
-| Primitive | File | Key Test Cases |
-|-----------|------|----------------|
-| `exp` | `prim_exp_test.go` | e^0=1, e^1≈2.718, negative |
-| `log` | `prim_log_test.go` | log(1)=0, log(e)=1, two-arg, negative→complex |
-| `sin` | `prim_sin_test.go` | sin(0)=0, sin(π/2)=1, periodicity |
-| `cos` | `prim_cos_test.go` | cos(0)=1, cos(π)=-1 |
-| `tan` | `prim_tan_test.go` | tan(0)=0, tan(π/4)=1 |
-| `asin` | `prim_asin_test.go` | Domain [-1,1], outside→complex |
-| `acos` | `prim_acos_test.go` | acos(1)=0 |
-| `atan` | `prim_atan_test.go` | One-arg, two-arg (atan2) |
+Tests are consolidated in `prim_trig_test.go` following the project's thematic consolidation pattern:
+
+| Primitive | Test Function | Test Cases |
+|-----------|---------------|------------|
+| `exp` | `TestExp`, `TestExpExtended`, `TestExpErrors` | 15+ ✅ |
+| `log` | `TestLog`, `TestLogExtended`, `TestLogErrors` | 20+ ✅ |
+| `sin` | `TestSin`, `TestSinExtended`, `TestSinErrors` | 15+ ✅ |
+| `cos` | `TestCos`, `TestCosExtended`, `TestCosErrors` | 15+ ✅ |
+| `tan` | `TestTan`, `TestTanExtended`, `TestTanErrors` | 12+ ✅ |
+| `asin` | `TestAsin`, `TestAsinExtended`, `TestAsinErrors` | 15+ ✅ |
+| `acos` | `TestAcos`, `TestAcosExtended`, `TestAcosErrors` | 15+ ✅ |
+| `atan` | `TestAtan`, `TestAtanExtended`, `TestAtanErrors` | 20+ ✅ |
+| Identities | `TestTranscendentalIdentities` | 7 identity tests ✅ |
+
+**Coverage includes:**
+- All supported numeric types (Integer, Float, Rational)
+- Special values (+inf.0, -inf.0, +nan.0)
+- Error conditions (wrong types: string, symbol, list, boolean)
+- Mathematical identities (sin²+cos²=1, tan=sin/cos, exp(log(x))=x, etc.)
+- Domain boundaries (asin/acos outside [-1,1])
+- Two-arg atan (atan2) with all quadrants
 
 ---
 
