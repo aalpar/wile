@@ -559,12 +559,61 @@ func TestStringCopy(t *testing.T) {
 			code:     `(string-copy "")`,
 			expected: values.NewString(""),
 		},
+		// R7RS extended: (string-copy string start)
+		{
+			name:     "string-copy with start",
+			code:     `(string-copy "hello" 2)`,
+			expected: values.NewString("llo"),
+		},
+		{
+			name:     "string-copy with start at 0",
+			code:     `(string-copy "hello" 0)`,
+			expected: values.NewString("hello"),
+		},
+		{
+			name:     "string-copy with start at end",
+			code:     `(string-copy "hello" 5)`,
+			expected: values.NewString(""),
+		},
+		// R7RS extended: (string-copy string start end)
+		{
+			name:     "string-copy with start and end",
+			code:     `(string-copy "hello" 1 4)`,
+			expected: values.NewString("ell"),
+		},
+		{
+			name:     "string-copy with start and end full",
+			code:     `(string-copy "hello" 0 5)`,
+			expected: values.NewString("hello"),
+		},
+		{
+			name:     "string-copy with start equals end",
+			code:     `(string-copy "hello" 2 2)`,
+			expected: values.NewString(""),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringCopyErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-copy with non-string", code: `(string-copy 42)`},
+		{name: "string-copy with non-integer start", code: `(string-copy "hello" "0")`},
+		{name: "string-copy with non-integer end", code: `(string-copy "hello" 0 "5")`},
+		{name: "string-copy with negative start", code: `(string-copy "hello" -1)`},
+		{name: "string-copy with end out of bounds", code: `(string-copy "hello" 0 6)`},
+		{name: "string-copy with start > end", code: `(string-copy "hello" 3 2)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
@@ -1059,6 +1108,248 @@ func TestCharUnicode(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// R7RS string mutation tests
+
+func TestStringSet(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-set! first char",
+			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
+			expected: values.NewString("Hello"),
+		},
+		{
+			name:     "string-set! last char",
+			code:     `(let ((s (string-copy "hello"))) (string-set! s 4 #\O) s)`,
+			expected: values.NewString("hellO"),
+		},
+		{
+			name:     "string-set! middle char",
+			code:     `(let ((s (string-copy "hello"))) (string-set! s 2 #\L) s)`,
+			expected: values.NewString("heLlo"),
+		},
+		{
+			name:     "string-set! returns void",
+			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H))`,
+			expected: values.Void,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringSetErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-set! with non-string", code: `(string-set! 42 0 #\a)`},
+		{name: "string-set! with non-integer index", code: `(string-set! "hello" "0" #\a)`},
+		{name: "string-set! with non-character", code: `(string-set! "hello" 0 "a")`},
+		{name: "string-set! index out of bounds", code: `(string-set! "hello" 5 #\a)`},
+		{name: "string-set! negative index", code: `(string-set! "hello" -1 #\a)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestStringFill(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-fill! entire string",
+			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z) s)`,
+			expected: values.NewString("zzzzz"),
+		},
+		{
+			name:     "string-fill! with start",
+			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2) s)`,
+			expected: values.NewString("hezzz"),
+		},
+		{
+			name:     "string-fill! with start and end",
+			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 1 4) s)`,
+			expected: values.NewString("hzzzo"),
+		},
+		{
+			name:     "string-fill! returns void",
+			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z))`,
+			expected: values.Void,
+		},
+		{
+			name:     "string-fill! empty range",
+			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2 2) s)`,
+			expected: values.NewString("hello"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringFillErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-fill! with non-string", code: `(string-fill! 42 #\z)`},
+		{name: "string-fill! with non-character", code: `(string-fill! "hello" "x")`},
+		{name: "string-fill! start out of bounds", code: `(string-fill! "hello" #\z 6)`},
+		{name: "string-fill! end out of bounds", code: `(string-fill! "hello" #\z 0 6)`},
+		{name: "string-fill! start > end", code: `(string-fill! "hello" #\z 3 2)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestStringCopyTo(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-copy! basic",
+			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc") to)`,
+			expected: values.NewString("abc45"),
+		},
+		{
+			name:     "string-copy! with offset",
+			code:     `(let ((to (string-copy "12345"))) (string-copy! to 2 "abc") to)`,
+			expected: values.NewString("12abc"),
+		},
+		{
+			name:     "string-copy! with start",
+			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abcde" 2) to)`,
+			expected: values.NewString("cde45"),
+		},
+		{
+			name:     "string-copy! with start and end",
+			code:     `(let ((to (string-copy "12345"))) (string-copy! to 1 "abcde" 1 3) to)`,
+			expected: values.NewString("1bc45"),
+		},
+		{
+			name:     "string-copy! returns void",
+			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc"))`,
+			expected: values.Void,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringCopyToErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-copy! to non-string", code: `(string-copy! 42 0 "abc")`},
+		{name: "string-copy! at non-integer", code: `(string-copy! "12345" "0" "abc")`},
+		{name: "string-copy! from non-string", code: `(string-copy! "12345" 0 42)`},
+		{name: "string-copy! destination overflow", code: `(string-copy! "123" 2 "abcde")`},
+		{name: "string-copy! invalid source range", code: `(string-copy! "12345" 0 "abc" 2 1)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestStringMap(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-map single string",
+			code:     `(string-map char-upcase "hello")`,
+			expected: values.NewString("HELLO"),
+		},
+		{
+			name:     "string-map with lambda",
+			code:     `(string-map (lambda (c) (integer->char (+ 1 (char->integer c)))) "abc")`,
+			expected: values.NewString("bcd"),
+		},
+		{
+			name:     "string-map empty string",
+			code:     `(string-map char-upcase "")`,
+			expected: values.NewString(""),
+		},
+		{
+			name:     "string-map two strings",
+			code:     `(string-map (lambda (a b) (if (char<? a b) b a)) "abc" "bac")`,
+			expected: values.NewString("bbc"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringMapErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-map non-procedure", code: `(string-map 42 "hello")`},
+		{name: "string-map non-string", code: `(string-map char-upcase 42)`},
+		{name: "string-map proc returns non-char", code: `(string-map (lambda (c) 42) "hello")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestStringForEach(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-for-each returns void",
+			code:     `(string-for-each (lambda (c) c) "hello")`,
+			expected: values.Void,
+		},
+		{
+			name:     "string-for-each with side effect",
+			code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "hello") count)`,
+			expected: values.NewInteger(5),
+		},
+		{
+			name:     "string-for-each empty string",
+			code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "") count)`,
+			expected: values.NewInteger(0),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringForEachErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string-for-each non-procedure", code: `(string-for-each 42 "hello")`},
+		{name: "string-for-each non-string", code: `(string-for-each (lambda (c) c) 42)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
