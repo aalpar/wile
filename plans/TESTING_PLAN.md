@@ -300,26 +300,26 @@ The following items must be completed to achieve R7RS conformance for string and
 **Legend:** ✅ = tests added, implementation done | 🧪 = tests added, implementation pending | ⬜ = no tests yet
 
 **Non-Variadic Procedures That Must Be Made Variadic (R7RS requires 2+ arguments):**
-- 🧪 `char-ci=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
-- 🧪 `char-ci<?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
-- 🧪 `char-ci>?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
-- 🧪 `char-ci<=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
-- 🧪 `char-ci>=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
-- 🧪 `string-ci=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
-- 🧪 `string-ci<?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
-- 🧪 `string-ci>?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
-- 🧪 `string-ci<=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
-- 🧪 `string-ci>=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+- ✅ `char-ci=?` - variadic implementation complete (`prim_char_ci_variadic.go`)
+- ✅ `char-ci<?` - variadic implementation complete (`prim_char_ci_variadic.go`)
+- ✅ `char-ci>?` - variadic implementation complete (`prim_char_ci_variadic.go`)
+- ✅ `char-ci<=?` - variadic implementation complete (`prim_char_ci_variadic.go`)
+- ✅ `char-ci>=?` - variadic implementation complete (`prim_char_ci_variadic.go`)
+- ✅ `string-ci=?` - variadic implementation complete (`prim_string_ci_variadic.go`)
+- ✅ `string-ci<?` - variadic implementation complete (`prim_string_ci_variadic.go`)
+- ✅ `string-ci>?` - variadic implementation complete (`prim_string_ci_variadic.go`)
+- ✅ `string-ci<=?` - variadic implementation complete (`prim_string_ci_variadic.go`)
+- ✅ `string-ci>=?` - variadic implementation complete (`prim_string_ci_variadic.go`)
 
 **Missing R7RS Base Procedures:**
-- ⬜ `string-set!` - `(string-set! string k char)` - mutate character at position
-- ⬜ `string-fill!` - `(string-fill! string fill [start [end]])` - fill region with character
-- ⬜ `string-copy!` - `(string-copy! to at from [start [end]])` - copy between strings
-- ⬜ `string-map` - `(string-map proc string1 string2 ...)` - map over strings
-- ⬜ `string-for-each` - `(string-for-each proc string1 string2 ...)` - iterate over strings
+- ✅ `string-set!` - `(string-set! string k char)` - mutate character at position
+- ✅ `string-fill!` - `(string-fill! string fill [start [end]])` - fill region with character
+- ✅ `string-copy!` - `(string-copy! to at from [start [end]])` - copy between strings
+- ✅ `string-map` - `(string-map proc string1 string2 ...)` - map over strings
+- ✅ `string-for-each` - `(string-for-each proc string1 string2 ...)` - iterate over strings
 
 **Missing Optional Arguments:**
-- ⬜ `string-copy` - add optional `start` and `end` arguments: `(string-copy string [start [end]])`
+- ✅ `string-copy` - add optional `start` and `end` arguments: `(string-copy string [start [end]])`
 - ⬜ `string->list` - add optional `start` and `end` arguments: `(string->list string [start [end]])`
 
 **Semantic Fixes:**
@@ -330,7 +330,26 @@ The following items must be completed to achieve R7RS conformance for string and
 **Additional Tests Added:**
 - ✅ Unicode string operations (`TestStringUnicode`) - Chinese, Greek, emoji, accented chars
 - ✅ Unicode character operations (`TestCharUnicode`) - Greek letters, char-upcase/downcase
-- ✅ String error conditions (`TestStringErrors`) - 19 error cases
+- ✅ String error conditions (`TestStringErrors`) - 45 error cases including:
+  - string-length, string-ref, substring, make-string, string-copy errors
+  - string constructor and string->list/list->string errors
+  - string-upcase, string-downcase, string-foldcase errors
+  - All string comparison operators (string=?, string<?, string>?, string<=?, string>=?)
+  - All string-ci comparison operators (string-ci=?, string-ci<?, string-ci>?, string-ci<=?, string-ci>=?)
+  - string->symbol, symbol->string, number->string errors
+- ✅ Character comparison error tests (`TestCharCompareErrors`) - 12 error cases for char=?, char<?, char>?, char<=?, char>=?
+- ✅ Character CI comparison error tests (`TestCharCICompareErrors`) - 10 error cases for char-ci comparisons
+- ✅ Character predicate error tests (`TestCharPredicateErrors`) - 10 error cases for char-alphabetic?, char-numeric?, etc.
+- ✅ Character conversion error tests (`TestCharConversionErrors`) - 14 error cases for char->integer, integer->char, char-upcase, etc.
+- ✅ String comparison tests (`TestStringEqualScheme`, `TestStringLessThanScheme`, etc.) - 50+ tests for string=?, string<?, string>?, string<=?, string>=?
+- ✅ Variadic char-ci comparison tests (`TestCharCICompareVariadic`) - tests for 3+ argument comparisons
+- ✅ Variadic string-ci comparison tests (`TestStringCICompareVariadic`) - tests for 3+ argument comparisons
+- ✅ String mutation tests (`TestStringSet`, `TestStringSetErrors`) - 9 tests for string-set!
+- ✅ String fill tests (`TestStringFill`, `TestStringFillErrors`) - 10 tests for string-fill!
+- ✅ String copy-to tests (`TestStringCopyTo`, `TestStringCopyToErrors`) - 10 tests for string-copy!
+- ✅ String map tests (`TestStringMap`, `TestStringMapErrors`) - 7 tests for string-map
+- ✅ String for-each tests (`TestStringForEach`, `TestStringForEachErrors`) - 5 tests for string-for-each
+- ✅ String copy with optional args tests (`TestStringCopy`, `TestStringCopyErrors`) - 14 tests for string-copy with start/end
 
 #### String Operations (20 files)
 | Primitive | Test Cases | Notes |

@@ -47,6 +47,22 @@ Package `runtime` initializes the top-level Scheme environment with primitives.
 - **Bootstrap order matters**: Macros loaded after all primitives registered
 - **Weak references**: Tokenizer/parser caches use weak pointers
 - **Expand-time subset**: Only safe primitives available during macro expansion
+- **Binary to variadic**: When R7RS requires variadic (2+ args) but implementation is binary, update registration to `{ParamCount: 2, IsVariadic: true}` and use helper like `charCompareVariadic` or `stringCompareVariadic`
+
+## Primitive Registration
+
+Primitives are registered in `environment_tiny.go` as `PrimitiveSpec`:
+
+```go
+{Name: "char=?", ParamCount: 2, IsVariadic: true, Impl: primitives.PrimCharEqVariadic},
+```
+
+| ParamCount | IsVariadic | Behavior |
+|------------|------------|----------|
+| 0 | true | All args as Pair in `mc.Arg(0)` |
+| 1 | true | First arg direct, rest as Pair in `mc.Arg(0)` |
+| 2 | true | First arg in `mc.Arg(0)`, rest as Pair in `mc.Arg(1)` |
+| N | false | Exactly N args, each in `mc.Arg(0)` through `mc.Arg(N-1)` |
 
 ## Testing
 

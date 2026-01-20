@@ -48,7 +48,8 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	q := values.NewString(strings.Repeat(string(fillChar), int(kInt.Value)))
+	// Use NewMutableString since make-string returns a mutable string per R7RS §6.7
+	q := values.NewMutableString(strings.Repeat(string(fillChar), int(kInt.Value)))
 	mc.SetValue(q)
 	return nil
 }

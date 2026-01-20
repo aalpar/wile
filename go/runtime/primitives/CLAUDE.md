@@ -19,7 +19,10 @@ Package `primitives` implements all R7RS Scheme built-in procedures.
 | `numeric_extremum.go` | min/max with exactness contagion and NaN handling |
 | `integer_fold.go` | gcd/lcm with BigInteger support |
 | `numeric_unary_ops.go` | Unary ops (abs, floor, ceiling, etc.) with BigInteger |
-| `char_compare.go` | Character comparison predicates |
+| `char_compare.go` | Character comparison helper (`charCompareVariadic`) |
+| `string_compare.go` | String comparison helper (`stringCompareVariadic`) |
+| `prim_char_ci_variadic.go` | Case-insensitive char comparisons (char-ci=?, etc.) |
+| `prim_string_ci_variadic.go` | Case-insensitive string comparisons (string-ci=?, etc.) |
 | `call_with_file.go` | File I/O wrapper with cleanup |
 | `eqv.go` | Equality semantics for memv/assv |
 
@@ -60,7 +63,8 @@ var runtimePrimitives = []PrimitiveSpec{
 - **Character `#\x` in tests**: Avoid `#\x` in test code as it starts a hex escape sequence; use `#\a` or other letters instead
 - **Simple errors**: Use `values.NewForeignError("message")` for validation errors without predefined constants
 - **String Unicode escapes**: Use `\xHEX;` format (R7RS) or embed Unicode directly; `\U` escape is not valid Scheme syntax
-- **R7RS conformance tests**: Some tests verify R7RS behavior that is not yet implemented (e.g., variadic char-ci/string-ci comparisons). These tests are intentionally failing until the implementation is fixed—do not remove them
+- **integer->char validation**: Current implementation does not validate Unicode scalar values per R7RS; negative integers, surrogate values (D800-DFFF), and values > 10FFFF should error but currently don't
+- **R7RS semantic differences**: See `plans/R7RS_SEMANTIC_DIFFERENCES.md` (at project root) for documented differences between implementation and R7RS specification (char-foldcase, string-foldcase, digit-value, etc.)
 
 ## Variadic Registration Patterns
 
@@ -78,6 +82,30 @@ For primitives requiring at least 2 arguments (like comparisons), use `ParamCoun
 Uses quicktest with `runProgram()` and `runSchemeCode()` helpers. Table-driven tests cover operations, edge cases, and error conditions.
 
 **Important**: Do not remove or revert tests that conform to R7RS. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed to conform to R7RS—not the test.
+
+### Error Testing Pattern
+
+Use `schemeCodeErrorTestCase` for testing error conditions:
+
+```go
+func TestXxxErrors(t *testing.T) {
+    tcs := []schemeCodeErrorTestCase{
+        {name: "wrong type - integer", code: `(xxx 42)`},
+        {name: "wrong type - string", code: `(xxx "hello")`},
+    }
+    for _, tc := range tcs {
+        t.Run(tc.name, func(t *testing.T) {
+            _, err := runSchemeCode(t, tc.code)
+            qt.Assert(t, err, qt.IsNotNil)
+        })
+    }
+}
+```
+
+Error tests should cover:
+- Wrong argument types (integer when expecting char, string when expecting symbol, etc.)
+- Boundary conditions (negative indices, out-of-bounds access)
+- Invalid values (per R7RS specification)
 
 ## R7RS Numeric Tower
 

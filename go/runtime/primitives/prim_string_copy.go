@@ -22,13 +22,57 @@ import (
 )
 
 // PrimStringCopy implements the string-copy primitive.
-// (string-copy string) returns a newly allocated copy of the given string.
+// R7RS §6.7: (string-copy string [start [end]])
+// Returns a newly allocated copy of the given string (or substring).
+// The returned string is mutable and distinct from the original.
 func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
+	rest := mc.Arg(1)
+
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy: expected a string but got %T", s)
 	}
-	mc.SetValue(values.NewString(str.Value))
+
+	runes := str.Runes()
+	length := len(runes)
+	start := 0
+	end := length
+
+	// Parse optional arguments: [start [end]]
+	if rest != values.EmptyList {
+		pair, ok := rest.(*values.Pair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
+		}
+
+		// Parse start
+		startVal, ok := pair.Car().(*values.Integer)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for start but got %T", pair.Car())
+		}
+		start = int(startVal.Value)
+
+		// Check for end argument
+		if pair.Cdr() != values.EmptyList {
+			pair2, ok := pair.Cdr().(*values.Pair)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
+			}
+			endVal, ok := pair2.Car().(*values.Integer)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for end but got %T", pair2.Car())
+			}
+			end = int(endVal.Value)
+		}
+	}
+
+	// Validate indices
+	if start < 0 || end > length || start > end {
+		return values.NewForeignError("string-copy: invalid indices")
+	}
+
+	// Use NewMutableString to ensure the copy is not interned and can be mutated
+	mc.SetValue(values.NewMutableString(string(runes[start:end])))
 	return nil
 }

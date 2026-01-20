@@ -101,6 +101,9 @@ if err := doSomething(); err != nil { ... }
 - `PRIMITIVES.md` - Complete primitives reference
 - `go/DESIGN.md` - Macro system design details
 - `BIBLIOGRAPHY.md` - Academic references (Flatt 2016, R7RS)
+- `plans/TESTING_PLAN.md` - Comprehensive primitive unit test implementation plan
+- `plans/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
+- `plans/R7RS_CONFORMANCE_PLAN.md` - R7RS conformance roadmap
 
 ## R7RS Conformance
 
