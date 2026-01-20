@@ -274,3 +274,40 @@ func TestMakePolarAngleRoundTrip(t *testing.T) {
 func floatToString(f float64) string {
 	return values.NewFloat(f).SchemeString()
 }
+
+// ----------------------------------------------------------------------------
+// angle - Error Tests
+// ----------------------------------------------------------------------------
+
+func TestAngleErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "angle of string", code: `(angle "hello")`},
+		{name: "angle of symbol", code: `(angle 'foo)`},
+		{name: "angle of list", code: `(angle '(1 2 3))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// ----------------------------------------------------------------------------
+// make-polar - Error Tests
+// ----------------------------------------------------------------------------
+
+func TestMakePolarErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "make-polar string magnitude", code: `(make-polar "3" 0)`},
+		{name: "make-polar string angle", code: `(make-polar 3 "0")`},
+		{name: "make-polar symbol arg", code: `(make-polar 3 'zero)`},
+		{name: "make-polar complex magnitude", code: `(make-polar 1+2i 0)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
