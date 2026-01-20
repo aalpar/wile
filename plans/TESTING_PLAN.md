@@ -393,24 +393,35 @@ The following items must be completed to achieve R7RS conformance for string and
 
 ---
 
-### Phase 5: Numeric Conversion & Complex Numbers (Priority: Medium)
+### Phase 5: Numeric Conversion & Complex Numbers (Priority: Medium) ✅ COMPLETE
 **Estimated time: 1-2 days**
 **Files: 12**
+**Status: Complete - 155+ test cases across existing and new test files**
+
+Tests are distributed across:
+- `prim_phase5_test.go` - 155 comprehensive tests for all Phase 5 primitives
+- `prim_numeric_conversion_test.go` - existing tests for numerator, denominator, number->string, string->number
+- `prim_numeric_extra_test.go` - existing tests for exact, inexact, exact-integer-sqrt, rationalize
+- `prim_complex_test.go` - existing tests for real-part, imag-part, magnitude, make-rectangular
+- `prim_complex_extra_test.go` - existing tests for angle, make-polar, round-trip tests
 
 | Primitive | File | Test Cases |
 |-----------|------|------------|
-| `exact` | `prim_exact_test.go` | 12+ |
-| `inexact` | `prim_inexact_test.go` | 12+ |
-| `numerator` | `prim_numerator_test.go` | 10+ |
-| `denominator` | `prim_denominator_test.go` | 10+ |
-| `number->string` | `prim_number_to_string_test.go` | 15+ |
-| `string->number` | `prim_string_to_number_test.go` | 15+ |
-| `make-rectangular` | `prim_make_rectangular_test.go` | 10+ |
-| `make-polar` | `prim_make_polar_test.go` | 10+ |
-| `real-part` | `prim_real_part_test.go` | 10+ |
-| `imag-part` | `prim_imag_part_test.go` | 10+ |
-| `magnitude` | `prim_magnitude_test.go` | 10+ |
-| `angle` | `prim_angle_test.go` | 10+ |
+| `exact` | `prim_phase5_test.go` | 16 ✅ |
+| `inexact` | `prim_phase5_test.go` | 11 ✅ |
+| `numerator` | `prim_phase5_test.go` | 12 ✅ |
+| `denominator` | `prim_phase5_test.go` | 12 ✅ |
+| `number->string` | `prim_phase5_test.go` | 18 ✅ |
+| `string->number` | `prim_phase5_test.go` | 14 ✅ |
+| `make-rectangular` | `prim_phase5_test.go` | 10 ✅ |
+| `make-polar` | `prim_complex_extra_test.go` | 11 ✅ |
+| `real-part` | `prim_phase5_test.go` | 9 ✅ |
+| `imag-part` | `prim_phase5_test.go` | 9 ✅ |
+| `magnitude` | `prim_phase5_test.go` | 14 ✅ |
+| `angle` | `prim_complex_extra_test.go` | 14 ✅ |
+| `exact?` | `prim_phase5_test.go` | 8 ✅ |
+| `inexact?` | `prim_phase5_test.go` | 7 ✅ |
+| `exact-integer?` | `prim_phase5_test.go` | 8 ✅ |
 
 ---
 

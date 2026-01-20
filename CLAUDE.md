@@ -94,6 +94,21 @@ if err := doSomething(); err != nil { ... }
 
 **Imports**: Internal packages first, then standard library.
 
+## Test File Naming Conventions
+
+The standard Go convention is that tests for functions in `foo.go` belong in `foo_test.go`. This project follows that convention with legitimate consolidation patterns for large packages:
+
+| Pattern | When Used | Example |
+|---------|-----------|---------|
+| **1:1 matching** | Small packages with few files | `environment/binding.go` → `binding_test.go` |
+| **Private function consolidation** | Files with only private functions | `validate/validate_if.go` → `validate_test.go` |
+| **Thematic consolidation** | Many small related files | `primitives/prim_add.go`, `prim_subtract.go` → `prim_arithmetic_test.go` |
+| **Coverage files** | Additional edge case coverage | `tokenizer/*_coverage_test.go` |
+
+**Consolidation suffixes**: `_test.go`, `_internal_test.go`, `_extra_test.go`, `_coverage_test.go`, `_mutual_test.go`
+
+See package-specific CLAUDE.md files for details on each package's test organization.
+
 ## References
 
 - `TODO.md` - Pending tasks, missing R7RS features, future extensions (multithreading, POSIX API, Go FFI)

@@ -47,3 +47,17 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 ## Testing
 
 Uses quicktest with suite pattern. Tests cover bytecode execution, pattern compilation, and expansion.
+
+### Test File Organization
+
+Tests are organized by functional area:
+
+| Test File | Tests For |
+|-----------|-----------|
+| `match_test.go` | Core Matcher VM bytecode execution |
+| `syntax_compiler_test.go` | Pattern compilation to bytecode |
+| `syntax_adapter_test.go` | SyntaxMatcher bridge layer |
+| `pattern_analyzer_test.go` | Pattern analysis utilities |
+| `expand_test.go` | Template expansion |
+
+When adding tests, choose the file matching the functional area being tested.

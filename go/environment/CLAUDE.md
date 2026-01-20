@@ -55,3 +55,19 @@ Two-phase lookup in `GetBinding()`:
 ## Testing
 
 Uses quicktest with coverage of binding operations, phase hierarchy, and scope-based lookup.
+
+### Test File Organization
+
+This package uses **1:1 mapping** - each source file has a corresponding test file:
+
+| Source File | Test File |
+|-------------|-----------|
+| `binding.go` | `binding_test.go` |
+| `environment_frame.go` | `environment_frame_test.go` |
+| `environment_mapping.go` | `environment_mapping_test.go` |
+| `global_environment_frame.go` | `global_environment_frame_test.go` |
+| `local_environment_frame.go` | `local_environment_frame_test.go` |
+| `local_index.go` | `local_index_test.go` |
+| `meta_frame.go` | `meta_frame_test.go` |
+
+When adding new functionality, add tests to the corresponding test file.

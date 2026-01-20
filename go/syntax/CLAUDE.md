@@ -50,3 +50,17 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool
 ## Testing
 
 Uses quicktest with suite pattern and custom `SyntaxEquals` checker.
+
+### Test File Organization
+
+Tests are organized by syntax type with a coverage file for edge cases:
+
+| Test File | Tests For |
+|-----------|-----------|
+| `syntax_pair_test.go` | SyntaxPair operations |
+| `syntax_value_test.go` | SyntaxValue interface, SyntaxObject |
+| `syntax_vector_test.go` | SyntaxVector operations |
+| `utils_test.go` | Utility functions |
+| `coverage_test.go` | Additional edge case coverage |
+
+When adding tests, use the type-specific test file or `coverage_test.go` for cross-cutting concerns.
