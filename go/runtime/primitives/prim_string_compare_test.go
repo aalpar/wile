@@ -504,6 +504,335 @@ func TestStringCICompareVariadic(t *testing.T) {
 	}
 }
 
+// Binary string comparison tests using runSchemeCode
+// These tests exercise the actual registered string comparison primitives
+
+func TestStringEqualScheme(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic equality
+		{
+			name:     "equal strings",
+			code:     `(string=? "hello" "hello")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "different strings",
+			code:     `(string=? "hello" "world")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "empty strings equal",
+			code:     `(string=? "" "")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "case sensitive different",
+			code:     `(string=? "Hello" "hello")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "different lengths",
+			code:     `(string=? "ab" "abc")`,
+			expected: values.FalseValue,
+		},
+		// Unicode
+		{
+			name:     "unicode equal",
+			code:     `(string=? "café" "café")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "unicode different",
+			code:     `(string=? "café" "cafe")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "Chinese strings equal",
+			code:     `(string=? "你好" "你好")`,
+			expected: values.TrueValue,
+		},
+		// Edge cases
+		{
+			name:     "single char equal",
+			code:     `(string=? "a" "a")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "single char different",
+			code:     `(string=? "a" "b")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "empty vs non-empty",
+			code:     `(string=? "" "a")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "whitespace matters",
+			code:     `(string=? "a b" "a  b")`,
+			expected: values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringLessThanScheme(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic ordering
+		{
+			name:     "lexicographic less",
+			code:     `(string<? "abc" "abd")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "lexicographic greater",
+			code:     `(string<? "abd" "abc")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "equal strings",
+			code:     `(string<? "abc" "abc")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "prefix is less",
+			code:     `(string<? "ab" "abc")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "longer is not less than prefix",
+			code:     `(string<? "abc" "ab")`,
+			expected: values.FalseValue,
+		},
+		// Case sensitivity (ASCII order: A-Z < a-z)
+		{
+			name:     "uppercase less than lowercase",
+			code:     `(string<? "A" "a")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "Z less than a",
+			code:     `(string<? "Z" "a")`,
+			expected: values.TrueValue,
+		},
+		// Empty strings
+		{
+			name:     "empty less than non-empty",
+			code:     `(string<? "" "a")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "non-empty not less than empty",
+			code:     `(string<? "a" "")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "empty not less than empty",
+			code:     `(string<? "" "")`,
+			expected: values.FalseValue,
+		},
+		// Unicode
+		{
+			name:     "unicode ordering",
+			code:     `(string<? "a" "α")`,
+			expected: values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringGreaterThanScheme(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic ordering
+		{
+			name:     "lexicographic greater",
+			code:     `(string>? "abd" "abc")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "lexicographic less",
+			code:     `(string>? "abc" "abd")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "equal strings",
+			code:     `(string>? "abc" "abc")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "longer is greater than prefix",
+			code:     `(string>? "abc" "ab")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "prefix is not greater",
+			code:     `(string>? "ab" "abc")`,
+			expected: values.FalseValue,
+		},
+		// Case sensitivity
+		{
+			name:     "lowercase greater than uppercase",
+			code:     `(string>? "a" "A")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "a greater than Z",
+			code:     `(string>? "a" "Z")`,
+			expected: values.TrueValue,
+		},
+		// Empty strings
+		{
+			name:     "non-empty greater than empty",
+			code:     `(string>? "a" "")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "empty not greater than non-empty",
+			code:     `(string>? "" "a")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "empty not greater than empty",
+			code:     `(string>? "" "")`,
+			expected: values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringLessOrEqualScheme(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic ordering
+		{
+			name:     "less than",
+			code:     `(string<=? "abc" "abd")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "equal",
+			code:     `(string<=? "abc" "abc")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "greater than",
+			code:     `(string<=? "abd" "abc")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "prefix less or equal",
+			code:     `(string<=? "ab" "abc")`,
+			expected: values.TrueValue,
+		},
+		// Empty strings
+		{
+			name:     "empty less or equal to empty",
+			code:     `(string<=? "" "")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "empty less or equal to non-empty",
+			code:     `(string<=? "" "a")`,
+			expected: values.TrueValue,
+		},
+		// Case sensitivity
+		{
+			name:     "uppercase less or equal lowercase",
+			code:     `(string<=? "A" "a")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "same case equal",
+			code:     `(string<=? "hello" "hello")`,
+			expected: values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringGreaterOrEqualScheme(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic ordering
+		{
+			name:     "greater than",
+			code:     `(string>=? "abd" "abc")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "equal",
+			code:     `(string>=? "abc" "abc")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "less than",
+			code:     `(string>=? "abc" "abd")`,
+			expected: values.FalseValue,
+		},
+		{
+			name:     "longer greater or equal to prefix",
+			code:     `(string>=? "abc" "ab")`,
+			expected: values.TrueValue,
+		},
+		// Empty strings
+		{
+			name:     "empty greater or equal to empty",
+			code:     `(string>=? "" "")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "non-empty greater or equal to empty",
+			code:     `(string>=? "a" "")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "empty not greater or equal to non-empty",
+			code:     `(string>=? "" "a")`,
+			expected: values.FalseValue,
+		},
+		// Case sensitivity
+		{
+			name:     "lowercase greater or equal uppercase",
+			code:     `(string>=? "a" "A")`,
+			expected: values.TrueValue,
+		},
+		{
+			name:     "same case equal",
+			code:     `(string>=? "hello" "hello")`,
+			expected: values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 // Variadic string comparison tests
 
 func TestStringCompareVariadic(t *testing.T) {
