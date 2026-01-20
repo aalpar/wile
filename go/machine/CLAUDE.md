@@ -51,3 +51,22 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 ## Testing
 
 Uses quicktest with unit tests for operations, integration tests for compilation/execution.
+
+### Test File Organization
+
+This package uses **consolidation** across 45+ test files organized by functional area:
+
+| Pattern | Examples | Tests For |
+|---------|----------|-----------|
+| `operation_*.go` | `operation_test.go`, `operation_misc_test.go` | Bytecode operations |
+| `compile_*.go` | `compile_time_continuation_test.go`, `compile_syntax_case_test.go` | Compilation phases |
+| `library_*.go` | `library_test.go`, `library_internal_test.go` | Library system |
+| `syntax_rules_*.go` | `syntax_rules_test.go`, `syntax_rules_internal_test.go` | Macro expansion |
+| `machine_*.go` | `machine_context_test.go`, `machine_closure_test.go` | VM execution |
+| `*_coverage_test.go` | `coverage_improvement_test.go` | Additional edge cases |
+
+When adding tests:
+- Operation constructors → `operation_test.go`
+- Compilation logic → relevant `compile_*_test.go`
+- VM execution → `machine_context_test.go`
+- Cross-cutting concerns → `hygiene_test.go` or appropriate `*_internal_test.go`

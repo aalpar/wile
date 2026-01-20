@@ -4,7 +4,7 @@ Package `primitives` implements all R7RS Scheme built-in procedures.
 
 ## Purpose
 
-224+ primitive implementations as Go foreign functions, organized by:
+237 primitive implementations as Go foreign functions, organized by:
 - One file per primitive: `prim_<name>.go`
 - Helper modules for shared patterns
 - Comprehensive test coverage
@@ -82,6 +82,26 @@ For primitives requiring at least 2 arguments (like comparisons), use `ParamCoun
 Uses quicktest with `runProgram()` and `runSchemeCode()` helpers. Table-driven tests cover operations, edge cases, and error conditions.
 
 **Important**: Do not remove or revert tests that conform to R7RS. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed to conform to R7RS—not the test.
+
+### Test File Organization
+
+This package uses **thematic consolidation** for test files rather than 1:1 mapping. With 237 primitive files, consolidation improves maintainability:
+
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_arithmetic_test.go` | `+`, `-`, `*`, `/` and related |
+| `prim_numeric_predicate_test.go` | `integer?`, `real?`, `number?`, etc. |
+| `prim_numeric_compare_test.go` | `=`, `<`, `>`, `<=`, `>=` |
+| `prim_char_test.go` | Character operations |
+| `prim_string_test.go` | String operations |
+| `prim_list_test.go` | List/pair operations |
+| `prim_vector_test.go` | Vector operations |
+| `prim_*_extra_test.go` | Additional coverage for specific primitives |
+
+When adding new primitive tests:
+- Check if a thematic test file exists for the category
+- If so, add tests there rather than creating a new file
+- Only create `prim_<name>_test.go` for primitives that don't fit existing categories
 
 ### Error Testing Pattern
 

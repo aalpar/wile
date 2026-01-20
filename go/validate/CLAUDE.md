@@ -51,3 +51,7 @@ Package `validate` validates Scheme syntax and produces typed expressions.
 ## Testing
 
 Uses quicktest with table-driven tests covering all forms and edge cases.
+
+### Test File Organization
+
+All tests are consolidated in `validate_test.go`. The individual `validate_*.go` files define **private** functions (e.g., `validateIf()`, `validateLambda()`) that are tested through the public `ValidateExpression` API. This is the standard Go pattern for testing internal implementations via public interfaces.

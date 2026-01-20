@@ -123,3 +123,25 @@ All numeric types support `LessThan` comparison with all other numeric types:
 ## Testing
 
 Uses quicktest with custom `SchemeEquals` checker. Extensive type-specific and cross-type tests.
+
+### Test File Organization
+
+This package uses **1:1 mapping** with type-based consolidation for related types:
+
+| Test File | Tests For |
+|-----------|-----------|
+| `integer_test.go` | Integer type |
+| `float_test.go` | Float type |
+| `big_number_test.go` | BigInteger and BigFloat types |
+| `rational_test.go` | Rational type |
+| `complex_test.go` | Complex type |
+| `pair_test.go` | Pair/cons cells |
+| `string_test.go` | String type |
+| `character_test.go` | Character type |
+| `symbol_test.go` | Symbol type |
+| `vector_test.go` | Vector type |
+| `hashtable_test.go` | Hashtable type |
+| `*_port_test.go` | Port types (string, bytevector, character) |
+| `*_error_test.go` | Error types (foreign, native) |
+
+When adding new value type tests, create `<typename>_test.go` or add to an existing related type's test file.

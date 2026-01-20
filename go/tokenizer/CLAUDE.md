@@ -56,3 +56,18 @@ Converts Unicode rune stream into tokens:
 ## Testing
 
 Uses quicktest with extensive table-driven tests for all token types, numeric formats, and error cases.
+
+### Test File Organization
+
+Tests are organized with the main test file plus coverage-focused supplementary files:
+
+| Test File | Purpose |
+|-----------|---------|
+| `tokenizer_test.go` | Core tokenizer functionality |
+| `big_number_test.go` | BigInteger/BigFloat token parsing |
+| `imaginary_coverage_test.go` | Imaginary number handling |
+| `edge_cases_test.go` | Edge case coverage |
+| `error_path_coverage_test.go` | Error scenario coverage |
+| `*_coverage_test.go` | Additional coverage files |
+
+This organization ensures comprehensive coverage while keeping test files focused and maintainable.
