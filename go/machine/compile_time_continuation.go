@@ -850,7 +850,9 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 		return nil
 	}
 	// Intern symbols to ensure eq? identity per R7RS 6.5
-	val := p.internSymbolsInValue(expr.Unwrap())
+	// Use UnwrapAll() to fully unwrap syntax values (including vector elements)
+	// so that equal? comparisons work correctly on literal vectors.
+	val := p.internSymbolsInValue(expr.UnwrapAll())
 	li := p.template.MaybeAppendLiteral(val)
 	p.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(li),
