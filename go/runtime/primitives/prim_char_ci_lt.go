@@ -16,11 +16,15 @@ package primitives
 
 import (
 	"context"
+	"unicode"
 
 	"wile/machine"
 )
 
-// PrimStringLe implements the string<=? primitive.
-func PrimStringLe(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompare(mc, "string<=?", func(a, b string) bool { return a <= b })
+// PrimCharCiLt implements the char-ci<? primitive.
+// Case-insensitive character less-than comparison.
+func PrimCharCiLt(_ context.Context, mc *machine.MachineContext) error {
+	return charCompare(mc, "char-ci<?", func(a, b rune) bool {
+		return unicode.ToLower(a) < unicode.ToLower(b)
+	})
 }

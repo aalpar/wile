@@ -293,6 +293,45 @@ These are the most fundamental primitives used everywhere.
 **Estimated time: 2-3 days**
 **Files: 32**
 
+#### R7RS Conformance TODO List
+
+The following items must be completed to achieve R7RS conformance for string and character operations.
+
+**Legend:** ✅ = tests added, implementation done | 🧪 = tests added, implementation pending | ⬜ = no tests yet
+
+**Non-Variadic Procedures That Must Be Made Variadic (R7RS requires 2+ arguments):**
+- 🧪 `char-ci=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
+- 🧪 `char-ci<?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
+- 🧪 `char-ci>?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
+- 🧪 `char-ci<=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
+- 🧪 `char-ci>=?` - currently binary, must accept 2+ args (tests in `TestCharCICompareVariadic`)
+- 🧪 `string-ci=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+- 🧪 `string-ci<?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+- 🧪 `string-ci>?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+- 🧪 `string-ci<=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+- 🧪 `string-ci>=?` - currently binary, must accept 2+ args (tests in `TestStringCICompareVariadic`)
+
+**Missing R7RS Base Procedures:**
+- ⬜ `string-set!` - `(string-set! string k char)` - mutate character at position
+- ⬜ `string-fill!` - `(string-fill! string fill [start [end]])` - fill region with character
+- ⬜ `string-copy!` - `(string-copy! to at from [start [end]])` - copy between strings
+- ⬜ `string-map` - `(string-map proc string1 string2 ...)` - map over strings
+- ⬜ `string-for-each` - `(string-for-each proc string1 string2 ...)` - iterate over strings
+
+**Missing Optional Arguments:**
+- ⬜ `string-copy` - add optional `start` and `end` arguments: `(string-copy string [start [end]])`
+- ⬜ `string->list` - add optional `start` and `end` arguments: `(string->list string [start [end]])`
+
+**Semantic Fixes:**
+- ⬜ `char-foldcase` - use Unicode SimpleCaseFolding algorithm, not just `unicode.ToLower()`
+- ⬜ `string-foldcase` - use Unicode case-folding algorithm, not just `strings.ToLower()`
+- ⬜ `digit-value` - handle all Unicode decimal digits (Arabic-Indic, Devanagari, etc.), not just ASCII 0-9
+
+**Additional Tests Added:**
+- ✅ Unicode string operations (`TestStringUnicode`) - Chinese, Greek, emoji, accented chars
+- ✅ Unicode character operations (`TestCharUnicode`) - Greek letters, char-upcase/downcase
+- ✅ String error conditions (`TestStringErrors`) - 19 error cases
+
 #### String Operations (20 files)
 | Primitive | Test Cases | Notes |
 |-----------|------------|-------|

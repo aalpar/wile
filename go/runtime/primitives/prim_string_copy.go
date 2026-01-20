@@ -18,9 +18,17 @@ import (
 	"context"
 
 	"wile/machine"
+	"wile/values"
 )
 
-// PrimStringLt implements the string<? primitive.
-func PrimStringLt(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompare(mc, "string<?", func(a, b string) bool { return a < b })
+// PrimStringCopy implements the string-copy primitive.
+// (string-copy string) returns a newly allocated copy of the given string.
+func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
+	s := mc.Arg(0)
+	str, ok := s.(*values.String)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy: expected a string but got %T", s)
+	}
+	mc.SetValue(values.NewString(str.Value))
+	return nil
 }

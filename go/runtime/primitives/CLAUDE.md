@@ -56,6 +56,22 @@ var runtimePrimitives = []PrimitiveSpec{
 - **Continuation escape**: `call/cc` copies continuation, uses sentinel error
 - **Arguments via mc.Arg()**: Not via environment frame bindings
 - **Weak caching**: Tokenizers/parsers cached per port with weak pointers
+- **Pair methods**: Use `pair.Car()` and `pair.Cdr()` - these are methods, not fields
+- **Character `#\x` in tests**: Avoid `#\x` in test code as it starts a hex escape sequence; use `#\a` or other letters instead
+- **Simple errors**: Use `values.NewForeignError("message")` for validation errors without predefined constants
+- **String Unicode escapes**: Use `\xHEX;` format (R7RS) or embed Unicode directly; `\U` escape is not valid Scheme syntax
+- **R7RS conformance tests**: Some tests verify R7RS behavior that is not yet implemented (e.g., variadic char-ci/string-ci comparisons). These tests are intentionally failing until the implementation is fixed—do not remove them
+
+## Variadic Registration Patterns
+
+The relationship between `ParamCount` and `IsVariadic` determines how arguments are passed:
+
+| ParamCount | IsVariadic | Arg Access | Example |
+|------------|------------|------------|---------|
+| 1 | true | `mc.Arg(0)` = all args as Pair | `+`, `*` |
+| 2 | true | `mc.Arg(0)` = first arg directly, `mc.Arg(1)` = rest as Pair | `-`, `/`, `char=?` |
+
+For primitives requiring at least 2 arguments (like comparisons), use `ParamCount: 2, IsVariadic: true`.
 
 ## Testing
 

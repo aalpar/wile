@@ -16,11 +16,20 @@ package primitives
 
 import (
 	"context"
+	"strings"
 
 	"wile/machine"
+	"wile/values"
 )
 
-// PrimStringGt implements the string>? primitive.
-func PrimStringGt(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompare(mc, "string>?", func(a, b string) bool { return a > b })
+// PrimStringFoldcase implements the string-foldcase primitive.
+// Returns a string with all characters case-folded for case-insensitive comparison.
+func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
+	s := mc.Arg(0)
+	str, ok := s.(*values.String)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAString, "string-foldcase: expected a string but got %T", s)
+	}
+	mc.SetValue(values.NewString(strings.ToLower(str.Value)))
+	return nil
 }
