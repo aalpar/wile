@@ -51,6 +51,7 @@ Converts Unicode rune stream into tokens:
 - **Nested block comments**: Depth counter tracks `#|...|#` nesting
 - **No backtracking**: Parser commits once input consumed
 - **Position tracking**: Updates happen after character consumed
+- **String escape sequences**: R7RS uses `\xHEX;` for Unicode escapes (e.g., `\x41;` for 'A'); `\U` escape is not valid—embed Unicode characters directly or use `\xHEX;` format
 
 ## Testing
 

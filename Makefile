@@ -36,7 +36,7 @@ format:
 .PHONY: clean
 clean: buildclean testclean modclean
 	for dir in "$(COVER_DIR)" "$(DIST_DIR)" "$(TEST_DIR)"; do \
-		if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
+	    if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
 	done
 
 .PHONY: buildclean

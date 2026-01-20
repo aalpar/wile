@@ -22,10 +22,10 @@ $(DIST_DIR)/$(MY_BIN): $(SOURCES)
 .PHONY: buildtest
 buildtest:
 	for dir in $(SOURCE_DIRS); do \
-        if [ -d "$$dir" ]; then \
-	   		$(GO_TEST) -c -o /dev/null $$dir/...; \
-		fi \
-    done
+	    if [ -d "$$dir" ]; then \
+	        $(GO_TEST) -c -o /dev/null $$dir/...; \
+	    fi \
+	done
 
 .PHONY: test
 test:

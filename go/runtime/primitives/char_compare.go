@@ -36,3 +36,36 @@ func charCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bo
 	mc.SetValue(utils.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
 	return nil
 }
+
+// charCompareVariadic is a helper for variadic character comparison primitives.
+// It extracts characters from the variadic args and applies the comparator pairwise.
+func charCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
+	c1 := mc.Arg(0)
+	ch1, ok := c1.(*values.Character)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
+	}
+
+	rest := mc.Arg(1)
+	prev := ch1.Value
+
+	for rest != values.EmptyList {
+		pair, ok := rest.(*values.Pair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
+		}
+		ch, ok := pair.Car().(*values.Character)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, pair.Car())
+		}
+		if !cmp(prev, ch.Value) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		prev = ch.Value
+		rest = pair.Cdr()
+	}
+
+	mc.SetValue(values.TrueValue)
+	return nil
+}

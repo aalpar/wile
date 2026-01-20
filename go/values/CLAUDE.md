@@ -118,6 +118,7 @@ All numeric types support `LessThan` comparison with all other numeric types:
 - **Complex ordering**: `LessThan` compares only real parts
 - **Record identity**: Records equal only if same object
 - **Cross-thread continuations**: Not allowed (`ErrCrossThreadContinuation`)
+- **Pair Car/Cdr are methods**: Use `pair.Car()` and `pair.Cdr()` with parentheses - they are methods, not fields
 
 ## Testing
 

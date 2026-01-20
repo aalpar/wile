@@ -1,4 +1,4 @@
-// Copyright 2026 Aaron Alpar
+// Copyright 2025 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,3 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+package primitives
+
+import (
+	"context"
+
+	"wile/machine"
+	"wile/values"
+)
+
+// PrimStringCopy implements the string-copy primitive.
+// (string-copy string) returns a newly allocated copy of the given string.
+func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
+	s := mc.Arg(0)
+	str, ok := s.(*values.String)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy: expected a string but got %T", s)
+	}
+	mc.SetValue(values.NewString(str.Value))
+	return nil
+}

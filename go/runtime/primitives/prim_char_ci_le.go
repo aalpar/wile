@@ -1,4 +1,4 @@
-// Copyright 2026 Aaron Alpar
+// Copyright 2025 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,3 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+package primitives
+
+import (
+	"context"
+	"unicode"
+
+	"wile/machine"
+)
+
+// PrimCharCiLe implements the char-ci<=? primitive.
+// Case-insensitive character less-than-or-equal comparison.
+func PrimCharCiLe(_ context.Context, mc *machine.MachineContext) error {
+	return charCompare(mc, "char-ci<=?", func(a, b rune) bool {
+		return unicode.ToLower(a) <= unicode.ToLower(b)
+	})
+}
