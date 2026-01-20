@@ -320,7 +320,7 @@ The following items must be completed to achieve R7RS conformance for string and
 
 **Missing Optional Arguments:**
 - ✅ `string-copy` - add optional `start` and `end` arguments: `(string-copy string [start [end]])`
-- ⬜ `string->list` - add optional `start` and `end` arguments: `(string->list string [start [end]])`
+- ✅ `string->list` - add optional `start` and `end` arguments: `(string->list string [start [end]])`
 
 **Semantic Fixes:**
 - ⬜ `char-foldcase` - use Unicode SimpleCaseFolding algorithm, not just `unicode.ToLower()`
@@ -350,6 +350,7 @@ The following items must be completed to achieve R7RS conformance for string and
 - ✅ String map tests (`TestStringMap`, `TestStringMapErrors`) - 7 tests for string-map
 - ✅ String for-each tests (`TestStringForEach`, `TestStringForEachErrors`) - 5 tests for string-for-each
 - ✅ String copy with optional args tests (`TestStringCopy`, `TestStringCopyErrors`) - 14 tests for string-copy with start/end
+- ✅ String->list with optional args tests (`TestStringToListOptional`, `TestStringToListErrors`) - 14 tests for string->list with start/end
 
 #### String Operations (20 files)
 | Primitive | Test Cases | Notes |
