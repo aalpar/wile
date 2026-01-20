@@ -887,14 +887,123 @@ func TestStringErrors(t *testing.T) {
 			name: "string-downcase with non-string",
 			code: `(string-downcase 42)`,
 		},
+		// string-foldcase errors
+		{
+			name: "string-foldcase with non-string",
+			code: `(string-foldcase 42)`,
+		},
+		{
+			name: "string-foldcase with symbol",
+			code: `(string-foldcase 'foo)`,
+		},
 		// string comparison errors
 		{
-			name: "string=? with non-strings",
+			name: "string=? with non-string first arg",
+			code: `(string=? 42 "hello")`,
+		},
+		{
+			name: "string=? with non-string second arg",
 			code: `(string=? "hello" 42)`,
 		},
 		{
-			name: "string<? with non-strings",
+			name: "string<? with non-string first arg",
 			code: `(string<? 42 "hello")`,
+		},
+		{
+			name: "string<? with non-string second arg",
+			code: `(string<? "hello" 42)`,
+		},
+		{
+			name: "string>? with non-string first arg",
+			code: `(string>? 42 "hello")`,
+		},
+		{
+			name: "string>? with non-string second arg",
+			code: `(string>? "hello" 42)`,
+		},
+		{
+			name: "string<=? with non-string first arg",
+			code: `(string<=? 42 "hello")`,
+		},
+		{
+			name: "string<=? with non-string second arg",
+			code: `(string<=? "hello" 42)`,
+		},
+		{
+			name: "string>=? with non-string first arg",
+			code: `(string>=? 42 "hello")`,
+		},
+		{
+			name: "string>=? with non-string second arg",
+			code: `(string>=? "hello" 42)`,
+		},
+		// string-ci comparison errors
+		{
+			name: "string-ci=? with non-string first arg",
+			code: `(string-ci=? 42 "hello")`,
+		},
+		{
+			name: "string-ci=? with non-string second arg",
+			code: `(string-ci=? "hello" 42)`,
+		},
+		{
+			name: "string-ci<? with non-string first arg",
+			code: `(string-ci<? 42 "hello")`,
+		},
+		{
+			name: "string-ci<? with non-string second arg",
+			code: `(string-ci<? "hello" 42)`,
+		},
+		{
+			name: "string-ci>? with non-string first arg",
+			code: `(string-ci>? 42 "hello")`,
+		},
+		{
+			name: "string-ci>? with non-string second arg",
+			code: `(string-ci>? "hello" 42)`,
+		},
+		{
+			name: "string-ci<=? with non-string first arg",
+			code: `(string-ci<=? 42 "hello")`,
+		},
+		{
+			name: "string-ci<=? with non-string second arg",
+			code: `(string-ci<=? "hello" 42)`,
+		},
+		{
+			name: "string-ci>=? with non-string first arg",
+			code: `(string-ci>=? 42 "hello")`,
+		},
+		{
+			name: "string-ci>=? with non-string second arg",
+			code: `(string-ci>=? "hello" 42)`,
+		},
+		// string->symbol errors
+		{
+			name: "string->symbol with non-string",
+			code: `(string->symbol 42)`,
+		},
+		{
+			name: "string->symbol with symbol",
+			code: `(string->symbol 'foo)`,
+		},
+		// symbol->string errors
+		{
+			name: "symbol->string with non-symbol",
+			code: `(symbol->string "foo")`,
+		},
+		{
+			name: "symbol->string with integer",
+			code: `(symbol->string 42)`,
+		},
+		// number->string errors
+		{
+			name: "number->string with non-number",
+			code: `(number->string "42")`,
+		},
+		{
+			name: "number->string with symbol",
+			code: `(number->string 'foo)`,
 		},
 	}
 	for _, tc := range tcs {
