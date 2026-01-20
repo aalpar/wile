@@ -94,6 +94,8 @@ if err := doSomething(); err != nil { ... }
 
 **Imports**: Internal packages first, then standard library.
 
+**Copyright headers**: Use the contents of `COPYRIGHT_HEADER` at the root of the repository for new Go files.
+
 ## Test File Naming Conventions
 
 The standard Go convention is that tests for functions in `foo.go` belong in `foo_test.go`. This project follows that convention with legitimate consolidation patterns for large packages:
