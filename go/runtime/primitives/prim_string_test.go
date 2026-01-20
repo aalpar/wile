@@ -1353,3 +1353,48 @@ func TestStringForEachErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestStringToListOptional(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic (no optional args)
+		{name: "string->list full", code: `(string->list "hello")`,
+			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{name: "string->list empty", code: `(string->list "")`, expected: values.EmptyList},
+		// With start argument
+		{name: "string->list with start", code: `(string->list "hello" 2)`,
+			expected: values.List(values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{name: "string->list with start at 0", code: `(string->list "hello" 0)`,
+			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{name: "string->list with start at end", code: `(string->list "hello" 5)`, expected: values.EmptyList},
+		// With start and end arguments
+		{name: "string->list with start and end", code: `(string->list "hello" 1 4)`,
+			expected: values.List(values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'))},
+		{name: "string->list with start and end full", code: `(string->list "hello" 0 5)`,
+			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{name: "string->list with start equals end", code: `(string->list "hello" 2 2)`, expected: values.EmptyList},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringToListErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "string->list with non-string", code: `(string->list 42)`},
+		{name: "string->list with non-integer start", code: `(string->list "hello" "x")`},
+		{name: "string->list with non-integer end", code: `(string->list "hello" 0 "x")`},
+		{name: "string->list with negative start", code: `(string->list "hello" -1)`},
+		{name: "string->list with end out of bounds", code: `(string->list "hello" 0 10)`},
+		{name: "string->list with start > end", code: `(string->list "hello" 3 1)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}

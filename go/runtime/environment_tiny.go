@@ -462,7 +462,7 @@ var runtimePrimitives = []PrimitiveSpec{
 	{"string->number", 2, true, primitives.PrimStringToNumber},
 	{"symbol->string", 1, false, primitives.PrimSymbolToString},
 	{"string->symbol", 1, false, primitives.PrimStringToSymbol},
-	{"string->list", 1, false, primitives.PrimStringToList},
+	{"string->list", 2, true, primitives.PrimStringToList},
 	{"list->string", 1, false, primitives.PrimListToString},
 
 	// Character operations

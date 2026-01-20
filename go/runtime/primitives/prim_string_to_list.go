@@ -22,16 +22,58 @@ import (
 )
 
 // PrimStringToList implements the string->list primitive.
-// Converts a string to a list of characters.
+// R7RS §6.7: (string->list string [start [end]])
+// Converts a string (or substring) to a list of characters.
 func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
+	rest := mc.Arg(1)
+
 	s, ok := o.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string->list: expected a string but got %T", o)
 	}
-	runes := []rune(s.Value)
+
+	runes := s.Runes()
+	length := len(runes)
+	start := 0
+	end := length
+
+	// Parse optional arguments: [start [end]]
+	if rest != values.EmptyList {
+		pair, ok := rest.(*values.Pair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
+		}
+
+		// Parse start
+		startVal, ok := pair.Car().(*values.Integer)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for start but got %T", pair.Car())
+		}
+		start = int(startVal.Value)
+
+		// Check for end argument
+		if pair.Cdr() != values.EmptyList {
+			pair2, ok := pair.Cdr().(*values.Pair)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
+			}
+			endVal, ok := pair2.Car().(*values.Integer)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for end but got %T", pair2.Car())
+			}
+			end = int(endVal.Value)
+		}
+	}
+
+	// Validate indices
+	if start < 0 || end > length || start > end {
+		return values.NewForeignError("string->list: invalid indices")
+	}
+
+	// Build the list from the substring
 	var result values.Value = values.EmptyList
-	for i := len(runes) - 1; i >= 0; i-- {
+	for i := end - 1; i >= start; i-- {
 		result = values.NewCons(values.NewCharacter(runes[i]), result)
 	}
 	mc.SetValue(result)
