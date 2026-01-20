@@ -531,3 +531,116 @@ func TestCharCompareVariadic(t *testing.T) {
 		})
 	}
 }
+
+// Error condition tests for character primitives per R7RS
+
+func TestCharCompareErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		// char=? errors
+		{name: "char=? with integer", code: `(char=? #\a 42)`},
+		{name: "char=? with string", code: `(char=? "a" #\a)`},
+		{name: "char=? with symbol", code: `(char=? 'a #\a)`},
+		// char<? errors
+		{name: "char<? with integer", code: `(char<? #\a 42)`},
+		{name: "char<? with string", code: `(char<? #\a "b")`},
+		// char>? errors
+		{name: "char>? with integer", code: `(char>? 42 #\a)`},
+		{name: "char>? with list", code: `(char>? #\a '())`},
+		// char<=? errors
+		{name: "char<=? with integer", code: `(char<=? #\a 42)`},
+		{name: "char<=? with boolean", code: `(char<=? #t #\a)`},
+		// char>=? errors
+		{name: "char>=? with integer", code: `(char>=? #\a 42)`},
+		{name: "char>=? with string", code: `(char>=? #\a "a")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestCharCICompareErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		// char-ci=? errors
+		{name: "char-ci=? with integer", code: `(char-ci=? #\a 42)`},
+		{name: "char-ci=? with string", code: `(char-ci=? "A" #\a)`},
+		// char-ci<? errors
+		{name: "char-ci<? with integer", code: `(char-ci<? #\a 42)`},
+		{name: "char-ci<? with symbol", code: `(char-ci<? #\a 'b)`},
+		// char-ci>? errors
+		{name: "char-ci>? with integer", code: `(char-ci>? 42 #\a)`},
+		{name: "char-ci>? with list", code: `(char-ci>? #\a '(a))`},
+		// char-ci<=? errors
+		{name: "char-ci<=? with integer", code: `(char-ci<=? #\a 42)`},
+		{name: "char-ci<=? with string", code: `(char-ci<=? #\a "A")`},
+		// char-ci>=? errors
+		{name: "char-ci>=? with integer", code: `(char-ci>=? #\a 42)`},
+		{name: "char-ci>=? with boolean", code: `(char-ci>=? #\a #f)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestCharPredicateErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		// char-alphabetic? errors
+		{name: "char-alphabetic? with integer", code: `(char-alphabetic? 65)`},
+		{name: "char-alphabetic? with string", code: `(char-alphabetic? "a")`},
+		// char-numeric? errors
+		{name: "char-numeric? with integer", code: `(char-numeric? 5)`},
+		{name: "char-numeric? with string", code: `(char-numeric? "5")`},
+		// char-whitespace? errors
+		{name: "char-whitespace? with integer", code: `(char-whitespace? 32)`},
+		{name: "char-whitespace? with string", code: `(char-whitespace? " ")`},
+		// char-upper-case? errors
+		{name: "char-upper-case? with integer", code: `(char-upper-case? 65)`},
+		{name: "char-upper-case? with string", code: `(char-upper-case? "A")`},
+		// char-lower-case? errors
+		{name: "char-lower-case? with integer", code: `(char-lower-case? 97)`},
+		{name: "char-lower-case? with string", code: `(char-lower-case? "a")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestCharConversionErrors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		// char->integer errors
+		{name: "char->integer with integer", code: `(char->integer 65)`},
+		{name: "char->integer with string", code: `(char->integer "a")`},
+		{name: "char->integer with symbol", code: `(char->integer 'a)`},
+		// integer->char errors
+		{name: "integer->char with character", code: `(integer->char #\a)`},
+		{name: "integer->char with string", code: `(integer->char "65")`},
+		// Note: R7RS also requires errors for negative integers, surrogate values (D800-DFFF),
+		// and values > 10FFFF, but the current implementation doesn't validate these yet.
+		// char-upcase errors
+		{name: "char-upcase with integer", code: `(char-upcase 97)`},
+		{name: "char-upcase with string", code: `(char-upcase "a")`},
+		// char-downcase errors
+		{name: "char-downcase with integer", code: `(char-downcase 65)`},
+		{name: "char-downcase with string", code: `(char-downcase "A")`},
+		// char-foldcase errors
+		{name: "char-foldcase with integer", code: `(char-foldcase 65)`},
+		{name: "char-foldcase with string", code: `(char-foldcase "A")`},
+		// digit-value errors
+		{name: "digit-value with integer", code: `(digit-value 5)`},
+		{name: "digit-value with string", code: `(digit-value "5")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
