@@ -137,10 +137,17 @@ This package uses a mix of **thematic consolidation** and **individual test file
 **Exception Handling & Promises (individual files):**
 | Test File | Tests For |
 |-----------|-----------|
-| `prim_exception_test.go` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, error-object accessors |
+| `prim_exception_test.go` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, `guard`, error-object accessors |
 | `prim_promise_test.go` | `promise?`, `make-promise`, `force`, `delay-force` |
 | `prim_promise_extra_test.go` | Additional promise tests (memoization, edge cases) |
 | `prim_parameter_test.go` | `make-parameter`, `parameterize` |
+
+**Eval, Syntax & Expansion (consolidated files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_eval_env_test.go` | `eval`, `interaction-environment`, `scheme-report-environment`, `null-environment` |
+| `prim_env_extra_test.go` | Additional environment tests |
+| `prim_identifier_test.go` | `identifier?`, `bound-identifier=?`, `free-identifier=?`, `datum->syntax`, `syntax->datum`, `expand`, `expand-once`, `compile`, `make-compile-time-value` |
 
 When adding new primitive tests:
 - Check if a thematic test file exists for the category

@@ -625,15 +625,41 @@ Tests are organized in individual test files:
 
 ---
 
-### Phase 11: Environment, Eval & Syntax (Priority: Lower)
+### Phase 11: Environment, Eval & Syntax (Priority: Lower) ✅ COMPLETE
 **Estimated time: 2-3 days**
-**Files: 17**
+**Files: 3 (consolidated test files)**
+**Status: Complete - 100+ test cases across test files**
 
-| Category | Primitives |
-|----------|------------|
-| Eval | `eval`, `environment`, `interaction-environment`, `scheme-report-environment`, `null-environment`, `load` |
-| Syntax | `datum->syntax`, `syntax->datum`, `identifier?`, `bound-identifier=?`, `free-identifier=?`, `syntax-local-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`, `make-compile-time-value` |
-| Expansion | `expand`, `expand-once`, `compile` |
+Tests are organized in consolidated test files:
+
+| Category | File | Test Cases |
+|----------|------|------------|
+| Eval & Environment | `prim_eval_env_test.go` | 45+ ✅ |
+| Environment Extra | `prim_env_extra_test.go` | 10+ ✅ |
+| Identifier Tests | `prim_identifier_test.go` | 20+ ✅ |
+
+**Eval Category Coverage:**
+- `eval` - evaluates expression in environment (basic, lambda, let, cond expressions)
+- `interaction-environment` - returns current REPL environment
+- `scheme-report-environment` - returns R5RS/R7RS environment (versions 5, 7)
+- `null-environment` - returns minimal environment (versions 5, 7)
+- `environment` - constructs environment from import specs (error cases tested)
+- Error conditions tested for all eval operations
+
+**Syntax Category Coverage:**
+- `datum->syntax` - converts datum to syntax object with optional template
+- `syntax->datum` - unwraps syntax to datum (symbol, number, list, nested, empty)
+- `identifier?` - predicate for syntax identifiers
+- `bound-identifier=?` - compares identifiers by name and scope (unit tests)
+- `free-identifier=?` - compares identifiers by binding (unit tests)
+- `make-compile-time-value` - wraps value for compile-time storage
+
+**Expansion Category Coverage:**
+- `expand` - fully expands syntax object (simple expressions, macros)
+- `expand-once` - single expansion step, returns multiple values
+- `compile` - compiles expression to thunk procedure
+
+**Note:** `syntax-local-value`, `syntax-local-introduce`, and `syntax-local-identifier-as-binding` can only be tested during macro expansion, so they are covered via macro system integration tests.
 
 ---
 
