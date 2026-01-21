@@ -579,16 +579,16 @@ Tests are organized in individual test files:
 **Exception Handling Coverage:**
 - `with-exception-handler` - continuable/non-continuable, nested handlers
 - `raise` - non-continuable exceptions (handler cannot return)
-- `raise-continuable` - continuable exceptions (handler can return)
+- `raise-continuable` - continuable exceptions, handler return value becomes result of `raise-continuable` and execution resumes at call site (R7RS §6.11)
 - `error` - creates error object and raises non-continuable
 - `error-object?` - predicate for error objects
 - `error-object-message` - extract message from error object
 - `error-object-irritants` - extract irritants list from error object
 
 **Promise Coverage:**
-- `make-promise` - wrapping values as promises
-- `make-lazy-promise` / `delay-force` - lazy evaluation
-- `force` - forcing promises, memoization
+- `make-promise` - wrapping values as promises; returns promise unchanged if already a promise (R7RS §4.2.5)
+- `make-lazy-promise` / `delay-force` - lazy evaluation for tail-recursive lazy algorithms
+- `force` - forcing promises, memoization, iterative forcing of nested promises
 - `promise?` - predicate tests
 - Memoization verification (side effects evaluated once)
 
@@ -599,13 +599,21 @@ Tests are organized in individual test files:
 - Current port parameters
 
 **R7RS Conformance Tests:**
-- Exception handler chain semantics (R7RS §6.11)
+- Exception handler chain semantics (R7RS §6.11) - when handler is invoked, current exception handler is the one that was in place when the handler was installed
 - Non-continuable vs continuable exception behavior
+- Continuable exception resumption: handler's return value becomes `raise-continuable` result, execution continues from call site
 - `error` object creation with message and irritants
 - `make-promise` identity (returns same promise when given promise, R7RS §4.2.5)
-- `delay-force` tail-call semantics for iterative lazy algorithms
+- `delay-force` tail-call semantics for iterative lazy algorithms (prevents stack growth)
 
-**Note:** Non-continuable exceptions (from `raise` and `error`) require handlers to escape via `call/cc` rather than returning normally. This is per R7RS §6.11.
+**Missing R7RS Features (not yet implemented):**
+- `guard` syntax (R7RS §4.2.7) - exception handling with cond-like clauses; workaround: use `call/cc` with `with-exception-handler`
+- `read-error?` predicate (R7RS §6.11) - returns #t for objects raised by read procedure
+- `file-error?` predicate (R7RS §6.11) - returns #t for file operation errors
+
+**Note:** Non-continuable exceptions (from `raise` and `error`) require handlers to escape via `call/cc` rather than returning normally. This is per R7RS §6.11. If a handler returns from a non-continuable exception, an error is raised.
+
+**See also:** `plans/R7RS_SEMANTIC_DIFFERENCES.md` for detailed documentation of R7RS conformance status for exceptions and promises.
 
 ---
 

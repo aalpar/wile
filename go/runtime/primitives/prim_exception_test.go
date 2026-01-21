@@ -734,3 +734,239 @@ func TestErrorR7RS(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// guard Tests (R7RS §4.2.7)
+// =============================================================================
+
+// TestGuard tests the guard syntax for exception handling
+func TestGuard(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "guard with else clause catches exception",
+			code: `(guard (exn (else 'caught)) (raise 'test-error))`,
+			out:  values.NewSymbol("caught"),
+		},
+		{
+			name: "guard with else clause returns exception value",
+			code: `(guard (exn (else exn)) (raise 'my-error))`,
+			out:  values.NewSymbol("my-error"),
+		},
+		{
+			name: "guard with else clause and expression",
+			code: `(guard (exn (else (list 'caught exn))) (raise 42))`,
+			out:  values.List(values.NewSymbol("caught"), values.NewInteger(42)),
+		},
+		{
+			name: "guard with matching test clause",
+			code: `(guard (exn ((eq? exn 'specific) 'matched)) (raise 'specific))`,
+			out:  values.NewSymbol("matched"),
+		},
+		{
+			name: "guard with test clause using exception value",
+			code: `(guard (exn ((number? exn) (+ exn 100))) (raise 42))`,
+			out:  values.NewInteger(142),
+		},
+		{
+			name: "guard with multiple clauses - first matches",
+			code: `(guard (exn
+				((number? exn) 'was-number)
+				((string? exn) 'was-string)
+				(else 'other))
+				(raise 123))`,
+			out: values.NewSymbol("was-number"),
+		},
+		{
+			name: "guard with multiple clauses - second matches",
+			code: `(guard (exn
+				((number? exn) 'was-number)
+				((string? exn) 'was-string)
+				(else 'other))
+				(raise "hello"))`,
+			out: values.NewSymbol("was-string"),
+		},
+		{
+			name: "guard with multiple clauses - else matches",
+			code: `(guard (exn
+				((number? exn) 'was-number)
+				((string? exn) 'was-string)
+				(else 'other))
+				(raise 'symbol))`,
+			out: values.NewSymbol("other"),
+		},
+		{
+			name: "guard normal execution - no exception",
+			code: `(guard (exn (else 'error)) (+ 1 2))`,
+			out:  values.NewInteger(3),
+		},
+		{
+			name: "guard normal execution - complex body",
+			code: `(guard (exn (else 'error))
+				(let ((x 10) (y 20))
+					(* x y)))`,
+			out: values.NewInteger(200),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestGuardArrowClause tests guard with => clause (R7RS §4.2.7)
+func TestGuardArrowClause(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "guard with => clause - procedure receives condition",
+			code: `(guard (exn ((string? exn) => string-length)) (raise "hello"))`,
+			out:  values.NewInteger(5),
+		},
+		{
+			name: "guard with => clause - custom procedure",
+			code: `(guard (exn ((number? exn) => (lambda (n) (* n 2)))) (raise 21))`,
+			out:  values.NewInteger(42),
+		},
+		{
+			name: "guard with => clause - list operations",
+			code: `(guard (exn ((list? exn) => length)) (raise '(a b c d e)))`,
+			out:  values.NewInteger(5),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestGuardReraise tests that guard re-raises when no clause matches (R7RS §4.2.7)
+func TestGuardReraise(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "guard re-raises to outer handler when no clause matches",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape (list 'outer e)))
+						(lambda ()
+							(guard (exn ((number? exn) 'was-number))
+								(raise 'symbol-error))))))`,
+			out: values.List(values.NewSymbol("outer"), values.NewSymbol("symbol-error")),
+		},
+		{
+			name: "guard re-raises preserves exception value",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape e))
+						(lambda ()
+							(guard (exn ((string? exn) 'was-string))
+								(raise 42))))))`,
+			out: values.NewInteger(42),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestGuardWithError tests guard with error objects (R7RS §4.2.7, §6.11)
+func TestGuardWithError(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "guard catches error object",
+			code: `(guard (exn ((error-object? exn) (error-object-message exn)))
+				(error "test message"))`,
+			out: values.NewString("test message"),
+		},
+		{
+			name: "guard accesses error irritants",
+			code: `(guard (exn ((error-object? exn) (error-object-irritants exn)))
+				(error "msg" 'a 'b 'c))`,
+			out: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+		},
+		{
+			name: "guard with error-object? test",
+			code: `(guard (exn
+				((error-object? exn) 'was-error)
+				(else 'was-other))
+				(error "oops"))`,
+			out: values.NewSymbol("was-error"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestGuardNested tests nested guard expressions (R7RS §4.2.7)
+func TestGuardNested(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "nested guard - inner catches",
+			code: `(guard (outer-exn (else 'outer))
+				(guard (inner-exn (else 'inner))
+					(raise 'test)))`,
+			out: values.NewSymbol("inner"),
+		},
+		{
+			name: "nested guard - inner re-raises to outer",
+			code: `(guard (outer-exn (else 'outer))
+				(guard (inner-exn ((number? inner-exn) 'was-number))
+					(raise 'symbol)))`,
+			out: values.NewSymbol("outer"),
+		},
+		{
+			name: "nested guard - both have matching clauses",
+			code: `(guard (outer-exn ((symbol? outer-exn) 'outer-symbol))
+				(guard (inner-exn ((number? inner-exn) 'inner-number))
+					(raise 42)))`,
+			out: values.NewSymbol("inner-number"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}

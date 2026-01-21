@@ -1,6 +1,6 @@
 # R7RS Semantic Differences
 
-This document catalogs differences between the current implementation and the R7RS-small specification for character and string procedures. These are semantic differences where the implementation produces results but may not match R7RS behavior for certain inputs.
+This document catalogs differences between the current implementation and the R7RS-small specification. These are semantic differences where the implementation produces results but may not match R7RS behavior for certain inputs, or where R7RS-specified features are missing.
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
@@ -18,6 +18,8 @@ This document catalogs differences between the current implementation and the R7
 | `digit-value` | All Unicode decimal digits | ASCII 0-9 only | Medium |
 | `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
 | `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
+| `read-error?` | Predicate for read errors | Not implemented | Low |
+| `file-error?` | Predicate for file errors | Not implemented | Low |
 
 ---
 
@@ -300,9 +302,118 @@ Add tests for edge cases:
 
 ---
 
+## Exceptions (R7RS §6.11)
+
+### Conformant Features
+
+The following exception-related features are implemented and conform to R7RS:
+
+| Procedure | Status | Notes |
+|-----------|--------|-------|
+| `with-exception-handler` | ✅ Conformant | Installs handler, propagates to parent on re-raise |
+| `raise` | ✅ Conformant | Non-continuable; handler must not return |
+| `raise-continuable` | ✅ Conformant | Handler return value becomes result of `raise-continuable` |
+| `error` | ✅ Conformant | Creates error object, raises non-continuable |
+| `error-object?` | ✅ Conformant | Type predicate |
+| `error-object-message` | ✅ Conformant | Extracts message string |
+| `error-object-irritants` | ✅ Conformant | Extracts irritants list |
+| `guard` | ✅ Conformant | Exception handling syntax with cond-like clauses |
+
+### Missing Features
+
+#### 8. `read-error?` Predicate
+
+**R7RS Specification (Section 6.11):**
+> "`(read-error? obj)` - Returns #t if obj is an object raised by the read procedure."
+
+**Current Status:** Not implemented
+
+**Impact:** Low - can use generic exception handling with `error-object?`
+
+---
+
+#### 9. `file-error?` Predicate
+
+**R7RS Specification (Section 6.11):**
+> "`(file-error? obj)` - Returns #t if obj is an object raised to signal that a file operation failed."
+
+**Current Status:** Not implemented
+
+**Impact:** Low - can use generic exception handling with `error-object?`
+
+---
+
+## Promises (R7RS §4.2.5)
+
+### Conformant Features
+
+The following promise-related features are implemented and conform to R7RS:
+
+| Procedure/Syntax | Status | Notes |
+|------------------|--------|-------|
+| `delay` | ✅ Conformant | Creates promise with delayed expression |
+| `force` | ✅ Conformant | Forces promise, memoizes result, iterative forcing |
+| `delay-force` | ✅ Conformant | Lazy promise for tail-recursive algorithms |
+| `make-promise` | ✅ Conformant | Wraps value in already-forced promise; returns promise unchanged |
+| `promise?` | ✅ Conformant | Type predicate |
+
+### Implementation Details
+
+#### Iterative Forcing
+
+Per R7RS §4.2.5, `force` implements iterative forcing:
+
+```scheme
+(force (delay (delay (delay 42))))  ; Returns 42
+```
+
+The implementation correctly handles nested promises by unwrapping them iteratively rather than recursively, preventing stack overflow for deeply nested promise chains.
+
+#### Memoization
+
+Promises correctly memoize their results. The thunk is evaluated only once:
+
+```scheme
+(let ((count 0))
+  (let ((p (delay (begin (set! count (+ count 1)) count))))
+    (force p)  ; count becomes 1
+    (force p)  ; returns cached 1, count still 1
+    (force p)  ; returns cached 1, count still 1
+    count))    ; => 1
+```
+
+#### `make-promise` Identity
+
+Per R7RS, `make-promise` returns its argument unchanged if it's already a promise:
+
+```scheme
+(let ((p (delay 42)))
+  (eq? p (make-promise p)))  ; => #t
+```
+
+#### `delay-force` for Tail Recursion
+
+Per R7RS, `delay-force` enables proper tail recursion in lazy algorithms. Without `delay-force`, recursive lazy algorithms would accumulate stack frames:
+
+```scheme
+;; With delay-force (correct - no stack growth):
+(letrec ((lazy-countdown
+          (lambda (n)
+            (if (= n 0)
+                (delay 'done)
+                (delay-force (lazy-countdown (- n 1)))))))
+  (force (lazy-countdown 100000)))  ; Works without stack overflow
+```
+
+### No Known Semantic Differences
+
+The promise implementation appears to fully conform to R7RS §4.2.5. All R7RS-specified behaviors have been verified through testing.
+
+---
+
 ## References
 
-- [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf) - Sections 6.6, 6.7
+- [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf) - Sections 4.2.5, 4.2.7, 6.6, 6.7, 6.11
 - [Unicode CaseFolding.txt](https://www.unicode.org/Public/UCD/latest/ucd/CaseFolding.txt)
 - [Unicode SpecialCasing.txt](https://www.unicode.org/Public/UCD/latest/ucd/SpecialCasing.txt)
 - [UAX #29: Unicode Text Segmentation](https://unicode.org/reports/tr29/)
