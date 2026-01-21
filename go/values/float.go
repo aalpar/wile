@@ -55,6 +55,9 @@ func (p *Float) Add(o Number) Number {
 		return NewFloat(p.Value + v.Float64())
 	case *Complex:
 		return NewComplex(complex(p.Value, 0) + v.Value)
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -73,6 +76,9 @@ func (p *Float) Subtract(o Number) Number {
 		return NewFloat(p.Value - v.Float64())
 	case *Complex:
 		return NewComplex(complex(p.Value, 0) - v.Value)
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -96,6 +102,9 @@ func (p *Float) Multiply(o Number) Number {
 		return NewFloat(p.Value * v.Float64())
 	case *Complex:
 		return NewComplex(complex(p.Value, 0) * v.Value)
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -114,6 +123,9 @@ func (p *Float) Divide(o Number) Number {
 		return NewFloat(p.Value / v.Float64())
 	case *Complex:
 		return NewComplex(complex(p.Value, 0) / v.Value)
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -141,6 +153,9 @@ func (p *Float) LessThan(o Number) bool {
 		return p.Value < v.Float64()
 	case *Complex:
 		return p.Value < real(v.Value)
+	case *BigComplex:
+		self := new(big.Float).SetFloat64(p.Value)
+		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
 	panic(ErrNotANumber)
 }

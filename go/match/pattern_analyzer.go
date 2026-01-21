@@ -95,14 +95,17 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		carHasVars := analyzeRecursive(t[0], variables, analysis)
 		if carHasVars {
 			// If car is a symbol variable, add it
-			if sym, ok := t[0].(*values.Symbol); ok {
+			sym, ok := t[0].(*values.Symbol)
+			if ok {
 				if _, isVar := variables[sym.Key]; isVar {
 					varsInSubtree[sym.Key] = struct{}{}
 				}
 			}
 			// If car is a pair, merge its variables
-			if carPair, ok := t[0].(*values.Pair); ok {
-				if carVars, exists := analysis.variablesInSubtree[carPair]; exists {
+			carPair, ok := t[0].(*values.Pair)
+			if ok {
+				carVars, exists := analysis.variablesInSubtree[carPair]
+				if exists {
 					for v := range carVars {
 						varsInSubtree[v] = struct{}{}
 					}
@@ -114,8 +117,10 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		cdrHasVars := analyzeRecursive(t[1], variables, analysis)
 		if cdrHasVars {
 			// If cdr is a pair, merge its variables
-			if cdrPair, ok := t[1].(*values.Pair); ok {
-				if cdrVars, exists := analysis.variablesInSubtree[cdrPair]; exists {
+			cdrPair, ok := t[1].(*values.Pair)
+			if ok {
+				cdrVars, exists := analysis.variablesInSubtree[cdrPair]
+				if exists {
 					for v := range cdrVars {
 						varsInSubtree[v] = struct{}{}
 					}

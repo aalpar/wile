@@ -30,17 +30,31 @@ func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))
+	case *values.BigComplex:
+		mc.SetValue(v.Phase())
 	case *values.Integer:
 		if v.Value >= 0 {
 			mc.SetValue(values.NewFloat(0))
 		} else {
 			mc.SetValue(values.NewFloat(math.Pi))
 		}
+	case *values.BigInteger:
+		if v.BigInt().Sign() >= 0 {
+			mc.SetValue(values.NewBigFloatFromFloat64(0))
+		} else {
+			mc.SetValue(values.NewBigFloatFromFloat64(math.Pi))
+		}
 	case *values.Float:
 		if v.Value >= 0 {
 			mc.SetValue(values.NewFloat(0))
 		} else {
 			mc.SetValue(values.NewFloat(math.Pi))
+		}
+	case *values.BigFloat:
+		if v.BigFloatValue().Sign() >= 0 {
+			mc.SetValue(values.NewBigFloatFromFloat64(0))
+		} else {
+			mc.SetValue(values.NewBigFloatFromFloat64(math.Pi))
 		}
 	case *values.Rational:
 		if v.Rat().Sign() >= 0 {

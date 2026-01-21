@@ -40,6 +40,10 @@ func ToComplex128(v values.Value) (complex128, error) {
 		return complex(f, 0), nil
 	case *values.Complex:
 		return n.Value, nil
+	case *values.BigComplex:
+		r := n.RealAsBigFloat().Float64()
+		i := n.ImagAsBigFloat().Float64()
+		return complex(r, i), nil
 	default:
 		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a number but got %T", v)
 	}

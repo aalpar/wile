@@ -23,9 +23,37 @@ import (
 
 // PrimMakeRectangular implements make-rectangular.
 // Creates a complex number from real and imaginary parts: x+yi
+// If either part is a BigInteger or BigFloat, returns a BigComplex.
 func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	i := mc.Arg(1)
+
+	// Check if either part requires BigComplex
+	_, rIsBigInt := r.(*values.BigInteger)
+	_, rIsBigFloat := r.(*values.BigFloat)
+	_, iIsBigInt := i.(*values.BigInteger)
+	_, iIsBigFloat := i.(*values.BigFloat)
+
+	if rIsBigInt || rIsBigFloat || iIsBigInt || iIsBigFloat {
+		// Create BigComplex
+		realPart, err := toBigComplexPart(r, "make-rectangular")
+		if err != nil {
+			return err
+		}
+		imagPart, err := toBigComplexPart(i, "make-rectangular")
+		if err != nil {
+			return err
+		}
+		// If both parts are BigInteger with imag=0, return BigInteger
+		if imagPart.IsZero() {
+			mc.SetValue(realPart)
+			return nil
+		}
+		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		return nil
+	}
+
+	// Standard Complex path
 	var realPart, imagPart float64
 	switch v := r.(type) {
 	case *values.Integer:
@@ -49,4 +77,23 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 	}
 	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
 	return nil
+}
+
+// toBigComplexPart converts a real number to a BigComplex-compatible part.
+func toBigComplexPart(v values.Value, name string) (values.Number, error) {
+	switch n := v.(type) {
+	case *values.BigInteger:
+		return n, nil
+	case *values.BigFloat:
+		return n, nil
+	case *values.Integer:
+		return values.NewBigIntegerFromInt64(n.Value), nil
+	case *values.Float:
+		return values.NewBigFloatFromFloat64(n.Value), nil
+	case *values.Rational:
+		// Convert to BigFloat for inexact representation
+		return values.NewBigFloatFromString(n.Rat().FloatString(256)), nil
+	default:
+		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+	}
 }

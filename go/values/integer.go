@@ -94,6 +94,9 @@ func (p *Integer) Add(o Number) Number {
 		return &Rational{value: result}
 	case *Complex:
 		return NewComplex(complex(float64(p.Value), 0) + v.Value)
+	case *BigComplex:
+		bc := NewBigComplex(NewBigIntegerFromInt64(p.Value), NewBigIntegerFromInt64(0))
+		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -120,6 +123,9 @@ func (p *Integer) Subtract(o Number) Number {
 		return &Rational{value: result}
 	case *Complex:
 		return NewComplex(complex(float64(p.Value), 0) - v.Value)
+	case *BigComplex:
+		bc := NewBigComplex(NewBigIntegerFromInt64(p.Value), NewBigIntegerFromInt64(0))
+		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -149,6 +155,9 @@ func (p *Integer) Multiply(o Number) Number {
 		return &Rational{value: result}
 	case *Complex:
 		return NewComplex(complex(float64(p.Value), 0) * v.Value)
+	case *BigComplex:
+		bc := NewBigComplex(NewBigIntegerFromInt64(p.Value), NewBigIntegerFromInt64(0))
+		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -183,6 +192,9 @@ func (p *Integer) Divide(o Number) Number {
 		return &Rational{value: result}
 	case *Complex:
 		return NewComplex(complex(float64(p.Value), 0) / v.Value)
+	case *BigComplex:
+		bc := NewBigComplex(NewBigIntegerFromInt64(p.Value), NewBigIntegerFromInt64(0))
+		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -212,6 +224,8 @@ func (p *Integer) LessThan(o Number) bool {
 		return self.Cmp(v.Rat()) < 0
 	case *Complex:
 		return float64(p.Value) < real(v.Value)
+	case *BigComplex:
+		return toBigFloat(NewBigIntegerFromInt64(p.Value)).Compare(v.Real()) < 0
 	}
 	panic(ErrNotANumber)
 }

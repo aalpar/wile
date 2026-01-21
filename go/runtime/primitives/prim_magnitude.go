@@ -17,6 +17,7 @@ package primitives
 import (
 	"context"
 	"math"
+	"math/big"
 	"math/cmplx"
 
 	"wile/machine"
@@ -30,14 +31,28 @@ func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))
+	case *values.BigComplex:
+		mc.SetValue(v.Magnitude())
 	case *values.Integer:
 		val := v.Value
 		if val < 0 {
 			val = -val
 		}
 		mc.SetValue(values.NewFloat(float64(val)))
+	case *values.BigInteger:
+		bi := v.BigInt()
+		if bi.Sign() < 0 {
+			bi = new(big.Int).Neg(bi)
+		}
+		mc.SetValue(values.NewBigFloat(new(big.Float).SetInt(bi)))
 	case *values.Float:
 		mc.SetValue(values.NewFloat(math.Abs(v.Value)))
+	case *values.BigFloat:
+		bf := v.BigFloatValue()
+		if bf.Sign() < 0 {
+			bf = new(big.Float).Neg(bf)
+		}
+		mc.SetValue(values.NewBigFloat(bf))
 	case *values.Rational:
 		mc.SetValue(values.NewFloat(math.Abs(v.Float64())))
 	default:

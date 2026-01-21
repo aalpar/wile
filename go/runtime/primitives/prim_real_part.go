@@ -28,9 +28,15 @@ func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(real(v.Value)))
+	case *values.BigComplex:
+		mc.SetValue(v.Real())
 	case *values.Integer:
 		mc.SetValue(values.NewFloat(float64(v.Value)))
+	case *values.BigInteger:
+		mc.SetValue(v)
 	case *values.Float:
+		mc.SetValue(v)
+	case *values.BigFloat:
 		mc.SetValue(v)
 	case *values.Rational:
 		mc.SetValue(values.NewFloat(v.Float64()))

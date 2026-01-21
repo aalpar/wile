@@ -89,6 +89,9 @@ func (p *BigFloat) Add(o Number) Number {
 	case *Complex:
 		f, _ := p.value.Float64()
 		return NewComplex(complex(f, 0) + v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Add(v)
 	}
 	return nil
 }
@@ -116,6 +119,9 @@ func (p *BigFloat) Subtract(o Number) Number {
 	case *Complex:
 		f, _ := p.value.Float64()
 		return NewComplex(complex(f, 0) - v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Subtract(v)
 	}
 	return nil
 }
@@ -146,6 +152,9 @@ func (p *BigFloat) Multiply(o Number) Number {
 	case *Complex:
 		f, _ := p.value.Float64()
 		return NewComplex(complex(f, 0) * v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Multiply(v)
 	}
 	return nil
 }
@@ -173,6 +182,9 @@ func (p *BigFloat) Divide(o Number) Number {
 	case *Complex:
 		f, _ := p.value.Float64()
 		return NewComplex(complex(f, 0) / v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Divide(v)
 	}
 	return nil
 }
@@ -239,6 +251,8 @@ func (p *BigFloat) Compare(o Number) int {
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
 		return p.value.Cmp(vf)
+	case *BigComplex:
+		return p.value.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
 	return 0
 }

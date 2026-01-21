@@ -71,6 +71,12 @@ func (p *Complex) Add(o Number) Number {
 		return NewComplex(p.Value + complex(float64(v.Value), 0))
 	case *Rational:
 		return NewComplex(p.Value + complex(v.Float64(), 0))
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(p.Value)),
+			NewBigFloatFromFloat64(imag(p.Value)),
+		)
+		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -89,6 +95,12 @@ func (p *Complex) Subtract(o Number) Number {
 		return NewComplex(p.Value - complex(float64(v.Value), 0))
 	case *Rational:
 		return NewComplex(p.Value - complex(v.Float64(), 0))
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(p.Value)),
+			NewBigFloatFromFloat64(imag(p.Value)),
+		)
+		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -107,6 +119,12 @@ func (p *Complex) Multiply(o Number) Number {
 		return NewComplex(p.Value * complex(float64(v.Value), 0))
 	case *Rational:
 		return NewComplex(p.Value * complex(v.Float64(), 0))
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(p.Value)),
+			NewBigFloatFromFloat64(imag(p.Value)),
+		)
+		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -125,6 +143,12 @@ func (p *Complex) Divide(o Number) Number {
 		return NewComplex(p.Value / complex(float64(v.Value), 0))
 	case *Rational:
 		return NewComplex(p.Value / complex(v.Float64(), 0))
+	case *BigComplex:
+		bc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(p.Value)),
+			NewBigFloatFromFloat64(imag(p.Value)),
+		)
+		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
 }
@@ -145,6 +169,8 @@ func (p *Complex) LessThan(o Number) bool {
 		return real(p.Value) < float64(v.Value)
 	case *Rational:
 		return real(p.Value) < v.Float64()
+	case *BigComplex:
+		return NewBigFloatFromFloat64(real(p.Value)).Compare(v.Real()) < 0
 	}
 	panic(ErrNotANumber)
 }

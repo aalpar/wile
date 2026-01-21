@@ -26,11 +26,17 @@ import (
 // R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
 func PrimExactQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	switch o.(type) {
+	switch v := o.(type) {
 	case *values.Integer, *values.BigInteger, *values.Rational:
 		mc.SetValue(values.TrueValue)
 	case *values.Float, *values.BigFloat, *values.Complex:
 		mc.SetValue(values.FalseValue)
+	case *values.BigComplex:
+		if v.IsExact() {
+			mc.SetValue(values.TrueValue)
+		} else {
+			mc.SetValue(values.FalseValue)
+		}
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "exact?: expected a number but got %T", o)
 	}

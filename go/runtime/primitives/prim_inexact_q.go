@@ -26,11 +26,17 @@ import (
 // R7RS §6.2.6: Returns #t if the number is inexact, #f otherwise.
 func PrimInexactQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	switch o.(type) {
+	switch v := o.(type) {
 	case *values.Float, *values.BigFloat, *values.Complex:
 		mc.SetValue(values.TrueValue)
 	case *values.Integer, *values.BigInteger, *values.Rational:
 		mc.SetValue(values.FalseValue)
+	case *values.BigComplex:
+		if v.IsExact() {
+			mc.SetValue(values.FalseValue)
+		} else {
+			mc.SetValue(values.TrueValue)
+		}
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact?: expected a number but got %T", o)
 	}

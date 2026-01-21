@@ -28,8 +28,14 @@ func PrimImagPart(_ context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(imag(v.Value)))
+	case *values.BigComplex:
+		mc.SetValue(v.Imag())
 	case *values.Integer, *values.Float, *values.Rational:
 		mc.SetValue(values.NewFloat(0))
+	case *values.BigInteger:
+		mc.SetValue(values.NewBigIntegerFromInt64(0))
+	case *values.BigFloat:
+		mc.SetValue(values.NewBigFloatFromFloat64(0))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "imag-part: expected a number but got %T", o)
 	}

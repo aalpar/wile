@@ -36,6 +36,12 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 		} else {
 			mc.SetValue(values.FalseValue)
 		}
+	case *values.BigComplex:
+		if v.IsReal() {
+			mc.SetValue(values.TrueValue)
+		} else {
+			mc.SetValue(values.FalseValue)
+		}
 	default:
 		mc.SetValue(values.FalseValue)
 	}

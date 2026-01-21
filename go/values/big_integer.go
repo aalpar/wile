@@ -108,6 +108,9 @@ func (p *BigInteger) Add(o Number) Number {
 		f := float64FromBigInt(p.value)
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) + v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		return bc.Add(v)
 	}
 	return nil
 }
@@ -135,6 +138,9 @@ func (p *BigInteger) Subtract(o Number) Number {
 		f := float64FromBigInt(p.value)
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) - v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		return bc.Subtract(v)
 	}
 	return nil
 }
@@ -167,6 +173,9 @@ func (p *BigInteger) Multiply(o Number) Number {
 	case *Complex:
 		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) * v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		return bc.Multiply(v)
 	}
 	return nil
 }
@@ -209,6 +218,9 @@ func (p *BigInteger) Divide(o Number) Number {
 	case *Complex:
 		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) / v.Datum())
+	case *BigComplex:
+		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		return bc.Divide(v)
 	}
 	return nil
 }
@@ -292,6 +304,9 @@ func (p *BigInteger) Compare(o Number) int {
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return pRat.Cmp(v.Rat())
+	case *BigComplex:
+		self := new(big.Float).SetInt(p.value)
+		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
 	return 0
 }
