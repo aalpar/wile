@@ -6,7 +6,7 @@ Package `runtime` initializes the top-level Scheme environment with primitives.
 
 - Creates and bootstraps the complete top-level environment
 - Registers 200+ Scheme built-in functions as foreign closures
-- Loads bootstrap macros (and, or, let, let*, letrec, cond, when, unless, etc.)
+- Loads bootstrap macros (and, or, let, let*, letrec, cond, when, unless, guard, etc.)
 - Manages I/O port parameters (stdin, stdout, stderr)
 - Maintains three-phase environment: TopLevel → Expand → Compile
 
