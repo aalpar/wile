@@ -64,6 +64,37 @@ func NewExpanderTimeContinuation(env *environment.EnvironmentFrame) *ExpanderTim
 	return q
 }
 
+// hasLocalVariableBinding checks if the symbol has a local variable binding
+// in the runtime environment that would shadow any macro definition.
+// R7RS §4.2.2: let bindings shadow outer bindings including macros.
+func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
+	// Only check local bindings - global variables don't shadow macros
+	li := p.env.GetLocalIndex(sym)
+	if li == nil {
+		return false
+	}
+
+	// Get the actual binding to check its type and scopes
+	binding := p.env.GetLocalBinding(li)
+	if binding == nil {
+		return false
+	}
+
+	// Only variable bindings shadow macros
+	if binding.BindingType() != environment.BindingTypeVariable {
+		return false
+	}
+
+	// Check scope compatibility for hygiene
+	bindingScopes := binding.Scopes()
+	if bindingScopes == nil || len(bindingScopes) == 0 {
+		// Binding has no scopes (user code) - matches any use
+		return true
+	}
+
+	return syntax.ScopesMatch(scopes, bindingScopes)
+}
+
 // ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	switch stx := expr.(type) {
@@ -458,37 +489,46 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 	if !ok {
 		return nil, fmt.Errorf("expected a symbol for syntax, got %T", sym.Unwrap())
 	}
-	// Look up syntax bindings in the expand phase environment
-	// R7RS requires syntax bindings to be separate from runtime bindings
-	expandEnv := p.env.Expand()
-	bnd := expandEnv.GetBinding(sym0)
 
-	// Check if it's a macro binding
-	if !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
-		// This is a macro - invoke the transformer (handled below)
-	} else {
-		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
-		// First check for compile-time primitives that don't have runtime bindings
-		// Check for primitive expander in the Expand environment
-		symVal := p.env.InternSymbol(sym0)
-		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
-		if pe != nil {
-			return pe.Expand(p, ectx, sym, expr)
-		}
+	// R7RS §4.2.2: Local variable bindings shadow macros
+	// Check if there's a local variable binding before checking for macros
+	if !p.hasLocalVariableBinding(sym0, sym.Scopes()) {
+		// No local variable shadowing - check for macros
+		// Look up syntax bindings in the expand phase environment
+		// R7RS requires syntax bindings to be separate from runtime bindings
+		expandEnv := p.env.Expand()
+		bnd := expandEnv.GetBinding(sym0)
 
-		// Regular procedure call - expand arguments (they might contain macro calls)
-		exprPair, ok := expr.(*syntax.SyntaxPair)
-		if ok && !syntax.IsSyntaxEmptyList(exprPair) {
-			expandedArgs, err := p.ExpandSyntaxArgumentList(ectx, exprPair)
-			if err != nil {
-				return nil, fmt.Errorf("failed to expand arguments: %w", err)
-			}
-			return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
+		// Check if it's a macro binding
+		if !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
+			// This is a macro - invoke the transformer (handled below after this block)
+			return p.expandMacroInvocation(ectx, sym, expr, bnd)
 		}
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Check that expr is a syntax pair (the arguments)
+	// Not a macro (or local variable shadows macro)
+	// Check if it's a primitive (quote, if, define-syntax, etc.)
+	symVal := p.env.InternSymbol(sym0)
+	pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
+	if pe != nil {
+		return pe.Expand(p, ectx, sym, expr)
+	}
+
+	// Regular procedure call - expand arguments (they might contain macro calls)
+	exprPair, ok := expr.(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(exprPair) {
+		expandedArgs, err := p.ExpandSyntaxArgumentList(ectx, exprPair)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand arguments: %w", err)
+		}
+		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
+	}
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
+// expandMacroInvocation invokes a macro transformer and returns the expanded result.
+// This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
+func (p *ExpanderTimeContinuation) expandMacroInvocation(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
 	mcls, ok := bnd.Value().(*MachineClosure)
 	if !ok {
 		return nil, fmt.Errorf("not a machine closure: %T", bnd.Value())
@@ -562,6 +602,13 @@ func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr synt
 
 	sym0, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
+		return expr, false, nil
+	}
+
+	// R7RS §4.2.2: Local variable bindings shadow macros
+	// Check if there's a local variable binding before checking for macros
+	if p.hasLocalVariableBinding(sym0, sym.Scopes()) {
+		// Local variable shadows macro - no expansion
 		return expr, false, nil
 	}
 
