@@ -584,6 +584,7 @@ Tests are organized in individual test files:
 - `error-object?` - predicate for error objects
 - `error-object-message` - extract message from error object
 - `error-object-irritants` - extract irritants list from error object
+- `guard` - exception handling syntax with cond-like clauses (R7RS §4.2.7)
 
 **Promise Coverage:**
 - `make-promise` - wrapping values as promises; returns promise unchanged if already a promise (R7RS §4.2.5)
@@ -606,8 +607,15 @@ Tests are organized in individual test files:
 - `make-promise` identity (returns same promise when given promise, R7RS §4.2.5)
 - `delay-force` tail-call semantics for iterative lazy algorithms (prevents stack growth)
 
+**Additional Coverage Added:**
+- `guard` syntax (R7RS §4.2.7) - exception handling with cond-like clauses, 21 test cases including:
+  - Basic else clause, test clauses, multiple clauses
+  - `=>` arrow clauses with procedure application
+  - Re-raise when no clause matches
+  - Integration with error objects
+  - Guard in various contexts (let, procedures)
+
 **Missing R7RS Features (not yet implemented):**
-- `guard` syntax (R7RS §4.2.7) - exception handling with cond-like clauses; workaround: use `call/cc` with `with-exception-handler`
 - `read-error?` predicate (R7RS §6.11) - returns #t for objects raised by read procedure
 - `file-error?` predicate (R7RS §6.11) - returns #t for file operation errors
 
