@@ -51,7 +51,7 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 			if err != nil {
 				return values.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
 			}
-			err = sub.Run(ctx)
+			err = sub.Run()
 			if err != nil {
 				if !errors.Is(err, machine.ErrMachineHalt) {
 					return values.WrapForeignErrorf(err, "make-parameter: converter error")

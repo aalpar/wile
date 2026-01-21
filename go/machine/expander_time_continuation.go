@@ -494,7 +494,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return nil, fmt.Errorf("not a machine closure: %T", bnd.Value())
 	}
 	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(mcls)
+	mc := NewMachineContextFromMachineClosure(context.TODO(), mcls)
 	if mc == nil {
 		return nil, fmt.Errorf("failed to create machine context from closure")
 	}
@@ -510,7 +510,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return nil, fmt.Errorf("failed to apply transformer: %w", err)
 	}
 
-	err = mc.Run(context.TODO())
+	err = mc.Run()
 	if err != nil && !errors.Is(err, ErrMachineHalt) {
 		return nil, err
 	}
@@ -582,7 +582,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr synt
 	}
 
 	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(mcls)
+	mc := NewMachineContextFromMachineClosure(context.TODO(), mcls)
 	if mc == nil {
 		return nil, false, fmt.Errorf("failed to create machine context from closure")
 	}
@@ -600,7 +600,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr synt
 		return nil, false, fmt.Errorf("failed to apply transformer: %w", err)
 	}
 
-	err = mc.Run(context.TODO())
+	err = mc.Run()
 	if err != nil && !errors.Is(err, ErrMachineHalt) {
 		return nil, false, err
 	}

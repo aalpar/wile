@@ -37,7 +37,7 @@ func TestExtractLiteralsFromSyntaxRules(t *testing.T) {
 	sv := parseSchemeExpr(t, env, macroCode)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }

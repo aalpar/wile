@@ -73,7 +73,7 @@ func TestOperationBuildSyntaxList_Apply_Empty(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationBuildSyntaxList(0)
 	result, err := op.Apply(context.Background(), mc)
@@ -92,7 +92,7 @@ func TestOperationBuildSyntaxList_Apply_WithSyntaxValues(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	// Push syntax values to stack
 	stx1 := syntax.NewSyntaxSymbol("a", nil)
@@ -117,7 +117,7 @@ func TestOperationBuildSyntaxList_Apply_WithValues(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	// Push regular values to stack
 	mc.evals.Push(values.NewInteger(1))

@@ -82,6 +82,8 @@ For primitives requiring at least 2 arguments (like comparisons), use `ParamCoun
 
 Uses quicktest with `runProgram()` and `runSchemeCode()` helpers. Table-driven tests cover operations, edge cases, and error conditions.
 
+For tests involving exception handling or promises where infinite loops are possible, use `runSchemeCodeWithTimeout()` to prevent resource exhaustion.
+
 **Important**: Do not remove or revert tests that conform to R7RS. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed to conform to R7RS—not the test.
 
 ### Test File Organization
@@ -131,6 +133,14 @@ This package uses a mix of **thematic consolidation** and **individual test file
 | `prim_current_port_test.go` | `current-input-port`, `current-output-port` |
 | `prim_close_port_test.go` | `close-port` |
 | `prim_io_errors_test.go` | I/O error conditions |
+
+**Exception Handling & Promises (individual files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_exception_test.go` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, error-object accessors |
+| `prim_promise_test.go` | `promise?`, `make-promise`, `force`, `delay-force` |
+| `prim_promise_extra_test.go` | Additional promise tests (memoization, edge cases) |
+| `prim_parameter_test.go` | `make-parameter`, `parameterize` |
 
 When adding new primitive tests:
 - Check if a thematic test file exists for the category

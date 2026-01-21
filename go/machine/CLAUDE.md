@@ -47,6 +47,7 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 - **Symbol interning**: Symbols interned through environment for `eq?` identity
 - **Eval stack vs value**: Arguments on stack, result in value register
 - **SubContext for foreign calls**: Fresh stacks but shared global environment
+- **Run() does NOT reset pc**: The VM loop in `Run()` starts from the current `pc` value. Callers must set `pc` appropriately: `Apply` sets `pc=0` for fresh closure invocation, `Restore` preserves saved `pc` for continuation resumption. Do NOT add `pc=0` to `Run()` - it would break `raise-continuable` resumption semantics.
 
 ## Testing
 

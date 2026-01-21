@@ -56,10 +56,12 @@ type MachineContext struct {
 	debugger         *Debugger         // optional debugger for breakpoints and stepping
 }
 
-// NewMachineContext creates a new machine context with the given continuation and initial values.
-func NewMachineContext(cont *MachineContinuation) *MachineContext {
+// NewMachineContext creates a new machine context with the given context and continuation.
+// The context enables cancellation/timeout support in the VM loop.
+// For callers that don't need cancellation, pass context.Background().
+func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineContext {
 	q := &MachineContext{
-		ctx:      context.Background(),
+		ctx:      ctx,
 		env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
 		template: cont.template, // not needed to copy, templates are immutable
 		cont:     cont.parent,
@@ -70,8 +72,8 @@ func NewMachineContext(cont *MachineContinuation) *MachineContext {
 	return q
 }
 
-func NewMachineContextFromMachineClosure(cls *MachineClosure) *MachineContext {
-	return NewMachineContext(NewMachineContinuation(nil, cls.template, cls.env))
+func NewMachineContextFromMachineClosure(ctx context.Context, cls *MachineClosure) *MachineContext {
+	return NewMachineContext(ctx, NewMachineContinuation(nil, cls.template, cls.env))
 }
 
 func (p *MachineContext) Parent() *MachineContinuation {
@@ -197,11 +199,42 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 	return p.Apply(mcls, vs...)
 }
 
-func (p *MachineContext) Run(ctx context.Context) error {
+// SetContext sets the context for this machine context.
+// This should be called before Run() to enable context cancellation/timeout.
+func (p *MachineContext) SetContext(ctx context.Context) {
+	p.ctx = ctx
+}
+
+// Context returns the context for this machine context.
+func (p *MachineContext) Context() context.Context {
+	return p.ctx
+}
+
+// Run executes the VM loop starting from the current pc.
+// The pc is NOT reset here - callers are responsible for ensuring the correct initial pc:
+//   - NewMachineContext copies pc from the continuation (typically 0 for fresh execution)
+//   - Apply sets pc = 0 for fresh closure invocation
+//   - Restore sets pc from the saved continuation for resumption
+// This design allows continuation resumption (e.g., raise-continuable) to work correctly
+// by preserving the pc set by Restore rather than unconditionally resetting to 0.
+//
+// Context cancellation: The loop checks p.ctx.Done() on each iteration, allowing
+// preemption via context.WithTimeout or context.WithCancel. This enables:
+//   - Test timeouts that actually stop execution
+//   - REPL interrupt support (Ctrl+C)
+//   - Resource management for long-running computations
+// Set the context via SetContext() before calling Run().
+func (p *MachineContext) Run() error {
 	var err error
 	mc := p
-	mc.pc = 0
 	for mc.pc < len(mc.template.operations) {
+		// Check for context cancellation (enables preemption via timeout/cancel)
+		select {
+		case <-mc.ctx.Done():
+			return mc.ctx.Err()
+		default:
+		}
+
 		// Check for debugger breaks
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
@@ -212,7 +245,7 @@ func (p *MachineContext) Run(ctx context.Context) error {
 			}
 		}
 
-		mc, err = mc.template.operations[mc.pc].Apply(ctx, mc)
+		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
 		if err != nil {
 			return err
 		}

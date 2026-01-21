@@ -1672,8 +1672,8 @@ func (p *CompileTimeContinuation) compileAndEvalTransformer(transformerExpr synt
 
 	// Execute the compiled template at compile time to get the closure
 	cont := NewMachineContinuation(nil, tpl, expandEnv)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error evaluating transformer")
 	}

@@ -23,14 +23,22 @@ import (
 // PrimRaiseContinuable implements the raise-continuable primitive.
 // (raise-continuable obj)
 // Raises a continuable exception with obj as the condition.
-// If the handler returns, its return value becomes the value of raise-continuable.
+// If the handler returns, its return value becomes the value of raise-continuable,
+// and execution continues from the call site per R7RS §6.11.
 func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
+
+	// Copy continuation to prevent mutation issues during handler execution.
+	// This follows the pattern established by call/cc.
+	cont := mc.Parent()
+	if cont != nil {
+		cont = cont.Copy()
+	}
 
 	return &machine.ErrExceptionEscape{
 		Condition:    obj,
 		Continuable:  true,
-		Continuation: mc.Parent(),
+		Continuation: cont,
 		Handled:      false,
 	}
 }

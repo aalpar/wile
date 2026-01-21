@@ -75,7 +75,7 @@ func TestOperationDrop_Apply(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	// Push value to stack
 	mc.evals.Push(values.NewInteger(42))

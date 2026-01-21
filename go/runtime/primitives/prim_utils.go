@@ -38,7 +38,7 @@ func duplicated1(ctx context.Context, mc *machine.MachineContext, thunk *machine
 	if err != nil {
 		return err
 	}
-	err = sub.Run(ctx)
+	err = sub.Run()
 	if err != nil {
 		// Propagate continuation escapes
 		var escapeErr *machine.ErrContinuationEscape

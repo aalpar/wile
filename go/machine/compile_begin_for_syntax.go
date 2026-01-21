@@ -78,8 +78,8 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 
 		// Execute the compiled code at compile time
 		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-		mc := NewMachineContext(cont)
-		err = mc.Run(context.Background())
+		mc := NewMachineContext(context.Background(), cont)
+		err = mc.Run()
 		if err != nil {
 			if !errors.Is(err, ErrMachineHalt) {
 				return values.WrapForeignErrorf(err, "begin-for-syntax: evaluation failed")

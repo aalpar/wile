@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"wile/environment"
 	"wile/machine"
@@ -27,6 +28,7 @@ import (
 	"wile/utils"
 	"wile/values"
 )
+
 
 // runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
 // This is the legacy version that accepts a pre-built AST.
@@ -50,9 +52,9 @@ func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog 
 	if err != nil {
 		return nil, err
 	}
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
 	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +93,9 @@ func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code 
 		return nil, err
 	}
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
 	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	if err != nil {
 		return nil, err
 	}
@@ -155,4 +157,55 @@ func runSchemeCodeExpectFalse(t *testing.T, code string) {
 	if result != values.FalseValue {
 		t.Errorf("expected #f but got %v for: %s", result, code)
 	}
+}
+
+// runSchemeCodeWithTimeout runs code with a timeout to prevent infinite loops.
+// Uses context.WithTimeout for proper cooperative cancellation - the VM loop
+// checks ctx.Done() on each iteration and exits cleanly when cancelled.
+func runSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) (values.Value, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return runSchemeCodeWithContext(t, ctx, code)
+}
+
+// runSchemeCodeWithContext parses and runs Scheme source code with the given context.
+// The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
+func runSchemeCodeWithContext(t *testing.T, ctx context.Context, code string) (values.Value, error) {
+	t.Helper()
+	env, err := runtime.NewTopLevelEnvironmentFrameTiny(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return runSchemeCodeWithEnvAndContext(t, ctx, env, code)
+}
+
+// runSchemeCodeWithEnvAndContext parses and runs Scheme source code with the given context and environment.
+func runSchemeCodeWithEnvAndContext(t *testing.T, ctx context.Context, env *environment.EnvironmentFrame, code string) (values.Value, error) {
+	t.Helper()
+	p := parser.NewParser(env, true, strings.NewReader(code))
+	stx, err := p.ReadSyntax(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ectx := machine.NewExpandTimeCallContext()
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	if err != nil {
+		return nil, err
+	}
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	if err != nil {
+		return nil, err
+	}
+
+	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
+	if err != nil {
+		return nil, err
+	}
+	return mc.GetValue(), nil
 }

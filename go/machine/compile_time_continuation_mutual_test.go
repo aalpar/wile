@@ -96,9 +96,8 @@ func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("Should be able to compile fact referencing itself"))
 
 	// Execute the define
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the function is defined

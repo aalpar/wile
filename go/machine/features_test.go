@@ -217,8 +217,8 @@ func TestCondExpandWithElse(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand (else 42))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -235,8 +235,8 @@ func TestCondExpandR7RS(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand (r7rs 100) (else 0))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,8 +252,8 @@ func TestCondExpandAnd(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((and r7rs) 200) (else 0))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -269,8 +269,8 @@ func TestCondExpandOr(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((or r7rs nonexistent-feature) 300) (else 0))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,8 +286,8 @@ func TestCondExpandNot(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((not nonexistent-feature) 400) (else 0))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -50,7 +50,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = sub.Run(ctx)
+	err = sub.Run()
 	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
@@ -67,7 +67,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	thunkErr := sub2.Run(ctx)
+	thunkErr := sub2.Run()
 	thunkResult := sub2.GetValues()
 
 	// Always call after thunk, even if main thunk escaped
@@ -76,7 +76,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = sub3.Run(ctx)
+	err = sub3.Run()
 	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {

@@ -87,7 +87,7 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, a
 			if err != nil {
 				return mc, mc.WrapError(err, "parameter: failed to apply converter")
 			}
-			err = sub.Run(ctx)
+			err = sub.Run()
 			if err != nil {
 				if !errors.Is(err, ErrMachineHalt) {
 					return mc, mc.WrapError(err, "parameter: converter error")
