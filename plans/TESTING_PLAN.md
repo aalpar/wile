@@ -483,62 +483,82 @@ Tests are consolidated in `prim_division_test.go` following the project's themat
 
 ---
 
-### Phase 8: Equality & Control Flow (Priority: Medium)
+### Phase 8: Equality & Control Flow (Priority: Medium) ✅ COMPLETE
 **Estimated time: 2 days**
 **Files: 11**
+**Status: Complete - 100+ test cases across individual test files**
 
-| Primitive | File | Key Test Cases |
-|-----------|------|----------------|
-| `eq?` | `prim_eq_q_test.go` | Symbols same, small ints cached |
-| `eqv?` | `prim_eqv_q_test.go` | Numbers, chars, booleans |
-| `equal?` | `prim_equal_q_test.go` | Deep comparison |
-| `apply` | `prim_apply_test.go` | With list, multiple args + list |
-| `map` | `prim_map_test.go` | Single list, multiple lists |
-| `for-each` | `prim_for_each_test.go` | Side effects, return void |
-| `call-with-values` | `prim_call_with_values_test.go` | Producer/consumer |
-| `values` | `prim_values_test.go` | Zero, one, multiple |
-| `dynamic-wind` | `prim_dynamic_wind_test.go` | Before/after with continuations |
-| `not` | `prim_not_test.go` | #f→#t, everything else→#f |
+Tests are organized in individual test files per primitive:
+
+| Primitive | File | Test Cases |
+|-----------|------|------------|
+| `eq?` | `prim_eq_q_test.go` | 12+ ✅ (identity, symbols, small ints, R7RS §4.1.2 literal interning) |
+| `eqv?` | `prim_eqv_q_test.go` | 15+ ✅ (numbers, chars, booleans, NaN, infinity) |
+| `equal?` | `prim_equal_q_test.go` | 12+ ✅ (deep comparison, lists, vectors, strings) |
+| `apply` | `prim_apply_test.go` | 10+ ✅ (with list, multiple args + list) |
+| `map` | `prim_map_test.go` | 10+ ✅ (single list, multiple lists) |
+| `for-each` | `prim_for_each_test.go` | 8+ ✅ (side effects, return void, multiple lists) |
+| `call-with-values` | `prim_call_with_values_test.go` | 10+ ✅ (producer/consumer, single/multiple values) |
+| `values` | `prim_values_test.go` | 8+ ✅ (zero, one, multiple values) |
+| `dynamic-wind` | `prim_dynamic_wind_test.go` | 10+ ✅ (before/after with continuations) |
+| `not` | `prim_not_test.go` | 8+ ✅ (#f→#t, everything else→#f) |
+| Control flow | `prim_control_flow_test.go` | 10+ ✅ (combined control flow tests) |
 
 ---
 
-### Phase 9: I/O Operations (Priority: Medium-Low)
+### Phase 9: I/O Operations (Priority: Medium-Low) ✅ COMPLETE
 **Estimated time: 3-4 days**
-**Files: 34**
+**Files: 18 (consolidated from 34 planned)**
+**Status: Complete - 150+ test cases across individual test files**
 
-These require more setup (temp files, string ports) but are less frequently modified.
+Tests are organized in individual test files per primitive or category:
 
 #### Port Creation & Management
-- `open-input-file`, `open-output-file`
-- `open-binary-input-file`, `open-binary-output-file`
-- `open-input-string`, `open-output-string`
-- `open-input-bytevector`, `open-output-bytevector`
-- `close-port`
-- Port predicates: `input-port?`, `output-port?`, `port?`, `*-port-open?`
-- Current ports: `current-input-port`, `current-output-port`
+| Primitive/Category | File | Test Cases |
+|-------------------|------|------------|
+| `open-binary-input-file` | `prim_open_binary_input_file_test.go` | 8+ ✅ |
+| `open-binary-output-file` | `prim_open_binary_output_file_test.go` | 8+ ✅ |
+| `open-input-bytevector`, `open-output-bytevector` | `prim_bytevector_port_test.go` | 10+ ✅ |
+| `close-port` | `prim_close_port_test.go` | 6+ ✅ |
+| Port predicates (edge cases) | `prim_port_predicates_extra_test.go` | 8+ ✅ |
+| Current ports | `prim_current_port_test.go` | 6+ ✅ |
 
 #### Higher-order Port Functions
-- `call-with-input-file`, `call-with-output-file`
-- `with-input-from-file`, `with-output-to-file`
-- `get-output-string`, `get-output-bytevector`
+| Primitive | File | Test Cases |
+|-----------|------|------------|
+| `call-with-input-file` | `prim_call_with_input_file_test.go` | 10+ ✅ |
+| `call-with-output-file` | `prim_call_with_output_file_test.go` | 10+ ✅ |
+| `with-input-from-file` | `prim_with_input_from_file_test.go` | 8+ ✅ |
+| `with-output-to-file` | `prim_with_output_to_file_test.go` | 8+ ✅ |
 
-#### Read/Write
-- `read`, `read-syntax`, `read-token`
-- `write`, `write-simple`, `write-shared`
-- `display`, `write-char`, `newline`
-- `eof-object`, `eof-object?`
+#### Read/Write Operations
+| Primitive/Category | File | Test Cases |
+|-------------------|------|------------|
+| `write-simple` | `prim_write_simple_test.go` | 12+ ✅ |
+| `write-shared` | `prim_write_shared_test.go` | 8+ ✅ |
+| Write variants (rational, float, complex, dotted pair) | `prim_write_extra_test.go` | 15+ ✅ |
+| Read variants | `prim_read_extra_test.go` | 6+ ✅ |
+| Display vs write comparison | `prim_display_extra_test.go` | 6+ ✅ |
+| String ports | `prim_string_port_extra_test.go` | 8+ ✅ |
+| Newline | `prim_newline_extra_test.go` | 4+ ✅ |
 
-**Test Strategy for I/O:**
-```go
-func TestOpenInputString(t *testing.T) {
-    // Use string ports to avoid file system
-    code := `(let ((p (open-input-string "hello")))
-               (read-char p))`
-    result, err := runSchemeCode(t, code)
-    qt.Assert(t, err, qt.IsNil)
-    qt.Assert(t, result, values.SchemeEquals, values.NewCharacter('h'))
-}
-```
+#### EOF & Error Handling
+| Category | File | Test Cases |
+|----------|------|------------|
+| EOF object | `prim_eof_object_test.go` | 8+ ✅ |
+| I/O errors | `prim_io_errors_test.go` | 12+ ✅ |
+
+**Coverage includes:**
+- Port creation for all port types (file, string, bytevector, binary)
+- Port predicates on various types (ports, empty list, vectors)
+- Read/write operations with multiple data types
+- EOF handling (uniqueness, eq?, eqv?, equal?)
+- Error conditions (wrong types, reading from output port, writing to input port)
+- Higher-order port functions with cleanup
+
+**Note:** Implementation differences documented:
+- `port?` does not recognize BinaryInputPort/BinaryOutputPort (implementation limitation)
+- `read` returns error on EOF rather than eof-object (implementation difference from R7RS)
 
 ---
 
