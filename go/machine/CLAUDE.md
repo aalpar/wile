@@ -48,6 +48,7 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 - **Eval stack vs value**: Arguments on stack, result in value register
 - **SubContext for foreign calls**: Fresh stacks but shared global environment
 - **Run() does NOT reset pc**: The VM loop in `Run()` starts from the current `pc` value. Callers must set `pc` appropriately: `Apply` sets `pc=0` for fresh closure invocation, `Restore` preserves saved `pc` for continuation resumption. Do NOT add `pc=0` to `Run()` - it would break `raise-continuable` resumption semantics.
+- **Let bindings shadow macros**: Per R7RS §4.2.2, local variable bindings in `let`/`let*`/`letrec` shadow outer macro definitions. The expander checks for local variable bindings before looking up macros (`hasLocalVariableBinding` in `expander_time_continuation.go`).
 
 ## Testing
 
@@ -71,3 +72,9 @@ When adding tests:
 - Compilation logic → relevant `compile_*_test.go`
 - VM execution → `machine_context_test.go`
 - Cross-cutting concerns → `hygiene_test.go` or appropriate `*_internal_test.go`
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for:
+- Flatt 2016 "Binding as Sets of Scopes" - the hygiene model used for macro expansion
+- R7RS §4.3 (Macros) and §5.4 (Syntax definitions)

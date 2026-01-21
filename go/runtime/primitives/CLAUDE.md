@@ -213,7 +213,7 @@ number (z)
 
 | Symbol | Type | Go Types |
 |--------|------|----------|
-| **z** | complex (any number) | Integer, BigInteger, Float, BigFloat, Rational, Complex |
+| **z** | complex (any number) | Integer, BigInteger, Float, BigFloat, Rational, Complex, BigComplex |
 | **x** | real | Integer, BigInteger, Float, BigFloat, Rational |
 | **q** | rational | Integer, BigInteger, BigFloat, Rational |
 | **n** | integer (exact OR inexact) | Integer, BigInteger, Float (if integral), BigFloat (if integral) |
@@ -348,7 +348,11 @@ When Go's `cmplx` functions return `NaN+NaNi` (e.g., `sin(+inf)`), `ComplexOrFlo
 
 The two-argument form `(atan y x)` computes the angle from the positive x-axis to point (x, y). Per R7RS, this form only accepts **real** arguments (not complex). Uses `math.Atan2` directly.
 
-## R7RS Normative Sources
+## References
+
+See `BIBLIOGRAPHY.md` at project root for complete academic references including R7RS, SRFIs, IEEE 754, and Unicode standards.
+
+### R7RS Normative Sources (Quick Reference)
 
 | Source | URL |
 |--------|-----|

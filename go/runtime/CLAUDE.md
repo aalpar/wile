@@ -67,3 +67,7 @@ Primitives are registered in `environment_tiny.go` as `PrimitiveSpec`:
 ## Testing
 
 Uses quicktest with `evalScheme()` helper for full parse→expand→compile→execute cycle.
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for R7RS specification, SRFI-18 (threading), and other standards implemented by this package.

@@ -64,3 +64,7 @@ Tests are organized by syntax type with a coverage file for edge cases:
 | `coverage_test.go` | Additional edge case coverage |
 
 When adding tests, use the type-specific test file or `coverage_test.go` for cross-cutting concerns.
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for Flatt 2016 "Binding as Sets of Scopes" - the academic paper describing the hygiene model implemented in this package.

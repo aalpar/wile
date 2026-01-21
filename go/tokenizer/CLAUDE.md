@@ -71,3 +71,7 @@ Tests are organized with the main test file plus coverage-focused supplementary 
 | `*_coverage_test.go` | Additional coverage files |
 
 This organization ensures comprehensive coverage while keeping test files focused and maintainable.
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for R7RS §7.1.1 (Lexical structure).

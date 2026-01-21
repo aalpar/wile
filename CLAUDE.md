@@ -116,8 +116,7 @@ See package-specific CLAUDE.md files for details on each package's test organiza
 - `TODO.md` - Pending tasks, missing R7RS features, future extensions (multithreading, POSIX API, Go FFI)
 - `CODING_STYLE.md` - Comprehensive style guide
 - `PRIMITIVES.md` - Complete primitives reference
-- `go/DESIGN.md` - Macro system design details
-- `BIBLIOGRAPHY.md` - Academic references (Flatt 2016, R7RS)
+- `BIBLIOGRAPHY.md` - Academic papers, specifications, and canonical references (Flatt 2016, R7RS, SRFIs, IEEE 754, Unicode)
 - `plans/TESTING_PLAN.md` - Comprehensive primitive unit test implementation plan
 - `plans/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
 - `plans/R7RS_CONFORMANCE_PLAN.md` - R7RS conformance roadmap

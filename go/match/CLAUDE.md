@@ -61,3 +61,7 @@ Tests are organized by functional area:
 | `expand_test.go` | Template expansion |
 
 When adding tests, choose the file matching the functional area being tested.
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for R7RS §4.3.2 (syntax-rules pattern language).

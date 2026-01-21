@@ -21,7 +21,7 @@ Complete R7RS value system including:
 **Number** - Numeric tower:
 - `Add`, `Subtract`, `Multiply`, `Divide`
 - `IsZero`, `LessThan`
-- Implemented by: Integer, Float, Rational, Complex, BigInteger, BigFloat
+- Implemented by: Integer, Float, Rational, Complex, BigInteger, BigFloat, BigComplex
 
 ## R7RS Numeric Tower Mapping
 
@@ -35,6 +35,7 @@ R7RS defines a hierarchy: `number ⊃ complex ⊃ real ⊃ rational ⊃ integer`
 | real | Float | inexact | IEEE 754 float64 |
 | real | BigFloat | inexact | Arbitrary precision via big.Float (`#m` prefix) |
 | complex | Complex | inexact | Real and imaginary as float64 |
+| complex | BigComplex | exact or inexact | Real and imaginary as BigInteger or Rational (exact) or BigFloat (inexact) |
 
 ### Exactness Properties
 
@@ -46,6 +47,7 @@ R7RS defines a hierarchy: `number ⊃ complex ⊃ real ⊃ rational ⊃ integer`
 | Float | #f | #t | Always inexact |
 | BigFloat | #f | #t | Always inexact, arbitrary precision |
 | Complex | #f | #t | Always inexact |
+| BigComplex | varies | varies | Exact if both parts are BigInteger/Rational, inexact if either is BigFloat |
 
 ### Special Value Properties
 
@@ -57,6 +59,7 @@ R7RS defines a hierarchy: `number ⊃ complex ⊃ real ⊃ rational ⊃ integer`
 | Float | varies | varies | varies | IEEE 754 supports ±inf, NaN |
 | BigFloat | #t | #f | #f | big.Float has no Inf/NaN |
 | Complex | varies | varies | varies | Follows Float rules |
+| BigComplex | #t | #f | #f | Always finite (uses BigInteger/Rational/BigFloat) |
 
 ### Type Predicates
 
@@ -100,12 +103,13 @@ All numeric types support `LessThan` comparison with all other numeric types:
 
 | Type | Can Compare With |
 |------|------------------|
-| Integer | Integer, BigInteger, Float, BigFloat, Rational, Complex |
-| BigInteger | Integer, BigInteger, Float, BigFloat, Rational |
-| Float | Integer, BigInteger, Float, BigFloat, Rational, Complex |
-| BigFloat | Integer, BigInteger, Float, BigFloat, Rational |
-| Rational | Integer, BigInteger, Float, BigFloat, Rational, Complex |
-| Complex | Integer, Float, Rational, Complex (compares real parts only) |
+| Integer | Integer, BigInteger, Float, BigFloat, Rational, Complex, BigComplex |
+| BigInteger | Integer, BigInteger, Float, BigFloat, Rational, BigComplex |
+| Float | Integer, BigInteger, Float, BigFloat, Rational, Complex, BigComplex |
+| BigFloat | Integer, BigInteger, Float, BigFloat, Rational, BigComplex |
+| Rational | Integer, BigInteger, Float, BigFloat, Rational, Complex, BigComplex |
+| Complex | Integer, Float, Rational, Complex, BigComplex (compares real parts only) |
+| BigComplex | All numeric types (compares real parts only for complex comparisons) |
 
 ## Gotchas
 
@@ -135,6 +139,7 @@ This package uses **1:1 mapping** with type-based consolidation for related type
 | `big_number_test.go` | BigInteger and BigFloat types |
 | `rational_test.go` | Rational type |
 | `complex_test.go` | Complex type |
+| `big_complex_test.go` | BigComplex type |
 | `pair_test.go` | Pair/cons cells |
 | `string_test.go` | String type |
 | `character_test.go` | Character type |
@@ -145,3 +150,7 @@ This package uses **1:1 mapping** with type-based consolidation for related type
 | `*_error_test.go` | Error types (foreign, native) |
 
 When adding new value type tests, create `<typename>_test.go` or add to an existing related type's test file.
+
+## References
+
+See `BIBLIOGRAPHY.md` at project root for R7RS numeric tower specification (§6.2) and IEEE 754 floating-point standard.
