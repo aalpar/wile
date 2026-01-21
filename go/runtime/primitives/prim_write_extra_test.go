@@ -146,3 +146,53 @@ func TestWriteMixedOperationsToPort(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("Expected *values.String, got %T", result))
 	qt.Assert(t, str.Value, qt.Equals, "\"line1\"\n> 123")
 }
+
+// Write with Different Value Types Tests (R7RS §6.13.3)
+
+func TestWriteWithRational(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write 3/4 p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	str, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, str.Value, qt.Equals, "3/4")
+}
+
+func TestWriteWithFloat(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write 3.14 p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	str, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, str.Value, qt.Equals, "3.14")
+}
+
+func TestWriteWithComplex(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write 1+2i p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	str, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, str.Value, qt.Equals, "1+2i")
+}
+
+func TestWriteWithDottedPair(t *testing.T) {
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write (cons 1 2) p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	str, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, str.Value, qt.Equals, "(1 . 2)")
+}
