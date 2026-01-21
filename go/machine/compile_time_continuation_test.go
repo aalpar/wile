@@ -66,10 +66,9 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
@@ -119,10 +118,9 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
 
-	mc := NewMachineContext(cont)
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewCons(values.NewString("hello"), values.EmptyList))
@@ -152,10 +150,9 @@ func TestCompileContext_CompileDefine(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
-	mc := NewMachineContext(cont)
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
@@ -181,10 +178,9 @@ func TestCompileContext_CompileQuote(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 1)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewSymbol("x"))
@@ -211,10 +207,9 @@ func TestCompileContext_CompileQuasiquote(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 1)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewSymbol("x"))
@@ -374,8 +369,8 @@ func evalSchemeString(code string) (values.Value, error) {
 		}
 
 		// Run
-		mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
-		err = mc.Run(ctx)
+		mc := NewMachineContext(ctx, NewMachineContinuation(nil, tpl, env))
+		err = mc.Run()
 		if err != nil {
 			return nil, err
 		}
@@ -414,10 +409,9 @@ func TestCompileContext_CompileIf(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 3)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("false"))
@@ -449,10 +443,9 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, cont.template.literals[0], values.SchemeEquals, values.NewString("true"))
 	qt.Assert(t, cont.template.literals[1], values.SchemeEquals, gi)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	// set! now returns void with the LoadVoid operation at the end
@@ -510,10 +503,9 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 4)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	// FIXME: should return ErrMachineHalt
 	//	qt.Assert(t, err, qt.ErrorIs, ErrMachineHalt)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
@@ -539,10 +531,9 @@ func TestCompileContext_CompileBegin_1(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("false"))
@@ -568,10 +559,9 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, cont.template, env))
-	ctx := context.Background()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run(ctx)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("second"))
@@ -723,9 +713,8 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Compile and run the define
 	cont, err := newTopLevelThunk(utils.DatumToSyntaxValue(sctx, defineProg), env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now call (loop 100)
@@ -733,8 +722,8 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	callProg := values.List(values.NewSymbol("loop"), values.NewInteger(100))
 	cont2, err := newTopLevelThunk(utils.DatumToSyntaxValue(sctx, callProg), env)
 	qt.Assert(t, err, qt.IsNil)
-	mc2 := NewMachineContext(cont2)
-	err = mc2.Run(ctx)
+	mc2 := NewMachineContext(context.Background(), cont2)
+	err = mc2.Run()
 	// ErrMachineHalt is expected when execution completes with inTail=true at top-level
 	// (RestoreContinuation returns ErrMachineHalt when mc.cont is nil)
 	if err != nil && err != ErrMachineHalt {
@@ -766,9 +755,8 @@ func TestCompileContext_CompileCaseLambda(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Run compilation to create case-lambda closure
-	mc := NewMachineContext(cont)
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify we got a case-lambda closure
@@ -801,9 +789,8 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 	cont, err := newTopLevelThunk(utils.DatumToSyntaxValue(sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := NewMachineContext(cont)
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err == ErrMachineHalt {
 		err = nil
 	}
@@ -1052,8 +1039,8 @@ func TestCompileDefineVar(t *testing.T) {
 	qt.Assert(t, cont, qt.IsNotNil)
 
 	// Run it
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1067,16 +1054,16 @@ func TestCompileSetBang(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define x 0)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now set! it
 	sv2 := parseSchemeExpr(t, env, `(set! x 42)`)
 	cont2, err := newTopLevelThunk(sv2, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc2 := NewMachineContext(cont2)
-	err = mc2.Run(context.Background())
+	mc2 := NewMachineContext(context.Background(), cont2)
+	err = mc2.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1091,8 +1078,8 @@ func TestCompileIfBranches(t *testing.T) {
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(1))
 
@@ -1100,8 +1087,8 @@ func TestCompileIfBranches(t *testing.T) {
 	sv2 := parseSchemeExpr(t, env, `(if #f 1)`)
 	cont2, err := newTopLevelThunk(sv2, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc2 := NewMachineContext(cont2)
-	err = mc2.Run(context.Background())
+	mc2 := NewMachineContext(context.Background(), cont2)
+	err = mc2.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1183,8 +1170,8 @@ func TestCompileQuasiquoteSimple(t *testing.T) {
 	sv := parseSchemeExpr(t, env, "`(a b c)")
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1198,16 +1185,16 @@ func TestCompileProcedureCallTail(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define (fn x) ((lambda (y) y) x))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test calling the function
 	sv = parseSchemeExpr(t, env, `(fn 42)`)
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1222,8 +1209,8 @@ func TestCompileProcedureCallNonTail(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda (x) (begin ((lambda (y) y) x) 99)) 1)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
 }
@@ -1237,8 +1224,8 @@ func TestCompileBeginSequence(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(begin 1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(3))
 }
@@ -1253,8 +1240,8 @@ func TestCompileIfNoAlternate(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(if #t 42)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 
@@ -1262,8 +1249,8 @@ func TestCompileIfNoAlternate(t *testing.T) {
 	sv = parseSchemeExpr(t, env, `(if #f 42)`)
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1277,8 +1264,8 @@ func TestCompileLambdaWithRestParameter(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda (a . rest) rest) 1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	// rest should be (2 3)
 	result := mc.value[0]
@@ -1295,8 +1282,8 @@ func TestCompileLambdaRestOnly(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda args args) 1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -1310,8 +1297,8 @@ func TestCompileCondExpandNotFeature(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((not nonexistent) 42))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1326,8 +1313,8 @@ func TestCompileCondExpandAndFeature(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((and r7rs) 42))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1342,8 +1329,8 @@ func TestCompileCondExpandOrFeature(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((or nonexistent r7rs) 42))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1358,8 +1345,8 @@ func TestCompileCondExpandLibraryFeature(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(cond-expand ((library (nonexistent lib)) 1) (else 99))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
 }
@@ -1374,16 +1361,16 @@ func TestCompileSymbolBranches(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define global-var 42)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile a reference to the global
 	sv = parseSchemeExpr(t, env, `global-var`)
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1398,8 +1385,8 @@ func TestCompileSymbolLocalBinding(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda (local-var) local-var) 99)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
 }
@@ -1427,8 +1414,8 @@ func TestCompileSyntaxPrimitiveBranches(t *testing.T) {
 			sv := parseSchemeExpr(t, env, tc.prog)
 			cont, err := newTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
-			mc := NewMachineContext(cont)
-			err = mc.Run(context.Background())
+			mc := NewMachineContext(context.Background(), cont)
+			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 		})
 	}
@@ -1444,16 +1431,16 @@ func TestCompileMultipleForms(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define fn (lambda (x) x))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call the function
 	sv = parseSchemeExpr(t, env, `(fn 42)`)
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
 }
@@ -1481,8 +1468,8 @@ func TestCompileSelfEvaluating(t *testing.T) {
 			sv := parseSchemeExpr(t, env, tc.prog)
 			cont, err := newTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
-			mc := NewMachineContext(cont)
-			err = mc.Run(context.Background())
+			mc := NewMachineContext(context.Background(), cont)
+			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.value[0], values.SchemeEquals, tc.expect)
 		})
@@ -1499,8 +1486,8 @@ func TestCompileNestedLambda(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(((lambda (x) (lambda (y) x)) 1) 2)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(1))
 }
@@ -1515,8 +1502,8 @@ func TestCompileComplexIf(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(if #t (if #f 1 2) 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(2))
 }
@@ -1609,8 +1596,8 @@ func TestCompileDefineFn(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define (identity x) x)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1626,8 +1613,8 @@ func TestCompileDefineFnVariadic(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define (varargs . x) x)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1643,8 +1630,8 @@ func TestCompileSymbolGlobal(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define my-global 42)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1653,8 +1640,8 @@ func TestCompileSymbolGlobal(t *testing.T) {
 	sv2 := parseSchemeExpr(t, env, `my-global`)
 	cont2, err := newTopLevelThunk(sv2, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc2 := NewMachineContext(cont2)
-	err = mc2.Run(context.Background())
+	mc2 := NewMachineContext(context.Background(), cont2)
+	err = mc2.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1671,8 +1658,8 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define my-var 10)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1681,8 +1668,8 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	sv2 := parseSchemeExpr(t, env, `(set! my-var 20)`)
 	cont2, err := newTopLevelThunk(sv2, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc2 := NewMachineContext(cont2)
-	err = mc2.Run(context.Background())
+	mc2 := NewMachineContext(context.Background(), cont2)
+	err = mc2.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1691,8 +1678,8 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	sv3 := parseSchemeExpr(t, env, `my-var`)
 	cont3, err := newTopLevelThunk(sv3, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc3 := NewMachineContext(cont3)
-	err = mc3.Run(context.Background())
+	mc3 := NewMachineContext(context.Background(), cont3)
+	err = mc3.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1708,8 +1695,8 @@ func TestCompileBegin(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(begin 1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1725,8 +1712,8 @@ func TestCompileLambdaMultiExprBody(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda () 1 2 3))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1743,8 +1730,8 @@ func TestCompileCaseLambdaMultiClause(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define f (case-lambda (() 0) ((x) x) ((x y) x)))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1759,8 +1746,8 @@ func TestCompileQuoteSymbol(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `'my-symbol`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1778,8 +1765,8 @@ func TestCompileQuoteVector(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `'#(1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1797,8 +1784,8 @@ func TestCompileIfThenOnly(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(if #t 42)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1814,8 +1801,8 @@ func TestCompileIfFalsePath(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(if #f 1 2)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1831,8 +1818,8 @@ func TestCompileDefineVarSimple(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define x 42)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1847,8 +1834,8 @@ func TestCompileLambdaWithMultipleParams(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda (a b c) a) 1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1864,8 +1851,8 @@ func TestCompileLambdaRest(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define all-args (lambda args args))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1880,8 +1867,8 @@ func TestCompileQuoteList(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `'(1 2 3)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1927,8 +1914,8 @@ func TestCompileSyntaxRulesSimple(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `(define-syntax my-id (syntax-rules () ((_ x) x)))`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2152,8 +2139,8 @@ func TestCompileQuasiquoteUnquoteSplicingInList(t *testing.T) {
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -2167,8 +2154,8 @@ func TestCompileSymbolLocal(t *testing.T) {
 	sv := parseSchemeExpr(t, env, "((lambda (x) x) 42)")
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -2195,8 +2182,8 @@ func TestCompilePrimitiveOrProcedureCallWithPair(t *testing.T) {
 	sv := parseSchemeExpr(t, env, "((lambda (x) x) 42)")
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -2211,16 +2198,16 @@ func TestCompileValidatedLambdaVariadic(t *testing.T) {
 	sv := parseSchemeExpr(t, env, "(lambda args args)")
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call it
 	sv = parseSchemeExpr(t, env, "((lambda args args) 1 2 3)")
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -2234,15 +2221,15 @@ func TestCompileValidatedDefineFnDotted(t *testing.T) {
 	sv := parseSchemeExpr(t, env, "(define (fn a . rest) rest)")
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call it
 	sv = parseSchemeExpr(t, env, "(fn 1 2 3)")
 	cont, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc = NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }

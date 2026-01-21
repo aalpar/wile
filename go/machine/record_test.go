@@ -61,8 +61,8 @@ func evalScheme(t *testing.T, code string) values.Value {
 
 		// Run
 		cont := machine.NewMachineContinuation(nil, tpl, env)
-		mc := machine.NewMachineContext(cont)
-		err = mc.Run(ctx)
+		mc := machine.NewMachineContext(ctx, cont)
+		err = mc.Run()
 		qt.Assert(t, err, qt.IsNil)
 
 		lastValue = mc.GetValue()

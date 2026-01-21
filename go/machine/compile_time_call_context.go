@@ -68,6 +68,7 @@ type CompileTimeCallContext struct {
 //   - env: the environment frame for variable resolution during compilation
 func NewCompileTimeCallContext(inTail, inExpression bool, env *environment.EnvironmentFrame) CompileTimeCallContext {
 	return CompileTimeCallContext{
+		ctx:          context.Background(),
 		env:          env,
 		inTail:       inTail,
 		inExpression: inExpression,
@@ -87,6 +88,7 @@ func NewCompileTimeCallContext(inTail, inExpression bool, env *environment.Envir
 //	err := p.CompileExpression(ctctx.NotInTail(), argExpr)
 func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
+		ctx:          p.ctx,
 		env:          p.env,
 		inTail:       false,
 		inExpression: p.inExpression,
@@ -98,6 +100,7 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 // at the current level (e.g., library declaration bodies before begin).
 func (p CompileTimeCallContext) NotInExpression() CompileTimeCallContext {
 	return CompileTimeCallContext{
+		ctx:          p.ctx,
 		env:          p.env,
 		inTail:       p.inTail,
 		inExpression: false,

@@ -269,14 +269,13 @@ func TestOperation(t *testing.T) {
 			lenv := environment.NewLocalEnvironment(0)
 			env := environment.NewEnvironmentFrame(lenv, genv)
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
-			mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 			mc.evals = tc.evals
 			mc.value = tc.value
 			if tc.setupFn != nil {
 				tc.setupFn(t, mc)
 			}
-			ctx := context.Background()
-			err := mc.Run(ctx)
+			err := mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 			tc.checkFn(t, mc)
 		})
@@ -935,8 +934,8 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 	)
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
-	err := mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err := mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -958,8 +957,8 @@ func TestOperationMakeClosureError(t *testing.T) {
 	)
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
-	err := mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err := mc.Run()
 	qt.Assert(t, err, qt.IsNotNil) // Should error because stack has wrong types
 }
 

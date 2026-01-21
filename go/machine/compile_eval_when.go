@@ -183,8 +183,8 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 
 		// Execute the compiled code at compile time
 		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-		mc := NewMachineContext(cont)
-		err = mc.Run(ctx)
+		mc := NewMachineContext(ctx, cont)
+		err = mc.Run()
 		if err != nil {
 			if !errors.Is(err, ErrMachineHalt) {
 				return values.WrapForeignErrorf(err, "eval-when: evaluation failed")

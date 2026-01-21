@@ -193,7 +193,7 @@ func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationSyntaxCaseNoMatch()
 	_, err := op.Apply(context.Background(), mc)
@@ -295,7 +295,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	stx := syntax.NewSyntaxSymbol("test", nil)
 	mc.SetValue(stx)
@@ -318,7 +318,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	// Set a non-syntax value
 	mc.SetValue(values.NewInteger(42))
@@ -382,7 +382,7 @@ func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationClearSyntaxCaseInput()
 	result, err := op.Apply(context.Background(), mc)

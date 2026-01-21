@@ -82,6 +82,8 @@ For primitives requiring at least 2 arguments (like comparisons), use `ParamCoun
 
 Uses quicktest with `runProgram()` and `runSchemeCode()` helpers. Table-driven tests cover operations, edge cases, and error conditions.
 
+For tests involving exception handling or promises where infinite loops are possible, use `runSchemeCodeWithTimeout()` to prevent resource exhaustion.
+
 **Important**: Do not remove or revert tests that conform to R7RS. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed to conform to R7RS—not the test.
 
 ### Test File Organization

@@ -891,8 +891,8 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame)
 		}
 
 		cont := machine.NewMachineContinuation(nil, tpl, env)
-		mc := machine.NewMachineContext(cont)
-		err = mc.Run(ctx)
+		mc := machine.NewMachineContext(ctx, cont)
+		err = mc.Run()
 		if err != nil {
 			return values.WrapForeignErrorf(err, "error running bootstrap macro")
 		}

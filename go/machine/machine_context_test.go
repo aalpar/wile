@@ -45,7 +45,7 @@ func TestNewMachineContext(t *testing.T) {
 	cont.evals.Push(values.NewInteger(2))
 
 	// Create MachineContext from continuation
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// Verify all fields are correctly transferred
 	qt.Assert(t, mc.env, qt.Equals, env)
@@ -64,7 +64,7 @@ func TestNewMachineContext_NilParent(t *testing.T) {
 	// Create a continuation with nil parent
 	cont := NewMachineContinuation(nil, nil, env)
 
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	qt.Assert(t, mc.env, qt.Equals, env)
 	qt.Assert(t, mc.cont, qt.IsNil) // nil parent means mc.cont should be nil
@@ -78,7 +78,7 @@ func TestNewMachineContext_RoundTrip(t *testing.T) {
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// Set some state on the context
 	mc.SetValue(values.NewInteger(100))
@@ -95,7 +95,7 @@ func TestNewMachineContext_RoundTrip(t *testing.T) {
 	qt.Assert(t, savedCont.template, qt.Equals, tpl)
 
 	// Create a new context from the saved continuation
-	mc2 := NewMachineContext(savedCont)
+	mc2 := NewMachineContext(context.Background(), savedCont)
 
 	// Verify the round-trip preserved state
 	qt.Assert(t, mc2.env, qt.Equals, env)
@@ -107,7 +107,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
 	cont := NewMachineContinuation(nil, nil, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.cont, qt.IsNil)
 	qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 0)
 	qt.Assert(t, mc.cont, qt.IsNil)
@@ -121,7 +121,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 func TestMachineContext_PushContinuation_1(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SaveContinuation(10)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
 	qt.Assert(t, mc.Parent(), qt.IsNotNil)
@@ -136,7 +136,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 func TestMachineContext_PushContinuation_2(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	bottom0 := mc.cont
 	mc.SaveContinuation(10)
 	bottom1 := mc.cont
@@ -161,7 +161,7 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
 	genv := environment.NewTopLevelGlobalEnvironmentFrame()
 	env := environment.NewEnvironmentFrame(nil, genv)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Test SetValues and GetValues
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
@@ -185,7 +185,7 @@ func TestMachineContext_CurrentContinuation(t *testing.T) {
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(2, 0, false)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	mc.SaveContinuation(5)
 	mc.evals.Push(values.NewInteger(42))
 	mc.SetValue(values.NewInteger(100))
@@ -203,7 +203,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 	env := environment.NewEnvironmentFrame(lenv, genv)
 	tpl := NewNativeTemplate(2, 0, false)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	mc.SetValue(values.NewInteger(42))
 	mc.evals.Push(values.NewInteger(100))
 	mc.SaveContinuation(5)
@@ -227,7 +227,7 @@ func TestMachineContext_Restore(t *testing.T) {
 	tpl1 := NewNativeTemplate(1, 0, false)
 	tpl2 := NewNativeTemplate(2, 0, false)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl1, env1))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl1, env1))
 	mc.pc = 5
 	mc.evals.Push(values.NewInteger(1))
 
@@ -258,7 +258,7 @@ func TestMachineContext_Apply_FixedArity(t *testing.T) {
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with correct argument count
 	_, err := mc.Apply(cls, values.NewInteger(10), values.NewInteger(20))
@@ -284,7 +284,7 @@ func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with wrong argument count
 	_, err := mc.Apply(cls, values.NewInteger(10))
@@ -300,7 +300,7 @@ func TestMachineContext_Apply_Variadic(t *testing.T) {
 	tpl := NewNativeTemplate(3, 0, true)
 
 	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with extra args for rest parameter
 	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4))
@@ -322,7 +322,7 @@ func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
 	tpl := NewNativeTemplate(3, 0, true)
 
 	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with too few args
 	_, err := mc.Apply(cls, values.NewInteger(1))
@@ -347,7 +347,7 @@ func TestMachineContext_ApplyCaseLambda(t *testing.T) {
 	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
 
 	env := environment.NewEnvironmentFrame(nil, genv)
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with 1 arg - should use cls1
 	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(42))
@@ -355,7 +355,7 @@ func TestMachineContext_ApplyCaseLambda(t *testing.T) {
 	qt.Assert(t, mc.template, qt.Equals, tpl1)
 
 	// Reset context
-	mc = NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc = NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with 2 args - should use cls2
 	_, err = mc.ApplyCaseLambda(caseLambda, values.NewInteger(1), values.NewInteger(2))
@@ -373,7 +373,7 @@ func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
 
 	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls})
 
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with wrong number of args
 	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
@@ -397,7 +397,7 @@ func TestNewMachineContextFromMachineClosure(t *testing.T) {
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContextFromMachineClosure(cls)
+	mc := NewMachineContextFromMachineClosure(context.Background(), cls)
 
 	qt.Assert(t, mc.template, qt.Equals, tpl)
 	qt.Assert(t, mc.env, qt.Equals, env)
@@ -411,7 +411,7 @@ func TestMachineContext_Error(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	err := mc.Error("test error message")
 
@@ -427,7 +427,7 @@ func TestMachineContext_Error_NoSource(t *testing.T) {
 	env := environment.NewEnvironmentFrame(nil, genv)
 
 	// No template means no source
-	mc := NewMachineContext(NewMachineContinuation(nil, nil, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	err := mc.Error("no source error")
 
@@ -441,7 +441,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	cause := values.NewForeignError("original error")
 	err := mc.WrapError(cause, "wrapped message")
@@ -456,7 +456,7 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 	env := environment.NewEnvironmentFrame(nil, genv)
 	tpl := NewNativeTemplate(0, 0, false)
 
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	cause := values.NewForeignError("original error")
 	err := mc.WrapError(cause, "")
@@ -478,8 +478,8 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.IsNotNil)
 	qt.Assert(t, len(mc.value) > 0, qt.IsTrue)
@@ -497,8 +497,8 @@ func TestExecuteVariadicProcedure(t *testing.T) {
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.IsNotNil)
 }
@@ -512,7 +512,7 @@ func TestMachineContextNewSubContext(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `42`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// Create a sub-context
 	sub := mc.NewSubContext()
@@ -527,7 +527,7 @@ func TestMachineContextSetValues(t *testing.T) {
 	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// SetValues
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2))
@@ -545,7 +545,7 @@ func TestMachineContextSetValue(t *testing.T) {
 	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// SetValue
 	mc.SetValue(values.NewInteger(42))
@@ -563,8 +563,8 @@ func TestMachineContextApplySimple(t *testing.T) {
 	sv := parseSchemeExpr(t, env, `((lambda (x) x) 100)`)
 	cont, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(cont)
-	err = mc.Run(context.Background())
+	mc := NewMachineContext(context.Background(), cont)
+	err = mc.Run()
 	if err != nil && err != ErrMachineHalt {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestMachineContextValueMethods(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	// Test SetValue and GetValue
 	mc.SetValue(values.NewInteger(42))
@@ -595,7 +595,7 @@ func TestMachineContextNewSubContextAdditional(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 
 	sub := mc.NewSubContext()
 	qt.Assert(t, sub, qt.IsNotNil)

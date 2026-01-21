@@ -30,9 +30,8 @@ func TestMachine_Operations(t *testing.T) {
 	env := environment.NewEnvironmentFrame(lenv, genv)
 	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
 	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err := mc.Run(ctx)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	err := mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -222,7 +221,7 @@ func TestMachineContinuationFromMachineContext(t *testing.T) {
 	)
 
 	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(cont)
+	mc := NewMachineContext(context.Background(), cont)
 	mc.pc = 0
 
 	// Create continuation from machine context

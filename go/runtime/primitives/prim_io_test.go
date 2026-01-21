@@ -75,9 +75,8 @@ func TestDisplayWithBuffer(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "hello")
 }
@@ -103,9 +102,8 @@ func TestWriteWithBuffer(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "42")
 }
@@ -131,9 +129,8 @@ func TestWriteCharWithBuffer(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "A")
 }
@@ -159,9 +156,8 @@ func TestNewlineWithBuffer(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "\n")
 }
@@ -187,9 +183,8 @@ func TestReadToken(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	// First token should be "hello" symbol
 	result := mc.GetValue()
@@ -217,9 +212,8 @@ func TestReadSyntax(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	result := mc.GetValue()
 	// Should return a syntax object
@@ -248,9 +242,8 @@ func TestRead(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	result := mc.GetValue()
 	// Should return a list (a b c)
@@ -285,9 +278,8 @@ func TestReadWithPort(t *testing.T) {
 	defer func() { primitives.SetCurrentInputPort(savedPort) }()
 	primitives.SetCurrentInputPort(port)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -313,9 +305,8 @@ func TestDisplayWithSymbol(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "hello")
 }
@@ -341,9 +332,8 @@ func TestWriteWithString(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "\"hello\"")
 }
@@ -369,9 +359,8 @@ func TestWriteCharWithUnicode(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "λ")
 }
@@ -398,9 +387,8 @@ func TestReadMultipleTokens(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	result := mc.GetValue()
 	qt.Assert(t, result, qt.IsNotNil)
@@ -427,9 +415,8 @@ func TestDisplayWithInteger(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "123")
 }
@@ -455,9 +442,8 @@ func TestDisplayWithBoolean(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "#t")
 }
@@ -484,9 +470,8 @@ func TestWriteWithSymbol(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "foo")
 }
@@ -534,9 +519,8 @@ func TestDisplayWithList(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "(1 2 3)")
 }
@@ -564,9 +548,8 @@ func TestWriteWithList(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, utils.DatumToSyntaxValue(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "(a b c)")
 }
@@ -598,9 +581,8 @@ func TestStringPorts(t *testing.T) {
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, &values.String{Value: "hello world"})
@@ -629,9 +611,8 @@ func TestStringInputPort(t *testing.T) {
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Read should return the list (+ 1 2)
@@ -664,9 +645,8 @@ func TestBytevectorPorts(t *testing.T) {
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// "AB" as bytes
@@ -695,9 +675,8 @@ func TestBytevectorInputPort(t *testing.T) {
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
@@ -778,9 +757,8 @@ func TestPortPredicates(t *testing.T) {
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			qt.Assert(t, err, qt.IsNil)
 
-			mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-			ctx := context.Background()
-			err = mc.Run(ctx)
+			mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 
 			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.out)

@@ -70,7 +70,7 @@ func TestOperationPopEnv_Apply_Success(t *testing.T) {
 	childEnv := environment.NewEnvironmentFrameWithParent(nil, parentEnv)
 
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, childEnv))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, childEnv))
 
 	op := NewOperationPopEnv()
 	result, err := op.Apply(context.Background(), mc)
@@ -89,7 +89,7 @@ func TestOperationPopEnv_Apply_Error_NoParent(t *testing.T) {
 	// env has no parent (Parent() returns nil)
 
 	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(NewMachineContinuation(nil, tpl, env))
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationPopEnv()
 	_, err := op.Apply(context.Background(), mc)

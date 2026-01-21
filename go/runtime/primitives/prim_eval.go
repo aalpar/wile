@@ -63,8 +63,8 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Run the compiled code in a sub-context
 	cont := machine.NewMachineContinuation(nil, tpl, env)
-	sub := machine.NewMachineContext(cont)
-	err = sub.Run(ctx)
+	sub := machine.NewMachineContext(ctx, cont)
+	err = sub.Run()
 	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {

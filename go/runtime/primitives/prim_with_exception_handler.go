@@ -54,7 +54,7 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 			"with-exception-handler: thunk must be a procedure but got %T", thunk)
 	}
 
-	thunkErr = sub.Run(ctx)
+	thunkErr = sub.Run()
 
 	// Check for exception escape
 	var excErr *machine.ErrExceptionEscape
@@ -98,7 +98,7 @@ func callExceptionHandler(ctx context.Context, mc *machine.MachineContext,
 			"with-exception-handler: handler must be a procedure but got %T", handler)
 	}
 
-	err := sub.Run(ctx)
+	err := sub.Run()
 
 	// Handler raised another exception - propagate it
 	var innerExc *machine.ErrExceptionEscape
@@ -136,7 +136,7 @@ func resumeFromContinuation(ctx context.Context, mc *machine.MachineContext,
 	resumeSub.Restore(cont)
 	resumeSub.SetValue(value)
 
-	err := resumeSub.Run(ctx)
+	err := resumeSub.Run()
 
 	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
 		return nil, err

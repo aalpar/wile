@@ -88,7 +88,7 @@ func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
 		if err != nil {
 			return err
 		}
-		err = sub.Run(ctx)
+		err = sub.Run()
 		if err != nil {
 			var escapeErr *machine.ErrContinuationEscape
 			if errors.As(err, &escapeErr) {

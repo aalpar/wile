@@ -81,11 +81,11 @@ func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.Envi
 
 func runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame, debugger *machine.Debugger) (machine.MultipleValues, error) {
 	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(cont)
+	mc := machine.NewMachineContext(ctx, cont)
 	if debugger != nil {
 		mc.SetDebugger(debugger)
 	}
-	err := mc.Run(ctx)
+	err := mc.Run()
 	if err != nil {
 		return nil, err
 	}

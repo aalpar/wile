@@ -49,9 +49,8 @@ func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (v
 		return nil, err
 	}
 
-	mc := machine.NewMachineContext(machine.NewMachineContinuation(nil, tpl, env))
-	ctx := context.Background()
-	err = mc.Run(ctx)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+	err = mc.Run()
 	if err != nil {
 		return nil, err
 	}

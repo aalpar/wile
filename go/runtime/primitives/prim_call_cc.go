@@ -50,7 +50,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = sub.Run(ctx)
+	err = sub.Run()
 	if err != nil {
 		// Check if this is a continuation escape
 		var escapeErr *machine.ErrContinuationEscape

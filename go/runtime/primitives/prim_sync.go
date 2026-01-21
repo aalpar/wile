@@ -276,7 +276,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		if _, err := sub.Apply(cls); err != nil {
 			return
 		}
-		err := sub.Run(context.Background())
+		err := sub.Run()
 		if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
 			return
 		}

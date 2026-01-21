@@ -102,7 +102,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Run the thunk
-		err := sub.Run(ctx)
+		err := sub.Run()
 		if err != nil {
 			// Ignore machine halt, it's normal
 			if !errors.Is(err, machine.ErrMachineHalt) {

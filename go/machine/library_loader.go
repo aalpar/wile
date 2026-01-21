@@ -205,8 +205,8 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// The library's code (begin blocks, defines) is in compiledLib.Template
 	if compiledLib.Template != nil && len(compiledLib.Template.operations) > 0 {
 		cont := NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
-		mc := NewMachineContext(cont)
-		err := mc.Run(ctx)
+		mc := NewMachineContext(ctx, cont)
+		err := mc.Run()
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "error executing library")
 		}
