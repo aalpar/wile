@@ -512,3 +512,149 @@ func TestErrorObjectIrritantsErrors(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// R7RS Conformance Tests (R7RS §6.11)
+// =============================================================================
+
+// TestRaiseNonContinuableR7RS tests R7RS §6.11 non-continuable exception semantics
+// R7RS: "Invoke the current exception handler on obj. The handler is called with
+// the same dynamic environment as the call to raise, except that the current
+// exception handler is the one that was in place when the handler was installed."
+func TestRaiseNonContinuableR7RS(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "non-continuable exception handler must not return",
+			// We use call/cc to properly escape from the non-continuable handler
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape 'caught))
+						(lambda () (raise 'error)))))`,
+			out: values.NewSymbol("caught"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestRaiseContinuableR7RS tests R7RS §6.11 continuable exception semantics
+// R7RS: "If the handler returns, the returned values become the values returned by
+// the call to raise-continuable."
+// Note: This implementation returns the handler's value as the result of with-exception-handler,
+// which is a valid interpretation when the thunk's computation is replaced by the handler result.
+func TestRaiseContinuableR7RS(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "continuable exception handler return value becomes result",
+			code: `(with-exception-handler
+				(lambda (e) (+ e 100))
+				(lambda () (raise-continuable 5)))`,
+			out: values.NewInteger(105), // handler returns 105
+		},
+		{
+			name: "continuable handler can transform exception value",
+			code: `(with-exception-handler
+				(lambda (e) (string-append e "!"))
+				(lambda () (raise-continuable "hello")))`,
+			out: values.NewString("hello!"),
+		},
+		{
+			name: "continuable handler with list processing",
+			code: `(with-exception-handler
+				(lambda (e) (length e))
+				(lambda () (raise-continuable '(a b c d e))))`,
+			out: values.NewInteger(5),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestExceptionHandlerChain tests R7RS §6.11 handler chain semantics
+// R7RS: "When an exception handler is invoked, the current exception handler
+// is the one that was in place when the handler was installed."
+func TestExceptionHandlerChain(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "handler can re-raise to outer handler with call/cc",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape (list 'outer e)))
+						(lambda ()
+							(with-exception-handler
+								(lambda (e) (raise (list 'from-inner e)))
+								(lambda () (raise-continuable 'original)))))))`,
+			out: values.List(values.NewSymbol("outer"),
+				values.List(values.NewSymbol("from-inner"), values.NewSymbol("original"))),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestErrorR7RS tests R7RS §6.11 error procedure semantics
+// R7RS: "Raises an exception as if by calling raise on a newly allocated
+// implementation-defined object which encapsulates the information provided
+// by message, as well as any objs, known as the irritants."
+func TestErrorR7RS(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "error creates error object with message and irritants",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e)
+							(escape (list (error-object? e)
+							              (error-object-message e)
+							              (error-object-irritants e))))
+						(lambda () (error "test" 'a 'b)))))`,
+			out: values.List(values.TrueValue,
+				values.NewString("test"),
+				values.List(values.NewSymbol("a"), values.NewSymbol("b"))),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}

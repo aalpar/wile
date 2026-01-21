@@ -18,6 +18,7 @@ This document catalogs differences between the current implementation and the R7
 | `digit-value` | All Unicode decimal digits | ASCII 0-9 only | Medium |
 | `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
 | `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
+| `raise-continuable` | Handler return continues from call site | Handler return becomes `with-exception-handler` result | Medium |
 
 ---
 
@@ -227,6 +228,39 @@ strings.ToLower(str.Value)
 - R7RS requires Unicode full lowercasing
 
 **Impact:** Lower than uppercasing since fewer characters expand during lowercasing.
+
+---
+
+### 8. `raise-continuable`
+
+**File:** `prim_raise_continuable.go`
+
+**R7RS Specification (Section 6.11 "Exceptions"):**
+> "Raises an exception by invoking the current exception handler on obj. The handler is called with the same dynamic environment as the call to raise-continuable, except that: (1) the current exception handler is the one that was in place when the handler being called was installed, and (2) if the handler being called returns, then it will return the values returned by the handler as the values of the call to raise-continuable."
+
+**Current Implementation:**
+
+The handler's return value becomes the result of the entire `with-exception-handler` expression, rather than returning to the point where `raise-continuable` was called.
+
+**Difference:**
+
+```scheme
+; R7RS behavior:
+(with-exception-handler
+  (lambda (e) (+ e 100))
+  (lambda () (+ (raise-continuable 5) 1)))
+; Should return: 106 (handler returns 105, then +1 = 106)
+
+; Current implementation:
+(with-exception-handler
+  (lambda (e) (+ e 100))
+  (lambda () (+ (raise-continuable 5) 1)))
+; Returns: 105 (handler return replaces entire with-exception-handler result)
+```
+
+**Impact:** Medium - affects programs that rely on continuing computation after a continuable exception. The handler's return value is still accessible, just not at the original call site.
+
+**Workaround:** For most use cases, this difference doesn't matter since the handler's return value is still the result. Programs needing true continuation from the call site can use `call/cc` to capture and invoke continuations explicitly.
 
 ---
 

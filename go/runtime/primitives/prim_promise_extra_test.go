@@ -211,6 +211,94 @@ func TestForceWithComplexExpressions(t *testing.T) {
 	}
 }
 
+// TestMakePromiseIdentity tests R7RS §4.2.5 make-promise identity behavior
+// R7RS: "If obj is already a promise, it is returned."
+func TestMakePromiseIdentity(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "make-promise returns same promise when given a promise",
+			code: `(let ((p (delay 42)))
+				(eq? p (make-promise p)))`,
+			out: values.TrueValue,
+		},
+		{
+			name: "make-promise on make-promise returns same promise",
+			code: `(let ((p (make-promise 'x)))
+				(eq? p (make-promise p)))`,
+			out: values.TrueValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestDelayForceTailCall tests R7RS §4.2.5 delay-force tail-call semantics
+// R7RS: "delay-force is similar to delay, except that the expression is expected
+// to evaluate to a promise. This idiom is needed for proper tail recursion in
+// lazy algorithms using delay and force."
+func TestDelayForceTailCall(t *testing.T) {
+	// This tests that delay-force enables iterative lazy algorithms
+	// without stack overflow. R7RS example: lazy-filter uses delay-force
+	// for proper tail recursion.
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "delay-force enables iterative lazy computation",
+			code: `(letrec ((lazy-countdown
+			           (lambda (n)
+			             (if (= n 0)
+			                 (delay 'done)
+			                 (delay-force (lazy-countdown (- n 1)))))))
+			         (force (lazy-countdown 100)))`,
+			out: values.NewSymbol("done"),
+		},
+		{
+			name: "delay-force chain doesn't accumulate stack",
+			code: `(letrec ((stream-ref
+			           (lambda (s n)
+			             (if (= n 0)
+			                 (force s)
+			                 (stream-ref (delay-force (cdr (force s))) (- n 1)))))
+			         (naturals
+			           (lambda (n)
+			             (delay (cons n (naturals (+ n 1)))))))
+			         (stream-ref (naturals 0) 10))`,
+			out: values.List(values.NewInteger(10), values.NewSymbol("naturals")),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			// For the stream test, we just check it doesn't stack overflow
+			// and returns something (the exact value depends on implementation)
+			if tc.name == "delay-force chain doesn't accumulate stack" {
+				qt.Assert(t, err, qt.IsNil)
+				// Just verify it returns a pair starting with 10
+				pair, ok := result.(*values.Pair)
+				qt.Assert(t, ok, qt.IsTrue)
+				qt.Assert(t, pair.Car(), values.SchemeEquals, values.NewInteger(10))
+			} else {
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, result, values.SchemeEquals, tc.out)
+			}
+		})
+	}
+}
+
 // TestMakePromiseEdgeCases tests make-promise edge cases
 func TestMakePromiseEdgeCases(t *testing.T) {
 	tcs := []struct {

@@ -24,6 +24,11 @@ import (
 
 // =============================================================================
 // make-parameter Tests (R7RS §4.2.6)
+//
+// R7RS §4.2.6: "Returns a newly allocated parameter object, which is a
+// procedure that accepts zero arguments and returns the value associated
+// with the parameter object. Initially, this value is the value of
+// (converter init), or of init if the converter is not specified."
 // =============================================================================
 
 func TestMakeParameter(t *testing.T) {
@@ -136,6 +141,9 @@ func TestMakeParameterErrors(t *testing.T) {
 
 // =============================================================================
 // parameterize Tests (R7RS §4.2.6)
+//
+// R7RS §4.2.6: "A parameterize expression is used to change the values returned
+// by specified parameter objects during the evaluation of the body."
 // =============================================================================
 
 func TestParameterize(t *testing.T) {

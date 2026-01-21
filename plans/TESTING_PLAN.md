@@ -598,7 +598,16 @@ Tests are organized in individual test files:
 - Parameter restoration on exception
 - Current port parameters
 
+**R7RS Conformance Tests:**
+- Exception handler chain semantics (R7RS §6.11)
+- Non-continuable vs continuable exception behavior
+- `error` object creation with message and irritants
+- `make-promise` identity (returns same promise when given promise, R7RS §4.2.5)
+- `delay-force` tail-call semantics for iterative lazy algorithms
+
 **Note:** Non-continuable exceptions (from `raise` and `error`) require handlers to escape via `call/cc` rather than returning normally. This is per R7RS §6.11.
+
+**Known Semantic Difference:** `raise-continuable` returns handler value as result of `with-exception-handler` rather than continuing from call site. See `plans/R7RS_SEMANTIC_DIFFERENCES.md` for details.
 
 ---
 
