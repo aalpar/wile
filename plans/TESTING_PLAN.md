@@ -562,15 +562,43 @@ Tests are organized in individual test files per primitive or category:
 
 ---
 
-### Phase 10: Exception Handling & Promises (Priority: Medium-Low)
+### Phase 10: Exception Handling & Promises (Priority: Medium-Low) ✅ COMPLETE
 **Estimated time: 1-2 days**
-**Files: 11**
+**Files: 3 (plus existing prim_promise_test.go)**
+**Status: Complete - 80+ test cases across test files**
 
-| Category | Primitives |
-|----------|------------|
-| Exceptions | `with-exception-handler`, `raise`, `raise-continuable`, `error`, `error-object?`, `error-object-message`, `error-object-irritants` |
-| Promises | `make-promise`, `make-lazy-promise`, `force` (memoization) |
-| Parameters | `make-parameter` (with/without converter) |
+Tests are organized in individual test files:
+
+| Category | File | Test Cases |
+|----------|------|------------|
+| Exception handling | `prim_exception_test.go` | 40+ ✅ |
+| Promises (additional) | `prim_promise_extra_test.go` | 25+ ✅ |
+| Promises (existing) | `prim_promise_test.go` | 20+ ✅ |
+| Parameters | `prim_parameter_test.go` | 25+ ✅ |
+
+**Exception Handling Coverage:**
+- `with-exception-handler` - continuable/non-continuable, nested handlers
+- `raise` - non-continuable exceptions (handler cannot return)
+- `raise-continuable` - continuable exceptions (handler can return)
+- `error` - creates error object and raises non-continuable
+- `error-object?` - predicate for error objects
+- `error-object-message` - extract message from error object
+- `error-object-irritants` - extract irritants list from error object
+
+**Promise Coverage:**
+- `make-promise` - wrapping values as promises
+- `make-lazy-promise` / `delay-force` - lazy evaluation
+- `force` - forcing promises, memoization
+- `promise?` - predicate tests
+- Memoization verification (side effects evaluated once)
+
+**Parameter Coverage:**
+- `make-parameter` - with and without converter
+- `parameterize` - dynamic binding, nesting, multiple parameters
+- Parameter restoration on exception
+- Current port parameters
+
+**Note:** Non-continuable exceptions (from `raise` and `error`) require handlers to escape via `call/cc` rather than returning normally. This is per R7RS §6.11.
 
 ---
 

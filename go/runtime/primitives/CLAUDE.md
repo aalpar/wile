@@ -132,6 +132,14 @@ This package uses a mix of **thematic consolidation** and **individual test file
 | `prim_close_port_test.go` | `close-port` |
 | `prim_io_errors_test.go` | I/O error conditions |
 
+**Exception Handling & Promises (individual files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_exception_test.go` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, error-object accessors |
+| `prim_promise_test.go` | `promise?`, `make-promise`, `force`, `delay-force` |
+| `prim_promise_extra_test.go` | Additional promise tests (memoization, edge cases) |
+| `prim_parameter_test.go` | `make-parameter`, `parameterize` |
+
 When adding new primitive tests:
 - Check if a thematic test file exists for the category
 - If so, add tests there rather than creating a new file
