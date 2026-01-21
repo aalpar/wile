@@ -86,7 +86,7 @@ Uses quicktest with `runProgram()` and `runSchemeCode()` helpers. Table-driven t
 
 ### Test File Organization
 
-This package uses **thematic consolidation** for test files rather than 1:1 mapping. With 237 primitive files, consolidation improves maintainability:
+This package uses a mix of **thematic consolidation** and **individual test files**. With 237 primitive files, consolidation improves maintainability for related operations, while individual files provide clarity for distinct primitives:
 
 | Test File | Tests For |
 |-----------|-----------|
@@ -98,12 +98,44 @@ This package uses **thematic consolidation** for test files rather than 1:1 mapp
 | `prim_list_test.go` | List/pair operations |
 | `prim_vector_test.go` | Vector operations |
 | `prim_trig_test.go` | Transcendental functions (exp, log, sin, cos, tan, asin, acos, atan) |
+| `prim_division_test.go` | floor/, truncate/, floor-quotient, etc. |
 | `prim_*_extra_test.go` | Additional coverage for specific primitives |
+
+**Equality & Control Flow (individual files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_eq_q_test.go` | `eq?` identity comparison |
+| `prim_eqv_q_test.go` | `eqv?` equivalence |
+| `prim_equal_q_test.go` | `equal?` deep comparison |
+| `prim_apply_test.go` | `apply` |
+| `prim_map_test.go` | `map` |
+| `prim_for_each_test.go` | `for-each` |
+| `prim_values_test.go` | `values` |
+| `prim_call_with_values_test.go` | `call-with-values` |
+| `prim_dynamic_wind_test.go` | `dynamic-wind` |
+| `prim_not_test.go` | `not` |
+
+**I/O Operations (individual files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_call_with_input_file_test.go` | `call-with-input-file` |
+| `prim_call_with_output_file_test.go` | `call-with-output-file` |
+| `prim_with_input_from_file_test.go` | `with-input-from-file` |
+| `prim_with_output_to_file_test.go` | `with-output-to-file` |
+| `prim_open_binary_input_file_test.go` | `open-binary-input-file` |
+| `prim_open_binary_output_file_test.go` | `open-binary-output-file` |
+| `prim_write_simple_test.go` | `write-simple` |
+| `prim_write_shared_test.go` | `write-shared` |
+| `prim_eof_object_test.go` | `eof-object`, `eof-object?` |
+| `prim_bytevector_port_test.go` | bytevector port operations |
+| `prim_current_port_test.go` | `current-input-port`, `current-output-port` |
+| `prim_close_port_test.go` | `close-port` |
+| `prim_io_errors_test.go` | I/O error conditions |
 
 When adding new primitive tests:
 - Check if a thematic test file exists for the category
 - If so, add tests there rather than creating a new file
-- Only create `prim_<name>_test.go` for primitives that don't fit existing categories
+- For distinct primitives (especially I/O and control flow), individual test files are preferred
 
 ### Error Testing Pattern
 
