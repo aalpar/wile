@@ -149,6 +149,20 @@ This package uses a mix of **thematic consolidation** and **individual test file
 | `prim_env_extra_test.go` | Additional environment tests |
 | `prim_identifier_test.go` | `identifier?`, `bound-identifier=?`, `free-identifier=?`, `datum->syntax`, `syntax->datum`, `expand`, `expand-once`, `compile`, `make-compile-time-value` |
 
+**System & Concurrency (individual files):**
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_file_env_test.go` | `file-exists?`, `get-environment-variable`, `get-environment-variables`, `command-line` |
+| `prim_delete_load_test.go` | `delete-file`, `load` |
+| `prim_misc_test.go` | `features`, `current-second`, `current-jiffy`, `jiffies-per-second` |
+| `prim_srfi18_time_test.go` | `current-time`, `time?`, `time->seconds`, `seconds->time` |
+| `prim_thread_test.go` | `make-thread`, `thread?`, `thread-name`, `thread-specific`, `thread-start!`, `thread-join!`, etc. |
+| `prim_mutex_test.go` | `make-mutex`, `mutex?`, `mutex-lock!`, `mutex-unlock!`, etc. |
+| `prim_condvar_test.go` | `make-condition-variable`, `condition-variable?`, `condition-variable-signal!`, etc. |
+| `prim_channel_test.go` | `make-channel`, `channel?`, `channel-send!`, `channel-receive`, etc. |
+| `prim_sync_test.go` | WaitGroup, RWMutex, Once, Atomic primitives |
+| `prim_void_q_test.go` | `void?` predicate |
+
 When adding new primitive tests:
 - Check if a thematic test file exists for the category
 - If so, add tests there rather than creating a new file

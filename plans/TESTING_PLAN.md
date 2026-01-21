@@ -663,17 +663,77 @@ Tests are organized in consolidated test files:
 
 ---
 
-### Phase 12: System & Concurrency (Priority: Lower)
+### Phase 12: System & Concurrency (Priority: Lower) ✅ COMPLETE
 **Estimated time: 2 days**
-**Files: 15**
+**Files: 10 test files**
+**Status: Complete - 150+ test cases**
 
-| Category | Primitives |
-|----------|------------|
-| File System | `file-exists?`, `delete-file` |
-| Process | `command-line`, `exit`, `emergency-exit`, `get-environment-variable`, `get-environment-variables`, `features` |
-| Time | `current-second`, `current-jiffy`, `jiffies-per-second` |
-| Threading | `thread`, `mutex`, `condvar` (SRFI-18) |
-| Go Concurrency | `channel`, `sync` (WaitGroup, RWMutex, Once, Atomic) |
+Tests are organized in the following test files:
+
+| Category | Test File | Test Cases |
+|----------|-----------|------------|
+| File System | `prim_file_env_test.go`, `prim_delete_load_test.go` | 15+ ✅ |
+| Process | `prim_file_env_test.go` | 10+ ✅ |
+| R7RS Time | `prim_misc_test.go` | 6+ ✅ |
+| SRFI-18 Time | `prim_srfi18_time_test.go` | 12+ ✅ |
+| SRFI-18 Threading | `prim_thread_test.go` | 25+ ✅ |
+| SRFI-18 Mutex | `prim_mutex_test.go` | 18+ ✅ |
+| SRFI-18 CondVar | `prim_condvar_test.go` | 15+ ✅ |
+| Go Channel | `prim_channel_test.go` | 25+ ✅ |
+| Go Sync | `prim_sync_test.go` | 45+ ✅ |
+| Type Predicate | `prim_void_q_test.go` | 9 ✅ |
+
+**File System Coverage:**
+- `file-exists?` - file existence predicate, error cases
+- `delete-file` - file deletion, error cases
+- `load` - file loading, multiple expressions, error handling
+
+**Process Coverage:**
+- `command-line` - returns list of command line arguments
+- `get-environment-variable` - retrieves single env var, returns #f for nonexistent
+- `get-environment-variables` - returns alist of all env vars
+- `features` - returns list of implementation features
+
+**R7RS Time Coverage:**
+- `current-second` - Unix timestamp as float
+- `current-jiffy` - nanoseconds since program start
+- `jiffies-per-second` - returns 1 billion
+
+**SRFI-18 Time Coverage:**
+- `current-time` - returns time object
+- `time?` - type predicate
+- `time->seconds` - converts time to float
+- `seconds->time` - converts float to time
+
+**SRFI-18 Threading Coverage:**
+- `make-thread`, `thread?`, `thread-name`, `thread-specific`, `thread-specific-set!`
+- `thread-start!`, `thread-yield!`, `thread-sleep!`, `thread-terminate!`, `thread-join!`
+- `current-thread`
+
+**SRFI-18 Mutex Coverage:**
+- `make-mutex`, `mutex?`, `mutex-name`, `mutex-specific`, `mutex-specific-set!`
+- `mutex-state`, `mutex-lock!`, `mutex-unlock!`
+
+**SRFI-18 Condition Variable Coverage:**
+- `make-condition-variable`, `condition-variable?`, `condition-variable-name`
+- `condition-variable-specific`, `condition-variable-specific-set!`
+- `condition-variable-signal!`, `condition-variable-broadcast!`
+
+**Go Channel Coverage:**
+- `make-channel`, `channel?`, `channel-capacity`, `channel-length`
+- `channel-send!`, `channel-receive`, `channel-try-send!`, `channel-try-receive`
+- `channel-close!`, `channel-closed?`
+
+**Go Sync Coverage:**
+- WaitGroup: `make-wait-group`, `wait-group?`, `wait-group-add!`, `wait-group-done!`, `wait-group-wait!`
+- RWMutex: `make-rw-mutex`, `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`, `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`, `rw-mutex-try-write-lock!`
+- Once: `make-once`, `once?`, `once-do!`, `once-done?`
+- Atomic: `make-atomic`, `atomic?`, `atomic-load`, `atomic-store!`, `atomic-swap!`, `atomic-compare-and-swap!`
+
+**Additional:**
+- Added `void?` predicate with tests
+
+**Note:** `exit` and `emergency-exit` cannot be tested directly as they terminate the process.
 
 ---
 
