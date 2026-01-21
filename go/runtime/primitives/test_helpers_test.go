@@ -16,8 +16,10 @@ package primitives_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"wile/environment"
 	"wile/machine"
@@ -27,6 +29,9 @@ import (
 	"wile/utils"
 	"wile/values"
 )
+
+// errTimeout is returned when code execution exceeds the specified timeout.
+var errTimeout = errors.New("execution timeout")
 
 // runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
 // This is the legacy version that accepts a pre-built AST.
@@ -154,5 +159,30 @@ func runSchemeCodeExpectFalse(t *testing.T, code string) {
 	}
 	if result != values.FalseValue {
 		t.Errorf("expected #f but got %v for: %s", result, code)
+	}
+}
+
+// runSchemeCodeWithTimeout runs code with a timeout to prevent infinite loops.
+// This is particularly important for exception and promise tests where continuable
+// exception resumption can cause infinite loops due to a bug in MachineContext.Run
+// that resets pc=0 unconditionally (see machine_context.go:203).
+func runSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) (values.Value, error) {
+	t.Helper()
+	type result struct {
+		value values.Value
+		err   error
+	}
+	done := make(chan result, 1)
+
+	go func() {
+		v, err := runSchemeCode(t, code)
+		done <- result{v, err}
+	}()
+
+	select {
+	case r := <-done:
+		return r.value, r.err
+	case <-time.After(timeout):
+		return nil, errTimeout
 	}
 }

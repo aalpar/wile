@@ -197,10 +197,16 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 	return p.Apply(mcls, vs...)
 }
 
+// Run executes the VM loop starting from the current pc.
+// The pc is NOT reset here - callers are responsible for ensuring the correct initial pc:
+//   - NewMachineContext copies pc from the continuation (typically 0 for fresh execution)
+//   - Apply sets pc = 0 for fresh closure invocation
+//   - Restore sets pc from the saved continuation for resumption
+// This design allows continuation resumption (e.g., raise-continuable) to work correctly
+// by preserving the pc set by Restore rather than unconditionally resetting to 0.
 func (p *MachineContext) Run(ctx context.Context) error {
 	var err error
 	mc := p
-	mc.pc = 0
 	for mc.pc < len(mc.template.operations) {
 		// Check for debugger breaks
 		if mc.debugger != nil {

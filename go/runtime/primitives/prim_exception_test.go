@@ -593,6 +593,7 @@ func TestRaiseContinuableR7RS(t *testing.T) {
 // R7RS: Handler's return value becomes the value of raise-continuable,
 // and execution continues from that point.
 func TestRaiseContinuableResumption(t *testing.T) {
+
 	tcs := []struct {
 		name string
 		code string
