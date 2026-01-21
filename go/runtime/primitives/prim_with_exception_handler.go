@@ -75,51 +75,128 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	return nil
 }
 
-func handleException(ctx context.Context, mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Value) error {
-	// Pop this handler before calling it (so re-raises use parent handler)
-	mc.PopExceptionHandler()
-	parentHandler := mc.ExceptionHandler()
+// callExceptionHandler invokes the exception handler with the given condition.
+// Returns the handler's return value, or an error if the handler raised an exception
+// or escaped via continuation.
+func callExceptionHandler(ctx context.Context, mc *machine.MachineContext,
+	condition values.Value, handler values.Value) (values.Value, error) {
 
-	// Call handler with the condition
 	sub := mc.NewSubContext()
-	sub.SetExceptionHandler(parentHandler)
+	sub.SetExceptionHandler(mc.ExceptionHandler())
 
 	switch h := handler.(type) {
 	case *machine.MachineClosure:
-		if _, err := sub.Apply(h, excErr.Condition); err != nil {
-			return err
+		if _, err := sub.Apply(h, condition); err != nil {
+			return nil, err
 		}
 	case *machine.CaseLambdaClosure:
-		if _, err := sub.ApplyCaseLambda(h, excErr.Condition); err != nil {
-			return err
+		if _, err := sub.ApplyCaseLambda(h, condition); err != nil {
+			return nil, err
 		}
 	default:
-		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure,
 			"with-exception-handler: handler must be a procedure but got %T", handler)
 	}
 
 	err := sub.Run(ctx)
 
-	// Check if handler raised another exception
+	// Handler raised another exception - propagate it
 	var innerExc *machine.ErrExceptionEscape
 	if errors.As(err, &innerExc) {
-		// Propagate to parent handler
-		return err
+		return nil, err
+	}
+
+	// Continuation escape - propagate it
+	var contErr *machine.ErrContinuationEscape
+	if errors.As(err, &contErr) {
+		return nil, err
 	}
 
 	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
-		return err
+		return nil, err
 	}
 
-	// Handler returned normally
-	if excErr.Continuable {
-		// For continuable exceptions, return handler's value
-		mc.SetValue(sub.GetValue())
+	return sub.GetValue(), nil
+}
+
+// resumeFromContinuation resumes execution from a captured continuation with the given value.
+// Returns the result of the resumed execution, or an error.
+// If cont is nil (raise-continuable was in tail position), returns value directly.
+func resumeFromContinuation(ctx context.Context, mc *machine.MachineContext,
+	cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
+
+	if cont == nil {
+		// raise-continuable was in tail position - no continuation to resume
+		// The handler's return value becomes the final result
+		return value, nil
+	}
+
+	resumeSub := mc.NewSubContext()
+	resumeSub.SetExceptionHandler(mc.ExceptionHandler())
+	resumeSub.Restore(cont)
+	resumeSub.SetValue(value)
+
+	err := resumeSub.Run(ctx)
+
+	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+		return nil, err
+	}
+
+	return resumeSub.GetValue(), nil
+}
+
+// handleException processes an exception by calling the handler and, for continuable
+// exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
+func handleException(ctx context.Context, mc *machine.MachineContext,
+	excErr *machine.ErrExceptionEscape, handler values.Value) error {
+
+	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
+	mc.PopExceptionHandler()
+
+	for {
+		// Call handler with the condition
+		handlerResult, err := callExceptionHandler(ctx, mc, excErr.Condition, handler)
+		if err != nil {
+			return err
+		}
+
+		// Non-continuable exception - handler should not return
+		if !excErr.Continuable {
+			return values.NewForeignError("exception handler returned from non-continuable exception")
+		}
+
+		// Continuable: resume execution from the captured continuation
+		// Push handler back so subsequent exceptions in resumed code use this handler
+		mc.PushExceptionHandler(handler)
+
+		resumeResult, resumeErr := resumeFromContinuation(ctx, mc, excErr.Continuation, handlerResult)
+
+		// Check if resumed code raised another exception
+		var newExcErr *machine.ErrExceptionEscape
+		if errors.As(resumeErr, &newExcErr) && !newExcErr.Handled {
+			// Pop handler (will be pushed again when we loop)
+			mc.PopExceptionHandler()
+			excErr = newExcErr
+			continue // Loop to handle new exception
+		}
+
+		// Check for continuation escape from resumed code
+		var contErr *machine.ErrContinuationEscape
+		if errors.As(resumeErr, &contErr) {
+			mc.PopExceptionHandler()
+			return resumeErr // Propagate the escape
+		}
+
+		// Clean up handler stack
+		mc.PopExceptionHandler()
+
+		if resumeErr != nil && !errors.Is(resumeErr, machine.ErrMachineHalt) {
+			return resumeErr
+		}
+
+		// Normal completion
+		mc.SetValue(resumeResult)
 		excErr.Handled = true
 		return nil
 	}
-
-	// Non-continuable exception - handler should not return
-	// R7RS says this is an error - raise a new exception
-	return values.NewForeignError("exception handler returned from non-continuable exception")
 }

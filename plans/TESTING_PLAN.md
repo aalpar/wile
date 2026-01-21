@@ -607,8 +607,6 @@ Tests are organized in individual test files:
 
 **Note:** Non-continuable exceptions (from `raise` and `error`) require handlers to escape via `call/cc` rather than returning normally. This is per R7RS §6.11.
 
-**Known Semantic Difference:** `raise-continuable` returns handler value as result of `with-exception-handler` rather than continuing from call site. See `plans/R7RS_SEMANTIC_DIFFERENCES.md` for details.
-
 ---
 
 ### Phase 11: Environment, Eval & Syntax (Priority: Lower)

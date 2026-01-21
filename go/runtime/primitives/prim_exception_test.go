@@ -551,8 +551,6 @@ func TestRaiseNonContinuableR7RS(t *testing.T) {
 // TestRaiseContinuableR7RS tests R7RS §6.11 continuable exception semantics
 // R7RS: "If the handler returns, the returned values become the values returned by
 // the call to raise-continuable."
-// Note: This implementation returns the handler's value as the result of with-exception-handler,
-// which is a valid interpretation when the thunk's computation is replaced by the handler result.
 func TestRaiseContinuableR7RS(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -560,11 +558,11 @@ func TestRaiseContinuableR7RS(t *testing.T) {
 		out  values.Value
 	}{
 		{
-			name: "continuable exception handler return value becomes result",
+			name: "continuable exception handler return value becomes result (tail position)",
 			code: `(with-exception-handler
 				(lambda (e) (+ e 100))
 				(lambda () (raise-continuable 5)))`,
-			out: values.NewInteger(105), // handler returns 105
+			out: values.NewInteger(105), // handler returns 105, raise-continuable in tail position
 		},
 		{
 			name: "continuable handler can transform exception value",
@@ -579,6 +577,83 @@ func TestRaiseContinuableR7RS(t *testing.T) {
 				(lambda (e) (length e))
 				(lambda () (raise-continuable '(a b c d e))))`,
 			out: values.NewInteger(5),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestRaiseContinuableResumption tests R7RS §6.11 resumption semantics
+// R7RS: Handler's return value becomes the value of raise-continuable,
+// and execution continues from that point.
+func TestRaiseContinuableResumption(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "handler return continues at call site - addition",
+			code: `(with-exception-handler
+				(lambda (e) (+ e 100))
+				(lambda () (+ (raise-continuable 5) 1)))`,
+			out: values.NewInteger(106), // handler returns 105, then +1 = 106
+		},
+		{
+			name: "handler return continues at call site - multiplication",
+			code: `(with-exception-handler
+				(lambda (e) (* e 2))
+				(lambda () (* (raise-continuable 7) 3)))`,
+			out: values.NewInteger(42), // handler returns 14, then *3 = 42
+		},
+		{
+			name: "multiple expressions after raise-continuable",
+			code: `(with-exception-handler
+				(lambda (e) 'recovered)
+				(lambda ()
+					(let ((x (raise-continuable 'warning)))
+						(list 'after x))))`,
+			out: values.List(values.NewSymbol("after"), values.NewSymbol("recovered")),
+		},
+		{
+			name: "raise-continuable in let binding",
+			code: `(with-exception-handler
+				(lambda (e) (* e 2))
+				(lambda ()
+					(let ((x (raise-continuable 5)))
+						(+ x 3))))`,
+			out: values.NewInteger(13), // (* 5 2) = 10, + 3 = 13
+		},
+		{
+			name: "raise-continuable in conditional test",
+			code: `(with-exception-handler
+				(lambda (e) #t)
+				(lambda ()
+					(if (raise-continuable #f) 'yes 'no)))`,
+			out: values.NewSymbol("yes"),
+		},
+		{
+			name: "nested continuable exceptions",
+			code: `(with-exception-handler
+				(lambda (e) (+ e 10))
+				(lambda ()
+					(+ (raise-continuable 1)
+					   (raise-continuable 2))))`,
+			out: values.NewInteger(23), // (+ 11 12)
+		},
+		{
+			name: "raise-continuable result used in function call",
+			code: `(with-exception-handler
+				(lambda (e) (list e e))
+				(lambda ()
+					(length (raise-continuable 'x))))`,
+			out: values.NewInteger(2), // (list 'x 'x) = (x x), length = 2
 		},
 	}
 
