@@ -286,6 +286,7 @@ var runtimePrimitives = []PrimitiveSpec{
 	{">=", 2, true, primitives.PrimNumGe},
 
 	// Type predicates
+	{"void?", 1, false, primitives.PrimVoidQ},
 	{"null?", 1, false, primitives.PrimNullQ},
 	{"pair?", 1, false, primitives.PrimPairQ},
 	{"number?", 1, false, primitives.PrimNumberQ},
