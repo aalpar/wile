@@ -455,6 +455,304 @@ Standard patterns:
 (*Type, bool)            // Concrete type with success flag
 ```
 
+## Numeric Type Patterns
+
+### Type Switch Case Ordering
+
+When handling all numeric types in a type switch, use consistent ordering from most to least specific (integer tower ascending, then complex):
+
+```go
+switch v := o.(type) {
+case *Integer:
+    // Handle native int64
+case *BigInteger:
+    // Handle arbitrary precision exact integer
+case *Float:
+    // Handle native float64
+case *BigFloat:
+    // Handle arbitrary precision inexact float
+case *Rational:
+    // Handle exact rational
+case *Complex:
+    // Handle native complex128
+case *BigComplex:
+    // Handle arbitrary precision complex
+default:
+    // Not a number
+}
+```
+
+**Rationale**: This ordering mirrors the numeric tower (integer → real → complex) and groups exact types (Integer, BigInteger, Rational) separately from inexact (Float, BigFloat, Complex, BigComplex partial).
+
+### Zero Optimization Pattern
+
+Short-circuit arithmetic operations when one operand is zero:
+
+```go
+func (p *SomeNumeric) Add(o Number) Number {
+    if p.IsZero() {
+        return o
+    }
+    switch v := o.(type) {
+    case *Integer:
+        if v.IsZero() {
+            return p
+        }
+        // ... actual computation
+    }
+}
+```
+
+**Apply to**: `Add` (either operand zero), `Multiply` (either operand zero returns zero), `Subtract` (subtrahend zero returns minuend).
+
+### Type Promotion Pattern
+
+When arithmetic involves mixed types, promote to the more general type:
+
+```go
+// Integer + BigInteger → promote Integer to BigInteger
+case *BigInteger:
+    bi := NewBigIntegerFromInt64(p.Value)
+    return bi.Add(v)
+
+// Integer + Float → promote Integer to Float (inexact contagion)
+case *Float:
+    return NewFloat(float64(p.Value) + v.Value)
+
+// Integer + Complex → promote Integer to Complex
+case *Complex:
+    return NewComplex(complex(float64(p.Value), 0) + v.Value)
+```
+
+**Promotion hierarchy**: Integer → BigInteger → Float → BigFloat → Rational → Complex → BigComplex
+
+### Exactness Contagion Pattern
+
+Operations involving inexact numbers return inexact results:
+
+```go
+// Exact + Exact = Exact
+NewInteger(1).Add(NewInteger(2))  // → Integer(3)
+
+// Exact + Inexact = Inexact
+NewInteger(1).Add(NewFloat(2.0))  // → Float(3.0)
+
+// Exception: exact zero dominates multiplication
+NewInteger(0).Multiply(NewFloat(1.5))  // → Integer(0)
+```
+
+### Simplification Pattern
+
+When a complex operation produces a real result (imaginary part zero), return the appropriate real type:
+
+```go
+func maybeSimplify(real, imag Number) Number {
+    if imag.IsZero() {
+        return real  // Return real type, not complex
+    }
+    return NewBigComplex(real, imag)
+}
+```
+
+### Arithmetic Method Template
+
+Standard structure for Number interface arithmetic methods:
+
+```go
+func (p *SomeType) Add(o Number) Number {
+    // 1. Zero optimization for receiver
+    if p.IsZero() {
+        return o
+    }
+    // 2. Type switch with consistent ordering
+    switch v := o.(type) {
+    case *Integer:
+        if v.IsZero() {
+            return p
+        }
+        // Promote or compute
+    case *BigInteger:
+        // ...
+    // ... other cases
+    default:
+        panic("unsupported type")
+    }
+}
+```
+
+## Primitive Implementation Patterns
+
+### Standard Primitive Structure
+
+All primitives follow this pattern:
+
+```go
+func PrimXxx(_ context.Context, mc *machine.MachineContext) error {
+    // 1. Extract arguments
+    arg := mc.Arg(0)
+
+    // 2. Type assertion and validation
+    typed, ok := arg.(*values.SomeType)
+    if !ok {
+        return values.WrapForeignErrorf(values.ErrSomeError, "xxx: expected type but got %T", arg)
+    }
+
+    // 3. Computation
+    result := compute(typed)
+
+    // 4. Set result and return
+    mc.SetValue(result)
+    return nil
+}
+```
+
+### Variadic Primitive Pattern
+
+For primitives accepting variable arguments:
+
+```go
+// ParamCount: 2, IsVariadic: true
+// mc.Arg(0) = first argument (direct)
+// mc.Arg(1) = rest of arguments as Pair
+
+func PrimXxxVariadic(_ context.Context, mc *machine.MachineContext) error {
+    first := mc.Arg(0)
+    rest, ok := mc.Arg(1).(*values.Pair)
+    if !ok {
+        return values.WrapForeignErrorf(values.ErrBadSyntax, "xxx: invalid arguments")
+    }
+
+    result := first
+    for curr := rest; curr != values.EmptyList; {
+        next := curr.Car()
+        result = process(result, next)
+        cdr, ok := curr.Cdr().(*values.Pair)
+        if !ok {
+            break
+        }
+        curr = cdr
+    }
+    mc.SetValue(result)
+    return nil
+}
+```
+
+### Comparison Chain Pattern
+
+For variadic comparison primitives (=, <, >, etc.):
+
+```go
+func compareChain(first values.Value, rest *values.Pair, cmp func(a, b values.Number) bool) (bool, error) {
+    prev, err := toNumber(first)
+    if err != nil {
+        return false, err
+    }
+    for curr := rest; curr != values.EmptyList; {
+        next, err := toNumber(curr.Car())
+        if err != nil {
+            return false, err
+        }
+        if !cmp(prev, next) {
+            return false, nil
+        }
+        prev = next
+        cdr, ok := curr.Cdr().(*values.Pair)
+        if !ok {
+            break
+        }
+        curr = cdr
+    }
+    return true, nil
+}
+```
+
+### Fold Pattern for Associative Operations
+
+For variadic associative operations (+, *, gcd, lcm):
+
+```go
+func foldNumbers(identity values.Number, args *values.Pair, op func(a, b values.Number) values.Number) (values.Number, error) {
+    result := identity
+    for curr := args; curr != values.EmptyList; {
+        n, err := toNumber(curr.Car())
+        if err != nil {
+            return nil, err
+        }
+        result = op(result, n)
+        cdr, ok := curr.Cdr().(*values.Pair)
+        if !ok {
+            break
+        }
+        curr = cdr
+    }
+    return result, nil
+}
+```
+
+### Error Message Pattern
+
+Include primitive name and expected vs actual type:
+
+```go
+// Good - includes context
+return values.WrapForeignErrorf(values.ErrNotANumber, "add: expected number but got %T", arg)
+
+// Good - specific to primitive
+return values.WrapForeignErrorf(values.ErrBadIndex, "vector-ref: index %d out of bounds for vector of length %d", idx, len)
+
+// Avoid - missing context
+return values.NewForeignError("not a number")
+```
+
+## Helper Function Patterns
+
+### Private Helper Naming
+
+Helper functions private to a file use descriptive lowercase names:
+
+```go
+// In prim_xxx.go
+func extractInteger(v values.Value, name string) (int64, *big.Int, bool, error)
+func toBigFloat(n Number) *BigFloat
+func maybeSimplify(real, imag Number) Number
+```
+
+### Conversion Helper Pattern
+
+For type conversions that may fail:
+
+```go
+func toXxx(v values.Value) (*XxxType, error) {
+    typed, ok := v.(*XxxType)
+    if !ok {
+        return nil, values.WrapForeignErrorf(values.ErrSomeError, "expected xxx but got %T", v)
+    }
+    return typed, nil
+}
+```
+
+### Part Accessor Helper Pattern
+
+For operations that work on parts of composite types:
+
+```go
+// Generic helper that handles multiple types via type switch
+func addParts(a, b Number) Number {
+    switch va := a.(type) {
+    case *BigInteger:
+        switch vb := b.(type) {
+        case *BigInteger:
+            return va.Add(vb)
+        case *BigFloat:
+            return toBigFloat(va).Add(vb)
+        }
+    case *BigFloat:
+        return va.Add(toBigFloat(b))
+    }
+    panic("unsupported part type")
+}
+```
+
 ## Miscellaneous
 
 ### Context Parameter
