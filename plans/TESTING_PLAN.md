@@ -8,7 +8,7 @@ All 12 phases of the testing plan have been implemented. This document is retain
 
 ## Summary
 
-All primitive unit tests have been implemented across 87 test files in `go/runtime/primitives/`.
+All primitive unit tests have been implemented across ~90 test files in `go/registry/core/`.
 
 | Phase | Category | Status |
 |-------|----------|--------|
@@ -75,10 +75,10 @@ func TestXxx(t *testing.T) {
 cd go && make test
 
 # Check coverage
-cd go && go test -cover ./runtime/primitives/...
+cd go && go test -cover ./registry/core/...
 
 # Run specific category
-cd go && go test -v -run "TestAdd|TestSub|TestMul" ./runtime/primitives/...
+cd go && go test -v -run "TestAdd|TestSub|TestMul" ./registry/core/...
 ```
 
 ---

@@ -340,7 +340,6 @@ package io
 
 import (
     "wile/registry"
-    "wile/runtime/primitives"
 )
 
 // Extension is the I/O extension.
@@ -351,10 +350,10 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
     r.AddPrimitives([]registry.PrimitiveSpec{
-        {"read", 0, true, primitives.PrimRead},
-        {"write", 1, true, primitives.PrimWrite},
-        {"display", 1, true, primitives.PrimDisplay},
-        {"newline", 0, true, primitives.PrimNewline},
+        {"read", 0, true, PrimRead},
+        {"write", 1, true, PrimWrite},
+        {"display", 1, true, PrimDisplay},
+        {"newline", 0, true, PrimNewline},
         // ... more I/O primitives
     }, registry.PhaseRuntime)
     return nil
@@ -540,7 +539,7 @@ go/
 | `wile/` | `registry/`, `machine/`, `environment/`, `values/` | `repl/`, `cmd/`, `extensions/*` |
 | `registry/` | `machine/`, `environment/`, `values/` | `wile/`, `repl/`, `extensions/*` |
 | `repl/` | `wile/` | `registry/`, `machine/`, `extensions/*` |
-| `extensions/*` | `registry/`, `machine/`, `values/`, `runtime/primitives/` | `wile/`, `repl/` |
+| `extensions/*` | `registry/`, `registry/helpers/`, `machine/`, `values/` | `wile/`, `repl/` |
 | `machine/` | `environment/`, `values/`, `syntax/`, `parser/` | `registry/`, `wile/`, `extensions/*` |
 
 ## Migration Strategy

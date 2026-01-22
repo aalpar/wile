@@ -238,7 +238,7 @@ After implementation:
 cd go && make test
 
 # Check coverage
-cd go && go test -cover ./runtime/primitives/...
+cd go && go test -cover ./registry/core/...
 ```
 
 ---

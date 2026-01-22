@@ -21,7 +21,7 @@ Package `io` provides I/O primitives for reading and writing.
 
 ## State Management
 
-This package manages the global I/O port state that was previously in `runtime/primitives/state.go`. Key state includes:
+This package manages the global I/O port state. Key state includes:
 
 ```go
 // Port parameters (current-input-port, current-output-port, current-error-port)
@@ -115,4 +115,3 @@ ioext.SetCurrentInputPort(myPort)
 - **Weak references**: Tokenizers/parsers are cached with weak pointers to allow GC
 - **InitState idempotent**: Safe to call multiple times; subsequent calls are no-ops
 - **Port parameters**: Created as `machine.Parameter` objects, not regular values
-- **runtime/primitives/state.go**: Now delegates to this package for backward compatibility

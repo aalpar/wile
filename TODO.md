@@ -252,10 +252,10 @@ func TestPrimName(t *testing.T) {
 
 Code Refactoring (see REFACTORING_PROPOSAL.md)
 ----------------------------------------------
-- [ ] Add `go/runtime/primitives/args.go` - helper functions for argument extraction (~600 lines saved)
-- [ ] Add `go/runtime/primitives/fold.go` - variadic numeric fold helpers (~500 lines saved)
+- [x] Migrate primitives from `runtime/primitives/` to `registry/core/` and `extensions/*/`
+- [x] Move primitive tests to `registry/core/`
+- [ ] Add `go/registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
 - [ ] Add `go/machine/operation_helpers.go` - EqualTo helper functions (~300 lines saved)
-- [ ] Migrate ~150 primitive files to use new argument helpers
 - [ ] Migrate ~27 operation files to use EqualTo helpers
 
 R7RS Missing Features

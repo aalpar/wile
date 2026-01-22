@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wile is a Scheme interpreter/compiler in Go with hygienic macros. It compiles Scheme to bytecode and executes it on a stack-based virtual machine, implementing R7RS-style `syntax-rules` macros with a "sets of scopes" hygiene model (Flatt 2016).
 
+## Development Environment
+
+This project is developed on macOS with MacPorts. GNU tools are available at:
+- `/opt/local/bin/` - MacPorts binaries
+- `/opt/local/libexec/gnubin/` - GNU coreutils (prefer these over BSD variants)
+
+Use `which` to locate binaries on the `$PATH`:
+```bash
+which gsed    # GNU sed (preferred over BSD sed)
+which gawk    # GNU awk
+```
+
 ## Build Commands
 
 All commands run from the `go/` directory:
@@ -144,7 +156,7 @@ This project aims to implement R7RS-small. Key resources:
 | R7RS Corrected (HTML) | https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-8.html |
 | R7RS-large Wiki (in progress) | https://codeberg.org/scheme/r7rs/wiki |
 
-**Testing policy**: Tests that conform to R7RS must not be removed or reverted. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed—not the test. See `go/runtime/primitives/CLAUDE.md` for detailed type requirements.
+**Testing policy**: Tests that conform to R7RS must not be removed or reverted. If a test fails but correctly reflects R7RS behavior, the implementation must be fixed—not the test. See `go/registry/core/CLAUDE.md` for detailed test organization.
 
 ### R7RS Specification Comments
 
