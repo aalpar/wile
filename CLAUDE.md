@@ -120,6 +120,9 @@ See package-specific CLAUDE.md files for details on each package's test organiza
 - `plans/TESTING_PLAN.md` - Comprehensive primitive unit test implementation plan
 - `plans/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
 - `plans/R7RS_CONFORMANCE_PLAN.md` - R7RS conformance roadmap
+- `plans/OPTIMIZATION_PLAN.md` - Performance optimization roadmap
+
+**Plan file naming**: Use `UPPERCASE_WITH_UNDERSCORES.md` (e.g., `OPTIMIZATION_PLAN.md`, `TESTING_PLAN.md`).
 
 ## R7RS Conformance
 
