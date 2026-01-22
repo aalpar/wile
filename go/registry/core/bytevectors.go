@@ -27,6 +27,7 @@ func addBytevectors(r *registry.Registry) error {
 		{"bytevector-u8-ref", 2, false, PrimBytevectorU8Ref},
 		{"bytevector-u8-set!", 3, false, PrimBytevectorU8Set},
 		{"bytevector-copy", 2, true, PrimBytevectorCopy},
+		{"bytevector-copy!", 4, true, PrimBytevectorCopyBang},
 		{"bytevector-append", 1, true, PrimBytevectorAppend},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

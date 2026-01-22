@@ -1,60 +1,74 @@
 # CLAUDE.md
 
-Package `runtime` initializes the top-level Scheme environment with primitives.
+Package `runtime` initializes the top-level Scheme environment using the registry pattern.
 
 ## Purpose
 
 - Creates and bootstraps the complete top-level environment
-- Registers 200+ Scheme built-in functions as foreign closures
+- Uses the registry pattern to compose core primitives and extensions
 - Loads bootstrap macros (and, or, let, let*, letrec, cond, when, unless, guard, etc.)
-- Manages I/O port parameters (stdin, stdout, stderr)
 - Maintains three-phase environment: TopLevel → Expand → Compile
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `environment_tiny.go` | Main initialization, primitive registration, bootstrap macros |
-| `primitives/` | 240+ primitive implementations |
-| `primitives/state.go` | Global I/O port state, tokenizer/parser caches |
+| `environment_tiny.go` | Main initialization using registry pattern |
+| `primitives/` | **Deprecated** - compatibility layer delegating to io extension |
 
 ## Initialization Flow
 
-1. `NewTopLevelEnvironmentFrameTiny()` creates environment
-2. `registerCompileTimePrimitives()` - if, lambda, quote, define, etc.
-3. `registerRuntimePrimitives()` - 200+ executable primitives
-4. `registerExpandTimePrimitives()` - Subset for macro expansion
-5. `loadBootstrapMacros()` - Parse, expand, compile, execute macro definitions
-6. `registerPortParameters()` - Bind port parameter objects
+`NewTopLevelEnvironmentFrameTiny()` uses the registry pattern:
+
+1. Creates a `registry.Registry` with core primitives (`core.AddToRegistry`)
+2. Adds all extensions (io, files, math, eval, exceptions, threads, gointerop, all, system)
+3. Creates new top-level environment frame
+4. Applies registry to environment (`reg.Apply`)
+5. Registers syntax compilers in compile environment
+6. Registers primitive expanders in expand environment
+7. Loads bootstrap macros from registry's `MacroSources()`
+
+## Extensions
+
+| Extension | Purpose |
+|-----------|---------|
+| `io` | Port I/O (read, write, display, ports) |
+| `files` | File I/O (open-input-file, open-output-file, etc.) |
+| `math` | Transcendental functions (sin, cos, exp, log, etc.) |
+| `eval` | eval, load, environments |
+| `exceptions` | with-exception-handler, raise, error |
+| `threads` | SRFI-18 threads, mutexes, condition variables |
+| `gointerop` | Go channels, WaitGroup, RWMutex, Once, Atomic |
+| `all` | Records, promises, extra string/char operations |
+| `system` | System interface (command-line, features, etc.) |
 
 ## Primitive Categories
 
+Core primitives (from `registry/core/`):
 - Arithmetic, numeric predicates, comparisons
 - List/pair operations, CxR accessors
 - String/character operations
-- Vectors, bytevectors, hashtables
-- I/O (read, write, ports)
+- Vectors, bytevectors
 - Higher-order (apply, map, for-each)
-- Continuations, exceptions, multiple values
-- SRFI-18 threads, mutexes, condition variables
-- Go channels, WaitGroup, RWMutex, Once, Atomic
+- Continuations, multiple values
+- Parameters (make-parameter)
+- Syntax operations
 
 ## Gotchas
 
-- **Variadic convention**: Rest args passed as Pair in last parameter
+- **Registry pattern**: Uses `registry.Registry` to compose primitives, same as `wile.Engine`
 - **Three-phase hierarchy**: TopLevel/Expand/Compile with different primitive subsets
-- **Port parameters special**: Created as Parameter objects, not regular values
 - **Bootstrap order matters**: Macros loaded after all primitives registered
-- **Weak references**: Tokenizer/parser caches use weak pointers
-- **Expand-time subset**: Only safe primitives available during macro expansion
-- **Binary to variadic**: When R7RS requires variadic (2+ args) but implementation is binary, update registration to `{ParamCount: 2, IsVariadic: true}` and use helper like `charCompareVariadic` or `stringCompareVariadic`
+- **Variadic convention**: Rest args passed as Pair in last parameter
 
 ## Primitive Registration
 
-Primitives are registered in `environment_tiny.go` as `PrimitiveSpec`:
+Primitives are registered via the registry pattern in extension packages:
 
 ```go
-{Name: "char=?", ParamCount: 2, IsVariadic: true, Impl: primitives.PrimCharEqVariadic},
+r.AddPrimitives([]registry.PrimitiveSpec{
+    {"char=?", 2, true, PrimCharEqVariadic},
+}, registry.PhaseRuntime|registry.PhaseExpand)
 ```
 
 | ParamCount | IsVariadic | Behavior |
@@ -63,6 +77,14 @@ Primitives are registered in `environment_tiny.go` as `PrimitiveSpec`:
 | 1 | true | First arg direct, rest as Pair in `mc.Arg(0)` |
 | 2 | true | First arg in `mc.Arg(0)`, rest as Pair in `mc.Arg(1)` |
 | N | false | Exactly N args, each in `mc.Arg(0)` through `mc.Arg(N-1)` |
+
+## Deprecated: runtime/primitives/
+
+The `runtime/primitives/` package is **deprecated**. It now serves as a compatibility layer for tests, delegating all state management to `extensions/io`. New code should:
+
+- Import primitives from `registry/core/` or `extensions/*/`
+- Use `extensions/io` for port state management
+- Use `registry/testhelpers` for test infrastructure
 
 ## Testing
 

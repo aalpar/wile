@@ -12,141 +12,109 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package primitives provides backward-compatible wrappers for the io extension state.
+// This package is deprecated - use extensions/io directly for new code.
 package primitives
 
 import (
-	"os"
 	"time"
 	"weak"
 
+	ioext "wile/extensions/io"
 	"wile/machine"
 	"wile/parser"
 	"wile/tokenizer"
 	"wile/values"
 )
 
-// Package-level state for I/O ports.
-// These are lazily initialized on first access.
+// Package-level state - delegates to io extension.
 var (
-	// currentInputPortParam is the parameter holding the current input port.
-	currentInputPortParam *machine.Parameter
-	// currentOutputPortParam is the parameter holding the current output port.
-	currentOutputPortParam *machine.Parameter
-	// currentErrorPortParam is the parameter holding the current error port.
-	currentErrorPortParam *machine.Parameter
 	// Tokenizers caches tokenizers per input port using weak references.
+	// Delegates to io extension.
 	Tokenizers map[values.Value]weak.Pointer[tokenizer.Tokenizer]
 	// Parsers caches parsers per input port using weak references.
+	// Delegates to io extension.
 	Parsers map[values.Value]weak.Pointer[parser.Parser]
 	// ProgramStartTime is used for current-jiffy to measure elapsed time.
 	ProgramStartTime = time.Now()
 )
 
-// stateInitialized tracks whether InitState has been called.
-var stateInitialized bool
-
-// InitState initializes the primitives state. Must be called before using I/O primitives.
+// InitState initializes the primitives state by delegating to io extension.
 // Safe to call multiple times - subsequent calls are no-ops.
+// Deprecated: Use extensions/io.InitState() directly.
 func InitState() {
-	if stateInitialized {
-		return
-	}
-	stateInitialized = true
-
-	Tokenizers = map[values.Value]weak.Pointer[tokenizer.Tokenizer]{}
-	Parsers = map[values.Value]weak.Pointer[parser.Parser]{}
-
-	// Initialize port parameters with default values
-	currentInputPortParam = machine.NewParameter(
-		values.NewCharacterInputPortFromReader(os.Stdin),
-		nil,
-	)
-	currentOutputPortParam = machine.NewParameter(
-		values.NewCharacterOutputPortFromWriter(os.Stdout),
-		nil,
-	)
-	currentErrorPortParam = machine.NewParameter(
-		values.NewCharacterOutputPortFromWriter(os.Stderr),
-		nil,
-	)
+	ioext.InitState()
+	// Keep local cache references pointing to io extension caches
+	Tokenizers = ioext.Tokenizers
+	Parsers = ioext.Parsers
 }
 
 // ResetState resets the primitives state. Used for testing.
+// Deprecated: Use extensions/io directly.
 func ResetState() {
-	stateInitialized = false
-	currentInputPortParam = nil
-	currentOutputPortParam = nil
-	currentErrorPortParam = nil
+	ioext.ResetState()
 	Tokenizers = nil
 	Parsers = nil
 }
 
 // GetCurrentInputPort returns the current input port from the parameter.
+// Deprecated: Use extensions/io.GetCurrentInputPort() directly.
 func GetCurrentInputPort() *values.CharacterInputPort {
-	if currentInputPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterInputPortFromReader(os.Stdin)
-	}
-	return currentInputPortParam.Value().(*values.CharacterInputPort)
+	return ioext.GetCurrentInputPort()
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
+// Deprecated: Use extensions/io.GetCurrentInputPortParam() directly.
 func GetCurrentInputPortParam() *machine.Parameter {
-	return currentInputPortParam
+	return ioext.GetCurrentInputPortParam()
 }
 
 // SetCurrentInputPort sets the current input port value. Used for testing.
+// Deprecated: Use extensions/io.SetCurrentInputPort() directly.
 func SetCurrentInputPort(port *values.CharacterInputPort) {
-	InitState() // Ensure state is initialized
-	currentInputPortParam.SetValue(port)
+	ioext.SetCurrentInputPort(port)
 }
 
 // ResetCurrentInputPort resets the current input port to stdin. Used for testing.
+// Deprecated: Use extensions/io.ResetCurrentInputPort() directly.
 func ResetCurrentInputPort() {
-	if currentInputPortParam != nil {
-		currentInputPortParam.SetValue(values.NewCharacterInputPortFromReader(os.Stdin))
-	}
+	ioext.ResetCurrentInputPort()
 }
 
 // GetCurrentOutputPort returns the current output port from the parameter.
+// Deprecated: Use extensions/io.GetCurrentOutputPort() directly.
 func GetCurrentOutputPort() *values.CharacterOutputPort {
-	if currentOutputPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPortFromWriter(os.Stdout)
-	}
-	return currentOutputPortParam.Value().(*values.CharacterOutputPort)
+	return ioext.GetCurrentOutputPort()
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
+// Deprecated: Use extensions/io.GetCurrentOutputPortParam() directly.
 func GetCurrentOutputPortParam() *machine.Parameter {
-	return currentOutputPortParam
+	return ioext.GetCurrentOutputPortParam()
 }
 
 // SetCurrentOutputPort sets the current output port value. Used for testing and parameterize.
+// Deprecated: Use extensions/io.SetCurrentOutputPort() directly.
 func SetCurrentOutputPort(port *values.CharacterOutputPort) {
-	InitState() // Ensure state is initialized
-	currentOutputPortParam.SetValue(port)
+	ioext.SetCurrentOutputPort(port)
 }
 
 // ResetCurrentOutputPort resets the current output port to stdout. Used for testing.
+// Deprecated: Use extensions/io.ResetCurrentOutputPort() directly.
 func ResetCurrentOutputPort() {
-	if currentOutputPortParam != nil {
-		currentOutputPortParam.SetValue(values.NewCharacterOutputPortFromWriter(os.Stdout))
-	}
+	ioext.ResetCurrentOutputPort()
 }
 
 // GetCurrentErrorPort returns the current error port from the parameter.
+// Deprecated: Use extensions/io.GetCurrentErrorPort() directly.
 func GetCurrentErrorPort() *values.CharacterOutputPort {
-	if currentErrorPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPortFromWriter(os.Stderr)
-	}
-	return currentErrorPortParam.Value().(*values.CharacterOutputPort)
+	return ioext.GetCurrentErrorPort()
 }
 
 // GetCurrentErrorPortParam returns the current-error-port parameter object.
+// Deprecated: Use extensions/io.GetCurrentErrorPortParam() directly.
 func GetCurrentErrorPortParam() *machine.Parameter {
-	return currentErrorPortParam
+	return ioext.GetCurrentErrorPortParam()
 }
 
 // StringValue returns the display representation of a value.

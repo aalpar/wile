@@ -1,19 +1,44 @@
 # CLAUDE.md
 
+## DEPRECATED
+
+**This package is deprecated.** It now serves as a compatibility layer for existing tests.
+
+- **Primitive implementations** have moved to `registry/core/` and `extensions/*/`
+- **Port state management** (`state.go`) now delegates to `extensions/io`
+- **New tests** should use `registry/testhelpers` for test infrastructure
+
+For new code, import primitives from their registration packages:
+- Core primitives: `registry/core/`
+- I/O: `extensions/io/`
+- Files: `extensions/files/`
+- Math: `extensions/math/`
+- Eval: `extensions/eval/`
+- Exceptions: `extensions/exceptions/`
+- Threads: `extensions/threads/`
+- Go interop: `extensions/gointerop/`
+- Records/promises: `extensions/all/`
+
+---
+
+## Legacy Documentation
+
+The documentation below describes the original structure and remains useful for understanding primitive implementation patterns.
+
 Package `primitives` implements all R7RS Scheme built-in procedures.
 
-## Purpose
+## Purpose (Historical)
 
 237 primitive implementations as Go foreign functions, organized by:
 - One file per primitive: `prim_<name>.go`
 - Helper modules for shared patterns
 - Comprehensive test coverage
 
-## Key Files
+## Key Files (Historical)
 
 | File | Purpose |
 |------|---------|
-| `state.go` | Global I/O port state, weak-referenced caches |
+| `state.go` | Compatibility layer - delegates to `extensions/io` |
 | `numeric_fold.go` | Variadic arithmetic helpers (+, -, *, /) |
 | `numeric_compare.go` | Comparison chain helpers (=, <, >, <=, >=) |
 | `numeric_extremum.go` | min/max with exactness contagion and NaN handling |
