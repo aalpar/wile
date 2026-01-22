@@ -24,7 +24,10 @@ type Value interface {
 	SchemeString() string
 	// IsVoid returns true if this is the void value.
 	IsVoid() bool
-	// internal returns the underlying values.Value
+	// Internal returns the underlying values.Value for advanced use.
+	// This is exported for use by testing packages and advanced embedding scenarios.
+	Internal() values.Value
+	// internal returns the underlying values.Value (unexported alias for Internal)
 	internal() values.Value
 }
 
@@ -38,6 +41,10 @@ func (w *wrappedValue) SchemeString() string {
 
 func (w *wrappedValue) IsVoid() bool {
 	return w.v == values.Void
+}
+
+func (w *wrappedValue) Internal() values.Value {
+	return w.v
 }
 
 func (w *wrappedValue) internal() values.Value {

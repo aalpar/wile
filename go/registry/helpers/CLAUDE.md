@@ -44,7 +44,6 @@ This package only depends on:
 
 It does NOT depend on:
 - Any extension packages
-- `wile/runtime/primitives`
 - Any circular imports
 
 ## Exported Functions

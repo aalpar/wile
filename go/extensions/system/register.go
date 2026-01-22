@@ -19,7 +19,6 @@ package system
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 // Extension is the system extension.
@@ -33,15 +32,15 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"command-line", 0, false, primitives.PrimCommandLine},
-		{"exit", 1, true, primitives.PrimExit},
-		{"emergency-exit", 1, true, primitives.PrimEmergencyExit},
-		{"get-environment-variable", 1, false, primitives.PrimGetEnvironmentVariable},
-		{"get-environment-variables", 0, false, primitives.PrimGetEnvironmentVariables},
-		{"current-second", 0, false, primitives.PrimCurrentSecond},
-		{"current-jiffy", 0, false, primitives.PrimCurrentJiffy},
-		{"jiffies-per-second", 0, false, primitives.PrimJiffiesPerSecond},
-		{"features", 0, false, primitives.PrimFeatures},
+		{"command-line", 0, false, PrimCommandLine},
+		{"exit", 1, true, PrimExit},
+		{"emergency-exit", 1, true, PrimEmergencyExit},
+		{"get-environment-variable", 1, false, PrimGetEnvironmentVariable},
+		{"get-environment-variables", 0, false, PrimGetEnvironmentVariables},
+		{"current-second", 0, false, PrimCurrentSecond},
+		{"current-jiffy", 0, false, PrimCurrentJiffy},
+		{"jiffies-per-second", 0, false, PrimJiffiesPerSecond},
+		{"features", 0, false, PrimFeatures},
 	}, registry.PhaseRuntime)
 	return nil
 }

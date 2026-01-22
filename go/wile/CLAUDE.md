@@ -91,10 +91,20 @@ result, _ := engine.Call(ctx, proc, wile.NewInteger(42))
 | `Void` | Void value |
 | `True` / `False` | Boolean constants |
 
+## Value Interface Methods
+
+| Method | Purpose |
+|--------|---------|
+| `SchemeString()` | Returns the Scheme representation |
+| `IsVoid()` | Returns true if this is the void value |
+| `Internal()` | Returns the underlying `values.Value` for advanced use |
+
+The `Internal()` method is useful for test packages and advanced embedding scenarios where direct access to the underlying value type is needed.
+
 ## Gotchas
 
 - **Core always included**: Unless WithRegistry is used, core primitives are automatic
 - **Extensions added after core**: Extension primitives registered after core
 - **Bootstrap macros**: Loaded after all primitives are registered
-- **Value wrapping**: Values are wrapped; use internal() for raw access
+- **Value wrapping**: Values are wrapped; use `Internal()` for raw `values.Value` access
 - **Environment access**: Use Environment() for advanced operations
