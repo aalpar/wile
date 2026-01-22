@@ -61,6 +61,26 @@ core.AddToRegistry(reg)
 | Syntax | 6 | Runtime + Expand |
 | Parameters | 2 | Runtime |
 
+## Testing
+
+This package contains the comprehensive test suite for all Scheme primitives (~90 test files). Tests cover:
+- Core primitives (arithmetic, lists, vectors, strings, etc.)
+- Extension primitives (I/O, files, math, eval, exceptions, threads, channels)
+- R7RS compliance, edge cases, and error conditions
+
+Test files use `package core_test` and test helpers in `test_helpers_test.go`.
+
+Key test files:
+| Test File | Tests For |
+|-----------|-----------|
+| `prim_arithmetic_test.go` | `+`, `-`, `*`, `/` and related |
+| `prim_list_test.go` | List/pair operations |
+| `prim_string_test.go` | String operations |
+| `prim_io_test.go` | read, write, display, ports |
+| `prim_exception_test.go` | Exception handling |
+| `prim_thread_test.go` | SRFI-18 threading |
+| `prim_channel_test.go` | Go channels |
+
 ## Gotchas
 
 - **Expand-time subset**: Many primitives available at expand-time for macro fenders
