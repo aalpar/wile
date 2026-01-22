@@ -40,7 +40,7 @@ import (
 type Options struct {
 	File        string `short:"f" long:"file" description:"Scheme file to run"`
 	LibraryPath string `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
-	Version     bool   `short:"v" long:"version" description:"Print version information and exit"`
+	Version     bool   `short:"V" long:"version" description:"Print version information and exit"`
 }
 
 var (
@@ -138,7 +138,7 @@ func setupSignals() {
 	}()
 
 	// ... rest of your program ...
-	fmt.Println("Program running, send SIGQUIT (Ctrl+\\\\) to dump stacks.")
+	fmt.Println("Program running, send SIGQUIT (Ctrl+\\) to dump stacks.")
 }
 
 func main() {
@@ -160,7 +160,7 @@ func main() {
 	}
 
 	if opts.Version {
-		fmt.Printf("Wile Scheme %s\n", BuildVersion)
+		fmt.Printf("Wile Scheme %s (%s)\n", BuildVersion, BuildSHA)
 		os.Exit(0)
 	}
 

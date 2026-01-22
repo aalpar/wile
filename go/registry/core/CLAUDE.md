@@ -4,9 +4,10 @@ Package `core` provides the core primitives required for Scheme to function.
 
 ## Purpose
 
-- Registers ~85 essential primitives always included in any Wile engine
+- Registers ~100 essential primitives always included in any Wile engine
 - Provides compile-time bindings for special forms (if, lambda, define, etc.)
 - Contains bootstrap macro definitions (and, or, let, cond, etc.)
+- Contains primitive implementations in `prim_*.go` files
 
 ## Key Files
 
@@ -14,19 +15,20 @@ Package `core` provides the core primitives required for Scheme to function.
 |------|---------|
 | `register.go` | Main entry point, Builder and Extension exports |
 | `specialforms.go` | Compile-time bindings (if, lambda, quote, define, etc.) |
-| `predicates.go` | Type predicates (null?, pair?, number?, etc.) |
-| `equality.go` | eq?, eqv?, equal?, not |
-| `pairs.go` | cons, car, cdr, CxR accessors |
-| `lists.go` | list, append, reverse, memq, assq, etc. |
-| `arithmetic.go` | +, -, *, /, comparisons, abs, min, max |
-| `control.go` | apply, call/cc, dynamic-wind, values |
-| `vectors.go` | make-vector, vector-ref, vector-set!, etc. |
-| `strings.go` | string operations and conversions |
-| `characters.go` | char->integer, integer->char, comparisons |
-| `bytevectors.go` | Bytevector operations, UTF-8 conversion |
-| `syntax.go` | identifier?, syntax->datum, datum->syntax |
-| `parameters.go` | make-parameter, parameter? |
+| `predicates.go` | Type predicate registrations |
+| `equality.go` | eq?, eqv?, equal?, not registrations |
+| `pairs.go` | cons, car, cdr, CxR accessor registrations |
+| `lists.go` | list, append, reverse, memq, assq, etc. registrations |
+| `arithmetic.go` | +, -, *, /, comparisons, abs, min, max registrations |
+| `control.go` | apply, call/cc, dynamic-wind, values registrations |
+| `vectors.go` | Vector operation registrations |
+| `strings.go` | String operation registrations |
+| `characters.go` | Character operation registrations |
+| `bytevectors.go` | Bytevector operation registrations |
+| `syntax.go` | Syntax operation registrations |
+| `parameters.go` | make-parameter, parameter? registrations |
 | `bootstrap.go` | Bootstrap macro source code |
+| `prim_*.go` | Primitive implementations (one per category) |
 
 ## Usage
 
@@ -55,7 +57,7 @@ core.AddToRegistry(reg)
 | Vectors | 7 | Runtime + Expand |
 | Strings | 15 | Runtime + Expand |
 | Characters | 7 | Runtime + Expand |
-| Bytevectors | 9 | Runtime + Expand |
+| Bytevectors | 10 | Runtime + Expand |
 | Syntax | 6 | Runtime + Expand |
 | Parameters | 2 | Runtime |
 
