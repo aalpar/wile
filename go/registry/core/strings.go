@@ -17,45 +17,44 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addStrings(r *registry.Registry) error {
 	// String construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string", 1, true, primitives.PrimString},
-		{"make-string", 2, true, primitives.PrimMakeString},
+		{"string", 1, true, PrimString},
+		{"make-string", 2, true, PrimMakeString},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String access
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string-length", 1, false, primitives.PrimStringLength},
-		{"string-ref", 2, false, primitives.PrimStringRef},
-		{"string-set!", 3, false, primitives.PrimStringSet},
+		{"string-length", 1, false, PrimStringLength},
+		{"string-ref", 2, false, PrimStringRef},
+		{"string-set!", 3, false, PrimStringSet},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string->list", 2, true, primitives.PrimStringToList},
-		{"list->string", 1, false, primitives.PrimListToString},
-		{"symbol->string", 1, false, primitives.PrimSymbolToString},
-		{"string->symbol", 1, false, primitives.PrimStringToSymbol},
+		{"string->list", 2, true, PrimStringToList},
+		{"list->string", 1, false, PrimListToString},
+		{"symbol->string", 1, false, PrimSymbolToString},
+		{"string->symbol", 1, false, PrimStringToSymbol},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string-append", 1, true, primitives.PrimStringAppend},
-		{"substring", 3, false, primitives.PrimSubstring},
-		{"string-copy", 2, true, primitives.PrimStringCopy},
+		{"string-append", 1, true, PrimStringAppend},
+		{"substring", 3, false, PrimSubstring},
+		{"string-copy", 2, true, PrimStringCopy},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String comparison
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string=?", 2, true, primitives.PrimStringEqVariadic},
-		{"string<?", 2, true, primitives.PrimStringLtVariadic},
-		{"string>?", 2, true, primitives.PrimStringGtVariadic},
-		{"string<=?", 2, true, primitives.PrimStringLeVariadic},
-		{"string>=?", 2, true, primitives.PrimStringGeVariadic},
+		{"string=?", 2, true, PrimStringEqVariadic},
+		{"string<?", 2, true, PrimStringLtVariadic},
+		{"string>?", 2, true, PrimStringGtVariadic},
+		{"string<=?", 2, true, PrimStringLeVariadic},
+		{"string>=?", 2, true, PrimStringGeVariadic},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

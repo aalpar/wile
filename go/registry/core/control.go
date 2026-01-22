@@ -17,28 +17,27 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addControl(r *registry.Registry) error {
 	// Higher-order functions
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"apply", 2, true, primitives.PrimApply},
-		{"map", 2, true, primitives.PrimMap},
-		{"for-each", 2, true, primitives.PrimForEach},
+		{"apply", 2, true, PrimApply},
+		{"map", 2, true, PrimMap},
+		{"for-each", 2, true, PrimForEach},
 	}, registry.PhaseRuntime)
 
 	// Continuations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"call-with-current-continuation", 1, false, primitives.PrimCallCC},
-		{"call/cc", 1, false, primitives.PrimCallCC},
-		{"dynamic-wind", 3, false, primitives.PrimDynamicWind},
+		{"call-with-current-continuation", 1, false, PrimCallCC},
+		{"call/cc", 1, false, PrimCallCC},
+		{"dynamic-wind", 3, false, PrimDynamicWind},
 	}, registry.PhaseRuntime)
 
 	// Multiple values
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"values", 1, true, primitives.PrimValues},
-		{"call-with-values", 2, false, primitives.PrimCallWithValues},
+		{"values", 1, true, PrimValues},
+		{"call-with-values", 2, false, PrimCallWithValues},
 	}, registry.PhaseRuntime)
 
 	return nil

@@ -17,23 +17,22 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addCharacters(r *registry.Registry) error {
 	// Character conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char->integer", 1, false, primitives.PrimCharToInteger},
-		{"integer->char", 1, false, primitives.PrimIntegerToChar},
+		{"char->integer", 1, false, PrimCharToInteger},
+		{"integer->char", 1, false, PrimIntegerToChar},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Character comparison
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char=?", 2, true, primitives.PrimCharEqVariadic},
-		{"char<?", 2, true, primitives.PrimCharLtVariadic},
-		{"char>?", 2, true, primitives.PrimCharGtVariadic},
-		{"char<=?", 2, true, primitives.PrimCharLeVariadic},
-		{"char>=?", 2, true, primitives.PrimCharGeVariadic},
+		{"char=?", 2, true, PrimCharEqVariadic},
+		{"char<?", 2, true, PrimCharLtVariadic},
+		{"char>?", 2, true, PrimCharGtVariadic},
+		{"char<=?", 2, true, PrimCharLeVariadic},
+		{"char>=?", 2, true, PrimCharGeVariadic},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

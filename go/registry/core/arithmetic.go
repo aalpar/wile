@@ -17,43 +17,42 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addArithmetic(r *registry.Registry) error {
 	// Basic arithmetic
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"+", 1, true, primitives.PrimAdd},
-		{"-", 2, true, primitives.PrimSub},
-		{"*", 1, true, primitives.PrimMul},
-		{"/", 2, true, primitives.PrimDiv},
+		{"+", 1, true, PrimAdd},
+		{"-", 2, true, PrimSub},
+		{"*", 1, true, PrimMul},
+		{"/", 2, true, PrimDiv},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Comparisons
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"=", 2, true, primitives.PrimNumEq},
-		{"<", 2, true, primitives.PrimNumLt},
-		{">", 2, true, primitives.PrimNumGt},
-		{"<=", 2, true, primitives.PrimNumLe},
-		{">=", 2, true, primitives.PrimNumGe},
+		{"=", 2, true, PrimNumEq},
+		{"<", 2, true, PrimNumLt},
+		{">", 2, true, PrimNumGt},
+		{"<=", 2, true, PrimNumLe},
+		{">=", 2, true, PrimNumGe},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Basic numeric operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"abs", 1, false, primitives.PrimAbs},
-		{"min", 2, true, primitives.PrimMin},
-		{"max", 2, true, primitives.PrimMax},
-		{"quotient", 2, false, primitives.PrimQuotient},
-		{"remainder", 2, false, primitives.PrimRemainder},
-		{"modulo", 2, false, primitives.PrimModulo},
-		{"gcd", 1, true, primitives.PrimGcd},
-		{"lcm", 1, true, primitives.PrimLcm},
+		{"abs", 1, false, PrimAbs},
+		{"min", 2, true, PrimMin},
+		{"max", 2, true, PrimMax},
+		{"quotient", 2, false, PrimQuotient},
+		{"remainder", 2, false, PrimRemainder},
+		{"modulo", 2, false, PrimModulo},
+		{"gcd", 1, true, PrimGcd},
+		{"lcm", 1, true, PrimLcm},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Exactness conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"exact", 1, false, primitives.PrimExact},
-		{"inexact", 1, false, primitives.PrimInexact},
+		{"exact", 1, false, PrimExact},
+		{"inexact", 1, false, PrimInexact},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

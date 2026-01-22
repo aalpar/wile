@@ -17,22 +17,21 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addSyntax(r *registry.Registry) error {
 	// Syntax objects (R6RS syntax-case support)
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"identifier?", 1, false, primitives.PrimIdentifierQ},
-		{"syntax->datum", 1, false, primitives.PrimSyntaxToDatum},
-		{"datum->syntax", 2, false, primitives.PrimDatumToSyntax},
-		{"generate-temporaries", 1, false, primitives.PrimGenerateTemporaries},
+		{"identifier?", 1, false, PrimIdentifierQ},
+		{"syntax->datum", 1, false, PrimSyntaxToDatum},
+		{"datum->syntax", 2, false, PrimDatumToSyntax},
+		{"generate-temporaries", 1, false, PrimGenerateTemporaries},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Identifier comparison
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"bound-identifier=?", 2, false, primitives.PrimBoundIdentifierEqualQ},
-		{"free-identifier=?", 2, false, primitives.PrimFreeIdentifierEqualQ},
+		{"bound-identifier=?", 2, false, PrimBoundIdentifierEqualQ},
+		{"free-identifier=?", 2, false, PrimFreeIdentifierEqualQ},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

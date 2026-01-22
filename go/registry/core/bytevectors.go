@@ -17,24 +17,23 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addBytevectors(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-bytevector", 2, true, primitives.PrimMakeBytevector},
-		{"bytevector", 1, true, primitives.PrimBytevector},
-		{"bytevector-length", 1, false, primitives.PrimBytevectorLength},
-		{"bytevector-u8-ref", 2, false, primitives.PrimBytevectorU8Ref},
-		{"bytevector-u8-set!", 3, false, primitives.PrimBytevectorU8Set},
-		{"bytevector-copy", 2, true, primitives.PrimBytevectorCopy},
-		{"bytevector-append", 1, true, primitives.PrimBytevectorAppend},
+		{"make-bytevector", 2, true, PrimMakeBytevector},
+		{"bytevector", 1, true, PrimBytevector},
+		{"bytevector-length", 1, false, PrimBytevectorLength},
+		{"bytevector-u8-ref", 2, false, PrimBytevectorU8Ref},
+		{"bytevector-u8-set!", 3, false, PrimBytevectorU8Set},
+		{"bytevector-copy", 2, true, PrimBytevectorCopy},
+		{"bytevector-append", 1, true, PrimBytevectorAppend},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// UTF-8 conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"utf8->string", 2, true, primitives.PrimUtf8ToString},
-		{"string->utf8", 2, true, primitives.PrimStringToUtf8},
+		{"utf8->string", 2, true, PrimUtf8ToString},
+		{"string->utf8", 2, true, PrimStringToUtf8},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

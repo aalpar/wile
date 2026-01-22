@@ -17,13 +17,12 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addParameters(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-parameter", 2, true, primitives.PrimMakeParameter},
-		{"parameter?", 1, false, primitives.PrimParameterQ},
+		{"make-parameter", 2, true, PrimMakeParameter},
+		{"parameter?", 1, false, PrimParameterQ},
 	}, registry.PhaseRuntime)
 
 	return nil

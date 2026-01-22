@@ -17,34 +17,33 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addLists(r *registry.Registry) error {
 	// List construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"list", 1, true, primitives.PrimList},
-		{"make-list", 2, true, primitives.PrimMakeList},
+		{"list", 1, true, PrimList},
+		{"make-list", 2, true, PrimMakeList},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// List operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"append", 1, true, primitives.PrimAppend},
-		{"reverse", 1, false, primitives.PrimReverse},
-		{"length", 1, false, primitives.PrimLength},
-		{"list-ref", 2, false, primitives.PrimListRef},
-		{"list-set!", 3, false, primitives.PrimListSet},
-		{"list-tail", 2, false, primitives.PrimListTail},
+		{"append", 1, true, PrimAppend},
+		{"reverse", 1, false, PrimReverse},
+		{"length", 1, false, PrimLength},
+		{"list-ref", 2, false, PrimListRef},
+		{"list-set!", 3, false, PrimListSet},
+		{"list-tail", 2, false, PrimListTail},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// List search
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"memq", 2, false, primitives.PrimMemq},
-		{"memv", 2, false, primitives.PrimMemv},
-		{"member", 2, false, primitives.PrimMember},
-		{"assq", 2, false, primitives.PrimAssq},
-		{"assv", 2, false, primitives.PrimAssv},
-		{"assoc", 2, false, primitives.PrimAssoc},
+		{"memq", 2, false, PrimMemq},
+		{"memv", 2, false, PrimMemv},
+		{"member", 2, false, PrimMember},
+		{"assq", 2, false, PrimAssq},
+		{"assv", 2, false, PrimAssv},
+		{"assoc", 2, false, PrimAssoc},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

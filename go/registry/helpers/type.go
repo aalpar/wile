@@ -12,27 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
-package core
+package helpers
 
 import (
-	"wile/registry"
+	"context"
+
+	"wile/machine"
+	"wile/utils"
+	"wile/values"
 )
 
-func addEquality(r *registry.Registry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"eq?", 2, false, PrimEqQ},
-		{"eqv?", 2, false, PrimEqvQ},
-		{"equal?", 2, false, PrimEqualQ},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-
-	return nil
-}
-
-func addBoolean(r *registry.Registry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"not", 1, false, PrimNot},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-
-	return nil
+// MakeTypePredicate creates a type predicate primitive function.
+// The check function should return true if the value matches the expected type.
+func MakeTypePredicate(check func(values.Value) bool) func(context.Context, *machine.MachineContext) error {
+	return func(_ context.Context, mc *machine.MachineContext) error {
+		o := mc.Arg(0)
+		mc.SetValue(utils.BoolToBoolean(check(o)))
+		return nil
+	}
 }

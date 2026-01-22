@@ -17,18 +17,17 @@ package core
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 func addVectors(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-vector", 2, true, primitives.PrimMakeVector},
-		{"vector", 1, true, primitives.PrimVector},
-		{"vector-length", 1, false, primitives.PrimVectorLength},
-		{"vector-ref", 2, false, primitives.PrimVectorRef},
-		{"vector-set!", 3, false, primitives.PrimVectorSet},
-		{"vector->list", 1, false, primitives.PrimVectorToList},
-		{"list->vector", 1, false, primitives.PrimListToVector},
+		{"make-vector", 2, true, PrimMakeVector},
+		{"vector", 1, true, PrimVector},
+		{"vector-length", 1, false, PrimVectorLength},
+		{"vector-ref", 2, false, PrimVectorRef},
+		{"vector-set!", 3, false, PrimVectorSet},
+		{"vector->list", 1, false, PrimVectorToList},
+		{"list->vector", 1, false, PrimListToVector},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
