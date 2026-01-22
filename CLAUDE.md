@@ -111,6 +111,16 @@ The standard Go convention is that tests for functions in `foo.go` belong in `fo
 
 See package-specific CLAUDE.md files for details on each package's test organization.
 
+## GitHub Workflow
+
+**Pull Request Merging**: The repository owner is an administrator. When merging PRs to master, use the `--admin` flag to bypass branch protection rules if necessary:
+
+```bash
+gh pr merge <PR> --merge --admin --delete-branch
+```
+
+Note: GitHub does not allow self-approval of PRs even with admin privileges, but admin merge ensures PRs can be merged without external approval.
+
 ## References
 
 - `TODO.md` - Pending tasks, missing R7RS features, future extensions (multithreading, POSIX API, Go FFI)
