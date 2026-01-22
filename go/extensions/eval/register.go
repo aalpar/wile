@@ -19,7 +19,6 @@ package eval
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 // Extension is the eval extension.
@@ -33,19 +32,19 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"eval", 2, false, primitives.PrimEval},
-		{"load", 1, false, primitives.PrimLoad},
-		{"interaction-environment", 0, false, primitives.PrimInteractionEnvironment},
-		{"scheme-report-environment", 1, false, primitives.PrimSchemeReportEnvironment},
-		{"null-environment", 1, false, primitives.PrimNullEnvironment},
-		{"environment", 1, true, primitives.PrimEnvironment},
-		{"expand", 1, false, primitives.PrimExpand},
-		{"expand-once", 1, false, primitives.PrimExpandOnce},
-		{"compile", 1, false, primitives.PrimCompile},
-		{"syntax-local-value", 1, false, primitives.PrimSyntaxLocalValue},
-		{"make-compile-time-value", 1, false, primitives.PrimMakeCompileTimeValue},
-		{"syntax-local-introduce", 1, false, primitives.PrimSyntaxLocalIntroduce},
-		{"syntax-local-identifier-as-binding", 1, false, primitives.PrimSyntaxLocalIdentifierAsBinding},
+		{"eval", 2, false, PrimEval},
+		{"load", 1, false, PrimLoad},
+		{"interaction-environment", 0, false, PrimInteractionEnvironment},
+		{"scheme-report-environment", 1, false, PrimSchemeReportEnvironment},
+		{"null-environment", 1, false, PrimNullEnvironment},
+		{"environment", 1, true, PrimEnvironment},
+		{"expand", 1, false, PrimExpand},
+		{"expand-once", 1, false, PrimExpandOnce},
+		{"compile", 1, false, PrimCompile},
+		{"syntax-local-value", 1, false, PrimSyntaxLocalValue},
+		{"make-compile-time-value", 1, false, PrimMakeCompileTimeValue},
+		{"syntax-local-introduce", 1, false, PrimSyntaxLocalIntroduce},
+		{"syntax-local-identifier-as-binding", 1, false, PrimSyntaxLocalIdentifierAsBinding},
 	}, registry.PhaseRuntime)
 	return nil
 }

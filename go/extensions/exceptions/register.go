@@ -19,7 +19,6 @@ package exceptions
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 // Extension is the exceptions extension.
@@ -33,13 +32,13 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"with-exception-handler", 2, false, primitives.PrimWithExceptionHandler},
-		{"raise", 1, false, primitives.PrimRaise},
-		{"raise-continuable", 1, false, primitives.PrimRaiseContinuable},
-		{"error", 2, true, primitives.PrimError},
-		{"error-object?", 1, false, primitives.PrimErrorObjectQ},
-		{"error-object-message", 1, false, primitives.PrimErrorObjectMessage},
-		{"error-object-irritants", 1, false, primitives.PrimErrorObjectIrritants},
+		{"with-exception-handler", 2, false, PrimWithExceptionHandler},
+		{"raise", 1, false, PrimRaise},
+		{"raise-continuable", 1, false, PrimRaiseContinuable},
+		{"error", 2, true, PrimError},
+		{"error-object?", 1, false, PrimErrorObjectQ},
+		{"error-object-message", 1, false, PrimErrorObjectMessage},
+		{"error-object-irritants", 1, false, PrimErrorObjectIrritants},
 	}, registry.PhaseRuntime)
 	return nil
 }

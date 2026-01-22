@@ -27,7 +27,6 @@ import (
 	"wile/extensions/system"
 	"wile/extensions/threads"
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 // Extension includes all standard extensions.
@@ -54,62 +53,62 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-record-type", 2, false, primitives.PrimMakeRecordType},
-		{"record-type?", 1, false, primitives.PrimIsRecordType},
-		{"record?", 1, false, primitives.PrimIsRecord},
-		{"record-type", 1, false, primitives.PrimRecordType},
-		{"record-constructor", 2, false, primitives.PrimRecordConstructor},
-		{"record-predicate", 1, false, primitives.PrimRecordPredicate},
-		{"record-accessor", 2, false, primitives.PrimRecordAccessor},
-		{"record-modifier", 2, false, primitives.PrimRecordModifier},
+		{"make-record-type", 2, false, PrimMakeRecordType},
+		{"record-type?", 1, false, PrimIsRecordType},
+		{"record?", 1, false, PrimIsRecord},
+		{"record-type", 1, false, PrimRecordType},
+		{"record-constructor", 2, false, PrimRecordConstructor},
+		{"record-predicate", 1, false, PrimRecordPredicate},
+		{"record-accessor", 2, false, PrimRecordAccessor},
+		{"record-modifier", 2, false, PrimRecordModifier},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addPromises(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"promise?", 1, false, primitives.PrimPromiseQ},
-		{"make-promise", 1, false, primitives.PrimMakePromise},
-		{"force", 1, false, primitives.PrimForce},
-		{"%make-lazy-promise", 1, false, primitives.PrimMakeLazyPromise},
+		{"promise?", 1, false, PrimPromiseQ},
+		{"make-promise", 1, false, PrimMakePromise},
+		{"force", 1, false, PrimForce},
+		{"%make-lazy-promise", 1, false, PrimMakeLazyPromise},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string-copy!", 2, true, primitives.PrimStringCopyTo},
-		{"string-fill!", 2, true, primitives.PrimStringFill},
-		{"string-map", 2, true, primitives.PrimStringMap},
-		{"string-for-each", 2, true, primitives.PrimStringForEach},
-		{"string-ci=?", 2, true, primitives.PrimStringCiEqVariadic},
-		{"string-ci<?", 2, true, primitives.PrimStringCiLtVariadic},
-		{"string-ci>?", 2, true, primitives.PrimStringCiGtVariadic},
-		{"string-ci<=?", 2, true, primitives.PrimStringCiLeVariadic},
-		{"string-ci>=?", 2, true, primitives.PrimStringCiGeVariadic},
-		{"string-upcase", 1, false, primitives.PrimStringUpcase},
-		{"string-downcase", 1, false, primitives.PrimStringDowncase},
-		{"string-foldcase", 1, false, primitives.PrimStringFoldcase},
+		{"string-copy!", 2, true, PrimStringCopyTo},
+		{"string-fill!", 2, true, PrimStringFill},
+		{"string-map", 2, true, PrimStringMap},
+		{"string-for-each", 2, true, PrimStringForEach},
+		{"string-ci=?", 2, true, PrimStringCiEqVariadic},
+		{"string-ci<?", 2, true, PrimStringCiLtVariadic},
+		{"string-ci>?", 2, true, PrimStringCiGtVariadic},
+		{"string-ci<=?", 2, true, PrimStringCiLeVariadic},
+		{"string-ci>=?", 2, true, PrimStringCiGeVariadic},
+		{"string-upcase", 1, false, PrimStringUpcase},
+		{"string-downcase", 1, false, PrimStringDowncase},
+		{"string-foldcase", 1, false, PrimStringFoldcase},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addMoreChars(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char-ci=?", 2, true, primitives.PrimCharCiEqVariadic},
-		{"char-ci<?", 2, true, primitives.PrimCharCiLtVariadic},
-		{"char-ci>?", 2, true, primitives.PrimCharCiGtVariadic},
-		{"char-ci<=?", 2, true, primitives.PrimCharCiLeVariadic},
-		{"char-ci>=?", 2, true, primitives.PrimCharCiGeVariadic},
-		{"char-alphabetic?", 1, false, primitives.PrimCharAlphabeticQ},
-		{"char-numeric?", 1, false, primitives.PrimCharNumericQ},
-		{"char-whitespace?", 1, false, primitives.PrimCharWhitespaceQ},
-		{"char-upper-case?", 1, false, primitives.PrimCharUpperCaseQ},
-		{"char-lower-case?", 1, false, primitives.PrimCharLowerCaseQ},
-		{"char-upcase", 1, false, primitives.PrimCharUpcase},
-		{"char-downcase", 1, false, primitives.PrimCharDowncase},
-		{"char-foldcase", 1, false, primitives.PrimCharFoldcase},
-		{"digit-value", 1, false, primitives.PrimDigitValue},
+		{"char-ci=?", 2, true, PrimCharCiEqVariadic},
+		{"char-ci<?", 2, true, PrimCharCiLtVariadic},
+		{"char-ci>?", 2, true, PrimCharCiGtVariadic},
+		{"char-ci<=?", 2, true, PrimCharCiLeVariadic},
+		{"char-ci>=?", 2, true, PrimCharCiGeVariadic},
+		{"char-alphabetic?", 1, false, PrimCharAlphabeticQ},
+		{"char-numeric?", 1, false, PrimCharNumericQ},
+		{"char-whitespace?", 1, false, PrimCharWhitespaceQ},
+		{"char-upper-case?", 1, false, PrimCharUpperCaseQ},
+		{"char-lower-case?", 1, false, PrimCharLowerCaseQ},
+		{"char-upcase", 1, false, PrimCharUpcase},
+		{"char-downcase", 1, false, PrimCharDowncase},
+		{"char-foldcase", 1, false, PrimCharFoldcase},
+		{"digit-value", 1, false, PrimDigitValue},
 	}, registry.PhaseRuntime)
 	return nil
 }

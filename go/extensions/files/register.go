@@ -19,7 +19,6 @@ package files
 
 import (
 	"wile/registry"
-	"wile/runtime/primitives"
 )
 
 // Extension is the file I/O extension.
@@ -33,16 +32,16 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"open-input-file", 1, false, primitives.PrimOpenInputFile},
-		{"open-output-file", 1, false, primitives.PrimOpenOutputFile},
-		{"open-binary-input-file", 1, false, primitives.PrimOpenBinaryInputFile},
-		{"open-binary-output-file", 1, false, primitives.PrimOpenBinaryOutputFile},
-		{"file-exists?", 1, false, primitives.PrimFileExistsQ},
-		{"delete-file", 1, false, primitives.PrimDeleteFile},
-		{"call-with-input-file", 2, false, primitives.PrimCallWithInputFile},
-		{"call-with-output-file", 2, false, primitives.PrimCallWithOutputFile},
-		{"with-input-from-file", 2, false, primitives.PrimWithInputFromFile},
-		{"with-output-to-file", 2, false, primitives.PrimWithOutputToFile},
+		{"open-input-file", 1, false, PrimOpenInputFile},
+		{"open-output-file", 1, false, PrimOpenOutputFile},
+		{"open-binary-input-file", 1, false, PrimOpenBinaryInputFile},
+		{"open-binary-output-file", 1, false, PrimOpenBinaryOutputFile},
+		{"file-exists?", 1, false, PrimFileExistsQ},
+		{"delete-file", 1, false, PrimDeleteFile},
+		{"call-with-input-file", 2, false, PrimCallWithInputFile},
+		{"call-with-output-file", 2, false, PrimCallWithOutputFile},
+		{"with-input-from-file", 2, false, PrimWithInputFromFile},
+		{"with-output-to-file", 2, false, PrimWithOutputToFile},
 	}, registry.PhaseRuntime)
 	return nil
 }
