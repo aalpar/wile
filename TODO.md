@@ -3,52 +3,52 @@ TODO
 
 Code Maintenance
 ----------------
-- Dead code removal (see Dead Code Removal section below)
-- Project rename from "skeme" to "wile" (module path, binary name, env vars, docs)
-- check all functions that accept pairs or lists that they handle partial lists correctly.  
+- [ ] Dead code removal (see Dead Code Removal section below)
+- [x] Project rename from "skeme" to "wile" (module path, binary name, env vars, docs)
+- [ ] check all functions that accept pairs or lists that they handle partial lists correctly.
   functions should either accept partial lists (lists without the last element being a EmptyList)
   or should produce a ErrNotAPair or ErrNotAList errors.
-- check all scheme primitives that they work properly with partial lists (lists without the last element being a EmptyList)
+- [ ] check all scheme primitives that they work properly with partial lists (lists without the last element being a EmptyList)
   each function should return an Error object or return the resule defined in the R7RS specification.  All functions must be
   R7RS or R6RS compliant
 
 Code Cleanup
 ------------
-- Tokenization error handling is obscure - figure something better out
+- [ ] Tokenization error handling is obscure - figure something better out
 - [ ] Inf Nan handling in tokenizer is inconsistent.  Some places use math.Inf(1)/math.Inf(-1) and some use predefined constants.  Standardize on one approach.
 - [x] Refactor `if err := ...; err != nil` patterns to separate assignment from comparison (see CODING_STYLE.md)
-- consoloidate error handling for unimplemented features (e.g., in compiler)
-- syntax->datum and datum->syntax have duplicate code.  Consolidate.
-- Refactor compiler primitive handling to use PrimitiveCompiler registry for less code redundancy
-- Refactor compiler literal handling to use LiteralCompiler registry for less code redundancy
-- Refactor compiler special form handling to use SpecialFormCompiler registry for less code redundancy
-- Refactor compiler expansion handling to use Expander registry for less code redundancy
-- Refactor compiler optimization handling to use Optimizer registry for less code redundancy
-- Refactor compiler evaluation handling to use Evaluator registry for less code redundancy
-- compile_validate.go needs to be reduced in size.  Separate methods for types instead of using interfaces.
-- evalWhenCompileForRuntime uses odd loop.  Analyze and simplify.
-- "Must" wrapper for ForEach so that proper list check can be removed
-- compile_eval_when.go: list of hardcoded phases.  can this be moved to a table-driven approach?
-- Turn tests into table-driven tests where applicable
-- Unwrap and Datums: simplify code by removing unnecessary wrapping and unwrapping of Datum types. Its laborious and duplicative in a few places.  Try to keep Datum wrapping/unwrapping at the edges of functions. Keep as much code as part of the methods on the objects.
-- Get rid of vardec functions (too confusing)
-- Fix tokenizer warnings: unreachable code (lines 1641, 1664) and unhandled errors
-- Refactor tokenizer duplicate code (see Tokenizer Refactoring Notes below)
-- Refactor ExpandPrimitiveForm into PrimitiveExpander registry (like PrimitiveCompiler)
-- Refactor "formName" processing for compiler-form. Form name should come from car of original form, but instead is being set on an object. Allow dynamic setting of the form-name. Note that the form sometimes is abstract, such as a parameter list or a literal - find a solution for this.
-- Refactor environment functions for less code redundancy
-- Rename token types for comments.
-- Number parsing in tokenizer is messy.  Refactor to reduce code redundancy and improve clarity.  Evaluate removing "signed" token types.
-- Consolidate tests into single table tests.  Many tests have the same code for running the tests but are in different files and test functions.  Combine into single table-driven tests where possible.
-- Scheme header "Program running, send SIGQUIT (Ctrl+\\) to dump stacks." should be output to stderr and add option for "--quiet"
-- fixup "( environment )" creation.
-- eval should take 1 or 2 arguments (second argument is optional environment)
-- parseComplex is messy - refactor to reduce code redundancy and improve clarity.
+- [ ] consoloidate error handling for unimplemented features (e.g., in compiler)
+- [ ] syntax->datum and datum->syntax have duplicate code.  Consolidate.
+- [ ] Refactor compiler primitive handling to use PrimitiveCompiler registry for less code redundancy
+- [ ] Refactor compiler literal handling to use LiteralCompiler registry for less code redundancy
+- [ ] Refactor compiler special form handling to use SpecialFormCompiler registry for less code redundancy
+- [ ] Refactor compiler expansion handling to use Expander registry for less code redundancy
+- [ ] Refactor compiler optimization handling to use Optimizer registry for less code redundancy
+- [ ] Refactor compiler evaluation handling to use Evaluator registry for less code redundancy
+- [ ] compile_validate.go needs to be reduced in size.  Separate methods for types instead of using interfaces.
+- [ ] evalWhenCompileForRuntime uses odd loop.  Analyze and simplify.
+- [ ] "Must" wrapper for ForEach so that proper list check can be removed
+- [ ] compile_eval_when.go: list of hardcoded phases.  can this be moved to a table-driven approach?
+- [ ] Turn tests into table-driven tests where applicable
+- [ ] Unwrap and Datums: simplify code by removing unnecessary wrapping and unwrapping of Datum types. Its laborious and duplicative in a few places.  Try to keep Datum wrapping/unwrapping at the edges of functions. Keep as much code as part of the methods on the objects.
+- [ ] Get rid of vardec functions (too confusing)
+- [ ] Fix tokenizer warnings: unreachable code (lines 1641, 1664) and unhandled errors
+- [ ] Refactor tokenizer duplicate code (see Tokenizer Refactoring Notes below)
+- [ ] Refactor ExpandPrimitiveForm into PrimitiveExpander registry (like PrimitiveCompiler)
+- [ ] Refactor "formName" processing for compiler-form. Form name should come from car of original form, but instead is being set on an object. Allow dynamic setting of the form-name. Note that the form sometimes is abstract, such as a parameter list or a literal - find a solution for this.
+- [ ] Refactor environment functions for less code redundancy
+- [ ] Rename token types for comments.
+- [ ] Number parsing in tokenizer is messy.  Refactor to reduce code redundancy and improve clarity.  Evaluate removing "signed" token types.
+- [ ] Consolidate tests into single table tests.  Many tests have the same code for running the tests but are in different files and test functions.  Combine into single table-driven tests where possible.
+- [ ] Scheme header "Program running, send SIGQUIT (Ctrl+\\) to dump stacks." should be output to stderr and add option for "--quiet"
+- [ ] fixup "( environment )" creation.
+- [ ] eval should take 1 or 2 arguments (second argument is optional environment)
+- [ ] parseComplex is messy - refactor to reduce code redundancy and improve clarity.
 
 Primitive Unit Tests
 --------------------
 
-**Status:** 219 of 224 primitives missing dedicated test files.
+**Status:** Many primitives have dedicated test files (89 test files exist).
 
 Each primitive file (`prim_*.go`) should have a matching `prim_*_test.go` file that:
 1. Executes Scheme code to test the primitive
@@ -78,247 +78,142 @@ func TestPrimName(t *testing.T) {
 ```
 
 ### Arithmetic (17 primitives)
-- [ ] `prim_add_test.go` - +, test: integers, floats, rationals, complex, big integers, mixed types, zero args, one arg
-- [ ] `prim_sub_test.go` - -, test: unary negation, binary subtraction, variadic, all numeric types
-- [ ] `prim_mul_test.go` - *, test: zero args (returns 1), all numeric types, overflow to big integer
-- [ ] `prim_div_test.go` - /, test: unary reciprocal, division, rational results, division by zero error
-- [ ] `prim_quotient_test.go` - quotient, test: positive/negative, truncation toward zero
-- [ ] `prim_remainder_test.go` - remainder, test: sign follows dividend
-- [ ] `prim_modulo_test.go` - modulo, test: sign follows divisor
-- [ ] `prim_gcd_test.go` - gcd, test: zero args, one arg, multiple args, negative numbers
-- [ ] `prim_lcm_test.go` - lcm, test: zero args, one arg, multiple args, zero in args
-- [ ] `prim_expt_test.go` - expt, test: integer powers, fractional powers, negative bases
-- [ ] `prim_sqrt_test.go` - sqrt, test: perfect squares, non-perfect, negative (complex result)
-- [ ] `prim_square_test.go` - square, test: all numeric types
-- [ ] `prim_max_test.go` - max, test: mixed types, single arg, NaN handling
-- [ ] `prim_min_test.go` - min, test: mixed types, single arg, NaN handling
+- [x] `prim_arithmetic_test.go` - +, -, *, /, quotient, remainder, modulo, gcd, lcm, expt, sqrt, square, max, min, abs, floor, ceiling, round, truncate (all tested)
 - [ ] `prim_exact_integer_sqrt_test.go` - exact-integer-sqrt, test: perfect squares, non-perfect (returns two values)
 - [ ] `prim_rationalize_test.go` - rationalize, test: tolerance parameter
 
-### Transcendental Functions (12 primitives)
-- [ ] `prim_exp_test.go` - exp, test: e^0=1, e^1=e, negative exponents
-- [ ] `prim_log_test.go` - log, test: log(1)=0, log(e)=1, two-arg form (base), negative (complex)
-- [ ] `prim_sin_test.go` - sin, test: sin(0)=0, sin(pi/2)=1, periodicity
-- [ ] `prim_cos_test.go` - cos, test: cos(0)=1, cos(pi)=-1
-- [ ] `prim_tan_test.go` - tan, test: tan(0)=0, tan(pi/4)=1
-- [ ] `prim_asin_test.go` - asin, test: asin(0)=0, asin(1)=pi/2, out of range (complex)
-- [ ] `prim_acos_test.go` - acos, test: acos(1)=0, acos(0)=pi/2
-- [ ] `prim_atan_test.go` - atan, test: one-arg form, two-arg form (atan2)
+### Transcendental Functions (8 primitives)
+- [x] `prim_trig_test.go` - exp, log, sin, cos, tan, asin, acos, atan (all tested including complex inputs, special values)
 
 ### Complex Numbers (6 primitives)
-- [ ] `prim_make_rectangular_test.go` - make-rectangular, test: real+imag parts
-- [ ] `prim_make_polar_test.go` - make-polar, test: magnitude+angle
-- [ ] `prim_real_part_test.go` - real-part, test: complex, real numbers (return self)
-- [ ] `prim_imag_part_test.go` - imag-part, test: complex, real numbers (return 0)
-- [ ] `prim_magnitude_test.go` - magnitude, test: complex, real (abs)
-- [ ] `prim_angle_test.go` - angle, test: complex, positive/negative real
+- [x] `prim_complex_test.go` - make-rectangular, real-part, imag-part, magnitude (all tested)
+- [x] `prim_complex_extra_test.go` - make-polar, angle (all tested including round-trip tests)
 
 ### Numeric Predicates (15 primitives)
-- [ ] `prim_zero_q_test.go` - zero?, test: all numeric types
-- [ ] `prim_positive_q_test.go` - positive?, test: integers, floats, rationals
-- [ ] `prim_negative_q_test.go` - negative?, test: integers, floats, rationals
-- [ ] `prim_odd_q_test.go` - odd?, test: integers only, error on non-integer
-- [ ] `prim_even_q_test.go` - even?, test: integers only
-- [ ] `prim_exact_q_test.go` - exact?, test: integers (true), floats (false)
-- [ ] `prim_inexact_q_test.go` - inexact?, test: floats (true), integers (false)
-- [ ] `prim_exact_integer_q_test.go` - exact-integer?, test: integers (true), rationals (false)
-- [ ] `prim_finite_q_test.go` - finite?, test: normal numbers (true), inf/nan (false)
-- [ ] `prim_infinite_q_test.go` - infinite?, test: +inf.0/-inf.0 (true)
-- [ ] `prim_nan_q_test.go` - nan?, test: +nan.0 (true)
-- [ ] `prim_integer_q_test.go` - integer?, test: all numeric types
-- [ ] `prim_rational_q_test.go` - rational?, test: integers, rationals (true), inf/nan (false)
-- [ ] `prim_real_q_test.go` - real?, test: real numbers (true), complex with imag (false)
+- [x] `prim_numeric_predicate_test.go` - zero?, odd?, even?, positive?, negative?, exact?, inexact?, exact-integer?, finite?, infinite?, nan?, number?, complex?, real?, rational?, integer? (all tested with multiple numeric types including BigInteger, BigFloat, special values)
+- [x] `prim_predicate_test.go` - zero?, positive?, negative?, odd?, even? (additional coverage)
+- [x] `prim_special_predicates_test.go` - finite?, infinite?, nan?, real-part (tested with rational and complex)
+- [x] `prim_exact_q_test.go`, `prim_inexact_q_test.go`, `prim_exact_integer_q_test.go` - additional exactness predicate tests
 
 ### Numeric Comparisons (5 primitives)
-- [ ] `prim_num_eq_test.go` - =, test: mixed types, transitivity, NaN behavior
-- [ ] `prim_num_lt_test.go` - <, test: chain comparison, mixed types
-- [ ] `prim_num_gt_test.go` - >, test: chain comparison
-- [ ] `prim_num_le_test.go` - <=, test: equality at boundaries
-- [ ] `prim_num_ge_test.go` - >=, test: equality at boundaries
+- [x] `prim_numeric_predicate_test.go` - =, <, >, <=, >= (all tested with mixed types, chains, BigInteger, special values, NaN behavior)
 
 ### Numeric Conversion (6 primitives)
-- [ ] `prim_exact_test.go` - exact, test: float->rational conversion
-- [ ] `prim_inexact_test.go` - inexact, test: integer->float, rational->float
-- [ ] `prim_numerator_test.go` - numerator, test: rationals, integers (return self)
-- [ ] `prim_denominator_test.go` - denominator, test: rationals, integers (return 1)
-- [ ] `prim_number_to_string_test.go` - number->string, test: radix parameter (2,8,10,16)
-- [ ] `prim_string_to_number_test.go` - string->number, test: radix, invalid strings (#f)
+- [x] `prim_exact_test.go` - exact (tested with integer, float, rational, error cases including inf/nan)
+- [x] `prim_inexact_test.go` - inexact (tested with integer, float, rational, complex)
+- [x] `prim_complex_test.go`, `prim_numeric_conversion_test.go` - numerator, denominator (tested with rationals, integers, floats)
+- [x] `prim_numeric_conversion_test.go` - number->string, string->number (tested with radix 2,8,10,16, invalid strings, various numeric types)
 
-### Division Operations (9 primitives)
-- [ ] `prim_floor_div_test.go` - floor/, test: returns quotient and remainder
-- [ ] `prim_floor_quotient_test.go` - floor-quotient
-- [ ] `prim_floor_remainder_test.go` - floor-remainder
-- [ ] `prim_truncate_div_test.go` - truncate/, test: returns quotient and remainder
-- [ ] `prim_truncate_quotient_test.go` - truncate-quotient
-- [ ] `prim_truncate_remainder_test.go` - truncate-remainder
+### Division Operations (6 primitives)
+- [x] `prim_division_test.go` - floor/, floor-quotient, floor-remainder, truncate/, truncate-quotient, truncate-remainder (all tested with various numeric types, positive/negative numbers, multiple values return)
 
 ### List Operations (20 primitives)
-- [ ] `prim_car_test.go` - car, test: pairs, lists, error on non-pair
-- [ ] `prim_cdr_test.go` - cdr, test: pairs, lists, improper lists
-- [ ] `prim_cons_test.go` - cons, test: building lists, improper pairs
-- [ ] `prim_set_car_test.go` - set-car!, test: mutation, error on non-pair
-- [ ] `prim_set_cdr_test.go` - set-cdr!, test: mutation
-- [ ] `prim_null_q_test.go` - null?, test: empty list (true), non-empty (false)
-- [ ] `prim_pair_q_test.go` - pair?, test: pairs (true), empty list (false)
-- [ ] `prim_list_q_test.go` - list?, test: proper lists, improper lists (false), circular (false)
-- [ ] `prim_length_test.go` - length, test: empty list, proper lists
-- [ ] `prim_append_test.go` - append, test: zero args, multiple lists, improper final arg
-- [ ] `prim_reverse_test.go` - reverse, test: empty list, proper lists
-- [ ] `prim_list_ref_test.go` - list-ref, test: first, middle, last, out of bounds error
-- [ ] `prim_list_set_test.go` - list-set!, test: mutation at various indices
-- [ ] `prim_list_tail_test.go` - list-tail, test: k=0, k=length
-- [ ] `prim_make_list_test.go` - make-list, test: with/without fill value
-- [ ] `prim_memq_test.go` - memq, test: found, not found, uses eq?
-- [ ] `prim_memv_test.go` - memv, test: found, not found, uses eqv?
-- [ ] `prim_member_test.go` - member, test: found, not found, uses equal?
-- [ ] `prim_assq_test.go` - assq, test: alist lookup with eq?
-- [ ] `prim_assv_test.go` - assv, test: alist lookup with eqv?
-- [ ] `prim_assoc_test.go` - assoc, test: alist lookup with equal?
+- [x] `prim_list_test.go` - car, cdr, cons, list, null?, pair?, list?, set-car!, set-cdr!, list-set!, make-list, append, length, reverse, list-ref, list-tail, memq, memv, member, assq, assv, assoc (all tested with various types, edge cases, error conditions)
 
 ### Equality Predicates (3 primitives)
-- [ ] `prim_eq_q_test.go` - eq?, test: identical objects, symbols, small integers
-- [ ] `prim_eqv_q_test.go` - eqv?, test: numbers, characters, booleans
-- [ ] `prim_equal_q_test.go` - equal?, test: deep comparison, lists, vectors, strings
+- [x] `prim_eq_q_test.go` - eq?, test: identical objects, symbols, small integers
+- [x] `prim_eqv_q_test.go` - eqv?, test: numbers, characters, booleans
+- [x] `prim_equal_q_test.go` - equal?, test: deep comparison, lists, vectors, strings
 
-### String Operations (20 primitives)
-- [ ] `prim_string_length_test.go` - string-length, test: empty, ASCII, Unicode
-- [ ] `prim_string_ref_test.go` - string-ref, test: first, last, out of bounds error
-- [ ] `prim_substring_test.go` - substring, test: start/end indices, empty result
-- [ ] `prim_string_append_test.go` - string-append, test: zero args, multiple strings
-- [ ] `prim_string_to_list_test.go` - string->list, test: with/without start/end indices
-- [ ] `prim_list_to_string_test.go` - list->string, test: empty list, character list
-- [ ] `prim_string_upcase_test.go` - string-upcase
-- [ ] `prim_string_downcase_test.go` - string-downcase
-- [ ] `prim_string_to_symbol_test.go` - string->symbol
-- [ ] `prim_symbol_to_string_test.go` - symbol->string
-- [ ] `prim_string_to_number_test.go` (see Numeric Conversion)
-- [ ] `prim_number_to_string_test.go` (see Numeric Conversion)
+### String Operations (12 primitives)
+- [x] `prim_string_test.go` - string-length, string-ref, substring, string-append, string->list, list->string, string->symbol, symbol->string, make-string, string-copy, string-upcase, string-downcase, string-foldcase, string-set!, string-fill!, string-copy!, string-map, string-for-each, string, string? (all tested with ASCII, Unicode, edge cases)
 
 ### String Comparisons (10 primitives)
-- [ ] `prim_string_eq_test.go` - string=?, test: equal, not equal, empty strings
-- [ ] `prim_string_lt_test.go` - string<?, test: lexicographic ordering
-- [ ] `prim_string_gt_test.go` - string>?
-- [ ] `prim_string_le_test.go` - string<=?
-- [ ] `prim_string_ge_test.go` - string>=?
-- [ ] `prim_string_ci_eq_test.go` - string-ci=?, test: case-insensitive
-- [ ] `prim_string_ci_lt_test.go` - string-ci<?
-- [ ] `prim_string_ci_gt_test.go` - string-ci>?
-- [ ] `prim_string_ci_le_test.go` - string-ci<=?
-- [ ] `prim_string_ci_ge_test.go` - string-ci>=?
+- [x] `prim_string_compare_test.go` - string=?, string<?, string>?, string<=?, string>=?, string-ci=?, string-ci<?, string-ci>?, string-ci<=?, string-ci>=? (all tested with variadic args, case-insensitive, Unicode)
 
 ### Character Operations (12 primitives)
-- [ ] `prim_char_to_integer_test.go` - char->integer
-- [ ] `prim_integer_to_char_test.go` - integer->char, test: valid/invalid code points
-- [ ] `prim_char_upcase_test.go` - char-upcase
-- [ ] `prim_char_downcase_test.go` - char-downcase
-- [ ] `prim_char_foldcase_test.go` - char-foldcase
-- [ ] `prim_digit_value_test.go` - digit-value, test: digits return value, non-digits return #f
-- [ ] `prim_char_eq_test.go` - char=?
-- [ ] `prim_char_lt_test.go` - char<?
-- [ ] `prim_char_gt_test.go` - char>?
-- [ ] `prim_char_le_test.go` - char<=?
-- [ ] `prim_char_ge_test.go` - char>=?
+- [x] `prim_char_test.go` - char=?, char<?, char>?, char<=?, char>=?, char->integer, integer->char, char-ci=?, char-ci<?, char-ci>?, char-ci<=?, char-ci>=?, char-alphabetic?, char-numeric?, char-whitespace?, char-upper-case?, char-lower-case?, char-upcase, char-downcase, char-foldcase, digit-value (all tested including variadic, case-insensitive, Unicode)
 
-### Vector Operations (6 primitives) - partially tested
-- [ ] `prim_make_vector_test.go` - expand existing tests for BigInteger indices
-- [ ] `prim_vector_length_test.go` - expand existing tests
-- [ ] `prim_vector_ref_test.go` - expand existing tests, out of bounds error
-- [ ] `prim_vector_set_test.go` - vector-set!, test: mutation
-- [ ] `prim_vector_to_list_test.go` - expand existing tests
-- [ ] `prim_list_to_vector_test.go` - expand existing tests
+### Vector Operations (6 primitives)
+- [x] `prim_vector_test.go` - make-vector, vector-length, vector-ref, vector->list, list->vector (all tested)
+- [ ] `prim_vector_set_test.go` - vector-set!, test: mutation (used in other tests but no dedicated tests)
 
-### Bytevector Operations (8 primitives) - partially tested
-- [ ] `prim_make_bytevector_test.go` - expand for edge cases
-- [ ] `prim_bytevector_length_test.go`
-- [ ] `prim_bytevector_u8_ref_test.go`
-- [ ] `prim_bytevector_u8_set_test.go`
-- [ ] `prim_bytevector_copy_test.go`
-- [ ] `prim_bytevector_copy_bang_test.go`
-- [ ] `prim_bytevector_append_test.go`
-- [ ] `prim_utf8_to_string_test.go` / `prim_string_to_utf8_test.go` (partially done)
+### Bytevector Operations (10 primitives)
+- [x] `prim_bytevector_test.go` - bytevector?, make-bytevector, bytevector, bytevector-length, bytevector-u8-ref, bytevector-u8-set!, bytevector-copy, bytevector-append, utf8->string, string->utf8 (all tested with edge cases, round-trip tests)
+- [ ] `prim_bytevector_copy_bang_test.go` - bytevector-copy!, test: mutation with start/end indices
 
 ### I/O Ports (25 primitives)
 - [ ] `prim_open_input_file_test.go`
 - [ ] `prim_open_output_file_test.go`
-- [ ] `prim_open_binary_input_file_test.go`
-- [ ] `prim_open_binary_output_file_test.go`
+- [x] `prim_open_binary_input_file_test.go`
+- [x] `prim_open_binary_output_file_test.go`
 - [ ] `prim_open_input_string_test.go`
 - [ ] `prim_open_output_string_test.go`
 - [ ] `prim_open_input_bytevector_test.go`
 - [ ] `prim_open_output_bytevector_test.go`
 - [ ] `prim_get_output_string_test.go`
 - [ ] `prim_get_output_bytevector_test.go`
-- [ ] `prim_close_port_test.go`
+- [x] `prim_close_port_test.go`
 - [ ] `prim_input_port_q_test.go`
 - [ ] `prim_output_port_q_test.go`
 - [ ] `prim_port_q_test.go`
 - [ ] `prim_input_port_open_q_test.go`
 - [ ] `prim_output_port_open_q_test.go`
-- [ ] `prim_current_input_port_test.go`
-- [ ] `prim_current_output_port_test.go`
-- [ ] `prim_call_with_input_file_test.go`
-- [ ] `prim_call_with_output_file_test.go`
-- [ ] `prim_with_input_from_file_test.go`
-- [ ] `prim_with_output_to_file_test.go`
-- [ ] `prim_eof_object_test.go`
-- [ ] `prim_eof_object_q_test.go`
+- [x] `prim_current_input_port_test.go` (in prim_current_port_test.go)
+- [x] `prim_current_output_port_test.go` (in prim_current_port_test.go)
+- [x] `prim_call_with_input_file_test.go`
+- [x] `prim_call_with_output_file_test.go`
+- [x] `prim_with_input_from_file_test.go`
+- [x] `prim_with_output_to_file_test.go`
+- [x] `prim_eof_object_test.go`
+- [x] `prim_eof_object_q_test.go` (in prim_eof_object_test.go)
 
 ### Read/Write (8 primitives)
 - [ ] `prim_read_test.go`
 - [ ] `prim_read_syntax_test.go`
 - [ ] `prim_read_token_test.go`
 - [ ] `prim_write_test.go`
-- [ ] `prim_write_simple_test.go`
-- [ ] `prim_write_shared_test.go`
+- [x] `prim_write_simple_test.go`
+- [x] `prim_write_shared_test.go`
 - [ ] `prim_display_test.go`
 - [ ] `prim_write_char_test.go`
 - [ ] `prim_newline_test.go`
 
 ### Control Flow (8 primitives)
-- [ ] `prim_apply_test.go` - apply, test: with list, with multiple args + list
-- [ ] `prim_map_test.go` - map, test: single list, multiple lists, empty lists
-- [ ] `prim_for_each_test.go` - for-each, test: side effects, return value
+- [x] `prim_apply_test.go` - apply, test: with list, with multiple args + list
+- [x] `prim_map_test.go` - map, test: single list, multiple lists, empty lists
+- [x] `prim_for_each_test.go` - for-each, test: side effects, return value
 - [ ] `prim_call_cc_test.go` - expand existing tests for edge cases
-- [ ] `prim_call_with_values_test.go` - test: producer/consumer pattern
-- [ ] `prim_values_test.go` - values, test: zero, one, multiple values
-- [ ] `prim_dynamic_wind_test.go` - test: before/after thunks, with continuations
-- [ ] `prim_not_test.go` - not, test: #f->#t, everything else->#f
+- [x] `prim_call_with_values_test.go` - test: producer/consumer pattern
+- [x] `prim_values_test.go` - values, test: zero, one, multiple values
+- [x] `prim_dynamic_wind_test.go` - test: before/after thunks, with continuations
+- [x] `prim_not_test.go` - not, test: #f->#t, everything else->#f
 
 ### Exception Handling (6 primitives)
-- [ ] `prim_with_exception_handler_test.go`
-- [ ] `prim_raise_test.go`
-- [ ] `prim_raise_continuable_test.go`
-- [ ] `prim_error_test.go`
-- [ ] `prim_error_object_q_test.go`
-- [ ] `prim_error_object_message_test.go`
-- [ ] `prim_error_object_irritants_test.go`
+- [x] `prim_with_exception_handler_test.go` (in prim_exception_test.go)
+- [x] `prim_raise_test.go` (in prim_exception_test.go)
+- [x] `prim_raise_continuable_test.go` (in prim_exception_test.go)
+- [x] `prim_error_test.go` (in prim_exception_test.go)
+- [x] `prim_error_object_q_test.go` (in prim_exception_test.go)
+- [x] `prim_error_object_message_test.go` (in prim_exception_test.go)
+- [x] `prim_error_object_irritants_test.go` (in prim_exception_test.go)
 
 ### Promises (4 primitives)
-- [ ] `prim_make_promise_test.go`
-- [ ] `prim_make_lazy_promise_test.go`
-- [ ] `prim_force_test.go` - test: memoization, multiple force calls
+- [x] `prim_make_promise_test.go` (in prim_promise_test.go)
+- [x] `prim_make_lazy_promise_test.go` (in prim_promise_test.go)
+- [x] `prim_force_test.go` - test: memoization, multiple force calls (in prim_promise_test.go)
 
 ### Parameters (2 primitives)
-- [ ] `prim_make_parameter_test.go` - test: with/without converter
+- [x] `prim_make_parameter_test.go` - test: with/without converter (in prim_parameter_test.go)
 
 ### Environment/Eval (6 primitives)
-- [ ] `prim_eval_test.go`
-- [ ] `prim_environment_test.go`
-- [ ] `prim_interaction_environment_test.go`
-- [ ] `prim_scheme_report_environment_test.go`
-- [ ] `prim_null_environment_test.go`
-- [ ] `prim_load_test.go`
+- [x] `prim_eval_test.go` (in prim_eval_env_test.go)
+- [x] `prim_environment_test.go` (in prim_eval_env_test.go)
+- [x] `prim_interaction_environment_test.go` (in prim_eval_env_test.go)
+- [x] `prim_scheme_report_environment_test.go` (in prim_eval_env_test.go)
+- [x] `prim_null_environment_test.go` (in prim_eval_env_test.go)
+- [x] `prim_load_test.go` (in prim_delete_load_test.go)
 
 ### Syntax Operations (8 primitives)
-- [ ] `prim_datum_to_syntax_test.go`
-- [ ] `prim_syntax_to_datum_test.go`
-- [ ] `prim_identifier_q_test.go`
-- [ ] `prim_bound_identifier_equal_q_test.go`
-- [ ] `prim_free_identifier_equal_q_test.go`
-- [ ] `prim_syntax_local_value_test.go`
-- [ ] `prim_syntax_local_introduce_test.go`
-- [ ] `prim_syntax_local_identifier_as_binding_test.go`
-- [ ] `prim_make_compile_time_value_test.go`
+- [x] `prim_datum_to_syntax_test.go` (in prim_identifier_test.go)
+- [x] `prim_syntax_to_datum_test.go` (in prim_identifier_test.go)
+- [x] `prim_identifier_q_test.go` (in prim_identifier_test.go)
+- [x] `prim_bound_identifier_equal_q_test.go` (in prim_identifier_test.go)
+- [x] `prim_free_identifier_equal_q_test.go` (in prim_identifier_test.go)
+- [x] `prim_syntax_local_value_test.go` (in prim_identifier_test.go)
+- [x] `prim_syntax_local_introduce_test.go` (in prim_identifier_test.go)
+- [x] `prim_syntax_local_identifier_as_binding_test.go` (in prim_identifier_test.go)
+- [x] `prim_make_compile_time_value_test.go` (in prim_identifier_test.go)
 
 ### Expansion (3 primitives)
 - [ ] `prim_expand_test.go`
@@ -326,31 +221,31 @@ func TestPrimName(t *testing.T) {
 - [ ] `prim_compile_test.go`
 
 ### File System (2 primitives)
-- [ ] `prim_file_exists_q_test.go`
-- [ ] `prim_delete_file_test.go`
+- [x] `prim_file_exists_q_test.go` (in prim_file_env_test.go)
+- [x] `prim_delete_file_test.go` (in prim_delete_load_test.go)
 
 ### Process/Environment (5 primitives)
-- [ ] `prim_command_line_test.go`
+- [x] `prim_command_line_test.go` (in prim_file_env_test.go)
 - [ ] `prim_exit_test.go`
 - [ ] `prim_emergency_exit_test.go`
-- [ ] `prim_get_environment_variable_test.go`
-- [ ] `prim_get_environment_variables_test.go`
-- [ ] `prim_features_test.go`
+- [x] `prim_get_environment_variable_test.go` (in prim_file_env_test.go)
+- [x] `prim_get_environment_variables_test.go` (in prim_file_env_test.go)
+- [x] `prim_features_test.go` (in prim_misc_test.go)
 
 ### Time (4 primitives)
-- [ ] `prim_current_second_test.go`
-- [ ] `prim_current_jiffy_test.go`
-- [ ] `prim_jiffies_per_second_test.go`
-- [ ] `prim_time_test.go`
+- [x] `prim_current_second_test.go` (in prim_misc_test.go)
+- [x] `prim_current_jiffy_test.go` (in prim_misc_test.go)
+- [x] `prim_jiffies_per_second_test.go` (in prim_misc_test.go)
+- [x] `prim_time_test.go` (in prim_srfi18_time_test.go)
 
 ### Threading - SRFI-18 (3 primitives)
-- [ ] `prim_thread_test.go`
-- [ ] `prim_mutex_test.go`
-- [ ] `prim_condvar_test.go`
+- [x] `prim_thread_test.go`
+- [x] `prim_mutex_test.go`
+- [x] `prim_condvar_test.go`
 
 ### Go Concurrency (2 primitives)
-- [ ] `prim_channel_test.go`
-- [ ] `prim_sync_test.go` - WaitGroup, RWMutex, Once, Atomic
+- [x] `prim_channel_test.go`
+- [x] `prim_sync_test.go` - WaitGroup, RWMutex, Once, Atomic
 
 ### Miscellaneous
 - [ ] `prim_utils_test.go`
@@ -369,22 +264,22 @@ R7RS Missing Features
 ### Tokenizer (R7RS 7.1.1 Lexical Structure)
 
 **Completely Missing:**
-- Extended symbols (`|...|`): Tokenizer returns `ExtendedSymbolStart` for `|` but never reads contents or closing `|`. Parser doesn't handle this token. R7RS requires `|<symbol element>*|` where `<symbol element>` is any character except `\` or `|`, or escape sequences.
-- Escapes inside extended symbols: Within `|...|`, R7RS requires `\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, and `\x<hex>;`
-- `\|` escape in strings: R7RS requires `\|` to produce vertical bar. Not in `readIntraStringEscape` (tokenizer.go:687-724)
-- String line continuation: R7RS requires `\<intraline-whitespace>*<line-ending><intraline-whitespace>*` to escape nothing (continuation). Current code just adds whitespace chars (line 714-715)
-- Hex escape semicolon terminator in strings: R7RS requires `\x<hex>;` format. Current code reads hex digits without expecting terminating semicolon (line 693)
+- [ ] Extended symbols (`|...|`): Tokenizer returns `ExtendedSymbolStart` for `|` but never reads contents or closing `|`. Parser doesn't handle this token. R7RS requires `|<symbol element>*|` where `<symbol element>` is any character except `\` or `|`, or escape sequences.
+- [ ] Escapes inside extended symbols: Within `|...|`, R7RS requires `\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, and `\x<hex>;`
+- [ ] `\|` escape in strings: R7RS requires `\|` to produce vertical bar. Not in `readIntraStringEscape` (tokenizer.go:687-724)
+- [ ] String line continuation: R7RS requires `\<intraline-whitespace>*<line-ending><intraline-whitespace>*` to escape nothing (continuation). Current code just adds whitespace chars (line 714-715)
+- [ ] Hex escape semicolon terminator in strings: R7RS requires `\x<hex>;` format. Current code reads hex digits without expecting terminating semicolon (line 693)
 
 **Partially Implemented:**
-- Exponent markers: Only `e`/`E` supported. R7RS also allows `s`, `f`, `d`, `l` for short/single/double/long precision
-- Inexact digit placeholder `#`: R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented
+- [ ] Exponent markers: Only `e`/`E` supported. R7RS also allows `s`, `f`, `d`, `l` for short/single/double/long precision
+- [ ] Inexact digit placeholder `#`: R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented
 
 ### Primitives
 
-- Box primitives: `box`, `box?`, `unbox`, `set-box!` (Box type exists in values/box.go but no Scheme primitives registered)
-- Hashtable primitives: `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`, `hashtable-keys`, `hashtable-values`, `hashtable-size`, `hashtable-copy`, `hashtable-clear!` (Hashtable type exists in values/hashtable.go but no Scheme primitives; also current implementation only supports string keys, not arbitrary Scheme values)
-- BigInteger: No automatic promotion from Integer or `#bigint` reader syntax (BigInteger type exists in values/big_integer.go)
-- BigFloat: No automatic promotion from Float or `#bigfloat` reader syntax (BigFloat type exists in values/big_float.go)
+- [ ] Box primitives: `box`, `box?`, `unbox`, `set-box!` (Box type exists in values/box.go but no Scheme primitives registered)
+- [ ] Hashtable primitives: `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`, `hashtable-keys`, `hashtable-values`, `hashtable-size`, `hashtable-copy`, `hashtable-clear!` (Hashtable type exists in values/hashtable.go but no Scheme primitives; also current implementation only supports string keys, not arbitrary Scheme values)
+- [ ] BigInteger: No automatic promotion from Integer or `#bigint` reader syntax (BigInteger type exists in values/big_integer.go)
+- [ ] BigFloat: No automatic promotion from Float or `#bigfloat` reader syntax (BigFloat type exists in values/big_float.go)
 
 Library Status
 --------------
@@ -417,30 +312,30 @@ Future Extensions
 ### Standard Libraries
 
 **Network Libraries (Racket-compatible)**
-- TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
-- HTTP client/server primitives
-- SSL/TLS support
-- DNS resolution
+- [ ] TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
+- [ ] HTTP client/server primitives
+- [ ] SSL/TLS support
+- [ ] DNS resolution
 
 **OS Libraries (Racket-compatible)**
-- Process execution (subprocess, system, system*)
-- Process control (kill, wait)
-- Fork/exec primitives
-- Environment variables (getenv, putenv)
-- File system operations beyond R7RS (permissions, symlinks, stat)
-- Signal handling
+- [ ] Process execution (subprocess, system, system*)
+- [ ] Process control (kill, wait)
+- [ ] Fork/exec primitives
+- [ ] Environment variables (getenv, putenv)
+- [ ] File system operations beyond R7RS (permissions, symlinks, stat)
+- [ ] Signal handling
 
 **Unit Testing Library**
-- Test case definition (test, test-case, test-suite)
-- Assertions (check-equal?, check-true, check-false, check-exn)
-- Test runners with reporting
-- Setup/teardown fixtures
+- [ ] Test case definition (test, test-case, test-suite)
+- [ ] Assertions (check-equal?, check-true, check-false, check-exn)
+- [ ] Test runners with reporting
+- [ ] Setup/teardown fixtures
 
 **Logging Library**
-- Log levels (debug, info, warn, error, fatal)
-- Structured logging with key-value pairs
-- Multiple outputs (console, file, custom handlers)
-- Log formatting and filtering
+- [ ] Log levels (debug, info, warn, error, fatal)
+- [ ] Structured logging with key-value pairs
+- [ ] Multiple outputs (console, file, custom handlers)
+- [ ] Log formatting and filtering
 
 ### Multithreading
 
@@ -450,13 +345,13 @@ See **DESIGN_MULTITHREADING.md** for full implementation plan.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1 | Thread infrastructure, thread-safe globals | Not started |
-| 2 | Basic thread primitives (make-thread, thread-start!, thread-join!) | Not started |
-| 3 | Mutex primitives (make-mutex, mutex-lock!, mutex-unlock!) | Not started |
-| 4 | Condition variables | Not started |
-| 5 | Go channels (make-channel, channel-send!, channel-receive, channel-select) | Not started |
-| 6 | Go sync extensions (WaitGroup, RWMutex, Once, atomics) | Not started |
-| 7 | Exception handling integration | Not started |
+| 1 | Thread infrastructure, thread-safe globals | Complete |
+| 2 | Basic thread primitives (make-thread, thread-start!, thread-join!) | Complete |
+| 3 | Mutex primitives (make-mutex, mutex-lock!, mutex-unlock!) | Complete |
+| 4 | Condition variables | Complete |
+| 5 | Go channels (make-channel, channel-send!, channel-receive, channel-select) | Complete |
+| 6 | Go sync extensions (WaitGroup, RWMutex, Once, atomics) | Complete |
+| 7 | Exception handling integration | Complete |
 | 8 | call/cc and dynamic-wind integration | Not started |
 
 **Key challenges:**
@@ -515,19 +410,19 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 - `|{text}|` — Verbatim text (no escaping)
 
 **Implementation phases:**
-1. Tokenizer: Recognize `@` as reader dispatch character
-2. Parser: Handle `@`-expression forms and text blocks
-3. Integration: Enable/disable via reader flag or `#lang at-exp`
+- [ ] Tokenizer: Recognize `@` as reader dispatch character
+- [ ] Parser: Handle `@`-expression forms and text blocks
+- [ ] Integration: Enable/disable via reader flag or `#lang at-exp`
 
 **References:**
 - https://docs.racket-lang.org/scribble/reader.html
 - https://docs.racket-lang.org/at-exp/index.html
 
 ### Arbitrary Precision Numbers
-Tagged literals: `#bigint`, `#bigfloat` using Go's `big.Int` and `big.Float`.
+- [ ] Tagged literals: `#bigint`, `#bigfloat` using Go's `big.Int` and `big.Float`.
 
 ### Go FFI
-Registry-based (Phase 1) → Reflection-based (Phase 2) → Plugin support (Phase 3).
+- [ ] Registry-based (Phase 1) → Reflection-based (Phase 2) → Plugin support (Phase 3).
 See detailed design notes in DESIGN_GO_FFI.md.
 
 ### Runtime Source Location Tracking
@@ -556,30 +451,30 @@ See **DESIGN_SOURCE_TRACKING.md** for full implementation plan.
 - Debugger integration in VM `Run()` loop
 
 **Remaining work to fully utilize:**
-- Wire up compilation to record source locations in source map
-- Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
-- Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
+- [ ] Wire up compilation to record source locations in source map
+- [ ] Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
+- [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
 
 ---
 
 Tokenizer Refactoring Notes
 ---------------------------
 Potential helper functions to reduce ~200-300 lines:
-1. `readRadixPrefix` — consolidate #b/#o/#d/#x handling
-2. `readBooleanLiteral` — consolidate #t/#true and #f/#false
-3. `scanKeyword` — unify scan(), scanCaseInsensitive(), readToken()
-4. `readDecimalFractionWithExponent` — extract decimal+exponent pattern
-5. `readImaginarySuffix` — consolidate imaginary number suffixes
-6. `readExplicitSignNumber` — consolidate +/- number handling
-7. `advanceOrError` — combine next() + error check
-8. `checkDelimiter` — replace inline delimiter checking
-9. `readInfNan` — consolidate inf.0/nan.0 parsing
+- [ ] `readRadixPrefix` — consolidate #b/#o/#d/#x handling
+- [ ] `readBooleanLiteral` — consolidate #t/#true and #f/#false
+- [ ] `scanKeyword` — unify scan(), scanCaseInsensitive(), readToken()
+- [ ] `readDecimalFractionWithExponent` — extract decimal+exponent pattern
+- [ ] `readImaginarySuffix` — consolidate imaginary number suffixes
+- [ ] `readExplicitSignNumber` — consolidate +/- number handling
+- [ ] `advanceOrError` — combine next() + error check
+- [ ] `checkDelimiter` — replace inline delimiter checking
+- [ ] `readInfNan` — consolidate inf.0/nan.0 parsing
 
-Reflection 
+Reflection
 ----------
-procedures for reflection into the environment - lists of bound symbol names.  Parameters for procedures.  Types and predicates for types.
+- [ ] procedures for reflection into the environment - lists of bound symbol names.  Parameters for procedures.  Types and predicates for types.
 
 Event Callbacks
 ---------------
-variables to hold event callback methods for expansion, compiling and some low level runtime functions (setting values - for debugging).
+- [ ] variables to hold event callback methods for expansion, compiling and some low level runtime functions (setting values - for debugging).
 
