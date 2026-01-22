@@ -30,10 +30,10 @@ import (
 	"wile/environment"
 	"wile/machine"
 	"wile/parser"
+	"wile/repl"
 	"wile/runtime"
 	"wile/syntax"
 
-	"github.com/ergochat/readline"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -76,15 +76,8 @@ func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machi
 }
 
 func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
-	return runWithDebugger(ctx, tpl, env, nil)
-}
-
-func runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame, debugger *machine.Debugger) (machine.MultipleValues, error) {
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(ctx, cont)
-	if debugger != nil {
-		mc.SetDebugger(debugger)
-	}
 	err := mc.Run()
 	if err != nil {
 		return nil, err
@@ -201,7 +194,7 @@ func main() {
 		runFile(ctx, env, fin, opts.File)
 		return
 	}
-	// interactive REPL
+	// interactive REPL using the repl package
 	runREPL(ctx, env)
 }
 
@@ -227,203 +220,12 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 	}
 }
 
-// runREPL runs an interactive Read-Eval-Print Loop with line editing
+// runREPL runs an interactive Read-Eval-Print Loop using the repl package
 func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
-	rl, err := readline.NewFromConfig(&readline.Config{
-		Prompt:          "> ",
-		InterruptPrompt: "^C",
-		EOFPrompt:       "",
-		HistoryFile:     getHistoryFile(),
-		HistoryLimit:    1000,
-	})
-	if err != nil {
-		// Fall back to simple REPL if readline fails
-		runSimpleREPL(ctx, env)
-		return
+	r := repl.New(env)
+	if err := r.Run(ctx); err != nil {
+		Failf(err, "REPL error")
 	}
-	defer rl.Close() //nolint:errcheck
-
-	// Create debug context
-	debugCtx := NewDebugContext()
-
-	// Set up break callback
-	debugCtx.Debugger().OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
-		debugCtx.SetCurrentMC(mc)
-		if bp != nil {
-			fmt.Printf("\nBreakpoint %d hit", bp.ID)
-			source := mc.CurrentSource()
-			if source != nil {
-				fmt.Printf(" at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
-			}
-			fmt.Println()
-		} else {
-			fmt.Print("\nStepped")
-			source := mc.CurrentSource()
-			if source != nil {
-				fmt.Printf(" to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
-			}
-			fmt.Println()
-		}
-	})
-
-	var inputBuffer strings.Builder
-
-	for {
-		line, err := rl.ReadLine()
-		if err != nil {
-			if err == readline.ErrInterrupt {
-				// Ctrl-C: clear current input and continue
-				inputBuffer.Reset()
-				rl.SetPrompt("> ")
-				continue
-			}
-			if err == io.EOF {
-				// Ctrl-D: exit
-				fmt.Println()
-				return
-			}
-			// Other error
-			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-			continue
-		}
-
-		// Check for debug commands before parsing as Scheme
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, ",") && inputBuffer.Len() == 0 {
-			debugCtx.HandleDebugCommand(trimmed)
-			continue
-		}
-
-		// Accumulate input
-		if inputBuffer.Len() > 0 {
-			inputBuffer.WriteString("\n")
-		}
-		inputBuffer.WriteString(line)
-
-		// Try to parse the accumulated input
-		input := inputBuffer.String()
-		rdr := strings.NewReader(input)
-		p := parser.NewParser(env, true, rdr)
-
-		stx, parseErr := p.ReadSyntax(context.TODO())
-		if parseErr != nil {
-			if isIncompleteInput(parseErr) {
-				// Incomplete expression - prompt for more input
-				rl.SetPrompt("  ")
-				continue
-			}
-			// Parse error - display and reset
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", parseErr)
-			inputBuffer.Reset()
-			rl.SetPrompt("> ")
-			continue
-		}
-
-		// Successfully parsed - evaluate
-		inputBuffer.Reset()
-		rl.SetPrompt("> ")
-
-		// Compile
-		tpl, compileErr := compile(env, stx)
-		if compileErr != nil {
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", compileErr)
-			continue
-		}
-
-		// Run with debugger
-		mv, runErr := runWithDebugger(ctx, tpl, env, debugCtx.Debugger())
-		if runErr != nil {
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", runErr)
-			continue
-		}
-
-		// Print result (unless void)
-		if !mv.IsVoid() {
-			fmt.Println(mv.SchemeString())
-		}
-	}
-}
-
-// runSimpleREPL is a fallback REPL without readline support
-func runSimpleREPL(ctx context.Context, env *environment.EnvironmentFrame) {
-	Printf("> ")
-	reader := bufio.NewReader(os.Stdin)
-	var inputBuffer strings.Builder
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println()
-				return
-			}
-			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-			continue
-		}
-
-		inputBuffer.WriteString(line)
-		input := inputBuffer.String()
-		rdr := strings.NewReader(input)
-		p := parser.NewParser(env, true, rdr)
-
-		stx, parseErr := p.ReadSyntax(context.TODO())
-		if parseErr != nil {
-			if isIncompleteInput(parseErr) {
-				Printf("  ")
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", parseErr)
-			inputBuffer.Reset()
-			Printf("> ")
-			continue
-		}
-
-		inputBuffer.Reset()
-
-		tpl, compileErr := compile(env, stx)
-		if compileErr != nil {
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", compileErr)
-			Printf("> ")
-			continue
-		}
-
-		mv, runErr := run(ctx, tpl, env)
-		if runErr != nil {
-			fmt.Fprintf(os.Stderr, "Exception: %v\n", runErr)
-			Printf("> ")
-			continue
-		}
-
-		if !mv.IsVoid() {
-			Printf("%s\n", mv.SchemeString())
-		}
-		Printf("> ")
-	}
-}
-
-// isIncompleteInput checks if the parse error indicates incomplete input
-// (e.g., unclosed parenthesis, unterminated string)
-func isIncompleteInput(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) {
-		return true
-	}
-	// Check for common incomplete input errors
-	errStr := err.Error()
-	return strings.Contains(errStr, "unexpected EOF") ||
-		strings.Contains(errStr, "unterminated") ||
-		strings.Contains(errStr, "unclosed")
-}
-
-// getHistoryFile returns the path for the REPL history file
-func getHistoryFile() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home + "/.wile_history"
 }
 
 func Printf(fmtstr string, args ...interface{}) {

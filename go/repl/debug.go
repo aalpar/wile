@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+//nolint:errcheck // Debug command output doesn't need error handling
+package repl
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,32 +25,32 @@ import (
 	"wile/machine"
 )
 
-// DebugContext holds the state for debug commands
+// DebugContext holds the state for debug commands.
 type DebugContext struct {
 	debugger  *machine.Debugger
 	currentMC *machine.MachineContext
 }
 
-// NewDebugContext creates a new debug context
+// NewDebugContext creates a new debug context.
 func NewDebugContext() *DebugContext {
 	return &DebugContext{
 		debugger: machine.NewDebugger(),
 	}
 }
 
-// Debugger returns the debugger instance
+// Debugger returns the debugger instance.
 func (dc *DebugContext) Debugger() *machine.Debugger {
 	return dc.debugger
 }
 
-// SetCurrentMC sets the current machine context (for inspection commands)
+// SetCurrentMC sets the current machine context (for inspection commands).
 func (dc *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
 	dc.currentMC = mc
 }
 
-// HandleDebugCommand processes a debug command starting with ','
-// Returns true if a command was handled, false otherwise
-func (dc *DebugContext) HandleDebugCommand(line string) bool {
+// HandleDebugCommand processes a debug command starting with ','.
+// Returns true if a command was handled, false otherwise.
+func (dc *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, ",") {
 		return false
@@ -64,82 +66,82 @@ func (dc *DebugContext) HandleDebugCommand(line string) bool {
 
 	switch cmd {
 	case "break", "b":
-		dc.cmdBreak(args)
+		dc.cmdBreak(args, out)
 	case "delete", "d":
-		dc.cmdDelete(args)
+		dc.cmdDelete(args, out)
 	case "list", "l":
-		dc.cmdList()
+		dc.cmdList(out)
 	case "enable":
-		dc.cmdEnable(args)
+		dc.cmdEnable(args, out)
 	case "disable":
-		dc.cmdDisable(args)
+		dc.cmdDisable(args, out)
 	case "step", "s":
-		dc.cmdStep()
+		dc.cmdStep(out)
 	case "next", "n":
-		dc.cmdNext()
+		dc.cmdNext(out)
 	case "finish", "f":
-		dc.cmdFinish()
+		dc.cmdFinish(out)
 	case "continue", "c":
-		dc.cmdContinue()
+		dc.cmdContinue(out)
 	case "backtrace", "bt":
-		dc.cmdBacktrace()
+		dc.cmdBacktrace(out)
 	case "where":
-		dc.cmdWhere()
+		dc.cmdWhere(out)
 	case "help", "h", "?":
-		dc.cmdHelp()
+		dc.cmdHelp(out)
 	default:
-		fmt.Printf("Unknown command: %s (type ,help for commands)\n", cmd)
+		fmt.Fprintf(out, "Unknown command: %s (type ,help for commands)\n", cmd)
 	}
 
 	return true
 }
 
-// cmdBreak sets a breakpoint
-func (dc *DebugContext) cmdBreak(args []string) {
+// cmdBreak sets a breakpoint.
+func (dc *DebugContext) cmdBreak(args []string, out io.Writer) {
 	if len(args) < 1 {
-		fmt.Println("Usage: ,break FILE:LINE[:COLUMN]")
+		fmt.Fprintln(out, "Usage: ,break FILE:LINE[:COLUMN]")
 		return
 	}
 
 	file, line, col := parseLocation(args[0])
 	if file == "" || line == 0 {
-		fmt.Println("Invalid location format. Use FILE:LINE or FILE:LINE:COLUMN")
+		fmt.Fprintln(out, "Invalid location format. Use FILE:LINE or FILE:LINE:COLUMN")
 		return
 	}
 
 	id := dc.debugger.SetBreakpoint(file, line, col)
-	fmt.Printf("Breakpoint %d set at %s:%d", id, file, line)
+	fmt.Fprintf(out, "Breakpoint %d set at %s:%d", id, file, line)
 	if col > 0 {
-		fmt.Printf(":%d", col)
+		fmt.Fprintf(out, ":%d", col)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 }
 
-// cmdDelete removes a breakpoint
-func (dc *DebugContext) cmdDelete(args []string) {
+// cmdDelete removes a breakpoint.
+func (dc *DebugContext) cmdDelete(args []string, out io.Writer) {
 	if len(args) < 1 {
-		fmt.Println("Usage: ,delete ID")
+		fmt.Fprintln(out, "Usage: ,delete ID")
 		return
 	}
 
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("Invalid breakpoint ID: %s\n", args[0])
+		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
 		return
 	}
 
 	if dc.debugger.RemoveBreakpoint(machine.BreakpointID(id)) {
-		fmt.Printf("Breakpoint %d deleted\n", id)
+		fmt.Fprintf(out, "Breakpoint %d deleted\n", id)
 	} else {
-		fmt.Printf("Breakpoint %d not found\n", id)
+		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
 	}
 }
 
-// cmdList lists all breakpoints
-func (dc *DebugContext) cmdList() {
+// cmdList lists all breakpoints.
+func (dc *DebugContext) cmdList(out io.Writer) {
 	bps := dc.debugger.Breakpoints()
 	if len(bps) == 0 {
-		fmt.Println("No breakpoints set")
+		fmt.Fprintln(out, "No breakpoints set")
 		return
 	}
 
@@ -148,7 +150,7 @@ func (dc *DebugContext) cmdList() {
 		return bps[i].ID < bps[j].ID
 	})
 
-	fmt.Println("Breakpoints:")
+	fmt.Fprintln(out, "Breakpoints:")
 	for _, bp := range bps {
 		status := "enabled"
 		if !bp.Enabled {
@@ -158,118 +160,118 @@ func (dc *DebugContext) cmdList() {
 		if bp.Column > 0 {
 			location = fmt.Sprintf("%s:%d", location, bp.Column)
 		}
-		fmt.Printf("  %d: %s (%s, hits: %d)\n", bp.ID, location, status, bp.HitCount)
+		fmt.Fprintf(out, "  %d: %s (%s, hits: %d)\n", bp.ID, location, status, bp.HitCount)
 	}
 }
 
-// cmdEnable enables a breakpoint
-func (dc *DebugContext) cmdEnable(args []string) {
+// cmdEnable enables a breakpoint.
+func (dc *DebugContext) cmdEnable(args []string, out io.Writer) {
 	if len(args) < 1 {
-		fmt.Println("Usage: ,enable ID")
+		fmt.Fprintln(out, "Usage: ,enable ID")
 		return
 	}
 
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("Invalid breakpoint ID: %s\n", args[0])
+		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
 		return
 	}
 
 	if dc.debugger.EnableBreakpoint(machine.BreakpointID(id)) {
-		fmt.Printf("Breakpoint %d enabled\n", id)
+		fmt.Fprintf(out, "Breakpoint %d enabled\n", id)
 	} else {
-		fmt.Printf("Breakpoint %d not found\n", id)
+		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
 	}
 }
 
-// cmdDisable disables a breakpoint
-func (dc *DebugContext) cmdDisable(args []string) {
+// cmdDisable disables a breakpoint.
+func (dc *DebugContext) cmdDisable(args []string, out io.Writer) {
 	if len(args) < 1 {
-		fmt.Println("Usage: ,disable ID")
+		fmt.Fprintln(out, "Usage: ,disable ID")
 		return
 	}
 
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("Invalid breakpoint ID: %s\n", args[0])
+		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
 		return
 	}
 
 	if dc.debugger.DisableBreakpoint(machine.BreakpointID(id)) {
-		fmt.Printf("Breakpoint %d disabled\n", id)
+		fmt.Fprintf(out, "Breakpoint %d disabled\n", id)
 	} else {
-		fmt.Printf("Breakpoint %d not found\n", id)
+		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
 	}
 }
 
-// cmdStep steps into the next expression
-func (dc *DebugContext) cmdStep() {
+// cmdStep steps into the next expression.
+func (dc *DebugContext) cmdStep(out io.Writer) {
 	dc.debugger.StepInto()
-	fmt.Println("Will step into next expression")
+	fmt.Fprintln(out, "Will step into next expression")
 }
 
-// cmdNext steps over (same frame)
-func (dc *DebugContext) cmdNext() {
+// cmdNext steps over (same frame).
+func (dc *DebugContext) cmdNext(out io.Writer) {
 	if dc.currentMC == nil {
-		fmt.Println("No active execution context")
+		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 	dc.debugger.StepOver(dc.currentMC)
-	fmt.Println("Will step over to next expression")
+	fmt.Fprintln(out, "Will step over to next expression")
 }
 
-// cmdFinish steps out of current function
-func (dc *DebugContext) cmdFinish() {
+// cmdFinish steps out of current function.
+func (dc *DebugContext) cmdFinish(out io.Writer) {
 	if dc.currentMC == nil {
-		fmt.Println("No active execution context")
+		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 	dc.debugger.StepOut(dc.currentMC)
-	fmt.Println("Will step out of current function")
+	fmt.Fprintln(out, "Will step out of current function")
 }
 
-// cmdContinue resumes execution
-func (dc *DebugContext) cmdContinue() {
+// cmdContinue resumes execution.
+func (dc *DebugContext) cmdContinue(out io.Writer) {
 	dc.debugger.Continue()
-	fmt.Println("Continuing execution")
+	fmt.Fprintln(out, "Continuing execution")
 }
 
-// cmdBacktrace shows the current stack trace
-func (dc *DebugContext) cmdBacktrace() {
+// cmdBacktrace shows the current stack trace.
+func (dc *DebugContext) cmdBacktrace(out io.Writer) {
 	if dc.currentMC == nil {
-		fmt.Println("No active execution context")
+		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
 	trace := dc.currentMC.CaptureStackTrace(20)
 	if len(trace) == 0 {
-		fmt.Println("Empty stack trace")
+		fmt.Fprintln(out, "Empty stack trace")
 		return
 	}
 
-	fmt.Println("Stack trace:")
-	fmt.Print(trace.String())
+	fmt.Fprintln(out, "Stack trace:")
+	fmt.Fprint(out, trace.String())
 }
 
-// cmdWhere shows the current source location
-func (dc *DebugContext) cmdWhere() {
+// cmdWhere shows the current source location.
+func (dc *DebugContext) cmdWhere(out io.Writer) {
 	if dc.currentMC == nil {
-		fmt.Println("No active execution context")
+		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
 	source := dc.currentMC.CurrentSource()
 	if source == nil {
-		fmt.Println("No source location available")
+		fmt.Fprintln(out, "No source location available")
 		return
 	}
 
-	fmt.Printf("At %s:%d:%d\n", source.File, source.Start.Line(), source.Start.Column())
+	fmt.Fprintf(out, "At %s:%d:%d\n", source.File, source.Start.Line(), source.Start.Column())
 }
 
-// cmdHelp shows available commands
-func (dc *DebugContext) cmdHelp() {
-	fmt.Println(`Debug commands:
+// cmdHelp shows available commands.
+func (dc *DebugContext) cmdHelp(out io.Writer) {
+	fmt.Fprintln(out, `Debug commands:
   ,break FILE:LINE[:COL]  Set breakpoint (aliases: ,b)
   ,delete ID              Delete breakpoint (aliases: ,d)
   ,list                   List breakpoints (aliases: ,l)
@@ -284,7 +286,7 @@ func (dc *DebugContext) cmdHelp() {
   ,help                   Show this help (aliases: ,h, ,?)`)
 }
 
-// parseLocation parses a location string like "file.scm:10" or "file.scm:10:5"
+// parseLocation parses a location string like "file.scm:10" or "file.scm:10:5".
 func parseLocation(s string) (file string, line, column int) {
 	parts := strings.Split(s, ":")
 	if len(parts) < 2 {

@@ -1,0 +1,224 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package core
+
+import (
+	"wile/registry"
+)
+
+// bootstrapMacroSource contains essential derived expression forms.
+// These macros are required for standard Scheme to work.
+const bootstrapMacroSource = `
+;; Boolean operators
+(define-syntax and
+  (syntax-rules ()
+    ((and) #t)
+    ((and test) test)
+    ((and test1 test2 ...)
+     (if test1 (and test2 ...) #f))))
+
+(define-syntax or
+  (syntax-rules ()
+    ((or) #f)
+    ((or test) test)
+    ((or test1 test2 ...)
+     (let ((x test1))
+       (if x x (or test2 ...))))))
+
+;; Binding forms
+(define-syntax let
+  (syntax-rules ()
+    ((let ((name val) ...) body ...)
+     ((lambda (name ...) (begin body ...)) val ...))
+    ((let tag ((name val) ...) body ...)
+     (letrec ((tag (lambda (name ...) body ...)))
+       (tag val ...)))))
+
+(define-syntax let*
+  (syntax-rules ()
+    ((let* () body ...)
+     (let () body ...))
+    ((let* ((name1 val1) (name2 val2) ...) body ...)
+     (let ((name1 val1))
+       (let* ((name2 val2) ...) body ...)))))
+
+(define-syntax letrec
+  (syntax-rules ()
+    ((letrec ((var init) ...) body ...)
+     (let ((var #f) ...)
+       (set! var init) ...
+       body ...))))
+
+;; Conditional forms
+(define-syntax cond
+  (syntax-rules (else =>)
+    ((cond (else result1 result2 ...))
+     (begin result1 result2 ...))
+    ((cond (test => result))
+     (let ((temp test))
+       (if temp (result temp))))
+    ((cond (test => result) clause1 clause2 ...)
+     (let ((temp test))
+       (if temp
+           (result temp)
+           (cond clause1 clause2 ...))))
+    ((cond (test))
+     test)
+    ((cond (test) clause1 clause2 ...)
+     (let ((temp test))
+       (if temp temp (cond clause1 clause2 ...))))
+    ((cond (test result1 result2 ...))
+     (if test (begin result1 result2 ...)))
+    ((cond (test result1 result2 ...) clause1 clause2 ...)
+     (if test
+         (begin result1 result2 ...)
+         (cond clause1 clause2 ...)))))
+
+(define-syntax when
+  (syntax-rules ()
+    ((when test result1 result2 ...)
+     (if test (begin result1 result2 ...)))))
+
+(define-syntax unless
+  (syntax-rules ()
+    ((unless test result1 result2 ...)
+     (if (not test) (begin result1 result2 ...)))))
+
+;; Lazy evaluation (promises)
+(define-syntax delay
+  (syntax-rules ()
+    ((delay expression)
+     (%make-lazy-promise (lambda () expression)))))
+
+(define-syntax delay-force
+  (syntax-rules ()
+    ((delay-force expression)
+     (%make-lazy-promise (lambda () expression)))))
+
+;; Parameters (dynamic binding)
+(define-syntax parameterize
+  (syntax-rules ()
+    ((parameterize () body ...)
+     (begin body ...))
+    ((parameterize ((param val) rest ...) body ...)
+     (let ((p param)
+           (new val)
+           (old (param)))
+       (dynamic-wind
+         (lambda () (p new))
+         (lambda () (parameterize (rest ...) body ...))
+         (lambda () (p old)))))))
+
+;; Exception handling (R7RS guard macro)
+(define-syntax guard
+  (syntax-rules ()
+    ((guard (var clause ...) body ...)
+     (call/cc
+       (lambda (guard-continuation)
+         (with-exception-handler
+           (lambda (condition)
+             (guard-continuation
+               (let ((var condition))
+                 (guard-aux var clause ...))))
+           (lambda () body ...)))))))
+
+(define-syntax guard-aux
+  (syntax-rules (else =>)
+    ((guard-aux var (else result ...))
+     (begin result ...))
+    ((guard-aux var (test => proc) clause ...)
+     (if test
+         (proc var)
+         (guard-aux var clause ...)))
+    ((guard-aux var (test result ...) clause ...)
+     (if test
+         (begin result ...)
+         (guard-aux var clause ...)))
+    ((guard-aux var)
+     (raise var))))
+
+;; Records (SRFI-9 / R7RS define-record-type)
+(define-syntax define-record-type
+  (syntax-rules ()
+    ((define-record-type type (constructor constructor-tag ...) predicate field-spec ...)
+     (define-record-type-impl type (constructor constructor-tag ...) predicate () () field-spec ...))))
+
+(define-syntax define-record-type-impl
+  (syntax-rules ()
+    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...))
+     (begin
+       (define type (make-record-type 'type '(field-name ...)))
+       (define constructor (record-constructor type '(constructor-tag ...)))
+       (define predicate (record-predicate type))
+       defn ...))
+    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor) rest ...)
+     (define-record-type-impl type (constructor constructor-tag ...) predicate
+       (field-name ... field-tag)
+       (defn ... (define accessor (record-accessor type 'field-tag)))
+       rest ...))
+    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor modifier) rest ...)
+     (define-record-type-impl type (constructor constructor-tag ...) predicate
+       (field-name ... field-tag)
+       (defn ... (begin (define accessor (record-accessor type 'field-tag)) (define modifier (record-modifier type 'field-tag))))
+       rest ...))))
+
+;; Multiple values binding forms
+(define-syntax let-values
+  (syntax-rules ()
+    ((let-values () body ...)
+     (begin body ...))
+    ((let-values ((formals expr)) body ...)
+     (call-with-values
+       (lambda () expr)
+       (lambda formals body ...)))
+    ((let-values ((formals expr) more ...) body ...)
+     (call-with-values
+       (lambda () expr)
+       (lambda formals
+         (let-values (more ...) body ...))))))
+
+(define-syntax let*-values
+  (syntax-rules ()
+    ((let*-values () body ...)
+     (begin body ...))
+    ((let*-values ((formals expr) more ...) body ...)
+     (call-with-values
+       (lambda () expr)
+       (lambda formals
+         (let*-values (more ...) body ...))))))
+
+;; Iteration
+(define-syntax do
+  (syntax-rules ()
+    ((do ((var init step ...) ...)
+         (test result ...)
+         command ...)
+     (letrec ((loop (lambda (var ...)
+                      (if test
+                          (begin result ...)
+                          (begin
+                            command ...
+                            (loop (do "step" var step ...) ...))))))
+       (loop init ...)))
+    ((do "step" var)
+     var)
+    ((do "step" var step)
+     step)))
+`
+
+func addBootstrapMacros(r *registry.Registry) error {
+	r.AddMacroSource(bootstrapMacroSource)
+	return nil
+}
