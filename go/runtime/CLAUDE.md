@@ -14,7 +14,6 @@ Package `runtime` initializes the top-level Scheme environment using the registr
 | File | Purpose |
 |------|---------|
 | `environment_tiny.go` | Main initialization using registry pattern |
-| `primitives/` | **Deprecated** - compatibility layer delegating to io extension |
 
 ## Initialization Flow
 
@@ -78,17 +77,9 @@ r.AddPrimitives([]registry.PrimitiveSpec{
 | 2 | true | First arg in `mc.Arg(0)`, rest as Pair in `mc.Arg(1)` |
 | N | false | Exactly N args, each in `mc.Arg(0)` through `mc.Arg(N-1)` |
 
-## Deprecated: runtime/primitives/
-
-The `runtime/primitives/` package is **deprecated**. It now serves as a compatibility layer for tests, delegating all state management to `extensions/io`. New code should:
-
-- Import primitives from `registry/core/` or `extensions/*/`
-- Use `extensions/io` for port state management
-- Use `registry/testhelpers` for test infrastructure
-
 ## Testing
 
-Uses quicktest with `evalScheme()` helper for full parse→expand→compile→execute cycle.
+Comprehensive primitive tests are located in `registry/core/`. Uses quicktest with helpers for full parse→expand→compile→execute cycle.
 
 ## References
 
