@@ -115,11 +115,10 @@ This prevents unintended variable capture in macros:
 
 ## Documentation
 
-- `INTRO.md` - Development guide and architecture overview
 - `PRIMITIVES.md` - Complete reference of supported types and primitives
 - `go/DESIGN.md` - Detailed macro system design
 - `BIBLIOGRAPHY.md` - Academic references
-- `go/TODO.md` - Implementation status and pending tasks
+- `TODO.md` - Implementation status and pending tasks
 
 ## References
 

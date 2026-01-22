@@ -360,6 +360,29 @@ See **DESIGN_MULTITHREADING.md** for full implementation plan.
 - call/cc scope limited to single thread
 - dynamic-wind cleanup on thread termination
 
+### Records (SRFI-9)
+
+Record types for user-defined data structures. SRFI-9 is the de facto standard for R7RS-small implementations.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | `define-record-type` macro | Not started |
+| 2 | Constructor, predicate, accessor generation | Not started |
+| 3 | Mutator (setter) generation | Not started |
+| 4 | Integration with `equal?` and `write` | Not started |
+
+**Syntax:**
+```scheme
+(define-record-type <point>
+  (make-point x y)
+  point?
+  (x point-x point-x-set!)
+  (y point-y point-y-set!))
+```
+
+**References:**
+- https://srfi.schemers.org/srfi-9/srfi-9.html
+
 ### Programmatic Tokenization and Parsing
 
 See **DESIGN_PROGRAMMATIC_READER.md** for full implementation plan.
