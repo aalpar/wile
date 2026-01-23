@@ -648,7 +648,7 @@ tail -n +2158 r7rs-tests.scm >> /tmp/safe-tests.scm
 9. ~~**Bug #12** - write-u8 - missing primitive~~ ✅ **Fixed**
 10. ~~**Bug #10** - fold-case directive - case folding for identifiers~~ ✅ **Fixed**
 11. ~~**Bug #11** - Bignum overflow - exact-integer-sqrt with BigInteger~~ ✅ **Fixed**
-12. **Bug #8-9** - Advanced syntax-rules features (ellipsis escape, custom ellipsis)
+12. ~~**Bug #8-9** - Advanced syntax-rules features (ellipsis escape, custom ellipsis)~~ ✅ **Fixed**
 
 ---
 
