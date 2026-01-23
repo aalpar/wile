@@ -34,16 +34,17 @@ func addLists(r *registry.Registry) error {
 		{"list-ref", 2, false, PrimListRef},
 		{"list-set!", 3, false, PrimListSet},
 		{"list-tail", 2, false, PrimListTail},
+		{"list-copy", 1, false, PrimListCopy},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// List search
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"memq", 2, false, PrimMemq},
 		{"memv", 2, false, PrimMemv},
-		{"member", 2, false, PrimMember},
+		{"member", 3, true, PrimMember},
 		{"assq", 2, false, PrimAssq},
 		{"assv", 2, false, PrimAssv},
-		{"assoc", 2, false, PrimAssoc},
+		{"assoc", 3, true, PrimAssoc},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

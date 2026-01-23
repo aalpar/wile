@@ -14,6 +14,10 @@ Code Maintenance
 
 Code Cleanup
 ------------
+- [ ] Use `values.Tuple` instead of `*values.Pair` when possible
+- [ ] Use `values.Number` when possible
+- [ ] Use `values.Indexable` for indexable values (except maps used `values.Mappable`)
+- [ ] Use `BoolToBoolean` where possible.
 - [ ] Tokenization error handling is obscure - figure something better out
 - [ ] Inf Nan handling in tokenizer is inconsistent.  Some places use math.Inf(1)/math.Inf(-1) and some use predefined constants.  Standardize on one approach.
 - [x] Refactor `if err := ...; err != nil` patterns to separate assignment from comparison (see CODING_STYLE.md)

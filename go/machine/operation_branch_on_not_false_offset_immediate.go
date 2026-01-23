@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"wile/utils"
 	"wile/values"
 )
 
@@ -46,7 +47,7 @@ func (p *OperationBranchOnNotFalseOffsetImmediate) EqualTo(o values.Value) bool 
 
 func (p *OperationBranchOnNotFalseOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	v := mc.evals.Pop()
-	if !values.EqualTo(v, values.FalseValue) {
+	if utils.ValueToBool(v) {
 		mc.pc += p.Offset
 	} else {
 		mc.pc++

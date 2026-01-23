@@ -39,6 +39,8 @@ func addPrimitives(r *registry.Registry) error {
 		{"error-object?", 1, false, PrimErrorObjectQ},
 		{"error-object-message", 1, false, PrimErrorObjectMessage},
 		{"error-object-irritants", 1, false, PrimErrorObjectIrritants},
+		{"read-error?", 1, false, PrimReadErrorQ},
+		{"file-error?", 1, false, PrimFileErrorQ},
 	}, registry.PhaseRuntime)
 	return nil
 }

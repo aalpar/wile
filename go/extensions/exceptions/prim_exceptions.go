@@ -274,7 +274,7 @@ func PrimError(_ context.Context, mc *machine.MachineContext) error {
 // #f otherwise.
 func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	_, ok := obj.(*values.ErrorObject)
+	_, ok := obj.(*values.NativeError)
 	if ok {
 		mc.SetValue(values.TrueValue)
 	} else {
@@ -287,9 +287,9 @@ func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
 // Returns the message string from an error object.
 func PrimErrorObjectMessage(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	errObj, ok := obj.(*values.ErrorObject)
+	errObj, ok := obj.(*values.NativeError)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnErrorObject,
+		return values.WrapForeignErrorf(values.ErrNotANativeError,
 			"error-object-message: expected error object but got %T", obj)
 	}
 	mc.SetValue(errObj.Message())
@@ -300,11 +300,37 @@ func PrimErrorObjectMessage(_ context.Context, mc *machine.MachineContext) error
 // Returns the list of irritant objects from an error object.
 func PrimErrorObjectIrritants(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	errObj, ok := obj.(*values.ErrorObject)
+	errObj, ok := obj.(*values.NativeError)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnErrorObject,
+		return values.WrapForeignErrorf(values.ErrNotANativeError,
 			"error-object-irritants: expected error object but got %T", obj)
 	}
 	mc.SetValue(errObj.Irritants())
+	return nil
+}
+
+// PrimReadErrorQ implements the read-error? predicate.
+// R7RS §6.11: Returns #t if obj is an error object raised during reading.
+func PrimReadErrorQ(_ context.Context, mc *machine.MachineContext) error {
+	obj := mc.Arg(0)
+	errObj, ok := obj.(*values.NativeError)
+	if ok && errObj.IsReadError() {
+		mc.SetValue(values.TrueValue)
+	} else {
+		mc.SetValue(values.FalseValue)
+	}
+	return nil
+}
+
+// PrimFileErrorQ implements the file-error? predicate.
+// R7RS §6.11: Returns #t if obj is an error object raised during file operations.
+func PrimFileErrorQ(_ context.Context, mc *machine.MachineContext) error {
+	obj := mc.Arg(0)
+	errObj, ok := obj.(*values.NativeError)
+	if ok && errObj.IsFileError() {
+		mc.SetValue(values.TrueValue)
+	} else {
+		mc.SetValue(values.FalseValue)
+	}
 	return nil
 }

@@ -63,6 +63,76 @@ func PrimEqualQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimNot(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// In Scheme, only #f is false; everything else is true
-	mc.SetValue(utils.BoolToBoolean(o == values.FalseValue))
+	mc.SetValue(utils.BoolToBoolean(!utils.ValueToBool(o)))
+	return nil
+}
+
+// PrimBooleanEq implements the boolean=? primitive.
+// R7RS §6.3: (boolean=? boolean1 boolean2 boolean3 ...)
+// Returns #t if all arguments are booleans and all are the same value.
+func PrimBooleanEq(_ context.Context, mc *machine.MachineContext) error {
+	first := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	// Check that first is a boolean
+	if first != values.TrueValue && first != values.FalseValue {
+		return values.WrapForeignErrorf(values.ErrNotABoolean, "boolean=?: expected a boolean but got %T", first)
+	}
+
+	// Process remaining arguments
+	current := rest
+	for !values.IsEmptyList(current) {
+		tuple, ok := current.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "boolean=?: improper argument list")
+		}
+		arg := tuple.Car()
+		if arg != values.TrueValue && arg != values.FalseValue {
+			return values.WrapForeignErrorf(values.ErrNotABoolean, "boolean=?: expected a boolean but got %T", arg)
+		}
+		if arg != first {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		current = tuple.Cdr()
+	}
+
+	mc.SetValue(values.TrueValue)
+	return nil
+}
+
+// PrimSymbolEq implements the symbol=? primitive.
+// R7RS §6.5: (symbol=? symbol1 symbol2 symbol3 ...)
+// Returns #t if all arguments are symbols and all are the same symbol.
+func PrimSymbolEq(_ context.Context, mc *machine.MachineContext) error {
+	first := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	// Check that first is a symbol
+	firstSym, ok := first.(*values.Symbol)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotASymbol, "symbol=?: expected a symbol but got %T", first)
+	}
+
+	// Process remaining arguments
+	current := rest
+	for !values.IsEmptyList(current) {
+		tuple, ok := current.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "symbol=?: improper argument list")
+		}
+		arg := tuple.Car()
+		sym, ok := arg.(*values.Symbol)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotASymbol, "symbol=?: expected a symbol but got %T", arg)
+		}
+		if sym.Key != firstSym.Key {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		current = tuple.Cdr()
+	}
+
+	mc.SetValue(values.TrueValue)
 	return nil
 }

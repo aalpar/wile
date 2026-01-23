@@ -35,9 +35,9 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 	}
 	var fill uint8 = 0
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
-			fillVal := pr.Car()
+		tuple, ok := rest.(values.Tuple)
+		if ok && !tuple.IsEmptyList() {
+			fillVal := tuple.Car()
 			fillInt, ok := fillVal.(*values.Integer)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", fillVal)
@@ -65,12 +65,12 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(&bv)
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector: expected a list but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []values.Byte
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
+	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
@@ -168,22 +168,22 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional start and end arguments
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
-			startVal, ok := pr.Car().(*values.Integer)
+		tuple, ok := rest.(values.Tuple)
+		if ok && !tuple.IsEmptyList() {
+			startVal, ok := tuple.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: start must be an integer but got %T", pr.Car())
+				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: start must be an integer but got %T", tuple.Car())
 			}
 			start = startVal.Value
 
 			// Check for end argument
-			cdr := pr.Cdr()
+			cdr := tuple.Cdr()
 			if !values.IsEmptyList(cdr) {
-				pr2, ok := cdr.(*values.Pair)
-				if ok && !values.IsEmptyList(pr2) {
-					endVal, ok := pr2.Car().(*values.Integer)
+				tuple2, ok := cdr.(values.Tuple)
+				if ok && !tuple2.IsEmptyList() {
+					endVal, ok := tuple2.Car().(*values.Integer)
 					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: end must be an integer but got %T", pr2.Car())
+						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: end must be an integer but got %T", tuple2.Car())
 					}
 					end = endVal.Value
 				}
@@ -230,22 +230,22 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 
 	// Parse optional start and end arguments
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
-			startVal, ok := pr.Car().(*values.Integer)
+		tuple, ok := rest.(values.Tuple)
+		if ok && !tuple.IsEmptyList() {
+			startVal, ok := tuple.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: start must be an integer but got %T", pr.Car())
+				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: start must be an integer but got %T", tuple.Car())
 			}
 			start = startVal.Value
 
 			// Check for end argument
-			cdr := pr.Cdr()
+			cdr := tuple.Cdr()
 			if !values.IsEmptyList(cdr) {
-				pr2, ok := cdr.(*values.Pair)
-				if ok && !values.IsEmptyList(pr2) {
-					endVal, ok := pr2.Car().(*values.Integer)
+				tuple2, ok := cdr.(values.Tuple)
+				if ok && !tuple2.IsEmptyList() {
+					endVal, ok := tuple2.Car().(*values.Integer)
 					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: end must be an integer but got %T", pr2.Car())
+						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: end must be an integer but got %T", tuple2.Car())
 					}
 					end = endVal.Value
 				}
@@ -281,12 +281,12 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(&bv)
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "bytevector-append: expected a list but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
 	var result []values.Byte
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
@@ -320,22 +320,22 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional start and end arguments
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
-			startVal, ok := pr.Car().(*values.Integer)
+		tuple, ok := rest.(values.Tuple)
+		if ok && !tuple.IsEmptyList() {
+			startVal, ok := tuple.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: start must be an integer but got %T", pr.Car())
+				return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: start must be an integer but got %T", tuple.Car())
 			}
 			start = startVal.Value
 
 			// Check for end argument
-			cdr := pr.Cdr()
+			cdr := tuple.Cdr()
 			if !values.IsEmptyList(cdr) {
-				pr2, ok := cdr.(*values.Pair)
-				if ok && !values.IsEmptyList(pr2) {
-					endVal, ok := pr2.Car().(*values.Integer)
+				tuple2, ok := cdr.(values.Tuple)
+				if ok && !tuple2.IsEmptyList() {
+					endVal, ok := tuple2.Car().(*values.Integer)
 					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: end must be an integer but got %T", pr2.Car())
+						return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: end must be an integer but got %T", tuple2.Car())
 					}
 					end = endVal.Value
 				}
@@ -375,22 +375,22 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional start and end arguments
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
-			startVal, ok := pr.Car().(*values.Integer)
+		tuple, ok := rest.(values.Tuple)
+		if ok && !tuple.IsEmptyList() {
+			startVal, ok := tuple.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: start must be an integer but got %T", pr.Car())
+				return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: start must be an integer but got %T", tuple.Car())
 			}
 			start = startVal.Value
 
 			// Check for end argument
-			cdr := pr.Cdr()
+			cdr := tuple.Cdr()
 			if !values.IsEmptyList(cdr) {
-				pr2, ok := cdr.(*values.Pair)
-				if ok && !values.IsEmptyList(pr2) {
-					endVal, ok := pr2.Car().(*values.Integer)
+				tuple2, ok := cdr.(values.Tuple)
+				if ok && !tuple2.IsEmptyList() {
+					endVal, ok := tuple2.Car().(*values.Integer)
 					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: end must be an integer but got %T", pr2.Car())
+						return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: end must be an integer but got %T", tuple2.Car())
 					}
 					end = endVal.Value
 				}

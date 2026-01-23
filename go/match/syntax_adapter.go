@@ -160,9 +160,6 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 			if carVal != nil {
 				carSyntax := carVal
 				car = sm.syntaxToValueWithMap(carSyntax)
-				//				} else {
-				//					car = carVal
-				//				}
 			}
 
 			var cdr values.Value
@@ -170,9 +167,6 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 			if cdrVal != nil {
 				cdrSyntax := cdrVal
 				cdr = sm.syntaxToValueWithMap(cdrSyntax)
-				//				} else {
-				//					cdr = cdrVal
-				//				}
 			}
 
 			// Build the result pair

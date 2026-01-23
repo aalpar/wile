@@ -41,12 +41,19 @@ func addReadWrite(r *registry.Registry) error {
 		{"read", 1, true, PrimRead},
 		{"read-token", 1, true, PrimReadToken},
 		{"read-syntax", 1, true, PrimReadSyntax},
+		{"read-char", 1, true, PrimReadChar},
+		{"peek-char", 1, true, PrimPeekChar},
+		{"read-line", 1, true, PrimReadLine},
+		{"read-string", 2, true, PrimReadString},
+		{"char-ready?", 1, true, PrimCharReadyQ},
 		{"write", 2, true, PrimWrite},
 		{"write-char", 2, true, PrimWriteChar},
+		{"write-string", 2, true, PrimWriteString},
 		{"display", 2, true, PrimDisplay},
 		{"newline", 1, true, PrimNewline},
 		{"write-simple", 2, true, PrimWriteSimple},
 		{"write-shared", 2, true, PrimWriteShared},
+		{"flush-output-port", 1, true, PrimFlushOutputPort},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -56,6 +63,8 @@ func addPorts(r *registry.Registry) error {
 		{"port?", 1, false, PrimPortQ},
 		{"input-port?", 1, false, PrimInputPortQ},
 		{"output-port?", 1, false, PrimOutputPortQ},
+		{"textual-port?", 1, false, PrimTextualPortQ},
+		{"binary-port?", 1, false, PrimBinaryPortQ},
 		{"input-port-open?", 1, false, PrimInputPortOpenQ},
 		{"output-port-open?", 1, false, PrimOutputPortOpenQ},
 		{"close-port", 1, false, PrimClosePort},
@@ -63,6 +72,7 @@ func addPorts(r *registry.Registry) error {
 		{"close-output-port", 1, false, PrimClosePort},
 		{"eof-object", 0, false, PrimEofObject},
 		{"eof-object?", 1, false, PrimEofObjectQ},
+		{"call-with-port", 2, false, PrimCallWithPort},
 	}, registry.PhaseRuntime)
 
 	// String ports
