@@ -62,9 +62,13 @@ const bootstrapMacroSource = `
        body ...))))
 
 ;; letrec* - like letrec but initializers are evaluated left-to-right
-;; In letrec*, each variable is in scope for all initializers and body.
-;; This simple implementation just uses letrec since we're not enforcing
-;; the left-to-right evaluation order at macro level (the compiler does it).
+;; R7RS §4.2.2: each variable is assigned in left-to-right order.
+;;
+;; This implementation delegates to letrec because Wile's letrec expansion
+;; produces sequential (set! var init) statements, which are evaluated
+;; left-to-right per R7RS §4.2.3. This differs from the canonical R7RS §7.3
+;; recursive macro but is semantically equivalent for this implementation.
+;; See plans/IMPLEMENTATION_NOTES.md for details.
 (define-syntax letrec*
   (syntax-rules ()
     ((letrec* ((var init) ...) body ...)

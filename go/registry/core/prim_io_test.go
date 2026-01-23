@@ -824,3 +824,108 @@ func TestNewlineToStringPort(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, s.Value, qt.Equals, "\n\n")
 }
+
+func TestWriteCircularPair(t *testing.T) {
+	// Test that write handles circular pairs correctly with datum labels
+	// R7RS §6.13.3: write-shared uses datum labels for shared/circular structures
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(let ((x (cons 1 2)))
+				(set-cdr! x x)
+				(write x p)
+				(get-output-string p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	// Expected format: #0=(1 . #0#)
+	qt.Assert(t, s.Value, qt.Equals, "#0=(1 . #0#)")
+}
+
+func TestWriteCircularList(t *testing.T) {
+	// Test write with a circular list
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(let ((x (list 1 2 3)))
+				(set-cdr! (cdr (cdr x)) x)
+				(write x p)
+				(get-output-string p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	// Expected format: #0=(1 2 3 . #0#)
+	qt.Assert(t, s.Value, qt.Equals, "#0=(1 2 3 . #0#)")
+}
+
+func TestDisplayCircularPair(t *testing.T) {
+	// Test that display handles circular pairs correctly
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(let ((x (cons 1 2)))
+				(set-cdr! x x)
+				(display x p)
+				(get-output-string p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, s.Value, qt.Equals, "#0=(1 . #0#)")
+}
+
+func TestWriteCircularVector(t *testing.T) {
+	// Test write with a circular vector
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(let ((v (vector 1 2 3)))
+				(vector-set! v 1 v)
+				(write v p)
+				(get-output-string p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	// Expected format: #0=#(1 #0# 3)
+	qt.Assert(t, s.Value, qt.Equals, "#0=#(1 #0# 3)")
+}
+
+func TestWriteSharedCircularPair(t *testing.T) {
+	// Test write-shared with circular pairs
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(let ((x (cons 1 2)))
+				(set-cdr! x x)
+				(write-shared x p)
+				(get-output-string p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, s.Value, qt.Equals, "#0=(1 . #0#)")
+}
+
+func TestWriteNonCircularPair(t *testing.T) {
+	// Test that non-circular structures don't get labels
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write '(1 2 3) p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, s.Value, qt.Equals, "(1 2 3)")
+}
+
+func TestWriteNonCircularVector(t *testing.T) {
+	// Test that non-circular vectors don't get labels
+	result, err := runSchemeCode(t, `
+		(let ((p (open-output-string)))
+			(write #(1 2 3) p)
+			(get-output-string p))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	s, ok := result.(*values.String)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, s.Value, qt.Equals, "#(1 2 3)")
+}

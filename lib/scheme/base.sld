@@ -15,8 +15,12 @@
     case-lambda
     include
     include-ci
+    ;; Auxiliary syntax (R7RS §5.1)
+    else
+    =>
     ;; Derived syntax (bootstrap macros)
     cond
+    case
     and
     or
     when
@@ -24,6 +28,7 @@
     let
     let*
     letrec
+    letrec*
     let-values
     let*-values
     do
@@ -208,6 +213,10 @@
     read-line
     read-string
     read
+    ;; Binary Input (R7RS §6.13.3)
+    read-u8
+    peek-u8
+    u8-ready?
     ;; Output
     newline
     write-char
@@ -215,6 +224,8 @@
     write
     display
     flush-output-port
+    ;; Binary Output (R7RS §6.13.3)
+    write-u8
     ;; System interface
     features
     ;; Parameters

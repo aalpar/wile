@@ -339,49 +339,43 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in: "#10=( 10 20 )",
-			sexpect: syntax.NewSyntaxObject(
-				syntax.NewSyntaxDatumLabelAssignment(
-					10,
-					syntax.NewSyntaxCons(
-						syntax.NewSyntaxObject(
-							values.NewInteger(10),
-							syntax.NewSourceContext("10", "",
-								syntax.NewSourceIndexes(6, 6, 0),
-								syntax.NewSourceIndexes(8, 8, 0),
-							),
-						),
-						syntax.NewSyntaxCons(
-							syntax.NewSyntaxObject(
-								values.NewInteger(20),
-								syntax.NewSourceContext("20", "",
-									syntax.NewSourceIndexes(9, 9, 0),
-									syntax.NewSourceIndexes(11, 11, 0),
-								),
-							),
-							syntax.NewSyntaxEmptyList(
-								syntax.NewSourceContext(")", "",
-									syntax.NewSourceIndexes(12, 12, 0),
-									syntax.NewSourceIndexes(13, 13, 0),
-								),
-							),
-							syntax.NewSourceContext("10", "",
-								syntax.NewSourceIndexes(6, 6, 0),
-								syntax.NewSourceIndexes(8, 8, 0),
-							),
-						),
-						syntax.NewSourceContext("(", "",
-							syntax.NewSourceIndexes(4, 4, 0),
+			sexpect: syntax.NewSyntaxDatumLabelAssignment(
+				10,
+				syntax.NewSyntaxCons(
+					syntax.NewSyntaxObject(
+						values.NewInteger(10),
+						syntax.NewSourceContext("10", "",
+							syntax.NewSourceIndexes(6, 6, 0),
 							syntax.NewSourceIndexes(8, 8, 0),
 						),
 					),
-					syntax.NewSourceContext(")", "",
-						syntax.NewSourceIndexes(12, 12, 0),
-						syntax.NewSourceIndexes(13, 13, 0),
+					syntax.NewSyntaxCons(
+						syntax.NewSyntaxObject(
+							values.NewInteger(20),
+							syntax.NewSourceContext("20", "",
+								syntax.NewSourceIndexes(9, 9, 0),
+								syntax.NewSourceIndexes(11, 11, 0),
+							),
+						),
+						syntax.NewSyntaxEmptyList(
+							syntax.NewSourceContext(")", "",
+								syntax.NewSourceIndexes(12, 12, 0),
+								syntax.NewSourceIndexes(13, 13, 0),
+							),
+						),
+						syntax.NewSourceContext("20", "",
+							syntax.NewSourceIndexes(9, 9, 0),
+							syntax.NewSourceIndexes(11, 11, 0),
+						),
+					),
+					syntax.NewSourceContext("(", "",
+						syntax.NewSourceIndexes(4, 4, 0),
+						syntax.NewSourceIndexes(5, 5, 0),
 					),
 				),
-				syntax.NewSourceContext(")", "",
-					syntax.NewSourceIndexes(12, 12, 0),
-					syntax.NewSourceIndexes(13, 13, 0),
+				syntax.NewSourceContext("#10=", "",
+					syntax.NewSourceIndexes(0, 0, 0),
+					syntax.NewSourceIndexes(4, 4, 0),
 				),
 			),
 		},
@@ -2765,6 +2759,68 @@ func TestTrimSuffix(t *testing.T) {
 			c := qt.New(t)
 			result := TrimSuffixFolded(tc.s, tc.suffix)
 			c.Assert(result, qt.Equals, tc.expect)
+		})
+	}
+}
+
+// TestParser_FoldCase tests R7RS §2.1 fold-case directive handling.
+func TestParser_FoldCase(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tcs := []struct {
+		name   string
+		input  string
+		expect string // expected symbol name after fold-case processing
+	}{
+		{
+			name:   "fold-case converts uppercase to lowercase",
+			input:  "#!fold-case FOO",
+			expect: "foo",
+		},
+		{
+			name:   "fold-case converts mixed case to lowercase",
+			input:  "#!fold-case FoObAr",
+			expect: "foobar",
+		},
+		{
+			name:   "no-fold-case preserves case",
+			input:  "#!fold-case #!no-fold-case FOO",
+			expect: "FOO",
+		},
+		{
+			name:   "fold-case directive is case-insensitive",
+			input:  "#!FOLD-CASE FOO",
+			expect: "foo",
+		},
+		{
+			name:   "no-fold-case directive is case-insensitive",
+			input:  "#!fold-case #!NO-FOLD-CASE FOO",
+			expect: "FOO",
+		},
+		{
+			name:   "lowercase preserved without fold-case",
+			input:  "foo",
+			expect: "foo",
+		},
+		{
+			name:   "uppercase preserved without fold-case",
+			input:  "FOO",
+			expect: "FOO",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			sv, err := p.ReadSyntax(ctx)
+			c.Assert(err, qt.IsNil)
+
+			sym, ok := sv.(*syntax.SyntaxSymbol)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxSymbol, got %T", sv))
+			c.Assert(sym.Sym.Key, qt.Equals, tc.expect)
 		})
 	}
 }

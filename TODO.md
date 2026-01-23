@@ -14,6 +14,16 @@ Code Maintenance
 
 Code Cleanup
 ------------
+- [ ] Siplify phase (meta environments) - extension facility has ordianl bindings for phases while Environment uses relative phases (so relationships can be more complex).  Consider the simpler approach for Wile
+- [ ] begin-for-syntax is a unfamiliar R7RS function.  investigate possible implmentations
+- [ ] investigate compileBeginBody implementation
+- [ ] check quasiquote exapnsion for potential simplifications
+- [ ] check letrec-syntax and let-syntax for simplification oppurtunities
+- [ ] SyntaxValue imlpements UnwrapAllShared.  Why not change all instances of UnwrapAll to UnwrapAllShared?
+- [ ] Compare methods on numbers - not all numbers need to be comparable, but all numbers should support a CompareTo method
+- [ ] Compare methods on numbers should be CompareTo to conform to Comparable.
+- [ ] Remove extranious methods on Numbers
+- [ ] Numbers, BigInteger, BigFloat: ensure all number operations handle mixed types correctly (Integer, Float, Rational, Complex, BigInteger, BigFloat) do not share the same comparison operations and are duplicated in multiple places.
 - [ ] auxiliary syntax exports: R7RS requires `(scheme base)` to export `else`, `=>`, `...`, `_` as auxiliary syntax keywords. Currently these cannot be exported because they aren't bound as values - they're pattern literals handled specially by `syntax-rules`. Need to implement auxiliary syntax binding mechanism.
 - [ ] Use `values.Tuple` instead of `*values.Pair` when possible
 - [ ] Use `values.Number` when possible

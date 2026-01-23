@@ -20,8 +20,27 @@ Complete R7RS value system including:
 
 **Number** - Numeric tower:
 - `Add`, `Subtract`, `Multiply`, `Divide`
-- `IsZero`, `LessThan`
+- `IsZero` - Check for zero
 - Implemented by: Integer, Float, Rational, Complex, BigInteger, BigFloat, BigComplex
+- `IsExact` - Exactness checks
+- `IsNegative` - Sign checks
+- `Negate` - Unary negation
+- Any object that implements Number must not also implement `IsInexact`, `IsPositive`, etc. to avoid ambiguity
+- All objects that implement `Number` must also implement `Value` and `Comparable`
+- All `Number` types support cross-type arithmetic and comparison with other `Number` types
+
+**Comparable** - Ordering:
+- `CompareTo(Value) int` - Total ordering (-1,0,1)
+- Implemented by: all numeric types, strings, characters, symbols
+- Records compare by identity only
+- Complex compares real parts only
+- Bytevectors compare lexicographically
+- Strings compare lexicographically
+- Characters compare by Unicode code point
+- Symbols compare by name lexicographically
+- Booleans: `#f < #t`
+- Others: no ordering
+- Cross-type comparisons supported for all numeric types
 
 ## R7RS Numeric Tower Mapping
 
@@ -71,6 +90,12 @@ A value satisfies multiple predicates due to the tower hierarchy:
 **Tuple** - List/sequence protocol:
 - `Car`, `Cdr`, `Append`, `ForEach`, `IsList`
 - Implemented by: Pair, ArrayList, Vector
+
+**SchemeWriter** - Cycle-aware output (R7RS §2.4, §6.13.3):
+- Two-pass algorithm: pass 1 identifies shared/circular objects, pass 2 outputs with datum labels
+- `WriteValueToString(v)` - Write with `#n=` and `#n#` labels for shared structures
+- `DisplayValueToString(v)` - Display mode (no quotes on strings)
+- Handles both pairs and vectors
 
 ## Optimizations
 

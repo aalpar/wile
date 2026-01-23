@@ -17,6 +17,9 @@ Wraps Scheme values with source location and scope information for:
 - `UnwrapAll()` - Deep recursive unwrap
 - `AddScope(scope)` - Add hygiene scope (returns new value)
 
+**Key Functions**:
+- `UnwrapAllShared(sv, cache)` - Recursive unwrap preserving object identity via cache. Essential for datum labels (R7RS §2.4) where `#n#` must be `eq?` to `#n=`. Pre-registers placeholders before recursing to handle circular structures.
+
 **Concrete Types**:
 - `SyntaxPair` - Cons cells with recursive scope propagation
 - `SyntaxSymbol` - Symbols with scope tracking (core for hygiene)

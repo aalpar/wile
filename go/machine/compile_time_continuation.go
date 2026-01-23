@@ -188,6 +188,10 @@ func (p *CompileTimeContinuation) CompileInclude(ctctx CompileTimeCallContext, e
 }
 
 // compileIncludeImpl is the shared implementation for include and include-ci.
+// It uses letrec* semantics so that forward references work within included files.
+//
+// R7RS §5.3.2: Internal definitions use letrec* semantics where all defined
+// variables are in scope at the start of the body.
 func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, _ bool) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -216,7 +220,8 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		reader := bufio.NewReader(file)
 		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
 
-		// Read and compile all forms from the file
+		// Read all forms from the file first, then process them with letrec* semantics
+		var forms []syntax.SyntaxValue
 		for {
 			stx, readErr := fileParser.ReadSyntax(context.TODO())
 			if readErr != nil {
@@ -225,19 +230,13 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 				}
 				return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
 			}
+			forms = append(forms, stx)
+		}
 
-			// Expand the form
-			ectx := NewExpandTimeCallContext()
-			expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
-			if expandErr != nil {
-				return values.WrapForeignErrorf(expandErr, "include: error expanding form from %q", fn.Value)
-			}
-
-			// Compile the expanded form
-			compileErr := p.CompileExpression(ctctx, expanded)
-			if compileErr != nil {
-				return values.WrapForeignErrorf(compileErr, "include: error compiling form from %q", fn.Value)
-			}
+		// Process forms with letrec* semantics: pre-declare all bindings first
+		err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+		if err != nil {
+			return err
 		}
 
 		// Move to next filename
@@ -247,6 +246,97 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		}
 	}
 	return nil
+}
+
+// processFormsWithLetrecSemantics processes a slice of forms with letrec* semantics.
+// It pre-declares all define bindings before compiling the forms.
+func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
+	// Pass 1: Expand all forms and pre-declare define bindings
+	var expandedForms []syntax.SyntaxValue
+	for _, stx := range forms {
+		// Expand the form
+		ectx := NewExpandTimeCallContext()
+		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
+		if expandErr != nil {
+			return values.WrapForeignErrorf(expandErr, "include: error expanding form from %q", filename)
+		}
+		expandedForms = append(expandedForms, expanded)
+
+		// Pre-declare if this is a define form
+		p.predeclareDefineBinding(expanded)
+	}
+
+	// Pass 2: Compile all forms (with all bindings now visible)
+	for _, expanded := range expandedForms {
+		compileErr := p.CompileExpression(ctctx, expanded)
+		if compileErr != nil {
+			return values.WrapForeignErrorf(compileErr, "include: error compiling form from %q", filename)
+		}
+	}
+
+	return nil
+}
+
+// predeclareDefineBinding pre-creates a binding for a define form.
+// This enables forward references within library bodies and included files.
+func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) {
+	pair, ok := v.(*syntax.SyntaxPair)
+	if !ok {
+		return
+	}
+
+	car := pair.SyntaxCar()
+	sym, ok := car.(*syntax.SyntaxSymbol)
+	if !ok {
+		return
+	}
+
+	keyword := sym.Unwrap().(*values.Symbol).Key
+	if keyword != "define" {
+		return
+	}
+
+	// Extract the name being defined
+	cdr := pair.SyntaxCdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok {
+		return
+	}
+
+	second := cdrPair.SyntaxCar()
+	var nameSym *syntax.SyntaxSymbol
+
+	switch s := second.(type) {
+	case *syntax.SyntaxSymbol:
+		// (define name expr)
+		nameSym = s
+	case *syntax.SyntaxPair:
+		// (define (name params...) body...)
+		nameExpr := s.SyntaxCar()
+		if ns, ok := nameExpr.(*syntax.SyntaxSymbol); ok {
+			nameSym = ns
+		}
+	}
+
+	if nameSym == nil {
+		return
+	}
+
+	// Pre-create the binding
+	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+	symbolScopes := nameSym.Scopes()
+
+	if p.env.LocalEnvironment() != nil {
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, symbolScopes)
+	} else {
+		gi, created := p.env.CreateGlobalBinding(name, environment.BindingTypeVariable)
+		if !created {
+			binding := p.env.GetGlobalBinding(gi)
+			if binding != nil && symbolScopes != nil {
+				binding.SetScopes(symbolScopes)
+			}
+		}
+	}
 }
 
 // CompileIncludeCi compiles an include-ci expression.
@@ -300,6 +390,34 @@ func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallCon
 		return values.WrapForeignErrorf(values.ErrNotAList, "expected expression list, got %T", tail)
 	}
 	return nil
+}
+
+// compileLibraryBegin compiles a library begin body with letrec* semantics.
+//
+// R7RS §5.3.2: Internal definitions use letrec* semantics where all defined
+// variables are in scope at the start of the body. This enables forward
+// references like (define any ...(every pair? lol)...) where every is
+// defined later in the body.
+//
+// This function performs two passes:
+//  1. Pre-declaration pass: Create bindings for all define forms
+//  2. Compilation pass: Compile all expressions (with all bindings visible)
+func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
+	if !expr.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of expressions, got %T", expr)
+	}
+
+	// Pass 1: Pre-declare all bindings from define forms
+	_, err := syntax.SyntaxForEach(ctctx.ctx, expr, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+		p.predeclareDefineBinding(v)
+		return nil
+	})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "failed to pre-declare library bindings")
+	}
+
+	// Pass 2: Compile all expressions (with all bindings now visible)
+	return p.compileExpressionList(ctctx, expr)
 }
 
 // CompileProcedureCall compiles a procedure call expression.
@@ -494,16 +612,98 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 		return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 
 	case *syntax.SyntaxVector:
-		// Vectors: expand elements and wrap in (list->vector (list ...))
-		var elems []syntax.SyntaxValue
-		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+		// Vectors: expand elements and wrap in (list->vector ...)
+		// Check if any element is unquote-splicing at depth 1
+		hasSplice := false
 		for _, elem := range v.Values {
-			elems = append(elems, p.expandQuasiquote(elem, depth))
+			if elemPair, ok := elem.(*syntax.SyntaxPair); ok {
+				if carSymName, ok := p.getSymbolName(elemPair.SyntaxCar()); ok {
+					if carSymName == "unquote-splicing" && depth == 1 {
+						hasSplice = true
+						break
+					}
+				}
+			}
 		}
-		listExpr := p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+
+		if !hasSplice {
+			// Simple case: (list->vector (list elem1 elem2 ...))
+			var elems []syntax.SyntaxValue
+			elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+			for _, elem := range v.Values {
+				elems = append(elems, p.expandQuasiquote(elem, depth))
+			}
+			listExpr := p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+			return p.buildQuasiquoteSyntaxList(srcCtx,
+				syntax.NewSyntaxSymbol("list->vector", srcCtx),
+				listExpr,
+			)
+		}
+
+		// Has splicing: (list->vector (append seg1 seg2 ...))
+		// Segment the elements similar to expandQuasiquoteListWithSplice
+		type segmentType int
+		const (
+			segNormal segmentType = iota
+			segSplice
+		)
+		type segment struct {
+			typ   segmentType
+			elems []syntax.SyntaxValue
+			expr  syntax.SyntaxValue
+		}
+
+		var segments []segment
+		var currentElems []syntax.SyntaxValue
+
+		flushNormal := func() {
+			if len(currentElems) > 0 {
+				segments = append(segments, segment{typ: segNormal, elems: currentElems})
+				currentElems = nil
+			}
+		}
+
+		for _, elem := range v.Values {
+			if elemPair, ok := elem.(*syntax.SyntaxPair); ok {
+				if carSymName, ok := p.getSymbolName(elemPair.SyntaxCar()); ok {
+					if carSymName == "unquote-splicing" && depth == 1 {
+						flushNormal()
+						if elemPair.Len() == 2 {
+							cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
+							expr := cdrPair.SyntaxCar()
+							segments = append(segments, segment{typ: segSplice, expr: expr})
+						} else {
+							// Malformed - treat as normal
+							currentElems = append(currentElems, p.expandQuasiquote(elem, depth))
+						}
+						continue
+					}
+				}
+			}
+			currentElems = append(currentElems, p.expandQuasiquote(elem, depth))
+		}
+		flushNormal()
+
+		// Build (append seg1 seg2 ...)
+		var appendArgs []syntax.SyntaxValue
+		appendArgs = append(appendArgs, syntax.NewSyntaxSymbol("append", srcCtx))
+
+		for _, seg := range segments {
+			switch seg.typ {
+			case segNormal:
+				// Wrap in (list ...)
+				listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
+				listArgs = append(listArgs, seg.elems...)
+				appendArgs = append(appendArgs, p.buildQuasiquoteSyntaxList(srcCtx, listArgs...))
+			case segSplice:
+				appendArgs = append(appendArgs, seg.expr)
+			}
+		}
+
+		appendExpr := p.buildQuasiquoteSyntaxList(srcCtx, appendArgs...)
 		return p.buildQuasiquoteSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("list->vector", srcCtx),
-			listExpr,
+			appendExpr,
 		)
 
 	default:
@@ -983,7 +1183,8 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 	case "import":
 		return p.processLibraryImport(ctctx, lib, argsExpr)
 	case "begin":
-		// Compile the begin body in the library environment
+		// Compile the begin body in the library environment with letrec* semantics.
+		// R7RS §5.3.2: All defined names are visible to all initializers.
 		beginPair, ok := argsExpr.(*syntax.SyntaxPair)
 		if !ok {
 			if syntax.IsSyntaxEmptyList(argsExpr) {
@@ -991,7 +1192,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 			}
 			return values.WrapForeignErrorf(values.ErrNotAPair, "begin: expected list of expressions")
 		}
-		return p.compileExpressionList(ctctx, beginPair)
+		return p.compileLibraryBegin(ctctx, beginPair)
 	case "include":
 		return p.CompileInclude(ctctx, argsExpr)
 	case "include-ci":
@@ -1124,7 +1325,8 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			}
 
 			// Get the binding from the imported library's environment
-			// First check the runtime environment, then the expand environment for syntax bindings
+			// First check the runtime environment, then the expand environment for syntax bindings,
+			// then the compile environment for auxiliary syntax (else, =>)
 			libSym := importedLib.Env.InternSymbol(values.NewSymbol(internalName))
 			importedBinding := importedLib.Env.GetBinding(libSym)
 			if importedBinding == nil {
@@ -1132,6 +1334,13 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 				expandEnv := importedLib.Env.Expand()
 				if expandEnv != nil {
 					importedBinding = expandEnv.GetBinding(libSym)
+				}
+			}
+			if importedBinding == nil {
+				// Auxiliary syntax (else, =>) are stored in the compile environment
+				compileEnv := importedLib.Env.Compile()
+				if compileEnv != nil {
+					importedBinding = compileEnv.GetBinding(libSym)
 				}
 			}
 			if importedBinding == nil {
@@ -1446,7 +1655,8 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 			}
 
 			// Get the binding from the library's environment
-			// First check the runtime environment, then the expand environment for syntax bindings
+			// First check the runtime environment, then the expand environment for syntax bindings,
+			// then the compile environment for auxiliary syntax (else, =>)
 			libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
 			libBinding := lib.Env.GetBinding(libSym)
 			if libBinding == nil {
@@ -1454,6 +1664,13 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 				expandEnv := lib.Env.Expand()
 				if expandEnv != nil {
 					libBinding = expandEnv.GetBinding(libSym)
+				}
+			}
+			if libBinding == nil {
+				// Auxiliary syntax (else, =>) are stored in the compile environment
+				compileEnv := lib.Env.Compile()
+				if compileEnv != nil {
+					libBinding = compileEnv.GetBinding(libSym)
 				}
 			}
 			if libBinding == nil {
@@ -1642,6 +1859,330 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// For non-syntax-rules transformers, we would need to compile and evaluate
 	// the transformer expression at compile time. For now, just support syntax-rules
 	return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
+}
+
+// CompileLetSyntax compiles the (let-syntax <bindings> <body>) form.
+//
+// R7RS §4.3.1: let-syntax creates local syntax bindings that are visible only
+// within the body. The transformers in the bindings are evaluated in the
+// environment where the let-syntax appears (they cannot see each other).
+//
+// Syntax: (let-syntax ((<keyword> <transformer-spec>) ...) <body>)
+//
+// Example:
+//
+//	(let-syntax
+//	    ((when (syntax-rules ()
+//	             ((when test stmt1 stmt2 ...)
+//	              (if test (begin stmt1 stmt2 ...))))))
+//	  (when #t (display "hello")))
+//
+// Reference: R7RS Section 4.3.1
+func (p *CompileTimeContinuation) CompileLetSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	return p.compileLetSyntaxImpl(ctctx, expr, false)
+}
+
+// CompileLetrecSyntax compiles the (letrec-syntax <bindings> <body>) form.
+//
+// R7RS §4.3.1: letrec-syntax is like let-syntax, but the bindings are visible
+// to each other, allowing mutually recursive macros.
+//
+// Syntax: (letrec-syntax ((<keyword> <transformer-spec>) ...) <body>)
+//
+// Reference: R7RS Section 4.3.1
+func (p *CompileTimeContinuation) CompileLetrecSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	return p.compileLetSyntaxImpl(ctctx, expr, true)
+}
+
+// compileLetSyntaxImpl implements both let-syntax and letrec-syntax.
+// The recursive parameter controls whether bindings can see each other.
+//
+// R7RS §4.3.1: let-syntax and letrec-syntax create local syntax bindings
+// that are visible only within the body. The bindings shadow any outer
+// bindings with the same name.
+func (p *CompileTimeContinuation) compileLetSyntaxImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, recursive bool) error {
+	formName := "let-syntax"
+	if recursive {
+		formName = "letrec-syntax"
+	}
+
+	// expr is (<bindings> <body>) - the args after the keyword has been stripped
+	argsPair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || argsPair.IsEmptyList() {
+		return values.NewForeignErrorf("%s: expected bindings and body", formName)
+	}
+
+	// Get the bindings list
+	bindingsStx := argsPair.SyntaxCar()
+	bindingsPair, ok := bindingsStx.(*syntax.SyntaxPair)
+	if !ok {
+		return values.NewForeignErrorf("%s: expected bindings list", formName)
+	}
+
+	// Get the body
+	bodyStx := argsPair.SyntaxCdr()
+	bodyPair, ok := bodyStx.(*syntax.SyntaxPair)
+	if !ok || bodyPair.IsEmptyList() {
+		return values.NewForeignErrorf("%s: expected body expressions", formName)
+	}
+
+	// Count bindings for local environment allocation
+	numBindings := 0
+	current := bindingsPair
+	for !syntax.IsSyntaxEmptyList(current) {
+		numBindings++
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	// Create a child expand environment with local bindings for the macros.
+	// This ensures let-syntax bindings shadow global macros without modifying them.
+	parentExpandEnv := p.env.Expand()
+	localExpandEnv := environment.NewLocalEnvironment(numBindings)
+	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, parentExpandEnv)
+
+	// Create a new scope for the let-syntax body
+	letScope := syntax.NewScope(nil)
+
+	// Parse bindings and compile transformers
+	type syntaxBinding struct {
+		keyword *values.Symbol
+		closure *MachineClosure
+	}
+	var bindings []syntaxBinding
+
+	if recursive {
+		// For letrec-syntax, pre-register all keywords in the child expand environment
+		// so transformers can reference each other during compilation.
+		current = bindingsPair
+		for !syntax.IsSyntaxEmptyList(current) {
+			bindingStx := current.SyntaxCar()
+			bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
+			if !ok || bindingPair.IsEmptyList() {
+				return values.NewForeignErrorf("%s: invalid binding", formName)
+			}
+			keywordStx := bindingPair.SyntaxCar()
+			keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
+			if !ok {
+				return values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+			}
+			keyword := keywordSym.Unwrap().(*values.Symbol)
+
+			// Pre-register with a placeholder in the child's local environment
+			_, _ = childExpandEnv.CreateLocalBinding(keyword, environment.BindingTypeSyntax)
+
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else {
+				break
+			}
+		}
+	}
+
+	// Now compile each transformer
+	current = bindingsPair
+	for !syntax.IsSyntaxEmptyList(current) {
+		bindingStx := current.SyntaxCar()
+		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
+		if !ok || bindingPair.IsEmptyList() {
+			return values.NewForeignErrorf("%s: invalid binding", formName)
+		}
+
+		// Get keyword
+		keywordStx := bindingPair.SyntaxCar()
+		keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
+		if !ok {
+			return values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+		}
+		keyword := keywordSym.Unwrap().(*values.Symbol)
+
+		// Get transformer expression
+		transformerCdr := bindingPair.SyntaxCdr()
+		transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
+		if !ok || transformerPair.IsEmptyList() {
+			return values.NewForeignErrorf("%s: missing transformer expression", formName)
+		}
+		transformerExpr := transformerPair.SyntaxCar()
+
+		// Check if transformer is a syntax-rules form
+		transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
+		if !ok {
+			return values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+		car := transformerPairExpr.SyntaxCar()
+		if car == nil {
+			return values.NewForeignErrorf("%s: invalid transformer", formName)
+		}
+		sym, ok := car.(*syntax.SyntaxSymbol)
+		if !ok {
+			return values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+		symVal := sym.Unwrap()
+		symbol, ok := symVal.(*values.Symbol)
+		if !ok || symbol.Key != "syntax-rules" {
+			return values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+
+		// Compile the syntax-rules transformer
+		// For letrec-syntax, use childExpandEnv so transformers can see each other
+		compileEnv := p.env
+		if recursive {
+			// Create a temporary environment that uses childExpandEnv for expansion
+			compileEnv = p.env // We'll handle this differently below
+		}
+		closure, err := CompileSyntaxRules(ctctx.ctx, compileEnv, transformerPairExpr)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
+		}
+
+		bindings = append(bindings, syntaxBinding{keyword: keyword, closure: closure})
+
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	// Store all transformers in the child expand environment's local bindings
+	for _, b := range bindings {
+		localIndex, created := childExpandEnv.CreateLocalBinding(b.keyword, environment.BindingTypeSyntax)
+		if !created {
+			// Binding already exists (from letrec-syntax pre-registration), get its index
+			localIndex = childExpandEnv.GetLocalIndex(b.keyword)
+		}
+		if localIndex != nil {
+			err := childExpandEnv.SetLocalValue(localIndex, b.closure)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Add the let-syntax scope to the body
+	scopedBody := bodyPair.AddScope(letScope)
+	scopedBodyPair, ok := scopedBody.(*syntax.SyntaxPair)
+	if !ok {
+		return values.NewForeignErrorf("%s: body must be a list", formName)
+	}
+
+	// Compile the body using the child expand environment for macro lookup
+	return p.compileLetSyntaxBody(ctctx, scopedBodyPair, childExpandEnv)
+}
+
+// compileLetSyntaxBody compiles a sequence of body expressions using a child
+// expand environment for macro lookup. This ensures let-syntax bindings shadow
+// outer macro bindings during expansion.
+func (p *CompileTimeContinuation) compileLetSyntaxBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair, expandEnv *environment.EnvironmentFrame) error {
+	if syntax.IsSyntaxEmptyList(body) {
+		return values.NewForeignError("expected at least one body expression")
+	}
+
+	// Create expander using the child expand environment
+	ectx := NewExpandTimeCallContext()
+	expander := NewExpanderTimeContinuation(expandEnv)
+
+	// First, collect all expressions into a slice to know which is last
+	var exprs []syntax.SyntaxValue
+	current := body
+	for !syntax.IsSyntaxEmptyList(current) {
+		exprs = append(exprs, current.SyntaxCar())
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else if !syntax.IsSyntaxEmptyList(cdr) {
+			return values.NewForeignError("body must be a proper list")
+		} else {
+			break
+		}
+	}
+
+	// Expand and compile each expression
+	for i, expr := range exprs {
+		isLast := i == len(exprs)-1
+
+		// Expand the expression using the child expand environment
+		expandedExpr, err := expander.ExpandExpression(ectx, expr)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "failed to expand body expression")
+		}
+
+		// Non-last expressions: force out of tail position.
+		exprCtx := ctctx.NotInTail()
+		if isLast {
+			exprCtx = ctctx
+		}
+
+		err = p.CompileExpression(exprCtx, expandedExpr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// compileBeginBody compiles a sequence of body expressions from raw syntax.
+// This is used by let-syntax and letrec-syntax to compile their body.
+// The last expression is compiled in tail position per R7RS 3.5.
+//
+// Body expressions are expanded before compilation to resolve macros that
+// may have been bound by the enclosing let-syntax/letrec-syntax.
+func (p *CompileTimeContinuation) compileBeginBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair) error {
+	if syntax.IsSyntaxEmptyList(body) {
+		return values.NewForeignError("expected at least one body expression")
+	}
+
+	// Create expander for macro expansion
+	ectx := NewExpandTimeCallContext()
+	expander := NewExpanderTimeContinuation(p.env)
+
+	// First, collect all expressions into a slice to know which is last
+	var exprs []syntax.SyntaxValue
+	current := body
+	for !syntax.IsSyntaxEmptyList(current) {
+		exprs = append(exprs, current.SyntaxCar())
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else if !syntax.IsSyntaxEmptyList(cdr) {
+			return values.NewForeignError("body must be a proper list")
+		} else {
+			break
+		}
+	}
+
+	// Expand and compile each expression
+	for i, expr := range exprs {
+		isLast := i == len(exprs)-1
+
+		// Expand the expression first to resolve macros
+		expandedExpr, err := expander.ExpandExpression(ectx, expr)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "failed to expand body expression")
+		}
+
+		// Non-last expressions: force out of tail position.
+		// Their return values are implicitly discarded.
+		exprCtx := ctctx.NotInTail()
+		if isLast {
+			// Last expression: inherit the tail position from the enclosing context.
+			exprCtx = ctctx
+		}
+
+		err = p.CompileExpression(exprCtx, expandedExpr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // compileAndEvalTransformer compiles a lambda expression and evaluates it at

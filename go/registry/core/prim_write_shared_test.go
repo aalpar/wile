@@ -63,7 +63,7 @@ func TestWriteShared(t *testing.T) {
 			code: `(let ((p (open-output-string)))
 				(write-shared #(1 2 3) p)
 				(get-output-string p))`,
-			expected: "#( 1 2 3 )",
+			expected: "#(1 2 3)",
 		},
 	}
 

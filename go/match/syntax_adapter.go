@@ -279,21 +279,38 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
 
 	case *values.Symbol:
-		// Create the symbol
-		sym := syntax.NewSyntaxSymbol(v.Key, srcCtx)
+		// Check if this is a free identifier (not a pattern variable)
+		// Free identifiers should resolve to their definition-time bindings,
+		// so they must NOT inherit use-site scopes.
+		var isFree bool
+		if freeIds != nil {
+			_, isFree = freeIds[v.Key]
+		}
+
+		// For free identifiers, use a scope-free source context so they can
+		// match global/compile-time bindings (like special forms 'if', 'begin').
+		// R7RS §4.3: macro-introduced identifiers refer to definition-time bindings.
+		symCtx := srcCtx
+		if isFree && srcCtx != nil && len(srcCtx.Scopes) > 0 {
+			// Strip scopes but preserve location info for error messages
+			symCtx = &syntax.SourceContext{
+				Text:   srcCtx.Text,
+				File:   srcCtx.File,
+				Start:  srcCtx.Start,
+				End:    srcCtx.End,
+				Origin: srcCtx.Origin,
+				// Scopes intentionally omitted for free identifiers
+			}
+		}
+
+		// Create the symbol with the appropriate context
+		sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
 
 		// Add intro scope if:
 		// 1. An intro scope was provided
 		// 2. This is NOT a free identifier
-		if introScope != nil {
-			if freeIds != nil {
-				_, isFree := freeIds[v.Key]
-				if !isFree {
-					sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
-				}
-			} else {
-				sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
-			}
+		if introScope != nil && !isFree {
+			sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
 		}
 		return sym
 

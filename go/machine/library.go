@@ -294,7 +294,8 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 		}
 
 		// Get the binding from the library's environment
-		// First check the runtime environment, then the expand environment for syntax bindings
+		// First check the runtime environment, then the expand environment for syntax bindings,
+		// then the compile environment for auxiliary syntax (else, =>)
 		libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
 		libBinding := lib.Env.GetBinding(libSym)
 		if libBinding == nil {
@@ -302,6 +303,13 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 			expandEnv := lib.Env.Expand()
 			if expandEnv != nil {
 				libBinding = expandEnv.GetBinding(libSym)
+			}
+		}
+		if libBinding == nil {
+			// Auxiliary syntax (else, =>) are stored in the compile environment
+			compileEnv := lib.Env.Compile()
+			if compileEnv != nil {
+				libBinding = compileEnv.GetBinding(libSym)
 			}
 		}
 		if libBinding == nil {

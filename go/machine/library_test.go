@@ -669,3 +669,53 @@ func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
 	notFound := reg.Lookup(machine.NewLibraryName("nonexistent"))
 	qt.Assert(t, notFound, qt.IsNil)
 }
+
+// TestLibraryForwardReferences tests that library bodies support forward references
+// per R7RS §5.3.2: Internal definitions use letrec* semantics.
+//
+// Prior to the fix, this would fail with:
+// "no such local or global binding \"callee\"" because caller references callee
+// before callee is defined.
+func TestLibraryForwardReferences(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a library with forward references in the begin body:
+	// 'caller' references 'callee' before 'callee' is defined
+	// This uses only primitives available in the test environment (no external imports)
+	libraryCode := `
+	(define-library (test forward-refs)
+	  (export caller callee)
+	  (begin
+	    (define (caller x)
+	      (callee x))
+	    (define (callee y)
+	      y)))
+	`
+
+	// Set up environment with library registry
+	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
+	defer func() { machine.LibraryEnvFactory = nil }()
+	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	c.Assert(err, qt.IsNil)
+
+	// Set up library registry
+	registry := machine.NewLibraryRegistry()
+	env.SetLibraryRegistry(registry)
+
+	// Parse the library definition
+	stx := parseLibrarySyntax(t, env, libraryCode)
+
+	// Create compiler and expand the library definition
+	ectx := machine.NewExpandTimeCallContext()
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	c.Assert(err, qt.IsNil)
+
+	// Compile the library - this should succeed with forward references
+	// Before the letrec* semantics fix, this would fail with:
+	// "no such local or global binding \"callee\""
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	err = compiler.CompileExpression(ctctx, expanded)
+	c.Assert(err, qt.IsNil, qt.Commentf("Forward references should work with letrec* semantics"))
+}

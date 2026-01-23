@@ -49,6 +49,8 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"unsyntax", (*ExpanderTimeContinuation).expandUnsyntax},
 		{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnsyntaxSplicing},
 		{"with-syntax", (*ExpanderTimeContinuation).expandWithSyntax},
+		{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
+		{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 
 		// Forms that expand their subexpressions
 		{"if", (*ExpanderTimeContinuation).expandIfForm},

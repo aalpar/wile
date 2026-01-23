@@ -70,7 +70,9 @@ type Parser struct {
 	cur         tokenizer.Token
 	err         error
 	skipComment bool
+	foldCase    bool   // R7RS §2.1: #!fold-case mode for identifiers
 	file        string // source file name for error reporting
+	datumLabels map[int]syntax.SyntaxValue // R7RS §2.4 datum labels (#n= and #n#)
 }
 
 // NewParser creates a new parser for the given reader and environment.
@@ -130,8 +132,15 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		if !p.skipComment {
 			return q, nil
 		}
-		switch q.(type) {
+		switch d := q.(type) {
 		case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
+			if p.err == io.EOF {
+				return nil, p.err
+			}
+			continue
+		case *syntax.SyntaxDirective:
+			// R7RS §2.1: Process fold-case directives
+			p.processFoldCaseDirective(d)
 			if p.err == io.EOF {
 				return nil, p.err
 			}
@@ -152,6 +161,10 @@ func (p *Parser) wrapSyntax(o values.Value, t tokenizer.Token) *syntax.SyntaxObj
 }
 
 func (p *Parser) wrapSyntaxSymbol(o string, t tokenizer.Token) *syntax.SyntaxSymbol {
+	// R7RS §2.1: Apply fold-case if directive is active
+	if p.foldCase {
+		o = strings.ToLower(o)
+	}
 	// Intern the symbol at parse time, colocating interning with syntax occurrence
 	sym := p.env.InternSymbol(values.NewSymbol(o))
 	return syntax.NewSyntaxSymbolForSymbol(sym, p.newSourceContext(t))
@@ -192,6 +205,136 @@ func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t
 
 func (p *Parser) wrapSyntaxDirective(v0 string, t tokenizer.Token) *syntax.SyntaxDirective {
 	return syntax.NewSyntaxDirective(v0, p.newSourceContext(t))
+}
+
+// processFoldCaseDirective handles R7RS §2.1 fold-case directives.
+// #!fold-case causes subsequent identifiers to be case-folded to lowercase.
+// #!no-fold-case restores case-sensitive reading.
+func (p *Parser) processFoldCaseDirective(d *syntax.SyntaxDirective) {
+	if strings.EqualFold(d.Name, "fold-case") {
+		p.foldCase = true
+	} else if strings.EqualFold(d.Name, "no-fold-case") {
+		p.foldCase = false
+	}
+}
+
+// readLabeledList reads a list into a pre-created placeholder pair.
+// This enables circular references where the list refers to itself via datum labels.
+// The placeholder must already be registered in datumLabels before calling this.
+//
+// R7RS §2.4: Datum labels enable representing shared/circular structures.
+// For #0=(1 . #0#), we:
+//  1. Pre-create a pair and register it as label 0
+//  2. Read the list contents, which may include #0# references
+//  3. Populate the pair with the read values
+func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
+	// Skip the opening paren
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.err
+	}
+
+	// Handle empty list: ()
+	if p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+		// Empty list - return the placeholder unchanged (nil . nil)
+		return placeholder, nil
+	}
+
+	// Read the first element
+	first, _, err := p.readSyntax()
+	if err != nil {
+		return nil, err
+	}
+	placeholder.SetCar(first)
+
+	// Advance to next token
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.err
+	}
+
+	// Check for improper list: (a . b)
+	if p.cur.Type() == tokenizer.TokenizerStateCons {
+		// Skip the dot
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.err
+		}
+		// Read the cdr
+		cdr, _, err := p.readSyntax()
+		if err != nil {
+			return nil, err
+		}
+		placeholder.SetCdr(cdr)
+		// Advance past the cdr and expect close paren
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.err
+		}
+		if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+			return nil, NewParserErrorf(p.cur, "expected ')' after improper list cdr")
+		}
+		return placeholder, nil
+	}
+
+	// Check for end of list
+	if p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+		// Single element list - set cdr to empty list
+		placeholder.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
+		return placeholder, nil
+	}
+
+	// Continue reading remaining elements
+	current := placeholder
+	for p.cur.Type() != tokenizer.TokenizerStateCloseParen && p.cur.Type() != tokenizer.TokenizerStateCons {
+		// Create a new pair for this element
+		nextPair := p.wrapSyntaxPair(nil, nil, p.cur)
+
+		// Read the element
+		elem, _, err := p.readSyntax()
+		if err != nil {
+			return nil, err
+		}
+		nextPair.SetCar(elem)
+
+		// Link to previous
+		current.SetCdr(nextPair)
+		current = nextPair
+
+		// Advance to next token
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.err
+		}
+	}
+
+	// Handle improper list ending: (a b . c)
+	if p.cur.Type() == tokenizer.TokenizerStateCons {
+		// Skip the dot
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.err
+		}
+		// Read the final cdr
+		cdr, _, err := p.readSyntax()
+		if err != nil {
+			return nil, err
+		}
+		current.SetCdr(cdr)
+		// Advance past the cdr and expect close paren
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.err
+		}
+		if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+			return nil, NewParserErrorf(p.cur, "expected ')' after improper list cdr")
+		}
+	} else {
+		// Proper list - terminate with empty list
+		current.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
+	}
+
+	return placeholder, nil
 }
 
 // readQuoteForm reads a quote-like form (quote, unquote, quasiquote, etc.).
@@ -241,6 +384,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCons:
 		return nil, p.cur, NewParserErrorWithWrap(values.ErrNotACons, p.cur, "unexpected '.' token")
 	case tokenizer.TokenizerStateLabelAssignment:
+		// R7RS §2.4: #n=<datum> defines datum label n
+		// For circular/shared structures, we must register the container before reading its contents
 		s := TrimPrefixFolded(p.cur.String(), "#")
 		is := strings.TrimSuffix(s, "=")
 		var i int64
@@ -248,24 +393,61 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
+		labelNum := int(i)
+		if p.datumLabels == nil {
+			p.datumLabels = make(map[int]syntax.SyntaxValue)
+		}
+		assignTok := p.cur
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
+		// Check if the next token starts a compound structure (list or vector)
+		// For these, we pre-register a placeholder to support circular references
 		var v syntax.SyntaxValue
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
+		switch p.cur.Type() {
+		case tokenizer.TokenizerStateOpenParen:
+			// Pre-register an empty pair for potential circular references
+			placeholder := p.wrapSyntaxPair(nil, nil, p.cur)
+			p.datumLabels[labelNum] = placeholder
+			// Now read the list contents, which can reference this label
+			v, p.err = p.readLabeledList(placeholder)
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+		case tokenizer.TokenizerStateOpenVector:
+			// For vectors, read normally (circular vector references are rare)
+			v, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			p.datumLabels[labelNum] = v
+		default:
+			// Non-compound datum: read normally and store
+			v, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			p.datumLabels[labelNum] = v
 		}
-		q0 := p.wrapSyntaxDatumLabelAssignment(int(i), v, p.cur)
+		q0 := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateLabelReference:
+		// R7RS §2.4: #n# references previously defined datum label n
 		s := strings.Trim(p.cur.String(), "#")
 		var i int64
 		i, p.err = strconv.ParseInt(s, 10, bits.UintSize)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
+		// Look up the datum in the label table
+		if p.datumLabels != nil {
+			if labeled, ok := p.datumLabels[int(i)]; ok {
+				// Return the actual datum, not a label reference
+				return labeled, p.cur, nil
+			}
+		}
+		// Label not found - return a SyntaxDatumLabel (will error at compile time)
 		q = p.wrapSyntaxDatumLabel(int(i), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDirective:
@@ -347,28 +529,25 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVector:
 		q0 := p.wrapSyntaxVector(nil, p.cur)
-		var v syntax.SyntaxValue
+		// Advance past #( token
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		for p.err == nil && p.curr().Type() != tokenizer.TokenizerStateCloseParen {
-			q0.Values = append(q0.Values, v)
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
+		// Read vector elements - match the list parsing pattern:
+		// check token type BEFORE reading, advance AFTER reading
+		for p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+			var v syntax.SyntaxValue
 			v, _, p.err = p.readSyntax()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-		}
-		if p.err != nil {
-			return nil, p.cur, p.err
+			q0.Values = append(q0.Values, v)
+			// Advance to next element (or close paren)
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
 		}
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVectorUnsignedByteMarker:

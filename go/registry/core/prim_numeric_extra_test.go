@@ -246,6 +246,22 @@ func TestExactIntegerSqrt(t *testing.T) {
 			out1: values.NewInteger(10),
 			out2: values.NewInteger(0),
 		},
+		{
+			// Bug #11: BigInteger input should work without overflow
+			// 10^20 = 100000000000000000000
+			// sqrt(10^20) = 10^10 = 10000000000
+			name: "exact-integer-sqrt of BigInteger (10^20)",
+			prog: values.List(values.NewSymbol("exact-integer-sqrt"), values.NewBigIntegerFromString("100000000000000000000", 10)),
+			out1: values.NewBigIntegerFromString("10000000000", 10),
+			out2: values.NewBigIntegerFromString("0", 10),
+		},
+		{
+			// 10^20 + 1 should give sqrt=10^10, remainder=1
+			name: "exact-integer-sqrt of BigInteger with remainder",
+			prog: values.List(values.NewSymbol("exact-integer-sqrt"), values.NewBigIntegerFromString("100000000000000000001", 10)),
+			out1: values.NewBigIntegerFromString("10000000000", 10),
+			out2: values.NewBigIntegerFromString("1", 10),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

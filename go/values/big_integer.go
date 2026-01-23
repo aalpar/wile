@@ -280,6 +280,11 @@ func (p *BigInteger) ToInexact() Number {
 	return NewFloat(f)
 }
 
+// Abs returns the absolute value of this BigInteger.
+func (p *BigInteger) Abs() *BigInteger {
+	return NewBigInteger(new(big.Int).Abs(p.value))
+}
+
 // Compare compares this BigInteger with another number.
 //
 // R7RS §6.2.6: Numeric comparisons use mathematical value regardless of

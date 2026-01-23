@@ -23,6 +23,7 @@ import (
 	"wile/environment"
 	"wile/machine"
 	"wile/parser"
+	"wile/syntax"
 	"wile/tokenizer"
 	"wile/values"
 )
@@ -75,7 +76,10 @@ func PrimRead(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error reading from input port")
 	}
-	q := syn.UnwrapAll()
+	// Use UnwrapAllShared to preserve object identity for datum labels (R7RS §2.4)
+	// and handle circular structures
+	cache := make(map[syntax.SyntaxValue]values.Value)
+	q := syntax.UnwrapAllShared(syn, cache)
 	mc.SetValue(q)
 	return nil
 }
@@ -177,6 +181,7 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimWrite implements the write primitive.
 // Writes a machine-readable representation of an object to the current output port or to the specified port.
+// R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
 func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	o := mc.Arg(1)
@@ -203,7 +208,8 @@ func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", port)
 		}
 	}
-	_, err := writer.Write([]byte(obj.SchemeString()))
+	// Use cycle-aware writer to handle circular structures
+	_, err := writer.Write([]byte(values.WriteValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
@@ -254,6 +260,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimDisplay implements the (display) primitive.
 // Writes a human-readable representation of an object to an output port.
+// R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
 func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	o := mc.Arg(1)
@@ -280,7 +287,8 @@ func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", port)
 		}
 	}
-	_, err := writer.Write([]byte(StringValue(obj)))
+	// Use cycle-aware writer to handle circular structures
+	_, err := writer.Write([]byte(values.DisplayValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
@@ -364,11 +372,7 @@ func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 // PrimWriteShared implements the write-shared primitive (R7RS).
 // Writes a machine-readable representation of an object using datum labels
 // (#n= and #n#) for shared and circular structure.
-//
-// NOTE: This is a basic implementation that behaves like write.
-// Full shared structure support with datum labels would require:
-// 1. First pass to detect shared nodes (nodes referenced more than once)
-// 2. Second pass to output with labels for shared nodes
+// R7RS §6.13.3: write-shared always uses datum labels for shared structure.
 //
 // (write-shared obj) or (write-shared obj port)
 func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
@@ -397,9 +401,8 @@ func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-shared: expected an output port but got %T", port)
 		}
 	}
-	// TODO: Implement proper shared structure detection and datum labels
-	// For now, this behaves like write
-	_, err := writer.Write([]byte(obj.SchemeString()))
+	// Use cycle-aware writer with datum labels for shared structure
+	_, err := writer.Write([]byte(values.WriteValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-shared: error writing to output port")
 	}
@@ -706,6 +709,163 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "write-string: error writing to output port")
 	}
 	mc.SetValues()
+	return nil
+}
+
+// PrimWriteU8 implements the write-u8 primitive.
+// R7RS §6.13.3: (write-u8 byte [port])
+// Writes byte to the given binary output port and returns an unspecified value.
+func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
+	byteVal := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	// Validate byte argument (must be exact integer 0-255)
+	var b byte
+	switch v := byteVal.(type) {
+	case *values.Integer:
+		if v.Value < 0 || v.Value > 255 {
+			return values.NewForeignError("write-u8: byte must be an exact integer in the range 0-255")
+		}
+		b = byte(v.Value)
+	default:
+		return values.WrapForeignErrorf(values.ErrNotANumber, "write-u8: expected an exact integer but got %T", byteVal)
+	}
+
+	// Get the port from rest arguments
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "write-u8: expected a list but got %T", rest)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "write-u8: expected a list but got %s", tuple.SchemeString())
+	}
+
+	// Write to the appropriate port
+	if tuple.IsEmptyList() {
+		// Default to current output port - but write-u8 requires a binary port
+		return values.NewForeignError("write-u8: no binary output port specified")
+	}
+
+	port := tuple.Car()
+	switch p := port.(type) {
+	case *values.BytevectorOutputPort:
+		err := p.WriteByte(b)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "write-u8: error writing byte")
+		}
+	case *values.BinaryOutputPort:
+		_, err := p.Write([]byte{b})
+		if err != nil {
+			return values.WrapForeignErrorf(err, "write-u8: error writing byte")
+		}
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-u8: expected a binary output port but got %T", port)
+	}
+
+	mc.SetValues()
+	return nil
+}
+
+// PrimReadU8 implements the read-u8 primitive.
+// R7RS §6.13.3: (read-u8 [port])
+// Reads the next byte from the given binary input port and returns it as an exact integer.
+// Returns eof-object at end of file.
+func PrimReadU8(_ context.Context, mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-u8: expected a list but got %T", o)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-u8: expected a list but got %s", tuple.SchemeString())
+	}
+
+	if tuple.IsEmptyList() {
+		return values.NewForeignError("read-u8: no binary input port specified")
+	}
+
+	port := tuple.Car()
+	switch p := port.(type) {
+	case *values.BytevectorInputPort:
+		b, err := p.ReadByte()
+		if err == io.EOF {
+			mc.SetValue(values.EofObject)
+			return nil
+		}
+		if err != nil {
+			return values.WrapForeignErrorf(err, "read-u8: error reading byte")
+		}
+		mc.SetValue(values.NewInteger(int64(b)))
+	case *values.BinaryInputPort:
+		buf := make([]byte, 1)
+		n, err := p.Read(buf)
+		if err == io.EOF || n == 0 {
+			mc.SetValue(values.EofObject)
+			return nil
+		}
+		if err != nil {
+			return values.WrapForeignErrorf(err, "read-u8: error reading byte")
+		}
+		mc.SetValue(values.NewInteger(int64(buf[0])))
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-u8: expected a binary input port but got %T", port)
+	}
+
+	return nil
+}
+
+// PrimPeekU8 implements the peek-u8 primitive.
+// R7RS §6.13.3: (peek-u8 [port])
+// Like read-u8, but does not consume the byte from the port.
+func PrimPeekU8(_ context.Context, mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "peek-u8: expected a list but got %T", o)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "peek-u8: expected a list but got %s", tuple.SchemeString())
+	}
+
+	if tuple.IsEmptyList() {
+		return values.NewForeignError("peek-u8: no binary input port specified")
+	}
+
+	port := tuple.Car()
+	switch p := port.(type) {
+	case *values.BytevectorInputPort:
+		b, err := p.ReadByte()
+		if err == io.EOF {
+			mc.SetValue(values.EofObject)
+			return nil
+		}
+		if err != nil {
+			return values.WrapForeignErrorf(err, "peek-u8: error reading byte")
+		}
+		// Unread the byte so it can be read again
+		err = p.UnreadByte()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "peek-u8: error unreading byte")
+		}
+		mc.SetValue(values.NewInteger(int64(b)))
+	case *values.BinaryInputPort:
+		// BinaryInputPort wraps io.Reader which doesn't support UnreadByte
+		// We would need a buffered reader for this - for now, return error
+		return values.NewForeignError("peek-u8: peek not supported on this binary input port")
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "peek-u8: expected a binary input port but got %T", port)
+	}
+
+	return nil
+}
+
+// PrimU8ReadyQ implements the u8-ready? primitive.
+// R7RS §6.13.3: (u8-ready? [port])
+// Returns #t if a byte is available for reading from the binary input port.
+func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
+	// For now, assume a byte is always ready for bytevector input ports
+	// A more accurate implementation would need non-blocking I/O
+	mc.SetValue(values.TrueValue)
 	return nil
 }
 

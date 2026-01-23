@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 	"strconv"
 )
@@ -158,6 +159,33 @@ func (p *Float) LessThan(o Number) bool {
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
 	panic(ErrNotANumber)
+}
+
+func (p *Float) Abs() *Float {
+	return NewFloat(math.Abs(p.Value))
+}
+
+func (p *Float) Compare(o Number) int {
+	pf := new(big.Float).SetFloat64(p.Value)
+	switch v := o.(type) {
+	case *BigFloat:
+		return pf.Cmp(v.value)
+	case *BigInteger:
+		vf := new(big.Float).SetInt(v.value)
+		return pf.Cmp(vf)
+	case *Integer:
+		vf := new(big.Float).SetInt64(v.Value)
+		return pf.Cmp(vf)
+	case *Float:
+		vf := new(big.Float).SetFloat64(v.Value)
+		return pf.Cmp(vf)
+	case *Rational:
+		vf := new(big.Float).SetRat(v.Rat())
+		return pf.Cmp(vf)
+	case *BigComplex:
+		return pf.Cmp(toBigFloat(v.Real()).BigFloatValue())
+	}
+	return 0
 }
 
 // IsVoid returns true if the float is nil.
