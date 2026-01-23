@@ -36,6 +36,8 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 | `operation_*.go` | 50+ bytecode instruction implementations |
 | `library.go` | Library system |
 | `debugger.go` | Breakpoint and stepping support |
+| `compile_syntax_rules.go` | R7RS syntax-rules compilation with custom ellipsis |
+| `compile_syntax_form.go` | `(syntax template)` compilation with escape form optimization |
 
 ## Gotchas
 
@@ -53,6 +55,9 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 - **Library bodies use letrec\* semantics**: R7RS §5.3.2 requires all defined names to be visible to all initializers, enabling forward references. `compileLibraryBegin` and `processFormsWithLetrecSemantics` implement two-pass compilation: pass 1 pre-declares all `define` bindings via `predeclareDefineBinding`, pass 2 compiles all forms with bindings visible.
 - **Auxiliary syntax lookup checks three environments**: When importing/exporting `else` and `=>`, `CopyLibraryBindingsToEnv` checks: (1) runtime env, (2) expand env for macros, (3) compile env for auxiliary syntax. These keywords are registered as compile-time bindings in `registry/core/specialforms.go`.
 - **Vector quasiquote with unquote-splicing**: `expandQuasiquote` handles `\`#(... ,@expr ...)` by detecting splicing, segmenting elements, and generating `(list->vector (append (list ...) expr (list ...)))` instead of the simple `(list->vector (list ...))` form.
+- **Custom ellipsis in syntax-rules**: R7RS §4.3.2 allows `(syntax-rules <ellipsis> (<literal>...) <clause>...)` to specify a custom ellipsis identifier. `CompileSyntaxRules` detects this form and threads the custom ellipsis through pattern compilation and template expansion.
+- **Ellipsis escape form optimization**: `compile_syntax_form.go` recognizes `(<ellipsis> <template>)` escape forms at compile time. `templateContainsEllipsis` skips escaped content, and `compileSyntaxTemplateToOps` compiles just the inner template. This avoids unnecessary runtime expansion for templates using escape forms.
+- **Ellipsis cannot be in literals list**: `extractLiterals` validates that the ellipsis identifier (default `...` or custom) cannot appear in the literals list per R7RS §4.3.2.
 
 ## Testing
 

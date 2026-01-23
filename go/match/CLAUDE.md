@@ -8,6 +8,8 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - Compiles R7RS patterns into bytecode
 - Executes bytecode to capture pattern variable bindings
 - Supports ellipsis patterns for zero-or-more repetitions
+- Supports R7RS §4.3.2 custom ellipsis identifiers
+- Supports R7RS §4.3.2 ellipsis escape forms `(<ellipsis> <template>)`
 
 ## Key Types
 
@@ -17,10 +19,14 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - `captureStack` - Captured bindings during matching
 - `valueStack` - Input tree position tracking
 - `ellipsisVars` - Maps ellipsis IDs to captured variables
+- `ellipsisID` - Custom ellipsis identifier (default `"..."`)
 
-**SyntaxCompiler** - Compiles patterns to bytecode
+**SyntaxCompiler** - Compiles patterns to bytecode:
+- `ellipsis` - Custom ellipsis identifier for pattern compilation
+- `literals` - Literal identifiers that match by name, not as variables
 
-**SyntaxMatcher** - Layer 2 bridge for syntax objects with hygiene
+**SyntaxMatcher** - Layer 2 bridge for syntax objects with hygiene:
+- `ellipsisID` - Custom ellipsis identifier passed to underlying Matcher
 
 ## Bytecode Instructions
 
@@ -43,6 +49,9 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - **Ellipsis IDs**: Unique IDs track which variables each ellipsis captures
 - **Syntax preservation**: SyntaxMatcher.syntaxMap preserves original syntax for captured variables
 - **Done validation complex**: Context-aware checking of cdr based on next instruction
+- **Custom ellipsis threading**: Custom ellipsis identifier must be threaded through `NewSyntaxCompilerWithEllipsis`, `NewSyntaxMatcherFull`, and `NewMatcherFull` to work correctly
+- **Underscore checks literals**: `_` is a wildcard only if NOT in the literals list; `compileSymbolElement` checks this
+- **Escape form detection**: `expandValue` checks for `(<ellipsisID> <template>)` and calls `expandEscapedTemplate` which expands without treating ellipsis specially
 - **Free identifiers get scope-free context (REVISIT)**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`) currently get empty scopes to match global/compile-time bindings. This fix for Bug 6 works but may not be the correct approach—proper hygiene might require definition-site scopes rather than no scopes. R7RS §4.3 requires macro-introduced identifiers to refer to definition-time bindings. This area needs further investigation.
 
 ## Testing
