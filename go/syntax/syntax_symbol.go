@@ -36,6 +36,12 @@ type SymbolInterner interface {
 type SyntaxSymbol struct {
 	Sym           *values.Symbol
 	sourceContext *SourceContext
+	// ResolvedBinding holds a pre-resolved binding for free identifiers in macro templates.
+	// This is set during macro expansion for identifiers that should resolve to bindings
+	// in the macro's definition environment rather than the use-site environment.
+	// Type: *environment.GlobalIndex (stored as any to avoid circular import).
+	// nil for normal symbols; only set for free identifiers from macros.
+	ResolvedBinding any
 }
 
 // NewSyntaxSymbol creates a new syntax symbol from a key string.
@@ -77,8 +83,20 @@ func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *Syn
 // distinguished during variable resolution (see ScopesMatch in scope_utils.go).
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 	return &SyntaxSymbol{
-		Sym:           p.Sym,
-		sourceContext: p.sourceContext.WithScope(scope),
+		Sym:             p.Sym,
+		sourceContext:   p.sourceContext.WithScope(scope),
+		ResolvedBinding: p.ResolvedBinding, // Preserve resolved binding
+	}
+}
+
+// WithResolvedBinding returns a new SyntaxSymbol with the given pre-resolved binding.
+// This is used during macro expansion to tag free identifiers with their
+// definition-site bindings, enabling proper resolution across library boundaries.
+func (p *SyntaxSymbol) WithResolvedBinding(binding any) *SyntaxSymbol {
+	return &SyntaxSymbol{
+		Sym:             p.Sym,
+		sourceContext:   p.sourceContext,
+		ResolvedBinding: binding,
 	}
 }
 

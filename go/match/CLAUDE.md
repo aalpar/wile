@@ -52,7 +52,7 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - **Custom ellipsis threading**: Custom ellipsis identifier must be threaded through `NewSyntaxCompilerWithEllipsis`, `NewSyntaxMatcherFull`, and `NewMatcherFull` to work correctly
 - **Underscore checks literals**: `_` is a wildcard only if NOT in the literals list; `compileSymbolElement` checks this
 - **Escape form detection**: `expandValue` checks for `(<ellipsisID> <template>)` and calls `expandEscapedTemplate` which expands without treating ellipsis specially
-- **Free identifiers get scope-free context (REVISIT)**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`) currently get empty scopes to match global/compile-time bindings. This fix for Bug 6 works but may not be the correct approach—proper hygiene might require definition-site scopes rather than no scopes. R7RS §4.3 requires macro-introduced identifiers to refer to definition-time bindings. This area needs further investigation.
+- **Free identifiers with pre-resolved bindings**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`, helper functions) receive pre-resolved bindings from the `freeIds` map. At macro definition time, free identifiers are resolved to their `GlobalIndex` and stored in `freeIds`. During template expansion, these bindings are attached to symbols via `WithResolvedBinding()`. This ensures R7RS §4.3 compliance: macro-introduced identifiers refer to definition-time bindings even when the macro is used in a different library context.
 
 ## Testing
 
