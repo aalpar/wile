@@ -65,7 +65,8 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	literals := make(map[string]struct{})
 	if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
 		if !literalsPair.IsEmptyList() {
-			err := extractLiterals(literalsPair, literals)
+			// syntax-case always uses the default ellipsis "..."
+			err := extractLiterals(literalsPair, literals, match.DefaultEllipsis)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}

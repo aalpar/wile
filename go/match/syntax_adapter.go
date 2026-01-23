@@ -56,21 +56,34 @@ import (
 // pattern variables. This is essential for hygiene - content captured from
 // the input must retain its original scopes, not receive new ones.
 type SyntaxMatcher struct {
-	matcher   *Matcher
-	syntaxMap map[values.Value]syntax.SyntaxValue // Maps raw values to their original syntax
+	matcher    *Matcher
+	syntaxMap  map[values.Value]syntax.SyntaxValue // Maps raw values to their original syntax
+	ellipsisID string                              // Custom ellipsis identifier (default "...")
 }
 
-// NewSyntaxMatcher creates a new syntax-aware matcher
+// NewSyntaxMatcher creates a new syntax-aware matcher with default ellipsis ("...").
 func NewSyntaxMatcher(variables map[string]struct{}, codes []SyntaxCommand) *SyntaxMatcher {
 	return NewSyntaxMatcherWithEllipsisVars(variables, codes, nil)
 }
 
 // NewSyntaxMatcherWithEllipsisVars creates a syntax-aware matcher with ellipsis variable mapping.
 // The ellipsisVars parameter maps each ellipsis ID to its captured pattern variables.
+// Uses the default ellipsis identifier ("...").
 func NewSyntaxMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}) *SyntaxMatcher {
+	return NewSyntaxMatcherFull(variables, codes, ellipsisVars, DefaultEllipsis)
+}
+
+// NewSyntaxMatcherFull creates a syntax-aware matcher with all parameters including custom ellipsis.
+// The ellipsisID parameter specifies the identifier used for ellipsis patterns
+// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
+func NewSyntaxMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *SyntaxMatcher {
+	if ellipsisID == "" {
+		ellipsisID = DefaultEllipsis
+	}
 	return &SyntaxMatcher{
-		matcher:   NewMatcherWithEllipsisVars(variables, codes, ellipsisVars),
-		syntaxMap: make(map[values.Value]syntax.SyntaxValue),
+		matcher:    NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
+		syntaxMap:  make(map[values.Value]syntax.SyntaxValue),
+		ellipsisID: ellipsisID,
 	}
 }
 
@@ -468,10 +481,12 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 type CompiledPattern struct {
 	Codes        []SyntaxCommand
 	EllipsisVars map[int]map[string]struct{}
+	EllipsisID   string // The ellipsis identifier used during compilation
 }
 
-// CompileSyntaxPattern compiles a syntax pattern into bytecode
-// This is a convenience function that unwraps syntax before compilation
+// CompileSyntaxPattern compiles a syntax pattern into bytecode.
+// This is a convenience function that unwraps syntax before compilation.
+// Uses the default ellipsis identifier ("...").
 func CompileSyntaxPattern(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) ([]SyntaxCommand, error) {
 	result, err := CompileSyntaxPatternFull(ctx, pattern, variables)
 	if err != nil {
@@ -482,7 +497,26 @@ func CompileSyntaxPattern(ctx context.Context, pattern syntax.SyntaxValue, varia
 
 // CompileSyntaxPatternFull compiles a syntax pattern into bytecode with ellipsis variable mapping.
 // Returns a CompiledPattern containing both the bytecode and the ellipsis variable mapping.
+// Uses the default ellipsis identifier ("...").
 func CompileSyntaxPatternFull(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) (*CompiledPattern, error) {
+	return CompileSyntaxPatternWithEllipsis(ctx, pattern, variables, DefaultEllipsis)
+}
+
+// CompileSyntaxPatternWithEllipsis compiles a syntax pattern into bytecode with a custom ellipsis.
+// The ellipsisID parameter specifies the identifier used for ellipsis patterns
+// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
+func CompileSyntaxPatternWithEllipsis(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
+	return CompileSyntaxPatternWithLiterals(ctx, pattern, variables, nil, ellipsisID)
+}
+
+// CompileSyntaxPatternWithLiterals compiles a syntax pattern into bytecode with literals and custom ellipsis.
+// The literals parameter contains identifiers that should be matched literally (not as pattern variables).
+// The ellipsisID parameter specifies the identifier used for ellipsis patterns.
+func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, literals map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
+	if ellipsisID == "" {
+		ellipsisID = DefaultEllipsis
+	}
+
 	// Convert syntax pattern to raw values
 	rawPattern := syntaxToValue(pattern)
 
@@ -492,9 +526,12 @@ func CompileSyntaxPatternFull(ctx context.Context, pattern syntax.SyntaxValue, v
 		return nil, errors.New("pattern must be a list")
 	}
 
-	// Compile using existing compiler
-	compiler := NewSyntaxCompiler()
+	// Compile using compiler with custom ellipsis and literals
+	compiler := NewSyntaxCompilerWithEllipsis(ellipsisID)
 	compiler.variables = variables
+	if literals != nil {
+		compiler.literals = literals
+	}
 	err := compiler.Compile(ctx, pair)
 	if err != nil {
 		return nil, err
@@ -503,6 +540,7 @@ func CompileSyntaxPatternFull(ctx context.Context, pattern syntax.SyntaxValue, v
 	return &CompiledPattern{
 		Codes:        compiler.codes,
 		EllipsisVars: compiler.ellipsisVars,
+		EllipsisID:   ellipsisID,
 	}, nil
 }
 

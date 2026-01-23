@@ -45,6 +45,7 @@ import (
 // Per R7RS, a syntax-rules form contains:
 //
 //	(syntax-rules (literal ...) clause ...)
+//	(syntax-rules <ellipsis> (literal ...) clause ...)  ; with custom ellipsis
 //
 // where each clause is (pattern template).
 //
@@ -63,6 +64,7 @@ type SyntaxRulesClause struct {
 	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 	freeIds      map[string]struct{}         // Free identifiers in template (not pattern vars)
 	macroScope   *syntax.Scope               // Hygiene scope for this macro (Flatt's model)
+	ellipsis     string                      // Custom ellipsis identifier (default "...")
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals
@@ -89,13 +91,17 @@ func (c *clausesWrapper) SchemeString() string {
 
 // CompileSyntaxRules compiles a syntax-rules form into a transformer procedure.
 //
-// R7RS Form: (syntax-rules (literal ...) (pattern template) ...)
+// R7RS Forms:
+//
+//	(syntax-rules (literal ...) (pattern template) ...)
+//	(syntax-rules <ellipsis> (literal ...) (pattern template) ...)  ; custom ellipsis
 //
 // The compilation process:
-//  1. Parse the literals list - these symbols are matched literally, not as variables
-//  2. For each clause, identify pattern variables (symbols not in literals list)
-//  3. Compile each pattern to bytecode (see match/syntax_compiler.go)
-//  4. Create a MachineClosure that, when invoked:
+//  1. Parse optional custom ellipsis identifier
+//  2. Parse the literals list - these symbols are matched literally, not as variables
+//  3. For each clause, identify pattern variables (symbols not in literals list)
+//  4. Compile each pattern to bytecode (see match/syntax_compiler.go)
+//  5. Create a MachineClosure that, when invoked:
 //     - Tries each pattern in order against the input form
 //     - On first match, expands the template with captured bindings
 //     - Adds an "intro scope" to the expansion for hygiene
@@ -104,6 +110,7 @@ func (c *clausesWrapper) SchemeString() string {
 // allowing the expander to recognize it as a macro transformer.
 func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue) (*MachineClosure, error) {
 	// syntaxRulesForm should be (syntax-rules (literals...) clause1 clause2 ...)
+	// or (syntax-rules <ellipsis> (literals...) clause1 clause2 ...)
 	formPair, ok := syntaxRulesForm.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.NewForeignErrorf("syntax-rules: expected a list")
@@ -120,8 +127,42 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		return nil, values.NewForeignErrorf("syntax-rules: expected literals list and clauses")
 	}
 
-	// Extract literals list
-	literalsStx := argsPair.SyntaxCar()
+	// Check for optional custom ellipsis identifier
+	// R7RS §4.3.2: (syntax-rules <ellipsis> (literal ...) clause ...)
+	ellipsis := match.DefaultEllipsis
+	firstArg := argsPair.SyntaxCar()
+	if firstArg == nil {
+		return nil, values.NewForeignErrorf("syntax-rules: missing literals list")
+	}
+
+	var literalsStx syntax.SyntaxValue
+	var clausesCdr syntax.SyntaxValue
+
+	// If firstArg is a symbol, it's a custom ellipsis identifier
+	if sym, ok := firstArg.(*syntax.SyntaxSymbol); ok {
+		symVal := sym.Unwrap()
+		if symValSym, ok := symVal.(*values.Symbol); ok {
+			ellipsis = symValSym.Key
+		}
+
+		// Move to next element for literals list
+		nextCdr := argsPair.SyntaxCdr()
+		if nextCdr == nil {
+			return nil, values.NewForeignErrorf("syntax-rules: missing literals list after ellipsis identifier")
+		}
+		nextPair, ok := nextCdr.(*syntax.SyntaxPair)
+		if !ok {
+			return nil, values.NewForeignErrorf("syntax-rules: expected literals list after ellipsis identifier")
+		}
+
+		literalsStx = nextPair.SyntaxCar()
+		clausesCdr = nextPair.SyntaxCdr()
+	} else {
+		// No custom ellipsis, firstArg is the literals list
+		literalsStx = firstArg
+		clausesCdr = argsPair.SyntaxCdr()
+	}
+
 	if literalsStx == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: missing literals list")
 	}
@@ -131,7 +172,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// Process literals list
 	literalsList, ok := literalsStx.(*syntax.SyntaxPair)
 	if ok && !syntax.IsSyntaxEmptyList(literalsList) {
-		err := extractLiterals(literalsList, literals)
+		err := extractLiterals(literalsList, literals, ellipsis)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "syntax-rules: invalid literals list")
 		}
@@ -139,7 +180,6 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// Empty literals list is also valid
 
 	// Process clauses
-	clausesCdr := argsPair.SyntaxCdr()
 	if clausesCdr == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: no clauses provided")
 	}
@@ -177,8 +217,8 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 			return values.NewForeignErrorf("syntax-rules: missing template in clause")
 		}
 
-		// Compile the pattern
-		compiledClause, err := compileClause(ctx, pattern, template, literals)
+		// Compile the pattern with custom ellipsis
+		compiledClause, err := compileClauseWithEllipsis(ctx, pattern, template, literals, ellipsis)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
 		}
@@ -201,28 +241,34 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	return createTransformerClosure(env, clauses, literals)
 }
 
-// compileClause compiles a single pattern-template pair
+// compileClause compiles a single pattern-template pair using the default ellipsis.
 func compileClause(ctx context.Context, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
-	// Determine pattern variables (anything not a literal or keyword)
+	return compileClauseWithEllipsis(ctx, pattern, template, literals, match.DefaultEllipsis)
+}
+
+// compileClauseWithEllipsis compiles a single pattern-template pair with a custom ellipsis.
+func compileClauseWithEllipsis(ctx context.Context, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) {
+	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	variables := make(map[string]struct{})
-	err := collectPatternVariables(pattern, literals, true, variables)
+	err := collectPatternVariablesWithEllipsis(pattern, literals, true, variables, ellipsis)
 	if err != nil {
 		return nil, err
 	}
-	// Compile pattern to bytecode with ellipsis variable mapping
-	compiled, err := match.CompileSyntaxPatternFull(ctx, pattern, variables)
+	// Compile pattern to bytecode with ellipsis variable mapping and literals
+	// Literals are needed so the compiler knows to match _ literally if it's in the literals list
+	compiled, err := match.CompileSyntaxPatternWithLiterals(ctx, pattern, variables, literals, ellipsis)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create matcher with ellipsis variable mapping
-	matcher := match.NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
+	// Create matcher with ellipsis variable mapping and custom ellipsis
+	matcher := match.NewSyntaxMatcherFull(variables, compiled.Codes, compiled.EllipsisVars, ellipsis)
 
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)
 	// These should NOT get the intro scope during expansion, so they can resolve
 	// to bindings outside the macro (including recursive references to the macro itself)
 	freeIds := make(map[string]struct{})
-	collectFreeIdentifiers(template, variables, freeIds)
+	collectFreeIdentifiersWithEllipsis(template, variables, freeIds, ellipsis)
 
 	return &SyntaxRulesClause{
 		pattern:      pattern,
@@ -233,23 +279,31 @@ func compileClause(ctx context.Context, pattern, template syntax.SyntaxValue, li
 		ellipsisVars: compiled.EllipsisVars,
 		freeIds:      freeIds,
 		macroScope:   nil, // Will be set when macro is defined
+		ellipsis:     ellipsis,
 	}, nil
 }
 
 // collectFreeIdentifiers walks the template and collects all identifiers that
 // are NOT pattern variables. These "free identifiers" refer to bindings outside
 // the macro and should NOT get the intro scope during expansion.
+// Uses the default ellipsis identifier ("...").
 //
 // This is critical for recursive macros: the macro's own name (e.g., "and" in
 // (and test2 ...)) must resolve to the macro's binding, not get an intro scope
 // that would break the lookup.
 func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]struct{}) {
+	collectFreeIdentifiersWithEllipsis(template, patternVars, freeIds, match.DefaultEllipsis)
+}
+
+// collectFreeIdentifiersWithEllipsis walks the template and collects all identifiers that
+// are NOT pattern variables, using a custom ellipsis identifier.
+func collectFreeIdentifiersWithEllipsis(template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]struct{}, ellipsis string) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
 		if symVal, ok := sym.(*values.Symbol); ok {
 			// Skip ellipsis marker
-			if symVal.Key == "..." {
+			if symVal.Key == ellipsis {
 				return
 			}
 			// If it's not a pattern variable, it's a free identifier
@@ -264,13 +318,13 @@ func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]
 			car := t.SyntaxCar()
 			if car != nil {
 				carStx := car
-				collectFreeIdentifiers(carStx, patternVars, freeIds)
+				collectFreeIdentifiersWithEllipsis(carStx, patternVars, freeIds, ellipsis)
 			}
 			// Recurse into cdr
 			cdr := t.SyntaxCdr()
 			if cdr != nil {
 				cdrStx := cdr
-				collectFreeIdentifiers(cdrStx, patternVars, freeIds)
+				collectFreeIdentifiersWithEllipsis(cdrStx, patternVars, freeIds, ellipsis)
 			}
 		}
 
@@ -280,15 +334,23 @@ func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]
 	}
 }
 
-// collectPatternVariables walks the pattern and identifies all pattern variables
-// A pattern variable is any symbol that is not a literal and not the first element
+// collectPatternVariables walks the pattern and identifies all pattern variables.
+// A pattern variable is any symbol that is not a literal, not the first element,
+// and not the ellipsis identifier.
+// Uses the default ellipsis identifier ("...").
 func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) error {
+	return collectPatternVariablesWithEllipsis(pattern, literals, isFirst, variables, match.DefaultEllipsis)
+}
+
+// collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
+// using a custom ellipsis identifier.
+func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) error {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
 		if symVal, ok := sym.(*values.Symbol); ok {
-			// Skip if it's a keyword (first position) or literal
-			if !isFirst && symVal.Key != "..." {
+			// Skip if it's a keyword (first position), ellipsis, or literal
+			if !isFirst && symVal.Key != ellipsis {
 				if _, isLiteral := literals[symVal.Key]; !isLiteral {
 					variables[symVal.Key] = struct{}{}
 				}
@@ -298,7 +360,7 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(p) {
 			// First element in a form is considered a keyword
-			err := collectPatternVariables(p.SyntaxCar(), literals, isFirst, variables)
+			err := collectPatternVariablesWithEllipsis(p.SyntaxCar(), literals, isFirst, variables, ellipsis)
 			if err != nil {
 				return err
 			}
@@ -306,7 +368,7 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 			// Rest of the form
 			cdr := p.SyntaxCdr()
 			if cdr != nil {
-				err = collectPatternVariables(cdr, literals, false, variables)
+				err = collectPatternVariablesWithEllipsis(cdr, literals, false, variables, ellipsis)
 				if err != nil {
 					return err
 				}
@@ -324,8 +386,9 @@ func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]str
 	return nil
 }
 
-// extractLiterals extracts literal symbols from the literals list
-func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct{}) error {
+// extractLiterals extracts literal symbols from the literals list.
+// R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
+func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct{}, ellipsis string) error {
 	v, err := literalsList.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {
 		sym, ok := literal.(*syntax.SyntaxSymbol)
 		if !ok {
@@ -334,6 +397,10 @@ func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct
 
 		symVal := sym.Unwrap()
 		if symbol, ok := symVal.(*values.Symbol); ok {
+			// R7RS §4.3.2: ellipsis cannot appear in literals list
+			if symbol.Key == ellipsis {
+				return values.NewForeignErrorf("ellipsis %q cannot appear in literals list", ellipsis)
+			}
 			literals[symbol.Key] = struct{}{}
 		} else {
 			return values.NewForeignErrorf("extractLiterals: literal must be a symbol")

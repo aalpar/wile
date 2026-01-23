@@ -285,7 +285,8 @@ func TestExpandEdgeCases(t *testing.T) {
 	t.Run("Expand with ellipsis variable outside context", func(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := &Matcher{
-			variables: variables,
+			variables:  variables,
+			ellipsisID: DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
 			bindings: map[string]values.Value{},
@@ -309,6 +310,7 @@ func TestExpandEdgeCases(t *testing.T) {
 		matcher := &Matcher{
 			variables:    variables,
 			ellipsisVars: ellipsisVars,
+			ellipsisID:   DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
 			bindings: map[string]values.Value{},
@@ -332,6 +334,7 @@ func TestExpandEdgeCases(t *testing.T) {
 		matcher := &Matcher{
 			variables:    variables,
 			ellipsisVars: ellipsisVars,
+			ellipsisID:   DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
 			bindings: map[string]values.Value{},
