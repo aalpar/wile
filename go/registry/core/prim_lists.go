@@ -16,9 +16,11 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"wile/machine"
 	"wile/registry/helpers"
+	"wile/utils"
 	"wile/values"
 )
 
@@ -364,16 +366,71 @@ func PrimMemv(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMember implements the member primitive.
-// Finds an element in a list using equal? for comparison.
+// R7RS §6.4: (member obj list [compare])
+// Finds an element in a list using equal? for comparison, or a custom compare procedure.
 func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
+	rest := mc.Arg(2)
+
+	// Check for optional compare procedure
+	var compareCls *machine.MachineClosure
+	if rest != values.EmptyList {
+		tuple, ok := rest.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "member: improper argument list")
+		}
+		cmp, ok := tuple.Car().(*machine.MachineClosure)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAProcedure, "member: expected a procedure for compare but got %T", tuple.Car())
+		}
+		compareCls = cmp
+	}
+
+	// If no compare procedure, use equal?
+	if compareCls == nil {
+		for !values.IsEmptyList(lst) {
+			pr, ok := lst.(*values.Pair)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
+			}
+			if values.EqualTo(pr.Car(), obj) {
+				mc.SetValue(pr)
+				return nil
+			}
+			lst = pr.Cdr()
+		}
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	// Use custom compare procedure
+	sub := mc.NewSubContext()
 	for !values.IsEmptyList(lst) {
 		pr, ok := lst.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
 		}
-		if values.EqualTo(pr.Car(), obj) {
+
+		// Call compare procedure with (obj, element)
+		_, err := sub.Apply(compareCls, obj, pr.Car())
+		if err != nil {
+			return err
+		}
+		err = sub.Run()
+		if err != nil {
+			var escapeErr *machine.ErrContinuationEscape
+			if errors.As(err, &escapeErr) {
+				return err
+			}
+			if !errors.Is(err, machine.ErrMachineHalt) {
+				return err
+			}
+		}
+
+		// If compare returns a true value (not #f), we found a match
+		result := sub.GetValue()
+		if utils.ValueToBool(result) {
 			mc.SetValue(pr)
 			return nil
 		}
@@ -394,6 +451,140 @@ func PrimAssv(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAssoc implements the assoc primitive.
+// R7RS §6.4: (assoc obj alist [compare])
+// Finds an entry in an alist using equal? for comparison, or a custom compare procedure.
 func PrimAssoc(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.AssocLookup(mc, "assoc", values.EqualTo)
+	obj := mc.Arg(0)
+	alist := mc.Arg(1)
+	rest := mc.Arg(2)
+
+	// Check for optional compare procedure
+	var compareCls *machine.MachineClosure
+	if rest != values.EmptyList {
+		tuple, ok := rest.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "assoc: improper argument list")
+		}
+		cmp, ok := tuple.Car().(*machine.MachineClosure)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAProcedure, "assoc: expected a procedure for compare but got %T", tuple.Car())
+		}
+		compareCls = cmp
+	}
+
+	// If no compare procedure, use equal?
+	if compareCls == nil {
+		return helpers.AssocLookup(mc, "assoc", values.EqualTo)
+	}
+
+	// Handle empty list
+	if values.IsEmptyList(alist) {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	pr, ok := alist.(*values.Pair)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected a list but got %T", alist)
+	}
+
+	// Use custom compare procedure
+	sub := mc.NewSubContext()
+	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		entry, ok := elem.(*values.Pair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
+		}
+
+		// Call compare procedure with (obj, car of entry)
+		_, err := sub.Apply(compareCls, obj, entry.Car())
+		if err != nil {
+			return err
+		}
+		err = sub.Run()
+		if err != nil {
+			var escapeErr *machine.ErrContinuationEscape
+			if errors.As(err, &escapeErr) {
+				return err
+			}
+			if !errors.Is(err, machine.ErrMachineHalt) {
+				return err
+			}
+		}
+
+		// If compare returns a true value (not #f), we found a match
+		result := sub.GetValue()
+		if utils.ValueToBool(result) {
+			mc.SetValue(entry)
+			return values.ErrStopIteration
+		}
+		return nil
+	})
+	if errors.Is(err, values.ErrStopIteration) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !values.IsEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected a proper list")
+	}
+	mc.SetValue(values.FalseValue)
+	return nil
+}
+
+// PrimListCopy implements the list-copy primitive.
+// R7RS §6.4: (list-copy obj)
+// Returns a newly allocated copy of obj if it is a list.
+// Only the pairs are copied; the car elements are shared.
+func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
+	obj := mc.Arg(0)
+
+	// If not a pair, return as-is
+	if values.IsEmptyList(obj) {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	pr, ok := obj.(*values.Pair)
+	if !ok {
+		// Not a list, return as-is per R7RS
+		mc.SetValue(obj)
+		return nil
+	}
+
+	// Copy the spine of the list
+	var head, tail *values.Pair
+	current := values.Value(pr)
+	for {
+		p, ok := current.(*values.Pair)
+		if !ok {
+			// Improper list ending - append the final cdr
+			if tail != nil {
+				tail.SetCdr(current)
+			}
+			break
+		}
+
+		newPair := values.NewCons(p.Car(), values.EmptyList)
+		if head == nil {
+			head = newPair
+		} else {
+			tail.SetCdr(newPair)
+		}
+		tail = newPair
+
+		cdr := p.Cdr()
+		if values.IsEmptyList(cdr) {
+			break
+		}
+		current = cdr
+	}
+
+	if head == nil {
+		mc.SetValue(values.EmptyList)
+	} else {
+		mc.SetValue(head)
+	}
+	return nil
 }

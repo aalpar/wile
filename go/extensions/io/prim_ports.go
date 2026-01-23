@@ -16,6 +16,7 @@ package io
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"wile/machine"
@@ -218,4 +219,95 @@ func PrimGetOutputBytevector(_ context.Context, mc *machine.MachineContext) erro
 	}
 	mc.SetValue(&result)
 	return nil
+}
+
+// PrimTextualPortQ implements the textual-port? primitive.
+// R7RS §6.13.1: Returns #t if the port is a textual port, #f otherwise.
+func PrimTextualPortQ(_ context.Context, mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	switch o.(type) {
+	case *values.CharacterInputPort, *values.CharacterOutputPort,
+		*values.StringInputPort, *values.StringOutputPort:
+		mc.SetValue(values.TrueValue)
+	default:
+		mc.SetValue(values.FalseValue)
+	}
+	return nil
+}
+
+// PrimBinaryPortQ implements the binary-port? primitive.
+// R7RS §6.13.1: Returns #t if the port is a binary port, #f otherwise.
+func PrimBinaryPortQ(_ context.Context, mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	switch o.(type) {
+	case *values.BytevectorInputPort, *values.BytevectorOutputPort,
+		*values.BinaryInputPort, *values.BinaryOutputPort:
+		mc.SetValue(values.TrueValue)
+	default:
+		mc.SetValue(values.FalseValue)
+	}
+	return nil
+}
+
+// PrimCallWithPort implements the call-with-port primitive.
+// R7RS §6.13.1: (call-with-port port proc)
+// Calls proc with port as an argument. When proc returns, the port is closed.
+func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
+	portArg := mc.Arg(0)
+	proc := mc.Arg(1)
+
+	// Validate that proc is a procedure
+	mcls, ok := proc.(*machine.MachineClosure)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-port: expected a procedure but got %T", proc)
+	}
+
+	// Call the procedure with the port
+	sub := mc.NewSubContext()
+	_, err := sub.Apply(mcls, portArg)
+	if err != nil {
+		return err
+	}
+	runErr := sub.Run()
+
+	// Close the port after proc returns (even if there was an error)
+	closePort(portArg)
+
+	// Handle any errors from running the procedure
+	if runErr != nil {
+		var escapeErr *machine.ErrContinuationEscape
+		if errors.As(runErr, &escapeErr) {
+			return runErr
+		}
+		if !errors.Is(runErr, machine.ErrMachineHalt) {
+			return runErr
+		}
+	}
+
+	// Return the result of the procedure
+	mc.SetValues(sub.GetValues()...)
+	return nil
+}
+
+// closePort closes a port regardless of its type.
+func closePort(o values.Value) {
+	switch p := o.(type) {
+	case *values.CharacterInputPort:
+		if closer, ok := p.Value.(io.Closer); ok {
+			closer.Close() //nolint:errcheck
+		}
+	case *values.CharacterOutputPort:
+		if closer, ok := p.Value.(io.Closer); ok {
+			closer.Close() //nolint:errcheck
+		}
+	case *values.BinaryInputPort:
+		if closer, ok := p.Value.(io.Closer); ok {
+			closer.Close() //nolint:errcheck
+		}
+	case *values.BinaryOutputPort:
+		if closer, ok := p.Value.(io.Closer); ok {
+			closer.Close() //nolint:errcheck
+		}
+	// String and bytevector ports don't need closing
+	}
 }

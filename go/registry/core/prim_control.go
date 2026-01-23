@@ -36,7 +36,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 
 	// R7RS: (apply proc arg1 ... args) combines arg1 ... with the final list args
 	// restVal is a list containing (arg1 ... args) where args is the final list
-	restList, ok := restVal.(*values.Pair)
+	restTuple, ok := restVal.(values.Tuple)
 	if !ok || values.IsEmptyList(restVal) {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "apply: expected at least one argument list")
 	}
@@ -45,15 +45,15 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	var prefixArgs values.Vector
 	var finalList values.Value
 	for {
-		car := restList.Car()
-		cdr := restList.Cdr()
+		car := restTuple.Car()
+		cdr := restTuple.Cdr()
 		if values.IsEmptyList(cdr) {
 			// This is the last element - it's the final args list
 			finalList = car
 			break
 		}
 		prefixArgs = append(prefixArgs, car)
-		restList, ok = cdr.(*values.Pair)
+		restTuple, ok = cdr.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: improper rest argument list")
 		}
@@ -61,11 +61,11 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Now append elements from finalList to prefixArgs
 	if !values.IsEmptyList(finalList) {
-		finalPair, ok := finalList.(*values.Pair)
+		finalTuple, ok := finalList.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
-		v, err := finalPair.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		v, err := finalTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
 			return nil
 		})
@@ -116,12 +116,12 @@ func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
 	var lists []values.Value
 	current := listsVal
 	for !values.IsEmptyList(current) {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "map: improper argument list")
 		}
-		lists = append(lists, pair.Car())
-		current = pair.Cdr()
+		lists = append(lists, tuple.Car())
+		current = tuple.Cdr()
 	}
 
 	// Check if any list is empty
@@ -130,7 +130,7 @@ func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.EmptyList)
 			return nil
 		}
-		if _, ok := lst.(*values.Pair); !ok {
+		if _, ok := lst.(values.Tuple); !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "map: argument %d is not a list", i+1)
 		}
 	}
@@ -148,12 +148,12 @@ func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
 				allDone = true
 				break
 			}
-			pair, ok := lst.(*values.Pair)
+			tuple, ok := lst.(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "map: argument %d is an improper list", i+1)
 			}
-			args[i] = pair.Car()
-			lists[i] = pair.Cdr()
+			args[i] = tuple.Car()
+			lists[i] = tuple.Cdr()
 		}
 		if allDone {
 			break
@@ -200,12 +200,12 @@ func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
 	var lists []values.Value
 	current := listsVal
 	for !values.IsEmptyList(current) {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "for-each: improper argument list")
 		}
-		lists = append(lists, pair.Car())
-		current = pair.Cdr()
+		lists = append(lists, tuple.Car())
+		current = tuple.Cdr()
 	}
 
 	// Check if any list is empty
@@ -214,7 +214,7 @@ func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
 			mc.SetValues()
 			return nil
 		}
-		if _, ok := lst.(*values.Pair); !ok {
+		if _, ok := lst.(values.Tuple); !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "for-each: argument %d is not a list", i+1)
 		}
 	}
@@ -231,12 +231,12 @@ func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
 				allDone = true
 				break
 			}
-			pair, ok := lst.(*values.Pair)
+			tuple, ok := lst.(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "for-each: argument %d is an improper list", i+1)
 			}
-			args[i] = pair.Car()
-			lists[i] = pair.Cdr()
+			args[i] = tuple.Car()
+			lists[i] = tuple.Cdr()
 		}
 		if allDone {
 			break
@@ -424,12 +424,12 @@ func PrimValues(_ context.Context, mc *machine.MachineContext) error {
 	var vals []values.Value
 	current := restVal
 	for !values.IsEmptyList(current) {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "values: improper argument list")
 		}
-		vals = append(vals, pair.Car())
-		current = pair.Cdr()
+		vals = append(vals, tuple.Car())
+		current = tuple.Cdr()
 	}
 
 	mc.SetValues(vals...)

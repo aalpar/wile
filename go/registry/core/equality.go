@@ -24,6 +24,8 @@ func addEquality(r *registry.Registry) error {
 		{"eq?", 2, false, PrimEqQ},
 		{"eqv?", 2, false, PrimEqvQ},
 		{"equal?", 2, false, PrimEqualQ},
+		{"boolean=?", 2, true, PrimBooleanEq},
+		{"symbol=?", 2, true, PrimSymbolEq},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

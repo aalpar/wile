@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"wile/machine"
+	"wile/utils"
 	"wile/values"
 )
 
@@ -453,7 +454,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 				threadArg := rest2List.Car()
 				if t, ok := threadArg.(*values.Thread); ok {
 					owner = t
-				} else if threadArg != values.FalseValue {
+				} else if utils.ValueToBool(threadArg) {
 					return values.WrapForeignErrorf(values.ErrNotAThread, "mutex-lock!: expected thread or #f for owner, got %T", threadArg)
 				} else {
 					owner = nil
@@ -506,7 +507,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 		cvArg := restList.Car()
 		if c, ok := cvArg.(*values.ConditionVariable); ok {
 			cv = c
-		} else if cvArg != values.FalseValue {
+		} else if utils.ValueToBool(cvArg) {
 			return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "mutex-unlock!: expected condition-variable or #f, got %T", cvArg)
 		}
 

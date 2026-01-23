@@ -22,6 +22,7 @@ import (
 var (
 	_ Value      = (*Vector)(nil)
 	_ Collection = (*Vector)(nil)
+	_ Indexable  = (*Vector)(nil)
 )
 
 // Vector represents an R7RS vector, a fixed-size mutable array of values.
@@ -42,6 +43,16 @@ func NewVectorWithLength(length int) *Vector {
 	slice := make([]Value, length)
 	q := Vector(slice)
 	return &q
+}
+
+// Get returns the element at the specified index.
+func (p *Vector) Get(i int) Value {
+	return (*p)[i]
+}
+
+// Set sets the element at the specified index to the given value.
+func (p *Vector) Set(i int, value Value) {
+	(*p)[i] = value
 }
 
 // Len returns the number of elements in the vector.

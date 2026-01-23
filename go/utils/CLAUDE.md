@@ -28,6 +28,16 @@ Bridge between:
 **BoolToBoolean(b bool) *values.Boolean**
 - Go bool to Scheme boolean singleton
 
+**ValueToBool(v values.Value) bool**
+- Scheme value to Go bool using Scheme semantics
+- Returns `false` only if v is `#f`, `true` for everything else
+- Use for truthiness checks in control flow
+
+**ValueToBoolean(v values.Value) *values.Boolean**
+- Scheme value to Scheme boolean using Scheme semantics
+- Returns `FalseValue` only if v is `#f`, `TrueValue` for everything else
+- Equivalent to `BoolToBoolean(ValueToBool(v))`
+
 **IsSyntaxComment(v values.Value) bool**
 - Identifies SyntaxComment or SyntaxDatumComment types
 
@@ -38,6 +48,10 @@ Bridge between:
 - **Improper list handling**: Uses ForEach iterator, returns remaining tail
 - **SyntaxValue pass-through**: Already-wrapped values returned unchanged
 - **Box contents wrapped**: Boxing wraps contents in syntax too
+- **Boolean conversion choice**:
+  - `BoolToBoolean(goCondition)` - for predicates returning based on Go conditions
+  - `ValueToBool(schemeValue)` - for checking Scheme value truthiness in Go control flow
+  - `ValueToBoolean(schemeValue)` - for coercing Scheme value to Scheme boolean
 
 ## Testing
 

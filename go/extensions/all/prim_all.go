@@ -390,20 +390,20 @@ func stringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, 
 	prev := str1.Value
 
 	for rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
+		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
 		}
-		str, ok := pair.Car().(*values.String)
+		str, ok := tuple.Car().(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, tuple.Car())
 		}
 		if !cmp(prev, str.Value) {
 			mc.SetValue(values.FalseValue)
 			return nil
 		}
 		prev = str.Value
-		rest = pair.Cdr()
+		rest = tuple.Cdr()
 	}
 
 	mc.SetValue(values.TrueValue)
@@ -425,12 +425,12 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	var args []values.Value
 	current := rest
 	for current != values.EmptyList {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
 		}
-		args = append(args, pair.Car())
-		current = pair.Cdr()
+		args = append(args, tuple.Car())
+		current = tuple.Cdr()
 	}
 
 	if len(args) < 2 {
@@ -504,12 +504,12 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 	var args []values.Value
 	current := rest
 	for current != values.EmptyList {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-fill!: improper argument list")
 		}
-		args = append(args, pair.Car())
-		current = pair.Cdr()
+		args = append(args, tuple.Car())
+		current = tuple.Cdr()
 	}
 
 	if len(args) < 1 {
@@ -569,16 +569,16 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 	var strs []*values.String
 	current := stringsVal
 	for !values.IsEmptyList(current) {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-map: improper argument list")
 		}
-		s, ok := pair.Car().(*values.String)
+		s, ok := tuple.Car().(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "string-map: expected a string but got %T", pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotAString, "string-map: expected a string but got %T", tuple.Car())
 		}
 		strs = append(strs, s)
-		current = pair.Cdr()
+		current = tuple.Cdr()
 	}
 
 	if len(strs) == 0 {
@@ -654,16 +654,16 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 	var strs []*values.String
 	current := stringsVal
 	for !values.IsEmptyList(current) {
-		pair, ok := current.(*values.Pair)
+		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-for-each: improper argument list")
 		}
-		s, ok := pair.Car().(*values.String)
+		s, ok := tuple.Car().(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "string-for-each: expected a string but got %T", pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotAString, "string-for-each: expected a string but got %T", tuple.Car())
 		}
 		strs = append(strs, s)
-		current = pair.Cdr()
+		current = tuple.Cdr()
 	}
 
 	if len(strs) == 0 {
@@ -767,13 +767,21 @@ func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimStringFoldcase implements the string-foldcase primitive.
+// R7RS §6.7: Returns a string whose characters are the case-folded versions of the characters in string.
+// Uses Unicode simple case folding which maps each character to a single character.
 func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-foldcase: expected a string but got %T", s)
 	}
-	mc.SetValue(values.NewString(strings.ToLower(str.Value)))
+	// Apply simple case folding to each character
+	runes := str.Runes()
+	result := make([]rune, len(runes))
+	for i, r := range runes {
+		result[i] = simpleCaseFold(r)
+	}
+	mc.SetValue(values.NewString(string(result)))
 	return nil
 }
 
@@ -793,20 +801,20 @@ func charCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b 
 	prev := ch1.Value
 
 	for rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
+		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
 		}
-		ch, ok := pair.Car().(*values.Character)
+		ch, ok := tuple.Car().(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, tuple.Car())
 		}
 		if !cmp(prev, ch.Value) {
 			mc.SetValue(values.FalseValue)
 			return nil
 		}
 		prev = ch.Value
-		rest = pair.Cdr()
+		rest = tuple.Cdr()
 	}
 
 	mc.SetValue(values.TrueValue)
@@ -926,28 +934,65 @@ func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharFoldcase returns the case-folded version of a character.
+// R7RS §6.6: Returns the simple Unicode case-folded version of the character.
 func PrimCharFoldcase(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	ch, ok := o.(*values.Character)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-foldcase: expected a character but got %T", o)
 	}
-	mc.SetValue(values.NewCharacter(unicode.ToLower(ch.Value)))
+	mc.SetValue(values.NewCharacter(simpleCaseFold(ch.Value)))
 	return nil
 }
 
+// simpleCaseFold performs Unicode simple case folding on a rune.
+// Simple case folding maps each character to a single character.
+// This is used for case-insensitive matching as specified by R7RS.
+func simpleCaseFold(r rune) rune {
+	// For most characters, simple case folding is equivalent to lowercase
+	// but we iterate through SimpleFold to find the canonical form
+	folded := unicode.SimpleFold(r)
+	// SimpleFold returns the next case-equivalent character in a cycle
+	// We want the "smallest" (typically lowercase) version
+	result := r
+	for folded != r {
+		if folded < result {
+			result = folded
+		}
+		folded = unicode.SimpleFold(folded)
+	}
+	// For characters without case, SimpleFold returns the character itself
+	// For cased characters, prefer lowercase
+	if unicode.IsUpper(result) {
+		return unicode.ToLower(result)
+	}
+	return result
+}
+
 // PrimDigitValue implements the (digit-value) primitive.
-// Returns the numeric value of a digit character, or #f if not a digit.
+// R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
+// according to Unicode, or #f if it is not a decimal digit.
 func PrimDigitValue(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	ch, ok := o.(*values.Character)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "digit-value: expected a character but got %T", o)
 	}
-	if ch.Value >= '0' && ch.Value <= '9' {
-		mc.SetValue(values.NewInteger(int64(ch.Value - '0')))
-	} else {
-		mc.SetValue(values.FalseValue)
+	// Check if it's a Unicode decimal digit (Nd category)
+	// Unicode decimal digits have values 0-9 within their respective scripts
+	if unicode.IsDigit(ch.Value) {
+		// Get the digit value by finding the base '0' for this script
+		// Unicode organizes decimal digits in blocks of 10: 0, 1, 2, ..., 9
+		base := ch.Value
+		for unicode.IsDigit(base - 1) {
+			base--
+		}
+		digit := int64(ch.Value - base)
+		if digit >= 0 && digit <= 9 {
+			mc.SetValue(values.NewInteger(digit))
+			return nil
+		}
 	}
+	mc.SetValue(values.FalseValue)
 	return nil
 }

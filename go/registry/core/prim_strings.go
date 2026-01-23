@@ -31,16 +31,16 @@ func PrimString(_ context.Context, mc *machine.MachineContext) error {
 
 	var sb strings.Builder
 	for args != values.EmptyList {
-		pair, ok := args.(*values.Pair)
+		tuple, ok := args.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string: expected a list of characters")
 		}
-		ch, ok := pair.Car().(*values.Character)
+		ch, ok := tuple.Car().(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "string: expected a character but got %T", pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotACharacter, "string: expected a character but got %T", tuple.Car())
 		}
 		sb.WriteRune(ch.Value)
-		args = pair.Cdr()
+		args = tuple.Cdr()
 	}
 
 	mc.SetValue(values.NewString(sb.String()))
@@ -63,11 +63,11 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 	fillChar := rune(0) // default fill character (NUL)
 	rest := mc.Arg(1)
 	if rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
+		tuple, ok := rest.(values.Tuple)
 		if ok {
-			ch, ok := pair.Car().(*values.Character)
+			ch, ok := tuple.Car().(*values.Character)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotACharacter, "make-string: expected a character but got %T", pair.Car())
+				return values.WrapForeignErrorf(values.ErrNotACharacter, "make-string: expected a character but got %T", tuple.Car())
 			}
 			fillChar = ch.Value
 		}
@@ -159,27 +159,27 @@ func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional arguments: [start [end]]
 	if rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
+		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
 		}
 
 		// Parse start
-		startVal, ok := pair.Car().(*values.Integer)
+		startVal, ok := tuple.Car().(*values.Integer)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for start but got %T", pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for start but got %T", tuple.Car())
 		}
 		start = int(startVal.Value)
 
 		// Check for end argument
-		if pair.Cdr() != values.EmptyList {
-			pair2, ok := pair.Cdr().(*values.Pair)
+		if tuple.Cdr() != values.EmptyList {
+			tuple2, ok := tuple.Cdr().(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
 			}
-			endVal, ok := pair2.Car().(*values.Integer)
+			endVal, ok := tuple2.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for end but got %T", pair2.Car())
+				return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for end but got %T", tuple2.Car())
 			}
 			end = int(endVal.Value)
 		}
@@ -207,12 +207,12 @@ func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewString(""))
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	tuple, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotACharacter, "list->string: expected a character but got %T", v)
@@ -261,16 +261,16 @@ func PrimStringToSymbol(_ context.Context, mc *machine.MachineContext) error {
 // Concatenates strings.
 func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	pr, ok := o.(*values.Pair)
+	tuple, ok := o.(values.Tuple)
 	if !ok {
 		if values.IsEmptyList(o) {
 			mc.SetValue(values.NewString(""))
 			return nil
 		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "string-append: expected a list but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAString, "string-append: expected a string but got %T", v)
@@ -334,27 +334,27 @@ func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional arguments: [start [end]]
 	if rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
+		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
 		}
 
 		// Parse start
-		startVal, ok := pair.Car().(*values.Integer)
+		startVal, ok := tuple.Car().(*values.Integer)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for start but got %T", pair.Car())
+			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for start but got %T", tuple.Car())
 		}
 		start = int(startVal.Value)
 
 		// Check for end argument
-		if pair.Cdr() != values.EmptyList {
-			pair2, ok := pair.Cdr().(*values.Pair)
+		if tuple.Cdr() != values.EmptyList {
+			tuple2, ok := tuple.Cdr().(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
 			}
-			endVal, ok := pair2.Car().(*values.Integer)
+			endVal, ok := tuple2.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for end but got %T", pair2.Car())
+				return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for end but got %T", tuple2.Car())
 			}
 			end = int(endVal.Value)
 		}

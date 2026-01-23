@@ -78,7 +78,7 @@ var (
 	ErrNotAProcedure               = NewStaticError("not a procedure")
 	ErrNotAStringOutputPort        = NewStaticError("not a string output port")
 	ErrNotABytevectorOutputPort    = NewStaticError("not a bytevector output port")
-	ErrNotAnErrorObject            = NewStaticError("not an error object")
+	ErrNotANativeError             = NewStaticError("not an error object")
 	ErrNotARecord                  = NewStaticError("not a record")
 	ErrNotARecordType              = NewStaticError("not a record type")
 

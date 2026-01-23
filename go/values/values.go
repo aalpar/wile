@@ -70,6 +70,13 @@ type Wrapped interface {
 	Wrap(Value)
 }
 
+type Indexable interface {
+	Value
+	Len() int
+	Get(int) Value
+	Set(int, Value)
+}
+
 // Collection represents a container that can be converted to a list.
 type Collection interface {
 	AsList() Tuple

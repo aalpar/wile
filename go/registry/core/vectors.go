@@ -26,8 +26,16 @@ func addVectors(r *registry.Registry) error {
 		{"vector-length", 1, false, PrimVectorLength},
 		{"vector-ref", 2, false, PrimVectorRef},
 		{"vector-set!", 3, false, PrimVectorSet},
-		{"vector->list", 1, false, PrimVectorToList},
+		{"vector->list", 2, true, PrimVectorToList},
 		{"list->vector", 1, false, PrimListToVector},
+		{"vector-copy", 2, true, PrimVectorCopy},
+		{"vector-copy!", 3, true, PrimVectorCopyTo},
+		{"vector-fill!", 3, true, PrimVectorFill},
+		{"vector-append", 1, true, PrimVectorAppend},
+		{"vector-map", 2, true, PrimVectorMap},
+		{"vector-for-each", 2, true, PrimVectorForEach},
+		{"vector->string", 2, true, PrimVectorToString},
+		{"string->vector", 2, true, PrimStringToVector},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

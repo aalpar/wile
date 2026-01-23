@@ -23,3 +23,22 @@ func BoolToBoolean(b bool) *values.Boolean {
 	}
 	return values.FalseValue
 }
+
+// BooleanToBool converts a Scheme *Boolean to a Go bool value.
+func BooleanToBool(b *values.Boolean) bool {
+	return b == values.TrueValue
+}
+
+// ValueToBool converts a value into a Go bool using Scheme semantics.
+func ValueToBool(b values.Value) bool {
+	v, ok := b.(*values.Boolean)
+	if !ok {
+		return true
+	}
+	return v.Datum()
+}
+
+// ValueToBoolean converts a value into a Scheme *Boolean using Scheme semantics.
+func ValueToBoolean(b values.Value) *values.Boolean {
+	return BoolToBoolean(ValueToBool(b))
+}
