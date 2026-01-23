@@ -8,6 +8,7 @@
     begin
     define
     define-syntax
+    syntax-error
     quasiquote
     unquote
     unquote-splicing

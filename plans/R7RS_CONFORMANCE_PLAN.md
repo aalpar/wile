@@ -16,12 +16,12 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Missing syntax/macros | 1 | Not started |
+| Missing syntax/macros | 0 | Complete |
 | Library system issues | 0 | Complete |
 | Tokenizer issues | 0 | Complete |
 | Semantic differences | 0 | Complete |
-| Completed items | 45+ | Complete |
-| **Total remaining** | **1** | **In progress** |
+| Completed items | 46+ | Complete |
+| **Total remaining** | **0** | **Complete** |
 
 ---
 
@@ -35,27 +35,10 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 | `letrec*` | §4.2.2 | Medium | ✅ Implemented in `bootstrap.go` |
 | `let-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
 | `letrec-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
-| `syntax-error` | §4.3.1 | Low | ❌ Not implemented |
+| `syntax-error` | §4.3.1 | Low | ✅ Implemented as primitive expander |
 | `define-values` | §5.3.3 | Medium | ✅ Implemented in compiler |
 
-**Remaining items:**
-
-#### `syntax-error` (R7RS §4.3.1)
-
-`syntax-error` is used in macro definitions to signal compile-time errors:
-
-```scheme
-(define-syntax must-be-even
-  (syntax-rules ()
-    ((must-be-even n)
-     (if (odd? n)
-         (syntax-error "must be even" n)
-         n))))
-```
-
-**Implementation notes:**
-- Must be recognized at macro expansion time, not runtime
-- Should include the template arguments in the error message
+All syntax/macros have been implemented.
 
 ---
 
@@ -158,6 +141,7 @@ The following items have been implemented and verified:
 - ✅ Scientific notation for bare integers (`1e-10`, `+1e10`)
 - ✅ Auxiliary syntax exports (`...`, `_`) from `(scheme base)`
 - ✅ `string-upcase` / `string-downcase` - Unicode full case mapping (ß → SS)
+- ✅ `syntax-error` - Compile-time error signaling in macros
 
 ---
 
@@ -165,7 +149,7 @@ The following items have been implemented and verified:
 
 | Library | Status | Notes |
 |---------|--------|-------|
-| `(scheme base)` | ~99% | Missing: `syntax-error` |
+| `(scheme base)` | 100% | Complete |
 | `(scheme char)` | 100% | |
 | `(scheme complex)` | 100% | |
 | `(scheme cxr)` | 100% | |

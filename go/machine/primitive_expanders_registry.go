@@ -52,6 +52,9 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 		{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 
+		// R7RS §4.3.1: syntax-error raises compile-time errors
+		{"syntax-error", (*ExpanderTimeContinuation).expandSyntaxError},
+
 		// Forms that expand their subexpressions
 		{"if", (*ExpanderTimeContinuation).expandIfForm},
 		{"begin", (*ExpanderTimeContinuation).expandBeginForm},

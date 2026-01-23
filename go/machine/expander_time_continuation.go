@@ -266,6 +266,72 @@ func (p *ExpanderTimeContinuation) expandLetrecSyntax(_ ExpandTimeCallContext, s
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
+// expandSyntaxError handles the (syntax-error message arg ...) form.
+// R7RS §4.3.1: syntax-error signals a compile-time error during macro expansion.
+// When encountered, it raises a compilation error with the given message and
+// arguments formatted as irritants.
+//
+// This allows macro authors to provide meaningful error messages for invalid uses:
+//
+//	(define-syntax must-be-pair
+//	  (syntax-rules ()
+//	    ((must-be-pair (a . b)) 'ok)
+//	    ((must-be-pair x) (syntax-error "expected a pair" x))))
+func (p *ExpanderTimeContinuation) expandSyntaxError(_ ExpandTimeCallContext, _ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	// Extract message (required first argument)
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil, fmt.Errorf("syntax-error: missing message argument")
+	}
+
+	// Get the message
+	msgVal := pair.SyntaxCar()
+	var message string
+	switch m := msgVal.(type) {
+	case *syntax.SyntaxObject:
+		if str, ok := m.Unwrap().(*values.String); ok {
+			message = str.Value
+		} else {
+			message = m.Unwrap().SchemeString()
+		}
+	case *syntax.SyntaxSymbol:
+		message = m.Sym.Key
+	default:
+		message = msgVal.SchemeString()
+	}
+
+	// Collect irritants (remaining arguments)
+	var irritants []string
+	rest := pair.SyntaxCdr()
+	for {
+		restPair, ok := rest.(*syntax.SyntaxPair)
+		if !ok || syntax.IsSyntaxEmptyList(restPair) {
+			break
+		}
+		irritant := restPair.SyntaxCar()
+		irritants = append(irritants, irritant.SchemeString())
+		rest = restPair.SyntaxCdr()
+	}
+
+	// Format the error message
+	if len(irritants) > 0 {
+		return nil, fmt.Errorf("syntax-error: %s: %s", message, formatIrritants(irritants))
+	}
+	return nil, fmt.Errorf("syntax-error: %s", message)
+}
+
+// formatIrritants joins irritants with commas for error display.
+func formatIrritants(irritants []string) string {
+	if len(irritants) == 1 {
+		return irritants[0]
+	}
+	result := irritants[0]
+	for _, s := range irritants[1:] {
+		result += ", " + s
+	}
+	return result
+}
+
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
 func (p *ExpanderTimeContinuation) expandBeginForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) {
