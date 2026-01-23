@@ -47,6 +47,9 @@ type valuePathEntry struct {
 	pr *values.Pair
 }
 
+// DefaultEllipsis is the standard R7RS ellipsis identifier.
+const DefaultEllipsis = "..."
+
 // Matcher is the pattern matching VM for syntax-rules.
 //
 // It executes compiled pattern bytecode against an input form,
@@ -57,20 +60,33 @@ type Matcher struct {
 	captureStack []*captureContext           // Binding capture stack (nesting for ellipsis)
 	valueStack   []valuePathEntry            // Input traversal stack
 	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
+	ellipsisID   string                      // Custom ellipsis identifier (default "...")
 }
 
-// NewMatcher creates a new pattern matcher.
+// NewMatcher creates a new pattern matcher with the default ellipsis ("...").
 func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand) *Matcher {
 	return NewMatcherWithEllipsisVars(variables, codes, nil)
 }
 
 // NewMatcherWithEllipsisVars creates a matcher with ellipsis variable mapping.
 // The ellipsisVars parameter maps each ellipsis ID to its captured pattern variables.
+// Uses the default ellipsis identifier ("...").
 func NewMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}) *Matcher {
+	return NewMatcherFull(variables, codes, ellipsisVars, DefaultEllipsis)
+}
+
+// NewMatcherFull creates a matcher with all parameters including custom ellipsis.
+// The ellipsisID parameter specifies the identifier used for ellipsis patterns
+// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
+func NewMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *Matcher {
+	if ellipsisID == "" {
+		ellipsisID = DefaultEllipsis
+	}
 	q := &Matcher{
 		variables:    variables,
 		codes:        codes,
 		ellipsisVars: ellipsisVars,
+		ellipsisID:   ellipsisID,
 	}
 	return q
 }
@@ -273,11 +289,23 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 		return t, nil
 
 	case *values.Pair:
-		// Check for ellipsis pattern (something ...)
 		if !values.IsEmptyList(t) {
+			// Check for ellipsis escape form: (<ellipsis> <template>)
+			// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical
+			// to <template>, except that ellipses within the template have no special meaning.
+			if sym, ok := t[0].(*values.Symbol); ok && sym.Key == p.ellipsisID {
+				cdr := t[1]
+				if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
+					// This is an escape form - return the inner template literally
+					// by expanding it with a matcher that uses "" as ellipsis (no ellipsis matching)
+					return p.expandEscapedTemplate(cdrPair[0], ctx, ellipsisVars)
+				}
+			}
+
+			// Check for ellipsis pattern (something <ellipsis>)
 			cdr := t[1]
 			if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
-				if sym, ok := cdrPair[0].(*values.Symbol); ok && sym.Key == "..." {
+				if sym, ok := cdrPair[0].(*values.Symbol); ok && sym.Key == p.ellipsisID {
 					// Found ellipsis - need to repeat the car for each capture
 					return p.expandEllipsis(t[0], cdrPair[1], ctx, ellipsisVars)
 				}
@@ -419,4 +447,46 @@ func (p *Matcher) appendToList(list values.Value, rest values.Value) values.Valu
 	}
 	pair := list.(*values.Pair)
 	return values.NewCons(pair[0], p.appendToList(pair[1], rest))
+}
+
+// expandEscapedTemplate expands a template inside an ellipsis escape form.
+// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical to
+// <template>, except that ellipses within the template have no special meaning.
+// This function expands the template literally - substituting pattern variables
+// but not treating ellipsis as a repetition marker.
+func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureContext, ellipsisVars map[string]struct{}) (values.Value, error) {
+	switch t := template.(type) {
+	case *values.Symbol:
+		// Check if it's a pattern variable
+		if val, ok := ctx.bindings[t.Key]; ok {
+			return val, nil
+		}
+		// Check if it's an ellipsis variable (from outer repetition)
+		if ellipsisVars != nil {
+			if _, ok := ellipsisVars[t.Key]; ok {
+				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
+			}
+		}
+		// Not a pattern variable, return as-is (including ellipsis symbols)
+		return t, nil
+
+	case *values.Pair:
+		if values.IsEmptyList(t) {
+			return t, nil
+		}
+		// In escaped context, don't check for ellipsis patterns - just expand car and cdr
+		car, err := p.expandEscapedTemplate(t[0], ctx, ellipsisVars)
+		if err != nil {
+			return nil, err
+		}
+		cdr, err := p.expandEscapedTemplate(t[1], ctx, ellipsisVars)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewCons(car, cdr), nil
+
+	default:
+		// Self-evaluating values (numbers, strings, etc.)
+		return t, nil
+	}
 }

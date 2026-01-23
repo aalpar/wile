@@ -57,12 +57,19 @@ func AnalyzePatternWithLiterals(pattern *values.Pair, literals map[string]struct
 	return analysis
 }
 
-// collectPatternVariables walks the pattern and identifies all pattern variables
+// collectPatternVariables walks the pattern and identifies all pattern variables.
+// Uses the default ellipsis identifier ("...").
 func collectPatternVariables(v values.Value, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) {
+	collectPatternVariablesWithEllipsis(v, literals, isFirst, variables, DefaultEllipsis)
+}
+
+// collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
+// using the specified ellipsis identifier.
+func collectPatternVariablesWithEllipsis(v values.Value, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) {
 	switch t := v.(type) {
 	case *values.Symbol:
 		// Skip if it's a keyword (first element), literal, or ellipsis
-		if !isFirst && t.Key != "..." {
+		if !isFirst && t.Key != ellipsis {
 			if _, isLiteral := literals[t.Key]; !isLiteral {
 				variables[t.Key] = struct{}{}
 			}
@@ -70,9 +77,9 @@ func collectPatternVariables(v values.Value, literals map[string]struct{}, isFir
 	case *values.Pair:
 		if !values.IsEmptyList(t) {
 			// First element in a pattern is the keyword
-			collectPatternVariables(t[0], literals, isFirst, variables)
+			collectPatternVariablesWithEllipsis(t[0], literals, isFirst, variables, ellipsis)
 			// Rest of the pattern
-			collectPatternVariables(t[1], literals, false, variables)
+			collectPatternVariablesWithEllipsis(t[1], literals, false, variables, ellipsis)
 		}
 	}
 }

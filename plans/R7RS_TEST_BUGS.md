@@ -12,8 +12,8 @@ This document tracks bugs discovered when running `r7rs-tests.scm` against Wile.
 |----------|----------|-------|--------|
 | Critical | Infinite loop / hang | 1 | **Fixed** |
 | High | Core functionality | 7 | 7 fixed |
-| Medium | Advanced features | 5 | 3 fixed, 2 remaining |
-| **Total** | | **13** | 11 fixed |
+| Medium | Advanced features | 5 | 5 fixed |
+| **Total** | | **13** | **All fixed** |
 
 ---
 
@@ -397,9 +397,10 @@ Updated `readTypedArrayOrExactnessOrRadixOrBooleanMarker` to accept uppercase va
 ### Bug #8: Ellipsis escape in nested syntax-rules doesn't work
 
 **Priority:** Medium
-**Status:** Not fixed
+**Status:** ✅ **Fixed**
+**Fixed in:** `go/match/match.go`
 
-**Reproduction:**
+**Previous behavior:**
 ```scheme
 (define-syntax be-like-begin
   (syntax-rules ()
@@ -411,23 +412,21 @@ Updated `readTypedArrayOrExactnessOrRadixOrBooleanMarker` to accept uppercase va
 ; Error: syntax-rules: no matching clause for input
 ```
 
+**Fix:** Implemented ellipsis escape form recognition in template expansion. When
+`(<ellipsis> <template>)` is encountered during expansion, the inner template is
+expanded with ellipsis having no special meaning, allowing literal ellipsis output.
+
 **R7RS Reference:** §4.3.2 - `(... <template>)` escapes ellipsis in the template
-
-**Fix Plan:**
-1. Implement ellipsis escaping in syntax-rules pattern matching
-2. When `(... ...)` is encountered, treat the inner `...` as a literal, not an ellipsis
-
-**Files to modify:**
-- `go/match/` or `go/define_syntax/` - Pattern matching engine
 
 ---
 
 ### Bug #9: Custom ellipsis identifier not supported
 
 **Priority:** Medium
-**Status:** Not fixed
+**Status:** ✅ **Fixed**
+**Fixed in:** `go/machine/compile_syntax_rules.go`, `go/match/match.go`, `go/match/syntax_compiler.go`, `go/match/syntax_adapter.go`
 
-**Reproduction:**
+**Previous behavior:**
 ```scheme
 (syntax-rules dots ()
   ((name expr dots)
@@ -435,14 +434,14 @@ Updated `readTypedArrayOrExactnessOrRadixOrBooleanMarker` to accept uppercase va
 ; Error: syntax-rules: missing pattern in clause
 ```
 
+**Fix:** Implemented R7RS §4.3.2 custom ellipsis identifier support:
+- Parse optional ellipsis identifier in syntax-rules form: `(syntax-rules <ellipsis> (<literal> ...) <clause> ...)`
+- Thread custom ellipsis through pattern compilation, matching, and template expansion
+- Default ellipsis remains `...` when not specified
+
+Additionally fixed: `_` (underscore) can now appear in the literals list to be matched literally instead of as a wildcard.
+
 **R7RS Reference:** §4.3.2 - `(syntax-rules (<ellipsis>) (<literal> ...) <clause> ...)`
-
-**Fix Plan:**
-1. Parse optional ellipsis identifier in syntax-rules
-2. Use specified identifier instead of `...` for ellipsis matching
-
-**Files to modify:**
-- `go/define_syntax/` - Syntax-rules parsing
 
 ---
 

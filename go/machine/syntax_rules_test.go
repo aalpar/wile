@@ -178,3 +178,136 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 	// TODO: Add test for actually invoking the transformer once the API supports it
 	_ = closure // Suppress unused variable warning
 }
+
+// TestSyntaxRulesWithCustomEllipsis tests R7RS §4.3.2 custom ellipsis identifier.
+// The syntax (syntax-rules <ellipsis> (<literal> ...) <clause> ...) allows
+// specifying an alternative identifier for the ellipsis, which is useful for
+// macros that need to generate code containing literal "..." identifiers.
+func TestSyntaxRulesWithCustomEllipsis(t *testing.T) {
+	// Test: (define-syntax my-list (syntax-rules ::: () ((my-list x :::) (list x :::))))
+	// Usage: (my-list 1 2 3) => (list 1 2 3)
+	// The ::: is used as the ellipsis instead of ...
+
+	env := createTestEnv()
+
+	// Parse the define-syntax form with custom ellipsis :::
+	defineSyntaxForm := parseSyntax(t, env,
+		`(define-syntax my-list
+		   (syntax-rules ::: ()
+		     ((my-list x :::) (list x :::))))`)
+	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
+
+	// Compile define-syntax
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile define-syntax with custom ellipsis: %v", err)
+	}
+
+	// Get the transformer from expand phase
+	myListSym := values.NewSymbol("my-list")
+	binding := env.Expand().GetBinding(myListSym)
+	if binding == nil {
+		t.Fatal("my-list not bound in expand phase environment")
+	}
+
+	_, ok := binding.Value().(*machine.MachineClosure)
+	if !ok {
+		t.Fatalf("my-list binding value is %T, expected MachineClosure", binding.Value())
+	}
+
+	// Test passes if we got this far - the syntax-rules macro with custom ellipsis was successfully compiled
+	t.Log("Custom ellipsis syntax-rules compiled successfully")
+}
+
+// TestSyntaxRulesWithUnderscoreInLiterals tests that _ can be matched literally
+// when it appears in the literals list, per R7RS §4.3.2.
+func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
+	// Test: (define-syntax test-underscore (syntax-rules (_) ((test-underscore _ x) x)))
+	// The _ is in the literals list, so it should be matched literally, not as a wildcard.
+	// Usage: (test-underscore _ 42) => 42
+	//        (test-underscore foo 42) => no match (foo doesn't match literal _)
+
+	env := createTestEnv()
+
+	// Parse the define-syntax form with _ in literals list
+	defineSyntaxForm := parseSyntax(t, env,
+		`(define-syntax test-underscore
+		   (syntax-rules (_)
+		     ((test-underscore _ x) x)))`)
+	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
+
+	// Compile define-syntax
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile define-syntax with _ in literals: %v", err)
+	}
+
+	// Get the transformer from expand phase
+	testUnderscoreSym := values.NewSymbol("test-underscore")
+	binding := env.Expand().GetBinding(testUnderscoreSym)
+	if binding == nil {
+		t.Fatal("test-underscore not bound in expand phase environment")
+	}
+
+	_, ok := binding.Value().(*machine.MachineClosure)
+	if !ok {
+		t.Fatalf("test-underscore binding value is %T, expected MachineClosure", binding.Value())
+	}
+
+	// Test passes if we got this far - the syntax-rules macro with _ in literals was successfully compiled
+	t.Log("Underscore in literals syntax-rules compiled successfully")
+}
+
+// TestSyntaxRulesEllipsisInLiteralsRejected tests that ellipsis in literals list is rejected.
+// R7RS §4.3.2: It is a syntax violation if ... appears in <literals>.
+func TestSyntaxRulesEllipsisInLiteralsRejected(t *testing.T) {
+	t.Run("Default ellipsis in literals", func(t *testing.T) {
+		env := createTestEnv()
+
+		// Parse a syntax-rules form with ... in the literals list (invalid)
+		defineSyntaxForm := parseSyntax(t, env,
+			`(define-syntax bad-macro
+			   (syntax-rules (...)
+			     ((bad-macro x) x)))`)
+		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
+
+		// Compile should fail
+		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+		ctctx := machine.NewCompileTimeCallContext(false, false, env)
+		err := ctc.CompileDefineSyntax(ctctx, args)
+		if err == nil {
+			t.Fatal("expected error when ellipsis appears in literals list")
+		}
+		if !strings.Contains(err.Error(), "ellipsis") {
+			t.Fatalf("expected error about ellipsis, got: %v", err)
+		}
+		t.Logf("Correctly rejected ellipsis in literals: %v", err)
+	})
+
+	t.Run("Custom ellipsis in literals", func(t *testing.T) {
+		env := createTestEnv()
+
+		// Parse a syntax-rules form with custom ellipsis ::: in the literals list (invalid)
+		defineSyntaxForm := parseSyntax(t, env,
+			`(define-syntax bad-macro
+			   (syntax-rules ::: (:::)
+			     ((bad-macro x) x)))`)
+		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
+
+		// Compile should fail
+		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+		ctctx := machine.NewCompileTimeCallContext(false, false, env)
+		err := ctc.CompileDefineSyntax(ctctx, args)
+		if err == nil {
+			t.Fatal("expected error when custom ellipsis appears in literals list")
+		}
+		if !strings.Contains(err.Error(), "ellipsis") {
+			t.Fatalf("expected error about ellipsis, got: %v", err)
+		}
+		t.Logf("Correctly rejected custom ellipsis in literals: %v", err)
+	})
+}

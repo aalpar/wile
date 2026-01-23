@@ -88,14 +88,25 @@ type SyntaxCompiler struct {
 	analysis       *PatternAnalysis            // pattern analysis results
 	nextEllipsisID int                         // counter for assigning unique ellipsis IDs
 	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
+	ellipsis       string                      // custom ellipsis identifier (default "...")
 }
 
-// NewSyntaxCompiler creates a new syntax compiler.
+// NewSyntaxCompiler creates a new syntax compiler with the default ellipsis ("...").
 func NewSyntaxCompiler() *SyntaxCompiler {
+	return NewSyntaxCompilerWithEllipsis(DefaultEllipsis)
+}
+
+// NewSyntaxCompilerWithEllipsis creates a new syntax compiler with a custom ellipsis identifier.
+// Per R7RS §4.3.2, syntax-rules can specify an alternative ellipsis identifier.
+func NewSyntaxCompilerWithEllipsis(ellipsis string) *SyntaxCompiler {
+	if ellipsis == "" {
+		ellipsis = DefaultEllipsis
+	}
 	q := &SyntaxCompiler{
 		variables:    map[string]struct{}{},
 		literals:     map[string]struct{}{},
 		ellipsisVars: map[int]map[string]struct{}{},
+		ellipsis:     ellipsis,
 	}
 	return q
 }
@@ -200,14 +211,23 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 
 // compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.
 func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) {
-	switch sym.Key {
-	case "...":
+	// Check for ellipsis (custom or default)
+	if sym.Key == vis.ellipsis {
 		compileEllipsis(vis, entry)
-	case "_":
-		// Wildcard - matches anything but doesn't bind (no bytecode emitted)
-	default:
-		compileSymbolOrLiteral(vis, entry, sym)
+		return
 	}
+	// Check for wildcard
+	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
+	// it appears in the list of literals, in which case it is matched literally.
+	if sym.Key == "_" {
+		if _, isLiteral := vis.literals[sym.Key]; !isLiteral {
+			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
+			return
+		}
+		// _ is in literals list, fall through to treat as literal
+	}
+	// Otherwise it's a variable or literal
+	compileSymbolOrLiteral(vis, entry, sym)
 }
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
@@ -222,13 +242,13 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 	}
 }
 
-// compileEllipsis handles the ... pattern, which matches zero or more repetitions.
+// compileEllipsis handles the ellipsis pattern, which matches zero or more repetitions.
 // If the previous element contains pattern variables, generates a loop structure.
-// Otherwise, treats ... as a literal symbol.
+// Otherwise, treats the ellipsis as a literal symbol.
 func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) {
 	if !previousElementHasVariables(vis, entry) {
-		// No pattern variables - treat ... as literal
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: &values.Symbol{Key: "..."}})
+		// No pattern variables - treat ellipsis as literal
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: &values.Symbol{Key: vis.ellipsis}})
 		return
 	}
 

@@ -270,3 +270,80 @@ func TestExpandErrors(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "no capture context")
 }
+
+// TestEllipsisEscape tests R7RS §4.3.2 ellipsis escape form.
+// A template of the form (... <template>) is identical to <template>,
+// except that ellipses within the template have no special meaning.
+func TestEllipsisEscape(t *testing.T) {
+	t.Run("Simple ellipsis escape", func(t *testing.T) {
+		// Pattern: (foo x)
+		// Template: (... ...) - the (... ...) escape form should produce literal ...
+		// Expected: ... (a single ellipsis symbol)
+		variables := map[string]struct{}{"x": {}}
+		pattern := values.List(values.NewSymbol("foo"), values.NewSymbol("x"))
+		input := values.List(values.NewSymbol("foo"), values.NewInteger(42))
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		matcher := NewMatcher(variables, compiler.codes)
+		matcher.ellipsisID = DefaultEllipsis
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Template: (... ...) - escape form containing ellipsis
+		escapeTemplate := values.List(values.NewSymbol("..."), values.NewSymbol("..."))
+		result, err := matcher.Expand(escapeTemplate)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Result should be the literal ... symbol
+		sym, ok := result.(*values.Symbol)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected symbol, got %T", result))
+		qt.Assert(t, sym.Key, qt.Equals, "...")
+	})
+
+	t.Run("Escape form with pattern variable", func(t *testing.T) {
+		// Pattern: (foo x)
+		// Template: (... (x ...)) - escape form containing x and ...
+		// Expected: (42 ...) - x substituted, ... kept literally
+		variables := map[string]struct{}{"x": {}}
+		pattern := values.List(values.NewSymbol("foo"), values.NewSymbol("x"))
+		input := values.List(values.NewSymbol("foo"), values.NewInteger(42))
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		matcher := NewMatcher(variables, compiler.codes)
+		matcher.ellipsisID = DefaultEllipsis
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Template: (... (x ...)) - escape form containing pattern var and ellipsis
+		innerTemplate := values.List(values.NewSymbol("x"), values.NewSymbol("..."))
+		escapeTemplate := values.List(values.NewSymbol("..."), innerTemplate)
+		result, err := matcher.Expand(escapeTemplate)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Result should be (42 ...)
+		resultPair, ok := result.(*values.Pair)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected pair, got %T", result))
+
+		// First element should be 42
+		firstInt, ok := resultPair[0].(*values.Integer)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected integer, got %T", resultPair[0]))
+		qt.Assert(t, firstInt.Value, qt.Equals, int64(42))
+
+		// Second element should be (... ()) - a list containing ... and empty list
+		restPair, ok := resultPair[1].(*values.Pair)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected pair, got %T", resultPair[1]))
+
+		// The car of rest should be the ... symbol
+		ellipsisSym, ok := restPair[0].(*values.Symbol)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected symbol, got %T", restPair[0]))
+		qt.Assert(t, ellipsisSym.Key, qt.Equals, "...")
+	})
+}
