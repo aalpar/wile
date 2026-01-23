@@ -18,6 +18,9 @@
     ;; Auxiliary syntax (R7RS §5.1)
     else
     =>
+    ;; Auxiliary syntax (R7RS §4.3.2)
+    ...
+    _
     ;; Derived syntax (bootstrap macros)
     cond
     case

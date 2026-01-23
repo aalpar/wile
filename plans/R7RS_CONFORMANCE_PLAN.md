@@ -16,12 +16,12 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Missing syntax/macros | 2 | Not started |
-| Library system issues | 2 | Partially complete |
-| Tokenizer issues | 1 | Not started |
-| Semantic differences | 2 | Not started |
-| Completed items | 40+ | Complete |
-| **Total remaining** | **7** | **In progress** |
+| Missing syntax/macros | 1 | Not started |
+| Library system issues | 0 | Complete |
+| Tokenizer issues | 0 | Complete |
+| Semantic differences | 0 | Complete |
+| Completed items | 45+ | Complete |
+| **Total remaining** | **1** | **In progress** |
 
 ---
 
@@ -36,7 +36,7 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 | `let-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
 | `letrec-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
 | `syntax-error` | §4.3.1 | Low | ❌ Not implemented |
-| `define-values` | §5.3.3 | Medium | ❌ Not implemented |
+| `define-values` | §5.3.3 | Medium | ✅ Implemented in compiler |
 
 **Remaining items:**
 
@@ -57,102 +57,37 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 - Must be recognized at macro expansion time, not runtime
 - Should include the template arguments in the error message
 
-#### `define-values` (R7RS §5.3.3)
-
-`define-values` binds multiple variables to values returned by a multiple-value expression:
-
-```scheme
-(define-values (quotient remainder) (floor/ 10 3))
-;; quotient => 3, remainder => 1
-```
-
-**Implementation notes:**
-- Requires `call-with-values` support (already implemented)
-- Can be implemented as a macro in `bootstrap.go`
-
 ---
 
-### Phase 5: Library System Issues
+### Phase 5: Library System Issues (Complete)
 
 | Item | Priority | Status |
 |------|----------|--------|
-| Auxiliary syntax exports (`...`, `_`) | Medium | ❌ Not exported |
+| Auxiliary syntax exports (`...`, `_`) | Medium | ✅ Exported |
 | Macro hygiene with internal bindings | Medium | ✅ Fixed |
 
-#### Auxiliary Syntax Exports
-
-R7RS §7.1.1 specifies that `(scheme base)` must export auxiliary syntax keywords:
-
-| Keyword | Used in | Status |
-|---------|---------|--------|
-| `else` | `cond`, `case`, `guard` | ✅ Exported |
-| `=>` | `cond`, `case` | ✅ Exported |
-| `...` | `syntax-rules` patterns | ❌ Not exported |
-| `_` | `syntax-rules` wildcard | ❌ Not exported |
-
-**Current status:** `else` and `=>` are exported from `(scheme base)` and work correctly. The ellipsis `...` and underscore `_` are not exported because they have no runtime binding and the library system doesn't support exporting pure auxiliary syntax.
-
-**Impact:** Low - these are only needed for macros that re-export or rename auxiliary syntax, which is rare.
-
-#### Macro Hygiene with Internal Bindings
-
-When a macro defined in a library references a helper function also defined in that library:
-
-```scheme
-;; In (my-lib):
-(define (helper x) ...)
-(define-syntax my-macro
-  (syntax-rules ()
-    ((my-macro x) (helper x))))  ;; 'helper' should resolve to library's binding
-```
-
-**Status: Fixed.** Free identifiers in macro templates are now pre-resolved to their `GlobalIndex` at macro definition time. During template expansion, these bindings are attached to symbols via `WithResolvedBinding()`, ensuring they resolve to the definition-time binding regardless of the use-site context. See `syntax/CLAUDE.md` for implementation details.
+All library system issues have been resolved.
 
 ---
 
-### Phase 6: Tokenizer Issues
+### Phase 6: Tokenizer Issues (Complete)
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| Scientific notation for bare integers | Medium | `1e-10` fails; `1.0e-10` works |
+| Item | Priority | Status |
+|------|----------|--------|
+| Scientific notation for bare integers | Medium | ✅ Fixed |
 
-#### Scientific Notation Issue
-
-Numbers in scientific notation without a decimal point fail to parse:
-
-```scheme
-1e-10      ; Error: strconv.ParseInt: parsing "1e-10": invalid syntax
-1.0e-10    ; Works: 1e-10
-+1e10      ; Error
-1.5e10     ; Works: 15000000000
-```
-
-**Root cause:** The tokenizer correctly identifies the number, but the value conversion attempts to parse it as an integer when there's no decimal point.
-
-**Impact:** Medium - requires users to include decimal points in scientific notation.
+All tokenizer issues have been resolved.
 
 ---
 
-### Phase 7: Semantic Differences
+### Phase 7: Semantic Differences (Complete)
 
-| Item | R7RS Requirement | Current Implementation | Priority |
-|------|------------------|------------------------|----------|
-| `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
-| `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
+| Item | R7RS Requirement | Status |
+|------|------------------|--------|
+| `string-upcase` | Unicode full uppercasing | ✅ Fixed |
+| `string-downcase` | Unicode full lowercasing | ✅ Fixed |
 
-#### Unicode Full Case Mapping
-
-R7RS requires `string-upcase` and `string-downcase` to use Unicode full case mapping, which can change string length:
-
-```scheme
-;; R7RS behavior:
-(string-upcase "straße")  ; Should return "STRASSE" (7 chars)
-
-;; Current behavior:
-(string-upcase "straße")  ; Returns "STRAßE" (6 chars) - ß unchanged
-```
-
-**Fix:** Use `golang.org/x/text/cases.Upper()` and `cases.Lower()` similar to how `string-foldcase` was fixed.
+All semantic differences have been resolved.
 
 ---
 
@@ -219,6 +154,10 @@ The following items have been implemented and verified:
 - ✅ Datum labels (`#n=` and `#n#`) for shared/circular structures
 - ✅ `#!fold-case` / `#!no-fold-case` directives
 - ✅ Case-insensitive number prefixes (`#I`, `#E`, `#B`, `#O`, `#D`, `#X`)
+- ✅ `define-values` - Multiple value definitions
+- ✅ Scientific notation for bare integers (`1e-10`, `+1e10`)
+- ✅ Auxiliary syntax exports (`...`, `_`) from `(scheme base)`
+- ✅ `string-upcase` / `string-downcase` - Unicode full case mapping (ß → SS)
 
 ---
 
@@ -226,7 +165,7 @@ The following items have been implemented and verified:
 
 | Library | Status | Notes |
 |---------|--------|-------|
-| `(scheme base)` | ~95% | Missing: `syntax-error`, `define-values`, `...`/`_` exports |
+| `(scheme base)` | ~99% | Missing: `syntax-error` |
 | `(scheme char)` | 100% | |
 | `(scheme complex)` | 100% | |
 | `(scheme cxr)` | 100% | |

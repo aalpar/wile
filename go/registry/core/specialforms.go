@@ -43,6 +43,10 @@ var compileTimeBindings = []string{
 	// These are literals used in syntax-rules patterns for cond and case
 	"else",
 	"=>",
+	// Auxiliary syntax (R7RS §4.3.2)
+	// These are special identifiers in syntax-rules patterns
+	"...",
+	"_",
 }
 
 func addSpecialForms(r *registry.Registry) error {

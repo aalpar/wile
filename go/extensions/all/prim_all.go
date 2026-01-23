@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"wile/environment"
 	"wile/machine"
@@ -747,24 +748,34 @@ func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error
 }
 
 // PrimStringUpcase implements the string-upcase primitive.
+// R7RS §6.7: Returns a string whose characters are the uppercase versions of the characters in string.
+// Uses Unicode full case mapping which can expand characters (e.g., ß → SS).
 func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-upcase: expected a string but got %T", s)
 	}
-	mc.SetValue(values.NewString(strings.ToUpper(str.Value)))
+	// Use Unicode full case mapping (language-independent)
+	caser := cases.Upper(language.Und)
+	result := caser.String(str.Value)
+	mc.SetValue(values.NewString(result))
 	return nil
 }
 
 // PrimStringDowncase implements the string-downcase primitive.
+// R7RS §6.7: Returns a string whose characters are the lowercase versions of the characters in string.
+// Uses Unicode full case mapping which can expand characters.
 func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-downcase: expected a string but got %T", s)
 	}
-	mc.SetValue(values.NewString(strings.ToLower(str.Value)))
+	// Use Unicode full case mapping (language-independent)
+	caser := cases.Lower(language.Und)
+	result := caser.String(str.Value)
+	mc.SetValue(values.NewString(result))
 	return nil
 }
 
