@@ -106,3 +106,120 @@ func TestTemplateContainsEllipsis_EmptyList(t *testing.T) {
 	stx := syntax.NewSyntaxEmptyList(nil)
 	c.Assert(templateContainsEllipsis(stx), qt.IsFalse)
 }
+
+func TestTemplateContainsEllipsis_EscapeForm(t *testing.T) {
+	c := qt.New(t)
+
+	// (... foo) - escape form, should return false because the ellipsis
+	// is the escape marker, not an actual ellipsis to expand
+	ellipsis := syntax.NewSyntaxSymbol("...", nil)
+	foo := syntax.NewSyntaxSymbol("foo", nil)
+	escapeForm := syntax.NewSyntaxCons(ellipsis,
+		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
+
+	c.Assert(templateContainsEllipsis(escapeForm), qt.IsFalse)
+}
+
+func TestTemplateContainsEllipsis_EscapeFormWithEllipsisInside(t *testing.T) {
+	c := qt.New(t)
+
+	// (... ...) - escape form containing ellipsis, should return false
+	// because the inner ellipsis is escaped (has no special meaning)
+	ellipsis1 := syntax.NewSyntaxSymbol("...", nil)
+	ellipsis2 := syntax.NewSyntaxSymbol("...", nil)
+	escapeForm := syntax.NewSyntaxCons(ellipsis1,
+		syntax.NewSyntaxCons(ellipsis2, syntax.NewSyntaxEmptyList(nil), nil), nil)
+
+	c.Assert(templateContainsEllipsis(escapeForm), qt.IsFalse)
+}
+
+func TestTemplateContainsEllipsis_EscapeFormFollowedByEllipsis(t *testing.T) {
+	c := qt.New(t)
+
+	// ((... foo) x ...) - escape form followed by actual ellipsis
+	// Should return true because of the trailing ellipsis
+	ellipsis := syntax.NewSyntaxSymbol("...", nil)
+	foo := syntax.NewSyntaxSymbol("foo", nil)
+	x := syntax.NewSyntaxSymbol("x", nil)
+	trailingEllipsis := syntax.NewSyntaxSymbol("...", nil)
+
+	escapeForm := syntax.NewSyntaxCons(ellipsis,
+		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
+
+	outerList := syntax.NewSyntaxCons(escapeForm,
+		syntax.NewSyntaxCons(x,
+			syntax.NewSyntaxCons(trailingEllipsis, syntax.NewSyntaxEmptyList(nil), nil), nil), nil)
+
+	c.Assert(templateContainsEllipsis(outerList), qt.IsTrue)
+}
+
+func TestTemplateContainsEllipsis_BareEllipsisNotEscapeForm(t *testing.T) {
+	c := qt.New(t)
+
+	// (...) - just ellipsis with no template, NOT an escape form
+	// Should return true because this is an unescaped ellipsis
+	ellipsis := syntax.NewSyntaxSymbol("...", nil)
+	bareEllipsis := syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil)
+
+	c.Assert(templateContainsEllipsis(bareEllipsis), qt.IsTrue)
+}
+
+// TestCompileSyntax_EscapeFormCompilesDirectly verifies that escape forms
+// are compiled to direct bytecode operations rather than falling back to
+// runtime expansion via OperationSyntaxTemplateExpand.
+func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
+	c := qt.New(t)
+
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	ccnt := NewCompiletimeContinuation(tpl, env)
+
+	// (syntax (... foo)) - escape form should compile directly
+	ellipsis := syntax.NewSyntaxSymbol("...", nil)
+	foo := syntax.NewSyntaxSymbol("foo", nil)
+	escapeForm := syntax.NewSyntaxCons(ellipsis,
+		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
+	expr := syntax.NewSyntaxCons(escapeForm, syntax.NewSyntaxEmptyList(nil), nil)
+
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	c.Assert(err, qt.IsNil)
+
+	// Verify NO OperationSyntaxTemplateExpand was generated
+	// (escape forms should compile to direct literal loads, not runtime expansion)
+	for _, op := range tpl.operations {
+		_, isTemplateExpand := op.(*OperationSyntaxTemplateExpand)
+		c.Assert(isTemplateExpand, qt.IsFalse,
+			qt.Commentf("escape form should not generate OperationSyntaxTemplateExpand"))
+	}
+}
+
+// TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion verifies that templates
+// with actual (non-escaped) ellipsis fall back to runtime expansion.
+func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
+	c := qt.New(t)
+
+	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	tpl := NewNativeTemplate(0, 0, false)
+	ccnt := NewCompiletimeContinuation(tpl, env)
+
+	// (syntax (foo ...)) - actual ellipsis, needs runtime expansion
+	foo := syntax.NewSyntaxSymbol("foo", nil)
+	ellipsis := syntax.NewSyntaxSymbol("...", nil)
+	template := syntax.NewSyntaxCons(foo,
+		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)
+	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
+
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	c.Assert(err, qt.IsNil)
+
+	// Verify OperationSyntaxTemplateExpand WAS generated
+	hasTemplateExpand := false
+	for _, op := range tpl.operations {
+		if _, ok := op.(*OperationSyntaxTemplateExpand); ok {
+			hasTemplateExpand = true
+			break
+		}
+	}
+	c.Assert(hasTemplateExpand, qt.IsTrue,
+		qt.Commentf("non-escape ellipsis should generate OperationSyntaxTemplateExpand"))
+}
