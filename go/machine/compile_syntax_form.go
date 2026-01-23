@@ -59,7 +59,10 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 	return p.compileSyntaxTemplateToOps(template)
 }
 
-// templateContainsEllipsis checks if a syntax template contains the ellipsis marker "...".
+// templateContainsEllipsis checks if a syntax template contains unescaped ellipsis "...".
+// R7RS §4.3.2: A template of the form (... <template>) is an escape form where
+// ellipses within have no special meaning. This function recognizes escape forms
+// and doesn't count their contents as containing ellipsis.
 func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
@@ -73,18 +76,44 @@ func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 		if v.IsEmptyList() {
 			return false
 		}
-		// Check car
+
+		// Check for escape form (... <template>)
+		// An escape form requires BOTH the ellipsis AND a template after it
 		car := v.SyntaxCar()
+		if isEllipsisSymbol(car) {
+			cdr := v.SyntaxCdr()
+			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() {
+				// This is a valid escape form (... <template> ...)
+				// The escaped template (car of cdr) doesn't count as containing ellipsis
+				// But we need to check the rest of the list (cdr of cdr)
+				rest := cdrPair.SyntaxCdr()
+				return templateContainsEllipsis(rest)
+			}
+			// Just (...) with no template - this is NOT an escape form
+			// The ellipsis itself is unescaped
+			return true
+		}
+
+		// Not an escape form - check car and cdr normally
 		if templateContainsEllipsis(car) {
 			return true
 		}
-		// Check cdr
 		cdr := v.SyntaxCdr()
 		return templateContainsEllipsis(cdr)
 
 	default:
 		return false
 	}
+}
+
+// isEllipsisSymbol checks if a syntax value is the ellipsis symbol "...".
+func isEllipsisSymbol(stx syntax.SyntaxValue) bool {
+	if sym, ok := stx.(*syntax.SyntaxSymbol); ok {
+		if s, ok := sym.Unwrap().(*values.Symbol); ok {
+			return s.Key == "..."
+		}
+	}
+	return false
 }
 
 // compileSyntaxTemplateToOps emits bytecode operations that build a syntax object.
@@ -119,6 +148,18 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			litIdx := p.template.MaybeAppendLiteral(v)
 			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
+		}
+
+		// Check for escape form (... <template>)
+		// R7RS §4.3.2: The result is just <template> with ellipsis having no special meaning
+		car := v.SyntaxCar()
+		if isEllipsisSymbol(car) {
+			cdr := v.SyntaxCdr()
+			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() {
+				// Get the escaped template and compile it directly
+				escapedTemplate := cdrPair.SyntaxCar()
+				return p.compileSyntaxTemplateToOps(escapedTemplate)
+			}
 		}
 
 		// Compile list elements and build a syntax list
