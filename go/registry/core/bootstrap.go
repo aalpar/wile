@@ -61,6 +61,15 @@ const bootstrapMacroSource = `
        (set! var init) ...
        body ...))))
 
+;; letrec* - like letrec but initializers are evaluated left-to-right
+;; In letrec*, each variable is in scope for all initializers and body.
+;; This simple implementation just uses letrec since we're not enforcing
+;; the left-to-right evaluation order at macro level (the compiler does it).
+(define-syntax letrec*
+  (syntax-rules ()
+    ((letrec* ((var init) ...) body ...)
+     (letrec ((var init) ...) body ...))))
+
 ;; Conditional forms
 (define-syntax cond
   (syntax-rules (else =>)
@@ -85,6 +94,30 @@ const bootstrapMacroSource = `
      (if test
          (begin result1 result2 ...)
          (cond clause1 clause2 ...)))))
+
+(define-syntax case
+  (syntax-rules (else =>)
+    ((case (key ...) clauses ...)
+     (let ((atom-key (key ...)))
+       (case atom-key clauses ...)))
+    ((case key (else => result))
+     (result key))
+    ((case key (else result1 result2 ...))
+     (begin result1 result2 ...))
+    ((case key ((atoms ...) => result))
+     (if (memv key '(atoms ...))
+         (result key)))
+    ((case key ((atoms ...) => result) clause clauses ...)
+     (if (memv key '(atoms ...))
+         (result key)
+         (case key clause clauses ...)))
+    ((case key ((atoms ...) result1 result2 ...))
+     (if (memv key '(atoms ...))
+         (begin result1 result2 ...)))
+    ((case key ((atoms ...) result1 result2 ...) clause clauses ...)
+     (if (memv key '(atoms ...))
+         (begin result1 result2 ...)
+         (case key clause clauses ...)))))
 
 (define-syntax when
   (syntax-rules ()

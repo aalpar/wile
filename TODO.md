@@ -14,6 +14,7 @@ Code Maintenance
 
 Code Cleanup
 ------------
+- [ ] auxiliary syntax exports: R7RS requires `(scheme base)` to export `else`, `=>`, `...`, `_` as auxiliary syntax keywords. Currently these cannot be exported because they aren't bound as values - they're pattern literals handled specially by `syntax-rules`. Need to implement auxiliary syntax binding mechanism.
 - [ ] Use `values.Tuple` instead of `*values.Pair` when possible
 - [ ] Use `values.Number` when possible
 - [ ] Use `values.Indexable` for indexable values (except maps used `values.Mappable`)
@@ -275,8 +276,21 @@ R7RS Missing Features
 - [ ] Hex escape semicolon terminator in strings: R7RS requires `\x<hex>;` format. Current code reads hex digits without expecting terminating semicolon (line 693)
 
 **Partially Implemented:**
+- [ ] Scientific notation in library files: Numbers like `1e-10` fail to parse in .sld files with "strconv.ParseInt: parsing '1e-10': invalid syntax". The tokenizer handles scientific notation in the REPL but not consistently in all parsing contexts.
 - [ ] Exponent markers: Only `e`/`E` supported. R7RS also allows `s`, `f`, `d`, `l` for short/single/double/long precision
 - [ ] Inexact digit placeholder `#`: R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented
+
+### Syntax/Macros
+
+- [ ] `case` macro (R7RS §4.2.1): The `case` conditional expression is not implemented. Bootstrap macros in `go/registry/core/bootstrap.go` include `cond` but not `case`.
+- [ ] `letrec*` macro (R7RS §4.2.2): Sequential letrec binding form not implemented.
+- [ ] `let-syntax` / `letrec-syntax` (R7RS §4.3.1): Local syntax definitions not implemented.
+- [ ] `syntax-error` (R7RS §4.3.1): Macro error signaling not implemented.
+- [ ] `define-values` (R7RS §5.3.3): Multiple value definition not implemented.
+
+### Macro/Library System
+
+- [ ] Macro hygiene with library-internal bindings: Macros defined in a library that reference helper functions defined in the same library fail at the use site with "no such binding". The macro expander should preserve the library's bindings for identifiers introduced by the macro, but currently the expanded code references unbound identifiers. Workaround: export helper functions with `%` prefix.
 
 ### Primitives
 
@@ -288,14 +302,15 @@ R7RS Missing Features
 Library Status
 --------------
 
-| Library               | Status |
-|-----------------------|--------|
-| scheme/base           | ~98%   |
-| scheme/char           | 100%   |
-| scheme/file           | 100%   |
-| scheme/write          | 100%   |
-| scheme/r5rs           | 0%     |
-| (others)              | 100%   |
+| Library               | Status | Notes |
+|-----------------------|--------|-------|
+| scheme/base           | ~90%   | Missing: `case`, `letrec*`, `let-syntax`, `letrec-syntax`, `syntax-error`, `define-values`, auxiliary syntax (`else`, `=>`, `...`, `_`) |
+| scheme/char           | 100%   | |
+| scheme/file           | 100%   | |
+| scheme/write          | 100%   | |
+| scheme/r5rs           | 100%   | |
+| chibi/test            | 100%   | Minimal stub implementation (not full chibi library) |
+| (others)              | 100%   | |
 
 ---
 
