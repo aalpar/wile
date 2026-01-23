@@ -1,193 +1,41 @@
 # R7RS Semantic Differences
 
-This document catalogs differences between the current implementation and the R7RS-small specification. These are semantic differences where the implementation produces results but may not match R7RS behavior for certain inputs, or where R7RS-specified features are missing.
+This document catalogs differences between the current implementation and the R7RS-small specification. These are semantic differences where the implementation produces results but may not match R7RS behavior for certain inputs.
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
+
+**Last Updated:** 2026-01-23
 
 ---
 
 ## Summary
 
-| Procedure | R7RS Requirement | Current Implementation | Impact |
+| Procedure | R7RS Requirement | Current Implementation | Status |
 |-----------|------------------|------------------------|--------|
-| `char-foldcase` | Unicode SimpleCaseFolding | `unicode.ToLower()` | Low |
-| `string-foldcase` | Unicode CaseFolding | `strings.ToLower()` | Low |
-| `char-ci=?` et al. | Compare via SimpleCaseFolding | Compare via `unicode.ToLower()` | Low |
-| `string-ci=?` | Compare via CaseFolding | `strings.EqualFold()` | Low |
-| `string-ci<?` et al. | Compare via CaseFolding | Compare via `strings.ToLower()` | Low |
-| `digit-value` | All Unicode decimal digits | ASCII 0-9 only | Medium |
-| `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
-| `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
-| `read-error?` | Predicate for read errors | Not implemented | Low |
-| `file-error?` | Predicate for file errors | Not implemented | Low |
+| `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | ⚠️ Difference |
+| `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | ⚠️ Difference |
+
+### Fixed Issues (No Longer Different)
+
+The following were previously listed as differences but have been fixed:
+
+| Procedure | Status | Fix Location |
+|-----------|--------|--------------|
+| `char-foldcase` | ✅ Fixed | Uses `simpleCaseFold()` in `extensions/all/prim_all.go` |
+| `string-foldcase` | ✅ Fixed | Uses `golang.org/x/text/cases.Fold()` |
+| `char-ci=?` et al. | ✅ Fixed | Uses simple case folding |
+| `string-ci=?` et al. | ✅ Fixed | Uses case folding |
+| `digit-value` | ✅ Fixed | Handles all Unicode Nd digits |
+| `read-error?` | ✅ Fixed | Implemented in `extensions/exceptions/prim_exceptions.go` |
+| `file-error?` | ✅ Fixed | Implemented in `extensions/exceptions/prim_exceptions.go` |
 
 ---
 
-## Detailed Analysis
+## Remaining Differences
 
-### 1. `char-foldcase`
+### 1. `string-upcase`
 
-**File:** `prim_char_foldcase.go`
-
-**R7RS Specification (Section 6.6 "Characters"):**
-> "The char-foldcase procedure applies the Unicode simple case-folding algorithm to its argument and returns the result. Note that language-sensitive folding is not used."
-
-**Current Implementation:**
-```go
-unicode.ToLower(ch.Value)
-```
-
-**Difference:**
-- Uses Go's `unicode.ToLower()` which performs Unicode lowercasing
-- R7RS requires Unicode SimpleCaseFolding (defined in Unicode CaseFolding.txt with status 'C' or 'S')
-
-**Affected Characters:**
-Most characters are unaffected. Differences occur primarily with:
-- Certain Greek characters (e.g., final sigma handling)
-- Some archaic or specialized Unicode characters
-
-**Reference:** [Unicode CaseFolding.txt](https://www.unicode.org/Public/UCD/latest/ucd/CaseFolding.txt)
-
----
-
-### 2. `string-foldcase`
-
-**File:** `prim_string_foldcase.go`
-
-**R7RS Specification (Section 6.7 "Strings"):**
-> "The string-foldcase procedure applies the Unicode full case-folding algorithm to its argument and returns the result."
-
-**Current Implementation:**
-```go
-strings.ToLower(str.Value)
-```
-
-**Difference:**
-- Uses Go's `strings.ToLower()` which performs simple lowercasing
-- R7RS requires Unicode full case-folding which can change string length
-
-**Key Example - German Sharp S (ß):**
-```
-Input:    "straße"  (6 characters)
-R7RS:     "strasse" (7 characters) - ß folds to "ss"
-Current:  "straße"  (6 characters) - ß unchanged by ToLower
-```
-
-**Other Affected Characters:**
-- U+0130 İ (Latin Capital Letter I With Dot Above) → "i\u0307" in full folding
-- Various ligatures and special characters
-
-**Fix:** Use `golang.org/x/text/cases` package with `cases.Fold(language.Und)`
-
----
-
-### 3. Case-Insensitive Character Comparisons
-
-**Files:** `prim_char_ci_eq.go`, `prim_char_ci_lt.go`, `prim_char_ci_gt.go`, `prim_char_ci_le.go`, `prim_char_ci_ge.go`
-
-**R7RS Specification (Section 6.6 "Characters"):**
-> "These procedures are similar to char=? et cetera, but they treat upper case and lower case letters as the same. For example, (char-ci=? #\A #\a) returns #t."
->
-> "Specifically, these procedures behave as if char-foldcase were applied to their arguments before comparing them."
-
-**Current Implementation:**
-```go
-unicode.ToLower(a) == unicode.ToLower(b)
-```
-
-**Difference:**
-Same as `char-foldcase` - uses lowercasing instead of SimpleCaseFolding.
-
-**Impact:** Minimal for typical use cases. May differ for exotic Unicode characters.
-
----
-
-### 4. Case-Insensitive String Comparisons
-
-**Files:** `prim_string_ci_eq.go`, `prim_string_ci_lt.go`, `prim_string_ci_gt.go`, `prim_string_ci_le.go`, `prim_string_ci_ge.go`
-
-**R7RS Specification (Section 6.7 "Strings"):**
-> "These procedures are the case-insensitive versions of string=?, string<?, etc. They behave as if string-foldcase were applied to their arguments before comparing them."
-
-**Current Implementation:**
-
-For `string-ci=?`:
-```go
-strings.EqualFold(a, b)
-```
-
-For `string-ci<?`, `string-ci>?`, etc.:
-```go
-strings.ToLower(a) < strings.ToLower(b)  // (comparison varies)
-```
-
-**Difference:**
-- `strings.EqualFold()` uses Unicode simple case-folding, which is close but not identical to R7RS full case-folding
-- Ordering comparisons use `strings.ToLower()` which differs from case-folding
-
-**Key Example:**
-```scheme
-; R7RS behavior (with full case-folding):
-(string-ci=? "straße" "STRASSE")  ; Should return #t
-
-; Current behavior (with simple folding/lowering):
-(string-ci=? "straße" "STRASSE")  ; Returns #f (ß ≠ ss)
-```
-
----
-
-### 5. `digit-value`
-
-**File:** `prim_digit_value.go`
-
-**R7RS Specification (Section 6.6 "Characters"):**
-> "This procedure returns the numeric value (0 to 9) of its argument if it is a numeric digit (that is, if char-numeric? returns #t), or #f on any other character."
->
-> Note: `char-numeric?` is defined to return #t for Unicode category Nd (Decimal Number).
-
-**Current Implementation:**
-```go
-if ch.Value >= '0' && ch.Value <= '9' {
-    mc.SetValue(values.NewInteger(int64(ch.Value - '0')))
-} else {
-    mc.SetValue(values.FalseValue)
-}
-```
-
-**Difference:**
-- Only handles ASCII digits 0-9 (U+0030 to U+0039)
-- R7RS requires handling ALL Unicode decimal digits (category Nd)
-
-**Affected Unicode Digit Ranges:**
-
-| Script | Range | Example | Digit Value |
-|--------|-------|---------|-------------|
-| ASCII | U+0030-0039 | 0-9 | ✅ Supported |
-| Arabic-Indic | U+0660-0669 | ٠١٢٣٤٥٦٧٨٩ | ❌ Returns #f |
-| Extended Arabic-Indic | U+06F0-06F9 | ۰۱۲۳۴۵۶۷۸۹ | ❌ Returns #f |
-| Devanagari | U+0966-096F | ०१२३४५६७८९ | ❌ Returns #f |
-| Bengali | U+09E6-09EF | ০১২৩৪৫৬৭৮৯ | ❌ Returns #f |
-| Thai | U+0E50-0E59 | ๐๑๒๓๔๕๖๗๘๙ | ❌ Returns #f |
-| Fullwidth | U+FF10-FF19 | ０１２３４５６７８９ | ❌ Returns #f |
-
-**Fix:**
-```go
-import "unicode"
-
-if unicode.IsDigit(ch.Value) {
-    // Calculate digit value from Unicode properties
-    // Each decimal digit block starts at value 0
-    // Use unicode.Nd category to find the base
-}
-```
-
-**Impact:** Medium - affects internationalized applications using non-ASCII numerals.
-
----
-
-### 6. `string-upcase`
-
-**File:** `prim_string_upcase.go`
+**File:** `go/extensions/all/prim_all.go`
 
 **R7RS Specification (Section 6.7 "Strings"):**
 > "These procedures apply the Unicode full uppercasing algorithm to their arguments and return the result."
@@ -205,16 +53,18 @@ strings.ToUpper(str.Value)
 ```
 Input:    "straße"  (6 characters)
 R7RS:     "STRASSE" (7 characters) - ß → SS
-Current:  "STRAßE"  (6 characters) - ß unchanged (Go 1.x behavior)
+Current:  "STRAßE"  (6 characters) - ß unchanged
 ```
 
-Note: As of Go 1.x, `strings.ToUpper()` does not expand ß to SS. This may change in future Go versions.
+**Impact:** Low - affects primarily German text with ß.
+
+**Fix:** Use `golang.org/x/text/cases.Upper(language.Und)`.
 
 ---
 
-### 7. `string-downcase`
+### 2. `string-downcase`
 
-**File:** `prim_string_downcase.go`
+**File:** `go/extensions/all/prim_all.go`
 
 **R7RS Specification (Section 6.7 "Strings"):**
 > "These procedures apply the Unicode full lowercasing algorithm to their arguments and return the result."
@@ -230,21 +80,83 @@ strings.ToLower(str.Value)
 
 **Impact:** Lower than uppercasing since fewer characters expand during lowercasing.
 
+**Fix:** Use `golang.org/x/text/cases.Lower(language.Und)`.
+
+---
+
+## Conformant Features
+
+The following features are fully conformant with R7RS:
+
+### Case Folding (R7RS §6.6, §6.7)
+
+| Procedure | Implementation | Notes |
+|-----------|----------------|-------|
+| `char-foldcase` | `simpleCaseFold()` | Unicode simple case folding |
+| `string-foldcase` | `cases.Fold()` | Unicode full case folding (ß → "ss") |
+| `char-ci=?` et al. | Via `simpleCaseFold()` | Correct per R7RS |
+| `string-ci=?` et al. | Via case folding | Correct per R7RS |
+
+The implementation correctly distinguishes between:
+- **Simple case folding** (char-foldcase): One-to-one character mapping
+- **Full case folding** (string-foldcase): Can expand characters (ß → "ss")
+
+### Unicode Digit Value (R7RS §6.6)
+
+`digit-value` correctly handles all Unicode decimal digits (category Nd):
+
+| Script | Range | Example | Status |
+|--------|-------|---------|--------|
+| ASCII | U+0030-0039 | 0-9 | ✅ |
+| Arabic-Indic | U+0660-0669 | ٠١٢٣٤٥٦٧٨٩ | ✅ |
+| Extended Arabic-Indic | U+06F0-06F9 | ۰۱۲۳۴۵۶۷۸۹ | ✅ |
+| Devanagari | U+0966-096F | ०१२३४५६७८९ | ✅ |
+| Bengali | U+09E6-09EF | ০১২৩৪৫৬৭৮৯ | ✅ |
+| Thai | U+0E50-0E59 | ๐๑๒๓๔๕๖๗๘๙ | ✅ |
+| Fullwidth | U+FF10-FF19 | ０１２３４５６７８９ | ✅ |
+
+### Exceptions (R7RS §6.11)
+
+| Procedure | Status | Notes |
+|-----------|--------|-------|
+| `with-exception-handler` | ✅ Conformant | Installs handler, propagates to parent on re-raise |
+| `raise` | ✅ Conformant | Non-continuable; handler must not return |
+| `raise-continuable` | ✅ Conformant | Handler return value becomes result |
+| `error` | ✅ Conformant | Creates error object, raises non-continuable |
+| `error-object?` | ✅ Conformant | Type predicate |
+| `error-object-message` | ✅ Conformant | Extracts message string |
+| `error-object-irritants` | ✅ Conformant | Extracts irritants list |
+| `guard` | ✅ Conformant | Exception handling syntax with cond-like clauses |
+| `read-error?` | ✅ Conformant | Predicate for read errors |
+| `file-error?` | ✅ Conformant | Predicate for file errors |
+
+### Promises (R7RS §4.2.5)
+
+| Procedure/Syntax | Status | Notes |
+|------------------|--------|-------|
+| `delay` | ✅ Conformant | Creates promise with delayed expression |
+| `force` | ✅ Conformant | Forces promise, memoizes result, iterative forcing |
+| `delay-force` | ✅ Conformant | Lazy promise for tail-recursive algorithms |
+| `make-promise` | ✅ Conformant | Wraps value in already-forced promise; returns promise unchanged |
+| `promise?` | ✅ Conformant | Type predicate |
+
+The implementation correctly handles:
+- **Iterative forcing:** `(force (delay (delay (delay 42))))` returns 42
+- **Memoization:** Thunk evaluated only once
+- **`make-promise` identity:** Returns promise argument unchanged
+- **`delay-force` tail recursion:** No stack growth for lazy algorithms
+
 ---
 
 ## Recommendations for Full R7RS Conformance
 
-### Option 1: Use `golang.org/x/text/cases` Package
+### Fix `string-upcase` and `string-downcase`
 
 ```go
 import (
     "golang.org/x/text/cases"
     "golang.org/x/text/language"
 )
-
-// For case-folding (char-foldcase, string-foldcase, case-insensitive comparisons)
-folder := cases.Fold()
-folded := folder.String(input)
 
 // For uppercasing (string-upcase)
 upper := cases.Upper(language.Und)
@@ -255,166 +167,22 @@ lower := cases.Lower(language.Und)
 result := lower.String(input)
 ```
 
-### Option 2: Implement Unicode Algorithms Directly
-
-For `digit-value`, use Unicode properties:
-```go
-import "unicode"
-
-func digitValue(r rune) (int, bool) {
-    if !unicode.Is(unicode.Nd, r) {
-        return 0, false
-    }
-    // Each Nd block starts with digit 0
-    // Find the block base and calculate offset
-    // ...
-}
-```
+This is the same approach used for `string-foldcase`, which already uses `cases.Fold()`.
 
 ### Trade-offs
 
 | Approach | Pros | Cons |
 |----------|------|------|
-| Add `x/text` dependency | Full conformance, well-tested | Additional dependency |
-| Current implementation | No dependencies, simpler | Not fully R7RS compliant |
-| Custom implementation | No dependencies, full control | More code to maintain |
+| Use `x/text` (recommended) | Full conformance, well-tested | Already a dependency |
+| Current implementation | Simpler | Not fully R7RS compliant |
 
----
-
-## Testing R7RS Conformance
-
-Add tests for edge cases:
-
-```scheme
-; Case folding tests
-(char-foldcase #\ß)           ; Should return #\ß (simple folding)
-(string-foldcase "ß")         ; Should return "ss" (full folding)
-(string-ci=? "STRASSE" "straße") ; Should return #t
-
-; Digit value tests
-(digit-value #\٥)             ; Arabic-Indic 5, should return 5
-(digit-value #\५)             ; Devanagari 5, should return 5
-(digit-value #\๕)             ; Thai 5, should return 5
-
-; Uppercasing tests
-(string-upcase "straße")      ; Should return "STRASSE"
-```
-
----
-
-## Exceptions (R7RS §6.11)
-
-### Conformant Features
-
-The following exception-related features are implemented and conform to R7RS:
-
-| Procedure | Status | Notes |
-|-----------|--------|-------|
-| `with-exception-handler` | ✅ Conformant | Installs handler, propagates to parent on re-raise |
-| `raise` | ✅ Conformant | Non-continuable; handler must not return |
-| `raise-continuable` | ✅ Conformant | Handler return value becomes result of `raise-continuable` |
-| `error` | ✅ Conformant | Creates error object, raises non-continuable |
-| `error-object?` | ✅ Conformant | Type predicate |
-| `error-object-message` | ✅ Conformant | Extracts message string |
-| `error-object-irritants` | ✅ Conformant | Extracts irritants list |
-| `guard` | ✅ Conformant | Exception handling syntax with cond-like clauses |
-
-### Missing Features
-
-#### 8. `read-error?` Predicate
-
-**R7RS Specification (Section 6.11):**
-> "`(read-error? obj)` - Returns #t if obj is an object raised by the read procedure."
-
-**Current Status:** Not implemented
-
-**Impact:** Low - can use generic exception handling with `error-object?`
-
----
-
-#### 9. `file-error?` Predicate
-
-**R7RS Specification (Section 6.11):**
-> "`(file-error? obj)` - Returns #t if obj is an object raised to signal that a file operation failed."
-
-**Current Status:** Not implemented
-
-**Impact:** Low - can use generic exception handling with `error-object?`
-
----
-
-## Promises (R7RS §4.2.5)
-
-### Conformant Features
-
-The following promise-related features are implemented and conform to R7RS:
-
-| Procedure/Syntax | Status | Notes |
-|------------------|--------|-------|
-| `delay` | ✅ Conformant | Creates promise with delayed expression |
-| `force` | ✅ Conformant | Forces promise, memoizes result, iterative forcing |
-| `delay-force` | ✅ Conformant | Lazy promise for tail-recursive algorithms |
-| `make-promise` | ✅ Conformant | Wraps value in already-forced promise; returns promise unchanged |
-| `promise?` | ✅ Conformant | Type predicate |
-
-### Implementation Details
-
-#### Iterative Forcing
-
-Per R7RS §4.2.5, `force` implements iterative forcing:
-
-```scheme
-(force (delay (delay (delay 42))))  ; Returns 42
-```
-
-The implementation correctly handles nested promises by unwrapping them iteratively rather than recursively, preventing stack overflow for deeply nested promise chains.
-
-#### Memoization
-
-Promises correctly memoize their results. The thunk is evaluated only once:
-
-```scheme
-(let ((count 0))
-  (let ((p (delay (begin (set! count (+ count 1)) count))))
-    (force p)  ; count becomes 1
-    (force p)  ; returns cached 1, count still 1
-    (force p)  ; returns cached 1, count still 1
-    count))    ; => 1
-```
-
-#### `make-promise` Identity
-
-Per R7RS, `make-promise` returns its argument unchanged if it's already a promise:
-
-```scheme
-(let ((p (delay 42)))
-  (eq? p (make-promise p)))  ; => #t
-```
-
-#### `delay-force` for Tail Recursion
-
-Per R7RS, `delay-force` enables proper tail recursion in lazy algorithms. Without `delay-force`, recursive lazy algorithms would accumulate stack frames:
-
-```scheme
-;; With delay-force (correct - no stack growth):
-(letrec ((lazy-countdown
-          (lambda (n)
-            (if (= n 0)
-                (delay 'done)
-                (delay-force (lazy-countdown (- n 1)))))))
-  (force (lazy-countdown 100000)))  ; Works without stack overflow
-```
-
-### No Known Semantic Differences
-
-The promise implementation appears to fully conform to R7RS §4.2.5. All R7RS-specified behaviors have been verified through testing.
+Since `golang.org/x/text/cases` is already imported for `string-foldcase`, adding full case mapping for `string-upcase` and `string-downcase` adds no new dependencies.
 
 ---
 
 ## References
 
-- [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf) - Sections 4.2.5, 4.2.7, 6.6, 6.7, 6.11
+- [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf) - Sections 6.6, 6.7, 6.11
 - [Unicode CaseFolding.txt](https://www.unicode.org/Public/UCD/latest/ucd/CaseFolding.txt)
 - [Unicode SpecialCasing.txt](https://www.unicode.org/Public/UCD/latest/ucd/SpecialCasing.txt)
-- [UAX #29: Unicode Text Segmentation](https://unicode.org/reports/tr29/)
 - [Go x/text/cases package](https://pkg.go.dev/golang.org/x/text/cases)

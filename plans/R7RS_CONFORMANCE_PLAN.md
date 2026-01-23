@@ -4,7 +4,11 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 **Reference:** [R7RS-small Specification](https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-8.html)
 
-**Related:** [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) - Bugs discovered by running the R7RS test suite
+**Related:**
+- [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) - Bugs discovered by running the R7RS test suite (all fixed)
+- [R7RS_SEMANTIC_DIFFERENCES.md](../docs/dev/R7RS_SEMANTIC_DIFFERENCES.md) - Semantic differences from R7RS
+
+**Last Updated:** 2026-01-23
 
 ---
 
@@ -12,11 +16,12 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Missing syntax/macros | 5 | Not started |
-| Library system issues | 2 | Not started |
+| Missing syntax/macros | 2 | Not started |
+| Library system issues | 2 | Partially complete |
 | Tokenizer issues | 1 | Not started |
-| Completed items | 30+ | Complete |
-| **Total remaining** | **8** | **In progress** |
+| Semantic differences | 2 | Not started |
+| Completed items | 40+ | Complete |
+| **Total remaining** | **7** | **In progress** |
 
 ---
 
@@ -24,65 +29,72 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 ### Phase 4: Missing Syntax/Macros (R7RS §4)
 
-These derived expression types are specified in R7RS but not implemented.
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `case` | §4.2.1 | High | ✅ Implemented in `bootstrap.go` |
+| `letrec*` | §4.2.2 | Medium | ✅ Implemented in `bootstrap.go` |
+| `let-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
+| `letrec-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
+| `syntax-error` | §4.3.1 | Low | ❌ Not implemented |
+| `define-values` | §5.3.3 | Medium | ❌ Not implemented |
 
-| Item | R7RS Section | Priority | Notes |
-|------|--------------|----------|-------|
-| `case` | §4.2.1 | High | Conditional expression; commonly used |
-| `letrec*` | §4.2.2 | Medium | Sequential letrec; less common |
-| `let-syntax` | §4.3.1 | Medium | Local syntax definitions |
-| `letrec-syntax` | §4.3.1 | Medium | Local recursive syntax definitions |
-| `syntax-error` | §4.3.1 | Low | Macro error signaling |
-| `define-values` | §5.3.3 | Medium | Multiple value definition |
+**Remaining items:**
 
-**Implementation location:** `go/registry/core/bootstrap.go`
+#### `syntax-error` (R7RS §4.3.1)
 
-#### `case` macro implementation
+`syntax-error` is used in macro definitions to signal compile-time errors:
 
 ```scheme
-(define-syntax case
-  (syntax-rules (else =>)
-    ((case (key ...) clauses ...)
-     (let ((atom-key (key ...)))
-       (case atom-key clauses ...)))
-    ((case key (else => result))
-     (result key))
-    ((case key (else result1 result2 ...))
-     (begin result1 result2 ...))
-    ((case key ((atoms ...) => result))
-     (if (memv key '(atoms ...))
-         (result key)))
-    ((case key ((atoms ...) => result) clause clauses ...)
-     (if (memv key '(atoms ...))
-         (result key)
-         (case key clause clauses ...)))
-    ((case key ((atoms ...) result1 result2 ...))
-     (if (memv key '(atoms ...))
-         (begin result1 result2 ...)))
-    ((case key ((atoms ...) result1 result2 ...) clause clauses ...)
-     (if (memv key '(atoms ...))
-         (begin result1 result2 ...)
-         (case key clause clauses ...)))))
+(define-syntax must-be-even
+  (syntax-rules ()
+    ((must-be-even n)
+     (if (odd? n)
+         (syntax-error "must be even" n)
+         n))))
 ```
+
+**Implementation notes:**
+- Must be recognized at macro expansion time, not runtime
+- Should include the template arguments in the error message
+
+#### `define-values` (R7RS §5.3.3)
+
+`define-values` binds multiple variables to values returned by a multiple-value expression:
+
+```scheme
+(define-values (quotient remainder) (floor/ 10 3))
+;; quotient => 3, remainder => 1
+```
+
+**Implementation notes:**
+- Requires `call-with-values` support (already implemented)
+- Can be implemented as a macro in `bootstrap.go`
+
+---
 
 ### Phase 5: Library System Issues
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| Auxiliary syntax exports | High | R7RS requires `(scheme base)` to export `else`, `=>`, `...`, `_`. Currently cannot be exported because they aren't bound as values. |
-| Macro hygiene with internal bindings | Medium | Macros in libraries that reference library-internal helpers fail at use site. Workaround: export helpers with `%` prefix. |
+| Item | Priority | Status |
+|------|----------|--------|
+| Auxiliary syntax exports (`...`, `_`) | Medium | ❌ Not exported |
+| Macro hygiene with internal bindings | Medium | ⚠️ Workaround available |
 
-**Auxiliary syntax issue:**
+#### Auxiliary Syntax Exports
 
-R7RS §7.1.1 specifies that `(scheme base)` must export auxiliary syntax keywords used in `cond`, `case`, `syntax-rules`, etc. These are:
-- `else` - used in `cond`, `case`, `guard`
-- `=>` - used in `cond`, `case`
-- `...` - used in `syntax-rules` patterns
-- `_` - used in `syntax-rules` as wildcard
+R7RS §7.1.1 specifies that `(scheme base)` must export auxiliary syntax keywords:
 
-Currently these cannot be exported from libraries because they have no runtime binding. Need to implement an auxiliary syntax binding mechanism that marks identifiers as syntax keywords without runtime values.
+| Keyword | Used in | Status |
+|---------|---------|--------|
+| `else` | `cond`, `case`, `guard` | ✅ Exported |
+| `=>` | `cond`, `case` | ✅ Exported |
+| `...` | `syntax-rules` patterns | ❌ Not exported |
+| `_` | `syntax-rules` wildcard | ❌ Not exported |
 
-**Macro hygiene issue:**
+**Current status:** `else` and `=>` are exported from `(scheme base)` and work correctly. The ellipsis `...` and underscore `_` are not exported because they have no runtime binding and the library system doesn't support exporting pure auxiliary syntax.
+
+**Impact:** Low - these are only needed for macros that re-export or rename auxiliary syntax, which is rare.
+
+#### Macro Hygiene with Internal Bindings
 
 When a macro defined in a library references a helper function also defined in that library:
 
@@ -94,95 +106,121 @@ When a macro defined in a library references a helper function also defined in t
     ((my-macro x) (helper x))))  ;; 'helper' should resolve to library's binding
 ```
 
-The expanded code at the use site fails with "no such binding: helper". The macro expander should preserve the original binding context for identifiers introduced by the macro template.
+The expanded code at the use site fails with "no such binding: helper".
+
+**Workaround:** Export helpers with `%` prefix convention. See `lib/chibi/test.sld` for an example.
+
+---
 
 ### Phase 6: Tokenizer Issues
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Scientific notation in libraries | Medium | `1e-10` fails to parse in .sld files |
+| Scientific notation for bare integers | Medium | `1e-10` fails; `1.0e-10` works |
 
-**Scientific notation issue:**
+#### Scientific Notation Issue
 
-Numbers in scientific notation (e.g., `1e-10`, `3.14e5`) fail to parse when used in library definition files (.sld) with error:
+Numbers in scientific notation without a decimal point fail to parse:
+
+```scheme
+1e-10      ; Error: strconv.ParseInt: parsing "1e-10": invalid syntax
+1.0e-10    ; Works: 1e-10
++1e10      ; Error
+1.5e10     ; Works: 15000000000
 ```
-strconv.ParseInt: parsing "1e-10": invalid syntax
+
+**Root cause:** The tokenizer correctly identifies the number, but the value conversion attempts to parse it as an integer when there's no decimal point.
+
+**Impact:** Medium - requires users to include decimal points in scientific notation.
+
+---
+
+### Phase 7: Semantic Differences
+
+| Item | R7RS Requirement | Current Implementation | Priority |
+|------|------------------|------------------------|----------|
+| `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
+| `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
+
+#### Unicode Full Case Mapping
+
+R7RS requires `string-upcase` and `string-downcase` to use Unicode full case mapping, which can change string length:
+
+```scheme
+;; R7RS behavior:
+(string-upcase "straße")  ; Should return "STRASSE" (7 chars)
+
+;; Current behavior:
+(string-upcase "straße")  ; Returns "STRAßE" (6 chars) - ß unchanged
 ```
 
-The tokenizer handles scientific notation in the REPL but the library loader uses a different code path that doesn't properly handle exponent notation.
+**Fix:** Use `golang.org/x/text/cases.Upper()` and `cases.Lower()` similar to how `string-foldcase` was fixed.
 
 ---
 
 ## Completed Items
 
-The following items from the original plan have been implemented:
+The following items have been implemented and verified:
 
-### String Operations (Original Phase 1)
-- **Case-Insensitive Character Comparisons** - All 5 variadic char-ci procedures in `prim_char_ci_variadic.go`
-- **Case-Insensitive String Comparisons** - All 5 variadic string-ci procedures in `prim_string_ci_variadic.go`
-- **Min/Max Single-Argument** - Implementation supports single argument calls
-- **string-copy with start/end** - Implemented in `prim_string_copy.go`
-- **string->list with start/end** - Implemented in `prim_string_to_list.go`
-- **string-map** - Implemented in `extensions/all/prim_all.go`
-- **string-for-each** - Implemented in `extensions/all/prim_all.go`
-- **String Mutation** - string-set!, string-fill!, string-copy! all implemented
+### Syntax/Macros (R7RS §4)
+- ✅ `case` - Conditional expression with datum matching
+- ✅ `letrec*` - Sequential letrec with left-to-right evaluation
+- ✅ `let-syntax` - Local syntax definitions
+- ✅ `letrec-syntax` - Local recursive syntax definitions
+- ✅ `cond-expand` - Feature-based conditional expansion
+- ✅ `guard` - Exception handling with condition clauses
+- ✅ `parameterize` - Dynamic parameter binding
+- ✅ `delay` / `delay-force` / `force` - Lazy evaluation
+- ✅ `define-record-type` - Record type definitions
 
-### Vector Operations (Original Phase 1.1, Phase 2.1)
-- **vector->list with start/end** - Implemented in `prim_vectors.go` with tests
-- **vector-copy** - Implemented in `prim_vectors.go`
-- **vector-copy!** - Implemented in `prim_vectors.go`
-- **vector-fill!** - Implemented in `prim_vectors.go`
-- **vector-append** - Implemented in `prim_vectors.go`
-- **vector-map** - Implemented in `prim_vectors.go`
-- **vector-for-each** - Implemented in `prim_vectors.go`
-- **vector->string** - Implemented in `prim_vectors.go`
-- **string->vector** - Implemented in `prim_vectors.go`
+### String Operations
+- ✅ Case-insensitive comparisons (`string-ci=?`, `string-ci<?`, etc.)
+- ✅ `string-copy` with start/end parameters
+- ✅ `string->list` with start/end parameters
+- ✅ `string-map`, `string-for-each`
+- ✅ String mutation (`string-set!`, `string-fill!`, `string-copy!`)
+- ✅ `string-foldcase` - Unicode full case folding (ß → "ss")
 
-### List Operations (Original Phase 1.2, Phase 2.2)
-- **member with compare** - Implemented in `prim_lists.go` with tests
-- **assoc with compare** - Implemented in `prim_lists.go` with tests
-- **list-copy** - Implemented in `prim_lists.go`
+### Character Operations
+- ✅ Case-insensitive comparisons (`char-ci=?`, `char-ci<?`, etc.)
+- ✅ `char-foldcase` - Unicode simple case folding
+- ✅ `digit-value` - All Unicode decimal digits (Nd category)
 
-### Equality Predicates (Original Phase 2.3)
-- **boolean=?** - Implemented in `registry/core/prim_equality.go`
-- **symbol=?** - Implemented in `registry/core/prim_equality.go`
+### Vector Operations
+- ✅ `vector->list` with start/end parameters
+- ✅ `vector-copy`, `vector-copy!`, `vector-fill!`, `vector-append`
+- ✅ `vector-map`, `vector-for-each`
+- ✅ `vector->string`, `string->vector`
 
-### Port Operations (Original Phase 2.4, 2.8)
-- **textual-port?** - Implemented in `extensions/io/prim_ports.go`
-- **binary-port?** - Implemented in `extensions/io/prim_ports.go`
-- **call-with-port** - Implemented in `extensions/io/prim_ports.go`
-- **flush-output-port** - Implemented in `extensions/io/prim_read_write.go`
+### List Operations
+- ✅ `member` / `assoc` with custom comparator
+- ✅ `list-copy`
 
-### Error Predicates (Original Phase 2.5)
-- **read-error?** - Implemented in `extensions/exceptions/prim_exceptions.go`
-- **file-error?** - Implemented in `extensions/exceptions/prim_exceptions.go`
+### I/O Operations
+- ✅ `read-char`, `peek-char`, `char-ready?`
+- ✅ `read-line`, `read-string`, `write-string`
+- ✅ `read-u8`, `peek-u8`, `write-u8`, `u8-ready?`
+- ✅ `textual-port?`, `binary-port?`
+- ✅ `call-with-port`, `flush-output-port`
+- ✅ Circular structure handling (`write`, `write-shared`)
 
-### Character I/O (Original Phase 2.6)
-- **read-char** - Implemented in `extensions/io/prim_read_write.go`
-- **peek-char** - Implemented in `extensions/io/prim_read_write.go`
-- **read-line** - Implemented in `extensions/io/prim_read_write.go`
-- **char-ready?** - Implemented in `extensions/io/prim_read_write.go`
+### Exception Handling
+- ✅ `with-exception-handler`, `raise`, `raise-continuable`
+- ✅ `guard` with `=>` syntax
+- ✅ `error-object?`, `error-object-message`, `error-object-irritants`
+- ✅ `read-error?`, `file-error?`
 
-### String I/O (Original Phase 2.7)
-- **read-string** - Implemented in `extensions/io/prim_read_write.go`
-- **write-string** - Implemented in `extensions/io/prim_read_write.go`
+### Macro System
+- ✅ `syntax-rules` with custom ellipsis identifier
+- ✅ Ellipsis escape form `(... <template>)`
+- ✅ `_` wildcard respects literals list
+- ✅ `syntax-case` (R6RS-style procedural macros)
 
-### Semantic Fixes (Original Phase 3)
-
-#### Unicode Case Folding
-- **char-foldcase** - Uses Unicode simple case folding in `extensions/all/prim_all.go`
-- **string-foldcase** - Uses Unicode full case folding via `golang.org/x/text/cases` in `extensions/all/prim_all.go`
-  - Correctly handles ß → "ss" expansion
-  - Correctly handles ẞ (capital sharp S) → "ss"
-  - Tests in `prim_string_test.go` and `prim_char_extra_test.go`
-
-#### Unicode Digit Value
-- **digit-value** - Handles all Unicode decimal digits (Nd category) in `extensions/all/prim_all.go`
-  - Supports Arabic-Indic digits (U+0660-U+0669)
-  - Supports Extended Arabic-Indic digits (U+06F0-U+06F9)
-  - Supports Devanagari digits (U+0966-U+096F)
-  - Supports Bengali, Thai, and all other Unicode decimal digit scripts
-  - Tests in `prim_char_extra_test.go`
+### Miscellaneous
+- ✅ `boolean=?`, `symbol=?`
+- ✅ Datum labels (`#n=` and `#n#`) for shared/circular structures
+- ✅ `#!fold-case` / `#!no-fold-case` directives
+- ✅ Case-insensitive number prefixes (`#I`, `#E`, `#B`, `#O`, `#D`, `#X`)
 
 ---
 
@@ -190,7 +228,7 @@ The following items from the original plan have been implemented:
 
 | Library | Status | Notes |
 |---------|--------|-------|
-| `(scheme base)` | ~90% | Missing: `case`, `letrec*`, `let-syntax`, `letrec-syntax`, `syntax-error`, `define-values`, auxiliary syntax |
+| `(scheme base)` | ~95% | Missing: `syntax-error`, `define-values`, `...`/`_` exports |
 | `(scheme char)` | 100% | |
 | `(scheme complex)` | 100% | |
 | `(scheme cxr)` | 100% | |
@@ -206,7 +244,6 @@ The following items from the original plan have been implemented:
 | `(scheme time)` | 100% | |
 | `(scheme write)` | 100% | |
 | `(scheme case-lambda)` | 100% | |
-| `(chibi test)` | 100% | Minimal stub implementation for running R7RS tests |
 
 ---
 
@@ -214,43 +251,22 @@ The following items from the original plan have been implemented:
 
 ### R7RS Conformance Tests
 
-The project includes `r7rs-tests.scm` which uses the `(chibi test)` library. A minimal compatible implementation of `(chibi test)` has been created at `lib/chibi/test.sld`.
-
-To run conformance tests:
 ```bash
 ./dist/scheme -f r7rs-tests.scm
 ```
 
-**Note:** The full chibi test library requires dependencies (`chibi diff`, `chibi term ansi`, `chibi optional`, `srfi 1`) that have complex requirements. The stub implementation provides the essential test interface without these dependencies.
+All 13 bugs from the R7RS test suite have been fixed. See [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) for details.
 
 ### Unit Tests
 
-All implementations have been verified with comprehensive Go tests:
-
 ```bash
-# Run all tests
 cd go && make test
-
-# Run Unicode-specific tests
-cd go && go test -v -run "Unicode" ./registry/core/...
-
-# Run library import tests
-cd go && go test -v -run "TestSchemeLibrary" ./machine/...
 ```
 
 ---
 
-## Notes
+## References
 
-### String Mutability
-R7RS specifies `string-set!`, `string-fill!`, and `string-copy!` which mutate strings. These have been implemented.
-
-### Case Folding Implementation
-- `char-foldcase` uses Unicode simple case folding (one-to-one character mapping)
-- `string-foldcase` uses Unicode full case folding via `golang.org/x/text/cases.Fold()` which correctly handles expansions like ß → "ss"
-
-### Unicode Digit Detection
-Go's `unicode.IsDigit()` returns true for all Unicode decimal digits (Nd category). The digit value is calculated by finding the base '0' character of each script's digit range.
-
-### Chibi Test Stub
-The `(chibi test)` stub exports helper functions with `%` prefix (`%test-pass`, `%test-fail`, `%approx-equal?`) to work around the macro hygiene issue with library-internal bindings.
+- [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
+- [R7RS Corrected HTML](https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-8.html)
+- [Unicode CaseFolding.txt](https://www.unicode.org/Public/UCD/latest/ucd/CaseFolding.txt)
