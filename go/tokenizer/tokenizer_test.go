@@ -378,35 +378,35 @@ func TestTokenizer_TokenStream(t *testing.T) {
 			tokens: []TokenizerState{TokenizerStateUnsignedDecimalFraction},
 			err:    io.EOF,
 		},
-		// R7RS conformance: signed integers with exponents
+		// R7RS conformance: signed integers with exponents (scientific notation)
 		{
 			in:     "+1e10",
 			src:    []string{"+1e10"},
-			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			tokens: []TokenizerState{TokenizerStateSignedScientificNotation},
 			err:    io.EOF,
 		},
 		{
 			in:     "-1e10",
 			src:    []string{"-1e10"},
-			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			tokens: []TokenizerState{TokenizerStateSignedScientificNotation},
 			err:    io.EOF,
 		},
 		{
 			in:     "+1E10",
 			src:    []string{"+1E10"},
-			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			tokens: []TokenizerState{TokenizerStateSignedScientificNotation},
 			err:    io.EOF,
 		},
 		{
 			in:     "-1e+10",
 			src:    []string{"-1e+10"},
-			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			tokens: []TokenizerState{TokenizerStateSignedScientificNotation},
 			err:    io.EOF,
 		},
 		{
 			in:     "+1e-10",
 			src:    []string{"+1e-10"},
-			tokens: []TokenizerState{TokenizerStateSignedInteger},
+			tokens: []TokenizerState{TokenizerStateSignedScientificNotation},
 			err:    io.EOF,
 		},
 		// R7RS conformance: trailing dot with exponent
@@ -1145,19 +1145,19 @@ func TestTokenizer_read(t *testing.T) {
 			bs:    "34e10",
 			scan:  "34e10",
 			err0:  io.EOF,
-			state: TokenizerStateUnsignedInteger,
+			state: TokenizerStateUnsignedScientificNotation,
 		},
 		{
 			bs:    "-34e10",
 			scan:  "-34e10",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    "+34e10",
 			scan:  "+34e10",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    ".34e10",
@@ -1181,7 +1181,7 @@ func TestTokenizer_read(t *testing.T) {
 			bs:    "34e+10",
 			scan:  "34e+10",
 			err0:  io.EOF,
-			state: TokenizerStateUnsignedInteger,
+			state: TokenizerStateUnsignedScientificNotation,
 		},
 		{
 			bs:    ".34e+10",
@@ -1537,48 +1537,48 @@ func TestTokenizer_read(t *testing.T) {
 			err0:  io.EOF,
 			state: TokenizerStateSignedImaginary,
 		},
-		// Exponents edge cases
+		// Exponents edge cases (scientific notation - parser determines int vs float)
 		{
 			bs:    "1e0",
 			scan:  "1e0",
 			err0:  io.EOF,
-			state: TokenizerStateUnsignedInteger,
+			state: TokenizerStateUnsignedScientificNotation,
 		},
 		{
 			bs:    "1e-0",
 			scan:  "1e-0",
 			err0:  io.EOF,
-			state: TokenizerStateUnsignedInteger,
+			state: TokenizerStateUnsignedScientificNotation,
 		},
 		{
 			bs:    "1e+0",
 			scan:  "1e+0",
 			err0:  io.EOF,
-			state: TokenizerStateUnsignedInteger,
+			state: TokenizerStateUnsignedScientificNotation,
 		},
 		{
 			bs:    "-1e-0",
 			scan:  "-1e-0",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    "-1e+0",
 			scan:  "-1e+0",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    "+1e-0",
 			scan:  "+1e-0",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    "+1e+0",
 			scan:  "+1e+0",
 			err0:  io.EOF,
-			state: TokenizerStateSignedInteger,
+			state: TokenizerStateSignedScientificNotation,
 		},
 		{
 			bs:    ".5e0",

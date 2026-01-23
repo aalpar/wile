@@ -389,6 +389,97 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 	return q, p.cur, nil
 }
 
+// parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
+// Returns an integer if the result is a whole number, otherwise a float.
+// For positive exponents: always integer (may promote to BigInteger).
+// For negative exponents: integer if mantissa has enough trailing zeros, otherwise float.
+func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := p.cur.String()
+
+	// Find the exponent marker (e or E)
+	expIdx := strings.IndexAny(s, "eEsSfFdDlL")
+	if expIdx == -1 {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
+	}
+
+	mantissaStr := s[:expIdx]
+	expStr := s[expIdx+1:]
+
+	// Parse exponent
+	exp, err := strconv.ParseInt(expStr, 10, 64)
+	if err != nil {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid exponent in scientific notation: %s", s)
+	}
+
+	// Parse mantissa as big.Int (strip sign for trailing zero counting)
+	mantissaStrNoSign := strings.TrimLeft(mantissaStr, "+-")
+	mantissa := new(big.Int)
+	_, ok := mantissa.SetString(mantissaStrNoSign, 10)
+	if !ok {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid mantissa in scientific notation: %s", s)
+	}
+
+	// Check sign
+	negative := strings.HasPrefix(mantissaStr, "-")
+
+	if exp >= 0 {
+		// Positive exponent: result is mantissa * 10^exp (always integer)
+		multiplier := new(big.Int).Exp(big.NewInt(10), big.NewInt(exp), nil)
+		result := new(big.Int).Mul(mantissa, multiplier)
+		if negative {
+			result.Neg(result)
+		}
+		// Try to fit in int64
+		if result.IsInt64() {
+			q := p.wrapSyntax(values.NewInteger(result.Int64()), p.cur)
+			return q, p.cur, nil
+		}
+		q := p.wrapSyntax(values.NewBigInteger(result), p.cur)
+		return q, p.cur, nil
+	}
+
+	// Negative exponent: check if mantissa has enough trailing zeros
+	trailingZeros := countTrailingZeros(mantissaStrNoSign)
+	absExp := -exp
+
+	if int64(trailingZeros) >= absExp {
+		// Result is integer: mantissa / 10^|exp|
+		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(absExp), nil)
+		result := new(big.Int).Div(mantissa, divisor)
+		if negative {
+			result.Neg(result)
+		}
+		// Try to fit in int64
+		if result.IsInt64() {
+			q := p.wrapSyntax(values.NewInteger(result.Int64()), p.cur)
+			return q, p.cur, nil
+		}
+		q := p.wrapSyntax(values.NewBigInteger(result), p.cur)
+		return q, p.cur, nil
+	}
+
+	// Result is float
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
+	}
+	q := p.wrapSyntax(values.NewFloat(f), p.cur)
+	return q, p.cur, nil
+}
+
+// countTrailingZeros counts the number of trailing zeros in a numeric string.
+func countTrailingZeros(s string) int {
+	count := 0
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '0' {
+			count++
+		} else {
+			break
+		}
+	}
+	return count
+}
+
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
 	cur := p.curr()
@@ -693,6 +784,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q1 := values.NewFloat(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
+	case tokenizer.TokenizerStateSignedScientificNotation,
+		tokenizer.TokenizerStateUnsignedScientificNotation:
+		// Scientific notation like "1e10", "+2e-5", "100000e-4"
+		// Parser determines if result is integer or float
+		return p.parseScientificNotation()
 	case tokenizer.TokenizerStateUnsignedRationalFraction:
 		// Unsigned rational fractions like "3/4"
 		var q1 *values.Rational

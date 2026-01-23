@@ -461,13 +461,14 @@ func TestCombinedRadixExactness(t *testing.T) {
 func TestKnownBugs(t *testing.T) {
 	t.Run("signed_integer_with_exponent_now_works", func(t *testing.T) {
 		// Previously documented as bug: +1e10 tokenized as two tokens
-		// This has been FIXED - now tokenizes correctly as single decimal fraction
+		// This has been FIXED - now tokenizes correctly as scientific notation
+		// Parser will determine if result is integer or float based on exponent
 		c := qt.New(t)
 		p := NewTokenizer(strings.NewReader("+1e10"), false)
 
 		tok, err := p.Next()
 		c.Assert(err, qt.IsNil)
-		c.Check(tok.Type(), qt.Equals, TokenizerStateSignedInteger)
+		c.Check(tok.Type(), qt.Equals, TokenizerStateSignedScientificNotation)
 		c.Check(tok.(*SimpleToken).src, qt.Equals, "+1e10")
 
 		// Verify no second token

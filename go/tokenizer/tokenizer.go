@@ -217,6 +217,13 @@ const (
 	// TokenizerStateUnsignedDecimalFraction represents 1.23 or 4.56.
 	TokenizerStateUnsignedDecimalFraction
 
+	// TokenizerStateSignedScientificNotation represents integers with exponents like +1e10, -2e-5.
+	// Parser determines if result is integer or float based on exponent sign and mantissa.
+	TokenizerStateSignedScientificNotation
+	// TokenizerStateUnsignedScientificNotation represents integers with exponents like 1e10, 2e-5.
+	// Parser determines if result is integer or float based on exponent sign and mantissa.
+	TokenizerStateUnsignedScientificNotation
+
 	// TokenizerStateEmptyList represents () (empty list).
 	TokenizerStateEmptyList
 	// TokenizerStateOpenParen represents ( (open parenthesis).
@@ -1323,9 +1330,9 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 		p.readDiv(r) //nolint:errcheck
 	case isExtendedExponentMarkerForRadix(p.curr()):
 		if signed {
-			p.state = TokenizerStateSignedInteger
+			p.state = TokenizerStateSignedScientificNotation
 		} else {
-			p.state = TokenizerStateUnsignedInteger
+			p.state = TokenizerStateUnsignedScientificNotation
 		}
 		p.mayReadExponent(r) //nolint:errcheck
 	}

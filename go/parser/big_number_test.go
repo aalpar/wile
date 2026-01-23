@@ -16,12 +16,15 @@ package parser
 
 import (
 	"context"
+	"math"
 	"math/big"
 	"strings"
 	"testing"
 
 	"wile/environment"
 	"wile/values"
+
+	"github.com/google/go-cmp/cmp"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -238,6 +241,112 @@ func TestIntegerNoOverflow(t *testing.T) {
 			intVal, ok := obj.(*values.Integer)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T", obj))
 			c.Assert(intVal.Value, qt.Equals, tc.expect)
+		})
+	}
+}
+
+// TestScientificNotationToInteger tests that scientific notation with positive exponents
+// or negative exponents with sufficient trailing zeros yields integers.
+func TestScientificNotationToInteger(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect int64
+	}{
+		// Positive exponents - always integer
+		{"1e10", 10000000000},
+		{"2e5", 200000},
+		{"+3e2", 300},
+		{"-4e3", -4000},
+		{"1e0", 1},
+		// Negative exponents with sufficient trailing zeros
+		{"100000e-4", 10},      // 5 trailing zeros >= 4
+		{"100000e-5", 1},       // 5 trailing zeros >= 5
+		{"1000e-3", 1},         // 3 trailing zeros >= 3
+		{"-2000e-2", -20},      // 3 trailing zeros >= 2
+		{"+50000e-4", 5},       // 4 trailing zeros >= 4
+		{"10e-1", 1},           // 1 trailing zero >= 1
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			intVal, ok := obj.(*values.Integer)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T: %v", obj, obj))
+			c.Assert(intVal.Value, qt.Equals, tc.expect)
+		})
+	}
+}
+
+// TestScientificNotationToFloat tests that scientific notation with negative exponents
+// and insufficient trailing zeros yields floats.
+func TestScientificNotationToFloat(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect float64
+	}{
+		// Negative exponents without sufficient trailing zeros
+		{"1e-10", 1e-10},
+		{"10e-4", 0.001},       // 1 trailing zero < 4
+		{"123e-5", 0.00123},    // 0 trailing zeros < 5
+		{"+5e-2", 0.05},        // 0 trailing zeros < 2
+		{"-7e-3", -0.007},      // 0 trailing zeros < 3
+		{"100e-4", 0.01},       // 2 trailing zeros < 4
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			floatVal, ok := obj.(*values.Float)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Float, got %T: %v", obj, obj))
+			c.Assert(floatVal.Value, qt.CmpEquals(cmp.Comparer(func(a, b float64) bool {
+				return math.Abs(a-b) < 1e-15
+			})), tc.expect)
+		})
+	}
+}
+
+// TestScientificNotationToBigInteger tests that large scientific notation results
+// are promoted to BigInteger.
+func TestScientificNotationToBigInteger(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect string
+	}{
+		{"1e20", "100000000000000000000"},
+		{"1e19", "10000000000000000000"}, // Just over int64 max (~9.2e18)
+		{"-5e19", "-50000000000000000000"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			bigInt, ok := obj.(*values.BigInteger)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T: %v", obj, obj))
+
+			expected := new(big.Int)
+			expected.SetString(tc.expect, 10)
+			c.Assert(bigInt.BigInt().Cmp(expected), qt.Equals, 0)
 		})
 	}
 }
