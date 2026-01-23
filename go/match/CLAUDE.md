@@ -43,7 +43,7 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - **Ellipsis IDs**: Unique IDs track which variables each ellipsis captures
 - **Syntax preservation**: SyntaxMatcher.syntaxMap preserves original syntax for captured variables
 - **Done validation complex**: Context-aware checking of cdr based on next instruction
-- **Free identifiers get scope-free context**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`) must NOT inherit use-site scopes. They need empty scopes to match global/compile-time bindings. R7RS §4.3 requires macro-introduced identifiers to refer to definition-time bindings.
+- **Free identifiers get scope-free context (REVISIT)**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`) currently get empty scopes to match global/compile-time bindings. This fix for Bug 6 works but may not be the correct approach—proper hygiene might require definition-site scopes rather than no scopes. R7RS §4.3 requires macro-introduced identifiers to refer to definition-time bindings. This area needs further investigation.
 
 ## Testing
 
