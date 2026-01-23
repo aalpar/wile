@@ -77,7 +77,7 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 | Item | Priority | Status |
 |------|----------|--------|
 | Auxiliary syntax exports (`...`, `_`) | Medium | ❌ Not exported |
-| Macro hygiene with internal bindings | Medium | ⚠️ Workaround available |
+| Macro hygiene with internal bindings | Medium | ✅ Fixed |
 
 #### Auxiliary Syntax Exports
 
@@ -106,9 +106,7 @@ When a macro defined in a library references a helper function also defined in t
     ((my-macro x) (helper x))))  ;; 'helper' should resolve to library's binding
 ```
 
-The expanded code at the use site fails with "no such binding: helper".
-
-**Workaround:** Export helpers with `%` prefix convention. See `lib/chibi/test.sld` for an example.
+**Status: Fixed.** Free identifiers in macro templates are now pre-resolved to their `GlobalIndex` at macro definition time. During template expansion, these bindings are attached to symbols via `WithResolvedBinding()`, ensuring they resolve to the definition-time binding regardless of the use-site context. See `syntax/CLAUDE.md` for implementation details.
 
 ---
 
