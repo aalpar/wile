@@ -16,18 +16,134 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
+| Macro system bugs | 2 | In Progress |
+| Scoping bugs | 1 | In Progress |
+| Numeric comparison bugs | 1 | In Progress |
 | Missing syntax/macros | 0 | Complete |
 | Library system issues | 0 | Complete |
 | Tokenizer issues | 0 | Complete |
 | Semantic differences | 0 | Complete |
 | Completed items | 46+ | Complete |
-| **Total remaining** | **0** | **Complete** |
+| **Total remaining** | **4** | **In Progress** |
 
 ---
 
 ## Outstanding Issues
 
-### Phase 4: Missing Syntax/Macros (R7RS §4)
+### Macro System Bugs (R7RS §4.3)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `letrec-syntax` expansion failure | §4.3.1 | High | Open |
+| `let-syntax` hygiene failure | §4.3.1 | High | Open |
+
+#### Bug: `letrec-syntax` expansion failure
+
+**Test case** (from r7rs-tests.scm line 413-430):
+```scheme
+(letrec-syntax
+  ((my-or (syntax-rules ()
+            ((my-or) #f)
+            ((my-or e) e)
+            ((my-or e1 e2 ...)
+             (let ((temp e1))
+               (if temp
+                   temp
+                   (my-or e2 ...)))))))
+  (let ((x #f)
+        (y 7)
+        (temp 8)
+        (let odd?)
+        (if even?))
+    (my-or x
+           (let temp)
+           (if y)
+           y)))
+```
+
+**Expected:** `7`
+
+**Actual:** Compilation error:
+```
+if: missing consequent: Cannot compile expression
+```
+
+**Analysis:** The recursive macro expansion of `my-or` eventually expands `(my-or)` to `#f`, but something in the nested `if` expansion chain loses track of the consequent expression.
+
+---
+
+#### Bug: `let-syntax` hygiene failure
+
+**Test case** (from r7rs-tests.scm line 408-411):
+```scheme
+(let ((x 'outer))
+  (let-syntax ((m (syntax-rules () ((m) x))))
+    (let ((x 'inner))
+      (m))))
+```
+
+**Expected:** `outer` (the macro `m` should capture the outer `x` at definition time)
+
+**Actual:** `inner` (the macro is incorrectly using the inner `x`)
+
+**Analysis:** This is a macro hygiene violation. Per R7RS §4.3.2, pattern variables and literals in a `syntax-rules` template should refer to bindings at the macro definition site, not the expansion site.
+
+---
+
+### Scoping Bugs (R7RS §5.3)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `let*-values` internal define leaks | §5.3.2 | Medium | Open |
+
+#### Bug: Internal define leaks through `let*-values`
+
+**Test case** (from r7rs-tests.scm line 242-246):
+```scheme
+(let ((x 1))
+  (let*-values ()
+    (define x 2)
+    #f)
+  x)
+```
+
+**Expected:** `1` (the internal `define` should be local to `let*-values` body)
+
+**Actual:** `2` (the internal define is leaking to the outer scope)
+
+**Analysis:** Per R7RS §5.3.2, internal definitions at the beginning of a body are equivalent to `letrec*` and should not affect bindings outside that body.
+
+---
+
+### Numeric Comparison Bugs (R7RS §6.1)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `equal?` fails on large exact integers | §6.1 | Medium | Open |
+
+#### Bug: `equal?` returns false for equal large integers
+
+**Test case** (from r7rs-tests.scm line 215-225):
+```scheme
+(let*-values (((root rem) (exact-integer-sqrt (expt 2 119))))
+  (list root rem))
+```
+
+**Expected:** `(815238614083298888 443242361398135744)` - and test passes
+
+**Actual:** The computed value is correct, but `(equal? computed expected)` returns `#f`
+
+**Analysis:** The chibi-test framework uses `equal?` for comparison. When comparing lists containing large exact integers (bignums), `equal?` appears to fail even when the values are identical. This may be an issue with bignum comparison in `equal?` or `eqv?`.
+
+**Affected tests:**
+- `(expt 2 119)` - root and remainder
+- `(expt 2 120)` - root and remainder
+- `(expt 2 121)` - root and remainder
+- `(expt 2 140)` - remainder check
+
+---
+
+### Phase 4: Missing Syntax/Macros (R7RS §4) - COMPLETE
 
 | Item | R7RS Section | Priority | Status |
 |------|--------------|----------|--------|
@@ -176,7 +292,9 @@ The following items have been implemented and verified:
 ./dist/scheme -f r7rs-tests.scm
 ```
 
-All 13 bugs from the R7RS test suite have been fixed. See [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) for details.
+**Current Status:** The test suite runs but fails in section 4.3 (Macros) with a compilation error. The 4 outstanding issues documented above prevent full test suite completion.
+
+**Previously Fixed:** 13 bugs from the R7RS test suite have been fixed. See [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) for details.
 
 ### Unit Tests
 
