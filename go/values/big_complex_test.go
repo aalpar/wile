@@ -112,12 +112,12 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
 	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
 
-	// Division by zero returns nil
+	// Division by zero panics
 	zero := NewBigComplexFromBigIntegers(
 		NewBigIntegerFromInt64(0),
 		NewBigIntegerFromInt64(0),
 	)
-	c.Assert(bc1.Divide(zero), qt.IsNil)
+	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
 
 func TestBigComplex_MixedArithmetic(t *testing.T) {

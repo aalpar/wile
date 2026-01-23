@@ -305,8 +305,7 @@ func TestBigInteger_DivisionByZero(t *testing.T) {
 	bi := NewBigIntegerFromInt64(100)
 	zero := NewBigIntegerFromInt64(0)
 
-	result := bi.Divide(zero)
-	c.Assert(result, qt.IsNil)
+	c.Assert(func() { bi.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
 
 func TestBigFloat_DivisionByZero(t *testing.T) {
@@ -315,8 +314,7 @@ func TestBigFloat_DivisionByZero(t *testing.T) {
 	bf := NewBigFloatFromFloat64(100.0)
 	zero := NewBigFloatFromFloat64(0.0)
 
-	result := bf.Divide(zero)
-	c.Assert(result, qt.IsNil)
+	c.Assert(func() { bf.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
 
 func TestBigInteger_IsVoid(t *testing.T) {

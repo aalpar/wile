@@ -67,6 +67,44 @@ func (p *Integer) Datum() int64 {
 	return p.Value
 }
 
+// addSame adds two integers of the same type.
+func (p *Integer) addSame(o *Integer) Number {
+	return NewInteger(p.Value + o.Value)
+}
+
+// subtractSame subtracts two integers of the same type.
+func (p *Integer) subtractSame(o *Integer) Number {
+	return NewInteger(p.Value - o.Value)
+}
+
+// multiplySame multiplies two integers of the same type.
+func (p *Integer) multiplySame(o *Integer) Number {
+	return NewInteger(p.Value * o.Value)
+}
+
+// divideSame divides two integers of the same type.
+// Returns Rational if not evenly divisible.
+func (p *Integer) divideSame(o *Integer) Number {
+	if o.Value == 0 {
+		panic(ErrDivisionByZero)
+	}
+	result := NewRational(p.Value, o.Value)
+	if result.IsInteger() {
+		return NewInteger(result.NumInt64())
+	}
+	return result
+}
+
+// compareSame compares two integers of the same type.
+func (p *Integer) compareSame(o *Integer) int {
+	if p.Value < o.Value {
+		return -1
+	} else if p.Value > o.Value {
+		return 1
+	}
+	return 0
+}
+
 // Add returns the sum of this integer and another number.
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
@@ -88,6 +126,9 @@ func (p *Integer) Add(o Number) Number {
 		return &BigInteger{value: result}
 	case *Float:
 		return NewFloat(float64(p.Value) + v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		result := new(big.Rat).Add(self, v.Rat())
@@ -117,6 +158,9 @@ func (p *Integer) Subtract(o Number) Number {
 		return &BigInteger{value: result}
 	case *Float:
 		return NewFloat(float64(p.Value) - v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		result := new(big.Rat).Sub(self, v.Rat())
@@ -149,6 +193,9 @@ func (p *Integer) Multiply(o Number) Number {
 		return &BigInteger{value: result}
 	case *Float:
 		return NewFloat(float64(p.Value) * v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		result := new(big.Rat).Mul(self, v.Rat())
@@ -186,6 +233,9 @@ func (p *Integer) Divide(o Number) Number {
 		return NewRationalFromBigInt(big.NewInt(p.Value), v.value)
 	case *Float:
 		return NewFloat(float64(p.Value) / v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *Rational:
 		self := big.NewRat(p.Value, 1)
 		result := new(big.Rat).Quo(self, v.Rat())
@@ -235,6 +285,65 @@ func (p *Integer) Abs() *Integer {
 		return NewInteger(-p.Value)
 	}
 	return NewInteger(p.Value)
+}
+
+// Negate returns the negation of this integer.
+//
+// R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
+func (p *Integer) Negate() Number {
+	return NewInteger(-p.Value)
+}
+
+// Compare compares this integer with another number.
+//
+// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
+// Returns -1 if p < o, 0 if p == o, 1 if p > o.
+func (p *Integer) Compare(o Number) int {
+	switch v := o.(type) {
+	case *Integer:
+		if p.Value < v.Value {
+			return -1
+		} else if p.Value > v.Value {
+			return 1
+		}
+		return 0
+	case *BigInteger:
+		return big.NewInt(p.Value).Cmp(v.value)
+	case *Float:
+		pf := float64(p.Value)
+		if pf < v.Value {
+			return -1
+		} else if pf > v.Value {
+			return 1
+		}
+		return 0
+	case *BigFloat:
+		self := new(big.Float).SetInt64(p.Value)
+		return self.Cmp(v.BigFloatValue())
+	case *Rational:
+		self := big.NewRat(p.Value, 1)
+		return self.Cmp(v.Rat())
+	case *Complex:
+		pf := float64(p.Value)
+		r := real(v.Value)
+		if pf < r {
+			return -1
+		} else if pf > r {
+			return 1
+		}
+		return 0
+	case *BigComplex:
+		self := new(big.Float).SetInt64(p.Value)
+		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
+	}
+	panic(ErrNotANumber)
+}
+
+// IsExact returns true since Integer is always exact.
+//
+// R7RS §6.2.2: Integers are always exact numbers.
+func (p *Integer) IsExact() bool {
+	return true
 }
 
 // IsVoid returns true if this integer is nil.

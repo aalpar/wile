@@ -63,6 +63,34 @@ func (p *BigFloat) Float64() float64 {
 	return f
 }
 
+// addSame adds two BigFloats of the same type.
+func (p *BigFloat) addSame(o *BigFloat) Number {
+	return &BigFloat{value: new(big.Float).Add(p.value, o.value)}
+}
+
+// subtractSame subtracts two BigFloats of the same type.
+func (p *BigFloat) subtractSame(o *BigFloat) Number {
+	return &BigFloat{value: new(big.Float).Sub(p.value, o.value)}
+}
+
+// multiplySame multiplies two BigFloats of the same type.
+func (p *BigFloat) multiplySame(o *BigFloat) Number {
+	return &BigFloat{value: new(big.Float).Mul(p.value, o.value)}
+}
+
+// divideSame divides two BigFloats of the same type.
+func (p *BigFloat) divideSame(o *BigFloat) Number {
+	if o.value.Sign() == 0 {
+		panic(ErrDivisionByZero)
+	}
+	return &BigFloat{value: new(big.Float).Quo(p.value, o.value)}
+}
+
+// compareSame compares two BigFloats of the same type.
+func (p *BigFloat) compareSame(o *BigFloat) int {
+	return p.value.Cmp(o.value)
+}
+
 // Add returns the sum of this BigFloat and another number.
 func (p *BigFloat) Add(o Number) Number {
 	if o.IsZero() {
@@ -93,7 +121,7 @@ func (p *BigFloat) Add(o Number) Number {
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Add(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Subtract returns the difference of this BigFloat and another number.
@@ -123,7 +151,7 @@ func (p *BigFloat) Subtract(o Number) Number {
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Subtract(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Multiply returns the product of this BigFloat and another number.
@@ -156,13 +184,13 @@ func (p *BigFloat) Multiply(o Number) Number {
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Multiply(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Divide returns the quotient of this BigFloat and another number.
 func (p *BigFloat) Divide(o Number) Number {
 	if o.IsZero() {
-		return nil // Division by zero
+		panic(ErrDivisionByZero)
 	}
 	switch v := o.(type) {
 	case *BigFloat:
@@ -186,7 +214,7 @@ func (p *BigFloat) Divide(o Number) Number {
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Divide(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Negate returns the negation of this BigFloat.
@@ -256,10 +284,18 @@ func (p *BigFloat) Compare(o Number) int {
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
 		return p.value.Cmp(vf)
+	case *Complex:
+		f, _ := p.value.Float64()
+		if f < real(v.Value) {
+			return -1
+		} else if f > real(v.Value) {
+			return 1
+		}
+		return 0
 	case *BigComplex:
 		return p.value.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	return 0
+	panic(ErrNotANumber)
 }
 
 // SchemeString returns the Scheme representation of this BigFloat.

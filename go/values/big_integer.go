@@ -79,6 +79,39 @@ func (p *BigInteger) Int64() int64 {
 	return p.value.Int64()
 }
 
+// addSame adds two BigIntegers of the same type.
+func (p *BigInteger) addSame(o *BigInteger) Number {
+	return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, o.value)}
+}
+
+// subtractSame subtracts two BigIntegers of the same type.
+func (p *BigInteger) subtractSame(o *BigInteger) Number {
+	return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, o.value)}
+}
+
+// multiplySame multiplies two BigIntegers of the same type.
+func (p *BigInteger) multiplySame(o *BigInteger) Number {
+	return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, o.value)}
+}
+
+// divideSame divides two BigIntegers of the same type.
+// Returns Rational if not evenly divisible.
+func (p *BigInteger) divideSame(o *BigInteger) Number {
+	if o.value.Sign() == 0 {
+		panic(ErrDivisionByZero)
+	}
+	quo, rem := new(big.Int).QuoRem(p.value, o.value, new(big.Int))
+	if rem.Sign() == 0 {
+		return &BigInteger{value: quo}
+	}
+	return NewRationalFromBigInt(p.value, o.value)
+}
+
+// compareSame compares two BigIntegers of the same type.
+func (p *BigInteger) compareSame(o *BigInteger) int {
+	return p.value.Cmp(o.value)
+}
+
 // Add returns the sum of this BigInteger and another number.
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
@@ -108,11 +141,14 @@ func (p *BigInteger) Add(o Number) Number {
 		f := float64FromBigInt(p.value)
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) + v.Datum())
+	case *BigFloat:
+		self := new(big.Float).SetInt(p.value)
+		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
 		return bc.Add(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Subtract returns the difference of this BigInteger and another number.
@@ -138,11 +174,14 @@ func (p *BigInteger) Subtract(o Number) Number {
 		f := float64FromBigInt(p.value)
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) - v.Datum())
+	case *BigFloat:
+		self := new(big.Float).SetInt(p.value)
+		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
 		return bc.Subtract(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Multiply returns the product of this BigInteger and another number.
@@ -173,11 +212,14 @@ func (p *BigInteger) Multiply(o Number) Number {
 	case *Complex:
 		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) * v.Datum())
+	case *BigFloat:
+		self := new(big.Float).SetInt(p.value)
+		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
 		return bc.Multiply(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Divide returns the quotient of this BigInteger and another number.
@@ -191,7 +233,7 @@ func (p *BigInteger) Multiply(o Number) Number {
 // exact / inexact = inexact (Float or Complex).
 func (p *BigInteger) Divide(o Number) Number {
 	if o.IsZero() {
-		return nil // Division by zero
+		panic(ErrDivisionByZero)
 	}
 	switch v := o.(type) {
 	case *BigInteger:
@@ -218,11 +260,14 @@ func (p *BigInteger) Divide(o Number) Number {
 	case *Complex:
 		f := float64FromBigInt(p.value)
 		return NewComplex(complex(f, 0) / v.Datum())
+	case *BigFloat:
+		self := new(big.Float).SetInt(p.value)
+		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
 		return bc.Divide(v)
 	}
-	return nil
+	panic(ErrNotANumber)
 }
 
 // Negate returns the negation of this BigInteger.
@@ -309,11 +354,19 @@ func (p *BigInteger) Compare(o Number) int {
 	case *Rational:
 		pRat := new(big.Rat).SetInt(p.value)
 		return pRat.Cmp(v.Rat())
+	case *Complex:
+		f := float64FromBigInt(p.value)
+		if f < real(v.Value) {
+			return -1
+		} else if f > real(v.Value) {
+			return 1
+		}
+		return 0
 	case *BigComplex:
 		self := new(big.Float).SetInt(p.value)
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	return 0
+	panic(ErrNotANumber)
 }
 
 // SchemeString returns the Scheme representation of this BigInteger.
