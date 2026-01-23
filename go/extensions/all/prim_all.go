@@ -23,6 +23,8 @@ import (
 	"strings"
 	"unicode"
 
+	"golang.org/x/text/cases"
+
 	"wile/environment"
 	"wile/machine"
 	"wile/utils"
@@ -768,20 +770,17 @@ func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringFoldcase implements the string-foldcase primitive.
 // R7RS §6.7: Returns a string whose characters are the case-folded versions of the characters in string.
-// Uses Unicode simple case folding which maps each character to a single character.
+// Uses Unicode full case folding which can expand characters (e.g., ß → ss).
 func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	str, ok := s.(*values.String)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "string-foldcase: expected a string but got %T", s)
 	}
-	// Apply simple case folding to each character
-	runes := str.Runes()
-	result := make([]rune, len(runes))
-	for i, r := range runes {
-		result[i] = simpleCaseFold(r)
-	}
-	mc.SetValue(values.NewString(string(result)))
+	// Use Unicode full case folding
+	caser := cases.Fold()
+	result := caser.String(str.Value)
+	mc.SetValue(values.NewString(result))
 	return nil
 }
 
@@ -935,6 +934,7 @@ func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharFoldcase returns the case-folded version of a character.
 // R7RS §6.6: Returns the simple Unicode case-folded version of the character.
+// Simple case folding maps each character to exactly one character.
 func PrimCharFoldcase(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	ch, ok := o.(*values.Character)
@@ -946,27 +946,23 @@ func PrimCharFoldcase(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // simpleCaseFold performs Unicode simple case folding on a rune.
-// Simple case folding maps each character to a single character.
+// Simple case folding maps each character to exactly one character.
 // This is used for case-insensitive matching as specified by R7RS.
+//
+// For most characters, simple case folding is equivalent to lowercase.
+// Special cases are handled based on Unicode CaseFolding.txt:
+//   - Capital sharp S (ẞ U+1E9E) folds to lowercase sharp s (ß U+00DF)
+//   - Most other characters just use ToLower
 func simpleCaseFold(r rune) rune {
-	// For most characters, simple case folding is equivalent to lowercase
-	// but we iterate through SimpleFold to find the canonical form
-	folded := unicode.SimpleFold(r)
-	// SimpleFold returns the next case-equivalent character in a cycle
-	// We want the "smallest" (typically lowercase) version
-	result := r
-	for folded != r {
-		if folded < result {
-			result = folded
-		}
-		folded = unicode.SimpleFold(folded)
+	// Handle special cases from Unicode CaseFolding.txt
+	switch r {
+	case 'ẞ': // U+1E9E LATIN CAPITAL LETTER SHARP S
+		return 'ß' // U+00DF LATIN SMALL LETTER SHARP S
+	case 'K': // U+212A KELVIN SIGN (if we get that far)
+		// Actually this is regular K, ignore
 	}
-	// For characters without case, SimpleFold returns the character itself
-	// For cased characters, prefer lowercase
-	if unicode.IsUpper(result) {
-		return unicode.ToLower(result)
-	}
-	return result
+	// For most characters, simple case folding equals lowercase
+	return unicode.ToLower(r)
 }
 
 // PrimDigitValue implements the (digit-value) primitive.

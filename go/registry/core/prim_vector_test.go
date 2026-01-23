@@ -125,6 +125,46 @@ func TestVectorToList(t *testing.T) {
 	}
 }
 
+// TestVectorToListOptional tests R7RS §6.8 optional start/end arguments for vector->list.
+func TestVectorToListOptional(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Basic usage without optional arguments
+		{"full vector", `(vector->list '#(a b c d e))`,
+			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"),
+				values.NewSymbol("d"), values.NewSymbol("e"))},
+		{"empty vector", `(vector->list '#())`, values.EmptyList},
+
+		// With start argument only
+		{"start at 0", `(vector->list '#(a b c d e) 0)`,
+			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"),
+				values.NewSymbol("d"), values.NewSymbol("e"))},
+		{"start at 2", `(vector->list '#(a b c d e) 2)`,
+			values.List(values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e"))},
+		{"start at end", `(vector->list '#(a b c d e) 5)`, values.EmptyList},
+
+		// With both start and end arguments
+		{"start 0 end 3", `(vector->list '#(a b c d e) 0 3)`,
+			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{"start 1 end 4", `(vector->list '#(a b c d e) 1 4)`,
+			values.List(values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d"))},
+		{"start 2 end 2", `(vector->list '#(a b c d e) 2 2)`, values.EmptyList},
+		{"start equals end at 0", `(vector->list '#(a b c) 0 0)`, values.EmptyList},
+		{"full range explicit", `(vector->list '#(a b c) 0 3)`,
+			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+
+		// With numeric values
+		{"numeric vector subrange", `(vector->list '#(10 20 30 40 50) 1 4)`,
+			values.List(values.NewInteger(20), values.NewInteger(30), values.NewInteger(40))},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestListToVector(t *testing.T) {
 	tcs := []struct {
 		name string

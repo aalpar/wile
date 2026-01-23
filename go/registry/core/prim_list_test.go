@@ -654,6 +654,52 @@ func TestMember(t *testing.T) {
 	}
 }
 
+// TestMemberWithCompare tests R7RS §6.4 optional compare procedure for member.
+func TestMemberWithCompare(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Custom compare using = for numeric comparison
+		{"member with = finds exact number", `(member 2.0 '(1 2 3) =)`,
+			values.List(values.NewInteger(2), values.NewInteger(3))},
+		{"member with = not found", `(member 5 '(1 2 3) =)`, values.FalseValue},
+
+		// Custom compare using string=?
+		{"member with string=?", `(member "B" '("a" "B" "c") string=?)`,
+			values.List(values.NewString("B"), values.NewString("c"))},
+
+		// Custom compare using string-ci=? for case-insensitive
+		{"member with string-ci=?", `(member "b" '("A" "B" "C") string-ci=?)`,
+			values.List(values.NewString("B"), values.NewString("C"))},
+		{"member with string-ci=? not found", `(member "d" '("A" "B" "C") string-ci=?)`,
+			values.FalseValue},
+
+		// Custom compare with lambda - find number greater than obj
+		{"member with custom lambda", `(member 2 '(1 2 3 4) (lambda (obj elem) (> elem obj)))`,
+			values.List(values.NewInteger(3), values.NewInteger(4))},
+
+		// Custom compare - always false returns #f
+		{"member with always-false compare", `(member 'x '(a b c) (lambda (a b) #f))`,
+			values.FalseValue},
+
+		// Custom compare - always true returns first element
+		{"member with always-true compare", `(member 'x '(a b c) (lambda (a b) #t))`,
+			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+
+		// Empty list with custom compare
+		{"member with compare in empty list", `(member 1 '() =)`, values.FalseValue},
+
+		// Compare using eq? explicitly
+		{"member with eq?", `(member 'b '(a b c) eq?)`,
+			values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 // ============================================================================
 // Association Lists: assq, assv, assoc
 // ============================================================================
@@ -721,6 +767,56 @@ func TestAssoc(t *testing.T) {
 			values.List(values.NewInteger(42), values.NewSymbol("b"))},
 		{"assoc finds character key", `(assoc #\y '((#\a alpha) (#\y why)))`,
 			values.List(values.NewCharacter('y'), values.NewSymbol("why"))},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestAssocWithCompare tests R7RS §6.4 optional compare procedure for assoc.
+func TestAssocWithCompare(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Custom compare using = for numeric comparison
+		{"assoc with = finds exact number", `(assoc 2.0 '((1 one) (2 two) (3 three)) =)`,
+			values.List(values.NewInteger(2), values.NewSymbol("two"))},
+		{"assoc with = not found", `(assoc 5 '((1 one) (2 two) (3 three)) =)`, values.FalseValue},
+
+		// Custom compare using string=?
+		{"assoc with string=?", `(assoc "B" '(("a" alpha) ("B" beta) ("c" gamma)) string=?)`,
+			values.List(values.NewString("B"), values.NewSymbol("beta"))},
+
+		// Custom compare using string-ci=? for case-insensitive
+		{"assoc with string-ci=?", `(assoc "b" '(("A" alpha) ("B" beta) ("C" gamma)) string-ci=?)`,
+			values.List(values.NewString("B"), values.NewSymbol("beta"))},
+		{"assoc with string-ci=? not found", `(assoc "d" '(("A" alpha) ("B" beta)) string-ci=?)`,
+			values.FalseValue},
+
+		// Custom compare with lambda - find key where car > obj
+		{"assoc with custom lambda", `(assoc 2 '((1 one) (2 two) (3 three) (4 four)) (lambda (obj key) (> key obj)))`,
+			values.List(values.NewInteger(3), values.NewSymbol("three"))},
+
+		// Custom compare - always false returns #f
+		{"assoc with always-false compare", `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #f))`,
+			values.FalseValue},
+
+		// Custom compare - always true returns first entry
+		{"assoc with always-true compare", `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #t))`,
+			values.List(values.NewSymbol("a"), values.NewInteger(1))},
+
+		// Empty alist with custom compare
+		{"assoc with compare in empty alist", `(assoc 1 '() =)`, values.FalseValue},
+
+		// Compare using eq? explicitly
+		{"assoc with eq?", `(assoc 'b '((a 1) (b 2) (c 3)) eq?)`,
+			values.List(values.NewSymbol("b"), values.NewInteger(2))},
+
+		// More complex custom comparison - check if key starts with same letter
+		{"assoc with char comparison", `(assoc #\b '((#\a alpha) (#\b beta) (#\c gamma)) char=?)`,
+			values.List(values.NewCharacter('b'), values.NewSymbol("beta"))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
