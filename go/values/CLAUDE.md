@@ -122,6 +122,59 @@ BigInteger division returns exact types when possible:
 | `#z100 / #z10` | BigInteger (10) - exact division |
 | `#z100 / #z3` | Rational (100/3) - inexact division |
 
+## Numeric Tower Infrastructure
+
+The `numeric_tower.go` file provides a unified dispatch system for cross-type numeric operations.
+
+### Promotion Ordering
+
+`NumericRank` defines the promotion hierarchy:
+
+```
+Integer < BigInteger < Rational < Float < BigFloat < Complex < BigComplex
+```
+
+This ordering ensures information preservation when promoting operands for mixed-type operations.
+
+### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `Rank(n)` | Returns the NumericRank of a number |
+| `Promote(n, target)` | Promotes a number to a higher rank |
+| `PromoteBoth(a, b)` | Promotes both numbers to their common rank |
+| `Simplify(n)` | Reduces a number to simpler type when possible |
+| `BinaryOp(a, b, op)` | Unified dispatch: promote, operate, simplify |
+
+### Tower Operations
+
+High-level operations that use the tower dispatch:
+
+```go
+TowerAdd(a, b Number) Number      // a + b
+TowerSubtract(a, b Number) Number // a - b
+TowerMultiply(a, b Number) Number // a * b
+TowerDivide(a, b Number) Number   // a / b
+TowerCompare(a, b Number) int     // -1, 0, or 1
+```
+
+These handle all 49 (7×7) type combinations via promotion.
+
+### Same-Type Operations
+
+Each numeric type implements private same-type methods:
+
+- `addSame`, `subtractSame`, `multiplySame`, `divideSame`, `compareSame`
+
+These are used by the tower dispatch after promotion.
+
+### Exactness
+
+```go
+ExactnessOf(n Number) Exactness       // Exact or Inexact
+ResultExactness(a, b Number) Exactness // exact op exact = exact
+```
+
 ## Cross-Type Comparison
 
 All numeric types support `LessThan` comparison with all other numeric types:
@@ -165,6 +218,7 @@ This package uses **1:1 mapping** with type-based consolidation for related type
 | `rational_test.go` | Rational type |
 | `complex_test.go` | Complex type |
 | `big_complex_test.go` | BigComplex type |
+| `numeric_tower_test.go` | Numeric tower infrastructure |
 | `pair_test.go` | Pair/cons cells |
 | `string_test.go` | String type |
 | `character_test.go` | Character type |

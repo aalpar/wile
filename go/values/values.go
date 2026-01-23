@@ -131,12 +131,18 @@ type Comparable interface {
 }
 
 // Number represents a numeric value in the Scheme numeric tower.
+//
+// R7RS §6.2.1: Numbers form a tower: number ⊃ complex ⊃ real ⊃ rational ⊃ integer.
+// All numeric types implement this interface for uniform arithmetic operations.
 type Number interface {
 	Value
 	Add(Number) Number
 	Subtract(Number) Number
 	Multiply(Number) Number
 	Divide(Number) Number
+	Negate() Number
 	IsZero() bool
+	IsExact() bool
 	LessThan(Number) bool
+	Compare(Number) int
 }

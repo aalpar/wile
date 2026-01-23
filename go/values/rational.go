@@ -84,6 +84,34 @@ func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
 }
 
+// addSame adds two Rationals of the same type.
+func (p *Rational) addSame(o *Rational) Number {
+	return &Rational{value: new(big.Rat).Add(p.value, o.value)}
+}
+
+// subtractSame subtracts two Rationals of the same type.
+func (p *Rational) subtractSame(o *Rational) Number {
+	return &Rational{value: new(big.Rat).Sub(p.value, o.value)}
+}
+
+// multiplySame multiplies two Rationals of the same type.
+func (p *Rational) multiplySame(o *Rational) Number {
+	return &Rational{value: new(big.Rat).Mul(p.value, o.value)}
+}
+
+// divideSame divides two Rationals of the same type.
+func (p *Rational) divideSame(o *Rational) Number {
+	if o.value.Sign() == 0 {
+		panic(ErrDivisionByZero)
+	}
+	return &Rational{value: new(big.Rat).Quo(p.value, o.value)}
+}
+
+// compareSame compares two Rationals of the same type.
+func (p *Rational) compareSame(o *Rational) int {
+	return p.value.Cmp(o.value)
+}
+
 // Add returns the sum of two numbers.
 func (p *Rational) Add(o Number) Number {
 	if o.IsZero() {
@@ -100,8 +128,15 @@ func (p *Rational) Add(o Number) Number {
 		other := big.NewRat(v.Value, 1)
 		result := new(big.Rat).Add(p.value, other)
 		return &Rational{value: result}
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.value)
+		result := new(big.Rat).Add(p.value, other)
+		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() + v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *Complex:
 		return NewComplex(complex(p.Float64(), 0) + v.Value)
 	case *BigComplex:
@@ -125,8 +160,15 @@ func (p *Rational) Subtract(o Number) Number {
 		other := big.NewRat(v.Value, 1)
 		result := new(big.Rat).Sub(p.value, other)
 		return &Rational{value: result}
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.value)
+		result := new(big.Rat).Sub(p.value, other)
+		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() - v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *Complex:
 		return NewComplex(complex(p.Float64(), 0) - v.Value)
 	case *BigComplex:
@@ -150,8 +192,15 @@ func (p *Rational) Multiply(o Number) Number {
 		other := big.NewRat(v.Value, 1)
 		result := new(big.Rat).Mul(p.value, other)
 		return &Rational{value: result}
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.value)
+		result := new(big.Rat).Mul(p.value, other)
+		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() * v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *Complex:
 		return NewComplex(complex(p.Float64(), 0) * v.Value)
 	case *BigComplex:
@@ -175,8 +224,15 @@ func (p *Rational) Divide(o Number) Number {
 		other := big.NewRat(v.Value, 1)
 		result := new(big.Rat).Quo(p.value, other)
 		return &Rational{value: result}
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.value)
+		result := new(big.Rat).Quo(p.value, other)
+		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() / v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *Complex:
 		return NewComplex(complex(p.Float64(), 0) / v.Value)
 	case *BigComplex:
@@ -215,6 +271,61 @@ func (p *Rational) LessThan(o Number) bool {
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
 	panic(ErrNotANumber)
+}
+
+// Negate returns the negation of this rational.
+//
+// R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
+func (p *Rational) Negate() Number {
+	return &Rational{value: new(big.Rat).Neg(p.value)}
+}
+
+// Compare compares this rational with another number.
+//
+// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
+// Returns -1 if p < o, 0 if p == o, 1 if p > o.
+func (p *Rational) Compare(o Number) int {
+	switch v := o.(type) {
+	case *Rational:
+		return p.value.Cmp(v.value)
+	case *Integer:
+		other := big.NewRat(v.Value, 1)
+		return p.value.Cmp(other)
+	case *BigInteger:
+		other := new(big.Rat).SetInt(v.BigInt())
+		return p.value.Cmp(other)
+	case *Float:
+		pf := p.Float64()
+		if pf < v.Value {
+			return -1
+		} else if pf > v.Value {
+			return 1
+		}
+		return 0
+	case *BigFloat:
+		self := new(big.Float).SetRat(p.value)
+		return self.Cmp(v.BigFloatValue())
+	case *Complex:
+		pf := p.Float64()
+		r := real(v.Value)
+		if pf < r {
+			return -1
+		} else if pf > r {
+			return 1
+		}
+		return 0
+	case *BigComplex:
+		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
+	}
+	panic(ErrNotANumber)
+}
+
+// IsExact returns true since Rational is always exact.
+//
+// R7RS §6.2.2: Rationals are always exact numbers.
+func (p *Rational) IsExact() bool {
+	return true
 }
 
 // IsVoid returns true if the rational is nil.

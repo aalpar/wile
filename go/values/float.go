@@ -42,6 +42,39 @@ func (p *Float) Datum() float64 {
 	return p.Value
 }
 
+// addSame adds two Floats of the same type.
+func (p *Float) addSame(o *Float) Number {
+	return NewFloat(p.Value + o.Value)
+}
+
+// subtractSame subtracts two Floats of the same type.
+func (p *Float) subtractSame(o *Float) Number {
+	return NewFloat(p.Value - o.Value)
+}
+
+// multiplySame multiplies two Floats of the same type.
+func (p *Float) multiplySame(o *Float) Number {
+	return NewFloat(p.Value * o.Value)
+}
+
+// divideSame divides two Floats of the same type.
+func (p *Float) divideSame(o *Float) Number {
+	if o.Value == 0 {
+		panic(ErrDivisionByZero)
+	}
+	return NewFloat(p.Value / o.Value)
+}
+
+// compareSame compares two Floats of the same type.
+func (p *Float) compareSame(o *Float) int {
+	if p.Value < o.Value {
+		return -1
+	} else if p.Value > o.Value {
+		return 1
+	}
+	return 0
+}
+
 // Add returns the sum of two numbers.
 func (p *Float) Add(o Number) Number {
 	if o.IsZero() {
@@ -50,8 +83,13 @@ func (p *Float) Add(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value + float64(v.Value))
+	case *BigInteger:
+		return NewFloat(p.Value + float64FromBigInt(v.value))
 	case *Float:
 		return NewFloat(p.Value + v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetFloat64(p.Value)
+		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *Rational:
 		return NewFloat(p.Value + v.Float64())
 	case *Complex:
@@ -71,8 +109,13 @@ func (p *Float) Subtract(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value - float64(v.Value))
+	case *BigInteger:
+		return NewFloat(p.Value - float64FromBigInt(v.value))
 	case *Float:
 		return NewFloat(p.Value - v.Value)
+	case *BigFloat:
+		self := new(big.Float).SetFloat64(p.Value)
+		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *Rational:
 		return NewFloat(p.Value - v.Float64())
 	case *Complex:
@@ -97,6 +140,11 @@ func (p *Float) Multiply(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value * float64(v.Value))
+	case *BigInteger:
+		return NewFloat(p.Value * float64FromBigInt(v.value))
+	case *BigFloat:
+		self := new(big.Float).SetFloat64(p.Value)
+		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *Float:
 		return NewFloat(p.Value * v.Value)
 	case *Rational:
@@ -118,6 +166,11 @@ func (p *Float) Divide(o Number) Number {
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value / float64(v.Value))
+	case *BigInteger:
+		return NewFloat(p.Value / float64FromBigInt(v.value))
+	case *BigFloat:
+		self := new(big.Float).SetFloat64(p.Value)
+		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *Float:
 		return NewFloat(p.Value / v.Value)
 	case *Rational:
@@ -165,6 +218,17 @@ func (p *Float) Abs() *Float {
 	return NewFloat(math.Abs(p.Value))
 }
 
+// Negate returns the negation of this float.
+//
+// R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
+func (p *Float) Negate() Number {
+	return NewFloat(-p.Value)
+}
+
+// Compare compares this float with another number.
+//
+// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
+// Returns -1 if p < o, 0 if p == o, 1 if p > o.
 func (p *Float) Compare(o Number) int {
 	pf := new(big.Float).SetFloat64(p.Value)
 	switch v := o.(type) {
@@ -182,10 +246,25 @@ func (p *Float) Compare(o Number) int {
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
 		return pf.Cmp(vf)
+	case *Complex:
+		r := real(v.Value)
+		if p.Value < r {
+			return -1
+		} else if p.Value > r {
+			return 1
+		}
+		return 0
 	case *BigComplex:
 		return pf.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	return 0
+	panic(ErrNotANumber)
+}
+
+// IsExact returns false since Float is always inexact.
+//
+// R7RS §6.2.2: Floating-point numbers are inexact.
+func (p *Float) IsExact() bool {
+	return false
 }
 
 // IsVoid returns true if the float is nil.
