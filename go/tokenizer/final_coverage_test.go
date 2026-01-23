@@ -97,9 +97,9 @@ func TestTokenizer_UnsignedFractionalEdgeCases(t *testing.T) {
 		// Integer followed by decimal
 		{"+10.5", TokenizerStateSignedDecimalFraction},
 		{"-10.5", TokenizerStateSignedDecimalFraction},
-		// Integer with exponent
-		{"+10e5", TokenizerStateSignedInteger},
-		{"-10e-5", TokenizerStateSignedInteger},
+		// Integer with exponent (scientific notation - parser determines int vs float)
+		{"+10e5", TokenizerStateSignedScientificNotation},
+		{"-10e-5", TokenizerStateSignedScientificNotation},
 		// Rational fractions
 		{"+3/4", TokenizerStateSignedRationalFraction},
 		{"-3/4", TokenizerStateSignedRationalFraction},
@@ -668,9 +668,9 @@ func TestTokenizer_Vectors(t *testing.T) {
 // Test mayUnsignedFractional with exponents
 func TestTokenizer_MayUnsignedExponentBranches(t *testing.T) {
 	tests := []tokenizerTestCase{
-		// Integer with exponent branches
-		{"+10e5", TokenizerStateSignedInteger},
-		{"-10e5", TokenizerStateSignedInteger},
+		// Integer with exponent branches (scientific notation - parser determines int vs float)
+		{"+10e5", TokenizerStateSignedScientificNotation},
+		{"-10e5", TokenizerStateSignedScientificNotation},
 		// Decimal with exponent
 		{"+10.5e5", TokenizerStateSignedDecimalFraction},
 		{"-10.5e5", TokenizerStateSignedDecimalFraction},
