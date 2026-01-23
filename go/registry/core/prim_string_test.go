@@ -754,6 +754,60 @@ func TestStringFoldcase(t *testing.T) {
 	}
 }
 
+// TestStringFoldcaseUnicode tests R7RS Unicode full case folding for string-foldcase.
+// Per R7RS §6.7, string-foldcase uses Unicode full case folding which can expand
+// characters (e.g., ß → ss, ẞ → ss).
+func TestStringFoldcaseUnicode(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// German sharp S - full case folding expands to "ss"
+		{
+			name:     "sharp s folds to ss",
+			code:     `(string-foldcase "ß")`,
+			expected: values.NewString("ss"),
+		},
+		{
+			name:     "capital sharp S folds to ss",
+			code:     `(string-foldcase "ẞ")`,
+			expected: values.NewString("ss"),
+		},
+		{
+			name:     "Straße becomes strasse",
+			code:     `(string-foldcase "Straße")`,
+			expected: values.NewString("strasse"),
+		},
+		{
+			name:     "STRASSE stays strasse",
+			code:     `(string-foldcase "STRASSE")`,
+			expected: values.NewString("strasse"),
+		},
+		// Greek letters
+		{
+			name:     "Greek sigma",
+			code:     `(string-foldcase "ΣΕΛΛΑΣ")`,
+			expected: values.NewString("σελλασ"),
+		},
+		// Mixed Unicode and ASCII
+		{
+			name:     "mixed Unicode",
+			code:     `(string-foldcase "Große Stadt")`,
+			expected: values.NewString("grosse stadt"),
+		},
+		// Already lowercase stays same (except ß)
+		{
+			name:     "lowercase stays lowercase",
+			code:     `(string-foldcase "hello")`,
+			expected: values.NewString("hello"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestStringConstructor(t *testing.T) {
 	tcs := []schemeCodeTestCase{
 		{

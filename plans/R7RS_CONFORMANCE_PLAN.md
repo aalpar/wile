@@ -8,14 +8,18 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 ## Summary
 
-| Category | Count | Priority |
-|----------|-------|----------|
-| Semantic issues | 3 | Medium |
-| **Total** | **3** | |
+**All planned R7RS conformance items have been implemented.**
+
+| Category | Count | Status |
+|----------|-------|--------|
+| Missing optional arguments | 0 | Complete |
+| Missing R7RS base procedures | 0 | Complete |
+| Semantic issues | 0 | Complete |
+| **Total** | **0** | **Complete** |
 
 ---
 
-## Completed Items (Removed from Plan)
+## Completed Items
 
 The following items from the original plan have been implemented:
 
@@ -69,65 +73,35 @@ The following items from the original plan have been implemented:
 - **read-string** - Implemented in `extensions/io/prim_read_write.go`
 - **write-string** - Implemented in `extensions/io/prim_read_write.go`
 
----
+### Semantic Fixes (Original Phase 3)
 
-## Phase 3: Semantic Fixes (Priority: Medium)
+#### Unicode Case Folding
+- **char-foldcase** - Uses Unicode simple case folding in `extensions/all/prim_all.go`
+- **string-foldcase** - Uses Unicode full case folding via `golang.org/x/text/cases` in `extensions/all/prim_all.go`
+  - Correctly handles ß → "ss" expansion
+  - Correctly handles ẞ (capital sharp S) → "ss"
+  - Tests in `prim_string_test.go` and `prim_char_extra_test.go`
 
-### 3.1 Unicode Case Folding
-
-| Procedure | Current Implementation | R7RS Requirement |
-|-----------|------------------------|------------------|
-| `char-foldcase` | `unicode.ToLower()` | Unicode SimpleCaseFolding |
-| `string-foldcase` | `strings.ToLower()` | Unicode CaseFolding |
-
-**Issue:** Case folding is not the same as lowercasing. For example:
-- German ß (U+00DF) should fold to "ss"
-- Turkish dotted I has special folding rules
-
-**Implementation:**
-- [ ] Use `golang.org/x/text/cases` package for proper case folding
-- [ ] Update `prim_char_foldcase.go` to use `cases.Fold`
-- [ ] Update `prim_string_foldcase.go` to use `cases.Fold`
-- [ ] Add Unicode case folding tests
-
-### 3.2 Unicode Digit Value
-
-| Procedure | Current Implementation | R7RS Requirement |
-|-----------|------------------------|------------------|
-| `digit-value` | ASCII 0-9 only | All Unicode decimal digits |
-
-**Issue:** Only handles ASCII digits. R7RS requires handling all Unicode decimal digits:
-- Arabic-Indic: ٠١٢٣٤٥٦٧٨٩ (U+0660-U+0669)
-- Devanagari: ०१२३४५६७८९ (U+0966-U+096F)
-- And many more...
-
-**Implementation:**
-- [ ] Update `prim_digit_value.go` to use Unicode digit detection
-- [ ] Use `unicode.IsDigit()` and calculate value from code point
-- [ ] Add tests for non-ASCII digits
+#### Unicode Digit Value
+- **digit-value** - Handles all Unicode decimal digits (Nd category) in `extensions/all/prim_all.go`
+  - Supports Arabic-Indic digits (U+0660-U+0669)
+  - Supports Extended Arabic-Indic digits (U+06F0-U+06F9)
+  - Supports Devanagari digits (U+0966-U+096F)
+  - Supports Bengali, Thai, and all other Unicode decimal digit scripts
+  - Tests in `prim_char_extra_test.go`
 
 ---
 
-## Testing Strategy
+## Verification
 
-For each fix:
-1. Add conformance tests that verify R7RS behavior
-2. Test edge cases (empty inputs, boundary values)
-3. Test error conditions
-4. Ensure backward compatibility
-
----
-
-## Verification Checklist
-
-After implementation:
+All implementations have been verified with comprehensive tests:
 
 ```bash
 # Run all tests
 cd go && make test
 
-# Check coverage
-cd go && go test -cover ./registry/core/...
+# Run Unicode-specific tests
+cd go && go test -v -run "Unicode" ./registry/core/...
 ```
 
 ---
@@ -137,8 +111,9 @@ cd go && go test -cover ./registry/core/...
 ### String Mutability
 R7RS specifies `string-set!`, `string-fill!`, and `string-copy!` which mutate strings. These have been implemented.
 
-### Case Folding Complexity
-True Unicode case folding requires the `golang.org/x/text/cases` package. This adds a dependency but provides correct behavior.
+### Case Folding Implementation
+- `char-foldcase` uses Unicode simple case folding (one-to-one character mapping)
+- `string-foldcase` uses Unicode full case folding via `golang.org/x/text/cases.Fold()` which correctly handles expansions like ß → "ss"
 
 ### Unicode Digit Detection
-Go's `unicode.IsDigit()` returns true for all Unicode decimal digits. The digit value can be calculated by subtracting the base digit (0) of that script's digit range.
+Go's `unicode.IsDigit()` returns true for all Unicode decimal digits (Nd category). The digit value is calculated by finding the base '0' character of each script's digit range.
