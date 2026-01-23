@@ -847,7 +847,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		p.next()
 		return
 
-	case p.curr() == '!': // #! array
+	case p.curr() == '!': // #! directive (R7RS §2.1)
 		p.state = TokenizerStateDirective
 		p.readDirective()
 		return
@@ -916,7 +916,7 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 	case p.curr() == 'f' || p.curr() == 'F': // #false, #f, #FALSE, #F (R7RS: case-insensitive)
 		p.readBoolean("false", TokenizerStateMarkerBooleanFalse)
 		return
-	case p.curr() == 'u': // #u8( .. unsigned with 8, 16, 32, 64, 128
+	case p.curr() == 'u' || p.curr() == 'U': // #u8(/#U8( bytevector (R7RS §7.1.1: case-insensitive)
 		k := p.scanCaseInsensitive([]byte("u8"))
 		if p.err != nil {
 			p.state = TokenizerStateMarker
@@ -928,22 +928,22 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 		p.state = TokenizerStateOpenVectorUnsignedByteMarker
 		p.next()
 		return
-	case p.curr() == 'i': // inexact, #i
+	case p.curr() == 'i' || p.curr() == 'I': // inexact, #i/#I (R7RS §7.1.1: case-insensitive)
 		p.readExactness(TokenizerStateMarkerNumberInexact)
 		return
-	case p.curr() == 'e': // exact, #e
+	case p.curr() == 'e' || p.curr() == 'E': // exact, #e/#E (R7RS §7.1.1: case-insensitive)
 		p.readExactness(TokenizerStateMarkerNumberExact)
 		return
-	case p.curr() == 'b': // binary, #b
+	case p.curr() == 'b' || p.curr() == 'B': // binary, #b/#B (R7RS §7.1.1: case-insensitive)
 		p.readRadixMarker(2, TokenizerStateMarkerBase2)
 		return
-	case p.curr() == 'o': // octal, #o
+	case p.curr() == 'o' || p.curr() == 'O': // octal, #o/#O (R7RS §7.1.1: case-insensitive)
 		p.readRadixMarker(8, TokenizerStateMarkerBase8)
 		return
-	case p.curr() == 'd': // decimal, #d
+	case p.curr() == 'd' || p.curr() == 'D': // decimal, #d/#D (R7RS §7.1.1: case-insensitive)
 		p.readRadixMarker(10, TokenizerStateMarkerBase10)
 		return
-	case p.curr() == 'x': // hex #x
+	case p.curr() == 'x' || p.curr() == 'X': // hex #x/#X (R7RS §7.1.1: case-insensitive)
 		p.readRadixMarker(16, TokenizerStateMarkerBase16)
 		return
 	case p.curr() == 'm' || p.curr() == 'M': // big float #m
@@ -1054,6 +1054,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 
 // readDirective reads a #! directive (e.g., #!fold-case, #!no-fold-case).
 // Called after '#' has been consumed with '!' as curr().
+// R7RS §2.1: #!fold-case and #!no-fold-case affect subsequent identifier reading.
 func (p *Tokenizer) readDirective() {
 	// #!backspace, #!b, ...
 	// drop the '!'

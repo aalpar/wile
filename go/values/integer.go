@@ -230,6 +230,13 @@ func (p *Integer) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
+func (p *Integer) Abs() *Integer {
+	if p.Value < 0 {
+		return NewInteger(-p.Value)
+	}
+	return NewInteger(p.Value)
+}
+
 // IsVoid returns true if this integer is nil.
 func (p *Integer) IsVoid() bool {
 	return p == nil

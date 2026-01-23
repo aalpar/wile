@@ -17,6 +17,7 @@ Converts token stream into syntax values with source location tracking:
 - `env` - Environment for symbol interning
 - `cur` - Current token
 - `file` - Source filename for error reporting
+- `datumLabels` - R7RS §2.4 datum label registry for `#n=` and `#n#`
 
 **ParserError** - Error with source location
 
@@ -37,6 +38,7 @@ Converts token stream into syntax values with source location tracking:
 - **No error recovery**: On error, tokenizer nullified
 - **Comment skipping optional**: `skipComment` parameter controls behavior
 - **Byte vector validation**: Elements validated as unsigned bytes at parse time
+- **Circular datum labels**: For `#n=(... #n# ...)`, pre-register a placeholder pair in `datumLabels` BEFORE reading list contents. `readLabeledList` handles this by creating and registering the pair, then populating it. This enables self-referential structures like `#0=(1 . #0#)`.
 
 ## Testing
 

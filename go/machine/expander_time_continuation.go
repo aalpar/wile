@@ -248,6 +248,24 @@ func (p *ExpanderTimeContinuation) expandWithSyntax(_ ExpandTimeCallContext, sym
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
+// expandLetSyntax returns the form unchanged. The bindings are transformer
+// specifications, not expressions, and must NOT be macro-expanded. The compiler
+// handles creating the local scope and expanding the body with the new macros.
+//
+// R7RS §4.3.1: let-syntax establishes local macro definitions.
+func (p *ExpanderTimeContinuation) expandLetSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
+// expandLetrecSyntax returns the form unchanged. Like let-syntax, the bindings
+// are transformer specifications that should not be expanded. The difference
+// from let-syntax is that transformers can reference each other (mutual recursion).
+//
+// R7RS §4.3.1: letrec-syntax is like let-syntax but with mutual visibility.
+func (p *ExpanderTimeContinuation) expandLetrecSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
 func (p *ExpanderTimeContinuation) expandBeginForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) {
@@ -494,13 +512,21 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 	// Check if there's a local variable binding before checking for macros
 	if !p.hasLocalVariableBinding(sym0, sym.Scopes()) {
 		// No local variable shadowing - check for macros
-		// Look up syntax bindings in the expand phase environment
-		// R7RS requires syntax bindings to be separate from runtime bindings
-		expandEnv := p.env.Expand()
-		bnd := expandEnv.GetBinding(sym0)
+		// First check local bindings in p.env (supports let-syntax local macros)
+		// Then fall back to the global expand environment
+		var bnd *environment.Binding
+
+		// Check local bindings first (for let-syntax/letrec-syntax)
+		bnd = p.env.GetBinding(sym0)
+
+		// If not found locally, check the global expand environment
+		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
+			expandEnv := p.env.Expand()
+			bnd = expandEnv.GetBinding(sym0)
+		}
 
 		// Check if it's a macro binding
-		if !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
+		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
 			// This is a macro - invoke the transformer (handled below after this block)
 			return p.expandMacroInvocation(ectx, sym, expr, bnd)
 		}

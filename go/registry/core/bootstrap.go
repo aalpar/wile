@@ -61,6 +61,19 @@ const bootstrapMacroSource = `
        (set! var init) ...
        body ...))))
 
+;; letrec* - like letrec but initializers are evaluated left-to-right
+;; R7RS §4.2.2: each variable is assigned in left-to-right order.
+;;
+;; This implementation delegates to letrec because Wile's letrec expansion
+;; produces sequential (set! var init) statements, which are evaluated
+;; left-to-right per R7RS §4.2.3. This differs from the canonical R7RS §7.3
+;; recursive macro but is semantically equivalent for this implementation.
+;; See plans/IMPLEMENTATION_NOTES.md for details.
+(define-syntax letrec*
+  (syntax-rules ()
+    ((letrec* ((var init) ...) body ...)
+     (letrec ((var init) ...) body ...))))
+
 ;; Conditional forms
 (define-syntax cond
   (syntax-rules (else =>)
@@ -85,6 +98,30 @@ const bootstrapMacroSource = `
      (if test
          (begin result1 result2 ...)
          (cond clause1 clause2 ...)))))
+
+(define-syntax case
+  (syntax-rules (else =>)
+    ((case (key ...) clauses ...)
+     (let ((atom-key (key ...)))
+       (case atom-key clauses ...)))
+    ((case key (else => result))
+     (result key))
+    ((case key (else result1 result2 ...))
+     (begin result1 result2 ...))
+    ((case key ((atoms ...) => result))
+     (if (memv key '(atoms ...))
+         (result key)))
+    ((case key ((atoms ...) => result) clause clauses ...)
+     (if (memv key '(atoms ...))
+         (result key)
+         (case key clause clauses ...)))
+    ((case key ((atoms ...) result1 result2 ...))
+     (if (memv key '(atoms ...))
+         (begin result1 result2 ...)))
+    ((case key ((atoms ...) result1 result2 ...) clause clauses ...)
+     (if (memv key '(atoms ...))
+         (begin result1 result2 ...)
+         (case key clause clauses ...)))))
 
 (define-syntax when
   (syntax-rules ()

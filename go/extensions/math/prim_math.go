@@ -801,25 +801,43 @@ func floorRat(r *big.Rat) *big.Rat {
 }
 
 // PrimExactIntegerSqrt implements the (exact-integer-sqrt) primitive.
+//
+// R7RS §6.2.6: Returns two non-negative exact integers s and r where
+// n = s² + r and n < (s+1)².
 func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	v, ok := o.(*values.Integer)
-	if !ok {
+
+	switch v := o.(type) {
+	case *values.Integer:
+		if v.Value < 0 {
+			return values.NewForeignError("exact-integer-sqrt: expected a non-negative integer")
+		}
+		s := int64(math.Sqrt(float64(v.Value)))
+		for s*s > v.Value {
+			s--
+		}
+		for (s+1)*(s+1) <= v.Value {
+			s++
+		}
+		r := v.Value - s*s
+		mc.SetValues(values.NewInteger(s), values.NewInteger(r))
+		return nil
+
+	case *values.BigInteger:
+		if v.BigInt().Sign() < 0 {
+			return values.NewForeignError("exact-integer-sqrt: expected a non-negative integer")
+		}
+		// Use big.Int.Sqrt which computes floor(sqrt(n))
+		s := new(big.Int).Sqrt(v.BigInt())
+		// Compute remainder: r = n - s²
+		sSquared := new(big.Int).Mul(s, s)
+		r := new(big.Int).Sub(v.BigInt(), sSquared)
+		mc.SetValues(values.NewBigInteger(s), values.NewBigInteger(r))
+		return nil
+
+	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "exact-integer-sqrt: expected an exact integer but got %T", o)
 	}
-	if v.Value < 0 {
-		return values.NewForeignError("exact-integer-sqrt: expected a non-negative integer")
-	}
-	s := int64(math.Sqrt(float64(v.Value)))
-	for s*s > v.Value {
-		s--
-	}
-	for (s+1)*(s+1) <= v.Value {
-		s++
-	}
-	r := v.Value - s*s
-	mc.SetValues(values.NewInteger(s), values.NewInteger(r))
-	return nil
 }
 
 // PrimMakeRectangular implements make-rectangular.

@@ -57,6 +57,32 @@ func TestAbsExtraCoverage(t *testing.T) {
 			code: "(abs 1/2)",
 			out:  values.NewRational(1, 2),
 		},
+		// R7RS §6.2.6: For complex numbers, abs returns the magnitude
+		{
+			name: "abs of complex 3+4i (classic Pythagorean)",
+			code: "(abs 3+4i)",
+			out:  values.NewFloat(5.0),
+		},
+		{
+			name: "abs of complex -3+4i",
+			code: "(abs -3+4i)",
+			out:  values.NewFloat(5.0),
+		},
+		{
+			name: "abs of complex 0+1i",
+			code: "(abs 0+1i)",
+			out:  values.NewFloat(1.0),
+		},
+		{
+			name: "abs of complex 1+0i",
+			code: "(abs 1+0i)",
+			out:  values.NewFloat(1.0),
+		},
+		{
+			name: "abs of complex 5+12i",
+			code: "(abs 5+12i)",
+			out:  values.NewFloat(13.0),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

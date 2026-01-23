@@ -54,6 +54,11 @@ func addReadWrite(r *registry.Registry) error {
 		{"write-simple", 2, true, PrimWriteSimple},
 		{"write-shared", 2, true, PrimWriteShared},
 		{"flush-output-port", 1, true, PrimFlushOutputPort},
+		// Binary I/O (R7RS §6.13.3)
+		{"read-u8", 1, true, PrimReadU8},
+		{"peek-u8", 1, true, PrimPeekU8},
+		{"u8-ready?", 1, true, PrimU8ReadyQ},
+		{"write-u8", 2, true, PrimWriteU8},
 	}, registry.PhaseRuntime)
 	return nil
 }

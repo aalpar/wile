@@ -108,6 +108,24 @@ if err := doSomething(); err != nil { ... }
 
 **Copyright headers**: Use the contents of `COPYRIGHT_HEADER` at the root of the repository for new Go files.
 
+## Code Elegance
+
+**Evaluate code like a mathematician evaluates proofs.** Scheme descends from lambda calculus; the implementation should reflect that lineage. Elegant code has:
+
+- **Economy**: Every element earns its place. If removing something breaks nothing, it shouldn't exist.
+- **Inevitability**: The best solution feels obvious in hindsight—"of course it's done this way."
+- **Symmetry**: Similar operations have similar structure. Asymmetry signals either a deeper pattern being missed or a genuine essential difference worth investigating.
+- **Generality without abstraction tax**: Solves the general case naturally, not by layering mechanisms. A macro expander that handles edge cases through special-casing has the wrong core abstraction.
+- **Transparency**: The code reveals the underlying structure of the problem. Reading it teaches you something about the domain—reading the scope-set implementation should illuminate Flatt's model.
+
+**Prefer algebraic thinking.** Code that composes like algebra—where you can substitute equals for equals, where operations have clear identities and inverses—is easier to reason about and extend. This matters especially in an interpreter: evaluation should be substitution-like, environments should compose cleanly, syntax transformations should be compositional.
+
+**Distrust cleverness.** Clever code that requires explanation is usually worse than straightforward code that doesn't. Exception: when the cleverness maps directly to a known structure (monads, folds, fixed points, CPS transforms). In those cases, name the pattern explicitly.
+
+**Notice when implementation fights the abstraction.** If code requires many special cases, null checks, or mode flags, the abstraction is probably wrong. Step back and ask what structure would make the problem trivial. The right representation often eliminates whole categories of bugs.
+
+**Honor the Lisp tradition.** Prefer data over code, composition over inheritance, recursion over iteration when it matches the problem structure. When in doubt, ask: would this look natural written in Scheme itself?
+
 ## Test File Naming Conventions
 
 The standard Go convention is that tests for functions in `foo.go` belong in `foo_test.go`. This project follows that convention with legitimate consolidation patterns for large packages:

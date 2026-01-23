@@ -44,6 +44,8 @@ func init() {
 	registerValidator("cond-expand", validateCondExpand)
 
 	// Forms that pass through to compiler (no validation needed)
+	registerPassthrough("let-syntax")
+	registerPassthrough("letrec-syntax")
 	registerPassthrough("meta")
 	registerPassthrough("syntax")
 	registerPassthrough("syntax-case")

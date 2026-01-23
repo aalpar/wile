@@ -170,3 +170,98 @@ func (p *SyntaxObject) EqualTo(v values.Value) bool {
 	}
 	return p == other
 }
+
+// UnwrapAllShared recursively unwraps a syntax value while preserving object identity.
+// This is essential for datum labels (R7RS §2.4) where #n# must refer to the exact same
+// object as #n=. The cache parameter tracks already-unwrapped syntax values to ensure
+// the same SyntaxValue always unwraps to the same values.Value.
+// This also handles circular structures by pre-registering placeholders before recursing.
+func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.Value {
+	if sv == nil {
+		return values.Void
+	}
+	// Check if we've already unwrapped this syntax value
+	if cached, ok := cache[sv]; ok {
+		return cached
+	}
+
+	switch v := sv.(type) {
+	case *SyntaxPair:
+		if v.IsVoid() {
+			return values.Void
+		}
+		if v.IsEmptyList() {
+			return values.EmptyList
+		}
+		// Pre-register a placeholder pair to handle circular references
+		placeholder := values.NewCons(nil, nil)
+		cache[sv] = placeholder
+		// Now recursively unwrap car and cdr
+		var car, cdr values.Value
+		if v.Values[0] != nil {
+			car = UnwrapAllShared(v.Values[0], cache)
+		}
+		if v.Values[1] != nil {
+			cdr = UnwrapAllShared(v.Values[1], cache)
+		} else {
+			cdr = values.EmptyList
+		}
+		placeholder.SetCar(car)
+		placeholder.SetCdr(cdr)
+		return placeholder
+
+	case *SyntaxVector:
+		if v.IsVoid() {
+			return values.Void
+		}
+		// Pre-register placeholder vector
+		vec := values.NewVectorWithLength(len(v.Values))
+		cache[sv] = vec
+		// Recursively unwrap elements
+		for i, elem := range v.Values {
+			if syntaxElem, ok := elem.(SyntaxValue); ok {
+				vec.Set(i, UnwrapAllShared(syntaxElem, cache))
+			} else {
+				vec.Set(i, elem)
+			}
+		}
+		return vec
+
+	case *SyntaxObject:
+		if datum, ok := v.Datum().(SyntaxValue); ok {
+			result := UnwrapAllShared(datum, cache)
+			cache[sv] = result
+			return result
+		}
+		result := v.Unwrap()
+		cache[sv] = result
+		return result
+
+	case *SyntaxDatumLabelAssignment:
+		// Unwrap the labeled value
+		if datum, ok := v.Value.(SyntaxValue); ok {
+			result := UnwrapAllShared(datum, cache)
+			cache[sv] = result
+			return result
+		}
+		cache[sv] = v.Value
+		return v.Value
+
+	case *SyntaxDatumLabel:
+		// This should not normally happen if the parser resolved the label
+		result := v.UnwrapAll()
+		cache[sv] = result
+		return result
+
+	case *SyntaxSymbol:
+		result := v.Unwrap()
+		cache[sv] = result
+		return result
+
+	default:
+		// For other types (SyntaxComment, SyntaxDirective, etc.), use standard UnwrapAll
+		result := sv.UnwrapAll()
+		cache[sv] = result
+		return result
+	}
+}

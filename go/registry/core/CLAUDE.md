@@ -87,3 +87,4 @@ Key test files:
 - **Bootstrap order**: Macros depend on primitives being registered first
 - **No I/O**: Core does not include any I/O primitives (use io extension)
 - **No exceptions**: Exception handling in extensions/exceptions
+- **Auxiliary syntax in compile env**: `else` and `=>` are registered as compile-time bindings in `specialforms.go`, not runtime bindings. They're used as literals in `cond` and `case` syntax-rules patterns. When exporting from `(scheme base)`, `CopyLibraryBindingsToEnv` must check the compile environment to find them.

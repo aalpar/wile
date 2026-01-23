@@ -124,6 +124,7 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAbs implements the abs primitive.
+// R7RS §6.2.6: For a complex number, abs returns its magnitude.
 func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -143,8 +144,20 @@ func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewFloat(math.Abs(v.Value)))
 	case *values.Rational:
 		mc.SetValue(values.NewRationalFromRat(new(big.Rat).Abs(v.Rat())))
+	case *values.BigFloat:
+		if v.IsNegative() {
+			mc.SetValue(v.Negate())
+		} else {
+			mc.SetValue(v)
+		}
+	case *values.Complex:
+		// R7RS §6.2.6: For complex numbers, abs returns the magnitude
+		mc.SetValue(values.NewFloat(v.Magnitude()))
+	case *values.BigComplex:
+		// R7RS §6.2.6: For complex numbers, abs returns the magnitude
+		mc.SetValue(v.Magnitude())
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "abs: expected a real number but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotANumber, "abs: expected a number but got %T", o)
 	}
 	return nil
 }

@@ -1,0 +1,280 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package machine_test
+
+import (
+	"bufio"
+	"context"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"wile/environment"
+	"wile/machine"
+	"wile/parser"
+	schemertime "wile/runtime"
+	"wile/syntax"
+	"wile/values"
+
+	qt "github.com/frankban/quicktest"
+)
+
+// getSchemeLibPath returns the path to the lib/ directory containing scheme libraries
+func getSchemeLibPath() string {
+	_, filename, _, _ := runtime.Caller(0)
+	// go/machine/library_scheme_test.go -> lib/
+	return filepath.Join(filepath.Dir(filename), "..", "..", "lib")
+}
+
+// setupSchemeLibraryTest sets up a test environment with access to scheme libraries
+func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
+	t.Helper()
+
+	// Set up the factory for creating library environments
+	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
+
+	// Create the top-level environment
+	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	if err != nil {
+		t.Fatalf("failed to create environment: %v", err)
+	}
+
+	// Create and configure the library registry with the scheme lib path
+	registry := machine.NewLibraryRegistry()
+	registry.SetSearchPaths([]string{getSchemeLibPath()})
+	env.SetLibraryRegistry(registry)
+
+	return env
+}
+
+// parseSchemeExpr parses a Scheme expression from a string
+func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
+	t.Helper()
+	reader := bufio.NewReader(strings.NewReader(code))
+	p := parser.NewParser(env, true, reader)
+	sv, err := p.ReadSyntax(context.TODO())
+	qt.Assert(t, err, qt.IsNil)
+	return sv
+}
+
+// compileAndRun compiles and runs a Scheme expression
+func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.SyntaxValue) (values.Value, error) {
+	t.Helper()
+
+	// Expand the expression
+	econt := machine.NewExpanderTimeContinuation(env)
+	ectx := machine.NewExpandTimeCallContext()
+	expanded, err := econt.ExpandExpression(ectx, sv)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compile the expanded expression
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	err = ctc.CompileExpression(ctctx, expanded)
+	if err != nil {
+		return nil, err
+	}
+
+	// Run
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err = mc.Run()
+	if err != nil {
+		return nil, err
+	}
+	return mc.GetValue(), nil
+}
+
+// TestSchemeLibraryImports tests importing all 13 R7RS scheme libraries in a single import expression.
+// This simulates running a Scheme source file with:
+//
+//	(import (scheme base) (scheme char) (scheme lazy)
+//	        (scheme inexact) (scheme complex) (scheme time)
+//	        (scheme file) (scheme read) (scheme write)
+//	        (scheme eval) (scheme process-context) (scheme case-lambda)
+//	        (scheme r5rs))
+func TestSchemeLibraryImports(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	// Import all 13 scheme libraries in a single import expression
+	importCode := `(import (scheme base) (scheme char) (scheme lazy)
+	        (scheme inexact) (scheme complex) (scheme time)
+	        (scheme file) (scheme read) (scheme write)
+	        (scheme eval) (scheme process-context) (scheme case-lambda)
+	        (scheme r5rs))`
+
+	sv := parseSchemeExpr(t, env, importCode)
+
+	// Extract args after 'import' keyword
+	importPair := sv.(*syntax.SyntaxPair)
+	args := importPair.Cdr().(syntax.SyntaxValue)
+
+	// Compile the import
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+
+	err := ctc.CompileImport(ctctx, args)
+	c.Assert(err, qt.IsNil, qt.Commentf("import of all scheme libraries failed"))
+
+	// Verify some key bindings from each library are available
+
+	// (scheme base) - car, cdr, cons, list, etc.
+	car := env.InternSymbol(values.NewSymbol("car"))
+	c.Assert(env.GetBinding(car), qt.IsNotNil, qt.Commentf("car not found from (scheme base)"))
+
+	// (scheme char) - char-upcase, char-downcase, etc.
+	charUpcase := env.InternSymbol(values.NewSymbol("char-upcase"))
+	c.Assert(env.GetBinding(charUpcase), qt.IsNotNil, qt.Commentf("char-upcase not found from (scheme char)"))
+
+	// (scheme lazy) - delay, force, promise?
+	force := env.InternSymbol(values.NewSymbol("force"))
+	c.Assert(env.GetBinding(force), qt.IsNotNil, qt.Commentf("force not found from (scheme lazy)"))
+
+	// (scheme inexact) - exp, log, sin, cos, etc.
+	exp := env.InternSymbol(values.NewSymbol("exp"))
+	c.Assert(env.GetBinding(exp), qt.IsNotNil, qt.Commentf("exp not found from (scheme inexact)"))
+
+	// (scheme complex) - make-rectangular, make-polar, etc.
+	makeRectangular := env.InternSymbol(values.NewSymbol("make-rectangular"))
+	c.Assert(env.GetBinding(makeRectangular), qt.IsNotNil, qt.Commentf("make-rectangular not found from (scheme complex)"))
+
+	// (scheme time) - current-second, current-jiffy, etc.
+	currentSecond := env.InternSymbol(values.NewSymbol("current-second"))
+	c.Assert(env.GetBinding(currentSecond), qt.IsNotNil, qt.Commentf("current-second not found from (scheme time)"))
+
+	// (scheme file) - open-input-file, open-output-file, etc.
+	openInputFile := env.InternSymbol(values.NewSymbol("open-input-file"))
+	c.Assert(env.GetBinding(openInputFile), qt.IsNotNil, qt.Commentf("open-input-file not found from (scheme file)"))
+
+	// (scheme read) - read
+	read := env.InternSymbol(values.NewSymbol("read"))
+	c.Assert(env.GetBinding(read), qt.IsNotNil, qt.Commentf("read not found from (scheme read)"))
+
+	// (scheme write) - write, display
+	write := env.InternSymbol(values.NewSymbol("write"))
+	c.Assert(env.GetBinding(write), qt.IsNotNil, qt.Commentf("write not found from (scheme write)"))
+
+	// (scheme eval) - eval, environment
+	eval := env.InternSymbol(values.NewSymbol("eval"))
+	c.Assert(env.GetBinding(eval), qt.IsNotNil, qt.Commentf("eval not found from (scheme eval)"))
+
+	// (scheme process-context) - command-line, exit, get-environment-variable
+	commandLine := env.InternSymbol(values.NewSymbol("command-line"))
+	c.Assert(env.GetBinding(commandLine), qt.IsNotNil, qt.Commentf("command-line not found from (scheme process-context)"))
+
+	// (scheme case-lambda) - case-lambda (syntax)
+	// Note: case-lambda is a syntax binding, so check expand environment
+	caseLambda := env.InternSymbol(values.NewSymbol("case-lambda"))
+	caseLambdaBinding := env.Expand().GetBinding(caseLambda)
+	c.Assert(caseLambdaBinding, qt.IsNotNil, qt.Commentf("case-lambda not found from (scheme case-lambda)"))
+
+	// (scheme r5rs) - provides R5RS compatibility
+	// Check for null-environment which is R5RS-specific
+	nullEnvironment := env.InternSymbol(values.NewSymbol("null-environment"))
+	c.Assert(env.GetBinding(nullEnvironment), qt.IsNotNil, qt.Commentf("null-environment not found from (scheme r5rs)"))
+}
+
+// TestSchemeLibraryImportsWithUsage tests that imported bindings actually work
+func TestSchemeLibraryImportsWithUsage(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	// Import scheme base and char
+	importCode := `(import (scheme base) (scheme char) (scheme inexact))`
+	sv := parseSchemeExpr(t, env, importCode)
+	importPair := sv.(*syntax.SyntaxPair)
+	args := importPair.Cdr().(syntax.SyntaxValue)
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	err := ctc.CompileImport(ctctx, args)
+	c.Assert(err, qt.IsNil)
+
+	// Test (scheme base) - list operations
+	sv = parseSchemeExpr(t, env, "(car '(1 2 3))")
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, values.SchemeEquals, values.NewInteger(1))
+
+	// Test (scheme char) - char-upcase
+	sv = parseSchemeExpr(t, env, "(char-upcase #\\a)")
+	result, err = compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, values.SchemeEquals, values.NewCharacter('A'))
+
+	// Test (scheme inexact) - exp
+	sv = parseSchemeExpr(t, env, "(exp 0)")
+	result, err = compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, values.SchemeEquals, values.NewFloat(1.0))
+}
+
+// TestIndividualSchemeLibraries tests each scheme library can be imported individually
+func TestIndividualSchemeLibraries(t *testing.T) {
+	libraries := []struct {
+		name   string
+		verify string // a binding to check
+	}{
+		{"base", "car"},
+		{"char", "char-upcase"},
+		{"lazy", "force"},
+		{"inexact", "exp"},
+		{"complex", "make-rectangular"},
+		{"time", "current-second"},
+		{"file", "open-input-file"},
+		{"read", "read"},
+		{"write", "write"},
+		{"eval", "eval"},
+		{"process-context", "command-line"},
+		{"case-lambda", "case-lambda"}, // syntax binding
+		{"r5rs", "null-environment"},
+	}
+
+	for _, lib := range libraries {
+		t.Run(lib.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := setupSchemeLibraryTest(t)
+
+			importCode := "(import (scheme " + lib.name + "))"
+			sv := parseSchemeExpr(t, env, importCode)
+			importPair := sv.(*syntax.SyntaxPair)
+			args := importPair.Cdr().(syntax.SyntaxValue)
+
+			tpl := machine.NewNativeTemplate(0, 0, false)
+			ctc := machine.NewCompiletimeContinuation(tpl, env)
+			ctctx := machine.NewCompileTimeCallContext(false, false, env)
+			err := ctc.CompileImport(ctctx, args)
+			c.Assert(err, qt.IsNil, qt.Commentf("failed to import (scheme %s)", lib.name))
+
+			// Verify the expected binding exists
+			sym := env.InternSymbol(values.NewSymbol(lib.verify))
+
+			// Check both runtime and expand environments
+			binding := env.GetBinding(sym)
+			if binding == nil {
+				binding = env.Expand().GetBinding(sym)
+			}
+			c.Assert(binding, qt.IsNotNil,
+				qt.Commentf("%s not found after importing (scheme %s)", lib.verify, lib.name))
+		})
+	}
+}

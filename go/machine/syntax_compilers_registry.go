@@ -45,6 +45,8 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 		{"include", (*CompileTimeContinuation).CompileInclude},
 		{"include-ci", (*CompileTimeContinuation).CompileIncludeCi},
 		{"define-syntax", (*CompileTimeContinuation).CompileDefineSyntax},
+		{"let-syntax", (*CompileTimeContinuation).CompileLetSyntax},
+		{"letrec-syntax", (*CompileTimeContinuation).CompileLetrecSyntax},
 		{"define-library", (*CompileTimeContinuation).CompileDefineLibrary},
 		{"library", (*CompileTimeContinuation).CompileDefineLibrary}, // R6RS alias
 		{"import", (*CompileTimeContinuation).CompileImport},

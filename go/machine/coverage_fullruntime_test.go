@@ -249,6 +249,64 @@ func TestCondForm(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
+// TestCondArrow tests cond with => clause (R7RS §4.2.1)
+func TestCondArrow(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	// Test cond with => - the result of the test is passed to the procedure
+	sv := parseSchemeExprExt(t, env, "(cond ((assq 'b '((a 1) (b 2) (c 3))) => cadr) (else 'not-found))")
+	cont, err := newTopLevelThunkExt(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+}
+
+// TestCondArrowFalseTest tests cond with => when test is false
+func TestCondArrowFalseTest(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	// Test cond with => - when test returns #f, fall through to else
+	sv := parseSchemeExprExt(t, env, "(cond ((assq 'z '((a 1) (b 2))) => cadr) (else 'not-found))")
+	cont, err := newTopLevelThunkExt(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("not-found"))
+}
+
+// TestCondArrowWithLambda tests cond with => using a lambda
+func TestCondArrowWithLambda(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	// Test cond with => using inline lambda
+	sv := parseSchemeExprExt(t, env, "(cond ((memq 'b '(a b c)) => (lambda (x) (length x))) (else 0))")
+	cont, err := newTopLevelThunkExt(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+}
+
+// TestCaseArrow tests case with => clause (R7RS §4.2.1)
+func TestCaseArrow(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	// Test case with => - the key is passed to the procedure
+	sv := parseSchemeExprExt(t, env, "(case (* 2 3) ((2 3 5 7) => (lambda (x) (list 'prime x))) ((1 4 6 8 9) => (lambda (x) (list 'composite x))))")
+	cont, err := newTopLevelThunkExt(sv, env)
+	qt.Assert(t, err, qt.IsNil)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	// (case 6 ...) should match (1 4 6 8 9) and return (composite 6)
+	expected := values.List(values.NewSymbol("composite"), values.NewInteger(6))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+}
+
 // TestQuasiquoteComplexList tests compileQuasiquoteComplexList path
 func TestQuasiquoteComplexList(t *testing.T) {
 	env := newFullRuntimeEnv(t)

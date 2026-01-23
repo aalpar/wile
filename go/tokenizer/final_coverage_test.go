@@ -278,17 +278,30 @@ func TestTokenizer_PolarPartEdgeCases(t *testing.T) {
 	}
 }
 
-// Test exactness and radix markers (lowercase only)
+// Test exactness and radix markers (R7RS §7.1.1: case-insensitive)
 func TestTokenizer_ExactnessRadixMarkers(t *testing.T) {
 	tests := []tokenizerTestCase{
 		// Exactness markers (lowercase)
 		{"#e10", TokenizerStateMarkerNumberExact},
 		{"#i10", TokenizerStateMarkerNumberInexact},
+		// Exactness markers (uppercase - R7RS §7.1.1)
+		{"#E10", TokenizerStateMarkerNumberExact},
+		{"#I10", TokenizerStateMarkerNumberInexact},
 		// Radix markers (lowercase)
 		{"#b101", TokenizerStateMarkerBase2},
 		{"#o77", TokenizerStateMarkerBase8},
 		{"#d99", TokenizerStateMarkerBase10},
 		{"#xff", TokenizerStateMarkerBase16},
+		// Radix markers (uppercase - R7RS §7.1.1)
+		{"#B101", TokenizerStateMarkerBase2},
+		{"#O77", TokenizerStateMarkerBase8},
+		{"#D99", TokenizerStateMarkerBase10},
+		{"#XFF", TokenizerStateMarkerBase16},
+		// Mixed case combinations
+		{"#E#b101", TokenizerStateMarkerNumberExact},
+		{"#I#X1a", TokenizerStateMarkerNumberInexact},
+		{"#B#e101", TokenizerStateMarkerBase2},
+		{"#X#i1a", TokenizerStateMarkerBase16},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
@@ -453,10 +466,11 @@ func TestTokenizer_ContinueCommentToken(t *testing.T) {
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
 }
 
-// Test typed arrays (u8 vectors)
+// Test typed arrays (u8 vectors) - R7RS §7.1.1: case-insensitive
 func TestTokenizer_TypedArrays(t *testing.T) {
 	tests := []tokenizerTestCase{
 		{"#u8(1 2 3)", TokenizerStateOpenVectorUnsignedByteMarker},
+		{"#U8(1 2 3)", TokenizerStateOpenVectorUnsignedByteMarker}, // uppercase
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {

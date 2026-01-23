@@ -234,6 +234,11 @@ func (p *BigFloat) ToInexact() Number {
 	return p
 }
 
+// Abs returns the absolute value of this BigFloat.
+func (p *BigFloat) Abs() *BigFloat {
+	return NewBigFloat(new(big.Float).Abs(p.value))
+}
+
 // Compare compares this BigFloat with another number.
 func (p *BigFloat) Compare(o Number) int {
 	switch v := o.(type) {
