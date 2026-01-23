@@ -173,3 +173,71 @@ func TestReadSyntaxBigIntegerInVector(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(bigInt.BigInt().Int64(), qt.Equals, int64(100))
 }
+
+// TestIntegerOverflowPromotion tests that integer literals too large for int64
+// are automatically promoted to BigInteger.
+func TestIntegerOverflowPromotion(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect string
+	}{
+		// Unsigned overflow
+		{"31622776601683793319", "31622776601683793319"},
+		{"9223372036854775808", "9223372036854775808"}, // int64 max + 1
+		{"99999999999999999999", "99999999999999999999"},
+		// Signed positive overflow
+		{"+9223372036854775808", "9223372036854775808"},
+		// Signed negative overflow
+		{"-9223372036854775809", "-9223372036854775809"}, // int64 min - 1
+		{"-99999999999999999999", "-99999999999999999999"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			bigInt, ok := obj.(*values.BigInteger)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T", obj))
+
+			expected := new(big.Int)
+			expected.SetString(tc.expect, 10)
+			c.Assert(bigInt.BigInt().Cmp(expected), qt.Equals, 0)
+		})
+	}
+}
+
+// TestIntegerNoOverflow tests that integers within int64 range remain Integer.
+func TestIntegerNoOverflow(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect int64
+	}{
+		{"9223372036854775807", 9223372036854775807},   // int64 max
+		{"-9223372036854775808", -9223372036854775808}, // int64 min
+		{"0", 0},
+		{"12345", 12345},
+		{"-12345", -12345},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			intVal, ok := obj.(*values.Integer)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T", obj))
+			c.Assert(intVal.Value, qt.Equals, tc.expect)
+		})
+	}
+}

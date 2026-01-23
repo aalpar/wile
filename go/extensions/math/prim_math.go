@@ -258,29 +258,22 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 
 		if baseInt, ok := baseNum.(*values.Integer); ok {
 			if e >= 0 {
-				result := int64(1)
-				b := baseInt.Value
-				for e > 0 {
-					if e%2 == 1 {
-						result *= b
-					}
-					b *= b
-					e /= 2
+				// Use big.Int to avoid overflow, then simplify if possible
+				baseBig := big.NewInt(baseInt.Value)
+				result := new(big.Int).Exp(baseBig, big.NewInt(e), nil)
+				// Try to fit in int64, otherwise return BigInteger
+				if result.IsInt64() {
+					mc.SetValue(values.NewInteger(result.Int64()))
+				} else {
+					mc.SetValue(values.NewBigInteger(result))
 				}
-				mc.SetValue(values.NewInteger(result))
 				return nil
 			}
-			result := int64(1)
-			b := baseInt.Value
+			// Negative exponent: compute 1 / base^|e|
 			absE := -e
-			for absE > 0 {
-				if absE%2 == 1 {
-					result *= b
-				}
-				b *= b
-				absE /= 2
-			}
-			mc.SetValue(values.NewRational(1, result))
+			baseBig := big.NewInt(baseInt.Value)
+			denom := new(big.Int).Exp(baseBig, big.NewInt(absE), nil)
+			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
 			return nil
 		}
 

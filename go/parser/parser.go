@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math"
 	"math/big"
@@ -358,6 +359,17 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
 	a, err := strconv.ParseInt(p.cur.String(), base, 64)
 	if err != nil {
+		// If overflow, promote to BigInteger
+		var numErr *strconv.NumError
+		isNumErr := errors.As(err, &numErr)
+		if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
+			bigInt := new(big.Int)
+			_, ok := bigInt.SetString(p.cur.String(), base)
+			if ok {
+				q := p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
+				return q, p.cur, nil
+			}
+		}
 		return nil, p.cur, err
 	}
 	q := p.wrapSyntax(values.NewInteger(a), p.cur)
@@ -623,6 +635,18 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		var a int64
 		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
 		if p.err != nil {
+			// If overflow, promote to BigInteger
+			var numErr *strconv.NumError
+			isNumErr := errors.As(p.err, &numErr)
+			if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
+				bigInt := new(big.Int)
+				_, ok := bigInt.SetString(p.cur.String(), 10)
+				if ok {
+					q = p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
+					p.err = nil
+					return q, p.cur, nil
+				}
+			}
 			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
@@ -642,6 +666,18 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		var a int64
 		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
 		if p.err != nil {
+			// If overflow, promote to BigInteger
+			var numErr *strconv.NumError
+			isNumErr := errors.As(p.err, &numErr)
+			if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
+				bigInt := new(big.Int)
+				_, ok := bigInt.SetString(p.cur.String(), 10)
+				if ok {
+					q = p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
+					p.err = nil
+					return q, p.cur, nil
+				}
+			}
 			return nil, p.cur, p.err
 		}
 		q1 := values.NewInteger(a)
@@ -681,28 +717,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		var a int64
-		a, p.err = strconv.ParseInt(p.cur.String(), 2, 64)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q1 := values.NewInteger(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+		return p.parseIntegerWithBase(2)
 	case tokenizer.TokenizerStateMarkerBase8:
 		// #o prefix - next token is base 8 integer
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		var a int64
-		a, p.err = strconv.ParseInt(p.cur.String(), 8, 64)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q1 := values.NewInteger(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+		return p.parseIntegerWithBase(8)
 	case tokenizer.TokenizerStateMarkerBase10:
 		// #d prefix - next token is base 10 integer
 		p.cur, p.err = p.toks.Next()
