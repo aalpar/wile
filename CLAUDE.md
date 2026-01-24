@@ -126,6 +126,8 @@ if err := doSomething(); err != nil { ... }
 
 **Honor the Lisp tradition.** Prefer data over code, composition over inheritance, recursion over iteration when it matches the problem structure. When in doubt, ask: would this look natural written in Scheme itself?
 
+**Refactoring discipline.** When fixing compile errors during refactoring, don't just make the minimal local fix. Step back and ask: does this change reveal redundant code? If you apply a pattern one way in file A, check if the same pattern applies in file B. Inconsistency between files handling the same logical situation signals incomplete thinking. "Fix the error" mode obscures opportunities that "understand the pattern" mode would catch.
+
 ## Test File Naming Conventions
 
 The standard Go convention is that tests for functions in `foo.go` belong in `foo_test.go`. This project follows that convention with legitimate consolidation patterns for large packages:

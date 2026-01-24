@@ -21,22 +21,29 @@ var _ SyntaxValue = syntaxVoidType{}
 // syntaxVoidType is a sentinel value representing the absence of a syntax value.
 type syntaxVoidType struct{}
 
-func (syntaxVoidType) SchemeString() string            { return values.SpecialVoid }
-func (syntaxVoidType) IsVoid() bool                    { return true }
-func (syntaxVoidType) EqualTo(v values.Value) bool     { return v != nil && v.IsVoid() }
-func (syntaxVoidType) SourceContext() *SourceContext   { return nil }
-func (syntaxVoidType) Unwrap() values.Value            { return values.Void }
-func (syntaxVoidType) UnwrapAll() values.Value         { return values.Void }
-func (p syntaxVoidType) AddScope(_ *Scope) SyntaxValue { return p }
+func (syntaxVoidType) SchemeString() string          { return values.SpecialVoid }
+func (syntaxVoidType) IsVoid() bool                  { return true }
+func (syntaxVoidType) EqualTo(v values.Value) bool   { return v != nil && v.IsVoid() }
+func (syntaxVoidType) SourceContext() *SourceContext { return nil }
+func (syntaxVoidType) Unwrap() values.Value          { return values.Void }
+func (syntaxVoidType) UnwrapAll() values.Value       { return values.Void }
 
 // SyntaxVoid is the singleton syntax void value.
 var SyntaxVoid SyntaxValue = syntaxVoidType{}
 
 // SyntaxValue is the interface for all syntax objects.
+// It provides access to source context and unwrapping capabilities.
 type SyntaxValue interface {
 	values.Value
 	SourceContext() *SourceContext
 	Unwrap() values.Value
 	UnwrapAll() values.Value
+}
+
+// ScopedSyntax is a syntax value that participates in hygiene scope tracking.
+// Types that can carry scopes for macro hygiene (symbols, pairs) implement this.
+// Self-evaluating literals (wrapped in SyntaxObject) do not need scopes.
+type ScopedSyntax interface {
+	SyntaxValue
 	AddScope(scope *Scope) SyntaxValue
 }

@@ -680,30 +680,7 @@ func TestSyntaxSymbol_SchemeString(t *testing.T) {
 	qt.Assert(t, sym.SchemeString(), qt.Contains, "foo")
 }
 
-// Test SyntaxObject uncovered methods
-func TestSyntaxObject_AddScope(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	obj := NewSyntaxObject(values.NewInteger(42), sctx)
-
-	scope := NewScope(nil)
-	newObj := obj.AddScope(scope)
-
-	qt.Assert(t, len(obj.sourceContext.Scopes), qt.Equals, 0)
-	qt.Assert(t, len(newObj.(*SyntaxObject).sourceContext.Scopes), qt.Equals, 1)
-	qt.Assert(t, newObj.(*SyntaxObject).sourceContext.Scopes[0], qt.Equals, scope)
-}
-
-func TestSyntaxObject_Scopes(t *testing.T) {
-	scope := NewScope(nil)
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	sctx = sctx.WithScope(scope)
-	obj := NewSyntaxObject(values.NewInteger(42), sctx)
-
-	scopes := obj.Scopes()
-	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, scopes[0], qt.Equals, scope)
-}
-
+// TestSyntaxObject_IsPair tests the IsPair method
 func TestSyntaxObject_IsPair(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	obj := NewSyntaxObject(values.NewInteger(42), sctx)

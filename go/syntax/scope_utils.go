@@ -155,6 +155,8 @@ func flipScopeOnObject(obj *SyntaxObject, scope *Scope) *SyntaxObject {
 // Returns a new syntax object with the scope added.
 // This is used by syntax-local-identifier-as-binding to mark identifiers
 // as binding sites.
+// Only ScopedSyntax types (symbols, pairs) receive scopes; self-evaluating
+// literals (SyntaxObject) are returned unchanged.
 func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 	if stx == nil || scope == nil {
 		return stx
@@ -165,9 +167,8 @@ func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 		return s.AddScope(scope)
 	case *SyntaxPair:
 		return s.AddScope(scope)
-	case *SyntaxObject:
-		return s.AddScope(scope)
 	default:
+		// SyntaxObject and other types don't need scopes
 		return stx
 	}
 }

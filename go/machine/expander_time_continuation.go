@@ -319,7 +319,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 	// - Lambda parameters (binding sites)
 	// - References to those parameters in the lambda body
 	// - Any other identifiers
-	scopedBody := body.AddScope(bindingScope)
+	scopedBody := syntax.AddScopeToSyntax(body, bindingScope)
 
 	// Continue expanding the scoped body
 	// The with-binding-scope form disappears - we return just the body

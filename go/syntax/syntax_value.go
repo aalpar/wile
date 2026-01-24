@@ -89,32 +89,6 @@ func (p *SyntaxObject) Datum() values.Value {
 	return p.datum
 }
 
-// AddScope returns a new SyntaxObject with an additional scope.
-// It recursively adds the scope to the datum if it's a syntax value.
-// Returns SyntaxValue interface to support recursive scope propagation.
-func (p *SyntaxObject) AddScope(scope *Scope) SyntaxValue {
-	// If the datum is a syntax value, recursively add scope to it
-	newDatum := p.Datum()
-	stx, ok := p.Datum().(SyntaxValue)
-	if ok {
-		if adder, ok := stx.(interface{ AddScope(*Scope) SyntaxValue }); ok {
-			newDatum = adder.AddScope(scope)
-		}
-	}
-	return &SyntaxObject{
-		datum:         newDatum,
-		sourceContext: p.sourceContext.WithScope(scope),
-	}
-}
-
-// Scopes returns the scopes of this syntax object
-func (p *SyntaxObject) Scopes() []*Scope {
-	if p.sourceContext == nil {
-		return nil
-	}
-	return p.sourceContext.Scopes
-}
-
 // UnwrapAll recursively unwraps all syntax wrappers and returns the underlying value.
 func (p *SyntaxObject) UnwrapAll() values.Value {
 	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))

@@ -220,11 +220,8 @@ func addScopeToSyntaxSkipFreeIds(val values.Value, scope *syntax.Scope, freeIds 
 			// while skipping free identifiers
 			return addScopeToPairSkipFreeIds(s, scope, freeIds)
 
-		case *syntax.SyntaxObject:
-			return s.AddScope(scope)
-
 		default:
-			// For other syntax types, return as-is
+			// Other syntax types (SyntaxObject, etc.) don't need scopes
 			return stx
 		}
 	}
@@ -300,10 +297,8 @@ func addScopeToSyntax(val values.Value, scope *syntax.Scope) values.Value {
 			return s.AddScope(scope)
 		case *syntax.SyntaxPair:
 			return s.AddScope(scope)
-		case *syntax.SyntaxObject:
-			return s.AddScope(scope)
 		default:
-			// For other syntax types, return as-is
+			// Other syntax types (SyntaxObject, etc.) don't need scopes
 			return stx
 		}
 	}
