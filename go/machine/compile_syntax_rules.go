@@ -92,15 +92,15 @@ func (f *FreeIdResolution) GetGlobal() any {
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern      syntax.SyntaxValue                  // The pattern to match against input
-	template     syntax.SyntaxValue                  // The template to expand on match
-	bytecode     []match.SyntaxCommand               // Compiled pattern bytecode
-	matcher      *match.SyntaxMatcher                // Pattern matcher instance
-	patternVars  map[string]struct{}                 // Variables extracted from pattern
-	ellipsisVars map[int]map[string]struct{}         // ellipsisID -> captured pattern variables
-	freeIds      map[string]*FreeIdResolution        // Free identifiers resolved to definition-time bindings
-	macroScope   *syntax.Scope                       // Hygiene scope for this macro (Flatt's model)
-	ellipsis     string                              // Custom ellipsis identifier (default "...")
+	pattern      syntax.SyntaxValue           // The pattern to match against input
+	template     syntax.SyntaxValue           // The template to expand on match (includes source context)
+	bytecode     []match.SyntaxCommand        // Compiled pattern bytecode
+	matcher      *match.SyntaxMatcher         // Pattern matcher instance
+	patternVars  map[string]struct{}          // Variables extracted from pattern
+	ellipsisVars map[int]map[string]struct{}  // ellipsisID -> captured pattern variables
+	freeIds      map[string]*FreeIdResolution // Free identifiers resolved to definition-time bindings
+	macroScope   *syntax.Scope                // Hygiene scope for this macro (Flatt's model)
+	ellipsis     string                       // Custom ellipsis identifier (default "...")
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals

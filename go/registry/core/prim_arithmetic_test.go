@@ -1010,7 +1010,7 @@ func TestMin(t *testing.T) {
 		// BigFloat operations (always inexact)
 		{"min of bigfloats", `(min #m3.5 #m2.5)`, values.NewBigFloatFromString("2.5")},
 		{"min bigfloat and integer", `(min #m2.5 3)`, values.NewBigFloatFromString("2.5")}, // BigFloat wins, stays BigFloat
-		{"min integer and bigfloat", `(min 2 #m3.5)`, values.NewFloat(2.0)},               // Integer wins but becomes inexact
+		{"min integer and bigfloat", `(min 2 #m3.5)`, values.NewFloat(2.0)},                // Integer wins but becomes inexact
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1843,6 +1843,14 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 			globalIndex = expandEnv.GetGlobalIndex(keyword)
 		}
 		if globalIndex != nil {
+			// Set scopes from the keyword symbol for hygiene
+			// This ensures local define-syntax bindings have correct scopes for lookup
+			symbolScopes := keywordSym.Scopes()
+			binding := expandEnv.GetGlobalBinding(globalIndex)
+			if binding != nil && symbolScopes != nil {
+				binding.SetScopes(symbolScopes)
+			}
+
 			err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
 			if err != nil {
 				return err
@@ -1870,6 +1878,15 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		if globalIndex == nil {
 			return nil
 		}
+
+		// Set scopes from the keyword symbol for hygiene
+		// This ensures local define-syntax bindings have correct scopes for lookup
+		symbolScopes := keywordSym.Scopes()
+		binding := expandEnv.GetGlobalBinding(globalIndex)
+		if binding != nil && symbolScopes != nil {
+			binding.SetScopes(symbolScopes)
+		}
+
 		err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
 		if err != nil {
 			return err

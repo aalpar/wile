@@ -14,12 +14,13 @@ Code Maintenance
 
 Code Cleanup
 ------------
+- [ ] Determination of matching scopes is mostly brute force - attempt optimization
 - [ ] Siplify phase (meta environments) - extension facility has ordianl bindings for phases while Environment uses relative phases (so relationships can be more complex).  Consider the simpler approach for Wile
 - [ ] begin-for-syntax is a unfamiliar R7RS function.  investigate possible implmentations
 - [ ] investigate compileBeginBody implementation
 - [ ] check quasiquote exapnsion for potential simplifications
 - [ ] check letrec-syntax and let-syntax for simplification oppurtunities
-- [ ] SyntaxValue imlpements UnwrapAllShared.  Why not change all instances of UnwrapAll to UnwrapAllShared?
+- [X] SyntaxValue imlpements UnwrapAllShared.  Why not change all instances of UnwrapAll to UnwrapAllShared?
 - [ ] Compare methods on numbers - not all numbers need to be comparable, but all numbers should support a CompareTo method
 - [ ] Compare methods on numbers should be CompareTo to conform to Comparable.
 - [ ] Remove extranious methods on Numbers

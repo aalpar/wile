@@ -71,8 +71,8 @@ type Parser struct {
 	cur         tokenizer.Token
 	err         error
 	skipComment bool
-	foldCase    bool   // R7RS §2.1: #!fold-case mode for identifiers
-	file        string // source file name for error reporting
+	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
+	file        string                     // source file name for error reporting
 	datumLabels map[int]syntax.SyntaxValue // R7RS §2.4 datum labels (#n= and #n#)
 }
 

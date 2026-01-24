@@ -43,6 +43,15 @@ func NewScope() *Scope {
 	return &Scope{id: nextScopeID}
 }
 
+// ID returns the unique identifier for this scope.
+// This can be used as a macro application ID for tracing.
+func (s *Scope) ID() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.id
+}
+
 // NewSyntaxNil creates a syntax empty list.
 // Deprecated: Use NewSyntaxEmptyList instead. This function exists for backward
 // compatibility but delegates to NewSyntaxEmptyList.

@@ -185,6 +185,49 @@ func TestPair_IsList(t *testing.T) {
 	}
 }
 
+func TestPair_IsList_Circular(t *testing.T) {
+	// Test that circular lists return false (R7RS §6.4)
+	// This tests Floyd's cycle detection algorithm
+
+	t.Run("self-referential", func(t *testing.T) {
+		// (set-cdr! x x) - cdr points to self
+		p := NewCons(NewSymbol("a"), EmptyList)
+		p.SetCdr(p)
+		qt.Assert(t, p.IsList(), qt.Equals, false)
+	})
+
+	t.Run("cycle after one element", func(t *testing.T) {
+		// (a . #0=(b . #0#))
+		p1 := NewCons(NewSymbol("a"), EmptyList)
+		p2 := NewCons(NewSymbol("b"), EmptyList)
+		p1.SetCdr(p2)
+		p2.SetCdr(p2) // p2 points to itself
+		qt.Assert(t, p1.IsList(), qt.Equals, false)
+	})
+
+	t.Run("cycle back to start", func(t *testing.T) {
+		// #0=(a b . #0#)
+		p1 := NewCons(NewSymbol("a"), EmptyList)
+		p2 := NewCons(NewSymbol("b"), EmptyList)
+		p1.SetCdr(p2)
+		p2.SetCdr(p1) // cycle back to start
+		qt.Assert(t, p1.IsList(), qt.Equals, false)
+	})
+
+	t.Run("longer cycle", func(t *testing.T) {
+		// (a b c d . #0=(e f . #0#))
+		cells := make([]*Pair, 6)
+		for i := range cells {
+			cells[i] = NewCons(NewInteger(int64(i)), EmptyList)
+		}
+		for i := 0; i < 5; i++ {
+			cells[i].SetCdr(cells[i+1])
+		}
+		cells[5].SetCdr(cells[4]) // cycle between last two
+		qt.Assert(t, cells[0].IsList(), qt.Equals, false)
+	})
+}
+
 func TestPair_Length(t *testing.T) {
 	tcs := []struct {
 		in           *Pair

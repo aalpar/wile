@@ -215,6 +215,7 @@ func (p *MachineContext) Context() context.Context {
 //   - NewMachineContext copies pc from the continuation (typically 0 for fresh execution)
 //   - Apply sets pc = 0 for fresh closure invocation
 //   - Restore sets pc from the saved continuation for resumption
+//
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
@@ -223,6 +224,7 @@ func (p *MachineContext) Context() context.Context {
 //   - Test timeouts that actually stop execution
 //   - REPL interrupt support (Ctrl+C)
 //   - Resource management for long-running computations
+//
 // Set the context via SetContext() before calling Run().
 func (p *MachineContext) Run() error {
 	var err error
