@@ -236,6 +236,22 @@ const bootstrapMacroSource = `
        (lambda formals
          (let*-values (more ...) body ...))))))
 
+;; define-values - R7RS 5.3.3
+;; Binds multiple variables to values from a multiple-value expression.
+;; Uses a recursive expansion that collects values into a list, then
+;; extracts them one by one with set!.
+(define-syntax define-values
+  (syntax-rules ()
+    ((define-values () expr)
+     (call-with-values (lambda () expr) (lambda () (if #f #f))))
+    ((define-values (var) expr)
+     (define var (call-with-values (lambda () expr) (lambda (x) x))))
+    ((define-values (var0 var1 ...) expr)
+     (begin
+       (define var0 (call-with-values (lambda () expr) list))
+       (define-values (var1 ...) (apply values (cdr var0)))
+       (set! var0 (car var0))))))
+
 ;; Iteration
 (define-syntax do
   (syntax-rules ()

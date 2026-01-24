@@ -112,19 +112,21 @@ func (sm *SyntaxMatcher) Expand(template syntax.SyntaxValue) (syntax.SyntaxValue
 // ExpandWithIntroScope performs template expansion with hygiene support.
 // The introScope is added to newly created syntax objects (from the template),
 // but NOT to syntax objects preserved from pattern variable substitution.
-// The freeIds set contains identifiers that should not receive the intro scope.
-func (sm *SyntaxMatcher) ExpandWithIntroScope(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}) (syntax.SyntaxValue, error) {
+// The freeIds map contains identifiers that should not receive the intro scope.
+// Values in the map are pre-resolved bindings (nil means just skip intro scope).
+func (sm *SyntaxMatcher) ExpandWithIntroScope(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any) (syntax.SyntaxValue, error) {
 	return sm.ExpandWithUseSite(template, introScope, freeIds, nil)
 }
 
 // ExpandWithUseSite performs template expansion with hygiene support and use-site tracking.
 // The introScope is added to newly created syntax objects (from the template),
 // but NOT to syntax objects preserved from pattern variable substitution.
-// The freeIds set contains identifiers that should not receive the intro scope.
+// The freeIds map contains identifiers that should not receive the intro scope.
+// Values in the map are pre-resolved bindings (nil means just skip intro scope).
 // The useSiteCtx, if provided, is used for the source context of newly created syntax
 // objects instead of the template's context. This allows error messages to point to
 // where the macro was invoked rather than where it was defined.
-func (sm *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
+func (sm *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
 	return sm.ExpandWithOrigin(template, introScope, freeIds, useSiteCtx, nil)
 }
 
@@ -132,10 +134,10 @@ func (sm *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introSco
 // Parameters:
 //   - template: The template to expand
 //   - introScope: Hygiene scope added to newly created syntax (not pattern variables)
-//   - freeIds: Identifiers that should not receive the intro scope
+//   - freeIds: Map of free identifier names to their pre-resolved bindings (any type to avoid circular imports)
 //   - useSiteCtx: Source context for newly created syntax (use-site vs template-site)
 //   - origin: Origin info for tracking macro expansion chains
-func (sm *SyntaxMatcher) ExpandWithOrigin(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) (syntax.SyntaxValue, error) {
+func (sm *SyntaxMatcher) ExpandWithOrigin(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) (syntax.SyntaxValue, error) {
 	// Convert template to raw values
 	rawTemplate := syntaxToValue(template)
 
@@ -224,7 +226,7 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 // using the syntax map to preserve original syntax objects from captured
 // pattern variables. When introScope is provided, it's added to newly
 // created symbols (but not to preserved originals or free identifiers).
-func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}) syntax.SyntaxValue {
+func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any) syntax.SyntaxValue {
 	return sm.valueToSyntaxWithUseSite(val, templateStx, introScope, freeIds, nil)
 }
 
@@ -234,7 +236,7 @@ func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateS
 // created symbols (but not to preserved originals or free identifiers).
 // When useSiteCtx is provided, it's used as the source context for newly
 // created syntax objects instead of the template's context.
-func (sm *SyntaxMatcher) valueToSyntaxWithUseSite(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext) syntax.SyntaxValue {
+func (sm *SyntaxMatcher) valueToSyntaxWithUseSite(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext) syntax.SyntaxValue {
 	return sm.valueToSyntaxWithOrigin(val, templateStx, introScope, freeIds, useSiteCtx, nil)
 }
 
@@ -246,7 +248,9 @@ func (sm *SyntaxMatcher) valueToSyntaxWithUseSite(val values.Value, templateStx 
 // created syntax objects instead of the template's context.
 // When origin is provided, it's attached to the source context of newly
 // created syntax objects to track macro expansion chains.
-func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]struct{}, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) syntax.SyntaxValue {
+// The freeIds map contains free identifier names mapped to their pre-resolved
+// bindings (any type, typically *environment.GlobalIndex).
+func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) syntax.SyntaxValue {
 	if val == nil {
 		return nil
 	}
@@ -296,8 +300,9 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		// Free identifiers should resolve to their definition-time bindings,
 		// so they must NOT inherit use-site scopes.
 		var isFree bool
+		var resolvedBinding any
 		if freeIds != nil {
-			_, isFree = freeIds[v.Key]
+			resolvedBinding, isFree = freeIds[v.Key]
 		}
 
 		// For free identifiers, use a scope-free source context so they can
@@ -325,6 +330,13 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		if introScope != nil && !isFree {
 			sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
 		}
+
+		// For free identifiers with a resolved binding, attach it to the symbol
+		// This enables cross-library macro hygiene by pre-resolving the binding
+		if isFree && resolvedBinding != nil {
+			sym = sym.WithResolvedBinding(resolvedBinding)
+		}
+
 		return sym
 
 	case *values.Integer:

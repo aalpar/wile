@@ -65,6 +65,23 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
 	sym := p.env.InternSymbol(expr.Sym)
 
+	// Check for pre-resolved binding from macro expansion
+	// This handles cross-library hygiene: free identifiers in macro templates
+	// carry their definition-time GlobalIndex so they resolve correctly
+	// even when the macro is used in a different library context.
+	if expr.ResolvedBinding != nil {
+		gi, ok := expr.ResolvedBinding.(*environment.GlobalIndex)
+		if ok && gi != nil {
+			i := p.template.MaybeAppendLiteral(gi)
+			p.AppendOperations(
+				NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
+			)
+			return nil
+		}
+		// If ResolvedBinding is set but not a GlobalIndex (or is nil),
+		// fall through to normal resolution
+	}
+
 	// Get the scopes from the syntax symbol for hygiene checking
 	symbolScopes := expr.Scopes()
 

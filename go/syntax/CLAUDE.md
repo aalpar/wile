@@ -23,6 +23,7 @@ Wraps Scheme values with source location and scope information for:
 **Concrete Types**:
 - `SyntaxPair` - Cons cells with recursive scope propagation
 - `SyntaxSymbol` - Symbols with scope tracking (core for hygiene)
+  - `ResolvedBinding` - Pre-resolved GlobalIndex for cross-library macro hygiene (see below)
 - `SyntaxVector` - Vectors (no individual element scopes)
 - `SyntaxObject` - Wrapper for other values
 
@@ -39,6 +40,21 @@ Wraps Scheme values with source location and scope information for:
 // Binding's scopes must be subset of use's scopes
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool
 ```
+
+## Cross-Library Macro Hygiene
+
+`SyntaxSymbol.ResolvedBinding` enables proper hygiene for macros that reference helpers from their definition library:
+
+```go
+// In SyntaxSymbol:
+ResolvedBinding any // *environment.GlobalIndex for free identifiers in macro templates
+```
+
+**Problem solved**: When macro defined in library A references helper `foo` also in A, and the macro is used in library B, `foo` must resolve to A's binding, not B's environment.
+
+**Solution**: At macro definition time, free identifiers are resolved to their `GlobalIndex` and stored in `SyntaxRulesClause.freeIds`. During template expansion, these bindings are attached to free identifier symbols via `WithResolvedBinding()`. At compile time, `CompileSymbol` checks for `ResolvedBinding` first, using it directly if present.
+
+This keeps the resolution context separate from the physical source context (SourceContext).
 
 ## Gotchas
 

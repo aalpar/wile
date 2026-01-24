@@ -16,18 +16,157 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Missing syntax/macros | 2 | Not started |
-| Library system issues | 2 | Partially complete |
-| Tokenizer issues | 1 | Not started |
-| Semantic differences | 2 | Not started |
-| Completed items | 40+ | Complete |
-| **Total remaining** | **7** | **In progress** |
+| Macro system bugs | 2 | In Progress |
+| Scoping bugs | 1 | In Progress |
+| Numeric comparison bugs | 1 | In Progress |
+| Missing syntax/macros | 0 | Complete |
+| Library system issues | 0 | Complete |
+| Tokenizer issues | 0 | Complete |
+| Semantic differences | 0 | Complete |
+| Completed items | 46+ | Complete |
+| **Total remaining** | **4** | **In Progress** |
 
 ---
 
 ## Outstanding Issues
 
-### Phase 4: Missing Syntax/Macros (R7RS §4)
+### Macro System Bugs (R7RS §4.3)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `letrec-syntax` expansion failure | §4.3.1 | High | Open |
+| `let-syntax` hygiene failure | §4.3.1 | High | Open |
+
+#### Bug: `letrec-syntax` expansion failure
+
+**Test case** (from r7rs-tests.scm line 413-430):
+```scheme
+(letrec-syntax
+  ((my-or (syntax-rules ()
+            ((my-or) #f)
+            ((my-or e) e)
+            ((my-or e1 e2 ...)
+             (let ((temp e1))
+               (if temp
+                   temp
+                   (my-or e2 ...)))))))
+  (let ((x #f)
+        (y 7)
+        (temp 8)
+        (let odd?)
+        (if even?))
+    (my-or x
+           (let temp)
+           (if y)
+           y)))
+```
+
+**Expected:** `7`
+
+**Actual:** Compilation error:
+```
+if: missing consequent: Cannot compile expression
+```
+
+**Analysis:** The recursive macro expansion of `my-or` eventually expands `(my-or)` to `#f`, but something in the nested `if` expansion chain loses track of the consequent expression.
+
+---
+
+#### Bug: `let-syntax` hygiene failure for local bindings
+
+**Test case** (from r7rs-tests.scm line 408-411):
+```scheme
+(let ((x 'outer))
+  (let-syntax ((m (syntax-rules () ((m) x))))
+    (let ((x 'inner))
+      (m))))
+```
+
+**Expected:** `outer` (the macro `m` should capture the outer `x` at definition time)
+
+**Actual:** `inner` (the macro is incorrectly using the inner `x`)
+
+**Root cause analysis:**
+
+The cross-library hygiene fix (commit 92ef270) implemented pre-resolved bindings for free identifiers in macro templates, but it only works for **global** bindings:
+
+1. In `collectFreeIdentifiersWithEllipsis` (compile_syntax_rules.go:308), free identifiers are resolved via `env.GetGlobalIndex(sym)`, which only returns bindings from the global environment.
+
+2. For local lexical bindings (from `let`, `lambda`, etc.), `GetGlobalIndex` returns `nil`, so no resolved binding is attached to the free identifier.
+
+3. At expansion time, since no pre-resolved binding exists, the symbol `x` resolves via normal scoping rules to whatever is in scope at the use site (the inner `x`).
+
+**Verification:**
+```scheme
+;; Global bindings work correctly:
+(define outer-x 'outer-global)
+(define-syntax m-global (syntax-rules () ((m-global) outer-x)))
+(let ((outer-x 'inner)) (m-global))  ; => 'outer-global ✓
+
+;; Local bindings fail:
+(let ((x 'outer))
+  (let-syntax ((m (syntax-rules () ((m) x))))
+    (let ((x 'inner)) (m))))  ; => 'inner ✗ (should be 'outer)
+```
+
+**Fix required:** The macro compiler needs to capture the full lexical environment at macro definition time, not just global bindings. Free identifiers should be resolved against this captured environment, including local bindings from enclosing `let`/`lambda` forms.
+
+---
+
+### Scoping Bugs (R7RS §5.3)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `let*-values` internal define leaks | §5.3.2 | Medium | Open |
+
+#### Bug: Internal define leaks through `let*-values`
+
+**Test case** (from r7rs-tests.scm line 242-246):
+```scheme
+(let ((x 1))
+  (let*-values ()
+    (define x 2)
+    #f)
+  x)
+```
+
+**Expected:** `1` (the internal `define` should be local to `let*-values` body)
+
+**Actual:** `2` (the internal define is leaking to the outer scope)
+
+**Analysis:** Per R7RS §5.3.2, internal definitions at the beginning of a body are equivalent to `letrec*` and should not affect bindings outside that body.
+
+---
+
+### Numeric Comparison Bugs (R7RS §6.1)
+
+| Item | R7RS Section | Priority | Status |
+|------|--------------|----------|--------|
+| `equal?` fails on large exact integers | §6.1 | Medium | Open |
+
+#### Bug: `equal?` returns false for equal large integers
+
+**Test case** (from r7rs-tests.scm line 215-225):
+```scheme
+(let*-values (((root rem) (exact-integer-sqrt (expt 2 119))))
+  (list root rem))
+```
+
+**Expected:** `(815238614083298888 443242361398135744)` - and test passes
+
+**Actual:** The computed value is correct, but `(equal? computed expected)` returns `#f`
+
+**Analysis:** The chibi-test framework uses `equal?` for comparison. When comparing lists containing large exact integers (bignums), `equal?` appears to fail even when the values are identical. This may be an issue with bignum comparison in `equal?` or `eqv?`.
+
+**Affected tests:**
+- `(expt 2 119)` - root and remainder
+- `(expt 2 120)` - root and remainder
+- `(expt 2 121)` - root and remainder
+- `(expt 2 140)` - remainder check
+
+---
+
+### Phase 4: Missing Syntax/Macros (R7RS §4) - COMPLETE
 
 | Item | R7RS Section | Priority | Status |
 |------|--------------|----------|--------|
@@ -35,126 +174,42 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 | `letrec*` | §4.2.2 | Medium | ✅ Implemented in `bootstrap.go` |
 | `let-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
 | `letrec-syntax` | §4.3.1 | Medium | ✅ Implemented as primitive expander |
-| `syntax-error` | §4.3.1 | Low | ❌ Not implemented |
-| `define-values` | §5.3.3 | Medium | ❌ Not implemented |
+| `syntax-error` | §4.3.1 | Low | ✅ Implemented as primitive expander |
+| `define-values` | §5.3.3 | Medium | ✅ Implemented in compiler |
 
-**Remaining items:**
-
-#### `syntax-error` (R7RS §4.3.1)
-
-`syntax-error` is used in macro definitions to signal compile-time errors:
-
-```scheme
-(define-syntax must-be-even
-  (syntax-rules ()
-    ((must-be-even n)
-     (if (odd? n)
-         (syntax-error "must be even" n)
-         n))))
-```
-
-**Implementation notes:**
-- Must be recognized at macro expansion time, not runtime
-- Should include the template arguments in the error message
-
-#### `define-values` (R7RS §5.3.3)
-
-`define-values` binds multiple variables to values returned by a multiple-value expression:
-
-```scheme
-(define-values (quotient remainder) (floor/ 10 3))
-;; quotient => 3, remainder => 1
-```
-
-**Implementation notes:**
-- Requires `call-with-values` support (already implemented)
-- Can be implemented as a macro in `bootstrap.go`
+All syntax/macros have been implemented.
 
 ---
 
-### Phase 5: Library System Issues
+### Phase 5: Library System Issues (Complete)
 
 | Item | Priority | Status |
 |------|----------|--------|
-| Auxiliary syntax exports (`...`, `_`) | Medium | ❌ Not exported |
-| Macro hygiene with internal bindings | Medium | ⚠️ Workaround available |
+| Auxiliary syntax exports (`...`, `_`) | Medium | ✅ Exported |
+| Macro hygiene with internal bindings | Medium | ✅ Fixed |
 
-#### Auxiliary Syntax Exports
-
-R7RS §7.1.1 specifies that `(scheme base)` must export auxiliary syntax keywords:
-
-| Keyword | Used in | Status |
-|---------|---------|--------|
-| `else` | `cond`, `case`, `guard` | ✅ Exported |
-| `=>` | `cond`, `case` | ✅ Exported |
-| `...` | `syntax-rules` patterns | ❌ Not exported |
-| `_` | `syntax-rules` wildcard | ❌ Not exported |
-
-**Current status:** `else` and `=>` are exported from `(scheme base)` and work correctly. The ellipsis `...` and underscore `_` are not exported because they have no runtime binding and the library system doesn't support exporting pure auxiliary syntax.
-
-**Impact:** Low - these are only needed for macros that re-export or rename auxiliary syntax, which is rare.
-
-#### Macro Hygiene with Internal Bindings
-
-When a macro defined in a library references a helper function also defined in that library:
-
-```scheme
-;; In (my-lib):
-(define (helper x) ...)
-(define-syntax my-macro
-  (syntax-rules ()
-    ((my-macro x) (helper x))))  ;; 'helper' should resolve to library's binding
-```
-
-The expanded code at the use site fails with "no such binding: helper".
-
-**Workaround:** Export helpers with `%` prefix convention. See `lib/chibi/test.sld` for an example.
+All library system issues have been resolved.
 
 ---
 
-### Phase 6: Tokenizer Issues
+### Phase 6: Tokenizer Issues (Complete)
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| Scientific notation for bare integers | Medium | `1e-10` fails; `1.0e-10` works |
+| Item | Priority | Status |
+|------|----------|--------|
+| Scientific notation for bare integers | Medium | ✅ Fixed |
 
-#### Scientific Notation Issue
-
-Numbers in scientific notation without a decimal point fail to parse:
-
-```scheme
-1e-10      ; Error: strconv.ParseInt: parsing "1e-10": invalid syntax
-1.0e-10    ; Works: 1e-10
-+1e10      ; Error
-1.5e10     ; Works: 15000000000
-```
-
-**Root cause:** The tokenizer correctly identifies the number, but the value conversion attempts to parse it as an integer when there's no decimal point.
-
-**Impact:** Medium - requires users to include decimal points in scientific notation.
+All tokenizer issues have been resolved.
 
 ---
 
-### Phase 7: Semantic Differences
+### Phase 7: Semantic Differences (Complete)
 
-| Item | R7RS Requirement | Current Implementation | Priority |
-|------|------------------|------------------------|----------|
-| `string-upcase` | Unicode full uppercasing | `strings.ToUpper()` | Low |
-| `string-downcase` | Unicode full lowercasing | `strings.ToLower()` | Low |
+| Item | R7RS Requirement | Status |
+|------|------------------|--------|
+| `string-upcase` | Unicode full uppercasing | ✅ Fixed |
+| `string-downcase` | Unicode full lowercasing | ✅ Fixed |
 
-#### Unicode Full Case Mapping
-
-R7RS requires `string-upcase` and `string-downcase` to use Unicode full case mapping, which can change string length:
-
-```scheme
-;; R7RS behavior:
-(string-upcase "straße")  ; Should return "STRASSE" (7 chars)
-
-;; Current behavior:
-(string-upcase "straße")  ; Returns "STRAßE" (6 chars) - ß unchanged
-```
-
-**Fix:** Use `golang.org/x/text/cases.Upper()` and `cases.Lower()` similar to how `string-foldcase` was fixed.
+All semantic differences have been resolved.
 
 ---
 
@@ -221,6 +276,11 @@ The following items have been implemented and verified:
 - ✅ Datum labels (`#n=` and `#n#`) for shared/circular structures
 - ✅ `#!fold-case` / `#!no-fold-case` directives
 - ✅ Case-insensitive number prefixes (`#I`, `#E`, `#B`, `#O`, `#D`, `#X`)
+- ✅ `define-values` - Multiple value definitions
+- ✅ Scientific notation for bare integers (`1e-10`, `+1e10`)
+- ✅ Auxiliary syntax exports (`...`, `_`) from `(scheme base)`
+- ✅ `string-upcase` / `string-downcase` - Unicode full case mapping (ß → SS)
+- ✅ `syntax-error` - Compile-time error signaling in macros
 
 ---
 
@@ -228,7 +288,7 @@ The following items have been implemented and verified:
 
 | Library | Status | Notes |
 |---------|--------|-------|
-| `(scheme base)` | ~95% | Missing: `syntax-error`, `define-values`, `...`/`_` exports |
+| `(scheme base)` | 100% | Complete |
 | `(scheme char)` | 100% | |
 | `(scheme complex)` | 100% | |
 | `(scheme cxr)` | 100% | |
@@ -255,7 +315,9 @@ The following items have been implemented and verified:
 ./dist/scheme -f r7rs-tests.scm
 ```
 
-All 13 bugs from the R7RS test suite have been fixed. See [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) for details.
+**Current Status:** The test suite runs but fails in section 4.3 (Macros) with a compilation error. The 4 outstanding issues documented above prevent full test suite completion.
+
+**Previously Fixed:** 13 bugs from the R7RS test suite have been fixed. See [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) for details.
 
 ### Unit Tests
 

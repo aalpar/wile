@@ -135,13 +135,20 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 			// This prevents variable capture between the macro and its use site
 			introScope := syntax.NewScope(nil)
 
+			// Convert freeIds from map[string]*environment.GlobalIndex to map[string]any
+			// This is needed because the match package uses any to avoid circular imports
+			freeIdsAny := make(map[string]any, len(clause.freeIds))
+			for k, v := range clause.freeIds {
+				freeIdsAny[k] = v
+			}
+
 			// Expand the template with hygiene support:
 			// - Pattern variable substitutions preserve original syntax (with original scopes)
 			// - Newly created symbols from template get the intro scope
-			// - Free identifiers (like 'if', 'lambda') don't get intro scope
+			// - Free identifiers (like 'if', 'lambda') don't get intro scope but carry resolved bindings
 			// - Use-site context is used for newly created syntax objects (better error messages)
 			// - Origin info tracks the macro expansion chain
-			expanded, err := clause.matcher.ExpandWithOrigin(clause.template, introScope, clause.freeIds, useSiteCtx, origin)
+			expanded, err := clause.matcher.ExpandWithOrigin(clause.template, introScope, freeIdsAny, useSiteCtx, origin)
 			if err != nil {
 				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}

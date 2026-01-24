@@ -56,15 +56,15 @@ import (
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern      syntax.SyntaxValue          // The pattern to match against input
-	template     syntax.SyntaxValue          // The template to expand on match
-	bytecode     []match.SyntaxCommand       // Compiled pattern bytecode
-	matcher      *match.SyntaxMatcher        // Pattern matcher instance
-	patternVars  map[string]struct{}         // Variables extracted from pattern
-	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	freeIds      map[string]struct{}         // Free identifiers in template (not pattern vars)
-	macroScope   *syntax.Scope               // Hygiene scope for this macro (Flatt's model)
-	ellipsis     string                      // Custom ellipsis identifier (default "...")
+	pattern      syntax.SyntaxValue                    // The pattern to match against input
+	template     syntax.SyntaxValue                    // The template to expand on match
+	bytecode     []match.SyntaxCommand                 // Compiled pattern bytecode
+	matcher      *match.SyntaxMatcher                  // Pattern matcher instance
+	patternVars  map[string]struct{}                   // Variables extracted from pattern
+	ellipsisVars map[int]map[string]struct{}           // ellipsisID -> captured pattern variables
+	freeIds      map[string]*environment.GlobalIndex   // Free identifiers resolved to definition-time bindings
+	macroScope   *syntax.Scope                         // Hygiene scope for this macro (Flatt's model)
+	ellipsis     string                                // Custom ellipsis identifier (default "...")
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals
@@ -218,7 +218,8 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		}
 
 		// Compile the pattern with custom ellipsis
-		compiledClause, err := compileClauseWithEllipsis(ctx, pattern, template, literals, ellipsis)
+		// Pass env so free identifiers can be resolved to their definition-time bindings
+		compiledClause, err := compileClauseWithEllipsis(ctx, env, pattern, template, literals, ellipsis)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
 		}
@@ -242,12 +243,13 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 }
 
 // compileClause compiles a single pattern-template pair using the default ellipsis.
-func compileClause(ctx context.Context, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
-	return compileClauseWithEllipsis(ctx, pattern, template, literals, match.DefaultEllipsis)
+func compileClause(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
+	return compileClauseWithEllipsis(ctx, env, pattern, template, literals, match.DefaultEllipsis)
 }
 
 // compileClauseWithEllipsis compiles a single pattern-template pair with a custom ellipsis.
-func compileClauseWithEllipsis(ctx context.Context, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) {
+// The env parameter is used to resolve free identifiers to their definition-time bindings.
+func compileClauseWithEllipsis(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	variables := make(map[string]struct{})
 	err := collectPatternVariablesWithEllipsis(pattern, literals, true, variables, ellipsis)
@@ -267,8 +269,9 @@ func compileClauseWithEllipsis(ctx context.Context, pattern, template syntax.Syn
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)
 	// These should NOT get the intro scope during expansion, so they can resolve
 	// to bindings outside the macro (including recursive references to the macro itself)
-	freeIds := make(map[string]struct{})
-	collectFreeIdentifiersWithEllipsis(template, variables, freeIds, ellipsis)
+	// Resolve each free identifier to its definition-time GlobalIndex for cross-library hygiene.
+	freeIds := make(map[string]*environment.GlobalIndex)
+	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis)
 
 	return &SyntaxRulesClause{
 		pattern:      pattern,
@@ -291,13 +294,18 @@ func compileClauseWithEllipsis(ctx context.Context, pattern, template syntax.Syn
 // This is critical for recursive macros: the macro's own name (e.g., "and" in
 // (and test2 ...)) must resolve to the macro's binding, not get an intro scope
 // that would break the lookup.
-func collectFreeIdentifiers(template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]struct{}) {
-	collectFreeIdentifiersWithEllipsis(template, patternVars, freeIds, match.DefaultEllipsis)
+//
+// The env parameter is used to resolve free identifiers to their definition-time
+// bindings (GlobalIndex), enabling proper resolution when the macro is used in
+// a different library context.
+func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*environment.GlobalIndex) {
+	collectFreeIdentifiersWithEllipsis(env, template, patternVars, freeIds, match.DefaultEllipsis)
 }
 
 // collectFreeIdentifiersWithEllipsis walks the template and collects all identifiers that
 // are NOT pattern variables, using a custom ellipsis identifier.
-func collectFreeIdentifiersWithEllipsis(template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]struct{}, ellipsis string) {
+// Resolves each free identifier to its GlobalIndex in the definition environment.
+func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*environment.GlobalIndex, ellipsis string) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
@@ -308,7 +316,13 @@ func collectFreeIdentifiersWithEllipsis(template syntax.SyntaxValue, patternVars
 			}
 			// If it's not a pattern variable, it's a free identifier
 			if _, isPatternVar := patternVars[symVal.Key]; !isPatternVar {
-				freeIds[symVal.Key] = struct{}{}
+				// Resolve the free identifier to its definition-time binding
+				// Use the interned symbol for consistent lookup
+				internedSym := env.InternSymbol(symVal)
+				gi := env.GetGlobalIndex(internedSym)
+				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
+				// unbound free identifiers like special forms will be handled normally)
+				freeIds[symVal.Key] = gi
 			}
 		}
 
@@ -318,13 +332,13 @@ func collectFreeIdentifiersWithEllipsis(template syntax.SyntaxValue, patternVars
 			car := t.SyntaxCar()
 			if car != nil {
 				carStx := car
-				collectFreeIdentifiersWithEllipsis(carStx, patternVars, freeIds, ellipsis)
+				collectFreeIdentifiersWithEllipsis(env, carStx, patternVars, freeIds, ellipsis)
 			}
 			// Recurse into cdr
 			cdr := t.SyntaxCdr()
 			if cdr != nil {
 				cdrStx := cdr
-				collectFreeIdentifiersWithEllipsis(cdrStx, patternVars, freeIds, ellipsis)
+				collectFreeIdentifiersWithEllipsis(env, cdrStx, patternVars, freeIds, ellipsis)
 			}
 		}
 

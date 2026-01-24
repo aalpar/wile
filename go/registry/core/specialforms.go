@@ -39,10 +39,16 @@ var compileTimeBindings = []string{
 	"define-for-syntax",
 	"begin-for-syntax",
 	"eval-when",
+	// R7RS §4.3.1: syntax-error for compile-time errors in macros
+	"syntax-error",
 	// Auxiliary syntax (R7RS §4.2.1, §4.2.5)
 	// These are literals used in syntax-rules patterns for cond and case
 	"else",
 	"=>",
+	// Auxiliary syntax (R7RS §4.3.2)
+	// These are special identifiers in syntax-rules patterns
+	"...",
+	"_",
 }
 
 func addSpecialForms(r *registry.Registry) error {

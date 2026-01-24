@@ -58,6 +58,47 @@ func TestApplyComprehensive(t *testing.T) {
 	}
 }
 
+// TestApplyMultipleValues tests that apply correctly propagates multiple values.
+// R7RS §6.4: apply should preserve multiple return values from the applied procedure.
+func TestApplyMultipleValues(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// apply values should return multiple values
+		{
+			name:     "apply values with two args",
+			code:     `(call-with-values (lambda () (apply values '(1 2))) list)`,
+			expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name:     "apply values with three args",
+			code:     `(call-with-values (lambda () (apply values '(a b c))) list)`,
+			expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+		},
+		{
+			name:     "apply values with zero args",
+			code:     `(call-with-values (lambda () (apply values '())) (lambda () 'empty))`,
+			expected: values.NewSymbol("empty"),
+		},
+		{
+			name:     "apply values with one arg",
+			code:     `(call-with-values (lambda () (apply values '(42))) (lambda (x) x))`,
+			expected: values.NewInteger(42),
+		},
+		// apply a multi-value returning procedure
+		{
+			name:     "apply floor/ (multi-value)",
+			code:     `(call-with-values (lambda () (apply floor/ '(17 5))) list)`,
+			expected: values.List(values.NewInteger(3), values.NewInteger(2)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestApplyErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "apply non-procedure", code: `(apply 5 '(1 2))`},
