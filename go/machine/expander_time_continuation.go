@@ -312,7 +312,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 	body := bodyPair.SyntaxCar()
 
 	// Create a fresh binding scope
-	bindingScope := syntax.NewScope(nil)
+	bindingScope := syntax.NewScope()
 
 	// Add the scope to the entire body
 	// This adds the scope to ALL identifiers in the body, including:

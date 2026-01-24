@@ -1967,7 +1967,7 @@ func (p *CompileTimeContinuation) compileLetSyntaxImpl(ctctx CompileTimeCallCont
 	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, parentExpandEnv)
 
 	// Create a new scope for the let-syntax body
-	letScope := syntax.NewScope(nil)
+	letScope := syntax.NewScope()
 
 	// Parse bindings and compile transformers
 	type syntaxBinding struct {

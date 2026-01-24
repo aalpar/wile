@@ -117,7 +117,7 @@ func TestSourceContext_WithScope(t *testing.T) {
 	sidx1 := NewSourceIndexes(5, 5, 1)
 	sctx := NewSourceContext("hello", "test.scm", sidx0, sidx1)
 
-	scope1 := NewScope(nil)
+	scope1 := NewScope()
 	sctx2 := sctx.WithScope(scope1)
 
 	qt.Assert(t, len(sctx.Scopes), qt.Equals, 0)
@@ -126,7 +126,7 @@ func TestSourceContext_WithScope(t *testing.T) {
 	qt.Assert(t, sctx2.Text, qt.Equals, "hello")
 	qt.Assert(t, sctx2.File, qt.Equals, "test.scm")
 
-	scope2 := NewScope(nil)
+	scope2 := NewScope()
 	sctx3 := sctx2.WithScope(scope2)
 	qt.Assert(t, len(sctx3.Scopes), qt.Equals, 2)
 	qt.Assert(t, sctx3.Scopes[0], qt.Equals, scope2)
@@ -135,7 +135,7 @@ func TestSourceContext_WithScope(t *testing.T) {
 
 func TestSourceContext_WithScope_Nil(t *testing.T) {
 	var sctx *SourceContext
-	scope := NewScope(nil)
+	scope := NewScope()
 	sctx2 := sctx.WithScope(scope)
 
 	qt.Assert(t, sctx2, qt.IsNotNil)
@@ -148,8 +148,8 @@ func TestSourceContext_WithScopes(t *testing.T) {
 	sidx1 := NewSourceIndexes(5, 5, 1)
 	sctx := NewSourceContext("hello", "test.scm", sidx0, sidx1)
 
-	scope1 := NewScope(nil)
-	scope2 := NewScope(nil)
+	scope1 := NewScope()
+	scope2 := NewScope()
 	scopes := []*Scope{scope1, scope2}
 
 	sctx2 := sctx.WithScopes(scopes)
@@ -157,7 +157,7 @@ func TestSourceContext_WithScopes(t *testing.T) {
 	qt.Assert(t, sctx2.Scopes[0], qt.Equals, scope1)
 	qt.Assert(t, sctx2.Scopes[1], qt.Equals, scope2)
 
-	scope3 := NewScope(nil)
+	scope3 := NewScope()
 	sctx3 := sctx2.WithScopes([]*Scope{scope3})
 	qt.Assert(t, len(sctx3.Scopes), qt.Equals, 3)
 	qt.Assert(t, sctx3.Scopes[0], qt.Equals, scope3)
@@ -176,7 +176,7 @@ func TestSourceContext_WithScopes_Empty(t *testing.T) {
 
 func TestSourceContext_WithScopes_Nil(t *testing.T) {
 	var sctx *SourceContext
-	scope := NewScope(nil)
+	scope := NewScope()
 	sctx2 := sctx.WithScopes([]*Scope{scope})
 
 	qt.Assert(t, sctx2, qt.IsNotNil)
@@ -186,9 +186,9 @@ func TestSourceContext_WithScopes_Nil(t *testing.T) {
 
 // Test scope utilities
 func TestScopesMatch(t *testing.T) {
-	scope1 := NewScope(nil)
-	scope2 := NewScope(nil)
-	scope3 := NewScope(nil)
+	scope1 := NewScope()
+	scope2 := NewScope()
+	scope3 := NewScope()
 
 	qt.Assert(t, ScopesMatch([]*Scope{}, []*Scope{}), qt.IsTrue)
 	qt.Assert(t, ScopesMatch([]*Scope{scope1}, []*Scope{}), qt.IsTrue)
@@ -202,9 +202,9 @@ func TestScopesMatch(t *testing.T) {
 }
 
 func TestHasScope(t *testing.T) {
-	scope1 := NewScope(nil)
-	scope2 := NewScope(nil)
-	scope3 := NewScope(nil)
+	scope1 := NewScope()
+	scope2 := NewScope()
+	scope3 := NewScope()
 
 	qt.Assert(t, HasScope([]*Scope{}, scope1), qt.IsFalse)
 	qt.Assert(t, HasScope([]*Scope{scope1}, scope1), qt.IsTrue)
@@ -214,8 +214,8 @@ func TestHasScope(t *testing.T) {
 }
 
 func TestAddScopeToSet(t *testing.T) {
-	scope1 := NewScope(nil)
-	scope2 := NewScope(nil)
+	scope1 := NewScope()
+	scope2 := NewScope()
 
 	scopes := []*Scope{}
 	scopes = AddScopeToSet(scopes, scope1)
@@ -233,9 +233,9 @@ func TestAddScopeToSet(t *testing.T) {
 }
 
 func TestRemoveScopeFromSet(t *testing.T) {
-	scope1 := NewScope(nil)
-	scope2 := NewScope(nil)
-	scope3 := NewScope(nil)
+	scope1 := NewScope()
+	scope2 := NewScope()
+	scope3 := NewScope()
 
 	scopes := []*Scope{scope1, scope2, scope3}
 	scopes = RemoveScopeFromSet(scopes, scope2)
@@ -530,7 +530,7 @@ func TestSyntaxPair_AddScope(t *testing.T) {
 	sym := NewSyntaxSymbol("foo", sctx)
 	pair := NewSyntaxCons(sym, NewSyntaxEmptyList(sctx), sctx)
 
-	scope := NewScope(nil)
+	scope := NewScope()
 	newPair := pair.AddScope(scope)
 
 	// Pair itself should NOT have the scope (scopes only matter on symbols)
@@ -636,7 +636,7 @@ func TestSyntaxSymbol_AddScope(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	sym := NewSyntaxSymbol("foo", sctx)
 
-	scope := NewScope(nil)
+	scope := NewScope()
 	newSym := sym.AddScope(scope)
 
 	qt.Assert(t, len(sym.sourceContext.Scopes), qt.Equals, 0)
@@ -645,7 +645,7 @@ func TestSyntaxSymbol_AddScope(t *testing.T) {
 }
 
 func TestSyntaxSymbol_Scopes(t *testing.T) {
-	scope := NewScope(nil)
+	scope := NewScope()
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	sctx = sctx.WithScope(scope)
 	sym := NewSyntaxSymbol("foo", sctx)
@@ -714,16 +714,13 @@ func TestSyntaxObject_EqualTo(t *testing.T) {
 	qt.Assert(t, obj1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 }
 
-// Test NewScope and NewScopeID
+// Test NewScope creates unique identity markers
 func TestNewScope(t *testing.T) {
-	scope := NewScope(nil)
-	qt.Assert(t, scope, qt.IsNotNil)
-}
-
-func TestNewScopeID(t *testing.T) {
-	id1 := NewScopeID()
-	id2 := NewScopeID()
-	qt.Assert(t, id1, qt.Not(qt.Equals), id2)
+	scope1 := NewScope()
+	scope2 := NewScope()
+	qt.Assert(t, scope1, qt.IsNotNil)
+	qt.Assert(t, scope2, qt.IsNotNil)
+	qt.Assert(t, scope1 != scope2, qt.IsTrue) // Different pointers
 }
 
 // Test NewSyntaxNil
@@ -909,7 +906,7 @@ func TestSourceContext_WithScope_PreservesOrigin(t *testing.T) {
 	origin := &OriginInfo{Identifier: "my-macro"}
 	sc = sc.WithOrigin(origin)
 
-	scope := NewScope(nil)
+	scope := NewScope()
 	scWithScope := sc.WithScope(scope)
 
 	// Origin should be preserved
@@ -927,7 +924,7 @@ func TestSourceContext_WithScopes_PreservesOrigin(t *testing.T) {
 	origin := &OriginInfo{Identifier: "my-macro"}
 	sc = sc.WithOrigin(origin)
 
-	scopes := []*Scope{NewScope(nil), NewScope(nil)}
+	scopes := []*Scope{NewScope(), NewScope()}
 	scWithScopes := sc.WithScopes(scopes)
 
 	// Origin should be preserved

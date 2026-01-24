@@ -143,7 +143,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create intro scope
-		introScope := syntax.NewScope(nil)
+		introScope := syntax.NewScope()
 		freeIds := make(map[string]any)
 
 		template := syntax.NewSyntaxSymbol("x", srcCtx)
@@ -425,7 +425,7 @@ func TestExpandWithUseSite(t *testing.T) {
 	)
 
 	// Expand with use-site context
-	introScope := syntax.NewScope(nil)
+	introScope := syntax.NewScope()
 	freeIds := map[string]any{"let": nil}
 	result, err := matcher.ExpandWithUseSite(template, introScope, freeIds, useSiteSc)
 	c.Assert(err, qt.IsNil)

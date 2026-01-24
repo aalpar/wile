@@ -27,8 +27,8 @@ import (
 
 func TestBoundIdentifierEqualQ(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
-	scope1 := syntax.NewScope(nil)
-	scope2 := syntax.NewScope(nil)
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
 
 	// Create syntax symbols with various scope configurations
 	idFoo := syntax.NewSyntaxSymbol("foo", sctx)

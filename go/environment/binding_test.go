@@ -24,8 +24,8 @@ import (
 )
 
 func TestBinding_NewBindingWithScopes(t *testing.T) {
-	scope1 := syntax.NewScope(nil)
-	scope2 := syntax.NewScope(nil)
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
 	scopes := []*syntax.Scope{scope1, scope2}
 
 	val := values.NewInteger(42)
@@ -67,7 +67,7 @@ func TestBinding_Scopes(t *testing.T) {
 	qt.Assert(t, b1.Scopes(), qt.IsNil)
 
 	// Test binding with scopes
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	scopes := []*syntax.Scope{scope}
 	b2 := NewBindingWithScopes(values.Void, BindingTypeVariable, scopes)
 	qt.Assert(t, b2.Scopes(), qt.HasLen, 1)
@@ -78,8 +78,8 @@ func TestBinding_SetScopes(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
 	qt.Assert(t, b.Scopes(), qt.IsNil)
 
-	scope1 := syntax.NewScope(nil)
-	scope2 := syntax.NewScope(nil)
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
 	scopes := []*syntax.Scope{scope1, scope2}
 
 	b.SetScopes(scopes)
@@ -135,8 +135,8 @@ func TestBinding_EqualTo(t *testing.T) {
 }
 
 func TestBinding_Copy(t *testing.T) {
-	scope1 := syntax.NewScope(nil)
-	scope2 := syntax.NewScope(nil)
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
 	scopes := []*syntax.Scope{scope1, scope2}
 
 	b1 := NewBindingWithScopes(values.NewInteger(42), BindingTypeVariable, scopes)
@@ -155,7 +155,7 @@ func TestBinding_Copy(t *testing.T) {
 	qt.Assert(t, b2.Scopes()[1], qt.Equals, scope2)
 
 	// Modify original scopes slice - copy should not be affected
-	b1.Scopes()[0] = syntax.NewScope(nil)
+	b1.Scopes()[0] = syntax.NewScope()
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1) // Copy unchanged
 
 	// Test copy with nil scopes
@@ -167,7 +167,7 @@ func TestBinding_Copy(t *testing.T) {
 }
 
 func TestBinding_NewBindingWithSource(t *testing.T) {
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	scopes := []*syntax.Scope{scope}
 	source := &syntax.SourceContext{
 		File:  "test.scm",

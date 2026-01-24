@@ -209,7 +209,7 @@ func TestAddScopeToSyntaxViaDefineSyntax(t *testing.T) {
 
 // TestAddScopeToSyntax tests the addScopeToSyntax helper function
 func TestAddScopeToSyntax(t *testing.T) {
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	srcCtx := syntax.NewZeroValueSourceContext()
 
 	// Test with nil
@@ -242,7 +242,7 @@ func TestAddScopeToSyntax(t *testing.T) {
 
 // TestAddScopeToSyntaxSkipFreeIds tests the addScopeToSyntaxSkipFreeIds function
 func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	srcCtx := syntax.NewZeroValueSourceContext()
 	freeIds := map[string]struct{}{
 		"if": {},
@@ -291,7 +291,7 @@ func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
 
 // TestAddScopeToPairSkipFreeIds tests the addScopeToPairSkipFreeIds function
 func TestAddScopeToPairSkipFreeIds(t *testing.T) {
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	srcCtx := syntax.NewZeroValueSourceContext()
 	freeIds := map[string]struct{}{
 		"if": {},
@@ -324,7 +324,7 @@ func TestAddScopeToPairSkipFreeIds(t *testing.T) {
 // TestAddScopeToSyntaxCoverage tests additional addScopeToSyntax paths
 func TestAddScopeToSyntaxCoverage(t *testing.T) {
 	// Test syntax pair
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	sym1 := syntax.NewSyntaxSymbol("a", nil)
 	sym2 := syntax.NewSyntaxSymbol("b", nil)
 	pair := syntax.NewSyntaxCons(sym1, sym2, nil)

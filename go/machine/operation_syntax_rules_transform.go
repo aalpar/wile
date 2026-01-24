@@ -133,7 +133,7 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site
-			introScope := syntax.NewScope(nil)
+			introScope := syntax.NewScope()
 
 			// Convert freeIds from map[string]*environment.GlobalIndex to map[string]any
 			// This is needed because the match package uses any to avoid circular imports

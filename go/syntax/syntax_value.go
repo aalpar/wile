@@ -25,34 +25,22 @@ var (
 	_ SyntaxValue  = (*SyntaxObject)(nil)
 )
 
-// ScopeID is a unique identifier for a scope in the hygiene system.
-type ScopeID int64
-
-// Scope represents a single scope in the syntax object.
-// It maps symbols to their corresponding ScopeID and maintains a reference to its parent scope.
-// This structure allows for nested scopes, enabling proper variable resolution in a scoped environment.
-// Identifiers match only if their symbol name and scope sets match the same binding.
-// This means two identifiers with the same textual name are distinct if their scopes differ.
+// Scope is an identity marker for macro hygiene.
+// Each macro invocation creates a fresh Scope. Hygiene checking uses pointer
+// equality to determine if a binding's scopes are a subset of a reference's scopes.
+// This implements Flatt's "sets of scopes" model where scopes are just unique tags,
+// not environment hierarchies.
 type Scope struct {
-	keys   map[values.Symbol]ScopeID
-	parent *Scope
+	id uint64 // ensures unique pointer identity (empty structs can share addresses in Go)
 }
 
-// NewScope creates a new scope with an optional parent
-func NewScope(parent *Scope) *Scope {
-	return &Scope{
-		keys:   make(map[values.Symbol]ScopeID),
-		parent: parent,
-	}
-}
-
-// nextScopeID is a simple counter for generating unique scope IDs
+// nextScopeID is a counter for generating unique scope identities
 var nextScopeID uint64
 
-// NewScopeID generates a unique scope ID
-func NewScopeID() ScopeID {
+// NewScope creates a new scope with unique identity for hygiene tracking.
+func NewScope() *Scope {
 	nextScopeID++
-	return ScopeID(nextScopeID)
+	return &Scope{id: nextScopeID}
 }
 
 // NewSyntaxNil creates a syntax empty list.
