@@ -14,6 +14,8 @@
 
 package syntax
 
+import "slices"
+
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
 // This implements the core hygiene check using Flatt's "sets of scopes" model:
 // A reference matches a binding if the binding's scope set is a SUBSET of the reference's scope set.
@@ -28,13 +30,7 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 	//
 	// Empty binding scopes (top-level) match everything since {} ⊆ X for all X.
 	for _, bindScope := range bindingScopes {
-		found := false
-		for _, useScope := range useScopes {
-			if bindScope == useScope {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(useScopes, bindScope)
 		if !found {
 			return false // Binding has a scope that use doesn't have
 		}
@@ -44,24 +40,15 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 
 // HasScope checks if a scope set contains a specific scope
 func HasScope(scopes []*Scope, target *Scope) bool {
-	for _, s := range scopes {
-		if s == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(scopes, target)
 }
 
 // AddScopeToSet adds a scope to a set if not already present
 func AddScopeToSet(scopes []*Scope, newScope *Scope) []*Scope {
-	if HasScope(scopes, newScope) {
-		return scopes // Already has this scope
+	if slices.Contains(scopes, newScope) {
+		return scopes
 	}
-	// Add the new scope
-	result := make([]*Scope, len(scopes)+1)
-	result[0] = newScope
-	copy(result[1:], scopes)
-	return result
+	return append(scopes, newScope)
 }
 
 // RemoveScopeFromSet removes a scope from a set
@@ -95,11 +82,12 @@ func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 	}
 
 	switch s := stx.(type) {
+	case *SyntaxSymbol:
+		return flipScopeOnSymbol(s, scope)
 	case *SyntaxPair:
 		return flipScopeOnPair(s, scope)
-	case *SyntaxObject:
-		return flipScopeOnObject(s, scope)
 	default:
+		// SyntaxObject and other types don't store meaningful scopes
 		return stx
 	}
 }
@@ -131,12 +119,12 @@ func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
 	return NewSyntaxCons(newCar, newCdr, pair.SourceContext())
 }
 
-// flipScopeOnObject flips a scope on a SyntaxObject.
-func flipScopeOnObject(obj *SyntaxObject, scope *Scope) *SyntaxObject {
-	if obj == nil {
+// flipScopeOnSymbol flips a scope on a SyntaxSymbol.
+func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
+	if sym == nil {
 		return nil
 	}
-	sctx := obj.SourceContext()
+	sctx := sym.SourceContext()
 	if sctx == nil {
 		sctx = &SourceContext{}
 	}
@@ -147,16 +135,21 @@ func flipScopeOnObject(obj *SyntaxObject, scope *Scope) *SyntaxObject {
 		Start:  sctx.Start,
 		End:    sctx.End,
 		Scopes: newScopes,
+		Origin: sctx.Origin,
 	}
-	return NewSyntaxObject(obj.Datum(), newSctx)
+	return &SyntaxSymbol{
+		Sym:             sym.Sym,
+		sourceContext:   newSctx,
+		ResolvedBinding: sym.ResolvedBinding,
+	}
 }
 
 // AddScopeToSyntax adds a scope to a syntax object.
 // Returns a new syntax object with the scope added.
 // This is used by syntax-local-identifier-as-binding to mark identifiers
 // as binding sites.
-// Only ScopedSyntax types (symbols, pairs) receive scopes; self-evaluating
-// literals (SyntaxObject) are returned unchanged.
+// Only symbols and pairs receive scopes; self-evaluating literals
+// (SyntaxObject) are returned unchanged.
 func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 	if stx == nil || scope == nil {
 		return stx

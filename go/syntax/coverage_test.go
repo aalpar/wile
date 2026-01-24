@@ -220,13 +220,14 @@ func TestAddScopeToSet(t *testing.T) {
 	scopes := []*Scope{}
 	scopes = AddScopeToSet(scopes, scope1)
 	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, scopes[0], qt.Equals, scope1)
+	qt.Assert(t, HasScope(scopes, scope1), qt.IsTrue)
 
 	scopes = AddScopeToSet(scopes, scope2)
 	qt.Assert(t, len(scopes), qt.Equals, 2)
-	qt.Assert(t, scopes[0], qt.Equals, scope2)
-	qt.Assert(t, scopes[1], qt.Equals, scope1)
+	qt.Assert(t, HasScope(scopes, scope1), qt.IsTrue)
+	qt.Assert(t, HasScope(scopes, scope2), qt.IsTrue)
 
+	// Adding duplicate should not increase size
 	scopes = AddScopeToSet(scopes, scope1)
 	qt.Assert(t, len(scopes), qt.Equals, 2)
 }
@@ -523,29 +524,22 @@ func TestSyntaxDatumLabelAssignment_SchemeString(t *testing.T) {
 	qt.Assert(t, result, qt.Equals, "1")
 }
 
-// Test SyntaxPair uncovered methods
+// Test SyntaxPair AddScope propagates to nested symbols (not to pair itself)
 func TestSyntaxPair_AddScope(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	value := NewSyntaxObject(values.NewInteger(42), sctx)
-	pair := NewSyntaxCons(value, NewSyntaxEmptyList(sctx), sctx)
+	sym := NewSyntaxSymbol("foo", sctx)
+	pair := NewSyntaxCons(sym, NewSyntaxEmptyList(sctx), sctx)
 
 	scope := NewScope(nil)
 	newPair := pair.AddScope(scope)
 
-	qt.Assert(t, len(pair.sourceContext.Scopes), qt.Equals, 0)
-	qt.Assert(t, len(newPair.(*SyntaxPair).sourceContext.Scopes), qt.Equals, 1)
-	qt.Assert(t, newPair.(*SyntaxPair).sourceContext.Scopes[0], qt.Equals, scope)
-}
+	// Pair itself should NOT have the scope (scopes only matter on symbols)
+	qt.Assert(t, len(newPair.(*SyntaxPair).sourceContext.Scopes), qt.Equals, 0)
 
-func TestSyntaxPair_Scopes(t *testing.T) {
-	scope := NewScope(nil)
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	sctx = sctx.WithScope(scope)
-	pair := NewSyntaxCons(nil, nil, sctx)
-
-	scopes := pair.Scopes()
-	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, scopes[0], qt.Equals, scope)
+	// But the nested symbol SHOULD have the scope
+	newSym := newPair.(*SyntaxPair).Car().(*SyntaxSymbol)
+	qt.Assert(t, len(newSym.Scopes()), qt.Equals, 1)
+	qt.Assert(t, newSym.Scopes()[0], qt.Equals, scope)
 }
 
 func TestSyntaxPair_SourceContext(t *testing.T) {

@@ -15,7 +15,8 @@ Wraps Scheme values with source location and scope information for:
 - `SourceContext()` - Source location and scopes
 - `Unwrap()` - Shallow unwrap to underlying value
 - `UnwrapAll()` - Deep recursive unwrap
-- `AddScope(scope)` - Add hygiene scope (returns new value)
+
+**Scope-aware types** - Only `SyntaxSymbol` and `SyntaxPair` have `AddScope(scope)` for hygiene. `SyntaxObject` (self-evaluating literals) does not need scopes.
 
 **Key Functions**:
 - `UnwrapAllShared(sv, cache)` - Recursive unwrap preserving object identity via cache. Essential for datum labels (R7RS §2.4) where `#n#` must be `eq?` to `#n=`. Pre-registers placeholders before recursing to handle circular structures.
@@ -60,7 +61,7 @@ This keeps the resolution context separate from the physical source context (Sou
 
 - **Double-wrapping panics**: SyntaxObject prevents wrapping syntax values
 - **Pointer equality**: `EqualTo()` uses pointer comparison, not content
-- **Recursive scope propagation**: `AddScope()` on SyntaxPair propagates to all nested elements
+- **Scope propagation**: `AddScope()` on SyntaxPair recursively propagates to nested symbols only; pairs themselves don't store scopes
 - **Empty list sentinel**: `SyntaxEmptyList` with both elements nil
 - **Vector scope ignored**: `SyntaxVector.AddScope()` returns same vector unchanged
 - **Immutable**: All operations return new syntax objects

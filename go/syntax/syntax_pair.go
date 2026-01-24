@@ -37,31 +37,21 @@ type SyntaxPair struct {
 	sourceContext *SourceContext
 }
 
-// AddScope returns a new SyntaxPair with an additional scope.
+// AddScope recursively propagates a scope to all nested symbols.
 //
-// This implements recursive scope propagation for Flatt's "sets of scopes" hygiene.
-// When a macro expands, the intro scope must be added to ALL identifiers in
-// the expansion, including those nested inside pairs.
+// This implements scope propagation for Flatt's "sets of scopes" hygiene.
+// When a macro expands, the intro scope must be added to all identifiers
+// (symbols) in the expansion. This method walks the pair structure and
+// calls AddScope on each element, ultimately reaching the symbols.
 //
-// The method:
-//  1. Creates a new SyntaxPair (syntax objects are immutable)
-//  2. Recursively calls AddScope on car and cdr elements
-//  3. Adds the scope to this pair's SourceContext
-//
-// This ensures that (let ((tmp x)) body) in a macro expansion gets the intro
-// scope on "let", "tmp", "x", and everything in "body", not just the outer pair.
-//
-// Returns SyntaxValue interface to support recursive scope propagation.
+// Only symbols store scopes for hygiene resolution. Pairs just propagate.
 func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
-	// Handle empty list case
+	// Empty list has no symbols to propagate to
 	if p.IsEmptyList() {
-		return &SyntaxPair{
-			Values:        [2]SyntaxValue{nil, nil},
-			sourceContext: p.sourceContext.WithScope(scope),
-		}
+		return p
 	}
 
-	// Recursively add scope to car and cdr
+	// Recursively add scope to car and cdr (scopes only matter on symbols)
 	var newCar, newCdr SyntaxValue
 	if p.Values[0] != nil {
 		if adder, ok := p.Values[0].(interface{ AddScope(*Scope) SyntaxValue }); ok {
@@ -80,16 +70,8 @@ func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
 
 	return &SyntaxPair{
 		Values:        [2]SyntaxValue{newCar, newCdr},
-		sourceContext: p.sourceContext.WithScope(scope),
+		sourceContext: p.sourceContext, // scopes only matter on symbols, not pairs
 	}
-}
-
-// Scopes returns the scopes of this syntax pair
-func (p *SyntaxPair) Scopes() []*Scope {
-	if p.sourceContext == nil {
-		return nil
-	}
-	return p.sourceContext.Scopes
 }
 
 // NewSyntaxEmptyList creates a syntax empty list with the given source context.

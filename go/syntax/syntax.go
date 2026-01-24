@@ -39,11 +39,3 @@ type SyntaxValue interface {
 	Unwrap() values.Value
 	UnwrapAll() values.Value
 }
-
-// ScopedSyntax is a syntax value that participates in hygiene scope tracking.
-// Types that can carry scopes for macro hygiene (symbols, pairs) implement this.
-// Self-evaluating literals (wrapped in SyntaxObject) do not need scopes.
-type ScopedSyntax interface {
-	SyntaxValue
-	AddScope(scope *Scope) SyntaxValue
-}
