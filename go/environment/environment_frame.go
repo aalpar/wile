@@ -265,23 +265,38 @@ func (p *EnvironmentFrame) GetIndex(key *values.Symbol) (*LocalIndex, *GlobalInd
 
 // GetBindingWithScopes returns the binding for the given symbol that matches the provided scopes.
 // This is used for hygienic variable resolution in macros.
-// It searches for local bindings first, then global bindings, checking scope compatibility.
+// It searches for local bindings first (walking up the parent chain), then global bindings,
+// checking scope compatibility at each level.
+//
+// For hygiene to work correctly with nested bindings of the same name:
+//   - Each let-bound variable has scopes from the binding site
+//   - A macro free identifier carries scopes from its definition site
+//   - We search ALL local bindings (not just innermost) to find one with matching scopes
 func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*syntax.Scope) *Binding {
-	// First, try local bindings
-	li := p.GetLocalIndex(key)
-	if li != nil {
-		binding := p.GetLocalBinding(li)
-		if binding != nil {
-			// Check if scopes match
-			if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
-				// Binding has no scopes (top-level or pre-hygiene), accept it
-				return binding
-			}
-			// Check scope compatibility using ScopesMatch from scope_utils
-			if syntax.ScopesMatch(scopes, binding.Scopes()) {
-				return binding
+	// Search local bindings in parent chain, checking scopes at each level
+	// This is critical for hygiene: inner bindings may not match the reference's scopes,
+	// but an outer binding might.
+	env := p
+	for env != nil && env.local != nil {
+		if i, ok := env.local.keys[*key]; ok {
+			binding := env.local.bindings[i]
+			if binding != nil {
+				// Check if scopes match
+				if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
+					// Binding has no scopes (top-level or pre-hygiene), accept it
+					return binding
+				}
+				// Check scope compatibility using ScopesMatch from scope_utils
+				if syntax.ScopesMatch(scopes, binding.Scopes()) {
+					return binding
+				}
+				// Scopes don't match - continue searching parent frames
 			}
 		}
+		if env.IsTopLevel() {
+			break
+		}
+		env = env.parent
 	}
 
 	// Then try global bindings
@@ -387,6 +402,41 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 		return nil
 	}
 	return NewLocalIndex(i, j)
+}
+
+// GetLocalIndexWithScopes returns the LocalIndex of a local binding that matches the given scopes.
+// This is used for hygienic variable resolution where we need to find a specific binding
+// (not just the innermost one) based on scope compatibility.
+// Returns nil if no matching local binding exists.
+func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
+	if p == nil || p.local == nil {
+		return nil
+	}
+	env := p
+	j := 0
+	for env != nil && env.local != nil {
+		if i, ok := env.local.keys[*key]; ok {
+			binding := env.local.bindings[i]
+			if binding != nil {
+				// Check if scopes match
+				if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
+					// Binding has no scopes (top-level or pre-hygiene), accept it
+					return NewLocalIndex(i, j)
+				}
+				// Check scope compatibility
+				if syntax.ScopesMatch(scopes, binding.Scopes()) {
+					return NewLocalIndex(i, j)
+				}
+				// Scopes don't match - continue searching parent frames
+			}
+		}
+		if env.IsTopLevel() {
+			break
+		}
+		env = env.parent
+		j++
+	}
+	return nil
 }
 
 // GetLocalBinding returns the binding for the given LocalIndex.

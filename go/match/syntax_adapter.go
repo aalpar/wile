@@ -43,6 +43,18 @@ import (
 	"wile/values"
 )
 
+// localScopesProvider is an interface for getting local scopes from a free ID resolution.
+// Implemented by machine.FreeIdResolution to avoid circular imports.
+type localScopesProvider interface {
+	GetLocalScopes() []*syntax.Scope
+}
+
+// globalBindingProvider is an interface for getting global bindings from a free ID resolution.
+// Implemented by machine.FreeIdResolution to avoid circular imports.
+type globalBindingProvider interface {
+	GetGlobal() any
+}
+
 // SyntaxMatcher adapts the unhygienic Matcher to work with syntax objects.
 //
 // It provides the bridge between:
@@ -300,43 +312,82 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		// Free identifiers should resolve to their definition-time bindings,
 		// so they must NOT inherit use-site scopes.
 		var isFree bool
-		var resolvedBinding any
+		var resolution any
 		if freeIds != nil {
-			resolvedBinding, isFree = freeIds[v.Key]
+			resolution, isFree = freeIds[v.Key]
 		}
 
-		// For free identifiers, use a scope-free source context so they can
-		// match global/compile-time bindings (like special forms 'if', 'begin').
-		// R7RS §4.3: macro-introduced identifiers refer to definition-time bindings.
-		symCtx := srcCtx
-		if isFree && srcCtx != nil && len(srcCtx.Scopes) > 0 {
-			// Strip scopes but preserve location info for error messages
-			symCtx = &syntax.SourceContext{
-				Text:   srcCtx.Text,
-				File:   srcCtx.File,
-				Start:  srcCtx.Start,
-				End:    srcCtx.End,
-				Origin: srcCtx.Origin,
-				// Scopes intentionally omitted for free identifiers
+		// Handle free identifiers - they can have local or global resolution
+		if isFree && resolution != nil {
+			// Check for local binding resolution first (for let-syntax hygiene)
+			if lsp, ok := resolution.(localScopesProvider); ok {
+				if localScopes := lsp.GetLocalScopes(); localScopes != nil {
+					// Local binding - use ONLY definition-site scopes, NOT use-site scopes
+					// This ensures the identifier resolves to the binding from
+					// macro definition time, not a shadowing binding at use site.
+					// We create a new context with only the definition-site scopes,
+					// discarding any use-site scopes that srcCtx may have.
+					var scopedCtx *syntax.SourceContext
+					if srcCtx != nil {
+						scopedCtx = &syntax.SourceContext{
+							Text:   srcCtx.Text,
+							File:   srcCtx.File,
+							Start:  srcCtx.Start,
+							End:    srcCtx.End,
+							Origin: srcCtx.Origin,
+							Scopes: localScopes, // Use ONLY definition-site scopes
+						}
+					} else {
+						scopedCtx = &syntax.SourceContext{Scopes: localScopes}
+					}
+					sym := syntax.NewSyntaxSymbol(v.Key, scopedCtx)
+					// No intro scope for free identifiers - they refer to outside bindings
+					return sym
+				}
 			}
+
+			// Check for global binding resolution (for cross-library hygiene)
+			if gbp, ok := resolution.(globalBindingProvider); ok {
+				if globalBinding := gbp.GetGlobal(); globalBinding != nil {
+					// Global binding - strip scopes and attach resolved binding
+					symCtx := srcCtx
+					if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+						symCtx = &syntax.SourceContext{
+							Text:   srcCtx.Text,
+							File:   srcCtx.File,
+							Start:  srcCtx.Start,
+							End:    srcCtx.End,
+							Origin: srcCtx.Origin,
+							// Scopes intentionally omitted for global free identifiers
+						}
+					}
+					sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
+					sym = sym.WithResolvedBinding(globalBinding)
+					return sym
+				}
+			}
+
+			// Resolution exists but has no local or global binding (e.g., special forms)
+			// Strip scopes but don't attach binding
+			symCtx := srcCtx
+			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+				symCtx = &syntax.SourceContext{
+					Text:   srcCtx.Text,
+					File:   srcCtx.File,
+					Start:  srcCtx.Start,
+					End:    srcCtx.End,
+					Origin: srcCtx.Origin,
+				}
+			}
+			sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
+			return sym
 		}
 
-		// Create the symbol with the appropriate context
-		sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
-
-		// Add intro scope if:
-		// 1. An intro scope was provided
-		// 2. This is NOT a free identifier
-		if introScope != nil && !isFree {
+		// Not a free identifier - create symbol with intro scope
+		sym := syntax.NewSyntaxSymbol(v.Key, srcCtx)
+		if introScope != nil {
 			sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
 		}
-
-		// For free identifiers with a resolved binding, attach it to the symbol
-		// This enables cross-library macro hygiene by pre-resolving the binding
-		if isFree && resolvedBinding != nil {
-			sym = sym.WithResolvedBinding(resolvedBinding)
-		}
-
 		return sym
 
 	case *values.Integer:

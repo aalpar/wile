@@ -40,6 +40,42 @@ import (
 	"wile/values"
 )
 
+// FreeIdResolution stores the resolution info for a free identifier in a macro template.
+// Free identifiers can be resolved to either global bindings (via GlobalIndex) or
+// local bindings (via their scope set at macro definition time).
+//
+// This type implements the localScopesProvider and globalBindingProvider interfaces
+// used by match.valueToSyntaxWithOrigin to handle hygiene without circular imports.
+type FreeIdResolution struct {
+	// Global is set if the free identifier refers to a global binding.
+	// This enables cross-library macro hygiene by pre-resolving the binding.
+	Global *environment.GlobalIndex
+	// LocalScopes is set if the free identifier refers to a local binding.
+	// These are the scopes of the binding at macro definition time.
+	// During expansion, the free identifier gets these scopes, ensuring
+	// it resolves to the definition-time binding (not a shadowing binding).
+	LocalScopes []*syntax.Scope
+}
+
+// GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
+// Implements the interface expected by match.valueToSyntaxWithOrigin.
+func (f *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
+	if f == nil {
+		return nil
+	}
+	return f.LocalScopes
+}
+
+// GetGlobal returns the global binding's index, or nil if this is a local binding.
+// Returns any to avoid circular import with environment package in match.
+// Implements the interface expected by match.valueToSyntaxWithOrigin.
+func (f *FreeIdResolution) GetGlobal() any {
+	if f == nil {
+		return nil
+	}
+	return f.Global
+}
+
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.
 //
 // Per R7RS, a syntax-rules form contains:
@@ -56,15 +92,15 @@ import (
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern      syntax.SyntaxValue                    // The pattern to match against input
-	template     syntax.SyntaxValue                    // The template to expand on match
-	bytecode     []match.SyntaxCommand                 // Compiled pattern bytecode
-	matcher      *match.SyntaxMatcher                  // Pattern matcher instance
-	patternVars  map[string]struct{}                   // Variables extracted from pattern
-	ellipsisVars map[int]map[string]struct{}           // ellipsisID -> captured pattern variables
-	freeIds      map[string]*environment.GlobalIndex   // Free identifiers resolved to definition-time bindings
-	macroScope   *syntax.Scope                         // Hygiene scope for this macro (Flatt's model)
-	ellipsis     string                                // Custom ellipsis identifier (default "...")
+	pattern      syntax.SyntaxValue                  // The pattern to match against input
+	template     syntax.SyntaxValue                  // The template to expand on match
+	bytecode     []match.SyntaxCommand               // Compiled pattern bytecode
+	matcher      *match.SyntaxMatcher                // Pattern matcher instance
+	patternVars  map[string]struct{}                 // Variables extracted from pattern
+	ellipsisVars map[int]map[string]struct{}         // ellipsisID -> captured pattern variables
+	freeIds      map[string]*FreeIdResolution        // Free identifiers resolved to definition-time bindings
+	macroScope   *syntax.Scope                       // Hygiene scope for this macro (Flatt's model)
+	ellipsis     string                              // Custom ellipsis identifier (default "...")
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals
@@ -269,8 +305,10 @@ func compileClauseWithEllipsis(ctx context.Context, env *environment.Environment
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)
 	// These should NOT get the intro scope during expansion, so they can resolve
 	// to bindings outside the macro (including recursive references to the macro itself)
-	// Resolve each free identifier to its definition-time GlobalIndex for cross-library hygiene.
-	freeIds := make(map[string]*environment.GlobalIndex)
+	// Resolve each free identifier to its definition-time binding:
+	// - For global bindings: store GlobalIndex for cross-library hygiene
+	// - For local bindings: store scopes so the identifier resolves to definition-time binding
+	freeIds := make(map[string]*FreeIdResolution)
 	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis)
 
 	return &SyntaxRulesClause{
@@ -296,16 +334,19 @@ func compileClauseWithEllipsis(ctx context.Context, env *environment.Environment
 // that would break the lookup.
 //
 // The env parameter is used to resolve free identifiers to their definition-time
-// bindings (GlobalIndex), enabling proper resolution when the macro is used in
-// a different library context.
-func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*environment.GlobalIndex) {
+// bindings:
+// - For global bindings: stores GlobalIndex for cross-library hygiene
+// - For local bindings: stores scopes so the identifier resolves to definition-time binding
+func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution) {
 	collectFreeIdentifiersWithEllipsis(env, template, patternVars, freeIds, match.DefaultEllipsis)
 }
 
 // collectFreeIdentifiersWithEllipsis walks the template and collects all identifiers that
 // are NOT pattern variables, using a custom ellipsis identifier.
-// Resolves each free identifier to its GlobalIndex in the definition environment.
-func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*environment.GlobalIndex, ellipsis string) {
+// Resolves each free identifier to either:
+// - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
+// - GlobalIndex (for global bindings) - enables cross-library macro hygiene
+func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
@@ -319,10 +360,27 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				// Resolve the free identifier to its definition-time binding
 				// Use the interned symbol for consistent lookup
 				internedSym := env.InternSymbol(symVal)
+
+				// Check local binding first (for let-syntax hygiene)
+				li := env.GetLocalIndex(internedSym)
+				if li != nil {
+					binding := env.GetLocalBinding(li)
+					if binding != nil {
+						// Local binding - store scopes for hygiene
+						freeIds[symVal.Key] = &FreeIdResolution{
+							LocalScopes: binding.Scopes(),
+						}
+						return
+					}
+				}
+
+				// Fall back to global binding (for cross-library hygiene)
 				gi := env.GetGlobalIndex(internedSym)
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
-				freeIds[symVal.Key] = gi
+				freeIds[symVal.Key] = &FreeIdResolution{
+					Global: gi,
+				}
 			}
 		}
 
