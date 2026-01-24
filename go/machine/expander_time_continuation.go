@@ -266,6 +266,66 @@ func (p *ExpanderTimeContinuation) expandLetrecSyntax(_ ExpandTimeCallContext, s
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
+// expandWithBindingScope implements the (with-binding-scope (id ...) body) form.
+//
+// This primitive expander creates a fresh "binding scope" and adds it to the entire
+// body. This is essential for hygienic macro expansion of binding forms like `let`.
+//
+// When a binding form (let, letrec, etc.) expands, it wraps its output in
+// with-binding-scope. The expander then:
+//  1. Creates a fresh scope S
+//  2. Adds S to the entire body (binding sites AND references)
+//  3. Returns the scoped body for further expansion
+//
+// This ensures that:
+//   - Each let form creates a unique scope
+//   - Binding identifiers and their references share that scope
+//   - Nested lets have different scopes, enabling hygiene
+//
+// Example:
+//
+//	(let ((x 1)) (+ x 1))
+//	→ macro expands to: (with-binding-scope (x) ((lambda (x) (+ x 1)) 1))
+//	→ expander adds scope S to body: ((lambda (x+S) (+ x+S 1)) 1)
+//	→ returns: ((lambda (x+S) (+ x+S 1)) 1)
+//
+// The identifier list (x) is currently unused but reserved for future use
+// (e.g., selective scope application or debugging).
+func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallContext, _ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	// expr is the cdr of (with-binding-scope (id ...) body)
+	// which is ((id ...) body)
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil, values.NewForeignError("with-binding-scope: expected (with-binding-scope (id ...) body)")
+	}
+
+	// Skip the identifier list - we add scope to the entire body anyway
+	// The identifier list is: pair.SyntaxCar()
+	// Future: could validate that identifiers are symbols
+
+	// Get the body
+	cdr := pair.SyntaxCdr()
+	bodyPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
+		return nil, values.NewForeignError("with-binding-scope: missing body")
+	}
+	body := bodyPair.SyntaxCar()
+
+	// Create a fresh binding scope
+	bindingScope := syntax.NewScope(nil)
+
+	// Add the scope to the entire body
+	// This adds the scope to ALL identifiers in the body, including:
+	// - Lambda parameters (binding sites)
+	// - References to those parameters in the lambda body
+	// - Any other identifiers
+	scopedBody := body.AddScope(bindingScope)
+
+	// Continue expanding the scoped body
+	// The with-binding-scope form disappears - we return just the body
+	return p.ExpandExpression(ectx, scopedBody)
+}
+
 // expandSyntaxError handles the (syntax-error message arg ...) form.
 // R7RS §4.3.1: syntax-error signals a compile-time error during macro expansion.
 // When encountered, it raises a compilation error with the given message and

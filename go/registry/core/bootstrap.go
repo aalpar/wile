@@ -38,13 +38,20 @@ const bootstrapMacroSource = `
        (if x x (or test2 ...))))))
 
 ;; Binding forms
+;;
+;; Each binding form uses with-binding-scope to create a fresh scope for its
+;; bindings. This is essential for hygienic macro expansion - it ensures that
+;; nested bindings of the same name can be distinguished by their scopes.
+;; See Flatt 2016 "Binding as Sets of Scopes" for the theoretical foundation.
 (define-syntax let
   (syntax-rules ()
     ((let ((name val) ...) body ...)
-     ((lambda (name ...) (begin body ...)) val ...))
+     (with-binding-scope (name ...)
+       ((lambda (name ...) (begin body ...)) val ...)))
     ((let tag ((name val) ...) body ...)
-     (letrec ((tag (lambda (name ...) body ...)))
-       (tag val ...)))))
+     (with-binding-scope (tag name ...)
+       (letrec ((tag (lambda (name ...) body ...)))
+         (tag val ...))))))
 
 (define-syntax let*
   (syntax-rules ()
@@ -212,19 +219,25 @@ const bootstrapMacroSource = `
        rest ...))))
 
 ;; Multiple values binding forms
+;;
+;; Note: with-binding-scope adds scope to the entire body including the expr.
+;; This is harmless - adding scopes to non-binding references doesn't break them
+;; because the scope check is "binding scopes ⊆ use scopes".
 (define-syntax let-values
   (syntax-rules ()
     ((let-values () body ...)
      (begin body ...))
     ((let-values ((formals expr)) body ...)
-     (call-with-values
-       (lambda () expr)
-       (lambda formals body ...)))
+     (with-binding-scope ()
+       (call-with-values
+         (lambda () expr)
+         (lambda formals body ...))))
     ((let-values ((formals expr) more ...) body ...)
-     (call-with-values
-       (lambda () expr)
-       (lambda formals
-         (let-values (more ...) body ...))))))
+     (with-binding-scope ()
+       (call-with-values
+         (lambda () expr)
+         (lambda formals
+           (let-values (more ...) body ...)))))))
 
 (define-syntax let*-values
   (syntax-rules ()

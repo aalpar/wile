@@ -111,23 +111,25 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	}
 
 	// Sym has scopes (from macro expansion), use scope-aware binding resolution
-	binding := p.env.GetBindingWithScopes(sym, symbolScopes)
-	if binding == nil {
-		// No binding found that matches the scopes
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
-	}
-
-	// Check if it's a local binding
-	li := p.env.GetLocalIndex(sym)
+	// Check if it's a local binding with matching scopes
+	li := p.env.GetLocalIndexWithScopes(sym, symbolScopes)
 	if li != nil {
-		// It's a local binding and scopes matched
+		// Found a local binding with matching scopes
 		p.AppendOperations(
 			NewOperationLoadLocalByLocalIndexImmediate(li),
 		)
 		return nil
 	}
 
-	// It must be a global binding
+	// Check global binding with scope matching
+	globalBinding := p.env.GetBindingWithScopes(sym, symbolScopes)
+	if globalBinding == nil {
+		// No binding found that matches the scopes
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+	}
+
+	// It must be a global binding (since local lookup failed)
+	// Note: globalBinding is used to verify a binding exists; we need the index for codegen
 	gi := p.env.GetGlobalIndex(sym)
 	if gi == nil {
 		// This shouldn't happen if GetBindingWithScopes succeeded
