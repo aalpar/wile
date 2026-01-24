@@ -72,7 +72,7 @@ if: missing consequent: Cannot compile expression
 
 ---
 
-#### Bug: `let-syntax` hygiene failure
+#### Bug: `let-syntax` hygiene failure for local bindings
 
 **Test case** (from r7rs-tests.scm line 408-411):
 ```scheme
@@ -86,7 +86,30 @@ if: missing consequent: Cannot compile expression
 
 **Actual:** `inner` (the macro is incorrectly using the inner `x`)
 
-**Analysis:** This is a macro hygiene violation. Per R7RS §4.3.2, pattern variables and literals in a `syntax-rules` template should refer to bindings at the macro definition site, not the expansion site.
+**Root cause analysis:**
+
+The cross-library hygiene fix (commit 92ef270) implemented pre-resolved bindings for free identifiers in macro templates, but it only works for **global** bindings:
+
+1. In `collectFreeIdentifiersWithEllipsis` (compile_syntax_rules.go:308), free identifiers are resolved via `env.GetGlobalIndex(sym)`, which only returns bindings from the global environment.
+
+2. For local lexical bindings (from `let`, `lambda`, etc.), `GetGlobalIndex` returns `nil`, so no resolved binding is attached to the free identifier.
+
+3. At expansion time, since no pre-resolved binding exists, the symbol `x` resolves via normal scoping rules to whatever is in scope at the use site (the inner `x`).
+
+**Verification:**
+```scheme
+;; Global bindings work correctly:
+(define outer-x 'outer-global)
+(define-syntax m-global (syntax-rules () ((m-global) outer-x)))
+(let ((outer-x 'inner)) (m-global))  ; => 'outer-global ✓
+
+;; Local bindings fail:
+(let ((x 'outer))
+  (let-syntax ((m (syntax-rules () ((m) x))))
+    (let ((x 'inner)) (m))))  ; => 'inner ✗ (should be 'outer)
+```
+
+**Fix required:** The macro compiler needs to capture the full lexical environment at macro definition time, not just global bindings. Free identifiers should be resolved against this captured environment, including local bindings from enclosing `let`/`lambda` forms.
 
 ---
 
