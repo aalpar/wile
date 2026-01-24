@@ -113,6 +113,11 @@ func (p *Matcher) Match(target *values.Pair) error {
 			if !values.EqualTo(cd.Value, p.valueStack[lvs-1].pr[0]) {
 				return ErrNotAMatch
 			}
+		case ByteCodeCompareCdr:
+			// Compare the CDR with a literal value (for improper list patterns with literal tail)
+			if !values.EqualTo(cd.Value, p.valueStack[lvs-1].pr[1]) {
+				return ErrNotAMatch
+			}
 		case ByteCodeCaptureCar:
 			lcs := len(p.captureStack)
 			sv := p.valueStack[lvs-1].pr[0]
@@ -121,6 +126,18 @@ func (p *Matcher) Match(target *values.Pair) error {
 				return ErrNotAMatch
 			}
 			p.captureStack[lcs-1].bindings[cd.Binding] = p.valueStack[lvs-1].pr[0]
+		case ByteCodeCaptureCdr:
+			// Capture the CDR of the current pair (for improper list patterns like (_ a . rest))
+			lcs := len(p.captureStack)
+			sv := p.valueStack[lvs-1].pr[1]
+			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
+			if ok && !values.EqualTo(sv, bv) {
+				return ErrNotAMatch
+			}
+			p.captureStack[lcs-1].bindings[cd.Binding] = sv
+			// After capturing CDR, update position to indicate the entire rest is consumed.
+			// Set the current pair's cdr to empty so Done doesn't think there are extra elements.
+			p.valueStack[lvs-1].pr = values.NewCons(p.valueStack[lvs-1].pr[0], values.EmptyList)
 		case ByteCodeJump:
 			if len(p.valueStack) == 0 {
 				return nil
@@ -227,6 +244,18 @@ func (p *Matcher) Match(target *values.Pair) error {
 			if len(p.valueStack) == 0 || values.IsEmptyList(p.valueStack[lvs-1].pr) || values.IsVoid(p.valueStack[lvs-1].pr) {
 				i += cd.Offset - 1 // -1 because i++ at end of loop
 			}
+		case ByteCodeSkipIfTailCount:
+			// Skip forward if remaining elements equals Count (for ellipsis-in-middle)
+			// R7RS §4.3.2 allows patterns like (a ... b c) where ellipsis is followed by more elements
+			remaining := countRemainingElements(p.valueStack[lvs-1].pr)
+			if remaining == cd.Count {
+				// Exactly enough for trailing pattern, exit loop
+				i += cd.Offset - 1 // -1 because i++ at end of loop
+			} else if remaining < cd.Count {
+				// Not enough elements for trailing pattern
+				return ErrNotAMatch
+			}
+			// remaining > Count: continue loop to match more ellipsis iterations
 		case ByteCodeRequireCarEmpty:
 			// Verify that the car at the current position is an empty list
 			// This is generated for patterns like () that must match empty input
@@ -489,4 +518,22 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 		// Self-evaluating values (numbers, strings, etc.)
 		return t, nil
 	}
+}
+
+// countRemainingElements counts the number of elements from the current position
+// to the end of the list. Used by ByteCodeSkipIfTailCount for ellipsis-in-middle.
+func countRemainingElements(pr *values.Pair) int {
+	count := 0
+	current := pr
+	for current != nil && !values.IsEmptyList(current) && !values.IsVoid(current) {
+		count++
+		cdr := current[1]
+		next, ok := cdr.(*values.Pair)
+		if !ok {
+			// Improper list or end
+			break
+		}
+		current = next
+	}
+	return count
 }

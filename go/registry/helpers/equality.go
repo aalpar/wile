@@ -17,18 +17,37 @@ package helpers
 import "wile/values"
 
 // Eqv is a helper implementing eqv? semantics for memv and assv.
+//
+// R7RS §6.1: eqv? returns #t for numbers that are = and both exact or both inexact.
+// For exact integers (Integer and BigInteger), this means comparing numeric values.
 func Eqv(a, b values.Value) bool {
 	if a == b {
 		return true
 	}
 	switch va := a.(type) {
 	case *values.Integer:
-		if vb, ok := b.(*values.Integer); ok {
+		switch vb := b.(type) {
+		case *values.Integer:
 			return va.Value == vb.Value
+		case *values.BigInteger:
+			// Both are exact integers, compare numerically
+			return va.Compare(vb) == 0
+		}
+	case *values.BigInteger:
+		switch vb := b.(type) {
+		case *values.BigInteger:
+			return va.BigInt().Cmp(vb.BigInt()) == 0
+		case *values.Integer:
+			// Both are exact integers, compare numerically
+			return va.Compare(vb) == 0
 		}
 	case *values.Float:
 		if vb, ok := b.(*values.Float); ok {
 			return va.Value == vb.Value
+		}
+	case *values.BigFloat:
+		if vb, ok := b.(*values.BigFloat); ok {
+			return va.BigFloatValue().Cmp(vb.BigFloatValue()) == 0
 		}
 	case *values.Rational:
 		if vb, ok := b.(*values.Rational); ok {
@@ -37,6 +56,10 @@ func Eqv(a, b values.Value) bool {
 	case *values.Complex:
 		if vb, ok := b.(*values.Complex); ok {
 			return va.Value == vb.Value
+		}
+	case *values.BigComplex:
+		if vb, ok := b.(*values.BigComplex); ok {
+			return va.EqualTo(vb)
 		}
 	case *values.Character:
 		if vb, ok := b.(*values.Character); ok {

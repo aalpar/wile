@@ -347,3 +347,219 @@ func TestEllipsisEscape(t *testing.T) {
 		qt.Assert(t, ellipsisSym.Key, qt.Equals, "...")
 	})
 }
+
+// TestEllipsisInMiddle tests R7RS §4.3.2 patterns with ellipsis in the middle of a list.
+// For example: (_ a b c ... x y) where the ellipsis is followed by additional pattern elements.
+func TestEllipsisInMiddle(t *testing.T) {
+	t.Run("Simple ellipsis in middle - zero iterations", func(t *testing.T) {
+		// Pattern: (_ a c ... x y)
+		// Input: (_ 1 6 7)
+		// Expected: a=1, c=<none>, x=6, y=7
+		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
+		pattern := values.List(
+			values.NewSymbol("_"),
+			values.NewSymbol("a"),
+			values.NewSymbol("c"),
+			values.NewSymbol("..."),
+			values.NewSymbol("x"),
+			values.NewSymbol("y"),
+		)
+		input := values.List(
+			values.NewSymbol("_"),
+			values.NewInteger(1),
+			values.NewInteger(6),
+			values.NewInteger(7),
+		)
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Check bytecode includes SkipIfTailCount
+		hasSkipIfTailCount := false
+		for _, code := range compiler.codes {
+			if _, ok := code.(ByteCodeSkipIfTailCount); ok {
+				hasSkipIfTailCount = true
+				break
+			}
+		}
+		qt.Assert(t, hasSkipIfTailCount, qt.IsTrue, qt.Commentf("expected SkipIfTailCount in bytecode"))
+
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
+
+		bindings := matcher.GetBindings()
+		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["x"], values.SchemeEquals, values.NewInteger(6))
+		qt.Assert(t, bindings["y"], values.SchemeEquals, values.NewInteger(7))
+	})
+
+	t.Run("Simple ellipsis in middle - multiple iterations", func(t *testing.T) {
+		// Pattern: (_ a c ... x y)
+		// Input: (_ 1 2 3 4 5 6 7)
+		// Expected: a=1, c=2,3,4,5 (4 iterations), x=6, y=7
+		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
+		pattern := values.List(
+			values.NewSymbol("_"),
+			values.NewSymbol("a"),
+			values.NewSymbol("c"),
+			values.NewSymbol("..."),
+			values.NewSymbol("x"),
+			values.NewSymbol("y"),
+		)
+		input := values.List(
+			values.NewSymbol("_"),
+			values.NewInteger(1),
+			values.NewInteger(2),
+			values.NewInteger(3),
+			values.NewInteger(4),
+			values.NewInteger(5),
+			values.NewInteger(6),
+			values.NewInteger(7),
+		)
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
+
+		bindings := matcher.GetBindings()
+		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["x"], values.SchemeEquals, values.NewInteger(6))
+		qt.Assert(t, bindings["y"], values.SchemeEquals, values.NewInteger(7))
+	})
+
+	t.Run("Ellipsis in middle with template expansion", func(t *testing.T) {
+		// Pattern: (_ a c ... x y)
+		// Input: (_ 1 2 3 6 7)
+		// Template: (list a x y)
+		// Expected: (list 1 6 7)
+		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
+		pattern := values.List(
+			values.NewSymbol("_"),
+			values.NewSymbol("a"),
+			values.NewSymbol("c"),
+			values.NewSymbol("..."),
+			values.NewSymbol("x"),
+			values.NewSymbol("y"),
+		)
+		input := values.List(
+			values.NewSymbol("_"),
+			values.NewInteger(1),
+			values.NewInteger(2),
+			values.NewInteger(3),
+			values.NewInteger(6),
+			values.NewInteger(7),
+		)
+		template := values.List(
+			values.NewSymbol("list"),
+			values.NewSymbol("a"),
+			values.NewSymbol("x"),
+			values.NewSymbol("y"),
+		)
+		expected := values.List(
+			values.NewSymbol("list"),
+			values.NewInteger(1),
+			values.NewInteger(6),
+			values.NewInteger(7),
+		)
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
+
+		result, err := matcher.Expand(template)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("template expansion failed"))
+		qt.Assert(t, result, values.SchemeEquals, expected)
+	})
+}
+
+// TestImproperListPattern tests R7RS §4.3.2 improper list patterns like (_ a . rest).
+func TestImproperListPattern(t *testing.T) {
+	t.Run("Simple improper list pattern", func(t *testing.T) {
+		// Pattern: (_ a . rest)
+		// Input: (_ 1 2 3)
+		// Expected: a=1, rest=(2 3)
+		variables := map[string]struct{}{"a": {}, "rest": {}}
+		// Create improper list: (_ a . rest)
+		pattern := values.NewCons(
+			values.NewSymbol("_"),
+			values.NewCons(
+				values.NewSymbol("a"),
+				values.NewSymbol("rest"), // improper tail
+			),
+		)
+		input := values.List(
+			values.NewSymbol("_"),
+			values.NewInteger(1),
+			values.NewInteger(2),
+			values.NewInteger(3),
+		)
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		// Check bytecode includes CaptureCdr
+		hasCaptureCdr := false
+		for _, code := range compiler.codes {
+			if _, ok := code.(ByteCodeCaptureCdr); ok {
+				hasCaptureCdr = true
+				break
+			}
+		}
+		qt.Assert(t, hasCaptureCdr, qt.IsTrue, qt.Commentf("expected CaptureCdr in bytecode, got: %v", compiler.codes))
+
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
+
+		bindings := matcher.GetBindings()
+		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["rest"], values.SchemeEquals, values.List(values.NewInteger(2), values.NewInteger(3)))
+	})
+
+	t.Run("Improper list pattern with single element rest", func(t *testing.T) {
+		// Pattern: (_ a . rest)
+		// Input: (_ 1 2)
+		// Expected: a=1, rest=(2)
+		variables := map[string]struct{}{"a": {}, "rest": {}}
+		pattern := values.NewCons(
+			values.NewSymbol("_"),
+			values.NewCons(
+				values.NewSymbol("a"),
+				values.NewSymbol("rest"),
+			),
+		)
+		input := values.List(
+			values.NewSymbol("_"),
+			values.NewInteger(1),
+			values.NewInteger(2),
+		)
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.Background(), pattern)
+		qt.Assert(t, err, qt.IsNil)
+
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err = matcher.Match(input)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
+
+		bindings := matcher.GetBindings()
+		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["rest"], values.SchemeEquals, values.List(values.NewInteger(2)))
+	})
+}

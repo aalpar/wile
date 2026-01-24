@@ -24,6 +24,8 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 **SyntaxCompiler** - Compiles patterns to bytecode:
 - `ellipsis` - Custom ellipsis identifier for pattern compilation
 - `literals` - Literal identifiers that match by name, not as variables
+- `skipMacroKeyword` - When true, skips the first pattern element (macro keyword placeholder)
+- `macroKeywordPassed` - Tracks whether the first element has been processed
 
 **SyntaxMatcher** - Layer 2 bridge for syntax objects with hygiene:
 - `ellipsisID` - Custom ellipsis identifier passed to underlying Matcher
@@ -33,12 +35,15 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 | Instruction | Purpose |
 |-------------|---------|
 | `ByteCodeCompareCar` | Compare car with literal |
+| `ByteCodeCompareCdr` | Compare cdr with literal (improper list patterns) |
 | `ByteCodeCaptureCar` | Capture car as pattern variable |
+| `ByteCodeCaptureCdr` | Capture cdr as pattern variable (improper list patterns) |
 | `ByteCodeVisitCar/Cdr` | Navigate into list |
 | `ByteCodeDone` | Signal completion |
 | `ByteCodePushContext` | Start ellipsis iteration |
 | `ByteCodePopContext` | Close iteration context |
 | `ByteCodeSkipIfEmpty` | While-loop check for zero iterations |
+| `ByteCodeSkipIfTailCount` | Exit ellipsis loop when N elements remain (ellipsis-in-middle) |
 | `ByteCodeJump` | Unconditional jump for loops |
 
 ## Gotchas
@@ -53,6 +58,9 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - **Underscore checks literals**: `_` is a wildcard only if NOT in the literals list; `compileSymbolElement` checks this
 - **Escape form detection**: `expandValue` checks for `(<ellipsisID> <template>)` and calls `expandEscapedTemplate` which expands without treating ellipsis specially
 - **Free identifiers with pre-resolved bindings**: In `valueToSyntaxWithOrigin`, free identifiers (non-pattern-variables like `if`, `begin`, helper functions) receive pre-resolved bindings from the `freeIds` map. At macro definition time, free identifiers are resolved to their `GlobalIndex` and stored in `freeIds`. During template expansion, these bindings are attached to symbols via `WithResolvedBinding()`. This ensures R7RS §4.3 compliance: macro-introduced identifiers refer to definition-time bindings even when the macro is used in a different library context.
+- **Improper list patterns**: Patterns like `(_ a . rest)` use `ByteCodeCaptureCdr` to capture the remaining input. After capturing, the value stack position is updated to empty to prevent `Done` from seeing "extra" elements.
+- **Ellipsis-in-middle patterns**: Patterns like `(_ a b ... x y)` use `ByteCodeSkipIfTailCount` to exit the loop when exactly N elements remain for the trailing pattern. The compiler counts trailing elements via `countPatternTailElements`.
+- **Macro keyword placeholder**: R7RS §4.3.2 specifies that the first element of each syntax-rules pattern is the macro keyword placeholder and should not be matched. `CompileSyntaxPatternWithLiterals` enables `skipMacroKeyword` to skip bytecode generation for the first element. This allows patterns like `(foo _)` to match `(my-macro bar)` where `foo` != `my-macro`.
 
 ## Testing
 

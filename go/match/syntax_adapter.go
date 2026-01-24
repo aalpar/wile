@@ -220,8 +220,6 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 		// 1. Each input position has a unique pointer in syntaxMap
 		// 2. Template symbols (which are the original interned pointers) won't be in syntaxMap
 		// 3. Template symbols will correctly get intro-scope
-		//
-		// See plans/SYMBOL_INTERNING_HYGIENE_FIX.md for detailed analysis.
 		result = values.NewSymbol(s.Sym.Key)
 
 	case *syntax.SyntaxObject:
@@ -287,8 +285,6 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 	// - Input symbols have unique pointers, correctly mapped in syntaxMap
 	// - Template symbols use the original interned pointers, NOT in syntaxMap
 	// - Template symbols will go through the intro-scope path below
-	//
-	// See plans/SYMBOL_INTERNING_HYGIENE_FIX.md for detailed analysis.
 	if origStx, ok := sm.syntaxMap[val]; ok {
 		return origStx
 	}
@@ -626,6 +622,8 @@ func CompileSyntaxPatternWithEllipsis(ctx context.Context, pattern syntax.Syntax
 // CompileSyntaxPatternWithLiterals compiles a syntax pattern into bytecode with literals and custom ellipsis.
 // The literals parameter contains identifiers that should be matched literally (not as pattern variables).
 // The ellipsisID parameter specifies the identifier used for ellipsis patterns.
+// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro being transformed;
+// it is not matched against the macro use being transformed.
 func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, literals map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
 	if ellipsisID == "" {
 		ellipsisID = DefaultEllipsis
@@ -646,6 +644,9 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	if literals != nil {
 		compiler.literals = literals
 	}
+	// Enable macro keyword skipping for syntax-rules patterns.
+	// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro.
+	compiler.SetSkipMacroKeyword(true)
 	err := compiler.Compile(ctx, pair)
 	if err != nil {
 		return nil, err

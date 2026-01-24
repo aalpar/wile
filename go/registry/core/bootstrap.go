@@ -226,7 +226,7 @@ const bootstrapMacroSource = `
 (define-syntax let-values
   (syntax-rules ()
     ((let-values () body ...)
-     (begin body ...))
+     (let () body ...))
     ((let-values ((formals expr)) body ...)
      (with-binding-scope ()
        (call-with-values
@@ -242,7 +242,7 @@ const bootstrapMacroSource = `
 (define-syntax let*-values
   (syntax-rules ()
     ((let*-values () body ...)
-     (begin body ...))
+     (let () body ...))
     ((let*-values ((formals expr) more ...) body ...)
      (call-with-values
        (lambda () expr)

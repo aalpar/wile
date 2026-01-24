@@ -74,6 +74,16 @@ It does NOT depend on:
 |----------|-------------|
 | `Eqv(a, b)` | eqv? semantics for numeric/character comparison |
 
+The `Eqv` function implements R7RS `eqv?` semantics for:
+- `*Integer` (including cross-type comparison with `*BigInteger`)
+- `*BigInteger` (including cross-type comparison with `*Integer`)
+- `*Float`
+- `*BigFloat`
+- `*Rational`
+- `*Complex`
+- `*BigComplex`
+- `*Character`
+
 ### List Helpers
 
 | Function | Description |

@@ -302,8 +302,11 @@ After fixing the bug:
 
 ## Example: Complete Debug Session
 
-See `plans/SYMBOL_INTERNING_HYGIENE_FIX.md` for a real example of this methodology applied to debug a macro hygiene bug, including:
-- Problem statement
-- Multiple hypothesis iterations
-- Debug path tracking
-- Final resolution documentation
+The Go interface nil check bug in `match/syntax_adapter.go` (commit history) demonstrates this methodology:
+
+1. **Problem**: `(let ((x 8)) (or #f (or #f x)))` returned `#f` instead of `8`
+2. **Hypothesis**: Template symbols not getting intro scope
+3. **Debug logging**: Added prints at nil check branch points
+4. **Discovery**: `globalBinding=<nil>, isNil=false` - Go interface nil gotcha
+5. **Fix**: Added reflection-based nil check
+6. **Verification**: All three hygiene test cases pass

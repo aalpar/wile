@@ -602,4 +602,4 @@ If these are needed later, they can be added without changing the core provenanc
 
 - Flatt, M. (2016). "Binding as Sets of Scopes" — Core theory
 - `syntax/source_context.go` — Existing `OriginInfo` for macro expansion provenance
-- `plans/LET_SYNTAX_HYGIENE_FIX.md` — Completed hygiene fix using `with-binding-scope`
+- `machine/expander_time_continuation.go` — `with-binding-scope` implementation
