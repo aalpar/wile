@@ -118,7 +118,7 @@ func (p *SyntaxSymbol) Datum() *values.Symbol {
 
 // UnwrapAll returns the underlying symbol value.
 func (p *SyntaxSymbol) UnwrapAll() values.Value {
-	return p.Unwrap()
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 func (p *SyntaxSymbol) Unwrap() values.Value {

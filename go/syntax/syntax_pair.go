@@ -157,24 +157,7 @@ func (p *SyntaxPair) SourceContext() *SourceContext {
 
 // UnwrapAll recursively unwraps the pair and returns a regular Scheme pair.
 func (p *SyntaxPair) UnwrapAll() values.Value {
-	if p.IsVoid() {
-		return values.Void
-	}
-	if p.IsEmptyList() {
-		return values.EmptyList
-	}
-	// Handle nil car/cdr values defensively
-	var car, cdr values.Value
-	if p.Values[0] != nil {
-		car = p.Values[0].UnwrapAll()
-	}
-	if p.Values[1] != nil {
-		cdr = p.Values[1].UnwrapAll()
-	} else {
-		cdr = values.EmptyList
-	}
-	q := values.NewCons(car, cdr)
-	return q
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // Unwrap returns a regular Scheme pair without recursively unwrapping.

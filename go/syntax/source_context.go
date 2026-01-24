@@ -162,8 +162,8 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 		File:   p.File,
 		Start:  p.Start,
 		End:    p.End,
-		Scopes: newScopes,
 		Origin: p.Origin,
+		Scopes: newScopes,
 	}
 }
 
@@ -185,8 +185,8 @@ func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
 		File:   p.File,
 		Start:  p.Start,
 		End:    p.End,
-		Scopes: newScopes,
 		Origin: p.Origin,
+		Scopes: newScopes,
 	}
 }
 

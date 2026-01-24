@@ -95,7 +95,8 @@ func (p *SyntaxObject) Datum() values.Value {
 func (p *SyntaxObject) AddScope(scope *Scope) SyntaxValue {
 	// If the datum is a syntax value, recursively add scope to it
 	newDatum := p.Datum()
-	if stx, ok := p.Datum().(SyntaxValue); ok {
+	stx, ok := p.Datum().(SyntaxValue)
+	if ok {
 		if adder, ok := stx.(interface{ AddScope(*Scope) SyntaxValue }); ok {
 			newDatum = adder.AddScope(scope)
 		}
@@ -116,11 +117,7 @@ func (p *SyntaxObject) Scopes() []*Scope {
 
 // UnwrapAll recursively unwraps all syntax wrappers and returns the underlying value.
 func (p *SyntaxObject) UnwrapAll() values.Value {
-	switch v := p.Datum().(type) {
-	case SyntaxValue:
-		return v.UnwrapAll()
-	}
-	return p.Unwrap()
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 func (p *SyntaxObject) Unwrap() values.Value {
@@ -249,7 +246,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 
 	case *SyntaxDatumLabel:
 		// This should not normally happen if the parser resolved the label
-		result := v.UnwrapAll()
+		result := values.NewInteger(int64(v.Label))
 		cache[sv] = result
 		return result
 
@@ -258,9 +255,25 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = result
 		return result
 
+	case *SyntaxComment:
+		result := values.NewString(v.Text)
+		cache[sv] = result
+		return result
+
+	case *SyntaxDirective:
+		result := values.NewString(v.Name)
+		cache[sv] = result
+		return result
+
+	case *SyntaxDatumComment:
+		// Recursively unwrap the commented value
+		result := UnwrapAllShared(v.Value, cache)
+		cache[sv] = result
+		return result
+
 	default:
-		// For other types (SyntaxComment, SyntaxDirective, etc.), use standard UnwrapAll
-		result := sv.UnwrapAll()
+		// All syntax types should be handled above
+		result := sv.Unwrap()
 		cache[sv] = result
 		return result
 	}

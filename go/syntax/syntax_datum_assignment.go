@@ -62,12 +62,7 @@ func (p *SyntaxDatumLabelAssignment) Unwrap() values.Value {
 
 // UnwrapAll recursively unwraps the assigned value.
 func (p *SyntaxDatumLabelAssignment) UnwrapAll() values.Value {
-	q := p.Value
-	sv, ok := p.Value.(SyntaxValue)
-	if ok {
-		q = sv.UnwrapAll()
-	}
-	return q
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // EqualTo returns true if both assignments are the same object.

@@ -53,7 +53,7 @@ func (p *SyntaxComment) Unwrap() values.Value {
 
 // UnwrapAll returns the comment text as a string value.
 func (p *SyntaxComment) UnwrapAll() values.Value {
-	return values.NewString(p.Text)
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // IsVoid returns true if the comment is nil.
