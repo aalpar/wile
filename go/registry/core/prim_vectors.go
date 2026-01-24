@@ -69,6 +69,7 @@ func PrimVectorLength(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimVectorRef implements the vector-ref primitive.
 // Returns the element of a vector at the given index.
+// R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
@@ -76,19 +77,20 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-ref: expected a vector but got %T", o)
 	}
-	idx, ok := k.(*values.Integer)
+	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-ref: expected an integer but got %T", k)
+		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-ref: expected an exact integer but got %T", k)
 	}
-	if idx.Value < 0 || idx.Value >= int64(len(*v)) {
+	if idx < 0 || idx >= int64(len(*v)) {
 		return values.NewForeignError("vector-ref: index out of bounds")
 	}
-	mc.SetValue((*v)[idx.Value])
+	mc.SetValue((*v)[idx])
 	return nil
 }
 
 // PrimVectorSet implements the vector-set! primitive.
 // Sets the element of a vector at the given index to a new value.
+// R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
@@ -97,14 +99,14 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-set!: expected a vector but got %T", o)
 	}
-	idx, ok := k.(*values.Integer)
+	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-set!: expected an integer but got %T", k)
+		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-set!: expected an exact integer but got %T", k)
 	}
-	if idx.Value < 0 || idx.Value >= int64(len(*v)) {
+	if idx < 0 || idx >= int64(len(*v)) {
 		return values.NewForeignError("vector-set!: index out of bounds")
 	}
-	(*v)[idx.Value] = obj
+	(*v)[idx] = obj
 	mc.SetValues()
 	return nil
 }

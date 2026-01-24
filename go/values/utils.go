@@ -146,3 +146,36 @@ func VectorToList(vs *Vector) *Pair {
 	}
 	return q
 }
+
+// ExactInteger extracts an exact integer from a Scheme value.
+// Returns the int64 value and true if the value is an exact integer that fits in int64.
+// Returns 0 and false otherwise.
+//
+// Accepts:
+//   - *Integer: direct int64 value
+//   - *BigInteger: if it fits in int64
+//   - *Rational: if denominator is 1 and numerator fits in int64
+//
+// R7RS defines exact integers to include rationals like 2/1 that are mathematically
+// integers. Call sites should check for non-negativity if required (e.g., for indexes).
+func ExactInteger(v Value) (int64, bool) {
+	switch n := v.(type) {
+	case *Integer:
+		return n.Value, true
+	case *BigInteger:
+		if n.value.IsInt64() {
+			return n.value.Int64(), true
+		}
+		return 0, false
+	case *Rational:
+		if n.IsInteger() {
+			num := n.Num()
+			if num.IsInt64() {
+				return num.Int64(), true
+			}
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
