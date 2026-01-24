@@ -17,11 +17,12 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateSetBang validates (set! name expr)
-func validateSetBang(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -45,7 +46,7 @@ func validateSetBang(ctx context.Context, pair *syntax.SyntaxPair, result *Valid
 	}
 
 	// Validate the value expression
-	value := validateExpr(ctx, elements[2], result)
+	value := validateExpr(ctx, env, elements[2], result)
 	if value == nil {
 		return nil
 	}

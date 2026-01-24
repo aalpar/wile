@@ -38,6 +38,7 @@ package match
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	"wile/syntax"
 	"wile/values"
@@ -210,7 +211,18 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 		}
 
 	case *syntax.SyntaxSymbol:
-		result = s.Unwrap()
+		// Create a FRESH symbol instance instead of using the globally interned one.
+		// This is critical for hygiene: the syntaxMap uses symbol pointers as keys,
+		// and if we use interned symbols, different occurrences of the same name
+		// (user's 'p' vs template's 'p') would collide.
+		//
+		// By creating fresh symbols for INPUT, we ensure:
+		// 1. Each input position has a unique pointer in syntaxMap
+		// 2. Template symbols (which are the original interned pointers) won't be in syntaxMap
+		// 3. Template symbols will correctly get intro-scope
+		//
+		// See plans/SYMBOL_INTERNING_HYGIENE_FIX.md for detailed analysis.
+		result = values.NewSymbol(s.Sym.Key)
 
 	case *syntax.SyntaxObject:
 		result = s.Unwrap()
@@ -267,8 +279,16 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		return nil
 	}
 
-	// Check if this value has a corresponding original syntax object
-	// If so, return the original to preserve scopes (no intro scope added!)
+	// Check if this value has a corresponding original syntax object in syntaxMap.
+	// If so, return the original to preserve scopes (no intro scope added!).
+	//
+	// This works for symbols too now because syntaxToValue creates FRESH symbol
+	// instances for input (not the globally interned ones). This means:
+	// - Input symbols have unique pointers, correctly mapped in syntaxMap
+	// - Template symbols use the original interned pointers, NOT in syntaxMap
+	// - Template symbols will go through the intro-scope path below
+	//
+	// See plans/SYMBOL_INTERNING_HYGIENE_FIX.md for detailed analysis.
 	if origStx, ok := sm.syntaxMap[val]; ok {
 		return origStx
 	}
@@ -321,7 +341,9 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 		if isFree && resolution != nil {
 			// Check for local binding resolution first (for let-syntax hygiene)
 			if lsp, ok := resolution.(localScopesProvider); ok {
-				if localScopes := lsp.GetLocalScopes(); localScopes != nil {
+				localScopes := lsp.GetLocalScopes()
+				// Check for non-empty local scopes (empty slice should NOT match)
+				if len(localScopes) > 0 {
 					// Local binding - use ONLY definition-site scopes, NOT use-site scopes
 					// This ensures the identifier resolves to the binding from
 					// macro definition time, not a shadowing binding at use site.
@@ -348,7 +370,17 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 
 			// Check for global binding resolution (for cross-library hygiene)
 			if gbp, ok := resolution.(globalBindingProvider); ok {
-				if globalBinding := gbp.GetGlobal(); globalBinding != nil {
+				globalBinding := gbp.GetGlobal()
+				// Check if globalBinding is actually non-nil (not just interface-non-nil)
+				// Go interfaces are nil only if both type and value are nil
+				isActuallyNil := globalBinding == nil
+				if !isActuallyNil {
+					// Use reflection to check if the underlying value is nil
+					if rv := reflect.ValueOf(globalBinding); !rv.IsValid() || rv.IsNil() {
+						isActuallyNil = true
+					}
+				}
+				if !isActuallyNil {
 					// Global binding - strip scopes and attach resolved binding
 					symCtx := srcCtx
 					if srcCtx != nil && len(srcCtx.Scopes) > 0 {
@@ -367,8 +399,16 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 				}
 			}
 
-			// Resolution exists but has no local or global binding (e.g., special forms)
-			// Strip scopes but don't attach binding
+			// Resolution exists but has no local or global binding (e.g., special forms,
+			// or template-bound identifiers like 'x' in (let ((x ...)) ...))
+			//
+			// IMPORTANT: We still add intro scope here! Template-bound identifiers need
+			// intro scope to be distinguished from user's identifiers with the same name.
+			// This fixes the hygiene bug where (let ((x 8)) (or #f (or #f x))) was returning
+			// #f instead of 8 because template's 'x' binding was capturing user's 'x'.
+			//
+			// For special forms (if, let, etc.), the intro scope is harmless because they
+			// resolve via their definition-time binding or compile-time handling.
 			symCtx := srcCtx
 			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 				symCtx = &syntax.SourceContext{
@@ -380,11 +420,22 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 				}
 			}
 			sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
+			// Add intro scope to template-bound identifiers for hygiene
+			if introScope != nil {
+				sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
+			}
 			return sym
 		}
 
 		// Not a free identifier - create symbol with intro scope
-		sym := syntax.NewSyntaxSymbol(v.Key, srcCtx)
+		// Strip scopes from srcCtx: template identifiers should not inherit
+		// use-site scopes, only the explicitly-added intro scope (Flatt 2016).
+		// This prevents template's `if` from matching user's `(let ((if f)) ...)`
+		templateCtx := srcCtx
+		if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+			templateCtx = srcCtx.WithoutScopes()
+		}
+		sym := syntax.NewSyntaxSymbol(v.Key, templateCtx)
 		if introScope != nil {
 			sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
 		}

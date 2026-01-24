@@ -17,11 +17,12 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateQuote validates (quote datum)
-func validateQuote(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateQuote(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -48,7 +49,7 @@ func validateQuote(_ context.Context, pair *syntax.SyntaxPair, result *Validatio
 // validateQuasiquote validates (quasiquote template)
 // Note: The template is not deeply validated here because quasiquote
 // has complex runtime semantics with nested unquote/unquote-splicing
-func validateQuasiquote(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateQuasiquote(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice

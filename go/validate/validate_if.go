@@ -17,11 +17,12 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateIf validates (if test conseq [alt])
-func validateIf(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateIf(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice for easier validation
@@ -45,12 +46,12 @@ func validateIf(ctx context.Context, pair *syntax.SyntaxPair, result *Validation
 	}
 
 	// Validate sub-expressions (continue even if some fail to collect all errors)
-	test := validateExpr(ctx, elements[1], result)
-	conseq := validateExpr(ctx, elements[2], result)
+	test := validateExpr(ctx, env, elements[1], result)
+	conseq := validateExpr(ctx, env, elements[2], result)
 
 	var alt ValidatedExpr
 	if argCount == 3 {
-		alt = validateExpr(ctx, elements[3], result)
+		alt = validateExpr(ctx, env, elements[3], result)
 	}
 
 	// If any sub-validation failed, don't return a valid form

@@ -17,24 +17,27 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/forms"
 	"wile/syntax"
 	"wile/values"
 )
 
 // ValidateExpression validates a syntax expression and returns
-// a validated form or a list of errors
-func ValidateExpression(ctx context.Context, expr syntax.SyntaxValue) *ValidationResult {
+// a validated form or a list of errors.
+// The env parameter provides the environment context for checking local variable
+// shadowing of special forms (R7RS §4.2.2).
+func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) *ValidationResult {
 	result := &ValidationResult{}
-	validated := validateExpr(ctx, expr, result)
+	validated := validateExpr(ctx, env, expr, result)
 	result.Expr = validated
 	return result
 }
 
-func validateExpr(ctx context.Context, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	switch e := expr.(type) {
 	case *syntax.SyntaxPair:
-		return validateForm(ctx, e, result)
+		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
 		return &ValidatedSymbol{source: e.SourceContext(), formName: "@symbol", Symbol: e}
 	case *syntax.SyntaxObject:
@@ -59,7 +62,7 @@ func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) Va
 	}
 }
 
-func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	// Get the first element to determine the form type
 	car := pair.SyntaxCar()
 
@@ -67,10 +70,18 @@ func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 	if sym, ok := car.(*syntax.SyntaxSymbol); ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
+			// R7RS §4.2.2: Local variable bindings shadow special forms
+			// Check if there's a local variable binding that shadows this form
+			hasLocal := hasLocalVariableBinding(env, symVal, sym.Scopes())
+			if hasLocal {
+				// Local variable shadows the special form - treat as procedure call
+				return validateCall(ctx, env, pair, result)
+			}
+
 			// Look up the form in the registry
 			spec := forms.Lookup(symVal.Key)
 			if spec != nil && spec.Validate != nil {
-				validated := spec.Validate(ctx, pair, result)
+				validated := spec.Validate(ctx, env, pair, result)
 				if validated == nil {
 					return nil
 				}
@@ -80,7 +91,48 @@ func validateForm(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 	}
 
 	// Not a special form - it's a function call
-	return validateCall(context.TODO(), pair, result)
+	return validateCall(ctx, env, pair, result)
+}
+
+// hasLocalVariableBinding checks if the symbol has a local variable binding
+// in the runtime environment that would shadow a special form.
+// R7RS §4.2.2: let bindings shadow outer bindings including special forms.
+func hasLocalVariableBinding(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) bool {
+	if env == nil {
+		return false
+	}
+
+	// Only check local bindings - global variables don't shadow special forms
+	li := env.GetLocalIndex(sym)
+	if li == nil {
+		return false
+	}
+
+	// Get the actual binding to check its type and scopes
+	binding := env.GetLocalBinding(li)
+	if binding == nil {
+		return false
+	}
+
+	// Only variable bindings shadow special forms
+	if binding.BindingType() != environment.BindingTypeVariable {
+		return false
+	}
+
+	// Check scope compatibility for hygiene
+	bindingScopes := binding.Scopes()
+	if bindingScopes == nil || len(bindingScopes) == 0 {
+		// Binding has no scopes (user code) - matches any use
+		return true
+	}
+
+	// Flatt's hygiene model: a reference matches a binding if the binding's
+	// scopes are a SUBSET of the reference's scopes. This ensures:
+	// - User's (if y) with scopes {let-scope, macro-scope} matches binding with {let-scope}
+	// - Macro template's (if ...) with scopes {macro-def-scope} does NOT match user's binding
+	//   because {let-scope} is not a subset of {macro-def-scope}
+	// ScopesMatch(useScopes, bindingScopes) checks bindingScopes ⊆ useScopes
+	return syntax.ScopesMatch(scopes, bindingScopes)
 }
 
 // collectList converts a syntax list to a slice of elements.

@@ -117,6 +117,23 @@ func (p *SourceContext) WithOrigin(origin *OriginInfo) *SourceContext {
 	}
 }
 
+// WithoutScopes returns a new SourceContext with scopes cleared.
+// Used when creating template identifiers that should not inherit
+// use-site scopes during macro expansion (Flatt 2016 hygiene model).
+func (p *SourceContext) WithoutScopes() *SourceContext {
+	if p == nil {
+		return nil
+	}
+	return &SourceContext{
+		Text:   p.Text,
+		File:   p.File,
+		Start:  p.Start,
+		End:    p.End,
+		Origin: p.Origin,
+		// Scopes intentionally omitted
+	}
+}
+
 // WithScope returns a new SourceContext with an additional scope.
 //
 // This is the primitive operation for adding hygiene scopes to syntax objects.

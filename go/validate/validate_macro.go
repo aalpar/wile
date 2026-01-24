@@ -17,6 +17,7 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 	"wile/values"
 )
@@ -24,7 +25,7 @@ import (
 // validateDefineSyntax validates (define-syntax keyword transformer)
 // Returns a ValidatedLiteral wrapping the original form since the compiler
 // has specialized handling for this.
-func validateDefineSyntax(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -55,7 +56,7 @@ func validateDefineSyntax(_ context.Context, pair *syntax.SyntaxPair, result *Va
 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateSyntaxRules(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -118,7 +119,7 @@ func validateSyntaxRules(ctx context.Context, pair *syntax.SyntaxPair, result *V
 
 // validateImport validates (import import-set...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateImport(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -147,7 +148,7 @@ func validateImport(_ context.Context, pair *syntax.SyntaxPair, result *Validati
 
 // validateExport validates (export export-spec...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateExport(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -177,7 +178,7 @@ func validateExport(_ context.Context, pair *syntax.SyntaxPair, result *Validati
 
 // validateDefineLibrary validates (define-library (name...) declaration...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateDefineLibrary(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -226,7 +227,7 @@ func validateDefineLibrary(ctx context.Context, pair *syntax.SyntaxPair, result 
 
 // validateInclude validates (include filename...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateInclude(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)
@@ -256,7 +257,7 @@ func validateInclude(_ context.Context, pair *syntax.SyntaxPair, result *Validat
 
 // validateCondExpand validates (cond-expand clause...)
 // Returns a ValidatedLiteral wrapping the original form.
-func validateCondExpand(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	elements, improper := collectList(pair)

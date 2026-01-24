@@ -1012,7 +1012,9 @@ func (p *CompileTimeContinuation) CompileUnquoteSplicing(_ CompileTimeCallContex
 // CompileExpression compiles a general expression.
 func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// Validate the expression first
-	result := validate.ValidateExpression(context.TODO(), expr)
+	// Pass the environment so validation can check for local variable shadowing
+	// of special forms (R7RS §4.2.2)
+	result := validate.ValidateExpression(context.TODO(), p.env, expr)
 	if !result.Ok() {
 		return values.NewForeignError(result.Error())
 	}

@@ -17,6 +17,7 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/forms"
 	"wile/syntax"
 )
@@ -61,18 +62,23 @@ func init() {
 }
 
 // validatorFunc is the internal type for validation functions.
-type validatorFunc func(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr
+// The env parameter provides the environment for checking local variable shadowing.
+type validatorFunc func(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr
 
 // registerValidator wraps a validation function and registers it with the forms package.
 func registerValidator(name string, fn validatorFunc) {
-	forms.RegisterValidator(name, func(ctx context.Context, pair any, result any) any {
-		return fn(ctx, pair.(*syntax.SyntaxPair), result.(*ValidationResult))
+	forms.RegisterValidator(name, func(ctx context.Context, env any, pair any, result any) any {
+		var envFrame *environment.EnvironmentFrame
+		if env != nil {
+			envFrame = env.(*environment.EnvironmentFrame)
+		}
+		return fn(ctx, envFrame, pair.(*syntax.SyntaxPair), result.(*ValidationResult))
 	})
 }
 
 // registerPassthrough registers a form that passes through as ValidatedLiteral.
 func registerPassthrough(name string) {
-	forms.RegisterValidator(name, func(_ context.Context, pair any, _ any) any {
+	forms.RegisterValidator(name, func(_ context.Context, _ any, pair any, _ any) any {
 		p := pair.(*syntax.SyntaxPair)
 		return &ValidatedLiteral{source: p.SourceContext(), formName: "@literal", Value: p}
 	})

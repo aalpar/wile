@@ -405,29 +405,40 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 }
 
 // GetLocalIndexWithScopes returns the LocalIndex of a local binding that matches the given scopes.
-// This is used for hygienic variable resolution where we need to find a specific binding
-// (not just the innermost one) based on scope compatibility.
+// This implements Flatt's "maximal" binding resolution: among all bindings whose scopes
+// are a subset of the reference's scopes, we return the one with the LARGEST scope set.
+// This ensures that more specific bindings are preferred over less specific ones.
 // Returns nil if no matching local binding exists.
 func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
 	if p == nil || p.local == nil {
 		return nil
 	}
+
+	// Collect all matching bindings with their scope counts
+	type candidate struct {
+		index      *LocalIndex
+		scopeCount int
+	}
+	var candidates []candidate
+
 	env := p
 	j := 0
 	for env != nil && env.local != nil {
 		if i, ok := env.local.keys[*key]; ok {
 			binding := env.local.bindings[i]
 			if binding != nil {
+				bindingScopes := binding.Scopes()
 				// Check if scopes match
-				if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
-					// Binding has no scopes (top-level or pre-hygiene), accept it
-					return NewLocalIndex(i, j)
+				if bindingScopes == nil || len(bindingScopes) == 0 {
+					// Binding has no scopes (top-level or pre-hygiene)
+					// This is a valid candidate with scope count 0
+					candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})
+				} else if syntax.ScopesMatch(scopes, bindingScopes) {
+					// Scopes match - count how many scopes are in common
+					// (which equals len(bindingScopes) since it's a subset)
+					candidates = append(candidates, candidate{NewLocalIndex(i, j), len(bindingScopes)})
 				}
-				// Check scope compatibility
-				if syntax.ScopesMatch(scopes, binding.Scopes()) {
-					return NewLocalIndex(i, j)
-				}
-				// Scopes don't match - continue searching parent frames
+				// If scopes don't match, skip this binding
 			}
 		}
 		if env.IsTopLevel() {
@@ -436,7 +447,20 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 		env = env.parent
 		j++
 	}
-	return nil
+
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Find the candidate with the maximum scope count (most specific binding)
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.scopeCount > best.scopeCount {
+			best = c
+		}
+	}
+
+	return best.index
 }
 
 // GetLocalBinding returns the binding for the given LocalIndex.

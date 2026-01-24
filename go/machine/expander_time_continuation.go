@@ -530,6 +530,11 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 }
 
 // expandLambdaForm expands (lambda (args...) body...)
+//
+// R7RS §4.2.2: Lambda parameters shadow outer bindings including macros and
+// primitive forms. This function creates a child environment with the formals
+// as local variable bindings before expanding the body, ensuring that references
+// to parameter names (like `if`, `let`) don't get treated as special forms.
 func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
@@ -546,7 +551,22 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	expandedBody, err := p.ExpandSyntaxArgumentList(ectx, cdrPair)
+	// Extract formal parameter symbols and their scopes
+	formalSyms := extractFormalSymbols(formals)
+
+	// Create a child environment with the formals as local variable bindings.
+	// This ensures that parameter names shadow macros and primitive forms.
+	childEnv := environment.NewEnvironmentFrameWithParent(
+		environment.NewLocalEnvironment(0),
+		p.env,
+	)
+	for _, fs := range formalSyms {
+		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
+	}
+
+	// Expand body in the child environment
+	childExpander := NewExpanderTimeContinuation(childEnv)
+	expandedBody, err := childExpander.ExpandSyntaxArgumentList(ectx, cdrPair)
 	if err != nil {
 		return nil, fmt.Errorf("lambda: failed to expand body: %w", err)
 	}
@@ -554,6 +574,45 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 	// Build (lambda formals expanded-body...)
 	args := syntax.NewSyntaxCons(formalsStx, expandedBody, sym.SourceContext())
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+}
+
+// formalSymbol pairs a symbol with its scopes for formal parameter tracking.
+type formalSymbol struct {
+	sym    *values.Symbol
+	scopes []*syntax.Scope
+}
+
+// extractFormalSymbols extracts symbols from a lambda formals expression.
+// Handles proper lists (x y z), improper lists (x y . rest), and single symbols (args).
+func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
+	var result []formalSymbol
+
+	switch f := formals.(type) {
+	case *syntax.SyntaxSymbol:
+		// Rest argument: (lambda args body...)
+		result = append(result, formalSymbol{f.Sym, f.Scopes()})
+	case *syntax.SyntaxPair:
+		// List of arguments: (lambda (x y z) body...) or (lambda (x y . rest) body...)
+		current := f
+		for !syntax.IsSyntaxEmptyList(current) {
+			car := current.SyntaxCar()
+			if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+			}
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else if sym, ok := cdr.(*syntax.SyntaxSymbol); ok {
+				// Improper list: (x y . rest)
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+				break
+			} else {
+				break
+			}
+		}
+	}
+
+	return result
 }
 
 // expandCaseLambdaForm expands (case-lambda (formals body...) ...)
@@ -634,8 +693,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return nil, fmt.Errorf("expected a symbol for syntax, got %T", sym.Unwrap())
 	}
 
-	// R7RS §4.2.2: Local variable bindings shadow macros
-	// Check if there's a local variable binding before checking for macros
+	// R7RS §4.2.2: Local variable bindings shadow macros AND primitive forms
+	// Check if there's a local variable binding before checking for macros or primitives
 	if !p.hasLocalVariableBinding(sym0, sym.Scopes()) {
 		// No local variable shadowing - check for macros
 		// First check local bindings in p.env (supports let-syntax local macros)
@@ -653,17 +712,16 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 
 		// Check if it's a macro binding
 		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
-			// This is a macro - invoke the transformer (handled below after this block)
+			// This is a macro - invoke the transformer
 			return p.expandMacroInvocation(ectx, sym, expr, bnd)
 		}
-	}
 
-	// Not a macro (or local variable shadows macro)
-	// Check if it's a primitive (quote, if, define-syntax, etc.)
-	symVal := p.env.InternSymbol(sym0)
-	pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
-	if pe != nil {
-		return pe.Expand(p, ectx, sym, expr)
+		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
+		symVal := p.env.InternSymbol(sym0)
+		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
+		if pe != nil {
+			return pe.Expand(p, ectx, sym, expr)
+		}
 	}
 
 	// Regular procedure call - expand arguments (they might contain macro calls)

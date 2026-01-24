@@ -161,6 +161,7 @@ Note: GitHub does not allow self-approval of PRs even with admin privileges, but
 - `plans/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
 - `plans/R7RS_CONFORMANCE_PLAN.md` - R7RS conformance roadmap
 - `plans/OPTIMIZATION_PLAN.md` - Performance optimization roadmap
+- `plans/SYSTEMATIC_DEBUG_LOGGING.md` - Methodology for debugging complex issues with targeted debug logging
 
 **Plan file naming**: Use `UPPERCASE_WITH_UNDERSCORES.md` (e.g., `OPTIMIZATION_PLAN.md`, `TESTING_PLAN.md`).
 
