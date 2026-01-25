@@ -419,6 +419,9 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimInexact implements the (inexact) primitive.
 // Converts exact number to inexact.
+//
+// R7RS §6.2.6: The inexact procedure returns an inexact representation
+// of z that is numerically closest to the argument.
 func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -430,6 +433,12 @@ func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewFloat(v.Float64()))
 	case *values.Complex:
 		mc.SetValue(v)
+	case *values.BigInteger:
+		mc.SetValue(v.ToInexact())
+	case *values.BigFloat:
+		mc.SetValue(v)
+	case *values.BigComplex:
+		mc.SetValue(v.ToInexact())
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact: expected a number but got %T", o)
 	}
