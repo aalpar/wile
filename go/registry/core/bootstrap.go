@@ -253,6 +253,7 @@ const bootstrapMacroSource = `
 ;; Binds multiple variables to values from a multiple-value expression.
 ;; Uses a recursive expansion that collects values into a list, then
 ;; extracts them one by one with set!.
+;; Also supports rest pattern: (define-values var expr) collects all values as a list.
 (define-syntax define-values
   (syntax-rules ()
     ((define-values () expr)
@@ -263,7 +264,9 @@ const bootstrapMacroSource = `
      (begin
        (define var0 (call-with-values (lambda () expr) list))
        (define-values (var1 ...) (apply values (cdr var0)))
-       (set! var0 (car var0))))))
+       (set! var0 (car var0))))
+    ((define-values var expr)
+     (define var (call-with-values (lambda () expr) list)))))
 
 ;; Iteration
 (define-syntax do

@@ -74,6 +74,28 @@ func TestDefineValuesComprehensive(t *testing.T) {
 			code:     `(begin (define-values (num str sym) (values 42 "hello" 'world)) (list num str sym))`,
 			expected: values.List(values.NewInteger(42), values.NewString("hello"), values.NewSymbol("world")),
 		},
+
+		// Rest pattern: bare identifier collects all values as a list (R7RS §5.3.3)
+		{
+			name:     "rest pattern collects all values",
+			code:     `(begin (define-values x (values 1 2)) x)`,
+			expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name:     "rest pattern single value",
+			code:     `(begin (define-values x (values 42)) x)`,
+			expected: values.List(values.NewInteger(42)),
+		},
+		{
+			name:     "rest pattern no values",
+			code:     `(begin (define-values x (values)) x)`,
+			expected: values.EmptyList,
+		},
+		{
+			name:     "rest pattern many values",
+			code:     `(begin (define-values x (values 'a 'b 'c 'd 'e)) x)`,
+			expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e")),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
