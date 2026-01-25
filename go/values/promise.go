@@ -18,6 +18,10 @@ var _ Value = (*Promise)(nil)
 
 // Promise represents a delayed computation (R7RS lazy evaluation).
 // A promise contains either an unevaluated thunk or a cached result.
+//
+// R7RS §4.2.5: The first time a promise is forced, its body is evaluated
+// and the result is memoized; on subsequent forces, the memoized result
+// is returned.
 type Promise struct {
 	// Thunk is the procedure to evaluate (nil if already forced)
 	Thunk Value
