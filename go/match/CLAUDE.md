@@ -29,6 +29,11 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 
 **SyntaxMatcher** - Layer 2 bridge for syntax objects with hygiene:
 - `ellipsisID` - Custom ellipsis identifier passed to underlying Matcher
+- `literalSyntax` - Pattern literals with their definition-site scopes
+- `bindingChecker` - Optional interface for R7RS §4.3.2 binding checks
+
+**BindingChecker** - Interface for checking use-site bindings:
+- `HasBinding(sym string, scopes []*syntax.Scope) bool` - Returns true if identifier has lexical binding
 
 ## Bytecode Instructions
 
@@ -61,6 +66,8 @@ Layer 1 of the macro system - unhygienic pattern matching VM:
 - **Improper list patterns**: Patterns like `(_ a . rest)` use `ByteCodeCaptureCdr` to capture the remaining input. After capturing, the value stack position is updated to empty to prevent `Done` from seeing "extra" elements.
 - **Ellipsis-in-middle patterns**: Patterns like `(_ a b ... x y)` use `ByteCodeSkipIfTailCount` to exit the loop when exactly N elements remain for the trailing pattern. The compiler counts trailing elements via `countPatternTailElements`.
 - **Macro keyword placeholder**: R7RS §4.3.2 specifies that the first element of each syntax-rules pattern is the macro keyword placeholder and should not be matched. `CompileSyntaxPatternWithLiterals` enables `skipMacroKeyword` to skip bytecode generation for the first element. This allows patterns like `(foo _)` to match `(my-macro bar)` where `foo` != `my-macro`.
+- **BindingChecker for R7RS §4.3.2 auxiliary syntax**: The `BindingChecker` interface (in `syntax_adapter.go`) allows the macro transformer to check if an identifier has a lexical binding at the use site. `MatchWithBindingChecker()` uses this during literal matching: per R7RS §4.3.2, a literal matches only if both the pattern and input identifiers have the same lexical binding, or both have no lexical binding. This enables proper hygiene for `=>` and `else` in `cond`/`case` - when locally shadowed, they don't match the pattern literals.
+- **literalScopesMatchWithChecker**: In `syntax_adapter.go`, this function implements R7RS literal matching semantics. It compares scopes and uses the binding checker to determine if identifiers should match. The `literalSyntax` field stores pattern literals with their definition-site scopes for comparison.
 
 ## Testing
 

@@ -56,6 +56,16 @@ type globalBindingProvider interface {
 	GetGlobal() any
 }
 
+// BindingChecker is an interface for checking if a symbol has a lexical binding.
+// This is used for R7RS auxiliary syntax hygiene: literals like => and else
+// should not match when the identifier has been locally bound.
+// Implemented by machine package to avoid circular imports.
+type BindingChecker interface {
+	// HasBinding checks if sym with the given scopes has a lexical binding.
+	// Returns true if the symbol is bound (to a variable, macro, etc.).
+	HasBinding(sym string, scopes []*syntax.Scope) bool
+}
+
 // SyntaxMatcher adapts the unhygienic Matcher to work with syntax objects.
 //
 // It provides the bridge between:
@@ -68,10 +78,23 @@ type globalBindingProvider interface {
 // Key feature: The syntaxMap preserves original syntax objects for captured
 // pattern variables. This is essential for hygiene - content captured from
 // the input must retain its original scopes, not receive new ones.
+//
+// Literal Hygiene: The literalSyntax map stores pattern literals with their
+// scopes. During matching, if an input symbol has a literal's name but
+// incompatible scopes (e.g., shadowed by let), it won't match the literal.
+// This implements R7RS's requirement that auxiliary syntax like => and else
+// be treated as regular expressions when locally shadowed.
+//
+// R7RS Binding Check: For full R7RS compliance (§4.3.2), we also check if
+// the input identifier has a lexical binding. If it does and the pattern
+// literal doesn't, they don't match. This is handled via the bindingChecker
+// field set during Match().
 type SyntaxMatcher struct {
-	matcher    *Matcher
-	syntaxMap  map[values.Value]syntax.SyntaxValue // Maps raw values to their original syntax
-	ellipsisID string                              // Custom ellipsis identifier (default "...")
+	matcher        *Matcher
+	syntaxMap      map[values.Value]syntax.SyntaxValue // Maps raw values to their original syntax
+	ellipsisID     string                              // Custom ellipsis identifier (default "...")
+	literalSyntax  map[string]*syntax.SyntaxSymbol     // Pattern literals with their scopes for hygiene
+	bindingChecker BindingChecker                      // For R7RS binding lookup during matching
 }
 
 // NewSyntaxMatcher creates a new syntax-aware matcher with default ellipsis ("...").
@@ -90,23 +113,60 @@ func NewSyntaxMatcherWithEllipsisVars(variables map[string]struct{}, codes []Syn
 // The ellipsisID parameter specifies the identifier used for ellipsis patterns
 // (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
 func NewSyntaxMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *SyntaxMatcher {
+	return NewSyntaxMatcherWithLiterals(variables, codes, ellipsisVars, ellipsisID, nil)
+}
+
+// NewSyntaxMatcherWithLiterals creates a syntax-aware matcher with literal syntax for hygiene.
+// The literalSyntax parameter maps literal names to their syntax symbols from the pattern.
+// This enables scope-aware literal matching: if an input symbol has a literal's name but
+// has been shadowed (has additional scopes), it won't match the pattern literal.
+// R7RS §4.3.2 requires this for auxiliary syntax like => and else in cond/case.
+func NewSyntaxMatcherWithLiterals(
+	variables map[string]struct{},
+	codes []SyntaxCommand,
+	ellipsisVars map[int]map[string]struct{},
+	ellipsisID string,
+	literalSyntax map[string]*syntax.SyntaxSymbol,
+) *SyntaxMatcher {
 	if ellipsisID == "" {
 		ellipsisID = DefaultEllipsis
 	}
 	return &SyntaxMatcher{
-		matcher:    NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
-		syntaxMap:  make(map[values.Value]syntax.SyntaxValue),
-		ellipsisID: ellipsisID,
+		matcher:       NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
+		syntaxMap:     make(map[values.Value]syntax.SyntaxValue),
+		ellipsisID:    ellipsisID,
+		literalSyntax: literalSyntax,
 	}
 }
 
-// Match performs pattern matching on syntax objects
+// Match performs pattern matching on syntax objects.
+// This is the basic method without binding checking. For full R7RS compliance
+// with auxiliary syntax hygiene, use MatchWithBindingChecker instead.
 func (sm *SyntaxMatcher) Match(input syntax.SyntaxValue) error {
+	return sm.MatchWithBindingChecker(input, nil)
+}
+
+// MatchWithBindingChecker performs pattern matching on syntax objects with
+// R7RS-compliant auxiliary syntax hygiene.
+//
+// The checker parameter enables R7RS §4.3.2 compliant literal matching:
+// literals match only if both identifiers have the same lexical binding,
+// or both have no lexical binding. If the input has a binding (from let,
+// lambda, etc.) but the pattern literal doesn't, they won't match.
+//
+// Pass nil for checker to use scope-based matching only (less strict).
+func (sm *SyntaxMatcher) MatchWithBindingChecker(input syntax.SyntaxValue, checker BindingChecker) error {
 	// Clear the syntax map for this match
 	sm.syntaxMap = make(map[values.Value]syntax.SyntaxValue)
 
+	// Store binding checker for use in syntaxToValueWithMap
+	sm.bindingChecker = checker
+
 	// Convert syntax to raw values for matching, building the syntax map
 	rawInput := sm.syntaxToValueWithMap(input)
+
+	// Clear binding checker after use
+	defer func() { sm.bindingChecker = nil }()
 
 	// Ensure it's a pair as the matcher expects
 	pair, ok := rawInput.(*values.Pair)
@@ -220,7 +280,23 @@ func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Val
 		// 1. Each input position has a unique pointer in syntaxMap
 		// 2. Template symbols (which are the original interned pointers) won't be in syntaxMap
 		// 3. Template symbols will correctly get intro-scope
-		result = values.NewSymbol(s.Sym.Key)
+		//
+		// Literal Hygiene: If this symbol has the same name as a pattern literal,
+		// check if the scopes are compatible. If the input has been shadowed
+		// (has extra scopes from a let binding), generate a unique symbol that
+		// won't match the pattern literal. This implements R7RS auxiliary syntax
+		// hygiene for => and else in cond/case.
+		symKey := s.Sym.Key
+		if sm.literalSyntax != nil {
+			if patternLit, hasLit := sm.literalSyntax[symKey]; hasLit {
+				if !sm.literalScopesMatchWithChecker(s, patternLit) {
+					// Scopes incompatible or input has binding - symbol is shadowed
+					// Use a unique key that won't match the pattern literal
+					symKey = symKey + "$shadowed$"
+				}
+			}
+		}
+		result = values.NewSymbol(symKey)
 
 	case *syntax.SyntaxObject:
 		result = s.Unwrap()
@@ -676,6 +752,90 @@ func (sm *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 		} else {
 			// Wrap the raw value in a SyntaxObject if not in map
 			result[name] = syntax.NewSyntaxObject(rawValue, nil)
+		}
+	}
+	return result
+}
+
+// literalScopesMatch checks if an input symbol should match a pattern literal.
+//
+// Per R7RS §4.3.2, a subform in the input matches a literal identifier if and
+// only if it is an identifier and either:
+//   - both its occurrence in the macro expression and its occurrence in the
+//     macro definition have the same lexical binding, or
+//   - the two identifiers are the same and both have no lexical binding.
+//
+// This function returns true if the input symbol refers to the same binding
+// as the pattern literal. It performs two checks:
+//
+// 1. Binding check (R7RS compliant): If a binding checker is available, we check
+// if the input has a lexical binding. Pattern literals (like => and else) are
+// by definition not bound in the macro definition. If the input IS bound
+// (e.g., via let or lambda), it doesn't match the unbound pattern literal.
+//
+// 2. Scope check (for let-syntax): We also check rebinding scopes from
+// let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,
+// the literal has been shadowed by a macro binding.
+//
+// Example with regular let:
+//
+//	(let ((=> #f)) (cond (#t => 'ok)))
+//	The input => has a lexical binding (the let-bound variable)
+//	Pattern => has no lexical binding
+//	They don't match because one is bound and one isn't
+//
+// Example with let-syntax:
+//
+//	(let-syntax ((=> ...)) (cond (#t => 'ok)))
+//	The input => has rebinding scope {letSyntaxScope}
+//	Pattern => has no rebinding scopes, so they don't match
+func (sm *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.SyntaxSymbol) bool {
+	if input == nil || pattern == nil {
+		return false
+	}
+
+	// R7RS binding check: if input has a lexical binding but pattern doesn't,
+	// they don't match. Pattern literals are by definition unbound.
+	if sm.bindingChecker != nil {
+		inputHasBinding := sm.bindingChecker.HasBinding(input.Sym.Key, input.Scopes())
+		// Pattern literals (=>, else, etc.) should never have a binding in
+		// standard Scheme. If input IS bound, it's been shadowed.
+		if inputHasBinding {
+			return false
+		}
+	}
+
+	// Also check rebinding scopes for let-syntax shadowing.
+	// This handles cases where the binding checker isn't available,
+	// and provides defense-in-depth for let-syntax cases.
+	inputRebindingScopes := filterRebindingScopes(input.Scopes())
+	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
+
+	// For the input to match the pattern literal, the input must not have
+	// any rebinding scopes that the pattern doesn't have.
+	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+}
+
+// literalScopesMatch is the standalone version for backward compatibility.
+// It only checks rebinding scopes, not actual bindings.
+func literalScopesMatch(input, pattern *syntax.SyntaxSymbol) bool {
+	if input == nil || pattern == nil {
+		return false
+	}
+
+	inputRebindingScopes := filterRebindingScopes(input.Scopes())
+	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
+
+	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+}
+
+// filterRebindingScopes returns only the scopes that are marked as rebinding scopes.
+// These are scopes from let-syntax/letrec-syntax that could shadow auxiliary syntax.
+func filterRebindingScopes(scopes []*syntax.Scope) []*syntax.Scope {
+	var result []*syntax.Scope
+	for _, s := range scopes {
+		if s != nil && s.IsRebinding {
+			result = append(result, s)
 		}
 	}
 	return result

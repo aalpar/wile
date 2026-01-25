@@ -32,15 +32,29 @@ var (
 // not environment hierarchies.
 type Scope struct {
 	id uint64 // ensures unique pointer identity (empty structs can share addresses in Go)
+	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
+	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
+	// False for with-binding-scope which only adds scopes for binding hygiene.
+	// This distinction is used in literalScopesMatch to correctly handle auxiliary
+	// syntax like => and else in cond/case.
+	IsRebinding bool
 }
 
 // nextScopeID is a counter for generating unique scope identities
 var nextScopeID uint64
 
 // NewScope creates a new scope with unique identity for hygiene tracking.
+// By default, scopes are not rebinding scopes.
 func NewScope() *Scope {
 	nextScopeID++
-	return &Scope{id: nextScopeID}
+	return &Scope{id: nextScopeID, IsRebinding: false}
+}
+
+// NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
+// Used by let-syntax and letrec-syntax to mark scopes that could shadow literals.
+func NewRebindingScope() *Scope {
+	nextScopeID++
+	return &Scope{id: nextScopeID, IsRebinding: true}
 }
 
 // ID returns the unique identifier for this scope.

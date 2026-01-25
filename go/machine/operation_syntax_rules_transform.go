@@ -45,9 +45,33 @@ import (
 	"context"
 	"fmt"
 
+	"wile/environment"
+	"wile/match"
 	"wile/syntax"
 	"wile/values"
 )
+
+// envBindingChecker implements match.BindingChecker for R7RS auxiliary syntax hygiene.
+// It checks if an identifier has a lexical binding in the current environment.
+type envBindingChecker struct {
+	env *environment.EnvironmentFrame
+}
+
+// Verify envBindingChecker implements match.BindingChecker
+var _ match.BindingChecker = (*envBindingChecker)(nil)
+
+// HasBinding checks if the given symbol with scopes has a lexical binding.
+// This is used by the pattern matcher to determine if an input identifier
+// should match a pattern literal. Per R7RS §4.3.2, literals match only if
+// both have the same lexical binding, or both have no lexical binding.
+func (e *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	if e.env == nil {
+		return false
+	}
+	s := values.NewSymbol(sym)
+	binding := e.env.GetBindingWithScopes(s, scopes)
+	return binding != nil
+}
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
 //
@@ -126,10 +150,24 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 		}
 	}
 
+	// Create binding checker for R7RS auxiliary syntax hygiene.
+	// This allows the pattern matcher to check if an identifier like => or else
+	// has been locally bound, in which case it shouldn't match the pattern literal.
+	//
+	// We use the expander context's environment (the use-site environment) rather
+	// than mctx.env (the macro definition-time environment). This is critical for
+	// checking if identifiers like => are bound by enclosing forms (like lambda
+	// from let expansion) at the macro use site.
+	bindingEnv := mctx.env
+	if mctx.expanderCtx != nil && mctx.expanderCtx.Env() != nil {
+		bindingEnv = mctx.expanderCtx.Env()
+	}
+	bindingChecker := &envBindingChecker{env: bindingEnv}
+
 	// Try each clause in order
 	for i, clause := range clauses {
-		// Try to match the pattern
-		err := clause.matcher.Match(input)
+		// Try to match the pattern with R7RS binding checking
+		err := clause.matcher.MatchWithBindingChecker(input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site

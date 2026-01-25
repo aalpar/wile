@@ -45,8 +45,11 @@ func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) 
 func createHygieneTestEnv() *environment.EnvironmentFrame {
 	env := environment.NewTopLevelEnvironmentFrame()
 
-	// Add some basic primitives for testing
-	// We'll add 'if', 'set!', 'let' support as needed
+	// Register primitive expanders (for let-syntax, quote, if, etc.)
+	err := machine.RegisterPrimitiveExpanders(env)
+	if err != nil {
+		panic("failed to register primitive expanders: " + err.Error())
+	}
 
 	return env
 }
@@ -374,4 +377,199 @@ func TestScopeCreation(t *testing.T) {
 		// This is correct behavior - they need to resolve to their original bindings
 		qt.Assert(t, quoteSym.Unwrap().(*values.Symbol).Key, qt.Equals, "quote")
 	}
+}
+
+// TestAuxiliarySyntaxShadowing tests R7RS auxiliary syntax hygiene.
+// Per R7RS §4.3.2, literals like => and else in syntax-rules should be
+// hygienic - if locally shadowed by let-syntax, they should be treated
+// as regular expressions, not as the special auxiliary syntax.
+//
+// Note: We use let-syntax for shadowing because it properly adds scopes
+// to the body (implementing Flatt's "sets of scopes" model). Regular let
+// is a runtime binding that doesn't affect compile-time scope sets.
+func TestAuxiliarySyntaxShadowing(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    string // Optional setup code (macros to define before test)
+		code     string
+		expected string
+	}{
+		{
+			name: "shadowed => via let-syntax treated as expression",
+			// When => is shadowed via let-syntax, it gets a new scope.
+			// The cond pattern's => has different scopes, so it doesn't match.
+			// The clause falls through to (test result1 result2 ...) pattern.
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With => shadowed, (test => 'ok) doesn't match the arrow pattern
+			// because the => has an extra scope from let-syntax.
+			// let-syntax wraps its body in (begin ...).
+			code:     "(let-syntax ((=> (syntax-rules () ((_) #f)))) (my-cond (#t => 'ok)))",
+			expected: "(begin (if #t (begin => (quote ok))))", // => doesn't match arrow, falls through
+		},
+		{
+			name: "unshadowed => still works as arrow",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			code:     "(my-cond (#t => (lambda (x) 'yes)))",
+			expected: "(let ((temp #t)) (if temp ((lambda (x) (quote yes)) temp)))",
+		},
+		{
+			name: "shadowed else via let-syntax not treated as else clause",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With else shadowed via let-syntax, it has a new scope.
+			// (else 'matched) doesn't match the else pattern, treated as regular test.
+			// let-syntax wraps its body in (begin ...).
+			code:     "(let-syntax ((else (syntax-rules () ((_) #f)))) (my-cond (else 'matched)))",
+			expected: "(begin (if else (begin (quote matched))))", // else is the test expression
+		},
+		// R7RS §4.3.2: Regular let binding also shadows auxiliary syntax.
+		// When => is bound via let (which expands to lambda), the lambda scope
+		// is added to the body, making => have different scopes than the pattern literal.
+		{
+			name: "shadowed => via regular let treated as expression",
+			setup: `
+				(define-syntax let
+				  (syntax-rules ()
+				    ((let ((name val) ...) body ...)
+				     (with-binding-scope (name ...)
+				       ((lambda (name ...) (begin body ...)) val ...)))))
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With => bound via let, it has the lambda scope.
+			// (test => 'ok) doesn't match the arrow pattern, falls through to (test result1 result2 ...).
+			// let expands to ((lambda (=>) ...) #f)
+			code:     "(let ((=> #f)) (my-cond (#t => 'ok)))",
+			expected: "((lambda (=>) (begin (if #t (begin => (quote ok))))) #f)",
+		},
+		{
+			name: "shadowed else via regular let not treated as else clause",
+			setup: `
+				(define-syntax let
+				  (syntax-rules ()
+				    ((let ((name val) ...) body ...)
+				     (with-binding-scope (name ...)
+				       ((lambda (name ...) (begin body ...)) val ...)))))
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With else bound via let, it has the lambda scope.
+			// (else 'matched) doesn't match the else pattern.
+			code:     "(let ((else #f)) (my-cond (else 'matched)))",
+			expected: "((lambda (else) (begin (if else (begin (quote matched))))) #f)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := createHygieneTestEnv()
+
+			// Setup: compile any macro definitions
+			if tt.setup != "" {
+				setupForms := parseMultipleForms(t, env, tt.setup)
+				for _, form := range setupForms {
+					// Skip nil forms (from empty strings between forms)
+					if form == nil {
+						continue
+					}
+
+					// Expand and compile each setup form
+					etc := machine.NewExpanderTimeContinuation(env)
+					ectx := machine.ExpandTimeCallContext{}
+					expanded, err := etc.ExpandExpression(ectx, form)
+					if err != nil {
+						t.Fatalf("failed to expand setup: %v", err)
+					}
+
+					// If it's a define-syntax, compile it
+					if pair, ok := expanded.(*syntax.SyntaxPair); ok {
+						if car := pair.Car(); car != nil {
+							if sym, ok := car.(*syntax.SyntaxSymbol); ok && sym.Sym.Key == "define-syntax" {
+								ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+								ctctx := machine.NewCompileTimeCallContext(false, false, env)
+								args := extractDefineSyntaxArgs(t, expanded)
+								err := ctc.CompileDefineSyntax(ctctx, args)
+								if err != nil {
+									t.Fatalf("failed to compile setup define-syntax: %v", err)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Parse the test code
+			testForm := parseString(t, env, tt.code)
+
+			// Expand the test form
+			etc := machine.NewExpanderTimeContinuation(env)
+			ectx := machine.ExpandTimeCallContext{}
+			expanded, err := etc.ExpandExpression(ectx, testForm)
+			if err != nil {
+				t.Fatalf("failed to expand: %v", err)
+			}
+
+			t.Logf("Expanded: %s", expanded.SchemeString())
+
+			// Parse expected form and compare
+			expectedForm := parseString(t, env, tt.expected)
+			qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll(),
+				qt.Commentf("expanded: %s, expected: %s", expanded.SchemeString(), expectedForm.SchemeString()))
+		})
+	}
+}
+
+// parseMultipleForms parses a string containing multiple Scheme forms
+func parseMultipleForms(t *testing.T, env *environment.EnvironmentFrame, input string) []syntax.SyntaxValue {
+	reader := strings.NewReader(input)
+	p := parser.NewParser(env, true, reader)
+	var forms []syntax.SyntaxValue
+	for {
+		stx, err := p.ReadSyntax(context.TODO())
+		if err != nil {
+			// EOF or other error
+			break
+		}
+		if stx != nil {
+			forms = append(forms, stx)
+		}
+	}
+	return forms
 }

@@ -48,6 +48,7 @@ import (
 	"wile/values"
 )
 
+
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
 //
 // It walks the syntax tree, detecting and expanding macro invocations.
@@ -324,8 +325,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContex
 	localExpandEnv := environment.NewLocalEnvironment(numBindings)
 	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
 
-	// Create a new scope for the let-syntax body
-	letScope := syntax.NewScope()
+	// Create a rebinding scope for the let-syntax body.
+	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
+	// This is used in literalScopesMatch to correctly reject shadowed literals.
+	letScope := syntax.NewRebindingScope()
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
 	if recursive {
@@ -521,9 +524,8 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 		return nil, values.NewForeignError("with-binding-scope: expected (with-binding-scope (id ...) body)")
 	}
 
-	// Skip the identifier list - we add scope to the entire body anyway
-	// The identifier list is: pair.SyntaxCar()
-	// Future: could validate that identifiers are symbols
+	// Get the identifier list - these are the identifiers being bound
+	idListStx := pair.SyntaxCar()
 
 	// Get the body
 	cdr := pair.SyntaxCdr()
@@ -543,8 +545,35 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 	// - Any other identifiers
 	scopedBody := syntax.AddScopeToSyntax(body, bindingScope)
 
-	// Continue expanding the scoped body
-	// The with-binding-scope form disappears - we return just the body
+	// Extract bound identifiers and create placeholder bindings for them.
+	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: when a macro
+	// like cond checks if => has been bound, it needs to find these placeholder
+	// bindings in the expand-time environment.
+	boundIds := extractIdentifierList(idListStx)
+	if len(boundIds) > 0 {
+		// Create a child expand environment with placeholder bindings
+		localExpandEnv := environment.NewLocalEnvironment(len(boundIds))
+		childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
+
+		// Add placeholder bindings for each bound identifier.
+		// The scopes include the binding scope we just created.
+		for _, id := range boundIds {
+			// Get the identifier's current scopes and add the binding scope
+			idScopes := id.Scopes()
+			newScopes := make([]*syntax.Scope, len(idScopes)+1)
+			copy(newScopes, idScopes)
+			newScopes[len(idScopes)] = bindingScope
+
+			sym := p.env.InternSymbol(id.Sym)
+			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes)
+		}
+
+		// Continue expansion with the child environment
+		childExpander := NewExpanderTimeContinuation(childExpandEnv)
+		return childExpander.ExpandExpression(ectx, scopedBody)
+	}
+
+	// No bound identifiers - just continue with current environment
 	return p.ExpandExpression(ectx, scopedBody)
 }
 
@@ -758,6 +787,11 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 // as local variable bindings before expanding the body, ensuring that references
 // to parameter names (like `if`, `let`) don't get treated as special forms.
 //
+// R7RS §4.3.2: Auxiliary syntax hygiene. Lambda adds a scope to both formals
+// and body BEFORE expanding inner macros. This ensures that identifiers in the
+// body (like `=>` in a `cond`) carry the lambda's scope, enabling correct
+// `free-identifier=?` comparisons during macro pattern matching.
+//
 // R7RS §5.3: Internal define-syntax forms are processed before expanding the
 // rest of the body, so locally-defined macros are visible to subsequent forms.
 func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
@@ -766,21 +800,28 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Keep formals unchanged
 	formals := pair.SyntaxCar()
-	formalsStx := formals
-	// Expand body
 	cdrVal := pair.SyntaxCdr()
 	cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Extract formal parameter symbols and their scopes
-	formalSyms := extractFormalSymbols(formals)
+	// Create a scope for this lambda's bindings.
+	// This scope is added to both formals and body BEFORE any inner expansion,
+	// ensuring that pattern matching in inner macros (like cond) can correctly
+	// detect when identifiers (like =>) have been bound by this lambda.
+	lambdaScope := syntax.NewScope()
+
+	// Add lambda scope to formals and body
+	formalsStx := syntax.AddScopeToSyntax(formals, lambdaScope)
+	bodyWithScope := cdrPair.AddScope(lambdaScope).(*syntax.SyntaxPair)
+
+	// Extract formal parameter symbols (now with lambda scope included)
+	formalSyms := extractFormalSymbols(formalsStx)
 
 	// Create a child environment with the formals as local variable bindings.
-	// This ensures that parameter names shadow macros and primitive forms.
+	// The bindings include the lambda scope, so lookups will find them.
 	childEnv := environment.NewEnvironmentFrameWithParent(
 		environment.NewLocalEnvironment(0),
 		p.env,
@@ -791,7 +832,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 
 	// R7RS §5.3: Process leading define-syntax forms before expanding the rest
 	// This makes locally-defined macros visible to subsequent body expressions
-	bodyExprs, err := collectBodyExpressions(cdrPair)
+	bodyExprs, err := collectBodyExpressions(bodyWithScope)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "lambda: invalid body expression")
 	}
@@ -1000,6 +1041,39 @@ func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
 	return result
 }
 
+// extractIdentifierList extracts SyntaxSymbols from an identifier list.
+// This is used by with-binding-scope to get the bound identifiers.
+// Returns the symbols with their scopes preserved.
+func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
+	var result []*syntax.SyntaxSymbol
+
+	pair, ok := idList.(*syntax.SyntaxPair)
+	if !ok {
+		// Single identifier or empty
+		if sym, ok := idList.(*syntax.SyntaxSymbol); ok {
+			return []*syntax.SyntaxSymbol{sym}
+		}
+		return nil
+	}
+
+	// List of identifiers
+	current := pair
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
+		if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+			result = append(result, sym)
+		}
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	return result
+}
+
 // expandCaseLambdaForm expands (case-lambda (formals body...) ...)
 func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
@@ -1133,6 +1207,15 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ectx ExpandTimeCallCont
 	if mc == nil {
 		return nil, fmt.Errorf("failed to create machine context from closure")
 	}
+
+	// Set the expander context so the transformer can access the use-site environment.
+	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
+	// needs to check if input identifiers have lexical bindings at the use site.
+	// For example, in (let ((=> #f)) (cond (#t => 'ok))), the pattern matcher needs
+	// to see that => is bound by the lambda (from let expansion) to correctly
+	// determine that it shouldn't match the literal => in cond's pattern.
+	expanderCtx := NewExpanderContext(p.env, p, ectx)
+	mc.SetExpanderContext(expanderCtx)
 
 	// For syntax-rules transformers, we pass the entire input form as an argument.
 	// The transformer expects the full form including the macro name.
