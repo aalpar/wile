@@ -1403,6 +1403,9 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 //   - (except <import-set> <id> ...): import all except specified
 //   - (prefix <import-set> <prefix>): add prefix to all imported names
 //   - (rename <import-set> (<old> <new>) ...): rename specific imports
+//   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
+//   - (for-template <import-set>)   : import at phase -1
+//   - (for-meta <n> <import-set>)   : import at phase +n
 func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -1423,6 +1426,12 @@ func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 			return parseImportSetPrefix(pair)
 		case "rename":
 			return parseImportSetRename(pair)
+		case "for-syntax":
+			return parseImportSetForSyntax(pair)
+		case "for-template":
+			return parseImportSetForTemplate(pair)
+		case "for-meta":
+			return parseImportSetForMeta(pair)
 		}
 	}
 
@@ -1575,6 +1584,78 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 	return importSet, err
 }
 
+// parseImportSetForSyntax parses (for-syntax <import-set>)
+// Adds +1 to the phase shift of the nested import set.
+func parseImportSetForSyntax(pair *syntax.SyntaxPair) (*ImportSet, error) {
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-syntax: expected import-set")
+	}
+
+	// Get nested import set
+	nestedExpr := cdrExpr.SyntaxCar()
+	importSet, err := parseImportSet(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add +1 to phase shift (composable)
+	importSet.PhaseShift++
+	return importSet, nil
+}
+
+// parseImportSetForTemplate parses (for-template <import-set>)
+// Adds -1 to the phase shift of the nested import set.
+func parseImportSetForTemplate(pair *syntax.SyntaxPair) (*ImportSet, error) {
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-template: expected import-set")
+	}
+
+	// Get nested import set
+	nestedExpr := cdrExpr.SyntaxCar()
+	importSet, err := parseImportSet(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add -1 to phase shift (composable)
+	importSet.PhaseShift--
+	return importSet, nil
+}
+
+// parseImportSetForMeta parses (for-meta <n> <import-set>)
+// Adds n to the phase shift of the nested import set.
+func parseImportSetForMeta(pair *syntax.SyntaxPair) (*ImportSet, error) {
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected phase level and import-set")
+	}
+
+	// Get phase level (integer)
+	phaseExpr := cdrExpr.SyntaxCar()
+	phaseInt, ok := phaseExpr.Unwrap().(*values.Integer)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAnInteger, "for-meta: expected integer phase level")
+	}
+
+	// Get nested import set
+	importSetPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected import-set after phase level")
+	}
+
+	nestedExpr := importSetPair.SyntaxCar()
+	importSet, err := parseImportSet(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add n to phase shift (composable)
+	importSet.PhaseShift += int(phaseInt.Value)
+	return importSet, nil
+}
+
 // parseIdentifierList parses a list of identifiers into a string slice.
 func parseIdentifierList(expr syntax.SyntaxValue) ([]string, error) {
 	if syntax.IsSyntaxEmptyList(expr) {
@@ -1636,6 +1717,12 @@ func parseLibraryName(expr syntax.SyntaxValue) (LibraryName, error) {
 //
 // This is for top-level imports outside of a library definition.
 // It loads the specified libraries and binds their exports in the current environment.
+//
+// Supports Racket-style phased imports:
+//   - (import (scheme base))                    ; Phase 0 (runtime)
+//   - (import (for-syntax (scheme base)))       ; Phase 1 (expand)
+//   - (import (for-template (scheme base)))     ; Phase -1
+//   - (import (for-meta 2 (scheme base)))       ; Phase 2
 func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is (<import-set> ...) - args after 'import' keyword
 	if syntax.IsSyntaxEmptyList(expr) {
@@ -1668,61 +1755,11 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 				importSet.LibraryName.SchemeString())
 		}
 
-		// Bind the imported names in the current environment
-		for localName, externalName := range bindings {
-			internalName := lib.GetInternalName(externalName)
-			if internalName == "" {
-				internalName = externalName
-			}
-
-			// Get the binding from the library's environment
-			// First check the runtime environment, then the expand environment for syntax bindings,
-			// then the compile environment for auxiliary syntax (else, =>)
-			libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
-			libBinding := lib.Env.GetBinding(libSym)
-			if libBinding == nil {
-				// Syntax bindings (define-syntax) are stored in the expand environment
-				expandEnv := lib.Env.Expand()
-				if expandEnv != nil {
-					libBinding = expandEnv.GetBinding(libSym)
-				}
-			}
-			if libBinding == nil {
-				// Auxiliary syntax (else, =>) are stored in the compile environment
-				compileEnv := lib.Env.Compile()
-				if compileEnv != nil {
-					libBinding = compileEnv.GetBinding(libSym)
-				}
-			}
-			if libBinding == nil {
-				return values.NewForeignErrorf("import: %s exports %q but binding not found in library",
-					importSet.LibraryName.SchemeString(), internalName)
-			}
-
-			// Create binding in the importing environment
-			localSym := p.env.InternSymbol(values.NewSymbol(localName))
-			_, created := p.env.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
-			if !created {
-				// Binding already exists - update it
-				// (This allows re-importing in REPL)
-			}
-			globalIdx := p.env.GetGlobalIndex(localSym)
-			if globalIdx != nil {
-				err := p.env.SetOwnGlobalValue(globalIdx, libBinding.Value())
-				if err != nil {
-					return values.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
-				}
-			}
-
-			// If it's a syntax binding, also copy to expand phase
-			if libBinding.BindingType() == environment.BindingTypeSyntax {
-				expandEnv := p.env.Expand()
-				_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
-				expandIdx := expandEnv.GetGlobalIndex(localSym)
-				if expandIdx != nil {
-					_ = expandEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
-				}
-			}
+		// Copy bindings to the target phase
+		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "import: error copying bindings from %s",
+				importSet.LibraryName.SchemeString())
 		}
 
 		return nil

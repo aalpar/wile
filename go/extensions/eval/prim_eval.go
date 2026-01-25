@@ -208,6 +208,12 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimEnvironment implements the (environment) primitive.
 // Constructs a new environment from import specifiers.
+//
+// Supports Racket-style phased imports:
+//   - (environment '(scheme base))                    ; Phase 0 (runtime)
+//   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
+//   - (environment '(for-template (scheme base)))     ; Phase -1
+//   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
 func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
@@ -256,8 +262,8 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 				importSet.LibraryName.SchemeString())
 		}
 
-		// Copy bindings to new environment
-		err = machine.CopyLibraryBindingsToEnv(lib, bindings, newEnv)
+		// Copy bindings to new environment at the specified phase
+		err = machine.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "environment: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())

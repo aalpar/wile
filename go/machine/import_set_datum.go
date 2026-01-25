@@ -58,6 +58,9 @@ func ParseLibraryNameFromDatum(expr values.Value) (LibraryName, error) {
 //   - (except <import-set> <id> ...): import all except specified
 //   - (prefix <import-set> <prefix>): add prefix to all imported names
 //   - (rename <import-set> (<old> <new>) ...): rename specific imports
+//   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
+//   - (for-template <import-set>)   : import at phase -1
+//   - (for-meta <n> <import-set>)   : import at phase +n
 func ParseImportSetFromDatum(expr values.Value) (*ImportSet, error) {
 	pair, ok := expr.(*values.Pair)
 	if !ok {
@@ -76,6 +79,12 @@ func ParseImportSetFromDatum(expr values.Value) (*ImportSet, error) {
 			return parseImportSetPrefixFromDatum(pair)
 		case "rename":
 			return parseImportSetRenameFromDatum(pair)
+		case "for-syntax":
+			return parseImportSetForSyntaxFromDatum(pair)
+		case "for-template":
+			return parseImportSetForTemplateFromDatum(pair)
+		case "for-meta":
+			return parseImportSetForMetaFromDatum(pair)
 		}
 	}
 
@@ -217,6 +226,78 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 	})
 
 	return importSet, err
+}
+
+// parseImportSetForSyntaxFromDatum parses (for-syntax <import-set>)
+// Adds +1 to the phase shift of the nested import set.
+func parseImportSetForSyntaxFromDatum(pair *values.Pair) (*ImportSet, error) {
+	cdr, ok := pair.Cdr().(*values.Pair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-syntax: expected import-set")
+	}
+
+	// Get nested import set
+	nestedExpr := cdr.Car()
+	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add +1 to phase shift (composable)
+	importSet.PhaseShift++
+	return importSet, nil
+}
+
+// parseImportSetForTemplateFromDatum parses (for-template <import-set>)
+// Adds -1 to the phase shift of the nested import set.
+func parseImportSetForTemplateFromDatum(pair *values.Pair) (*ImportSet, error) {
+	cdr, ok := pair.Cdr().(*values.Pair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-template: expected import-set")
+	}
+
+	// Get nested import set
+	nestedExpr := cdr.Car()
+	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add -1 to phase shift (composable)
+	importSet.PhaseShift--
+	return importSet, nil
+}
+
+// parseImportSetForMetaFromDatum parses (for-meta <n> <import-set>)
+// Adds n to the phase shift of the nested import set.
+func parseImportSetForMetaFromDatum(pair *values.Pair) (*ImportSet, error) {
+	cdr, ok := pair.Cdr().(*values.Pair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected phase level and import-set")
+	}
+
+	// Get phase level (integer)
+	phaseExpr := cdr.Car()
+	phaseInt, ok := phaseExpr.(*values.Integer)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAnInteger, "for-meta: expected integer phase level")
+	}
+
+	// Get nested import set
+	importSetPair, ok := cdr.Cdr().(*values.Pair)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected import-set after phase level")
+	}
+
+	nestedExpr := importSetPair.Car()
+	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add n to phase shift (composable)
+	importSet.PhaseShift += int(phaseInt.Value)
+	return importSet, nil
 }
 
 // parseIdentifierListFromDatum parses a list of identifiers into a string slice.
