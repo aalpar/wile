@@ -56,6 +56,14 @@ type globalBindingProvider interface {
 	GetGlobal() any
 }
 
+// hasLocalBindingProvider is an interface for checking if a local binding was found
+// at macro definition time, even if the binding has no scopes. This distinguishes
+// "local binding with empty scopes" from "no binding at all" - the former should NOT
+// get intro scope added during expansion.
+type hasLocalBindingProvider interface {
+	GetHasLocalBinding() bool
+}
+
 // BindingChecker is an interface for checking if a symbol has a lexical binding.
 // This is used for R7RS auxiliary syntax hygiene: literals like => and else
 // should not match when the identifier has been locally bound.
@@ -414,9 +422,9 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 			// Check for local binding resolution first (for let-syntax hygiene)
 			if lsp, ok := resolution.(localScopesProvider); ok {
 				localScopes := lsp.GetLocalScopes()
-				// Check for non-empty local scopes (empty slice should NOT match)
+				// Check for non-empty local scopes
 				if len(localScopes) > 0 {
-					// Local binding - use ONLY definition-site scopes, NOT use-site scopes
+					// Local binding with scopes - use ONLY definition-site scopes, NOT use-site scopes
 					// This ensures the identifier resolves to the binding from
 					// macro definition time, not a shadowing binding at use site.
 					// We create a new context with only the definition-site scopes,
@@ -469,6 +477,18 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 					sym = sym.WithResolvedBinding(globalBinding)
 					return sym
 				}
+			}
+
+			// Check if a local binding was found (even with empty scopes).
+			// This handles the case where a macro references a local variable
+			// that doesn't have scopes attached (e.g., from a let binding).
+			// The identifier should NOT get intro scope - it should preserve
+			// its original scopes so it resolves to the definition-time binding.
+			if hlp, ok := resolution.(hasLocalBindingProvider); ok && hlp.GetHasLocalBinding() {
+				// Local binding found but no scopes - preserve original scopes
+				// (don't add intro scope, which would break hygiene)
+				sym := syntax.NewSyntaxSymbol(v.Key, srcCtx)
+				return sym
 			}
 
 			// Resolution exists but has no local or global binding (e.g., special forms,

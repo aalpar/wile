@@ -8,7 +8,7 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 - [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) - Bugs discovered by running the R7RS test suite (all fixed)
 - [R7RS_SEMANTIC_DIFFERENCES.md](../docs/dev/R7RS_SEMANTIC_DIFFERENCES.md) - Semantic differences from R7RS
 
-**Last Updated:** 2026-01-23
+**Last Updated:** 2026-01-25
 
 ---
 
@@ -16,15 +16,15 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Macro system bugs | 2 | In Progress |
+| Macro system bugs | 1 | In Progress |
 | Scoping bugs | 1 | In Progress |
 | Numeric comparison bugs | 1 | In Progress |
 | Missing syntax/macros | 0 | Complete |
 | Library system issues | 0 | Complete |
 | Tokenizer issues | 0 | Complete |
 | Semantic differences | 0 | Complete |
-| Completed items | 46+ | Complete |
-| **Total remaining** | **4** | **In Progress** |
+| Completed items | 47+ | Complete |
+| **Total remaining** | **3** | **In Progress** |
 
 ---
 
@@ -35,7 +35,7 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 | Item | R7RS Section | Priority | Status |
 |------|--------------|----------|--------|
 | `letrec-syntax` expansion failure | §4.3.1 | High | Open |
-| `let-syntax` hygiene failure | §4.3.1 | High | Open |
+| ~~`let-syntax` hygiene failure~~ | §4.3.1 | High | ✅ Fixed |
 
 #### Bug: `letrec-syntax` expansion failure
 
@@ -72,7 +72,9 @@ if: missing consequent: Cannot compile expression
 
 ---
 
-#### Bug: `let-syntax` hygiene failure for local bindings
+#### ~~Bug: `let-syntax` hygiene failure for local bindings~~ FIXED
+
+**Status:** Fixed 2026-01-25
 
 **Test case** (from r7rs-tests.scm line 408-411):
 ```scheme
@@ -84,32 +86,7 @@ if: missing consequent: Cannot compile expression
 
 **Expected:** `outer` (the macro `m` should capture the outer `x` at definition time)
 
-**Actual:** `inner` (the macro is incorrectly using the inner `x`)
-
-**Root cause analysis:**
-
-The cross-library hygiene fix (commit 92ef270) implemented pre-resolved bindings for free identifiers in macro templates, but it only works for **global** bindings:
-
-1. In `collectFreeIdentifiersWithEllipsis` (compile_syntax_rules.go:308), free identifiers are resolved via `env.GetGlobalIndex(sym)`, which only returns bindings from the global environment.
-
-2. For local lexical bindings (from `let`, `lambda`, etc.), `GetGlobalIndex` returns `nil`, so no resolved binding is attached to the free identifier.
-
-3. At expansion time, since no pre-resolved binding exists, the symbol `x` resolves via normal scoping rules to whatever is in scope at the use site (the inner `x`).
-
-**Verification:**
-```scheme
-;; Global bindings work correctly:
-(define outer-x 'outer-global)
-(define-syntax m-global (syntax-rules () ((m-global) outer-x)))
-(let ((outer-x 'inner)) (m-global))  ; => 'outer-global ✓
-
-;; Local bindings fail:
-(let ((x 'outer))
-  (let-syntax ((m (syntax-rules () ((m) x))))
-    (let ((x 'inner)) (m))))  ; => 'inner ✗ (should be 'outer)
-```
-
-**Fix required:** The macro compiler needs to capture the full lexical environment at macro definition time, not just global bindings. Free identifiers should be resolved against this captured environment, including local bindings from enclosing `let`/`lambda` forms.
+**Fix:** Added `HasLocalBinding` flag to `FreeIdResolution` in `compile_syntax_rules.go`. When a local binding is found (even with empty scopes), this flag is set to `true`. During expansion in `syntax_adapter.go`, if `HasLocalBinding` is true, the free identifier preserves its original scopes instead of getting intro scope added. This ensures the identifier resolves to the definition-time binding, not a shadowing binding at use site.
 
 ---
 

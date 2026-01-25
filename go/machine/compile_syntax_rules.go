@@ -44,8 +44,9 @@ import (
 // Free identifiers can be resolved to either global bindings (via GlobalIndex) or
 // local bindings (via their scope set at macro definition time).
 //
-// This type implements the localScopesProvider and globalBindingProvider interfaces
-// used by match.valueToSyntaxWithOrigin to handle hygiene without circular imports.
+// This type implements the localScopesProvider, globalBindingProvider, and
+// hasLocalBindingProvider interfaces used by match.valueToSyntaxWithOrigin to
+// handle hygiene without circular imports.
 type FreeIdResolution struct {
 	// Global is set if the free identifier refers to a global binding.
 	// This enables cross-library macro hygiene by pre-resolving the binding.
@@ -55,6 +56,11 @@ type FreeIdResolution struct {
 	// During expansion, the free identifier gets these scopes, ensuring
 	// it resolves to the definition-time binding (not a shadowing binding).
 	LocalScopes []*syntax.Scope
+	// HasLocalBinding is true if a local binding was found at macro definition time,
+	// even if the binding has no scopes. This distinguishes "local binding with empty
+	// scopes" from "no binding at all" - the former should NOT get intro scope added
+	// during expansion, while the latter might (for special forms).
+	HasLocalBinding bool
 }
 
 // GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
@@ -74,6 +80,16 @@ func (f *FreeIdResolution) GetGlobal() any {
 		return nil
 	}
 	return f.Global
+}
+
+// GetHasLocalBinding returns true if a local binding was found at macro definition time.
+// This is used to distinguish "local binding with empty scopes" from "no binding at all".
+// Implements the hasLocalBindingProvider interface.
+func (f *FreeIdResolution) GetHasLocalBinding() bool {
+	if f == nil {
+		return false
+	}
+	return f.HasLocalBinding
 }
 
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.
@@ -387,9 +403,12 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				if li != nil {
 					binding := env.GetLocalBinding(li)
 					if binding != nil {
-						// Local binding - store scopes for hygiene
+						// Local binding found - store scopes for hygiene
+						// Set HasLocalBinding=true even if scopes are empty,
+						// so expansion knows not to add intro scope.
 						freeIds[symVal.Key] = &FreeIdResolution{
-							LocalScopes: binding.Scopes(),
+							LocalScopes:     binding.Scopes(),
+							HasLocalBinding: true,
 						}
 						return
 					}
