@@ -153,6 +153,19 @@ gh pr merge <PR> --merge --admin --delete-branch
 
 Note: GitHub does not allow self-approval of PRs even with admin privileges, but admin merge ensures PRs can be merged without external approval.
 
+## Important: Plan File Location
+
+**Plans go in `wile/plans/`, NOT `wile/go/plans/`.**
+
+When investigating R7RS conformance issues:
+1. Document each test BEFORE running it in `plans/R7RS_TEST_INVESTIGATION_IN_PROGRESS.md`
+2. Save the file
+3. Run the test (max 15s timeout - Wile may hang)
+4. Log results in the same file
+5. Save again
+6. Keep error summary at the top of the file
+7. Use bisection technique to isolate errors
+
 ## References
 
 - `TODO.md` - Pending tasks, missing R7RS features, future extensions (multithreading, POSIX API, Go FFI)
