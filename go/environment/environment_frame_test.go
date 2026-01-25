@@ -241,26 +241,27 @@ func TestEnvironmentFrame_MetaHierarchy(t *testing.T) {
 }
 
 func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
-	// Test the new chain-based phase hierarchy:
-	// TopLevel (= Runtime) → meta → Expand → meta → Compile
+	// Test the indexed phase hierarchy:
+	// TopLevel is phase 0, Expand is phase 1, Compile is phase 2
 	topLevel := NewTopLevelEnvironmentFrame()
 
-	// Runtime IS the top-level
-	runtime := topLevel.Runtime()
-	qt.Assert(t, topLevel, qt.Not(qt.Equals), runtime)
-	qt.Assert(t, topLevel.meta, qt.Equals, runtime)
+	// TopLevel is phase 0 (runtime)
+	qt.Assert(t, topLevel.PhaseLevel(), qt.Equals, PhaseRuntime)
 
-	// Expand is created lazily via meta
-	qt.Assert(t, topLevel.meta, qt.IsNotNil)
+	// Runtime returns phase 0 environment (same as TopLevel for phase 0)
+	runtime := topLevel.Runtime()
+	qt.Assert(t, runtime, qt.IsNotNil)
+	qt.Assert(t, runtime.PhaseLevel(), qt.Equals, PhaseRuntime)
+
+	// Expand is phase 1
 	expand := topLevel.Expand()
 	qt.Assert(t, expand, qt.IsNotNil)
-	qt.Assert(t, runtime.meta, qt.Equals, expand)
+	qt.Assert(t, expand.PhaseLevel(), qt.Equals, PhaseExpand)
 
-	// Compile chains from expand
-	qt.Assert(t, expand.meta, qt.IsNil)
+	// Compile is phase 2
 	compile := topLevel.Compile()
 	qt.Assert(t, compile, qt.IsNotNil)
-	qt.Assert(t, expand.meta, qt.Equals, compile)
+	qt.Assert(t, compile.PhaseLevel(), qt.Equals, PhaseCompile)
 
 	// Each phase should have its own environment
 	qt.Assert(t, runtime, qt.Not(qt.Equals), expand)
@@ -271,23 +272,35 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, expand.GlobalEnvironment(), qt.Not(qt.Equals), runtime.GlobalEnvironment())
 	qt.Assert(t, compile.GlobalEnvironment(), qt.Not(qt.Equals), expand.GlobalEnvironment())
 
-	// Chain structure: expand parents to runtime, compile parents to expand
-	qt.Assert(t, expand.Parent(), qt.Not(qt.Equals), runtime)
-	qt.Assert(t, compile.Parent(), qt.Not(qt.Equals), expand)
-
-	qt.Assert(t, expand.Parent(), qt.Equals, runtime.Parent())
-	qt.Assert(t, expand.Parent(), qt.Equals, compile.Parent())
-	qt.Assert(t, runtime.Parent(), qt.Equals, compile.Parent())
+	// Phase environments parent to TopLevel for interning access
+	qt.Assert(t, expand.Parent(), qt.Equals, topLevel)
+	qt.Assert(t, compile.Parent(), qt.Equals, topLevel)
 
 	// TopLevel() should return the root from any frame
 	qt.Assert(t, runtime.TopLevel(), qt.Equals, topLevel)
 	qt.Assert(t, expand.TopLevel(), qt.Equals, topLevel)
 	qt.Assert(t, compile.TopLevel(), qt.Equals, topLevel)
 
-	// Phase accessors should be cached
+	// Phase accessors should be cached (same instance returned)
 	qt.Assert(t, topLevel.Runtime(), qt.Equals, runtime)
 	qt.Assert(t, topLevel.Expand(), qt.Equals, expand)
 	qt.Assert(t, topLevel.Compile(), qt.Equals, compile)
+
+	// AtPhase provides direct indexed access
+	qt.Assert(t, topLevel.AtPhase(0), qt.Equals, topLevel)
+	qt.Assert(t, topLevel.AtPhase(1), qt.Equals, expand)
+	qt.Assert(t, topLevel.AtPhase(2), qt.Equals, compile)
+
+	// Arbitrary phases can be created
+	phase3 := topLevel.AtPhase(3)
+	qt.Assert(t, phase3, qt.IsNotNil)
+	qt.Assert(t, phase3.PhaseLevel(), qt.Equals, 3)
+	qt.Assert(t, topLevel.AtPhase(3), qt.Equals, phase3) // Same instance
+
+	// Negative phases (for future for-template support)
+	phaseMinus1 := topLevel.AtPhase(-1)
+	qt.Assert(t, phaseMinus1, qt.IsNotNil)
+	qt.Assert(t, phaseMinus1.PhaseLevel(), qt.Equals, -1)
 }
 
 func TestEnvironmentFrame_SharedInterning(t *testing.T) {

@@ -28,13 +28,36 @@ Manages the relationship between variables and values across:
 - `[0]` - Slot index within frame
 - `[1]` - Depth (parent frames to traverse)
 
+**PhaseRegistry** - Indexed phase environment storage:
+- `envs map[int]*EnvironmentFrame` - O(1) phase access by integer index
+- Thread-safe via `sync.RWMutex` for concurrent macro expansion
+- Owned by TopLevel, shared across all child environments
+- Supports negative phases (for future `for-template` support)
+
 ## Phase Navigation
 
+Phases are indexed by integer level with O(1) access via `PhaseRegistry`:
+
 ```go
-env.Runtime()  // Creates/returns runtime phase environment
-env.Expand()   // Creates/returns expand phase environment
-env.Compile()  // Creates/returns compile phase environment
-env.TopLevel() // Traverses to root environment
+env.AtPhase(0)  // Phase 0: Runtime (same as TopLevel)
+env.AtPhase(1)  // Phase 1: Expansion (for-syntax)
+env.AtPhase(2)  // Phase 2: Compile-time (for-meta 2)
+env.AtPhase(-1) // Phase -1: Template (for-template, future)
+env.AtPhase(n)  // Arbitrary phase N
+
+// Convenience methods (use AtPhase internally)
+env.Runtime()   // AtPhase(PhaseRuntime) = AtPhase(0)
+env.Expand()    // AtPhase(PhaseExpand) = AtPhase(1)
+env.Compile()   // AtPhase(PhaseCompile) = AtPhase(2)
+env.TopLevel()  // Traverses parent chain to root
+```
+
+**Phase Constants**:
+```go
+PhaseTemplate = -1  // for-template
+PhaseRuntime  = 0   // runtime execution
+PhaseExpand   = 1   // macro expansion (for-syntax)
+PhaseCompile  = 2   // compile-time (for-meta 2)
 ```
 
 ## Binding Lookup
@@ -43,14 +66,38 @@ Two-phase lookup in `GetBinding()`:
 1. Local phase: Traverse local bindings up through parents
 2. Global phase: Search global bindings (stops at TopLevel)
 
+## let-syntax Environment Chain
+
+`let-syntax` and `letrec-syntax` create child expand environments during macro expansion:
+
+```go
+// In expander_time_continuation.go expandLetSyntaxImpl():
+localExpandEnv := environment.NewLocalEnvironment(numBindings)
+childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
+```
+
+Key points:
+- **Parent is the enclosing expand environment** (`p.env`), not `p.env.Expand()`
+- This preserves the environment chain for nested let-syntax forms
+- Inner macros can reference outer macros through the parent chain
+- Local macro bindings use `BindingTypeSyntax` with scopes for hygiene
+
+Example environment chain for nested let-syntax:
+```
+TopLevel.Expand()
+    └── outer let-syntax childExpandEnv (has macro 'outer')
+            └── inner let-syntax childExpandEnv (has macro 'inner', can see 'outer')
+```
+
 ## Gotchas
 
 - **GetIndex() has known bug**: Skips first frame in loops (documented in code)
 - **CreateLocalBinding is "MaybeCreate"**: Returns `(index, false)` if exists
-- **Phase hierarchy**: Expand/Compile have parent pointing to TopLevel, not each other
-- **Symbol interning shared**: All phases access same interning maps
-- **Copy() shares parent**: Only local/global are copied, parent is shared
+- **Phase environments parent to TopLevel**: All phase environments (Expand, Compile, etc.) have `parent` pointing to TopLevel for symbol interning access
+- **Symbol interning shared**: All phases access same interning maps via TopLevel
+- **Copy() shares parent and phases**: Only local/global are copied; parent and PhaseRegistry are shared
 - **LibraryRegistry as `any`**: Stored as `any` to avoid circular imports
+- **PhaseRegistry is thread-safe**: Uses `sync.RWMutex` for concurrent access during macro expansion
 
 ## Testing
 
@@ -69,5 +116,6 @@ This package uses **1:1 mapping** - each source file has a corresponding test fi
 | `local_environment_frame.go` | `local_environment_frame_test.go` |
 | `local_index.go` | `local_index_test.go` |
 | `meta_frame.go` | `meta_frame_test.go` |
+| `phase_registry.go` | `phase_registry_test.go` |
 
 When adding new functionality, add tests to the corresponding test file.

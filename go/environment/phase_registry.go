@@ -1,0 +1,123 @@
+// Copyright 2025 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package environment
+
+import "sync"
+
+// Phase level constants for standard Scheme phases.
+// These match Racket's phase numbering convention.
+const (
+	PhaseTemplate = -1 // for-template (template instantiation)
+	PhaseRuntime  = 0  // Runtime execution (phase 0)
+	PhaseExpand   = 1  // Macro expansion (for-syntax, phase 1)
+	PhaseCompile  = 2  // Compile-time (for-meta 2, phase 2)
+)
+
+// PhaseRegistry manages phase-indexed environment frames.
+// It provides O(1) access to any phase environment and supports
+// lazy creation of phase environments on first access.
+//
+// The registry is owned by the TopLevel environment and shared
+// across all child environments via pointer. This enables any
+// environment frame to access any phase directly.
+//
+// Thread-safe: All operations are protected by a read-write mutex
+// to support concurrent macro expansion.
+type PhaseRegistry struct {
+	mu       sync.RWMutex
+	envs     map[int]*EnvironmentFrame
+	topLevel *EnvironmentFrame
+}
+
+// NewPhaseRegistry creates a new phase registry owned by the given TopLevel.
+// The TopLevel environment is automatically registered at phase 0.
+func NewPhaseRegistry(topLevel *EnvironmentFrame) *PhaseRegistry {
+	q := &PhaseRegistry{
+		envs:     make(map[int]*EnvironmentFrame),
+		topLevel: topLevel,
+	}
+	// TopLevel is phase 0 (runtime)
+	q.envs[PhaseRuntime] = topLevel
+	return q
+}
+
+// Get returns the environment for the given phase, or nil if not yet created.
+func (r *PhaseRegistry) Get(phase int) *EnvironmentFrame {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.envs[phase]
+}
+
+// GetOrCreate returns the environment for the given phase, creating it if needed.
+// Phase 0 always returns the TopLevel environment.
+// Other phases are lazily created with their own GlobalEnvironmentFrame.
+func (r *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
+	// Fast path: check with read lock
+	r.mu.RLock()
+	env := r.envs[phase]
+	r.mu.RUnlock()
+	if env != nil {
+		return env
+	}
+
+	// Slow path: create with write lock
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if env := r.envs[phase]; env != nil {
+		return env
+	}
+
+	// Create new phase environment
+	env = r.createPhaseEnv(phase)
+	r.envs[phase] = env
+	return env
+}
+
+// createPhaseEnv creates a new environment frame for the given phase.
+// Must be called with write lock held.
+func (r *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
+	// Create a new GlobalEnvironmentFrame for this phase.
+	// Share interning maps from TopLevel for symbol identity.
+	global := NewGlobalEnvironmentFrame(nil, nil)
+
+	q := &EnvironmentFrame{
+		parent:     r.topLevel, // Phase envs parent to TopLevel for interning
+		local:      nil,
+		global:     global,
+		phaseLevel: phase,
+		phases:     r,
+	}
+	return q
+}
+
+// Phases returns all currently instantiated phase levels.
+// Useful for debugging and introspection.
+func (r *PhaseRegistry) Phases() []int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]int, 0, len(r.envs))
+	for phase := range r.envs {
+		result = append(result, phase)
+	}
+	return result
+}
+
+// TopLevel returns the TopLevel environment (phase 0).
+func (r *PhaseRegistry) TopLevel() *EnvironmentFrame {
+	return r.topLevel
+}

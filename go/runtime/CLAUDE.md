@@ -27,6 +27,22 @@ Package `runtime` initializes the top-level Scheme environment using the registr
 6. Registers primitive expanders in expand environment
 7. Loads bootstrap macros from registry's `MacroSources()`
 
+## Primitive Expanders vs Syntax Compilers
+
+The system has two dispatch mechanisms for special forms:
+
+| Type | Phase | Registry | Examples |
+|------|-------|----------|----------|
+| Primitive Expanders | Expansion | `primitive_expanders_registry.go` | `let-syntax`, `letrec-syntax`, `quote`, `if`, `lambda`, `begin` |
+| Syntax Compilers | Compilation | `syntax_compilers_registry.go` | `define-syntax`, `syntax-case`, `import`, `define-library` |
+
+**let-syntax/letrec-syntax** are primitive expanders, not syntax compilers:
+- Handled entirely during expansion phase (before compilation)
+- Create child expand environments for local macro bindings
+- The let-syntax wrapper disappears after expansion
+- Only the expanded body reaches the compiler
+- When body contains `define` forms, wrapped in `((lambda () (begin body...)))` to isolate scope
+
 ## Extensions
 
 | Extension | Purpose |

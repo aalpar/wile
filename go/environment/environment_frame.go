@@ -23,19 +23,21 @@ import (
 //
 // Design: EnvironmentFrame owns two hierarchy axes:
 //   - parent: lexical scoping chain (lambda bodies → enclosing scope → ... → TopLevel)
-//   - meta: phase chain (Runtime → Expand → Compile)
+//   - phases: indexed phase registry for O(1) access to any phase (Runtime, Expand, Compile, ...)
 //
 // LocalEnvironmentFrame and GlobalEnvironmentFrame have no hierarchy of their own.
 //
-// Phase Hierarchy (R7RS) - chain via meta field:
+// Phase Hierarchy (Racket-style) - indexed via PhaseRegistry:
 //
-//	TopLevel EnvironmentFrame (= Runtime)
+//	TopLevel EnvironmentFrame (= Phase 0 / Runtime)
 //	│   parent: nil
+//	│   phaseLevel: 0
 //	│   global: primitives, user defines, symbol/syntax interning
-//	│   meta: → Expand
-//	│           │   global: syntax bindings (define-syntax)
-//	│           │   meta: → Compile
-//	│                       global: compile-time procedures
+//	│   phases: → PhaseRegistry
+//	│             ├── [0] → TopLevel (runtime)
+//	│             ├── [1] → Expand (for-syntax, macro definitions)
+//	│             ├── [2] → Compile (for-meta 2, syntax compilers)
+//	│             └── [-1] → Template (for-template, future)
 //
 // Each phase has its own GlobalEnvironmentFrame. Sym/syntax interning maps
 // are shared from TopLevel's GlobalEnvironmentFrame.
@@ -48,49 +50,63 @@ type EnvironmentFrame struct {
 	local *LocalEnvironmentFrame
 	// global holds global bindings for this phase
 	global *GlobalEnvironmentFrame
-	// meta links to next phase environment (Expand from Runtime, Compile from Expand)
-	meta *EnvironmentFrame
+	// phaseLevel indicates which phase this frame represents (0=runtime, 1=expand, etc.)
+	phaseLevel int
+	// phases is the shared phase registry, owned by TopLevel
+	phases *PhaseRegistry
 }
 
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
 // This frame has no parent and contains the shared symbol/syntax interning maps.
+// It also creates the PhaseRegistry for indexed phase access.
 func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	global := NewTopLevelGlobalEnvironmentFrame()
 	q := &EnvironmentFrame{
-		parent: nil,
-		local:  nil,
-		global: global,
+		parent:     nil,
+		local:      nil,
+		global:     global,
+		phaseLevel: PhaseRuntime,
 	}
+	// Create phase registry and register TopLevel as phase 0
+	q.phases = NewPhaseRegistry(q)
 	return q
 }
 
 // NewPhaseEnvironmentFrame creates an environment frame for a specific phase.
 // It has its own GlobalEnvironmentFrame for phase-specific bindings and
 // parents to the given tip-top frame for shared interning access.
+//
+// Deprecated: Use AtPhase(n) instead, which uses the PhaseRegistry for
+// indexed access. This function is kept for backward compatibility.
 func NewPhaseEnvironmentFrame(tenv *EnvironmentFrame) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	// Share the interning maps from tip-top.
 	global := NewGlobalEnvironmentFrame(nil, nil)
 	return &EnvironmentFrame{
-		parent: tenv,
-		local:  nil,
-		global: global,
+		parent:     tenv,
+		local:      nil,
+		global:     global,
+		phaseLevel: -999, // Unknown phase level (legacy creation)
+		phases:     tenv.phases,
 	}
 }
 
 // NewEnvironmentFrame creates a new environment frame with the given local and global environment frames.
-// The parent field is set to nil.
+// The parent field is set to nil. This is typically used for isolated environments.
 func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
-		local:  local,
-		global: global,
+		local:      local,
+		global:     global,
+		phaseLevel: PhaseRuntime,
+		phases:     nil, // No phase registry for isolated environments
 	}
 	return q
 }
 
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
 // The global environment frame is inherited from the parent, or set to a new top-level global environment frame if the parent is nil.
-// This is used for creating child frames within a phase (e.g., lambda bodies).
+// This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
+// The phase level and registry are inherited from the parent.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent: parent,
@@ -98,8 +114,12 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 	}
 	if parent == nil {
 		q.global = NewTopLevelGlobalEnvironmentFrame()
+		q.phaseLevel = PhaseRuntime
+		q.phases = nil
 	} else {
 		q.global = parent.global
+		q.phaseLevel = parent.phaseLevel
+		q.phases = parent.phases
 	}
 	return q
 }
@@ -118,36 +138,41 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 	return frame
 }
 
-// Runtime returns the runtime phase environment, creating it if needed.
-// This should only be called on the tip-top frame; other frames delegate to tip-top.
+// AtPhase returns the environment for the given phase level, creating it if needed.
+// Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
+// Negative phases (e.g., -1 for for-template) are also supported.
+//
+// This is the primary method for cross-phase access with O(1) lookup time.
+func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
+	topLevel := p.TopLevel()
+	if topLevel.phases == nil {
+		// Legacy environment without phase registry - create one
+		topLevel.phases = NewPhaseRegistry(topLevel)
+	}
+	return topLevel.phases.GetOrCreate(phase)
+}
+
+// PhaseLevel returns the phase level of this environment frame.
+func (p *EnvironmentFrame) PhaseLevel() int {
+	return p.phaseLevel
+}
+
+// Runtime returns the runtime phase environment (phase 0).
+// This is the TopLevel environment where normal bindings live.
 func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
-	cenv := p.TopLevel()
-	if cenv.meta == nil {
-		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
-	}
-	return cenv.meta
+	return p.AtPhase(PhaseRuntime)
 }
 
-// Expand returns the expand phase environment, creating it if needed.
+// Expand returns the expand phase environment (phase 1), creating it if needed.
 // This is where syntax bindings from define-syntax are stored.
-// This should only be called on the tip-top frame; other frames delegate to tip-top.
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
-	cenv := p.Runtime()
-	if cenv.meta == nil {
-		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
-	}
-	return cenv.meta
+	return p.AtPhase(PhaseExpand)
 }
 
-// Compile returns the compile phase environment, creating it if needed.
-// This is where compile-time procedures are stored.
-// This should only be called on the tip-top frame; other frames delegate to tip-top.
+// Compile returns the compile phase environment (phase 2), creating it if needed.
+// This is where compile-time procedures (syntax compilers) are stored.
 func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
-	cenv := p.Expand()
-	if cenv.meta == nil {
-		cenv.meta = NewPhaseEnvironmentFrame(p.TopLevel())
-	}
-	return cenv.meta
+	return p.AtPhase(PhaseCompile)
 }
 
 // Meta returns the expand phase environment for backward compatibility.
@@ -590,12 +615,14 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 }
 
 // Copy creates a deep copy of the environment frame.
-// The parent environment frame is shared between the original and the copy.
+// The parent environment frame and phase registry are shared between the original and the copy.
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
-		parent: p.parent,
-		local:  p.local.Copy().(*LocalEnvironmentFrame),
-		global: p.global.Copy().(*GlobalEnvironmentFrame),
+		parent:     p.parent,
+		local:      p.local.Copy().(*LocalEnvironmentFrame),
+		global:     p.global.Copy().(*GlobalEnvironmentFrame),
+		phaseLevel: p.phaseLevel,
+		phases:     p.phases,
 	}
 	return q
 }
