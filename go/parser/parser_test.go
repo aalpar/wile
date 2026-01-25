@@ -967,6 +967,69 @@ func TestParser_CommentsFollowedByCode(t *testing.T) {
 	}
 }
 
+// TestParser_CommentsInsideLists tests that comments inside lists are properly
+// skipped when skipComments is true. This is important for macro definitions
+// where comments between clauses should be ignored.
+func TestParser_CommentsInsideLists(t *testing.T) {
+	tcs := []struct {
+		name   string
+		in     string
+		expect values.Value
+	}{
+		{
+			name:   "line comment inside list",
+			in:     "(1 ;; comment\n2 3)",
+			expect: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			name:   "block comment inside list",
+			in:     "(a #| comment |# b c)",
+			expect: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+		},
+		{
+			name:   "datum comment inside list",
+			in:     "(1 #;ignored 2 3)",
+			expect: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			name:   "multiple comments inside list",
+			in:     "(a ;; first\n#| second |# b #;c d)",
+			expect: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("d")),
+		},
+		{
+			name:   "comment at start of list",
+			in:     "(;; comment\n1 2)",
+			expect: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name:   "comment at end of list",
+			in:     "(1 2 ;; comment\n)",
+			expect: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name:   "nested list with comment",
+			in:     "((a ;; inner comment\nb) c)",
+			expect: values.List(values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("c")),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.in)) // skipComments = true
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+
+			// Verify we've consumed everything
+			_, err = p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.Equals, io.EOF)
+		})
+	}
+}
+
 // TestParserError tests the ParserError type.
 func TestParserError(t *testing.T) {
 	c := qt.New(t)

@@ -482,6 +482,49 @@ func countTrailingZeros(s string) int {
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
+
+	// Skip comments when skipComment is enabled
+	// This handles comments inside lists, vectors, and other compound structures
+	for p.skipComment {
+		cur := p.curr()
+		switch cur.Type() {
+		case tokenizer.TokenizerStateLineCommentBody, tokenizer.TokenizerStateBlockCommentBody:
+			// Skip the comment and advance to next token
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		case tokenizer.TokenizerStateDatumCommentBegin:
+			// Skip the datum comment begin token
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			// Read and discard the commented datum
+			_, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			// Advance past the commented datum
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		case tokenizer.TokenizerStateDirective:
+			// Process fold-case directives even when skipping
+			d := p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
+			p.processFoldCaseDirective(d)
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		}
+		break
+	}
+
 	cur := p.curr()
 	switch cur.Type() {
 	case tokenizer.TokenizerStateCons:
@@ -592,6 +635,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			v, _, p.err = p.readSyntax()
 			if p.err != nil {
 				return nil, p.cur, p.err
+			}
+			// After skipping comments, we may have landed on a delimiter (close paren or cons)
+			// In that case, readSyntax returns nil and we should exit the loop
+			if v == nil {
+				break
 			}
 			pr0 = pr.(*syntax.SyntaxPair)
 			pr0.SetCar(v)
