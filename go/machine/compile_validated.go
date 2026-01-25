@@ -438,47 +438,59 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 // The last expression is compiled in tail position per R7RS 3.5. Appends RestoreContinuation
 // at the end to return from the closure.
 //
-// This function is called after parameters have been bound to the local environment.
-// The body expressions are compiled into the child template (tpl), not the parent's template.
+// R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
+// throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
-	// Create a new compiler continuation that emits bytecode into the child template.
-	// This is separate from the parent's compiler (p) because lambda bodies live in
-	// their own bytecode templates, executed when the closure is called.
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-
-	// Create the call context for body expressions. Key settings:
-	// - inTail=true: the context starts in tail position (lambda body is a tail context)
-	// - inExpression: inherited from parent (affects how definitions are handled)
-	// - env: the child environment where parameters are bound
 	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
 
-	// Compile each body expression in sequence.
-	// Per R7RS 3.5, only the LAST expression in a lambda body is in tail position.
-	// This enables tail-call optimization: (lambda (x) (setup) (tail-call x))
+	// R7RS §5.3.2: Internal definitions use letrec* semantics
+	// Pass 1: Pre-declare all define bindings so forward references work
+	for _, bodyExpr := range clause.Body() {
+		childCompiler.predeclareDefineBindingFromValidated(bodyExpr)
+	}
+
+	// Pass 2: Compile all expressions (with all bindings now visible)
 	for i, bodyExpr := range clause.Body() {
 		isLast := i == len(clause.Body())-1
-
-		// Non-last expressions: force out of tail position.
-		// Their values are discarded (overwritten by subsequent expressions).
 		bodyCtx := lambdaBodyContext.NotInTail()
 		if isLast {
-			// Last expression: keep in tail position from lambdaBodyContext.
-			// If this expression is a call, it becomes a tail call (no stack growth).
 			bodyCtx = lambdaBodyContext
 		}
-
 		err := childCompiler.compileValidated(bodyCtx, bodyExpr)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Append the return operation to complete the closure's bytecode.
-	// RestoreContinuation pops the saved continuation from the call stack and
-	// jumps back to the caller. The value register contains the result of the
-	// last body expression, which becomes the closure's return value.
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	return nil
+}
+
+// predeclareDefineBindingFromValidated pre-creates a binding for a validated define form.
+// This enables forward references within lambda bodies per R7RS §5.3.2.
+func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr validate.ValidatedExpr) {
+	def, ok := expr.(*validate.ValidatedDefine)
+	if !ok {
+		return // Not a define, skip
+	}
+
+	sym := p.env.InternSymbol(def.Name().Sym)
+	symbolScopes := def.Name().Scopes()
+
+	if p.env.LocalEnvironment() != nil {
+		// Local scope: create local binding
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
+	} else {
+		// Global scope: create global binding
+		gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+		if !created {
+			binding := p.env.GetGlobalBinding(gi)
+			if binding != nil && symbolScopes != nil {
+				binding.SetScopes(symbolScopes)
+			}
+		}
+	}
 }
 
 // bindRestParameter binds the rest parameter (if any) to the local environment.
@@ -696,23 +708,24 @@ func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCa
 // are evaluated left-to-right; the value of the last expression becomes
 // the value of the entire begin form.
 //
+// R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names
+// are visible throughout the body, enabling forward references between defines.
+//
 // Example: (begin (display "hello") (newline) 42) => 42 (after printing)
 func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedBegin) error {
 	startPC := len(p.template.operations)
 
-	// Compile each expression in sequence. The key consideration is tail position:
-	// only the LAST expression can be in tail position per R7RS 3.5.
-	// Earlier expressions are evaluated for side effects; their values are discarded.
+	// R7RS §5.3.2: Internal definitions use letrec* semantics
+	// Pass 1: Pre-declare all define bindings so forward references work
+	for _, expr := range v.Body() {
+		p.predeclareDefineBindingFromValidated(expr)
+	}
+
+	// Pass 2: Compile each expression in sequence
 	for i, expr := range v.Body() {
 		isLast := i == len(v.Body())-1
-
-		// Non-last expressions: force out of tail position.
-		// Their return values are implicitly discarded (overwritten by next expression).
 		exprCtx := ctctx.NotInTail()
 		if isLast {
-			// Last expression: inherit the tail position from the enclosing context.
-			// If begin is in tail position, so is its last expression. This enables
-			// tail-call optimization for patterns like: (begin (setup) (tail-call))
 			exprCtx = ctctx
 		}
 
