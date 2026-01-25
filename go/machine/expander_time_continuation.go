@@ -314,10 +314,15 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContex
 		}
 	}
 
-	// Create child expand environment for macro bindings
-	parentExpandEnv := p.env.Expand()
+	// Create child expand environment for macro bindings.
+	// Use p.env directly as the parent (not p.env.Expand()) to preserve
+	// the environment chain for nested let-syntax. When we have:
+	//   (let-syntax ((outer ...))
+	//     (let-syntax ((inner ...)) ...))
+	// The inner let-syntax's environment must have outer's environment
+	// in its parent chain, not the global expand environment.
 	localExpandEnv := environment.NewLocalEnvironment(numBindings)
-	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, parentExpandEnv)
+	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
 
 	// Create a new scope for the let-syntax body
 	letScope := syntax.NewScope()
@@ -337,7 +342,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContex
 				return nil, values.NewForeignErrorf("%s: keyword must be a symbol", formName)
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
-			_, _ = childExpandEnv.CreateLocalBinding(keyword, environment.BindingTypeSyntax)
+			// Create binding with letScope so free identifier resolution works
+			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
 
 			cdr := current.SyntaxCdr()
 			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -398,8 +404,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContex
 			return nil, values.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}
 
-		// Store in child expand environment
-		localIndex, created := childExpandEnv.CreateLocalBinding(keyword, environment.BindingTypeSyntax)
+		// Store in child expand environment with letScope for free identifier resolution
+		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
 		if !created {
 			localIndex = childExpandEnv.GetLocalIndex(keyword)
 		}
