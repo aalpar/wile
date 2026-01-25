@@ -167,7 +167,8 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of complex",
 			code: "(real-part 3+4i)",
-			out:  values.NewFloat(3.0),
+			// 3+4i is exact (integer parts), so returns exact 3
+			out:  values.NewBigIntegerFromInt64(3),
 		},
 		{
 			name: "real-part of integer",
@@ -187,12 +188,14 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of negative complex",
 			code: "(real-part -3+4i)",
-			out:  values.NewFloat(-3.0),
+			// -3+4i is exact (integer parts), so returns exact -3
+			out:  values.NewBigIntegerFromInt64(-3),
 		},
 		{
 			name: "real-part of complex with negative real",
 			code: "(real-part -5-2i)",
-			out:  values.NewFloat(-5.0),
+			// -5-2i is exact (integer parts), so returns exact -5
+			out:  values.NewBigIntegerFromInt64(-5),
 		},
 		{
 			name: "real-part of rational with negative numerator",
@@ -207,12 +210,14 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of complex with zero real",
 			code: "(real-part 0+5i)",
-			out:  values.NewFloat(0.0),
+			// 0+5i is exact (integer parts), so returns exact 0
+			out:  values.NewBigIntegerFromInt64(0),
 		},
 		{
 			name: "real-part of purely real complex",
 			code: "(real-part 7+0i)",
-			out:  values.NewFloat(7.0),
+			// 7+0i is exact (integer parts), so returns exact 7
+			out:  values.NewBigIntegerFromInt64(7),
 		},
 	}
 	for _, tc := range tcs {

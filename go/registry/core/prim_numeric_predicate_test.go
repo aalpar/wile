@@ -432,11 +432,17 @@ func TestExactnessPredicatesExtended(t *testing.T) {
 		// exact-integer? on BigFloat (always false - inexact)
 		{"exact-integer? on bigfloat", `(exact-integer? #m4.0)`, values.FalseValue},
 
-		// exact? on complex
-		{"exact? on complex", `(exact? 1+2i)`, values.FalseValue},
+		// exact? on exact complex (integer parts are parsed as exact BigComplex)
+		{"exact? on complex", `(exact? 1+2i)`, values.TrueValue},
 
-		// inexact? on complex
-		{"inexact? on complex", `(inexact? 1+2i)`, values.TrueValue},
+		// inexact? on exact complex
+		{"inexact? on complex", `(inexact? 1+2i)`, values.FalseValue},
+
+		// exact? on inexact complex (float parts)
+		{"exact? on inexact complex", `(exact? 1.0+2.0i)`, values.FalseValue},
+
+		// inexact? on inexact complex (float parts)
+		{"inexact? on inexact complex", `(inexact? 1.0+2.0i)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

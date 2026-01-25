@@ -936,7 +936,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		// Full complex numbers like 1+2i, 3-4i, 1.5+2.5i, +1+2i, -3-4i
-		var q1 *values.Complex
+		// R7RS §6.2.2: Exact if both parts are integer/rational, inexact otherwise
+		var q1 values.Number
 		q1, p.err = p.parseComplex(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -1167,9 +1168,72 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	return values.NewComplexFromParts(real, imag), nil
 }
 
+// isRationalString checks if a string represents a rational number (contains /).
+func isRationalString(s string) bool {
+	return strings.Contains(s, "/")
+}
+
+// isIntegerString checks if a string represents an integer (no . or /).
+func isIntegerString(s string) bool {
+	// Handle signed numbers
+	start := 0
+	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
+		start = 1
+	}
+	if start >= len(s) {
+		return false
+	}
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isExactPartString checks if a string represents an exact number (integer or rational).
+func isExactPartString(s string) bool {
+	// Handle pure sign cases for imaginary: +i and -i map to exact 1 or -1
+	if s == "+" || s == "-" {
+		return true
+	}
+	return isIntegerString(s) || isRationalString(s)
+}
+
+// parseExactPart parses an exact number string (integer or rational) and returns
+// a BigInteger or Rational suitable for use as a BigComplex part.
+func parseExactPart(s string) (values.Number, error) {
+	// Handle pure sign cases for imaginary: +i -> 1, -i -> -1
+	if s == "+" {
+		return values.NewBigIntegerFromInt64(1), nil
+	}
+	if s == "-" {
+		return values.NewBigIntegerFromInt64(-1), nil
+	}
+
+	if isRationalString(s) {
+		r := new(big.Rat)
+		_, ok := r.SetString(s)
+		if !ok {
+			return nil, errors.New("invalid rational: " + s)
+		}
+		return values.NewRationalFromRat(r), nil
+	}
+
+	// Integer
+	i := new(big.Int)
+	_, ok := i.SetString(s, 10)
+	if !ok {
+		return nil, errors.New("invalid integer: " + s)
+	}
+	return values.NewBigInteger(i), nil
+}
+
 // parseComplex parses a complex number string like "1+2i", "3-4i", "1.5+2.5i", "1+i", "5-i"
 // Also handles infnan: "+inf.0+inf.0i", "1+inf.0i", "3+nan.0i"
-func (p *Parser) parseComplex(s string) (*values.Complex, error) {
+// R7RS §6.2.2: Returns an exact BigComplex if both parts are exact (integer/rational),
+// otherwise returns an inexact Complex.
+func (p *Parser) parseComplex(s string) (values.Number, error) {
 	// Remove the trailing 'i'
 	s = strings.TrimSuffix(s, "i")
 
@@ -1190,7 +1254,7 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 			if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
 				strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
 				strings.HasPrefix(rest, "+i") || strings.HasPrefix(rest, "-i") ||
-				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.') {
+				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/') {
 				signPos = i
 				break
 			}
@@ -1207,13 +1271,26 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	realPart := s[:signPos]
 	imagPart := s[signPos:] // includes the sign
 
-	// Parse real part
+	// Check if both parts are exact (integer or rational)
+	// If so, create an exact BigComplex; otherwise use inexact Complex
+	if isExactPartString(realPart) && isExactPartString(imagPart) {
+		realNum, err := parseExactPart(realPart)
+		if err != nil {
+			return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
+		}
+		imagNum, err := parseExactPart(imagPart)
+		if err != nil {
+			return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
+		}
+		return values.NewBigComplex(realNum, imagNum), nil
+	}
+
+	// Parse as inexact complex
 	rel, err := p.parseRealPart(realPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
 
-	// Parse imaginary part
 	img, err := p.parseImagPart(imagPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)

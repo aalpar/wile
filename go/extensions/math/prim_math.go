@@ -234,6 +234,11 @@ func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
 		}
 	case *values.Complex:
 		mc.SetValue(values.NewComplex(cmplx.Sqrt(v.Value)))
+	case *values.BigComplex:
+		// Convert BigComplex to complex128 and compute sqrt
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(realF, imagF))))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
@@ -327,6 +332,31 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(float64(e.Value), 0))))
 		case *values.Rational:
 			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Float64(), 0))))
+		case *values.BigComplex:
+			eReal := e.RealAsBigFloat().Float64()
+			eImag := e.ImagAsBigFloat().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(eReal, eImag))))
+		}
+	case *values.BigComplex:
+		bReal := b.RealAsBigFloat().Float64()
+		bImag := b.ImagAsBigFloat().Float64()
+		bComplex := complex(bReal, bImag)
+		switch e := expNum.(type) {
+		case *values.Complex:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, e.Value)))
+		case *values.Float:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Value, 0))))
+		case *values.Integer:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(float64(e.Value), 0))))
+		case *values.Rational:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Float64(), 0))))
+		case *values.BigComplex:
+			eReal := e.RealAsBigFloat().Float64()
+			eImag := e.ImagAsBigFloat().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(eReal, eImag))))
+		case *values.BigInteger:
+			ef, _ := e.BigInt().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
 		}
 	default:
 		var bf float64
@@ -558,7 +588,9 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are always finite
+		// BigFloat uses math/big which doesn't support infinity/NaN
 		mc.SetValue(values.TrueValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(!math.IsInf(v.Value, 0) && !math.IsNaN(v.Value)))
@@ -577,7 +609,9 @@ func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are never infinite
+		// BigFloat uses math/big which doesn't support infinity
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsInf(v.Value, 0)))
@@ -596,7 +630,9 @@ func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are never NaN
+		// BigFloat uses math/big which doesn't support NaN
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsNaN(v.Value)))
@@ -984,7 +1020,10 @@ func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))
 	case *values.BigComplex:
-		mc.SetValue(v.Magnitude())
+		// Convert to float64 for magnitude calculation (transcendental operation via sqrt)
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
 	case *values.Integer:
 		val := v.Value
 		if val < 0 {
@@ -1020,7 +1059,10 @@ func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))
 	case *values.BigComplex:
-		mc.SetValue(v.Phase())
+		// Convert to float64 for phase calculation (transcendental operation)
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewFloat(cmplx.Phase(complex(realF, imagF))))
 	case *values.Integer:
 		if v.Value >= 0 {
 			mc.SetValue(values.NewFloat(0))
@@ -1083,6 +1125,12 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Rational:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	case *values.Complex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigComplex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigInteger:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigFloat:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "number->string: expected a number but got %T", n)

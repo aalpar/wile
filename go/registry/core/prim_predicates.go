@@ -165,6 +165,31 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 		} else {
 			mc.SetValue(values.FalseValue)
 		}
+	case *values.BigComplex:
+		// Check if imaginary part is zero and real part is an integer
+		if v.IsReal() {
+			realPart := v.Real()
+			switch rp := realPart.(type) {
+			case *values.BigInteger:
+				mc.SetValue(values.TrueValue)
+			case *values.Rational:
+				if rp.IsInteger() {
+					mc.SetValue(values.TrueValue)
+				} else {
+					mc.SetValue(values.FalseValue)
+				}
+			case *values.BigFloat:
+				if rp.BigFloatValue().IsInt() {
+					mc.SetValue(values.TrueValue)
+				} else {
+					mc.SetValue(values.FalseValue)
+				}
+			default:
+				mc.SetValue(values.FalseValue)
+			}
+		} else {
+			mc.SetValue(values.FalseValue)
+		}
 	default:
 		mc.SetValue(values.FalseValue)
 	}

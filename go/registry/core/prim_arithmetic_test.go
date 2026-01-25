@@ -704,9 +704,13 @@ func TestSquare(t *testing.T) {
 		{"square of rational", `(square 1/2)`, values.NewRational(1, 4)},
 		{"square of negative rational", `(square -2/3)`, values.NewRational(4, 9)},
 
-		// Complex operations
-		{"square of complex", `(square 1+1i)`, values.NewComplexFromParts(0.0, 2.0)},
-		{"square of imaginary", `(square 0+2i)`, values.NewComplexFromParts(-4.0, 0.0)},
+		// Exact complex operations (integer parts are parsed as exact BigComplex)
+		{"square of exact complex", `(square 1+1i)`, values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(2))},
+		{"square of exact imaginary", `(square 0+2i)`, values.NewBigIntegerFromInt64(-4)},
+
+		// Inexact complex operations
+		{"square of inexact complex", `(square 1.0+1.0i)`, values.NewComplexFromParts(0.0, 2.0)},
+		{"square of inexact imaginary", `(square 0.0+2.0i)`, values.NewComplexFromParts(-4.0, 0.0)},
 
 		// BigInteger operations
 		{"square of biginteger", `(square #z10000000000)`, values.NewBigIntegerFromString("100000000000000000000", 10)},
