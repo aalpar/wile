@@ -25,6 +25,7 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 | `MachineContinuation` | Saved state for function calls |
 | `Operation` | Single bytecode instruction |
 | `CompileTimeContinuation` | Compiler state |
+| `CompileTimeCallContext` | Compilation context (tail position, expression mode) |
 | `CompiledLibrary` | Loaded library with exports |
 
 ## Key Files
@@ -32,12 +33,14 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 | File | Purpose |
 |------|---------|
 | `compile_time_continuation.go` | Main compiler (2000+ lines) |
+| `compile_time_call_context.go` | Compilation context (tail position, expression mode) |
 | `machine_context.go` | Execution context and VM loop |
 | `operation_*.go` | 50+ bytecode instruction implementations |
 | `library.go` | Library system |
 | `debugger.go` | Breakpoint and stepping support |
 | `compile_syntax_rules.go` | R7RS syntax-rules compilation with custom ellipsis |
 | `compile_syntax_form.go` | `(syntax template)` compilation with escape form optimization |
+| `expander_time_continuation.go` | Macro expander (quasiquote, let-syntax, syntax-case) |
 
 ## Gotchas
 
@@ -51,7 +54,9 @@ ValidatedExpr → CompileTimeContinuation → NativeTemplate → MachineContext 
 - **SubContext for foreign calls**: Fresh stacks but shared global environment
 - **Run() does NOT reset pc**: The VM loop in `Run()` starts from the current `pc` value. Callers must set `pc` appropriately: `Apply` sets `pc=0` for fresh closure invocation, `Restore` preserves saved `pc` for continuation resumption. Do NOT add `pc=0` to `Run()` - it would break `raise-continuable` resumption semantics.
 - **Let bindings shadow macros**: Per R7RS §4.2.2, local variable bindings in `let`/`let*`/`letrec` shadow outer macro definitions. The expander checks for local variable bindings before looking up macros (`hasLocalVariableBinding` in `expander_time_continuation.go`).
-- **let-syntax/letrec-syntax are primitive expanders**: These forms must NOT have their bindings macro-expanded. The bindings are transformer specifications `((name (syntax-rules ...)))`, not expressions. If `name` shadows a global macro, the expander must not invoke that macro on the binding. Registered in `primitive_expanders_registry.go`, implementations in `expander_time_continuation.go`. The compiler (`compileLetSyntaxBody`) handles creating the local scope and expanding the body with the new macros.
+- **let-syntax/letrec-syntax fully handled during expansion**: These forms are primitive expanders that complete all macro binding and body expansion before compilation begins. The expander (`expandLetSyntaxImpl` in `expander_time_continuation.go`) creates a child expand environment with local macro bindings, compiles syntax-rules transformers, expands the body with the child environment, and returns the expanded body. The let-syntax/letrec-syntax wrapper disappears after expansion - only the expanded body reaches the compiler.
+- **let-syntax body defines wrapped in lambda**: When `expandLetSyntaxImpl` detects `define` forms in the expanded body, it wraps the body in `((lambda () (begin body...)))` to create a new runtime stack frame. This prevents defines from leaking to the outer scope. Without defines, the body compiles directly.
+- **Nested let-syntax uses expand environment chain**: Each let-syntax creates a child expand environment with the enclosing expand environment as parent. This enables inner macros to reference outer macros during expansion. The parent chain is established during expansion, not compilation.
 - **Library bodies use letrec\* semantics**: R7RS §5.3.2 requires all defined names to be visible to all initializers, enabling forward references. `compileLibraryBegin` and `processFormsWithLetrecSemantics` implement two-pass compilation: pass 1 pre-declares all `define` bindings via `predeclareDefineBinding`, pass 2 compiles all forms with bindings visible.
 - **Auxiliary syntax lookup checks three environments**: When importing/exporting `else` and `=>`, `CopyLibraryBindingsToEnv` checks: (1) runtime env, (2) expand env for macros, (3) compile env for auxiliary syntax. These keywords are registered as compile-time bindings in `registry/core/specialforms.go`.
 - **Vector quasiquote with unquote-splicing**: `expandQuasiquote` handles `\`#(... ,@expr ...)` by detecting splicing, segmenting elements, and generating `(list->vector (append (list ...) expr (list ...)))` instead of the simple `(list->vector (list ...))` form.
