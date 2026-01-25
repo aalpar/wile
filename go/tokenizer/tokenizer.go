@@ -1353,7 +1353,50 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			p.mayReadSignedImaginaryPart(true, r) //nolint:errcheck
 		} else {
 			p.state = TokenizerStateUnsignedComplex
-			p.next()
+			p.next() // consume sign
+			if p.err != nil {
+				return
+			}
+			// Check for unit imaginary (+i or -i) - must peek to distinguish from inf.0
+			if p.curr() == 'i' {
+				p.next() // consume 'i'
+				if p.err != nil {
+					return
+				}
+				// If followed by 'n', it might be inf.0i - continue parsing
+				if p.curr() == 'n' {
+					// Parse "nf.0" portion of inf.0
+					n := p.scan([]byte("nf"))
+					if p.err != nil {
+						return
+					}
+					if n != 0 {
+						p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
+						return
+					}
+					if !isDot(p.curr()) {
+						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+						return
+					}
+					p.next()
+					if p.err != nil {
+						return
+					}
+					if !isDigit(r, p.curr()) {
+						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+						return
+					}
+					p.readUnsignedBaseNNumber(r, 0)
+					if p.err != nil {
+						return
+					}
+					if isImaginary(p.curr()) {
+						p.next()
+					}
+				}
+				// Otherwise just unit imaginary, already consumed 'i'
+				return
+			}
 			p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
 			if p.err != nil {
 				return
@@ -1487,7 +1530,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 	// Branch 1: Starts with explicit sign (+/-)
 	switch {
 	case p.curr() == 'i':
-		// TODO: refactor readInf
+		// Could be inf.0 - caller already handles unit imaginary 'i'
 		p.readInf("inf", r) //nolint:errcheck
 		return
 	case p.curr() == 'n':
@@ -1626,10 +1669,44 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		}
 	}
 
-	// Check for +i or -i (pure imaginary unit) or +inf or -inf
+	// Check for +i or -i (pure imaginary unit) or +inf.0i or -inf.0i
 	if p.curr() == 'i' {
-		// Check for +inf.0i or -inf.0i
-		p.scanForImaginaryNumberSpecials(r, "inf") //nolint:errcheck
+		p.next() // consume 'i'
+		if p.err != nil {
+			return
+		}
+		// If NOT followed by 'n', it's pure imaginary (+i or -i) - we're done
+		if p.curr() != 'n' {
+			return
+		}
+		// Could be inf.0i - continue parsing "nf.0<digits>i"
+		n := p.scan([]byte("nf"))
+		if p.err != nil {
+			return
+		}
+		if n != 0 {
+			p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
+			return
+		}
+		if !isDot(p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.next()
+		if p.err != nil {
+			return
+		}
+		if !isDigit(r, p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.readUnsignedBaseNNumber(r, 0)
+		if p.err != nil {
+			return
+		}
+		if isImaginary(p.curr()) {
+			p.next()
+		}
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i

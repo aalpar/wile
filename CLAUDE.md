@@ -18,6 +18,37 @@ which gsed    # GNU sed (preferred over BSD sed)
 which gawk    # GNU awk
 ```
 
+## Imperatives (Never Deviate)
+
+These are exact patterns. Do not improvise or substitute alternatives.
+
+| Wrong | Correct | Note |
+|-------|---------|------|
+| `go test ./...` | `cd go && go test ./...` | Must run from go/ directory |
+| Creating plans in `go/plans/` | Creating plans in `plans/` | Plans live at repo root |
+
+**NEVER** use single-dash long flags with the scheme binary.
+**ALWAYS** run Go commands from the `go/` directory.
+**ALWAYS** create plan files in `wile/plans/`, not `wile/go/plans/`.
+
+## Documentation Notation
+
+| Notation | Meaning | Example |
+|----------|---------|---------|
+| `<value>` | Required placeholder (user supplies) | `git commit -m "<message>"` |
+| `[value]` | Optional element | `go test [-v] ./...` |
+| `<value>...` | One or more of this element | `cat <file>...` |
+| `[value]...` | Zero or more of this element | `rm [file]...` |
+| `{a\|b}` | Required choice between alternatives | `git {push\|pull}` |
+| `[a\|b]` | Optional choice between alternatives | `make [build\|test]` |
+| `ALLCAPS` | Environment variable or constant | `$GOPATH`, `EOF` |
+| `` `literal` `` | Exact text (use as-is) | `` `--verbose` `` |
+| `→` | Maps to / becomes / produces | `foo.go → foo_test.go` |
+
+**Escaping**: When angle brackets appear literally in commands (rare), escape as `\<` or quote the whole command.
+
+**Combining**: `[--timeout <ms>]` means the flag is optional, but if provided, requires a value.
+
 ## Build Commands
 
 All commands run from the `go/` directory:
@@ -44,7 +75,7 @@ Run the REPL:
 
 Run a Scheme file:
 ```bash
-./dist/scheme -file example.scm
+./dist/scheme --file example.scm
 ```
 
 ## Architecture

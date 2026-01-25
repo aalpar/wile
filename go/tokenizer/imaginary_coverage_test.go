@@ -87,6 +87,8 @@ func TestSignedImaginaryPartVariations(t *testing.T) {
 		{input: "1-i", expectedType: TokenizerStateUnsignedComplex},
 		{input: "1/2+i", expectedType: TokenizerStateUnsignedComplex},
 		{input: "1/2-i", expectedType: TokenizerStateUnsignedComplex},
+		{input: "3/2+i", expectedType: TokenizerStateUnsignedComplex}, // Issue #5 regression test
+		{input: "3/2-i", expectedType: TokenizerStateUnsignedComplex}, // Issue #5 regression test
 		{input: "1.5+i", expectedType: TokenizerStateUnsignedComplex},
 		{input: "1.5-i", expectedType: TokenizerStateUnsignedComplex},
 
