@@ -535,6 +535,9 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 // primitive forms. This function creates a child environment with the formals
 // as local variable bindings before expanding the body, ensuring that references
 // to parameter names (like `if`, `let`) don't get treated as special forms.
+//
+// R7RS §5.3: Internal define-syntax forms are processed before expanding the
+// rest of the body, so locally-defined macros are visible to subsequent forms.
 func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
@@ -564,16 +567,176 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
 	}
 
-	// Expand body in the child environment
-	childExpander := NewExpanderTimeContinuation(childEnv)
-	expandedBody, err := childExpander.ExpandSyntaxArgumentList(ectx, cdrPair)
+	// R7RS §5.3: Process leading define-syntax forms before expanding the rest
+	// This makes locally-defined macros visible to subsequent body expressions
+	bodyExprs, err := collectBodyExpressions(cdrPair)
 	if err != nil {
-		return nil, fmt.Errorf("lambda: failed to expand body: %w", err)
+		return nil, values.WrapForeignErrorf(err, "lambda: invalid body expression")
+	}
+
+	// Handle the case where body is wrapped in (begin ...) - common from let macro
+	unwrappedExprs, wasBeginWrapped := unwrapBeginBodyWithFlag(bodyExprs)
+
+	defineSyntaxForms, remainingExprs := extractLeadingDefineSyntaxSyntax(unwrappedExprs)
+
+	// If there are leading define-syntax forms, compile them first
+	if len(defineSyntaxForms) > 0 {
+		expandEnv := childEnv.Expand()
+		for _, dsPair := range defineSyntaxForms {
+			err := compileDefineSyntaxFromSyntax(expandEnv, dsPair)
+			if err != nil {
+				return nil, values.WrapForeignErrorf(err, "lambda: failed to compile define-syntax")
+			}
+		}
+	}
+
+	// Expand body in the child environment (with new macros visible)
+	childExpander := NewExpanderTimeContinuation(childEnv)
+	var expandedExprs []syntax.SyntaxValue
+
+	// Include define-syntax forms (unexpanded - they're handled at compile time)
+	for _, ds := range defineSyntaxForms {
+		expandedExprs = append(expandedExprs, ds)
+	}
+
+	// Expand remaining expressions
+	for _, expr := range remainingExprs {
+		expanded, err := childExpander.ExpandExpression(ectx, expr)
+		if err != nil {
+			return nil, values.WrapForeignErrorf(err,"lambda: failed to expand body")
+		}
+		expandedExprs = append(expandedExprs, expanded)
+	}
+
+	// Rebuild the body as a syntax list
+	var expandedBody *syntax.SyntaxPair
+	if wasBeginWrapped {
+		// Re-wrap in begin
+		beginSym := syntax.NewSyntaxSymbol("begin", sym.SourceContext())
+		innerList := syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
+		beginForm := syntax.NewSyntaxCons(beginSym, innerList, sym.SourceContext())
+		expandedBody = syntax.SyntaxList(sym.SourceContext(), beginForm)
+	} else {
+		expandedBody = syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
 	}
 
 	// Build (lambda formals expanded-body...)
 	args := syntax.NewSyntaxCons(formalsStx, expandedBody, sym.SourceContext())
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+}
+
+// collectBodyExpressions collects all expressions from a body syntax pair into a slice.
+func collectBodyExpressions(body *syntax.SyntaxPair) ([]syntax.SyntaxValue, error) {
+	var exprs []syntax.SyntaxValue
+	current := body
+	for !syntax.IsSyntaxEmptyList(current) {
+		exprs = append(exprs, current.SyntaxCar())
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else if syntax.IsSyntaxEmptyList(cdr) {
+			break
+		} else {
+			return nil, fmt.Errorf("body must be a proper list")
+		}
+	}
+	return exprs, nil
+}
+
+// unwrapBeginBodyWithFlag handles the case where a lambda body is a single (begin ...) form.
+// This is common from let macro expansion: (let () body...) -> ((lambda () (begin body...)))
+// Returns the contents of the begin and a flag indicating if unwrapping occurred.
+func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, bool) {
+	if len(exprs) != 1 {
+		return exprs, false
+	}
+	pair, ok := exprs[0].(*syntax.SyntaxPair)
+	if !ok {
+		return exprs, false
+	}
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return exprs, false
+	}
+	sym, ok := carSym.Unwrap().(*values.Symbol)
+	if !ok || sym.Key != "begin" {
+		return exprs, false
+	}
+	// It's (begin ...), extract the contents
+	cdr := pair.Cdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok {
+		return exprs, false
+	}
+	innerExprs, err := collectBodyExpressions(cdrPair)
+	if err != nil {
+		return exprs, false
+	}
+	return innerExprs, true
+}
+
+// extractLeadingDefineSyntaxSyntax extracts leading define-syntax forms from a body.
+func extractLeadingDefineSyntaxSyntax(exprs []syntax.SyntaxValue) (defineSyntax []*syntax.SyntaxPair, remaining []syntax.SyntaxValue) {
+	for i, expr := range exprs {
+		if !isDefineSyntaxSyntax(expr) {
+			return defineSyntax, exprs[i:]
+		}
+		defineSyntax = append(defineSyntax, expr.(*syntax.SyntaxPair))
+	}
+	return defineSyntax, nil
+}
+
+// isDefineSyntaxSyntax checks if a syntax value is a define-syntax form.
+func isDefineSyntaxSyntax(expr syntax.SyntaxValue) bool {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return false
+	}
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return false
+	}
+	sym, ok := carSym.Unwrap().(*values.Symbol)
+	return ok && sym.Key == "define-syntax"
+}
+
+// compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
+// in the given expand environment.
+func compileDefineSyntaxFromSyntax(expandEnv *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+	// Extract: (define-syntax keyword transformer)
+	cdr, ok := dsPair.Cdr().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: malformed")
+	}
+	keywordSym, ok := cdr.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return fmt.Errorf("define-syntax: keyword must be a symbol")
+	}
+	keyword := expandEnv.InternSymbol(keywordSym.Unwrap().(*values.Symbol))
+	symbolScopes := keywordSym.Scopes()
+
+	transformerCdr, ok := cdr.Cdr().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: missing transformer")
+	}
+	transformer, ok := transformerCdr.SyntaxCar().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: transformer must be a list")
+	}
+
+	// Compile the transformer
+	closure, err := CompileSyntaxRules(context.TODO(), expandEnv, transformer)
+	if err != nil {
+		return err
+	}
+
+	// Store in the expand environment
+	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+	binding := expandEnv.GetGlobalBinding(globalIndex)
+	if binding != nil && symbolScopes != nil {
+		binding.SetScopes(symbolScopes)
+	}
+	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
 }
 
 // formalSymbol pairs a symbol with its scopes for formal parameter tracking.
