@@ -48,7 +48,6 @@ import (
 	"wile/values"
 )
 
-
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
 //
 // It walks the syntax tree, detecting and expanding macro invocations.
@@ -98,6 +97,8 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 
 // ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	var result syntax.SyntaxValue
+	var err error
 	switch stx := expr.(type) {
 	case *syntax.SyntaxPair:
 		// Handle empty list - no expansion needed
@@ -106,7 +107,11 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, 
 		}
 		car := stx.SyntaxCar()
 		cdr := stx.SyntaxCdr().(*syntax.SyntaxPair)
-		return p.ExpandSyntaxOrProcedureCall(ectx, car, cdr)
+		result, err = p.ExpandSyntaxOrProcedureCall(ectx, car, cdr)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	case *syntax.SyntaxSymbol:
 		return p.ExpandSymbol(ectx, stx)
 	case *syntax.SyntaxObject:
@@ -1154,7 +1159,9 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 
 	// R7RS §4.2.2: Local variable bindings shadow macros AND primitive forms
 	// Check if there's a local variable binding before checking for macros or primitives
-	if !p.hasLocalVariableBinding(sym0, sym.Scopes()) {
+	hasLocalBinding := p.hasLocalVariableBinding(sym0, sym.Scopes())
+
+	if !hasLocalBinding {
 		// No local variable shadowing - check for macros
 		// First check local bindings in p.env (supports let-syntax local macros)
 		// Then fall back to the global expand environment
