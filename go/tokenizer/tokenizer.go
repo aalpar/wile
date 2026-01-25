@@ -1637,7 +1637,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	}
 
-	// Check for numeric coefficient: +3i, +3.5i, etc.
+	// Check for numeric coefficient: +3i, +3.5i, +3/4i, etc.
 	if !isDigit(r, p.curr()) {
 		return
 	}
@@ -1645,8 +1645,9 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 	if p.err != nil {
 		return
 	}
-	// Check for decimal part
+	// Check for decimal part, rational part, or exponent
 	if isDot(p.curr()) {
+		// Decimal: +3.5i
 		p.next()
 		if p.err != nil {
 			return
@@ -1658,6 +1659,20 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 			}
 		}
 		p.mayReadExponent(r) //nolint:errcheck
+		if p.err != nil {
+			return
+		}
+	} else if p.curr() == '/' {
+		// Rational: +3/4i
+		p.next()
+		if p.err != nil {
+			return
+		}
+		if !isDigit(r, p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return
 		}

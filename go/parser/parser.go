@@ -1174,7 +1174,7 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	return values.NewComplexFromParts(rel, img), nil
 }
 
-// parseFloatOrInfnan parses a float that may be inf.0 or nan.0
+// parseFloatOrInfnan parses a float that may be inf.0, nan.0, or a rational
 func parseFloatOrInfnan(s string) (float64, error) {
 	switch s {
 	case "+inf.0":
@@ -1184,6 +1184,26 @@ func parseFloatOrInfnan(s string) (float64, error) {
 	case "+nan.0", "-nan.0":
 		return math.NaN(), nil
 	}
+
+	// Check for rational number (contains '/')
+	if slashIdx := strings.Index(s, "/"); slashIdx != -1 {
+		numStr := s[:slashIdx]
+		denStr := s[slashIdx+1:]
+
+		num, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return 0, err
+		}
+		den, err := strconv.ParseFloat(denStr, 64)
+		if err != nil {
+			return 0, err
+		}
+		if den == 0 {
+			return 0, errors.New("division by zero in rational")
+		}
+		return num / den, nil
+	}
+
 	return strconv.ParseFloat(s, 64)
 }
 

@@ -1146,6 +1146,28 @@ func TestParseComplex(t *testing.T) {
 		// Scientific notation in both parts
 		{"1e2+3e2i", 100, 300},
 		{"1.5e2+2.5e2i", 150, 250},
+
+		// Rational real parts
+		{"3/2+i", 1.5, 1},
+		{"3/2-i", 1.5, -1},
+		{"1/2+2i", 0.5, 2},
+		{"-3/2+i", -1.5, 1},
+		{"-3/2-i", -1.5, -1},
+		{"5/4+3i", 1.25, 3},
+
+		// Rational imaginary parts
+		{"1+3/4i", 1, 0.75},
+		{"1-3/4i", 1, -0.75},
+		{"2+1/2i", 2, 0.5},
+		{"2-1/2i", 2, -0.5},
+
+		// Rational real and imaginary parts
+		{"1/2+3/4i", 0.5, 0.75},
+		{"1/2-3/4i", 0.5, -0.75},
+		{"-1/2+3/4i", -0.5, 0.75},
+		{"-1/2-3/4i", -0.5, -0.75},
+		{"3/4+5/8i", 0.75, 0.625},
+		{"7/2+9/4i", 3.5, 2.25},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -1257,6 +1279,12 @@ func TestReadSyntaxComplex(t *testing.T) {
 		{"1+i", 1, 1},
 		{"5-i", 5, -1},
 		{"1e2+3i", 100, 3},
+		// Rational complex numbers
+		{"3/2+i", 1.5, 1},
+		{"1/2+3/4i", 0.5, 0.75},
+		{"3/4-1/2i", 0.75, -0.5},
+		{"1+3/4i", 1, 0.75},
+		{"1-3/4i", 1, -0.75},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
