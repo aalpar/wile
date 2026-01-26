@@ -1126,17 +1126,18 @@ func TestParseImaginary(t *testing.T) {
 		input string
 		real  float64
 		imag  float64
+		exact bool // true if result should be exact BigComplex
 	}{
-		{"+i", 0, 1},
-		{"-i", 0, -1},
-		{"+3i", 0, 3},
-		{"-3i", 0, -3},
-		{"+2.5i", 0, 2.5},
-		{"-2.5i", 0, -2.5},
-		{"+0.5i", 0, 0.5},
-		{"-0.5i", 0, -0.5},
-		{"+100i", 0, 100},
-		{"-100i", 0, -100},
+		{"+i", 0, 1, true},
+		{"-i", 0, -1, true},
+		{"+3i", 0, 3, true},
+		{"-3i", 0, -3, true},
+		{"+2.5i", 0, 2.5, false},
+		{"-2.5i", 0, -2.5, false},
+		{"+0.5i", 0, 0.5, false},
+		{"-0.5i", 0, -0.5, false},
+		{"+100i", 0, 100, true},
+		{"-100i", 0, -100, true},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -1144,8 +1145,25 @@ func TestParseImaginary(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(tc.input))
 			z, err := p.parseImaginary(tc.input)
 			c.Assert(err, qt.IsNil)
-			c.Assert(z.Real(), qt.Equals, tc.real)
-			c.Assert(z.Imag(), qt.Equals, tc.imag)
+			if tc.exact {
+				// Should be exact BigComplex
+				bc, ok := z.(*values.BigComplex)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigComplex, got %T", z))
+				c.Assert(bc.IsExact(), qt.IsTrue)
+				// For exact complex, real and imag are BigInteger
+				realBi, realOk := bc.Real().(*values.BigInteger)
+				c.Assert(realOk, qt.IsTrue)
+				c.Assert(realBi.Int64(), qt.Equals, int64(tc.real))
+				imagBi, imagOk := bc.Imag().(*values.BigInteger)
+				c.Assert(imagOk, qt.IsTrue)
+				c.Assert(imagBi.Int64(), qt.Equals, int64(tc.imag))
+			} else {
+				// Should be inexact Complex
+				cplx, ok := z.(*values.Complex)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected Complex, got %T", z))
+				c.Assert(cplx.Real(), qt.Equals, tc.real)
+				c.Assert(cplx.Imag(), qt.Equals, tc.imag)
+			}
 		})
 	}
 }
@@ -1325,11 +1343,12 @@ func TestReadSyntaxImaginary(t *testing.T) {
 		input string
 		real  float64
 		imag  float64
+		exact bool // true if result should be exact BigComplex
 	}{
-		{"+i", 0, 1},
-		{"-i", 0, -1},
-		{"+3i", 0, 3},
-		{"-2.5i", 0, -2.5},
+		{"+i", 0, 1, true},
+		{"-i", 0, -1, true},
+		{"+3i", 0, 3, true},
+		{"-2.5i", 0, -2.5, false},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -1338,10 +1357,18 @@ func TestReadSyntaxImaginary(t *testing.T) {
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
 
-			z, ok := syn.UnwrapAll().(*values.Complex)
-			c.Assert(ok, qt.IsTrue)
-			c.Assert(z.Real(), qt.Equals, tc.real)
-			c.Assert(z.Imag(), qt.Equals, tc.imag)
+			val := syn.UnwrapAll()
+			real, imag := getComplexParts(val.(values.Number))
+			c.Assert(real, qt.Equals, tc.real)
+			c.Assert(imag, qt.Equals, tc.imag)
+			if tc.exact {
+				bc, ok := val.(*values.BigComplex)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigComplex, got %T", val))
+				c.Assert(bc.IsExact(), qt.IsTrue)
+			} else {
+				_, ok := val.(*values.Complex)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected Complex, got %T", val))
+			}
 		})
 	}
 }
@@ -1695,12 +1722,14 @@ func TestReadSyntaxMixedNumericTypes(t *testing.T) {
 	c.Assert(second.Num().Int64(), qt.Equals, int64(3))
 	c.Assert(second.Denom().Int64(), qt.Equals, int64(4))
 
-	// Third: +2i (pure imaginary - still Complex since parseImaginary returns Complex)
+	// Third: +2i (pure imaginary - now exact BigComplex since parseImaginary returns exact for integers)
 	pair = pair.Cdr().(*values.Pair)
-	third, ok := pair.Car().(*values.Complex)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(third.Real(), qt.Equals, 0.0)
-	c.Assert(third.Imag(), qt.Equals, 2.0)
+	third, ok := pair.Car().(*values.BigComplex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigComplex, got %T", pair.Car()))
+	c.Assert(third.IsExact(), qt.IsTrue)
+	thirdReal, thirdImag := getComplexParts(third)
+	c.Assert(thirdReal, qt.Equals, 0.0)
+	c.Assert(thirdImag, qt.Equals, 2.0)
 
 	// Fourth: 1+2i (complex - now exact BigComplex since both parts are integers)
 	pair = pair.Cdr().(*values.Pair)

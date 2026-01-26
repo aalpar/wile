@@ -38,6 +38,7 @@ package match
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"wile/values"
 )
@@ -423,8 +424,19 @@ func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 		return 0
 	}
 
+	// Collect and sort IDs for deterministic iteration order.
+	// Go map iteration order is non-deterministic, which could cause
+	// different ellipsis IDs to be returned on different runs when
+	// multiple IDs match. This led to intermittent hangs in macro expansion.
+	ids := make([]int, 0, len(p.ellipsisVars))
+	for id := range p.ellipsisVars {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
 	// Find the ID that contains ALL the requested variables
-	for id, ellipsisVars := range p.ellipsisVars {
+	for _, id := range ids {
+		ellipsisVars := p.ellipsisVars[id]
 		allFound := true
 		for v := range vars {
 			if _, ok := ellipsisVars[v]; !ok {
@@ -438,7 +450,8 @@ func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 	}
 
 	// Fallback: find any ID that contains at least one variable
-	for id, ellipsisVars := range p.ellipsisVars {
+	for _, id := range ids {
+		ellipsisVars := p.ellipsisVars[id]
 		for v := range vars {
 			if _, ok := ellipsisVars[v]; ok {
 				return id

@@ -980,13 +980,23 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 	p.state = TokenizerStateCharMnemonicOrHexEscape
 	switch {
 	case p.curr() == 'x':
-		p.state = TokenizerStateCharHexEscape
+		// Peek ahead to see if hex digits follow - if not, #\x is just the character 'x'
 		p.next()
 		if p.err != nil {
-			return utf8.RuneError
+			// EOF after #\x means just the character 'x'
+			p.err = nil
+			p.state = TokenizerStateCharGraphic
+			return 'x'
+		}
+		if !isDigit(16, p.curr()) {
+			// No hex digits follow, so #\x is the graphic character 'x'
+			// (the next char will be handled by the caller)
+			p.state = TokenizerStateCharGraphic
+			return 'x'
 		}
 		// R7RS: \x<hex scalar value>; where hex scalar value is any Unicode code point
 		// (0 to 0x10FFFF) except surrogates (0xD800-0xDFFF)
+		p.state = TokenizerStateCharHexEscape
 		x, n := p.readUnsignedBaseNInteger(16, 0) //nolint:errcheck
 		if n == 0 {
 			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape, p.tokenStart, p.tokenEnd)

@@ -1,12 +1,12 @@
 ;; -*- coding: utf-8 -*-
 
-;; Uses (chibi test) or (srfi 64) for testing framework
 (import (scheme base) (scheme char) (scheme lazy)
         (scheme inexact) (scheme complex) (scheme time)
         (scheme file) (scheme read) (scheme write)
         (scheme eval) (scheme process-context) (scheme case-lambda)
         (scheme r5rs)
-        (chibi test))
+        (chibi test)  ; or (srfi 64)
+        )
 
 ;; R7RS test suite.  Covers all procedures and syntax in the small
 ;; language except `delete-file'.  Currently assumes full-unicode

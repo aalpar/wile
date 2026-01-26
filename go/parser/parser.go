@@ -713,7 +713,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, p.err
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
-			break
+			// Empty bytevector case: #u8()
+			q = p.wrapSyntax(q0, p.cur)
+			return q, p.cur, nil
 		}
 		i, ok := stx.Unwrap().(*values.Integer)
 		for {
@@ -910,7 +912,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginary:
 		// Pure imaginary numbers like +3i, -2i, +i, -i
-		var q1 *values.Complex
+		var q1 values.Number
 		q1, p.err = p.parseImaginary(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -955,7 +957,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginary:
 		// Pure imaginary numbers (unsigned, typically after radix prefix)
-		var q1 *values.Complex
+		var q1 values.Number
 		q1, p.err = p.parseImaginary(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -1097,7 +1099,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCloseParen:
 		return q, p.cur, nil
 	}
-	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %s", p.cur.String())
+	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
 }
 
 func (p *Parser) listSyntax(t tokenizer.Token, os ...syntax.SyntaxValue) syntax.SyntaxValue {
@@ -1140,19 +1142,40 @@ func (p *Parser) parseRational(s string) (*values.Rational, error) {
 }
 
 // parseImaginary parses an imaginary number string like "+3i", "-2i", "+i", "-i"
-func (p *Parser) parseImaginary(s string) (*values.Complex, error) {
+// R7RS §6.2.2: Returns exact BigComplex for integer imaginary parts,
+// inexact Complex for floating-point imaginary parts.
+func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	// Remove the trailing 'i'
 	s = strings.TrimSuffix(s, "i")
 
-	// Handle "+i" and "-i" cases
+	// Handle "+i" and "-i" cases - these are exact
 	if s == "+" || s == "" {
-		return values.NewComplexFromParts(0, 1), nil
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(1),
+		), nil
 	}
 	if s == "-" {
-		return values.NewComplexFromParts(0, -1), nil
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(-1),
+		), nil
 	}
 
-	// Parse the numeric part
+	// Check if the imaginary coefficient is an integer (exact) or float (inexact)
+	if isIntegerString(s) {
+		// Parse as exact integer
+		imag, err := parseExactPart(s)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			imag,
+		), nil
+	}
+
+	// Parse the numeric part as inexact float
 	imag, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, err

@@ -24,25 +24,27 @@ import (
 
 func TestMakeRectangularComprehensive(t *testing.T) {
 	tcs := []schemeCodeTestCase{
-		// Integer args
+		// Integer args - R7RS §6.2.6: exact + exact = exact BigComplex
 		{name: "make-rectangular integers", code: `(make-rectangular 3 4)`,
-			expected: values.NewComplexFromParts(3.0, 4.0)},
+			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))},
 		{name: "make-rectangular negative integers", code: `(make-rectangular -3 -4)`,
-			expected: values.NewComplexFromParts(-3.0, -4.0)},
+			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-3), values.NewBigIntegerFromInt64(-4))},
+		// When imaginary is zero, exact result is the exact real part
 		{name: "make-rectangular zero imaginary", code: `(make-rectangular 5 0)`,
-			expected: values.NewComplexFromParts(5.0, 0.0)},
+			expected: values.NewBigIntegerFromInt64(5)},
 		{name: "make-rectangular zero real", code: `(make-rectangular 0 5)`,
-			expected: values.NewComplexFromParts(0.0, 5.0)},
+			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(5))},
 
-		// Float args
+		// Float args - inexact Complex
 		{name: "make-rectangular floats", code: `(make-rectangular 3.0 4.0)`,
 			expected: values.NewComplexFromParts(3.0, 4.0)},
+		// Mixed exact/inexact -> inexact Complex
 		{name: "make-rectangular mixed int float", code: `(make-rectangular 3 4.0)`,
 			expected: values.NewComplexFromParts(3.0, 4.0)},
 
-		// Rational args
+		// Rational args - exact BigComplex with Rational parts
 		{name: "make-rectangular rationals", code: `(make-rectangular 1/2 3/4)`,
-			expected: values.NewComplexFromParts(0.5, 0.75)},
+			expected: values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

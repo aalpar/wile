@@ -965,16 +965,48 @@ func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMakeRectangular implements make-rectangular.
+// R7RS §6.2.6: If both arguments are exact, the result is exact.
 func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	i := mc.Arg(1)
 
-	_, rIsBigInt := r.(*values.BigInteger)
+	// Check if both arguments are real numbers (not complex)
+	rNum, rOk := r.(values.Number)
+	iNum, iOk := i.(values.Number)
+	if !rOk {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
+	}
+	if !iOk {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
+	}
+
+	// Reject complex numbers - make-rectangular requires real number arguments
+	if !isRealNumber(r) {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", r)
+	}
+	if !isRealNumber(i) {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", i)
+	}
+
+	bothExact := values.ExactnessOf(rNum) == values.Exact && values.ExactnessOf(iNum) == values.Exact
+
+	if bothExact {
+		// Create exact BigComplex
+		realPart := toExactBigComplexPart(rNum)
+		imagPart := toExactBigComplexPart(iNum)
+		if imagPart.IsZero() {
+			mc.SetValue(realPart)
+			return nil
+		}
+		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		return nil
+	}
+
+	// At least one argument is inexact - check if we need BigFloat precision
 	_, rIsBigFloat := r.(*values.BigFloat)
-	_, iIsBigInt := i.(*values.BigInteger)
 	_, iIsBigFloat := i.(*values.BigFloat)
 
-	if rIsBigInt || rIsBigFloat || iIsBigInt || iIsBigFloat {
+	if rIsBigFloat || iIsBigFloat {
 		realPart, err := toBigComplexPart(r, "make-rectangular")
 		if err != nil {
 			return err
@@ -991,6 +1023,7 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
+	// Use regular Complex for inexact numbers
 	var realPart, imagPart float64
 	switch v := r.(type) {
 	case *values.Integer:
@@ -999,6 +1032,8 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		realPart = v.Value
 	case *values.Rational:
 		realPart = v.Float64()
+	case *values.BigInteger:
+		realPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
 	}
@@ -1009,11 +1044,44 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		imagPart = v.Value
 	case *values.Rational:
 		imagPart = v.Float64()
+	case *values.BigInteger:
+		imagPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
 	}
 	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
 	return nil
+}
+
+// toExactBigComplexPart converts an exact number to a BigInteger or Rational
+// suitable for use as a BigComplex part.
+func toExactBigComplexPart(n values.Number) values.Number {
+	switch v := n.(type) {
+	case *values.Integer:
+		return values.NewBigIntegerFromInt64(v.Value)
+	case *values.BigInteger:
+		return v
+	case *values.Rational:
+		return v
+	default:
+		panic("toExactBigComplexPart: expected exact number")
+	}
+}
+
+// isRealNumber returns true if the value is a real number (not complex).
+// Real numbers include Integer, BigInteger, Float, BigFloat, and Rational.
+// Complex and BigComplex are only considered real if their imaginary part is zero.
+func isRealNumber(v values.Value) bool {
+	switch n := v.(type) {
+	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
+		return true
+	case *values.Complex:
+		return n.IsReal()
+	case *values.BigComplex:
+		return n.IsReal()
+	default:
+		return false
+	}
 }
 
 func toBigComplexPart(v values.Value, name string) (values.Number, error) {

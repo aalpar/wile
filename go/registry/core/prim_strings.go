@@ -43,7 +43,8 @@ func PrimString(_ context.Context, mc *machine.MachineContext) error {
 		args = tuple.Cdr()
 	}
 
-	mc.SetValue(values.NewString(sb.String()))
+	// R7RS §6.7: string returns a "newly allocated string"
+	mc.SetValue(values.NewMutableString(sb.String()))
 	return nil
 }
 
