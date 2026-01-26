@@ -649,11 +649,27 @@ func formatIrritants(irritants []string) string {
 }
 
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
+// Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
+// ensuring macros defined in begin are available to subsequent forms.
 func (p *ExpanderTimeContinuation) expandBeginForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) {
-		expandedArgs, err := p.ExpandSyntaxArgumentList(ectx, exprPair)
+		// Collect forms from the begin body
+		forms, err := collectBodyExpressions(exprPair)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect begin body: %w", err)
+		}
+
+		// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
+		// This ensures macros defined in begin are available to subsequent forms
+		expandedForms, err := p.ExpandBodyWithDefineSyntax(ectx, forms)
 		if err != nil {
 			return nil, fmt.Errorf("failed to expand begin body: %w", err)
+		}
+
+		// Rebuild the begin form with expanded contents
+		expandedArgs := syntax.NewSyntaxEmptyList(sym.SourceContext())
+		for i := len(expandedForms) - 1; i >= 0; i-- {
+			expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
 		}
 		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
 	}

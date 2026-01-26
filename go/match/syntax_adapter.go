@@ -72,6 +72,12 @@ type BindingChecker interface {
 	// HasBinding checks if sym with the given scopes has a lexical binding.
 	// Returns true if the symbol is bound (to a variable, macro, etc.).
 	HasBinding(sym string, scopes []*syntax.Scope) bool
+
+	// GetBinding returns the binding for sym with the given scopes.
+	// Returns nil if no binding exists. The returned value is opaque but
+	// can be compared for equality to check if two identifiers have the
+	// same binding (per R7RS §4.3.2).
+	GetBinding(sym string, scopes []*syntax.Scope) any
 }
 
 // SyntaxMatcher adapts the unhygienic Matcher to work with syntax objects.
@@ -548,6 +554,35 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 	case *values.Character:
 		return syntax.NewSyntaxObject(v, srcCtx)
 
+	case *values.Vector:
+		// Recursively wrap each element
+		elements := make([]syntax.SyntaxValue, len(*v))
+		for i, elem := range *v {
+			elements[i] = sm.valueToSyntaxWithOrigin(elem, templateStx, introScope, freeIds, useSiteCtx, origin)
+		}
+		return syntax.NewSyntaxVector(srcCtx, elements...)
+
+	// Handle already-wrapped syntax types - these may appear if captured values
+	// contain syntax objects (e.g., from vector literals in templates)
+	case *syntax.SyntaxSymbol:
+		// Already a syntax symbol - add intro scope if needed
+		if introScope != nil {
+			return v.AddScope(introScope).(*syntax.SyntaxSymbol)
+		}
+		return v
+
+	case *syntax.SyntaxPair:
+		// Already a syntax pair - return as-is
+		return v
+
+	case *syntax.SyntaxVector:
+		// Already a syntax vector - return as-is
+		return v
+
+	case *syntax.SyntaxObject:
+		// Already a syntax object - return as-is
+		return v
+
 	default:
 		// For any other value type, wrap in generic syntax object
 		return syntax.NewSyntaxObject(val, srcCtx)
@@ -814,15 +849,20 @@ func (sm *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.Sy
 		return false
 	}
 
-	// R7RS binding check: if input has a lexical binding but pattern doesn't,
-	// they don't match. Pattern literals are by definition unbound.
+	// R7RS §4.3.2 binding check: literals match if both have the same lexical
+	// binding, or both have no lexical binding. After library import, auxiliary
+	// syntax like => gets exported to phase 0, so both input and pattern may
+	// have bindings. We compare the actual bindings, not just whether they exist.
 	if sm.bindingChecker != nil {
-		inputHasBinding := sm.bindingChecker.HasBinding(input.Sym.Key, input.Scopes())
-		// Pattern literals (=>, else, etc.) should never have a binding in
-		// standard Scheme. If input IS bound, it's been shadowed.
-		if inputHasBinding {
+		inputBinding := sm.bindingChecker.GetBinding(input.Sym.Key, input.Scopes())
+		patternBinding := sm.bindingChecker.GetBinding(pattern.Sym.Key, pattern.Scopes())
+
+		// R7RS §4.3.2: literals match if both have the same binding, or both unbound
+		if inputBinding != patternBinding {
+			// Different bindings (or one bound and one not) - don't match
 			return false
 		}
+		// Same binding (including both nil) - continue to scope check below
 	}
 
 	// Also check rebinding scopes for let-syntax shadowing.

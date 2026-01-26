@@ -73,6 +73,19 @@ func (e *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool 
 	return binding != nil
 }
 
+// GetBinding returns the binding for the given symbol with scopes.
+// This is used for R7RS §4.3.2 auxiliary syntax hygiene: we compare the
+// actual bindings (not just whether they exist) to determine if a literal
+// matches. Two identifiers match only if they have the same binding.
+func (e *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+	if e.env == nil {
+		return nil
+	}
+	s := values.NewSymbol(sym)
+	binding := e.env.GetBindingWithScopes(s, scopes)
+	return binding
+}
+
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
 //
 // Execution context:
