@@ -322,8 +322,9 @@ func compileClauseWithEllipsisAndLiterals(
 	ellipsis string,
 ) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
+	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	variables := make(map[string]struct{})
-	err := collectPatternVariablesWithEllipsis(pattern, literals, true, variables, ellipsis)
+	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, ellipsis)
 	if err != nil {
 		return nil, err
 	}
@@ -450,20 +451,38 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 // A pattern variable is any symbol that is not a literal, not the first element,
 // and not the ellipsis identifier.
 // Uses the default ellipsis identifier ("...").
-func collectPatternVariables(pattern syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) error {
-	return collectPatternVariablesWithEllipsis(pattern, literals, isFirst, variables, match.DefaultEllipsis)
+// The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene.
+func collectPatternVariables(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}) error {
+	return collectPatternVariablesWithEllipsis(pattern, literalSyntax, isFirst, variables, match.DefaultEllipsis)
 }
 
 // collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
 // using a custom ellipsis identifier.
-func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) error {
+// The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene:
+// a pattern symbol only matches a literal if they have the same name AND the same scopes.
+func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}, ellipsis string) error {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
 		if symVal, ok := sym.(*values.Symbol); ok {
-			// Skip if it's a keyword (first position), ellipsis, or literal
+			// Skip if it's a keyword (first position) or ellipsis
 			if !isFirst && symVal.Key != ellipsis {
-				if _, isLiteral := literals[symVal.Key]; !isLiteral {
+				// Check if this identifier matches a literal via bound-identifier=?
+				// R7RS §4.3.2: literals are matched by bound-identifier=?, not just name
+				if litSym, ok := literalSyntax[symVal.Key]; ok {
+					// Name matches - now check scopes (bound-identifier=? semantics)
+					patternScopes := p.Scopes()
+					litScopes := litSym.Scopes()
+					// For bound-identifier=?, scopes must match bidirectionally (set equality)
+					scopesMatch := syntax.ScopesMatch(patternScopes, litScopes) &&
+						syntax.ScopesMatch(litScopes, patternScopes)
+					if !scopesMatch {
+						// Same name but different scopes - treat as pattern variable
+						variables[symVal.Key] = struct{}{}
+					}
+					// If scopes match, it's a literal - don't add to variables
+				} else {
+					// Name not in literals - it's a pattern variable
 					variables[symVal.Key] = struct{}{}
 				}
 			}
@@ -472,7 +491,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literals ma
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(p) {
 			// First element in a form is considered a keyword
-			err := collectPatternVariablesWithEllipsis(p.SyntaxCar(), literals, isFirst, variables, ellipsis)
+			err := collectPatternVariablesWithEllipsis(p.SyntaxCar(), literalSyntax, isFirst, variables, ellipsis)
 			if err != nil {
 				return err
 			}
@@ -480,7 +499,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literals ma
 			// Rest of the form
 			cdr := p.SyntaxCdr()
 			if cdr != nil {
-				err = collectPatternVariablesWithEllipsis(cdr, literals, false, variables, ellipsis)
+				err = collectPatternVariablesWithEllipsis(cdr, literalSyntax, false, variables, ellipsis)
 				if err != nil {
 					return err
 				}
@@ -496,12 +515,6 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literals ma
 	}
 
 	return nil
-}
-
-// extractLiterals extracts literal symbols from the literals list.
-// R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
-func extractLiterals(literalsList *syntax.SyntaxPair, literals map[string]struct{}, ellipsis string) error {
-	return extractLiteralsWithSyntax(literalsList, literals, nil, ellipsis)
 }
 
 // extractLiteralsWithSyntax extracts literal symbols from the literals list,

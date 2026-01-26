@@ -6,7 +6,7 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 **Related:**
 - [R7RS_TEST_BUGS.md](R7RS_TEST_BUGS.md) - Bugs discovered by running the R7RS test suite (all fixed)
-- [R7RS_SEMANTIC_DIFFERENCES.md](../docs/dev/R7RS_SEMANTIC_DIFFERENCES.md) - Semantic differences from R7RS
+- [R7RS_CONFORMANCE_ISSUES.md](R7RS_CONFORMANCE_ISSUES.md) - Detailed investigation notes
 
 **Last Updated:** 2026-01-25
 
@@ -16,130 +16,63 @@ This document outlines remaining non-conformance issues with R7RS-small and the 
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Macro system bugs | 1 | In Progress |
-| Scoping bugs | 1 | In Progress |
-| Numeric comparison bugs | 1 | In Progress |
+| Bound-identifier hygiene | 1 | Open |
 | Missing syntax/macros | 0 | Complete |
 | Library system issues | 0 | Complete |
 | Tokenizer issues | 0 | Complete |
 | Semantic differences | 0 | Complete |
-| Completed items | 47+ | Complete |
-| **Total remaining** | **3** | **In Progress** |
+| `set!` mutation | 0 | ✅ Works (was testing artifact) |
+| Completed items | 50+ | Complete |
+| **Total remaining** | **1** | **In Progress** |
 
 ---
 
 ## Outstanding Issues
 
-### Macro System Bugs (R7RS §4.3)
+### Macro System: Bound-Identifier Hygiene (R7RS §4.3)
 
 | Item | R7RS Section | Priority | Status |
 |------|--------------|----------|--------|
-| `letrec-syntax` expansion failure | §4.3.1 | High | Open |
-| ~~`let-syntax` hygiene failure~~ | §4.3.1 | High | ✅ Fixed |
+| Nested let-syntax bound-identifier=? | §4.3.2 | Medium | Open |
 
-#### Bug: `letrec-syntax` expansion failure
+#### Bug: Nested `let-syntax` with literals fails bound-identifier=? check
 
-**Test case** (from r7rs-tests.scm line 413-430):
+**Test case** (r7rs-tests.scm lines 585-592):
 ```scheme
-(letrec-syntax
-  ((my-or (syntax-rules ()
-            ((my-or) #f)
-            ((my-or e) e)
-            ((my-or e1 e2 ...)
-             (let ((temp e1))
-               (if temp
-                   temp
-                   (my-or e2 ...)))))))
-  (let ((x #f)
-        (y 7)
-        (temp 8)
-        (let odd?)
-        (if even?))
-    (my-or x
-           (let temp)
-           (if y)
-           y)))
+(let-syntax
+    ((m (syntax-rules ()
+          ((m x) (let-syntax
+                     ((n (syntax-rules (k)
+                           ((n x) 'bound-identifier=?)
+                           ((n y) 'free-identifier=?))))
+                   (n z))))))
+  (m k))
 ```
 
-**Expected:** `7`
+**Expected:** `'bound-identifier=?`
+**Actual:** `'free-identifier=?`
 
-**Actual:** Compilation error:
-```
-if: missing consequent: Cannot compile expression
-```
-
-**Analysis:** The recursive macro expansion of `my-or` eventually expands `(my-or)` to `#f`, but something in the nested `if` expansion chain loses track of the consequent expression.
+**Analysis:** The inner `syntax-rules` should recognize `k` as a literal that matches via `bound-identifier=?` because the outer macro binds `x` to `k`. The pattern variable `x` in the inner macro should match the same identifier.
 
 ---
 
-#### ~~Bug: `let-syntax` hygiene failure for local bindings~~ FIXED
+## Recently Fixed Issues
 
-**Status:** Fixed 2026-01-25
+### ~~letrec-syntax expansion failure~~ FIXED 2026-01-25
 
-**Test case** (from r7rs-tests.scm line 408-411):
-```scheme
-(let ((x 'outer))
-  (let-syntax ((m (syntax-rules () ((m) x))))
-    (let ((x 'inner))
-      (m))))
-```
+The complex `my-or` macro test now returns `7` correctly.
 
-**Expected:** `outer` (the macro `m` should capture the outer `x` at definition time)
+### ~~let-syntax hygiene failure~~ FIXED 2026-01-25
 
-**Fix:** Added `HasLocalBinding` flag to `FreeIdResolution` in `compile_syntax_rules.go`. When a local binding is found (even with empty scopes), this flag is set to `true`. During expansion in `syntax_adapter.go`, if `HasLocalBinding` is true, the free identifier preserves its original scopes instead of getting intro scope added. This ensures the identifier resolves to the definition-time binding, not a shadowing binding at use site.
+Added `HasLocalBinding` flag to `FreeIdResolution` for correct hygiene.
 
----
+### ~~let*-values internal define scope~~ FIXED 2026-01-25
 
-### Scoping Bugs (R7RS §5.3)
+Internal defines now properly scoped to body. Test returns `1` (not `2`).
 
-| Item | R7RS Section | Priority | Status |
-|------|--------------|----------|--------|
-| `let*-values` internal define leaks | §5.3.2 | Medium | Open |
+### ~~equal? on large integers~~ FIXED 2026-01-25
 
-#### Bug: Internal define leaks through `let*-values`
-
-**Test case** (from r7rs-tests.scm line 242-246):
-```scheme
-(let ((x 1))
-  (let*-values ()
-    (define x 2)
-    #f)
-  x)
-```
-
-**Expected:** `1` (the internal `define` should be local to `let*-values` body)
-
-**Actual:** `2` (the internal define is leaking to the outer scope)
-
-**Analysis:** Per R7RS §5.3.2, internal definitions at the beginning of a body are equivalent to `letrec*` and should not affect bindings outside that body.
-
----
-
-### Numeric Comparison Bugs (R7RS §6.1)
-
-| Item | R7RS Section | Priority | Status |
-|------|--------------|----------|--------|
-| `equal?` fails on large exact integers | §6.1 | Medium | Open |
-
-#### Bug: `equal?` returns false for equal large integers
-
-**Test case** (from r7rs-tests.scm line 215-225):
-```scheme
-(let*-values (((root rem) (exact-integer-sqrt (expt 2 119))))
-  (list root rem))
-```
-
-**Expected:** `(815238614083298888 443242361398135744)` - and test passes
-
-**Actual:** The computed value is correct, but `(equal? computed expected)` returns `#f`
-
-**Analysis:** The chibi-test framework uses `equal?` for comparison. When comparing lists containing large exact integers (bignums), `equal?` appears to fail even when the values are identical. This may be an issue with bignum comparison in `equal?` or `eqv?`.
-
-**Affected tests:**
-- `(expt 2 119)` - root and remainder
-- `(expt 2 120)` - root and remainder
-- `(expt 2 121)` - root and remainder
-- `(expt 2 140)` - remainder check
+BigInteger equality comparison now works correctly.
 
 ---
 

@@ -157,6 +157,18 @@ if err := doSomething(); err != nil { ... }
 
 **Honor the Lisp tradition.** Prefer data over code, composition over inheritance, recursion over iteration when it matches the problem structure. When in doubt, ask: would this look natural written in Scheme itself?
 
+**When evaluating code for refactoring.** When you see similar purposes implemented with different mechanisms, ask:
+
+ 1. What's the essential operation? Strip away the context-specific setup and teardown. What's the irreducible core that all sites need?
+ 2. Are the differences real or accidental? If code paths diverge, ask why. Is it because the semantics genuinely differ, or because the code evolved separately? Check if the "difference"
+ is actually enforced elsewhere (validation, type system, caller context).
+ 3. Who should own each concern? If one function checks a condition and another relies on that condition being true, the check might belong in only one place. "Leading define-syntax only"
+ was a constraint, but lambda bodies already get validated—the expander was redundantly encoding a rule.
+ 4. Look for the same verbs, not the same nouns. The code used different iteration mechanisms (manual loop, ForEach, extract-then-process), but all were doing "for each form: expand, maybe
+ compile macro." The verb pattern—the sequence of actions—was identical.
+ 5. Test your abstraction by substitution. Before committing, verify: can each call site actually use the unified function? If one site needs special handling the function can't provide,
+ the abstraction is wrong. Here, lambda still handles begin-wrapping outside the call, which is correct—that's lambda-specific, not part of the core operation.
+
 **Refactoring discipline.** When fixing compile errors during refactoring, don't just make the minimal local fix. Step back and ask: does this change reveal redundant code? If you apply a pattern one way in file A, check if the same pattern applies in file B. Inconsistency between files handling the same logical situation signals incomplete thinking. "Fix the error" mode obscures opportunities that "understand the pattern" mode would catch.
 
 ## Test File Naming Conventions
@@ -203,11 +215,18 @@ When investigating R7RS conformance issues:
 - `CODING_STYLE.md` - Comprehensive style guide
 - `PRIMITIVES.md` - Complete primitives reference
 - `BIBLIOGRAPHY.md` - Academic papers, specifications, and canonical references (Flatt 2016, R7RS, SRFIs, IEEE 754, Unicode)
-- `plans/TESTING_PLAN.md` - Comprehensive primitive unit test implementation plan
-- `plans/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
-- `plans/R7RS_CONFORMANCE_PLAN.md` - R7RS conformance roadmap
-- `plans/OPTIMIZATION_PLAN.md` - Performance optimization roadmap
-- `plans/SYSTEMATIC_DEBUG_LOGGING.md` - Methodology for debugging complex issues with targeted debug logging
+- `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` - Documented differences between implementation and R7RS specification
+
+### Plan Files
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `plans/R7RS_CONFORMANCE_PLAN.md` | R7RS conformance roadmap | Active - 2 issues remaining |
+| `plans/R7RS_CONFORMANCE_ISSUES.md` | Detailed issue investigation notes | Active |
+| `plans/REFACTORING_OPPORTUNITIES.md` | Code refactoring opportunities | Reference |
+| `plans/TESTING_PLAN.md` | Primitive unit test implementation | Reference |
+| `plans/OPTIMIZATION_PLAN.md` | Performance optimization roadmap | Future |
+| `plans/SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology | Reference |
 
 **Plan file naming**: Use `UPPERCASE_WITH_UNDERSCORES.md` (e.g., `OPTIMIZATION_PLAN.md`, `TESTING_PLAN.md`).
 

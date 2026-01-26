@@ -573,3 +573,56 @@ func parseMultipleForms(t *testing.T, env *environment.EnvironmentFrame, input s
 	}
 	return forms
 }
+
+// TestBoundIdentifierHygieneInNestedSyntaxRules tests R7RS conformance for
+// bound-identifier=? semantics in nested syntax-rules. This corresponds to
+// r7rs-tests.scm lines 585-592.
+//
+// R7RS §4.3.2 requires that identifiers appearing in patterns be compared to
+// literals using bound-identifier=?, not just by name. When a pattern variable
+// from an outer macro is substituted into an inner macro's pattern, and the
+// substituted identifier has the same name as a literal in the inner macro,
+// they should only match if they have the same scopes.
+func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// The outer macro 'm' captures input 'x' and substitutes it into the inner
+	// macro 'n'. The inner macro has 'k' as a literal. When (m k) is called:
+	// - 'x' captures 'k' from the use site (with use-site scopes)
+	// - In the template, 'x' in pattern (n x) is substituted with the captured 'k'
+	// - The literal 'k' in (syntax-rules (k) ...) has template scopes
+	// - These are different scopes, so they're NOT bound-identifier=?
+	// - Therefore 'k' in (n k) is treated as a pattern variable
+	// - Pattern (n x) matches input (n z), returning 'bound-identifier=?
+	outerMacro := parseString(t, env, `
+		(define-syntax m
+		  (syntax-rules ()
+		    ((m x) (let-syntax
+		               ((n (syntax-rules (k)
+		                     ((n x) 'bound-identifier=?)
+		                     ((n y) 'free-identifier=?))))
+		             (n z)))))
+	`)
+
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	args := extractDefineSyntaxArgs(t, outerMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to compile outer macro"))
+
+	// Test: (m k) should expand to 'bound-identifier=?
+	testForm := parseString(t, env, `(m k)`)
+
+	etc := machine.NewExpanderTimeContinuation(env)
+	ectx := machine.ExpandTimeCallContext{}
+	expanded, err := etc.ExpandExpression(ectx, testForm)
+	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to expand (m k)"))
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// The expected result is (begin (quote bound-identifier=?))
+	// The outer begin comes from let-syntax body wrapping
+	expectedForm := parseString(t, env, `(begin (quote bound-identifier=?))`)
+	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll(),
+		qt.Commentf("expected (begin (quote bound-identifier=?)), got: %s", expanded.SchemeString()))
+}

@@ -835,8 +835,8 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
 	}
 
-	// R7RS §5.3: Process leading define-syntax forms before expanding the rest
-	// This makes locally-defined macros visible to subsequent body expressions
+	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions
+	// This makes locally-defined macros visible to later body expressions
 	bodyExprs, err := collectBodyExpressions(bodyWithScope)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "lambda: invalid body expression")
@@ -845,35 +845,11 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, 
 	// Handle the case where body is wrapped in (begin ...) - common from let macro
 	unwrappedExprs, wasBeginWrapped := unwrapBeginBodyWithFlag(bodyExprs)
 
-	defineSyntaxForms, remainingExprs := extractLeadingDefineSyntaxSyntax(unwrappedExprs)
-
-	// If there are leading define-syntax forms, compile them first
-	if len(defineSyntaxForms) > 0 {
-		expandEnv := childEnv.Expand()
-		for _, dsPair := range defineSyntaxForms {
-			err := compileDefineSyntaxFromSyntax(expandEnv, dsPair)
-			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "lambda: failed to compile define-syntax")
-			}
-		}
-	}
-
-	// Expand body in the child environment (with new macros visible)
+	// Expand body in the child environment, compiling define-syntax as encountered
 	childExpander := NewExpanderTimeContinuation(childEnv)
-	var expandedExprs []syntax.SyntaxValue
-
-	// Include define-syntax forms (unexpanded - they're handled at compile time)
-	for _, ds := range defineSyntaxForms {
-		expandedExprs = append(expandedExprs, ds)
-	}
-
-	// Expand remaining expressions
-	for _, expr := range remainingExprs {
-		expanded, err := childExpander.ExpandExpression(ectx, expr)
-		if err != nil {
-			return nil, values.WrapForeignErrorf(err,"lambda: failed to expand body")
-		}
-		expandedExprs = append(expandedExprs, expanded)
+	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(ectx, unwrappedExprs)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "lambda: failed to expand body")
 	}
 
 	// Rebuild the body as a syntax list
@@ -943,15 +919,38 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 	return innerExprs, true
 }
 
-// extractLeadingDefineSyntaxSyntax extracts leading define-syntax forms from a body.
-func extractLeadingDefineSyntaxSyntax(exprs []syntax.SyntaxValue) (defineSyntax []*syntax.SyntaxPair, remaining []syntax.SyntaxValue) {
-	for i, expr := range exprs {
-		if !isDefineSyntaxSyntax(expr) {
-			return defineSyntax, exprs[i:]
+// ExpandBodyWithDefineSyntax expands a sequence of body forms, compiling
+// define-syntax forms as encountered so subsequent forms can use the macros.
+//
+// This unifies the expansion pattern used by:
+// - Lambda bodies (internal define-syntax)
+// - Library bodies (top-level define-syntax)
+// - Include files (top-level define-syntax)
+//
+// R7RS §5.3: Internal define-syntax forms must be processed before expanding
+// subsequent body expressions so that locally-defined macros are visible.
+func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
+	ectx ExpandTimeCallContext,
+	forms []syntax.SyntaxValue,
+) ([]syntax.SyntaxValue, error) {
+	var result []syntax.SyntaxValue
+	for _, form := range forms {
+		expanded, err := p.ExpandExpression(ectx, form)
+		if err != nil {
+			return nil, err
 		}
-		defineSyntax = append(defineSyntax, expr.(*syntax.SyntaxPair))
+
+		// If define-syntax, compile it now for subsequent forms
+		if isDefineSyntaxSyntax(expanded) {
+			pair := expanded.(*syntax.SyntaxPair)
+			if err := compileDefineSyntaxFromSyntax(p.env.Expand(), pair); err != nil {
+				return nil, err
+			}
+		}
+
+		result = append(result, expanded)
 	}
-	return defineSyntax, nil
+	return result, nil
 }
 
 // isDefineSyntaxSyntax checks if a syntax value is a define-syntax form.

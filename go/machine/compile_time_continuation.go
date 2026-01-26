@@ -270,31 +270,22 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // processFormsWithLetrecSemantics processes a slice of forms with letrec* semantics.
 // It pre-declares all define bindings before compiling the forms.
 //
-// For define-syntax forms, the transformer is compiled immediately during Pass 1
+// For define-syntax forms, the transformer is compiled immediately during expansion
 // so that subsequent forms can use the macro during their expansion.
 // R7RS §5.3: Internal define-syntax forms must be processed before expanding
 // subsequent body expressions.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
-	// Pass 1: Expand forms one by one, compiling define-syntax immediately.
-	// This is critical: macros must be compiled before subsequent forms are expanded
-	// so that those forms can use the macros.
-	var expandedForms []syntax.SyntaxValue
-	for _, stx := range forms {
-		// Expand the form
-		ectx := NewExpandTimeCallContext()
-		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
-		if expandErr != nil {
-			return values.WrapForeignErrorf(expandErr, "include: error expanding form from %q", filename)
-		}
-		expandedForms = append(expandedForms, expanded)
+	// Pass 1: Expand all forms, compiling define-syntax as encountered
+	ectx := NewExpandTimeCallContext()
+	expander := NewExpanderTimeContinuation(p.env)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
+	}
 
-		// Pre-declare if this is a define form
+	// Pre-declare all define bindings for letrec* semantics
+	for _, expanded := range expandedForms {
 		p.predeclareDefineBinding(expanded)
-
-		// Compile define-syntax NOW so subsequent forms can use the macro
-		if err := p.compileDefineSyntaxEarly(expanded); err != nil {
-			return values.WrapForeignErrorf(err, "include: error compiling define-syntax from %q", filename)
-		}
 	}
 
 	// Pass 2: Compile all forms (define-syntax already compiled, will be skipped)
@@ -370,31 +361,6 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	}
 }
 
-// compileDefineSyntaxEarly compiles a define-syntax form during expansion.
-// This makes the macro available for subsequent forms in the same scope.
-// R7RS §5.3: Internal define-syntax forms must be processed before expanding
-// subsequent body expressions so that locally-defined macros are visible.
-func (p *CompileTimeContinuation) compileDefineSyntaxEarly(expanded syntax.SyntaxValue) error {
-	pair, ok := expanded.(*syntax.SyntaxPair)
-	if !ok {
-		return nil // Not a pair, skip
-	}
-
-	car := pair.SyntaxCar()
-	sym, ok := car.(*syntax.SyntaxSymbol)
-	if !ok {
-		return nil // Car is not a symbol, skip
-	}
-
-	keyword := sym.Unwrap().(*values.Symbol).Key
-	if keyword != "define-syntax" {
-		return nil // Not define-syntax, skip
-	}
-
-	// Use the existing compileDefineSyntaxFromSyntax from expander_time_continuation.go
-	return compileDefineSyntaxFromSyntax(p.env.Expand(), pair)
-}
-
 // CompileIncludeCi compiles an include-ci expression.
 // It reads and compiles all forms from the specified files in order,
 // treating symbols as case-insensitive (folded to lowercase).
@@ -459,37 +425,34 @@ func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallCon
 // subsequent body expressions so that locally-defined macros are visible.
 //
 // This function performs two passes:
-//  1. Expansion pass: Expand each form, pre-declare define bindings, and
-//     compile define-syntax immediately so macros are available for later forms
-//  2. Compilation pass: Compile all expanded expressions
+//  1. Expansion pass: Expand all forms, compiling define-syntax as encountered
+//  2. Compilation pass: Pre-declare define bindings, then compile all expressions
 func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
 	if !expr.IsList() {
 		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of expressions, got %T", expr)
 	}
 
-	// Pass 1: Expand all forms, pre-declare define bindings, and compile define-syntax early.
-	// This is critical: macros must be compiled before subsequent forms are expanded.
-	var expandedForms []syntax.SyntaxValue
+	// Collect forms into a slice
+	var forms []syntax.SyntaxValue
 	_, err := syntax.SyntaxForEach(ctctx.ctx, expr, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		// Expand the form
-		ectx := NewExpandTimeCallContext()
-		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, v)
-		if expandErr != nil {
-			return values.WrapForeignErrorf(expandErr, "library: error expanding form")
-		}
-		expandedForms = append(expandedForms, expanded)
-
-		// Pre-declare if this is a define form
-		p.predeclareDefineBinding(expanded)
-
-		// Compile define-syntax NOW so subsequent forms can use the macro
-		if dsErr := p.compileDefineSyntaxEarly(expanded); dsErr != nil {
-			return values.WrapForeignErrorf(dsErr, "library: error compiling define-syntax")
-		}
+		forms = append(forms, v)
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to expand library body")
+		return values.WrapForeignErrorf(err, "failed to collect library body forms")
+	}
+
+	// Pass 1: Expand all forms, compiling define-syntax as encountered
+	ectx := NewExpandTimeCallContext()
+	expander := NewExpanderTimeContinuation(p.env)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "library: error expanding forms")
+	}
+
+	// Pre-declare all define bindings for letrec* semantics
+	for _, expanded := range expandedForms {
+		p.predeclareDefineBinding(expanded)
 	}
 
 	// Pass 2: Compile all expanded expressions
