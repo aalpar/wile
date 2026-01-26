@@ -262,52 +262,47 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 	t.Log("Underscore in literals syntax-rules compiled successfully")
 }
 
-// TestSyntaxRulesEllipsisInLiteralsRejected tests that ellipsis in literals list is rejected.
-// R7RS §4.3.2: It is a syntax violation if ... appears in <literals>.
-func TestSyntaxRulesEllipsisInLiteralsRejected(t *testing.T) {
-	t.Run("Default ellipsis in literals", func(t *testing.T) {
+// TestSyntaxRulesEllipsisInLiteralsAccepted tests that ellipsis in literals list is accepted.
+// R7RS §4.3.2: If <ellipsis> is specified (appears in <literals>), it is treated as a
+// literal and ellipsis functionality is disabled for this syntax-rules form.
+func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
+	t.Run("Default ellipsis in literals compiles", func(t *testing.T) {
 		env := createTestEnv()
 
-		// Parse a syntax-rules form with ... in the literals list (invalid)
+		// Parse a syntax-rules form with ... in the literals list (valid per R7RS)
 		defineSyntaxForm := parseSyntax(t, env,
-			`(define-syntax bad-macro
+			`(define-syntax elli-macro
 			   (syntax-rules (...)
-			     ((bad-macro x) x)))`)
+			     ((elli-macro x) x)))`)
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
-		// Compile should fail
+		// Compile should succeed - ellipsis in literals disables ellipsis functionality
 		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
 		ctctx := machine.NewCompileTimeCallContext(false, false, env)
 		err := ctc.CompileDefineSyntax(ctctx, args)
-		if err == nil {
-			t.Fatal("expected error when ellipsis appears in literals list")
+		if err != nil {
+			t.Fatalf("expected ellipsis in literals to compile, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "ellipsis") {
-			t.Fatalf("expected error about ellipsis, got: %v", err)
-		}
-		t.Logf("Correctly rejected ellipsis in literals: %v", err)
+		t.Log("Ellipsis in literals syntax-rules compiled successfully")
 	})
 
-	t.Run("Custom ellipsis in literals", func(t *testing.T) {
+	t.Run("Custom ellipsis in literals compiles", func(t *testing.T) {
 		env := createTestEnv()
 
-		// Parse a syntax-rules form with custom ellipsis ::: in the literals list (invalid)
+		// Parse a syntax-rules form with custom ellipsis ::: in the literals list (valid per R7RS)
 		defineSyntaxForm := parseSyntax(t, env,
-			`(define-syntax bad-macro
+			`(define-syntax elli-macro
 			   (syntax-rules ::: (:::)
-			     ((bad-macro x) x)))`)
+			     ((elli-macro x) x)))`)
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
-		// Compile should fail
+		// Compile should succeed - ellipsis in literals disables ellipsis functionality
 		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
 		ctctx := machine.NewCompileTimeCallContext(false, false, env)
 		err := ctc.CompileDefineSyntax(ctctx, args)
-		if err == nil {
-			t.Fatal("expected error when custom ellipsis appears in literals list")
+		if err != nil {
+			t.Fatalf("expected custom ellipsis in literals to compile, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "ellipsis") {
-			t.Fatalf("expected error about ellipsis, got: %v", err)
-		}
-		t.Logf("Correctly rejected custom ellipsis in literals: %v", err)
+		t.Log("Custom ellipsis in literals syntax-rules compiled successfully")
 	})
 }

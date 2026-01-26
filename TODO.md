@@ -27,6 +27,8 @@ Code Maintenance
 
 Code Cleanup
 ------------
+### FreeIdResolution
+- [ ] Try and find a more specific type for the interface, instead of 'any'.
 
 ### Match Package SyntaxValue Usage
 **Status:** ✅ DESIGN IS CORRECT - No cleanup needed

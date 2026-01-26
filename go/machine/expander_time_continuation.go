@@ -935,6 +935,56 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 	return innerExprs, true
 }
 
+// extractDefineName extracts the name being defined from a define form.
+// Returns nil if the form is not a define or is malformed.
+//
+// Note: This intentionally excludes define-syntax forms. Macro bindings are
+// handled separately by compileDefineSyntaxFromSyntax which stores them in the
+// expand environment. We only pre-register define bindings so that macros can
+// reference forward-declared variable definitions.
+//
+// Handles:
+//   - (define name value)
+//   - (define (name args...) body...)
+func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
+	pair, ok := form.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil
+	}
+
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return nil
+	}
+
+	sym := carSym.Unwrap().(*values.Symbol)
+	// Only handle define, not define-syntax (macros are handled separately)
+	if sym.Key != "define" {
+		return nil
+	}
+
+	cdr := pair.SyntaxCdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
+		return nil
+	}
+
+	second := cdrPair.SyntaxCar()
+	switch s := second.(type) {
+	case *syntax.SyntaxSymbol:
+		// (define name ...)
+		return s
+	case *syntax.SyntaxPair:
+		// (define (name args...) body...) - extract name from the pair
+		if !syntax.IsSyntaxEmptyList(s) {
+			if nameExpr, ok := s.SyntaxCar().(*syntax.SyntaxSymbol); ok {
+				return nameExpr
+			}
+		}
+	}
+	return nil
+}
+
 // ExpandBodyWithDefineSyntax expands a sequence of body forms, compiling
 // define-syntax forms as encountered so subsequent forms can use the macros.
 //
@@ -945,10 +995,30 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 //
 // R7RS §5.3: Internal define-syntax forms must be processed before expanding
 // subsequent body expressions so that locally-defined macros are visible.
+//
+// R7RS §5.3.2: Bodies use letrec* semantics where all defined names are visible
+// to all initializers. This enables forward references within macros - a macro
+// can reference a definition that appears later in the same body.
 func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	ectx ExpandTimeCallContext,
 	forms []syntax.SyntaxValue,
 ) ([]syntax.SyntaxValue, error) {
+	// Pre-scan: Register placeholder bindings for all define/define-syntax forms
+	// This enables forward hygienic references within the body (R7RS letrec* semantics)
+	for _, form := range forms {
+		if nameSym := extractDefineName(form); nameSym != nil {
+			name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+			scopes := nameSym.Scopes()
+			// Create placeholder binding in current environment (not expand phase)
+			if p.env.LocalEnvironment() != nil {
+				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+			} else {
+				p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+			}
+		}
+	}
+
+	// Now expand sequentially with all bindings visible
 	var result []syntax.SyntaxValue
 	for _, form := range forms {
 		expanded, err := p.ExpandExpression(ectx, form)
@@ -959,7 +1029,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isDefineSyntaxSyntax(expanded) {
 			pair := expanded.(*syntax.SyntaxPair)
-			if err := compileDefineSyntaxFromSyntax(p.env.Expand(), pair); err != nil {
+			if err := compileDefineSyntaxFromSyntax(p.env, pair); err != nil {
 				return nil, err
 			}
 		}
@@ -984,8 +1054,14 @@ func isDefineSyntaxSyntax(expr syntax.SyntaxValue) bool {
 }
 
 // compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
-// in the given expand environment.
-func compileDefineSyntaxFromSyntax(expandEnv *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+// in the expand environment.
+//
+// The env parameter is used for free identifier resolution during compilation (so macros
+// can see local bindings like lambda parameters), while the actual macro binding is stored
+// in env.Expand() for lookup during expansion.
+func compileDefineSyntaxFromSyntax(env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+	expandEnv := env.Expand()
+
 	// Extract: (define-syntax keyword transformer)
 	cdr, ok := dsPair.Cdr().(*syntax.SyntaxPair)
 	if !ok {
@@ -1007,13 +1083,14 @@ func compileDefineSyntaxFromSyntax(expandEnv *environment.EnvironmentFrame, dsPa
 		return fmt.Errorf("define-syntax: transformer must be a list")
 	}
 
-	// Compile the transformer
-	closure, err := CompileSyntaxRules(context.TODO(), expandEnv, transformer)
+	// Compile the transformer using the full environment for free identifier resolution
+	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
+	closure, err := CompileSyntaxRules(context.TODO(), env, transformer)
 	if err != nil {
 		return err
 	}
 
-	// Store in the expand environment
+	// Store in the expand environment (for macro lookup during expansion)
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil && symbolScopes != nil {

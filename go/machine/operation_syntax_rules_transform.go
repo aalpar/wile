@@ -199,7 +199,9 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 			// - Free identifiers (like 'if', 'lambda') don't get intro scope but carry resolved bindings
 			// - Use-site context is used for newly created syntax objects (better error messages)
 			// - Origin info tracks the macro expansion chain
-			expanded, err := clause.matcher.ExpandWithOrigin(clause.template, introScope, freeIdsAny, useSiteCtx, origin)
+			// - Pattern variable syntax enables nested macro hygiene via scope comparison
+			expanded, err := clause.matcher.ExpandWithPatternVarSyntax(
+				clause.template, introScope, freeIdsAny, useSiteCtx, origin, clause.patternVarSyntax)
 			if err != nil {
 				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}

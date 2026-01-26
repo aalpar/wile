@@ -50,7 +50,7 @@ import (
 type FreeIdResolution struct {
 	// Global is set if the free identifier refers to a global binding.
 	// This enables cross-library macro hygiene by pre-resolving the binding.
-	Global *environment.GlobalIndex
+	Global any
 	// LocalScopes is set if the free identifier refers to a local binding.
 	// These are the scopes of the binding at macro definition time.
 	// During expansion, the free identifier gets these scopes, ensuring
@@ -108,16 +108,17 @@ func (f *FreeIdResolution) GetHasLocalBinding() bool {
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern       syntax.SyntaxValue              // The pattern to match against input
-	template      syntax.SyntaxValue              // The template to expand on match (includes source context)
-	bytecode      []match.SyntaxCommand           // Compiled pattern bytecode
-	matcher       *match.SyntaxMatcher            // Pattern matcher instance
-	patternVars   map[string]struct{}             // Variables extracted from pattern
-	ellipsisVars  map[int]map[string]struct{}     // ellipsisID -> captured pattern variables
-	freeIds       map[string]*FreeIdResolution    // Free identifiers resolved to definition-time bindings
-	macroScope    *syntax.Scope                   // Hygiene scope for this macro (Flatt's model)
-	ellipsis      string                          // Custom ellipsis identifier (default "...")
-	literalSyntax map[string]*syntax.SyntaxSymbol // Literal identifiers with scopes for hygiene
+	pattern          syntax.SyntaxValue              // The pattern to match against input
+	template         syntax.SyntaxValue              // The template to expand on match (includes source context)
+	bytecode         []match.SyntaxCommand           // Compiled pattern bytecode
+	matcher          *match.SyntaxMatcher            // Pattern matcher instance
+	patternVars      map[string]struct{}             // Variables extracted from pattern
+	patternVarSyntax map[string]*syntax.SyntaxSymbol // Pattern variables with their scopes (for nested macro hygiene)
+	ellipsisVars     map[int]map[string]struct{}     // ellipsisID -> captured pattern variables
+	freeIds          map[string]*FreeIdResolution    // Free identifiers resolved to definition-time bindings
+	macroScope       *syntax.Scope                   // Hygiene scope for this macro (Flatt's model)
+	ellipsis         string                          // Custom ellipsis identifier (default "...")
+	literalSyntax    map[string]*syntax.SyntaxSymbol // Literal identifiers with scopes for hygiene
 }
 
 // clausesWrapper wraps clauses as a values.Value for storing in literals
@@ -233,6 +234,15 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	}
 	// Empty literals list is also valid
 
+	// R7RS §4.3.2: If ellipsis appears in literals, it becomes a literal
+	// and ellipsis functionality is disabled for this syntax-rules form.
+	// Use "\x00" as sentinel since it cannot appear in Scheme symbols and
+	// won't be replaced with default by the match package.
+	_, ellipsisIsLiteral := literals[ellipsis]
+	if ellipsisIsLiteral {
+		ellipsis = "\x00"
+	}
+
 	// Process clauses
 	if clausesCdr == nil {
 		return nil, values.NewForeignErrorf("syntax-rules: no clauses provided")
@@ -323,8 +333,10 @@ func compileClauseWithEllipsisAndLiterals(
 ) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
+	// Also collect pattern variable syntax for nested macro hygiene
 	variables := make(map[string]struct{})
-	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, ellipsis)
+	varSyntax := make(map[string]*syntax.SyntaxSymbol)
+	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, varSyntax, ellipsis)
 	if err != nil {
 		return nil, err
 	}
@@ -349,16 +361,17 @@ func compileClauseWithEllipsisAndLiterals(
 	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis)
 
 	return &SyntaxRulesClause{
-		pattern:       pattern,
-		template:      template,
-		bytecode:      compiled.Codes,
-		matcher:       matcher,
-		patternVars:   variables,
-		ellipsisVars:  compiled.EllipsisVars,
-		freeIds:       freeIds,
-		macroScope:    nil, // Will be set when macro is defined
-		ellipsis:      ellipsis,
-		literalSyntax: literalSyntax,
+		pattern:          pattern,
+		template:         template,
+		bytecode:         compiled.Codes,
+		matcher:          matcher,
+		patternVars:      variables,
+		patternVarSyntax: varSyntax,
+		ellipsisVars:     compiled.EllipsisVars,
+		freeIds:          freeIds,
+		macroScope:       nil, // Will be set when macro is defined
+		ellipsis:         ellipsis,
+		literalSyntax:    literalSyntax,
 	}, nil
 }
 
@@ -427,8 +440,24 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(t) {
-			// Recurse into car
+			// Check if this is a nested macro definition form (syntax-rules, define-syntax)
+			// that should not be walked for free identifiers
 			car := t.SyntaxCar()
+			if car != nil {
+				if carSym, ok := car.(*syntax.SyntaxSymbol); ok {
+					carVal := carSym.Unwrap()
+					if sym, ok := carVal.(*values.Symbol); ok {
+						// Skip nested syntax-rules and define-syntax forms
+						// These define their own scope and shouldn't pollute the
+						// outer macro's free identifier set
+						if sym.Key == "syntax-rules" || sym.Key == "define-syntax" {
+							return
+						}
+					}
+				}
+			}
+
+			// Recurse into car
 			if car != nil {
 				carStx := car
 				collectFreeIdentifiersWithEllipsis(env, carStx, patternVars, freeIds, ellipsis)
@@ -453,14 +482,18 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 // Uses the default ellipsis identifier ("...").
 // The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene.
 func collectPatternVariables(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}) error {
-	return collectPatternVariablesWithEllipsis(pattern, literalSyntax, isFirst, variables, match.DefaultEllipsis)
+	return collectPatternVariablesWithEllipsis(pattern, literalSyntax, isFirst, variables, nil, match.DefaultEllipsis)
 }
 
 // collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
 // using a custom ellipsis identifier.
 // The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene:
 // a pattern symbol only matches a literal if they have the same name AND the same scopes.
-func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}, ellipsis string) error {
+// The varSyntax parameter, if non-nil, will be populated with the syntax symbol of each
+// pattern variable. This is critical for nested macro hygiene: when an outer macro introduces
+// a symbol into an inner macro's template, the symbol's scopes distinguish it from inner
+// pattern variables.
+func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}, varSyntax map[string]*syntax.SyntaxSymbol, ellipsis string) error {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
@@ -479,11 +512,19 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 					if !scopesMatch {
 						// Same name but different scopes - treat as pattern variable
 						variables[symVal.Key] = struct{}{}
+						// Record the pattern variable's syntax for nested macro hygiene
+						if varSyntax != nil {
+							varSyntax[symVal.Key] = p
+						}
 					}
 					// If scopes match, it's a literal - don't add to variables
 				} else {
 					// Name not in literals - it's a pattern variable
 					variables[symVal.Key] = struct{}{}
+					// Record the pattern variable's syntax for nested macro hygiene
+					if varSyntax != nil {
+						varSyntax[symVal.Key] = p
+					}
 				}
 			}
 		}
@@ -491,7 +532,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(p) {
 			// First element in a form is considered a keyword
-			err := collectPatternVariablesWithEllipsis(p.SyntaxCar(), literalSyntax, isFirst, variables, ellipsis)
+			err := collectPatternVariablesWithEllipsis(p.SyntaxCar(), literalSyntax, isFirst, variables, varSyntax, ellipsis)
 			if err != nil {
 				return err
 			}
@@ -499,7 +540,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 			// Rest of the form
 			cdr := p.SyntaxCdr()
 			if cdr != nil {
-				err = collectPatternVariablesWithEllipsis(cdr, literalSyntax, false, variables, ellipsis)
+				err = collectPatternVariablesWithEllipsis(cdr, literalSyntax, false, variables, varSyntax, ellipsis)
 				if err != nil {
 					return err
 				}
@@ -537,10 +578,6 @@ func extractLiteralsWithSyntax(
 
 		symVal := sym.Unwrap()
 		if symbol, ok := symVal.(*values.Symbol); ok {
-			// R7RS §4.3.2: ellipsis cannot appear in literals list
-			if symbol.Key == ellipsis {
-				return values.NewForeignErrorf("ellipsis %q cannot appear in literals list", ellipsis)
-			}
 			literals[symbol.Key] = struct{}{}
 			// Store syntax symbol for scope-aware matching if map provided
 			if literalSyntax != nil {
