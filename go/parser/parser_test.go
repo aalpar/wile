@@ -30,13 +30,18 @@ import (
 )
 
 // getComplexParts extracts real and imaginary parts as float64 from
-// either a *values.Complex or *values.BigComplex.
+// a complex number. Also handles real numbers (Float, Integer) which
+// are complex with zero imaginary part per R7RS numeric tower.
 func getComplexParts(n values.Number) (real, imag float64) {
 	switch v := n.(type) {
 	case *values.Complex:
 		return v.Real(), v.Imag()
 	case *values.BigComplex:
 		return v.RealAsBigFloat().Float64(), v.ImagAsBigFloat().Float64()
+	case *values.Float:
+		return v.Datum(), 0
+	case *values.Integer:
+		return float64(v.Datum()), 0
 	}
 	panic("not a complex number")
 }
@@ -1494,17 +1499,14 @@ func TestReadSyntaxRadixHex(t *testing.T) {
 // Exactness Marker Tests (#e, #i)
 // ============================================================================
 
-func TestReadSyntaxExactnessMarkers(t *testing.T) {
-	// Note: Exactness markers are parsed but don't change the value type
-	// (as noted in parser.go: "For now, we don't track exactness in the value types")
+// TestReadSyntaxExactMarker tests the #e (exact) prefix which preserves integer type.
+func TestReadSyntaxExactMarker(t *testing.T) {
 	tcs := []struct {
 		input  string
 		expect int64
 	}{
 		{"#e42", 42},
-		{"#i42", 42},
 		{"#e100", 100},
-		{"#i100", 100},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -1516,6 +1518,31 @@ func TestReadSyntaxExactnessMarkers(t *testing.T) {
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
 			c.Assert(i.Datum(), qt.Equals, tc.expect)
+		})
+	}
+}
+
+// TestReadSyntaxInexactMarker tests the #i (inexact) prefix which converts to Float.
+//
+// R7RS §6.2.5: The #i prefix requests an inexact representation.
+func TestReadSyntaxInexactMarker(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect float64
+	}{
+		{"#i42", 42.0},
+		{"#i100", 100.0},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			f, ok := syn.UnwrapAll().(*values.Float)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(f.Datum(), qt.Equals, tc.expect)
 		})
 	}
 }

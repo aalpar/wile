@@ -643,45 +643,25 @@ func TestDivisionErrors(t *testing.T) {
 		{name: "truncate-quotient divide by zero", code: `(truncate-quotient 10 0)`},
 		{name: "truncate-remainder divide by zero", code: `(truncate-remainder 10 0)`},
 
-		// Wrong type - first argument
-		{name: "floor/ float dividend", code: `(floor/ 10.5 3)`},
+		// Wrong type - first argument (strings, symbols, lists are invalid; floats/rationals are valid per R7RS)
 		{name: "floor/ string dividend", code: `(floor/ "10" 3)`},
 		{name: "floor/ symbol dividend", code: `(floor/ 'ten 3)`},
 		{name: "floor/ list dividend", code: `(floor/ '(10) 3)`},
-		{name: "floor/ rational dividend", code: `(floor/ 10/3 3)`},
 
-		{name: "truncate/ float dividend", code: `(truncate/ 10.5 3)`},
 		{name: "truncate/ string dividend", code: `(truncate/ "10" 3)`},
 		{name: "truncate/ symbol dividend", code: `(truncate/ 'ten 3)`},
 		{name: "truncate/ list dividend", code: `(truncate/ '(10) 3)`},
-		{name: "truncate/ rational dividend", code: `(truncate/ 10/3 3)`},
-
-		{name: "floor-quotient float", code: `(floor-quotient 10.5 3)`},
-		{name: "floor-remainder float", code: `(floor-remainder 10.5 3)`},
-		{name: "truncate-quotient float", code: `(truncate-quotient 10.5 3)`},
-		{name: "truncate-remainder float", code: `(truncate-remainder 10.5 3)`},
 
 		// Wrong type - second argument
-		{name: "floor/ float divisor", code: `(floor/ 10 3.5)`},
 		{name: "floor/ string divisor", code: `(floor/ 10 "3")`},
 		{name: "floor/ symbol divisor", code: `(floor/ 10 'three)`},
 		{name: "floor/ list divisor", code: `(floor/ 10 '(3))`},
-		{name: "floor/ rational divisor", code: `(floor/ 10 3/2)`},
 
-		{name: "truncate/ float divisor", code: `(truncate/ 10 3.5)`},
 		{name: "truncate/ string divisor", code: `(truncate/ 10 "3")`},
 		{name: "truncate/ symbol divisor", code: `(truncate/ 10 'three)`},
 		{name: "truncate/ list divisor", code: `(truncate/ 10 '(3))`},
-		{name: "truncate/ rational divisor", code: `(truncate/ 10 3/2)`},
-
-		{name: "floor-quotient float divisor", code: `(floor-quotient 10 3.5)`},
-		{name: "floor-remainder float divisor", code: `(floor-remainder 10 3.5)`},
-		{name: "truncate-quotient float divisor", code: `(truncate-quotient 10 3.5)`},
-		{name: "truncate-remainder float divisor", code: `(truncate-remainder 10 3.5)`},
 
 		// Both arguments wrong type
-		{name: "floor/ both floats", code: `(floor/ 10.5 3.5)`},
-		{name: "truncate/ both floats", code: `(truncate/ 10.5 3.5)`},
 		{name: "floor/ both strings", code: `(floor/ "10" "3")`},
 		{name: "truncate/ both strings", code: `(truncate/ "10" "3")`},
 	}

@@ -27,6 +27,9 @@ Code Maintenance
 
 Code Cleanup
 ------------
+### MakeExact MakeInexact Helpers
+- [ ] Try an improved implementation that reduces code size
+
 ### FreeIdResolution
 - [ ] Try and find a more specific type for the interface, instead of 'any'.
 

@@ -93,10 +93,24 @@
       (newline))
 
     ;; Approximate equality for floating point - exported for macro use
+    ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
       (cond
        ((and (number? a) (number? b))
-        (< (abs (- a b)) epsilon))
+        (cond
+         ;; Both infinite with same sign
+         ((and (infinite? a) (infinite? b))
+          (eqv? a b))
+         ;; Both NaN - R7RS says (= +nan.0 +nan.0) is #f, but for testing
+         ;; purposes we consider two NaNs as "equal"
+         ((and (nan? a) (nan? b))
+          #t)
+         ;; One is infinite/NaN and other is not
+         ((or (infinite? a) (infinite? b) (nan? a) (nan? b))
+          #f)
+         ;; Normal numeric comparison
+         (else
+          (< (abs (- a b)) epsilon))))
        ((and (pair? a) (pair? b))
         (and (%approx-equal? (car a) (car b) epsilon)
              (%approx-equal? (cdr a) (cdr b) epsilon)))
@@ -180,7 +194,9 @@
         ((test-values expected expr)
          (test-values #f expected expr))
         ((test-values name expected expr)
-         (test name expected (call-with-values (lambda () expr) list)))))
+         (test name
+               (call-with-values (lambda () expected) list)
+               (call-with-values (lambda () expr) list)))))
 
     (define-syntax test-group
       (syntax-rules ()

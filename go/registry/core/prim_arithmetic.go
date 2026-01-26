@@ -397,10 +397,13 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimExact implements the (exact) primitive.
 // Converts an inexact number to an exact representation.
+//
+// R7RS §6.2.6: The exact procedure returns an exact representation
+// of z that is numerically closest to the argument.
 func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.Rational:
+	case *values.Integer, *values.Rational, *values.BigInteger:
 		mc.SetValue(v)
 	case *values.Float:
 		// Convert float to rational
@@ -408,7 +411,17 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 		if r == nil {
 			return values.NewForeignError("exact: cannot convert infinity or NaN to exact")
 		}
-		mc.SetValue(values.NewRationalFromRat(r))
+		// If denominator is 1, return Integer instead of Rational
+		if r.IsInt() {
+			num := r.Num()
+			if num.IsInt64() {
+				mc.SetValue(values.NewInteger(num.Int64()))
+			} else {
+				mc.SetValue(values.NewBigInteger(num))
+			}
+		} else {
+			mc.SetValue(values.NewRationalFromRat(r))
+		}
 	case *values.Complex:
 		return values.NewForeignError("exact: complex numbers not supported")
 	default:

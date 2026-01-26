@@ -979,14 +979,38 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q1 := values.NewComplexFromParts(0, math.NaN())
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateMarkerNumberExact, tokenizer.TokenizerStateMarkerNumberInexact:
-		// #e or #i prefix - just read the next number
-		// For now, we don't track exactness in the value types
+	case tokenizer.TokenizerStateMarkerNumberExact:
+		// #e prefix - read the next number and convert to exact
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		return p.readSyntax()
+		q, tok, err := p.readSyntax()
+		if err != nil {
+			return nil, tok, err
+		}
+		// Convert to exact
+		exactVal, err := p.makeExact(q)
+		if err != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", err)
+		}
+		return exactVal, tok, nil
+	case tokenizer.TokenizerStateMarkerNumberInexact:
+		// #i prefix - read the next number and convert to inexact
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		q, tok, err := p.readSyntax()
+		if err != nil {
+			return nil, tok, err
+		}
+		// Convert to inexact
+		inexactVal, err := p.makeInexact(q)
+		if err != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", err)
+		}
+		return inexactVal, tok, nil
 	case tokenizer.TokenizerStateBigIntegerDefaultBase:
 		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
 	case tokenizer.TokenizerStateBigIntegerBase10:
@@ -1291,6 +1315,17 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
 
+	// R7RS: If the imaginary part is exact zero, treat the number as real.
+	// e.g., -2.5+0i should be just -2.5 (a Float), not a Complex.
+	// This is because exact 0 means "definitely zero", while inexact 0.0 means
+	// "approximately zero" and could have rounding errors.
+	if isExactPartString(imagPart) {
+		parsedImag, parseErr := parseExactPart(imagPart)
+		if parseErr == nil && parsedImag.IsZero() {
+			return values.NewFloat(rel), nil
+		}
+	}
+
 	img, err := p.parseImagPart(imagPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
@@ -1400,4 +1435,123 @@ func TrimSuffixFolded(s, suffix string) string {
 		lastj -= n1
 	}
 	return s[:lasti]
+}
+
+// makeExact converts a syntax-wrapped number to its exact representation.
+// R7RS §6.2.6: exact converts an inexact number to exact.
+// For integers and rationals, they are already exact.
+// For floats, they are converted to rationals or integers if they represent whole numbers.
+func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	val := stx.Unwrap()
+	num, ok := val.(values.Number)
+	if !ok {
+		return nil, errors.New("not a number")
+	}
+
+	var exactNum values.Value
+	switch v := num.(type) {
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		// Already exact
+		exactNum = v
+	case *values.Float:
+		// Convert float to exact
+		f := v.Value
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, errors.New("cannot convert inf or nan to exact")
+		}
+		// Check if it's a whole number
+		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			exactNum = values.NewInteger(int64(f))
+		} else {
+			// Convert to rational using big.Rat
+			r := new(big.Rat).SetFloat64(f)
+			exactNum = values.NewRationalFromRat(r)
+		}
+	case *values.BigFloat:
+		// Convert BigFloat to exact
+		bf := v.BigFloatValue()
+		if bf.IsInf() {
+			return nil, errors.New("cannot convert inf to exact")
+		}
+		// Try to convert to integer first
+		if bf.IsInt() {
+			i, _ := bf.Int(nil)
+			exactNum = values.NewBigInteger(i)
+		} else {
+			// Convert to rational
+			r, _ := bf.Rat(nil)
+			exactNum = values.NewRationalFromRat(r)
+		}
+	case *values.Complex:
+		// Convert complex to exact BigComplex
+		re := v.Real()
+		im := v.Imag()
+		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
+			return nil, errors.New("cannot convert complex with inf or nan to exact")
+		}
+		reRat := new(big.Rat).SetFloat64(re)
+		imRat := new(big.Rat).SetFloat64(im)
+		reNum := values.NewRationalFromRat(reRat)
+		imNum := values.NewRationalFromRat(imRat)
+		exactNum = values.NewBigComplex(reNum, imNum)
+	case *values.BigComplex:
+		// Already exact or convert to exact
+		if v.IsExact() {
+			exactNum = v
+		} else {
+			return nil, errors.New("cannot convert inexact BigComplex to exact")
+		}
+	default:
+		return nil, errors.New("unsupported number type for exact conversion")
+	}
+
+	// Re-wrap with the same syntax context
+	return p.rewrapSyntax(stx, exactNum), nil
+}
+
+// makeInexact converts a syntax-wrapped number to its inexact representation.
+// R7RS §6.2.6: inexact converts an exact number to inexact.
+func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	val := stx.Unwrap()
+	num, ok := val.(values.Number)
+	if !ok {
+		return nil, errors.New("not a number")
+	}
+
+	var inexactNum values.Value
+	switch v := num.(type) {
+	case *values.Float, *values.BigFloat:
+		// Already inexact
+		inexactNum = v
+	case *values.Complex:
+		// Already inexact
+		inexactNum = v
+	case *values.Integer:
+		inexactNum = values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		inexactNum = values.NewFloat(f)
+	case *values.Rational:
+		f, _ := v.Rat().Float64()
+		inexactNum = values.NewFloat(f)
+	case *values.BigComplex:
+		// Convert to inexact Complex
+		reFloat := v.RealAsBigFloat().Float64()
+		imFloat := v.ImagAsBigFloat().Float64()
+		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
+	default:
+		return nil, errors.New("unsupported number type for inexact conversion")
+	}
+
+	return p.rewrapSyntax(stx, inexactNum), nil
+}
+
+// rewrapSyntax wraps a new value with the same syntax context as the original.
+func (p *Parser) rewrapSyntax(orig syntax.SyntaxValue, newVal values.Value) syntax.SyntaxValue {
+	// Get the source context from the original syntax value
+	var sctx *syntax.SourceContext
+	if so, ok := orig.(*syntax.SyntaxObject); ok {
+		sctx = so.SourceContext()
+	}
+	return syntax.NewSyntaxObject(newVal, sctx)
 }

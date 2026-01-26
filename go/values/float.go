@@ -281,8 +281,29 @@ func (p *Float) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme representation of the float.
+//
+// R7RS §6.2.5: +inf.0, -inf.0, and +nan.0 are the written representations
+// for positive infinity, negative infinity, and NaN.
+// R7RS §7.1.1: Inexact real numbers must contain a decimal point to distinguish
+// them from exact integers.
 func (p *Float) SchemeString() string {
-	return strconv.FormatFloat(p.Value, 'f', -1, 64)
+	if math.IsInf(p.Value, 1) {
+		return "+inf.0"
+	}
+	if math.IsInf(p.Value, -1) {
+		return "-inf.0"
+	}
+	if math.IsNaN(p.Value) {
+		return "+nan.0"
+	}
+	s := strconv.FormatFloat(p.Value, 'f', -1, 64)
+	// Ensure inexact integers have a decimal point to distinguish from exact integers
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' {
+			return s
+		}
+	}
+	return s + ".0"
 }
 
 func (p *Float) String() string {

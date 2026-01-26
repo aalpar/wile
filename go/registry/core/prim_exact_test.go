@@ -33,8 +33,8 @@ func TestExact(t *testing.T) {
 		{name: "exact on float 0.5", code: `(exact 0.5)`, expected: values.NewRational(1, 2)},
 		{name: "exact on float 0.25", code: `(exact 0.25)`, expected: values.NewRational(1, 4)},
 		{name: "exact on float 1.5", code: `(exact 1.5)`, expected: values.NewRational(3, 2)},
-		// Note: exact on integer float returns Rational(3/1), not Integer(3) - this is R7RS compliant
-		{name: "exact on integer float", code: `(exact 3.0)`, expected: values.NewRational(3, 1)},
+		// R7RS §6.2.6: exact on integer float returns Integer (simpler exact representation)
+		{name: "exact on integer float", code: `(exact 3.0)`, expected: values.NewInteger(3)},
 
 		// Rational - already exact
 		{name: "exact on rational", code: `(exact 3/4)`, expected: values.NewRational(3, 4)},
