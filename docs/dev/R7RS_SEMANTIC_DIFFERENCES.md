@@ -4,7 +4,7 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-01-23
+**Last Updated:** 2026-01-26
 
 ---
 
@@ -145,6 +145,28 @@ The implementation correctly handles:
 - **Memoization:** Thunk evaluated only once
 - **`make-promise` identity:** Returns promise argument unchanged
 - **`delay-force` tail recursion:** No stack growth for lazy algorithms
+
+### Complex Square Root Branch Cut (R7RS §6.2.6)
+
+The `sqrt` procedure for complex numbers follows the IEEE 754/C99 Annex G branch cut convention:
+
+**Branch Cut Convention:**
+> "The result r is chosen so that real(r) >= 0 and imag(r) has the same sign as imag(x)"
+
+**Behavior with Signed Zero:**
+
+| Input | Result | Explanation |
+|-------|--------|-------------|
+| `(sqrt -1)` | `0+1i` | Standard case: negative real → positive imaginary |
+| `(sqrt -1.0+0.0i)` | `0+1i` | Positive zero imaginary part → positive imaginary result |
+| `(sqrt -1.0-0.0i)` | `0-1i` | Negative zero imaginary part → negative imaginary result |
+
+This follows the ISO C99 standard where signed zero in the imaginary part indicates which side of the branch cut to approach from:
+- `-0.0i` means approaching the negative real axis from below
+- `+0.0i` means approaching from above
+
+**R7RS Compatibility:**
+R7RS §6.2.5 references R6RS which states the branch cut is on the negative real axis, continuous from above. Our implementation is consistent with this when signed zero is handled correctly. Some R7RS test suites may not account for signed zero semantics in their expected values.
 
 ---
 
