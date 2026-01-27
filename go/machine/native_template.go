@@ -17,6 +17,7 @@ package machine
 import (
 	"slices"
 
+	"wile/environment"
 	"wile/syntax"
 	"wile/values"
 )
@@ -80,9 +81,16 @@ func (p *NativeTemplate) SetName(name string) {
 }
 
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
-	for i, l := range p.literals {
-		if l.EqualTo(v) {
-			return LiteralIndex(i)
+	// Don't deduplicate environments - each closure needs its own instance
+	// because environments are mutable and context-dependent. The parent
+	// chain is set at runtime by OperationMakeClosure, so structural
+	// equality doesn't capture lexical context.
+	_, isEnv := v.(*environment.EnvironmentFrame)
+	if !isEnv {
+		for i, l := range p.literals {
+			if l.EqualTo(v) {
+				return LiteralIndex(i)
+			}
 		}
 	}
 	l := len(p.literals)
