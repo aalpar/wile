@@ -17,6 +17,7 @@ package environment
 import (
 	"testing"
 
+	"wile/syntax"
 	"wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -176,4 +177,69 @@ func TestGlobalEnvironmentFrame_EqualTo_NilCases(t *testing.T) {
 	env3 := NewTopLevelGlobalEnvironmentFrame()
 	env3.CreateGlobalBinding(sym, BindingTypeVariable)
 	qt.Assert(t, env2.EqualTo(env3), qt.IsFalse)
+}
+
+func TestGlobalEnvironmentFrame_GlobalSymbolInterning(t *testing.T) {
+	// Reset global symbol interns for test isolation
+	values.ResetSymbolInterns()
+
+	// Create two separate environments
+	env1 := NewTopLevelGlobalEnvironmentFrame()
+	env2 := NewTopLevelGlobalEnvironmentFrame()
+
+	// Intern a symbol in env1
+	sym1 := values.NewSymbol("foo")
+	interned1 := env1.InternSymbol(sym1)
+	qt.Assert(t, interned1, qt.Equals, sym1)
+
+	// Intern the same symbol name in env2
+	sym2 := values.NewSymbol("foo")
+	interned2 := env2.InternSymbol(sym2)
+
+	// With global interning, both should return the same pointer
+	qt.Assert(t, interned2, qt.Equals, interned1,
+		qt.Commentf("global symbol interning: same name should return same pointer"))
+
+	// New symbols interned in either env are visible globally
+	sym3 := values.NewSymbol("bar")
+	interned3 := env1.InternSymbol(sym3)
+	interned4 := env2.InternSymbol(values.NewSymbol("bar"))
+	qt.Assert(t, interned3, qt.Equals, interned4,
+		qt.Commentf("global symbol interning: works across environments"))
+}
+
+func TestGlobalEnvironmentFrame_ShareSyntaxInternsFrom(t *testing.T) {
+	// Create source environment with interned syntax
+	source := NewTopLevelGlobalEnvironmentFrame()
+	key := values.NewInteger(42)
+	stx := syntax.NewSyntaxSymbol("test", nil)
+	interned1 := source.InternSyntax(key, stx)
+	qt.Assert(t, interned1, qt.Equals, stx)
+
+	// Create target environment - syntax interning is separate initially
+	target := NewTopLevelGlobalEnvironmentFrame()
+	interned2 := target.InternSyntax(key, syntax.NewSyntaxSymbol("different", nil))
+	// Target has its own syntax intern table
+	qt.Assert(t, interned2 != interned1, qt.IsTrue,
+		qt.Commentf("separate envs have separate syntax interning"))
+
+	// Share syntax interning maps
+	target.ShareSyntaxInternsFrom(source)
+
+	// Now target should return the same interned syntax as source
+	interned3 := target.InternSyntax(key, syntax.NewSyntaxSymbol("ignored", nil))
+	qt.Assert(t, interned3, qt.Equals, interned1,
+		qt.Commentf("after sharing, should return source's interned syntax"))
+}
+
+func TestGlobalEnvironmentFrame_ShareSyntaxInternsFrom_NilSource(t *testing.T) {
+	// Verify ShareSyntaxInternsFrom handles nil source gracefully
+	target := NewTopLevelGlobalEnvironmentFrame()
+	target.ShareSyntaxInternsFrom(nil)
+
+	// Should still work after nil share
+	key := values.NewInteger(99)
+	stx := syntax.NewSyntaxSymbol("test", nil)
+	interned := target.InternSyntax(key, stx)
+	qt.Assert(t, interned, qt.Equals, stx)
 }

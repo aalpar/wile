@@ -75,7 +75,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
 	env := environment.NewEnvironmentFrame(nil,
-		environment.NewGlobalEnvironmentFrame(nil, nil))
+		environment.NewGlobalEnvironmentFrame(nil))
 	gi, ok := env.CreateGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
@@ -128,7 +128,7 @@ func TestExpandExpression_List(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil, nil))
+	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil))
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 
@@ -168,7 +168,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil, nil))
+	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil))
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 

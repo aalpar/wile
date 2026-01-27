@@ -32,11 +32,16 @@ func PrimCons(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCar implements the car primitive.
 // Returns the first element of a pair.
+//
+// R7RS §6.4: It is an error to take the car of the empty list.
 func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	v, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "car: expected a pair but got %T", o)
+	}
+	if v.IsEmptyList() {
+		return values.NewForeignError("car: cannot take car of empty list")
 	}
 	mc.SetValue(v.Car())
 	return nil
@@ -44,11 +49,16 @@ func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCdr implements the cdr primitive.
 // Returns the second element of a pair.
+//
+// R7RS §6.4: It is an error to take the cdr of the empty list.
 func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	v, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "cdr: expected a pair but got %T", o)
+	}
+	if v.IsEmptyList() {
+		return values.NewForeignError("cdr: cannot take cdr of empty list")
 	}
 	mc.SetValue(v.Cdr())
 	return nil
@@ -89,6 +99,8 @@ func PrimSetCdr(_ context.Context, mc *machine.MachineContext) error {
 // cxrHelper applies a sequence of car/cdr operations to a value.
 // The ops string contains 'a' for car and 'd' for cdr, applied right-to-left.
 // For example, "ad" means (car (cdr x)), i.e., cadr.
+//
+// R7RS §6.4: It is an error to take car/cdr of the empty list.
 func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 	v := o
 	// Apply operations right-to-left (innermost first)
@@ -96,6 +108,9 @@ func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 		p, ok := v.(*values.Pair)
 		if !ok {
 			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, v)
+		}
+		if p.IsEmptyList() {
+			return nil, values.NewForeignError(name + ": cannot take car/cdr of empty list")
 		}
 		if ops[i] == 'a' {
 			v = p.Car()

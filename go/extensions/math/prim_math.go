@@ -234,6 +234,10 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSqrt implements the (sqrt) primitive.
+//
+// R7RS §6.2.6: The branch cut for sqrt lies along the negative real axis,
+// continuous with quadrant II. This means for values on the negative real axis
+// (including those with -0.0 imaginary part), sqrt returns positive imaginary.
 func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -257,16 +261,39 @@ func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewFloat(math.Sqrt(f)))
 		}
 	case *values.Complex:
-		mc.SetValue(values.NewComplex(cmplx.Sqrt(v.Value)))
+		mc.SetValue(values.NewComplex(complexSqrtR7RS(v.Value)))
 	case *values.BigComplex:
 		// Convert BigComplex to complex128 and compute sqrt
 		realF := v.RealAsBigFloat().Float64()
 		imagF := v.ImagAsBigFloat().Float64()
-		mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(realF, imagF))))
+		mc.SetValue(values.NewComplex(complexSqrtR7RS(complex(realF, imagF))))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
 	return nil
+}
+
+// complexSqrtR7RS computes square root with R7RS branch cut semantics.
+// R7RS §6.2.6 specifies the branch cut lies along the negative real axis,
+// continuous with quadrant II. This means values on the negative real axis
+// (real < 0, imag == 0) should return positive imaginary, regardless of
+// whether the imaginary part is +0.0 or -0.0.
+//
+// Go's cmplx.Sqrt follows IEEE 754 conventions where -0.0 imaginary means
+// "below the real axis", returning negative imaginary. We correct for this
+// by treating -0.0 as +0.0 for branch cut purposes.
+func complexSqrtR7RS(z complex128) complex128 {
+	re := real(z)
+	im := imag(z)
+
+	// If on the negative real axis (real < 0, imag is zero regardless of sign),
+	// ensure we return positive imaginary by using +0.0 for the imaginary part.
+	if re < 0 && im == 0 {
+		// Use positive zero to get the correct branch cut behavior
+		return cmplx.Sqrt(complex(re, 0))
+	}
+
+	return cmplx.Sqrt(z)
 }
 
 // PrimExpt implements the (expt) primitive.

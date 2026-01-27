@@ -60,6 +60,19 @@ func NewErrorObject(message string, irritants ...Value) *NativeError {
 	return q
 }
 
+// NewErrorObjectWithCause creates a new error object that wraps a Go error.
+// This preserves the original error for debugging while providing R7RS-compliant
+// exception handling. The wrapped error can be retrieved with Datum() or Unwrap().
+func NewErrorObjectWithCause(message string, cause error, irritants ...Value) *NativeError {
+	q := &NativeError{
+		message:   NewString(message),
+		irritants: List(irritants...),
+		kind:      ErrorKindGeneric,
+		err:       cause,
+	}
+	return q
+}
+
 // NewReadError creates a new read error object with the given message and irritants.
 // R7RS §6.11: read-error? predicate checks for errors during reading.
 func NewReadError(message string, irritants ...Value) *NativeError {

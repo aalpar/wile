@@ -61,42 +61,48 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 }
 
 // GlobalEnvironmentFrame represents global bindings for a single phase.
-// It holds bindings and optionally symbol/syntax interning maps.
+// It holds bindings and optionally syntax interning maps.
 //
 // Design: GlobalEnvironmentFrame has no hierarchy of its own. The environment
 // hierarchy is managed by EnvironmentFrame via its parent field. Each phase
-// (runtime, expand, compile) has its own GlobalEnvironmentFrame. The tip-top
-// environment's GlobalEnvironmentFrame holds shared interning maps.
+// (runtime, expand, compile) has its own GlobalEnvironmentFrame.
+//
+// Note: Symbol and syntax interning are delegated to TopLevelEnvironment when
+// available, ensuring R7RS symbol identity works correctly across all phases.
 type GlobalEnvironmentFrame struct {
 	// symbol to binding index lookup map
 	keys     map[values.Symbol]int
 	bindings []*Binding
-	// symbol canonicalization map (typically only on tip-top's global)
-	symbolInterns map[values.Symbol]*values.Symbol
-	// syntax object interning map (typically only on tip-top's global)
+	// topLevel is the owning TopLevelEnvironment (nil for legacy/isolated environments)
+	topLevel *TopLevelEnvironment
+	// syntaxInterns is for legacy environments without TopLevelEnvironment
+	// Deprecated: Use TopLevelEnvironment.InternSyntax instead
 	syntaxInterns map[values.Value]syntax.SyntaxValue
-	// library registry for R7RS library loading (typically only on tip-top's global)
-	// Stored as any to avoid circular dependency with machine package.
+	// libraryRegistry is for legacy environments without TopLevelEnvironment
+	// Deprecated: Use TopLevelEnvironment.LibraryRegistry instead
 	libraryRegistry any
 }
 
-// NewTopLevelGlobalEnvironmentFrame creates a new global environment with fresh interning maps.
-// Use this for creating the tip-top environment that holds shared interning state.
+// NewTopLevelGlobalEnvironmentFrame creates a new global environment frame.
+// Use this for creating the tip-top environment.
+//
+// Deprecated: Use NewTopLevelEnvironment() instead, which provides per-instance
+// symbol interning. This function creates a GlobalEnvironmentFrame without a
+// TopLevelEnvironment reference, so it falls back to global symbol interning.
 func NewTopLevelGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
-	return NewGlobalEnvironmentFrame(nil, nil)
+	return NewGlobalEnvironmentFrame(nil)
 }
 
 // NewGlobalEnvironmentFrame creates a new global environment frame.
-// If symInterns or synInterns are nil, new maps are created.
-// Pass existing maps to share interning state between phases.
-func NewGlobalEnvironmentFrame(symInterns map[values.Symbol]*values.Symbol, synInterns map[values.Value]syntax.SyntaxValue) *GlobalEnvironmentFrame {
+// If synInterns is nil, a new map is created.
+// Pass an existing map to share syntax interning state between phases.
+//
+// Note: Symbol interning uses a global table (values.InternSymbol) and does not
+// need to be passed here.
+func NewGlobalEnvironmentFrame(synInterns map[values.Value]syntax.SyntaxValue) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
 		keys:     map[values.Symbol]int{},
-	}
-	q.symbolInterns = symInterns
-	if q.symbolInterns == nil {
-		q.symbolInterns = map[values.Symbol]*values.Symbol{}
 	}
 	q.syntaxInterns = synInterns
 	if q.syntaxInterns == nil {
@@ -106,12 +112,14 @@ func NewGlobalEnvironmentFrame(symInterns map[values.Symbol]*values.Symbol, synI
 }
 
 // Copy creates a deep copy of the global environment frame.
-// Note that the parent is not copied.
+// Note that topLevel is shared (not copied) between original and copy.
 func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
 		return (*GlobalEnvironmentFrame)(nil)
 	}
-	q := &GlobalEnvironmentFrame{}
+	q := &GlobalEnvironmentFrame{
+		topLevel: p.topLevel, // Shared, not copied
+	}
 	q.bindings = slices.Clone(p.bindings)
 	for i := range p.bindings {
 		q.bindings[i] = p.bindings[i].Copy().(*Binding)
@@ -119,10 +127,6 @@ func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	if p.keys != nil {
 		q.keys = make(map[values.Symbol]int)
 		maps.Copy(q.keys, p.keys)
-	}
-	if p.symbolInterns != nil {
-		q.symbolInterns = make(map[values.Symbol]*values.Symbol)
-		maps.Copy(q.symbolInterns, p.symbolInterns)
 	}
 	if p.syntaxInterns != nil {
 		q.syntaxInterns = make(map[values.Value]syntax.SyntaxValue)
@@ -243,22 +247,27 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 }
 
 // InternSymbol returns the canonical version of the given symbol.
-// If this symbol has been seen before, the previously interned pointer is returned.
-// Otherwise, the symbol is added to the intern map and returned.
-// This ensures symbol identity for eq? comparisons.
+// This delegates to TopLevelEnvironment when available, falling back to the
+// global symbol interning table for backward compatibility.
+// Per R7RS §6.5: "Two symbols are identical (in the sense of eq?) if and only
+// if their names are spelled the same way."
 func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
-	v, ok := p.symbolInterns[*q]
-	if ok {
-		return v
+	if p.topLevel != nil {
+		return p.topLevel.InternSymbol(q)
 	}
-	p.symbolInterns[*q] = q
-	return q
+	// Fall back to global interning for legacy environments
+	return values.InternSymbol(q)
 }
 
 // InternSyntax returns the canonical version of the given syntax value.
 // If an equivalent syntax value has been seen before, it is returned.
 // Otherwise, the value is added to the intern map and returned.
+// Delegates to TopLevelEnvironment when available.
 func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
+	if p.topLevel != nil {
+		return p.topLevel.InternSyntax(k, v)
+	}
+	// Fall back to local map for legacy environments
 	val, ok := p.syntaxInterns[k]
 	if ok {
 		return val
@@ -267,15 +276,35 @@ func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxVal
 	return v
 }
 
+// ShareSyntaxInternsFrom copies the syntax interning map reference from another GlobalEnvironmentFrame.
+// This allows multiple environments to share the same syntax interning state.
+// Symbol interning is now handled globally via values.InternSymbol(), so only syntax
+// interning needs to be shared between environments.
+func (p *GlobalEnvironmentFrame) ShareSyntaxInternsFrom(source *GlobalEnvironmentFrame) {
+	if source == nil {
+		return
+	}
+	p.syntaxInterns = source.syntaxInterns
+}
+
 // LibraryRegistry returns the library registry for R7RS library loading.
 // The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set.
+// Delegates to TopLevelEnvironment when available.
 func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
+	if p.topLevel != nil {
+		return p.topLevel.LibraryRegistry()
+	}
 	return p.libraryRegistry
 }
 
 // SetLibraryRegistry sets the library registry for R7RS library loading.
 // The registry should be a *machine.LibraryRegistry.
+// Delegates to TopLevelEnvironment when available.
 func (p *GlobalEnvironmentFrame) SetLibraryRegistry(registry any) {
+	if p.topLevel != nil {
+		p.topLevel.SetLibraryRegistry(registry)
+		return
+	}
 	p.libraryRegistry = registry
 }

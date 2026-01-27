@@ -67,7 +67,7 @@ var allExtensions = []registry.Extension{
 // This function:
 //  1. Creates a registry with core primitives
 //  2. Adds all extensions (io, files, math, eval, exceptions, threads, gointerop, all, system)
-//  3. Creates a new top-level environment frame
+//  3. Creates a new TopLevelEnvironment with per-instance symbol interning
 //  4. Applies the registry to register all primitives
 //  5. Registers primitive compilers in the compile environment
 //  6. Loads bootstrap macros (and, or, let, let*, letrec, cond, when, unless, parameterize)
@@ -90,8 +90,9 @@ func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.Environm
 		}
 	}
 
-	// Create environment
-	env := environment.NewTopLevelEnvironmentFrame()
+	// Create TopLevelEnvironment (per-instance symbol interning)
+	topLevel := environment.NewTopLevelEnvironment()
+	env := topLevel.Runtime()
 
 	// Apply registry to environment
 	err = reg.Apply(ctx, env)

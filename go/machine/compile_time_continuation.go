@@ -172,8 +172,8 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%T is not a pair", expr)
 	}
-	// Get the meta environment and compile expressions in it
-	metaEnv := p.env.Meta()
+	// Get the expand environment and compile expressions in it
+	metaEnv := p.env.Expand()
 	metaCont := NewCompiletimeContinuation(p.template, metaEnv)
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
@@ -1168,6 +1168,11 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		// Fallback for tests that don't set up the factory
 		libEnv = environment.NewTopLevelEnvironmentFrame()
 	}
+
+	// Share syntax interning maps with the caller environment for consistent
+	// syntax object handling. Symbol interning is handled globally.
+	libEnv.ShareSyntaxInternsFrom(p.env)
+
 	lib := NewCompiledLibrary(libName, libEnv)
 
 	// Process library declarations

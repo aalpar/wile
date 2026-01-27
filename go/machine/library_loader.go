@@ -124,6 +124,10 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// so that nested imports work correctly
 	libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
 
+	// Share syntax interning maps with the caller environment for consistent
+	// syntax object handling. Symbol interning is handled globally.
+	libEnv.ShareSyntaxInternsFrom(callerEnv)
+
 	// Parse the file
 	reader := bufio.NewReader(file)
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)

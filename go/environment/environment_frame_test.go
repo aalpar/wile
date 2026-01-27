@@ -221,22 +221,22 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 	qt.Assert(t, lb.value, qt.Equals, values.Void)
 }
 
-func TestEnvironmentFrame_MetaHierarchy(t *testing.T) {
-	// Meta() returns Expand() for backward compatibility
+func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
+	// Expand() returns the phase 1 environment
 	env := NewTopLevelEnvironmentFrame()
-	qt.Assert(t, env.Meta(), qt.IsNotNil)
-	qt.Assert(t, env.Meta(), qt.Not(qt.Equals), env)
-	qt.Assert(t, env.Meta().LocalEnvironment(), qt.IsNil)
+	qt.Assert(t, env.Expand(), qt.IsNotNil)
+	qt.Assert(t, env.Expand(), qt.Not(qt.Equals), env)
+	qt.Assert(t, env.Expand().LocalEnvironment(), qt.IsNil)
 
-	// Meta (Expand) should be cached (same pointer)
-	qt.Assert(t, env.Meta(), qt.Equals, env.Meta())
+	// Expand should be cached (same pointer)
+	qt.Assert(t, env.Expand(), qt.Equals, env.Expand())
 
-	// Meta().Meta() returns the same Expand (Meta/Expand always returns TopLevel.meta)
-	meta2 := env.Meta().Meta()
-	qt.Assert(t, meta2, qt.IsNotNil)
-	qt.Assert(t, meta2, qt.Equals, env.Meta()) // Same expand environment
+	// Expand().Expand() returns the same Expand environment
+	expand2 := env.Expand().Expand()
+	qt.Assert(t, expand2, qt.IsNotNil)
+	qt.Assert(t, expand2, qt.Equals, env.Expand()) // Same expand environment
 
-	// To get Compile, call Compile() directly
+	// Compile is a different phase than Expand
 	qt.Assert(t, env.Compile(), qt.Not(qt.Equals), env.Expand())
 }
 

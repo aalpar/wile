@@ -27,6 +27,9 @@ Code Maintenance
 
 Code Cleanup
 ------------
+### Investigate Symbol Interning Semantic
+- [ ] Symbol interning semantics should be looked up in R7RS.  Look at benefits of environment interning with global interning.
+
 ### MakeExact MakeInexact Helpers
 - [ ] Try an improved implementation that reduces code size
 

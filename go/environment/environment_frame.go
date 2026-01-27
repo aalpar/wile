@@ -21,28 +21,75 @@ import (
 
 // EnvironmentFrame represents an environment frame in the hierarchy.
 //
-// Design: EnvironmentFrame owns two hierarchy axes:
-//   - parent: lexical scoping chain (lambda bodies → enclosing scope → ... → TopLevel)
-//   - phases: indexed phase registry for O(1) access to any phase (Runtime, Expand, Compile, ...)
+// # Type Relationships
 //
-// LocalEnvironmentFrame and GlobalEnvironmentFrame have no hierarchy of their own.
+// The environment system has four types with distinct responsibilities:
 //
-// Phase Hierarchy (Racket-style) - indexed via PhaseRegistry:
+//	┌─────────────────────────────────────────────────────────────────────────┐
+//	│                        TopLevelEnvironment                              │
+//	│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)    │
+//	│                                                                         │
+//	│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)     │
+//	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                │
+//	│  phases ─────────── *PhaseRegistry                                     │
+//	│  libraryRegistry ── any (*machine.LibraryRegistry)                     │
+//	│  runtime ────────── *EnvironmentFrame (phase 0)                        │
+//	└─────────────────────────────────────────────────────────────────────────┘
+//	                                    │
+//	                                    │ owns
+//	                                    ▼
+//	┌─────────────────────────────────────────────────────────────────────────┐
+//	│                         EnvironmentFrame                                │
+//	│  (Lexical scope node: links local/global bindings, parent chain)       │
+//	│                                                                         │
+//	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)     │
+//	│  local ──────────── *LocalEnvironmentFrame (lambda params, let vars)   │
+//	│  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
+//	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
+//	│  phases ─────────── *PhaseRegistry (shared reference)                  │
+//	│  topLevel ───────── *TopLevelEnvironment (back-reference)              │
+//	└─────────────────────────────────────────────────────────────────────────┘
+//	          │                                    │
+//	          │ contains                           │ contains
+//	          ▼                                    ▼
+//	┌───────────────────────────┐    ┌────────────────────────────────────────┐
+//	│  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
+//	│  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
+//	│                           │    │                                        │
+//	│  keys ─── map[Symbol]int  │    │  keys ──────── map[Symbol]int          │
+//	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
+//	└───────────────────────────┘    │  topLevel ──── *TopLevelEnvironment    │
+//	                                 └────────────────────────────────────────┘
 //
-//	TopLevel EnvironmentFrame (= Phase 0 / Runtime)
-//	│   parent: nil
-//	│   phaseLevel: 0
-//	│   global: primitives, user defines, symbol/syntax interning
-//	│   phases: → PhaseRegistry
-//	│             ├── [0] → TopLevel (runtime)
-//	│             ├── [1] → Expand (for-syntax, macro definitions)
-//	│             ├── [2] → Compile (for-meta 2, syntax compilers)
-//	│             └── [-1] → Template (for-template, future)
+// # Ownership and Sharing
 //
-// Each phase has its own GlobalEnvironmentFrame. Sym/syntax interning maps
-// are shared from TopLevel's GlobalEnvironmentFrame.
+//   - TopLevelEnvironment: Root owner. One per Wile VM instance.
+//   - EnvironmentFrame: Many per VM. Share topLevel and phases references.
+//   - GlobalEnvironmentFrame: One per phase. Shares topLevel reference.
+//   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
-// Binding lookup is two-phase: first all locals up parent chain, then all globals.
+// # Lexical Hierarchy (parent chain)
+//
+//	(lambda (x)           ; EnvironmentFrame A: local={x}, parent=TopLevel
+//	  (let ((y 1))        ; EnvironmentFrame B: local={y}, parent=A
+//	    (lambda (z)       ; EnvironmentFrame C: local={z}, parent=B
+//	      (+ x y z))))
+//
+// # Phase Hierarchy (via PhaseRegistry)
+//
+//	TopLevelEnvironment
+//	└── PhaseRegistry
+//	    ├── [0] Runtime EnvironmentFrame (normal execution)
+//	    ├── [1] Expand EnvironmentFrame (macro expansion, for-syntax)
+//	    ├── [2] Compile EnvironmentFrame (syntax compilers, for-meta 2)
+//	    └── [-1] Template EnvironmentFrame (for-template, future)
+//
+// Each phase has its own GlobalEnvironmentFrame but shares the same
+// TopLevelEnvironment for symbol/syntax interning.
+//
+// # Binding Lookup
+//
+// Two-phase search: first all locals up parent chain, then globals.
 type EnvironmentFrame struct {
 	// parent links to enclosing lexical scope (nil for TopLevel)
 	parent *EnvironmentFrame
@@ -54,22 +101,19 @@ type EnvironmentFrame struct {
 	phaseLevel int
 	// phases is the shared phase registry, owned by TopLevel
 	phases *PhaseRegistry
+	// topLevel is the owning TopLevelEnvironment (nil for legacy environments)
+	topLevel *TopLevelEnvironment
 }
 
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
 // This frame has no parent and contains the shared symbol/syntax interning maps.
 // It also creates the PhaseRegistry for indexed phase access.
+//
+// Deprecated: Use NewTopLevelEnvironment().Runtime() instead for per-instance
+// symbol interning. This function now internally uses NewTopLevelEnvironment()
+// to provide proper isolation.
 func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
-	global := NewTopLevelGlobalEnvironmentFrame()
-	q := &EnvironmentFrame{
-		parent:     nil,
-		local:      nil,
-		global:     global,
-		phaseLevel: PhaseRuntime,
-	}
-	// Create phase registry and register TopLevel as phase 0
-	q.phases = NewPhaseRegistry(q)
-	return q
+	return NewTopLevelEnvironment().Runtime()
 }
 
 // NewPhaseEnvironmentFrame creates an environment frame for a specific phase.
@@ -80,14 +124,18 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 // indexed access. This function is kept for backward compatibility.
 func NewPhaseEnvironmentFrame(tenv *EnvironmentFrame) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
-	// Share the interning maps from tip-top.
-	global := NewGlobalEnvironmentFrame(nil, nil)
+	// Symbol interning is handled via TopLevelEnvironment when available.
+	global := NewGlobalEnvironmentFrame(nil)
+	if tenv != nil && tenv.topLevel != nil {
+		global.topLevel = tenv.topLevel
+	}
 	return &EnvironmentFrame{
 		parent:     tenv,
 		local:      nil,
 		global:     global,
 		phaseLevel: -999, // Unknown phase level (legacy creation)
 		phases:     tenv.phases,
+		topLevel:   tenv.topLevel,
 	}
 }
 
@@ -106,7 +154,7 @@ func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
 // The global environment frame is inherited from the parent, or set to a new top-level global environment frame if the parent is nil.
 // This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
-// The phase level and registry are inherited from the parent.
+// The phase level, registry, and topLevel are inherited from the parent.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent: parent,
@@ -116,10 +164,12 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 		q.global = NewTopLevelGlobalEnvironmentFrame()
 		q.phaseLevel = PhaseRuntime
 		q.phases = nil
+		q.topLevel = nil
 	} else {
 		q.global = parent.global
 		q.phaseLevel = parent.phaseLevel
 		q.phases = parent.phases
+		q.topLevel = parent.topLevel
 	}
 	return q
 }
@@ -615,7 +665,7 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 }
 
 // Copy creates a deep copy of the environment frame.
-// The parent environment frame and phase registry are shared between the original and the copy.
+// The parent, phase registry, and topLevel are shared between the original and the copy.
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent:     p.parent,
@@ -623,6 +673,7 @@ func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 		global:     p.global.Copy().(*GlobalEnvironmentFrame),
 		phaseLevel: p.phaseLevel,
 		phases:     p.phases,
+		topLevel:   p.topLevel,
 	}
 	return q
 }
@@ -660,14 +711,43 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 	return p.parent.EqualTo(v.parent)
 }
 
-// InternSymbol interns the given symbol using the tip-top's shared interning map.
-// This ensures symbol identity is consistent across all phases.
+// InternSymbol interns the given symbol.
+// Delegates to TopLevelEnvironment when available, falling back to the
+// global interning table for backward compatibility.
+// Per R7RS §6.5: "Two symbols are identical (in the sense of eq?) if and only
+// if their names are spelled the same way."
 func (p *EnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
-	return p.TopLevel().global.InternSymbol(q)
+	if p.topLevel != nil {
+		return p.topLevel.InternSymbol(q)
+	}
+	// Fall back to global interning for legacy environments
+	return values.InternSymbol(q)
 }
 
-// InternSyntax interns the given syntax value using the tip-top's shared interning map.
-// This ensures syntax object identity is consistent across all phases.
+// TopLevelEnv returns the TopLevelEnvironment for this frame.
+// Returns nil for legacy environments created without TopLevelEnvironment.
+func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
+	return p.topLevel
+}
+
+// InternSyntax interns the given syntax value.
+// Delegates to TopLevelEnvironment when available, falling back to the
+// tip-top global frame for legacy environments.
 func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
+	if p.topLevel != nil {
+		return p.topLevel.InternSyntax(k, v)
+	}
+	// Fall back to tip-top's global frame for legacy environments
 	return p.TopLevel().global.InternSyntax(k, v)
+}
+
+// ShareSyntaxInternsFrom configures this environment to share syntax interning
+// with another environment.
+// Symbol interning is now handled globally via values.InternSymbol(), so only syntax
+// interning needs to be shared between environments.
+func (p *EnvironmentFrame) ShareSyntaxInternsFrom(source *EnvironmentFrame) {
+	if source == nil {
+		return
+	}
+	p.TopLevel().global.ShareSyntaxInternsFrom(source.TopLevel().global)
 }
