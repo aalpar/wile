@@ -22,11 +22,11 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestPhaseRegistry_NewPhaseRegistry(t *testing.T) {
+func TestPhaseRegistry_Creation(t *testing.T) {
 	topLevel := NewTopLevelEnvironmentFrame()
 
 	qt.Assert(t, topLevel.phases, qt.IsNotNil)
-	qt.Assert(t, topLevel.phases.TopLevel(), qt.Equals, topLevel)
+	qt.Assert(t, topLevel.phases.TopLevelFrame(), qt.Equals, topLevel)
 
 	// Phase 0 should be registered as TopLevel
 	qt.Assert(t, topLevel.phases.Get(PhaseRuntime), qt.Equals, topLevel)

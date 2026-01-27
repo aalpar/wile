@@ -65,8 +65,7 @@ func TestOperationPopEnv_EqualTo(t *testing.T) {
 func TestOperationPopEnv_Apply_Success(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	parentEnv := environment.NewEnvironmentFrame(nil, genv)
+	parentEnv := environment.NewTopLevelEnvironmentFrame()
 	childEnv := environment.NewEnvironmentFrameWithParent(nil, parentEnv)
 
 	tpl := NewNativeTemplate(0, 0, false)
@@ -84,8 +83,7 @@ func TestOperationPopEnv_Apply_Success(t *testing.T) {
 func TestOperationPopEnv_Apply_Error_NoParent(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	// env has no parent (Parent() returns nil)
 
 	tpl := NewNativeTemplate(0, 0, false)

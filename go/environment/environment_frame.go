@@ -116,29 +116,6 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	return NewTopLevelEnvironment().Runtime()
 }
 
-// NewPhaseEnvironmentFrame creates an environment frame for a specific phase.
-// It has its own GlobalEnvironmentFrame for phase-specific bindings and
-// parents to the given tip-top frame for shared interning access.
-//
-// Deprecated: Use AtPhase(n) instead, which uses the PhaseRegistry for
-// indexed access. This function is kept for backward compatibility.
-func NewPhaseEnvironmentFrame(tenv *EnvironmentFrame) *EnvironmentFrame {
-	// Create a new GlobalEnvironmentFrame for this phase.
-	// Symbol interning is handled via TopLevelEnvironment when available.
-	global := NewGlobalEnvironmentFrame(nil)
-	if tenv != nil && tenv.topLevel != nil {
-		global.topLevel = tenv.topLevel
-	}
-	return &EnvironmentFrame{
-		parent:     tenv,
-		local:      nil,
-		global:     global,
-		phaseLevel: -999, // Unknown phase level (legacy creation)
-		phases:     tenv.phases,
-		topLevel:   tenv.topLevel,
-	}
-}
-
 // NewEnvironmentFrame creates a new environment frame with the given local and global environment frames.
 // The parent field is set to nil. This is typically used for isolated environments.
 func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
@@ -152,24 +129,21 @@ func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 }
 
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
-// The global environment frame is inherited from the parent, or set to a new top-level global environment frame if the parent is nil.
+// The global environment frame is inherited from the parent.
 // This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
 // The phase level, registry, and topLevel are inherited from the parent.
+// Panics if parent is nil - use NewTopLevelEnvironmentFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
-	q := &EnvironmentFrame{
-		parent: parent,
-		local:  local,
-	}
 	if parent == nil {
-		q.global = NewTopLevelGlobalEnvironmentFrame()
-		q.phaseLevel = PhaseRuntime
-		q.phases = nil
-		q.topLevel = nil
-	} else {
-		q.global = parent.global
-		q.phaseLevel = parent.phaseLevel
-		q.phases = parent.phases
-		q.topLevel = parent.topLevel
+		panic("NewEnvironmentFrameWithParent called with nil parent - use NewTopLevelEnvironmentFrame() instead")
+	}
+	q := &EnvironmentFrame{
+		parent:     parent,
+		local:      local,
+		global:     parent.global,
+		phaseLevel: parent.phaseLevel,
+		phases:     parent.phases,
+		topLevel:   parent.topLevel,
 	}
 	return q
 }
@@ -193,11 +167,11 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // Negative phases (e.g., -1 for for-template) are also supported.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
+// The environment must have been created via NewTopLevelEnvironment().
 func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
-		// Legacy environment without phase registry - create one
-		topLevel.phases = NewPhaseRegistry(topLevel)
+		panic("AtPhase called on environment without PhaseRegistry - use NewTopLevelEnvironment()")
 	}
 	return topLevel.phases.GetOrCreate(phase)
 }
@@ -223,12 +197,6 @@ func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 // This is where compile-time procedures (syntax compilers) are stored.
 func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
 	return p.AtPhase(PhaseCompile)
-}
-
-// Meta returns the expand phase environment for backward compatibility.
-// Deprecated: Use Expand() instead for clarity.
-func (p *EnvironmentFrame) Meta() *EnvironmentFrame {
-	return p.Expand()
 }
 
 // Parent returns the parent environment frame.
@@ -712,16 +680,15 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 }
 
 // InternSymbol interns the given symbol.
-// Delegates to TopLevelEnvironment when available, falling back to the
-// global interning table for backward compatibility.
+// Delegates to the TopLevelEnvironment for this frame.
 // Per R7RS §6.5: "Two symbols are identical (in the sense of eq?) if and only
 // if their names are spelled the same way."
+// Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
-	if p.topLevel != nil {
-		return p.topLevel.InternSymbol(q)
+	if p.topLevel == nil {
+		panic("InternSymbol called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()")
 	}
-	// Fall back to global interning for legacy environments
-	return values.InternSymbol(q)
+	return p.topLevel.InternSymbol(q)
 }
 
 // TopLevelEnv returns the TopLevelEnvironment for this frame.
@@ -731,23 +698,12 @@ func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 }
 
 // InternSyntax interns the given syntax value.
-// Delegates to TopLevelEnvironment when available, falling back to the
-// tip-top global frame for legacy environments.
+// Delegates to the TopLevelEnvironment for this frame.
+// Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
-	if p.topLevel != nil {
-		return p.topLevel.InternSyntax(k, v)
+	if p.topLevel == nil {
+		panic("InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()")
 	}
-	// Fall back to tip-top's global frame for legacy environments
-	return p.TopLevel().global.InternSyntax(k, v)
+	return p.topLevel.InternSyntax(k, v)
 }
 
-// ShareSyntaxInternsFrom configures this environment to share syntax interning
-// with another environment.
-// Symbol interning is now handled globally via values.InternSymbol(), so only syntax
-// interning needs to be shared between environments.
-func (p *EnvironmentFrame) ShareSyntaxInternsFrom(source *EnvironmentFrame) {
-	if source == nil {
-		return
-	}
-	p.TopLevel().global.ShareSyntaxInternsFrom(source.TopLevel().global)
-}

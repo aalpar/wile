@@ -37,10 +37,12 @@ import (
 	"wile/values"
 )
 
-// LibraryEnvFactory is a function that creates a new top-level environment for a library.
+// LibraryEnvFactory is a function that creates a new environment for a library.
 // This avoids import cycles between machine and runtime packages.
-// The function should return a fresh environment with primitives registered.
-var LibraryEnvFactory func(ctx context.Context) (*environment.EnvironmentFrame, error)
+// The function should return a fresh environment with primitives registered,
+// but MUST share the TopLevelEnvironment with callerEnv to ensure symbol identity.
+// R7RS §6.5: (eq? 'foo (string->symbol "foo")) must be #t.
+var LibraryEnvFactory func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error)
 
 // LoadLibrary loads a library by name, compiling and executing it if not already loaded.
 // Returns the CompiledLibrary which can be used to import bindings.
@@ -110,12 +112,13 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	}
 	defer file.Close() //nolint:errcheck
 
-	// Create a fresh top-level environment for the library
-	// This isolates the library from the caller's environment
+	// Create a fresh environment for the library
+	// This isolates the library's bindings from the caller's environment,
+	// but shares the TopLevelEnvironment for symbol interning.
 	if LibraryEnvFactory == nil {
 		return nil, values.NewForeignErrorf("LibraryEnvFactory not configured")
 	}
-	libEnv, err := LibraryEnvFactory(ctx)
+	libEnv, err := LibraryEnvFactory(ctx, callerEnv)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "could not create library environment")
 	}
@@ -123,10 +126,6 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// Share the library registry with the new environment
 	// so that nested imports work correctly
 	libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
-
-	// Share syntax interning maps with the caller environment for consistent
-	// syntax object handling. Symbol interning is handled globally.
-	libEnv.ShareSyntaxInternsFrom(callerEnv)
 
 	// Parse the file
 	reader := bufio.NewReader(file)

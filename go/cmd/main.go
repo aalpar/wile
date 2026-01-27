@@ -179,7 +179,8 @@ func main() {
 	env.SetLibraryRegistry(registry)
 
 	// Set up the library environment factory (avoids import cycle)
-	machine.LibraryEnvFactory = runtime.NewTopLevelEnvironmentFrameTiny
+	// Use NewLibraryEnvironmentFrame which shares the TopLevelEnvironment for symbol identity
+	machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
 	// read evaluate loop
 	ctx := context.Background()
 	// include file if any

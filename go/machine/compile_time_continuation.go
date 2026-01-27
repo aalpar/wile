@@ -1156,9 +1156,10 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	}
 
 	// Create isolated library environment with primitives
+	// The library gets its own bindings but shares the TopLevelEnvironment for symbol interning
 	var libEnv *environment.EnvironmentFrame
 	if LibraryEnvFactory != nil {
-		libEnv, err = LibraryEnvFactory(ctctx.ctx)
+		libEnv, err = LibraryEnvFactory(ctctx.ctx, p.env)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "define-library: could not create library environment")
 		}
@@ -1168,10 +1169,6 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		// Fallback for tests that don't set up the factory
 		libEnv = environment.NewTopLevelEnvironmentFrame()
 	}
-
-	// Share syntax interning maps with the caller environment for consistent
-	// syntax object handling. Symbol interning is handled globally.
-	libEnv.ShareSyntaxInternsFrom(p.env)
 
 	lib := NewCompiledLibrary(libName, libEnv)
 

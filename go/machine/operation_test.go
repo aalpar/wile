@@ -202,9 +202,9 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationMakeClosure(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				genv := environment.NewTopLevelGlobalEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironmentFrame()
 				lenv := environment.NewLocalEnvironment(0)
-				env := environment.NewEnvironmentFrame(lenv, genv)
+				env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				tpl := NewNativeTemplate(0, 0, false)
 				mc.evals.PushAll([]values.Value{tpl, env})
 			},
@@ -227,10 +227,10 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationSaveContinuationOffsetImmediate(1),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				genv := environment.NewTopLevelGlobalEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironmentFrame()
 				lenv := environment.NewLocalEnvironment(0)
 				tpl := NewNativeTemplate(0, 0, false)
-				mc.env = environment.NewEnvironmentFrame(lenv, genv)
+				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				mc.template = tpl
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
@@ -244,12 +244,11 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationRestoreContinuation(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				genv := environment.NewTopLevelGlobalEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironmentFrame()
 				lenv := environment.NewLocalEnvironment(0)
-				mc.env = environment.NewEnvironmentFrame(lenv, genv)
+				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				mc.template = NewNativeTemplate(0, 0, false)
 				mc.SaveContinuation(1)
-				genv = environment.NewTopLevelGlobalEnvironmentFrame()
 				lenv = environment.NewLocalEnvironment(0)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, mc.env)
 			},
@@ -265,9 +264,9 @@ func TestOperation(t *testing.T) {
 			if tc.evals == nil {
 				tc.evals = NewStack()
 			}
-			genv := environment.NewTopLevelGlobalEnvironmentFrame()
+			topEnv := environment.NewTopLevelEnvironmentFrame()
 			lenv := environment.NewLocalEnvironment(0)
-			env := environment.NewEnvironmentFrame(lenv, genv)
+			env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
 			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 			mc.evals = tc.evals

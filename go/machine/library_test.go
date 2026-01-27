@@ -299,7 +299,7 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
 	// Set up the factory for creating library environments
-	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
+	machine.LibraryEnvFactory = schemertime.NewLibraryEnvironmentFrame
 
 	// Create the top-level environment
 	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
@@ -693,7 +693,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	`
 
 	// Set up environment with library registry
-	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
+	machine.LibraryEnvFactory = schemertime.NewLibraryEnvironmentFrame
 	defer func() { machine.LibraryEnvFactory = nil }()
 	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)

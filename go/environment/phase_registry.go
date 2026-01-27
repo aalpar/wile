@@ -41,26 +41,7 @@ type PhaseRegistry struct {
 	// topLevelEnv is the owning TopLevelEnvironment (nil for legacy environments)
 	topLevelEnv *TopLevelEnvironment
 	// topLevelEnvFrm is the runtime (phase 0) environment frame
-	// For legacy environments, this is the old-style top-level frame
 	topLevelEnvFrm *EnvironmentFrame
-	// topLevel is kept for backward compatibility
-	// Deprecated: Use topLevelEnvFrm instead
-	topLevel *EnvironmentFrame
-}
-
-// NewPhaseRegistry creates a new phase registry owned by the given TopLevel.
-// The TopLevel environment is automatically registered at phase 0.
-// Deprecated: Use NewTopLevelEnvironment() which creates the registry internally.
-func NewPhaseRegistry(topLevel *EnvironmentFrame) *PhaseRegistry {
-	q := &PhaseRegistry{
-		envs:           make(map[int]*EnvironmentFrame),
-		topLevel:       topLevel,
-		topLevelEnvFrm: topLevel,
-		topLevelEnv:    topLevel.topLevel,
-	}
-	// TopLevel is phase 0 (runtime)
-	q.envs[PhaseRuntime] = topLevel
-	return q
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
@@ -101,8 +82,7 @@ func (r *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 // Must be called with write lock held.
 func (r *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
-	// Symbol interning is handled via TopLevelEnvironment when available.
-	global := NewGlobalEnvironmentFrame(nil)
+	global := NewGlobalEnvironmentFrame()
 	global.topLevel = r.topLevelEnv
 
 	q := &EnvironmentFrame{
@@ -127,12 +107,6 @@ func (r *PhaseRegistry) Phases() []int {
 		result = append(result, phase)
 	}
 	return result
-}
-
-// TopLevel returns the TopLevel environment (phase 0).
-// Deprecated: Use TopLevelFrame() for the frame or TopLevelEnv() for the TopLevelEnvironment.
-func (r *PhaseRegistry) TopLevel() *EnvironmentFrame {
-	return r.topLevelEnvFrm
 }
 
 // TopLevelFrame returns the runtime (phase 0) environment frame.

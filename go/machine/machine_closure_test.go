@@ -25,11 +25,11 @@ import (
 )
 
 func TestMachineClosure_Copy(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(2)
 	lenv.Bindings()[0].SetValue(values.NewInteger(42))
 	lenv.Bindings()[1].SetValue(values.NewInteger(100))
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -44,8 +44,7 @@ func TestMachineClosure_Copy(t *testing.T) {
 }
 
 func TestMachineClosure_IsVoid(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -56,8 +55,7 @@ func TestMachineClosure_IsVoid(t *testing.T) {
 }
 
 func TestMachineClosure_SchemeString(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -65,8 +63,7 @@ func TestMachineClosure_SchemeString(t *testing.T) {
 }
 
 func TestMachineClosure_EqualTo(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls1 := NewClosureWithTemplate(tpl, env)
@@ -84,7 +81,7 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	qt.Assert(t, cls1.EqualTo(cls4), qt.IsFalse)
 
 	// Different environment
-	env2 := environment.NewEnvironmentFrame(nil, genv)
+	env2 := environment.NewTopLevelEnvironmentFrame()
 	cls5 := NewClosureWithTemplate(tpl, env2)
 	qt.Assert(t, cls1.EqualTo(cls5), qt.IsFalse)
 

@@ -31,7 +31,7 @@ import (
 type dummyExpandTimeCallContext struct{}
 
 func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, nil)
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("foo", nil)
 	result, err := cont.ExpandSymbol(NewExpandTimeCallContext(), sym)
@@ -44,7 +44,7 @@ func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 }
 
 func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, nil)
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewExpanderTimeContinuation(env)
 	num := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 	result, err := cont.ExpandSelfEvaluating(NewExpandTimeCallContext(), num)
@@ -57,7 +57,7 @@ func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 }
 
 func TestExpandExpression_Symbol(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, nil)
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("bar", nil)
 	cctx := NewExpandTimeCallContext()
@@ -74,8 +74,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// Test that macro expansion works with a dummy transformer.
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
-	env := environment.NewEnvironmentFrame(nil,
-		environment.NewGlobalEnvironmentFrame(nil))
+	env := environment.NewTopLevelEnvironmentFrame()
 	gi, ok := env.CreateGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
@@ -128,7 +127,7 @@ func TestExpandExpression_List(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil))
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 
@@ -168,7 +167,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
-	env := environment.NewEnvironmentFrame(nil, environment.NewGlobalEnvironmentFrame(nil))
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 

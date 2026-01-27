@@ -70,8 +70,7 @@ func TestOperationBuildSyntaxList_EqualTo(t *testing.T) {
 func TestOperationBuildSyntaxList_Apply_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -89,8 +88,7 @@ func TestOperationBuildSyntaxList_Apply_Empty(t *testing.T) {
 func TestOperationBuildSyntaxList_Apply_WithSyntaxValues(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -114,8 +112,7 @@ func TestOperationBuildSyntaxList_Apply_WithSyntaxValues(t *testing.T) {
 func TestOperationBuildSyntaxList_Apply_WithValues(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 

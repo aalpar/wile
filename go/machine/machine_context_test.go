@@ -25,8 +25,7 @@ import (
 )
 
 func TestNewMachineContext(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	// Create a parent continuation to verify parent chain works
@@ -58,8 +57,7 @@ func TestNewMachineContext(t *testing.T) {
 }
 
 func TestNewMachineContext_NilParent(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// Create a continuation with nil parent
 	cont := NewMachineContinuation(nil, nil, env)
@@ -73,8 +71,7 @@ func TestNewMachineContext_NilParent(t *testing.T) {
 
 func TestNewMachineContext_RoundTrip(t *testing.T) {
 	// Test that saving and restoring a continuation preserves state
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -104,8 +101,7 @@ func TestNewMachineContext_RoundTrip(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_0(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	cont := NewMachineContinuation(nil, nil, env)
 	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.cont, qt.IsNil)
@@ -119,8 +115,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_1(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SaveContinuation(10)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
@@ -134,8 +129,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_2(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	bottom0 := mc.cont
 	mc.SaveContinuation(10)
@@ -159,8 +153,7 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Test SetValues and GetValues
@@ -181,8 +174,7 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 }
 
 func TestMachineContext_CurrentContinuation(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -198,9 +190,9 @@ func TestMachineContext_CurrentContinuation(t *testing.T) {
 }
 
 func TestMachineContext_NewSubContext(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -221,9 +213,9 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 }
 
 func TestMachineContext_Restore(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env1 := environment.NewEnvironmentFrame(nil, genv)
-	env2 := environment.NewEnvironmentFrame(nil, genv)
+	topEnv := environment.NewTopLevelEnvironmentFrame()
+	env1 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	env2 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	tpl1 := NewNativeTemplate(1, 0, false)
 	tpl2 := NewNativeTemplate(2, 0, false)
 
@@ -252,9 +244,9 @@ func TestMachineContext_Restore(t *testing.T) {
 }
 
 func TestMachineContext_Apply_FixedArity(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -278,9 +270,9 @@ func TestMachineContext_Apply_FixedArity(t *testing.T) {
 }
 
 func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -293,9 +285,9 @@ func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
 }
 
 func TestMachineContext_Apply_Variadic(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(3)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// Variadic with 2 required parameters plus rest
 	tpl := NewNativeTemplate(3, 0, true)
 
@@ -316,9 +308,9 @@ func TestMachineContext_Apply_Variadic(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(3)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(3, 0, true)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -331,22 +323,22 @@ func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 
 	// Create two clauses with different arities
 	lenv1 := environment.NewLocalEnvironment(1)
-	env1 := environment.NewEnvironmentFrame(lenv1, genv)
+	env1 := environment.NewEnvironmentFrameWithParent(lenv1, topEnv)
 	tpl1 := NewNativeTemplate(1, 0, false)
 	cls1 := NewClosureWithTemplate(tpl1, env1)
 
 	lenv2 := environment.NewLocalEnvironment(2)
-	env2 := environment.NewEnvironmentFrame(lenv2, genv)
+	env2 := environment.NewEnvironmentFrameWithParent(lenv2, topEnv)
 	tpl2 := NewNativeTemplate(2, 0, false)
 	cls2 := NewClosureWithTemplate(tpl2, env2)
 
 	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
 
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Apply with 1 arg - should use cls1
@@ -364,10 +356,10 @@ func TestMachineContext_ApplyCaseLambda(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 
 	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 	cls := NewClosureWithTemplate(tpl, env)
 
@@ -391,9 +383,9 @@ func TestErrContinuationEscape_Error(t *testing.T) {
 }
 
 func TestNewMachineContextFromMachineClosure(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -406,8 +398,7 @@ func TestNewMachineContextFromMachineClosure(t *testing.T) {
 }
 
 func TestMachineContext_Error(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
@@ -423,8 +414,7 @@ func TestMachineContext_Error(t *testing.T) {
 }
 
 func TestMachineContext_Error_NoSource(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	// No template means no source
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
@@ -437,8 +427,7 @@ func TestMachineContext_Error_NoSource(t *testing.T) {
 }
 
 func TestMachineContext_WrapError(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -452,8 +441,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 }
 
 func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))

@@ -23,9 +23,9 @@ import (
 )
 
 func TestNewEnvironmentFrame(t *testing.T) {
-	q := NewEnvironmentFrame(nil, nil)
+	q := NewTopLevelEnvironmentFrame()
 	qt.Assert(t, q, qt.Not(qt.IsNil))
-	qt.Assert(t, q.GlobalEnvironment(), qt.IsNil)
+	qt.Assert(t, q.GlobalEnvironment(), qt.IsNotNil)
 	qt.Assert(t, q.LocalEnvironment(), qt.IsNil)
 }
 

@@ -121,6 +121,69 @@ func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.Environm
 	return env, nil
 }
 
+// NewLibraryEnvironmentFrame creates a new environment for a library that shares
+// the TopLevelEnvironment with the caller. This ensures symbol identity is preserved
+// across library boundaries per R7RS §6.5: (eq? 'foo (string->symbol "foo")) must be #t.
+//
+// The library gets its own:
+//   - GlobalEnvironmentFrame for bindings (isolates library definitions)
+//   - PhaseRegistry for expand/compile phases
+//
+// But shares with caller:
+//   - TopLevelEnvironment (symbol and syntax interning)
+//   - LibraryRegistry (for nested imports)
+func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+	// Get caller's TopLevelEnvironment
+	callerTopLevel := callerEnv.TopLevelEnv()
+	if callerTopLevel == nil {
+		return nil, values.NewForeignErrorf("caller environment has no TopLevelEnvironment")
+	}
+
+	// Create a new environment that shares the TopLevelEnvironment
+	libEnv := callerTopLevel.NewChildRuntime()
+
+	// Create registry with core primitives
+	reg := registry.NewRegistry()
+	err := core.AddToRegistry(reg)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error adding core to registry")
+	}
+
+	// Add all extensions
+	for _, ext := range allExtensions {
+		err := ext.AddToRegistry(reg)
+		if err != nil {
+			return nil, values.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
+		}
+	}
+
+	// Apply registry to the library environment
+	err = reg.Apply(ctx, libEnv)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error applying registry to library environment")
+	}
+
+	// Register syntax compilers in the compile environment
+	err = machine.RegisterSyntaxCompilers(libEnv)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error registering syntax compilers")
+	}
+
+	// Register primitive expanders in the expand environment
+	err = machine.RegisterPrimitiveExpanders(libEnv)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error registering primitive expanders")
+	}
+
+	// Load bootstrap macros
+	err = loadBootstrapMacros(ctx, libEnv, reg.MacroSources())
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "error loading bootstrap macros")
+	}
+
+	return libEnv, nil
+}
+
 // loadBootstrapMacros parses and executes the bootstrap macro definitions.
 // This loads the derived expression forms (and, or, let, let*, letrec, cond, when, unless)
 // from the registry's macro sources.

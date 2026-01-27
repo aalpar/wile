@@ -44,7 +44,7 @@ func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
 	// Set up the factory for creating library environments
-	machine.LibraryEnvFactory = schemertime.NewTopLevelEnvironmentFrameTiny
+	machine.LibraryEnvFactory = schemertime.NewLibraryEnvironmentFrame
 
 	// Create the top-level environment
 	env, err := schemertime.NewTopLevelEnvironmentFrameTiny(context.TODO())

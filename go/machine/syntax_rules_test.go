@@ -39,9 +39,7 @@ func parseSyntax(t *testing.T, env *environment.EnvironmentFrame, input string) 
 
 // Helper function to create a test environment
 func createTestEnv() *environment.EnvironmentFrame {
-	// Create a minimal environment
-	globalEnv := environment.NewTopLevelGlobalEnvironmentFrame()
-	return environment.NewEnvironmentFrame(nil, globalEnv)
+	return environment.NewTopLevelEnvironmentFrame()
 }
 
 // Helper function to extract the args from a define-syntax form

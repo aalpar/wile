@@ -182,6 +182,39 @@ func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 	p.libraryRegistry = registry
 }
 
+// NewChildRuntime creates a new runtime environment frame that shares this
+// TopLevelEnvironment for symbol and syntax interning, but has its own
+// GlobalEnvironmentFrame and PhaseRegistry for isolated bindings.
+//
+// This is used for library environments that need to:
+//   - Share symbol interning (for R7RS §6.5 symbol identity)
+//   - Have isolated bindings (library definitions don't leak)
+//   - Have their own phase hierarchy
+func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
+	// Create a new global frame sharing this TopLevelEnvironment
+	global := newGlobalEnvironmentFrameWithTopLevel(p)
+
+	// Create the runtime frame for the child
+	runtime := &EnvironmentFrame{
+		parent:     nil,
+		local:      nil,
+		global:     global,
+		phaseLevel: PhaseRuntime,
+		topLevel:   p, // Share the TopLevelEnvironment
+	}
+
+	// Create a new phase registry for the child
+	childPhases := &PhaseRegistry{
+		envs:           make(map[int]*EnvironmentFrame),
+		topLevelEnv:    p, // Share the TopLevelEnvironment
+		topLevelEnvFrm: runtime,
+	}
+	childPhases.envs[PhaseRuntime] = runtime
+	runtime.phases = childPhases
+
+	return runtime
+}
+
 // SymbolInternCount returns the number of interned symbols.
 // This is intended for testing and debugging purposes.
 func (p *TopLevelEnvironment) SymbolInternCount() int {
