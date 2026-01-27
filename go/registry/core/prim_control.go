@@ -326,7 +326,8 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 			// dynamic-wind frames are on sub's winding stack.
 			sourceStack := sub.WindingStack()
 			// Restore the continuation with proper winding handling
-			if restoreErr := mc.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack); restoreErr != nil {
+			restoreErr := mc.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack)
+			if restoreErr != nil {
 				return restoreErr
 			}
 			mc.SetValue(escapeErr.Value)

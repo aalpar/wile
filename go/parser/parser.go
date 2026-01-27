@@ -1369,7 +1369,8 @@ func parseFloatOrInfnan(s string) (float64, error) {
 	}
 
 	// Check for rational number (contains '/')
-	if slashIdx := strings.Index(s, "/"); slashIdx != -1 {
+	slashIdx := strings.Index(s, "/")
+	if slashIdx != -1 {
 		numStr := s[:slashIdx]
 		denStr := s[slashIdx+1:]
 

@@ -520,7 +520,8 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 					// If it's a define-syntax, compile it
 					if pair, ok := expanded.(*syntax.SyntaxPair); ok {
-						if car := pair.Car(); car != nil {
+						car := pair.Car()
+						if car != nil {
 							if sym, ok := car.(*syntax.SyntaxSymbol); ok && sym.Sym.Key == "define-syntax" {
 								ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
 								ctctx := machine.NewCompileTimeCallContext(false, false, env)

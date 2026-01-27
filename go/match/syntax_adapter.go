@@ -912,7 +912,8 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 				isActuallyNil := globalBinding == nil
 				if !isActuallyNil {
 					// Use reflection to check if the underlying value is nil
-					if rv := reflect.ValueOf(globalBinding); !rv.IsValid() || rv.IsNil() {
+					rv := reflect.ValueOf(globalBinding)
+					if !rv.IsValid() || rv.IsNil() {
 						isActuallyNil = true
 					}
 				}

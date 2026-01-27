@@ -259,7 +259,8 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 // runREPL runs an interactive Read-Eval-Print Loop using the repl package
 func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 	r := repl.New(env)
-	if err := r.Run(ctx); err != nil {
+	err := r.Run(ctx)
+	if err != nil {
 		Failf(err, "REPL error")
 	}
 }

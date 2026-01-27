@@ -111,34 +111,36 @@ func (p *Matcher) Match(target *values.Pair) error {
 		code := p.codes[i]
 		switch cd := code.(type) {
 		case ByteCodeCompareCar:
-			if !values.EqualTo(cd.Value, p.valueStack[lvs-1].pr[0]) {
+			vsv := p.valueStack[lvs-1].pr
+			if !values.EqualTo(cd.Value, vsv.Car()) {
 				return ErrNotAMatch
 			}
 		case ByteCodeCompareCdr:
 			// Compare the CDR with a literal value (for improper list patterns with literal tail)
-			if !values.EqualTo(cd.Value, p.valueStack[lvs-1].pr[1]) {
+			vsv := p.valueStack[lvs-1].pr
+			if !values.EqualTo(cd.Value, vsv.Cdr()) {
 				return ErrNotAMatch
 			}
 		case ByteCodeCaptureCar:
 			lcs := len(p.captureStack)
-			sv := p.valueStack[lvs-1].pr[0]
+			vsv := p.valueStack[lvs-1].pr
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
-			if ok && !values.EqualTo(sv, bv) {
+			if ok && !values.EqualTo(vsv.Car(), bv) {
 				return ErrNotAMatch
 			}
 			p.captureStack[lcs-1].bindings[cd.Binding] = p.valueStack[lvs-1].pr[0]
 		case ByteCodeCaptureCdr:
 			// Capture the CDR of the current pair (for improper list patterns like (_ a . rest))
 			lcs := len(p.captureStack)
-			sv := p.valueStack[lvs-1].pr[1]
+			vsv := p.valueStack[lvs-1].pr
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
-			if ok && !values.EqualTo(sv, bv) {
+			if ok && !values.EqualTo(vsv.Cdr(), bv) {
 				return ErrNotAMatch
 			}
-			p.captureStack[lcs-1].bindings[cd.Binding] = sv
+			p.captureStack[lcs-1].bindings[cd.Binding] = vsv.Cdr()
 			// After capturing CDR, update position to indicate the entire rest is consumed.
 			// Set the current pair's cdr to empty so Done doesn't think there are extra elements.
-			p.valueStack[lvs-1].pr = values.NewCons(p.valueStack[lvs-1].pr[0], values.EmptyList)
+			p.valueStack[lvs-1].pr = values.NewCons(vsv.Car(), values.EmptyList)
 		case ByteCodeJump:
 			if len(p.valueStack) == 0 {
 				return nil
@@ -154,7 +156,8 @@ func (p *Matcher) Match(target *values.Pair) error {
 				// There are more elements in the input than in the pattern
 				// Check if we're in a loop context (ellipsis) - in that case
 				// cdr being non-empty is expected
-				if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsVoid(cdrPair) {
+				cdrPair, ok := cdr.(*values.Pair)
+				if ok && !values.IsVoid(cdrPair) {
 					// More elements exist - this is only OK in a loop context
 					if i+1 >= len(p.codes) {
 						return ErrNotAMatch
@@ -178,13 +181,14 @@ func (p *Matcher) Match(target *values.Pair) error {
 			if len(p.valueStack) == 0 {
 				return nil
 			}
-			cdr = p.valueStack[lvs-1].pr[1]
+			cdr = p.valueStack[lvs-1].pr.Cdr()
 
 			// Check if there are more elements at the parent level
 			// After popping, if cdr is not empty, there are more siblings to match
 			// If the next instruction is ByteCodeDone (no more pattern elements),
 			// then extra siblings means the pattern doesn't match
-			if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
+			cdrPair, ok := cdr.(*values.Pair)
+			if ok && !values.IsEmptyList(cdrPair) {
 				if i+1 < len(p.codes) {
 					_, ok = p.codes[i+1].(ByteCodeDone)
 					if ok {
@@ -268,7 +272,8 @@ func (p *Matcher) Match(target *values.Pair) error {
 			}
 			// Move to next element in the list
 			cdr := p.valueStack[lvs-1].pr[1]
-			if cdrPair, ok := cdr.(*values.Pair); ok {
+			cdrPair, ok := cdr.(*values.Pair)
+			if ok {
 				p.valueStack[lvs-1] = valuePathEntry{pr: cdrPair}
 			} else if values.IsEmptyList(cdr) || cdr == nil {
 				p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
@@ -305,12 +310,14 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 	switch t := template.(type) {
 	case *values.Symbol:
 		// Check if it's a pattern variable
-		if val, ok := ctx.bindings[t.Key]; ok {
+		val, ok := ctx.bindings[t.Key]
+		if ok {
 			return val, nil
 		}
 		// Check if it's an ellipsis variable (from outer repetition)
 		if ellipsisVars != nil {
-			if _, ok := ellipsisVars[t.Key]; ok {
+			_, ok := ellipsisVars[t.Key]
+			if ok {
 				// This variable should be expanded in the context of ellipsis
 				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
@@ -323,9 +330,11 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 			// Check for ellipsis escape form: (<ellipsis> <template>)
 			// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical
 			// to <template>, except that ellipses within the template have no special meaning.
-			if sym, ok := t[0].(*values.Symbol); ok && sym.Key == p.ellipsisID {
+			sym, ok := t[0].(*values.Symbol)
+			if ok && sym.Key == p.ellipsisID {
 				cdr := t[1]
-				if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
+				cdrPair, ok := cdr.(*values.Pair)
+				if ok && !values.IsEmptyList(cdrPair) {
 					// This is an escape form - return the inner template literally
 					// by expanding it with a matcher that uses "" as ellipsis (no ellipsis matching)
 					return p.expandEscapedTemplate(cdrPair[0], ctx, ellipsisVars)
@@ -334,8 +343,10 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 
 			// Check for ellipsis pattern (something <ellipsis>)
 			cdr := t[1]
-			if cdrPair, ok := cdr.(*values.Pair); ok && !values.IsEmptyList(cdrPair) {
-				if sym, ok := cdrPair[0].(*values.Symbol); ok && sym.Key == p.ellipsisID {
+			cdrPair, ok := cdr.(*values.Pair)
+			if ok && !values.IsEmptyList(cdrPair) {
+				sym, ok := cdrPair[0].(*values.Symbol)
+				if ok && sym.Key == p.ellipsisID {
 					// Found ellipsis - need to repeat the car for each capture
 					return p.expandEllipsis(t[0], cdrPair[1], ctx, ellipsisVars)
 				}

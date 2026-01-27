@@ -1148,11 +1148,13 @@ func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
 	switch p := port.(type) {
 	case *values.CharacterOutputPort:
 		if syncer, ok := p.Value.(interface{ Sync() error }); ok {
-			if err := syncer.Sync(); err != nil {
+			err := syncer.Sync()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		} else if flusher, ok := p.Value.(interface{ Flush() error }); ok {
-			if err := flusher.Flush(); err != nil {
+			err := flusher.Flush()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		}
@@ -1163,11 +1165,13 @@ func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
 		// Bytevector output ports don't need flushing
 	case *values.BinaryOutputPort:
 		if syncer, ok := p.Value.(interface{ Sync() error }); ok {
-			if err := syncer.Sync(); err != nil {
+			err := syncer.Sync()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		} else if flusher, ok := p.Value.(interface{ Flush() error }); ok {
-			if err := flusher.Flush(); err != nil {
+			err := flusher.Flush()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		}

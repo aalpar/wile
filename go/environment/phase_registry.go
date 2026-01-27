@@ -68,7 +68,8 @@ func (r *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 	defer r.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if env := r.envs[phase]; env != nil {
+	env = r.envs[phase]
+	if env != nil {
 		return env
 	}
 

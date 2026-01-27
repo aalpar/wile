@@ -577,7 +577,8 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	p.windingStack = sourceStack[:commonDepth]
 
 	// Rewind: run before thunks for frames being entered (to target)
-	if err := p.RewindTo(targetStack, commonDepth); err != nil {
+	err := p.RewindTo(targetStack, commonDepth)
+	if err != nil {
 		return err
 	}
 
@@ -618,7 +619,8 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 		if err == nil || errors.Is(err, ErrMachineHalt) {
 			// Unwind any remaining frames (call after thunks)
 			if len(p.windingStack) > 0 {
-				if unwindErr := p.UnwindTo(0); unwindErr != nil {
+				unwindErr := p.UnwindTo(0)
+				if unwindErr != nil {
 					return unwindErr
 				}
 			}
@@ -644,7 +646,8 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 
 			// Use the current winding stack as the source for unwinding.
 			// Restore with proper winding handling
-			if restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, p.windingStack, escapeErr.WindingStack); restoreErr != nil {
+			restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, p.windingStack, escapeErr.WindingStack)
+			if restoreErr != nil {
 				return restoreErr
 			}
 			p.SetValue(escapeErr.Value)

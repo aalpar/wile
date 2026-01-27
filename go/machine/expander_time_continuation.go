@@ -1065,7 +1065,8 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	// Pre-scan: Register placeholder bindings for all define/define-syntax forms
 	// This enables forward hygienic references within the body (R7RS letrec* semantics)
 	for _, form := range forms {
-		if nameSym := extractDefineName(form); nameSym != nil {
+		nameSym := extractDefineName(form)
+		if nameSym != nil {
 			name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
 			scopes := nameSym.Scopes()
 			// Create placeholder binding in current environment (not expand phase)
@@ -1088,7 +1089,8 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isDefineSyntaxSyntax(expanded) {
 			pair := expanded.(*syntax.SyntaxPair)
-			if err := compileDefineSyntaxFromSyntax(p.env, pair); err != nil {
+			err = compileDefineSyntaxFromSyntax(p.env, pair)
+			if err != nil {
 				return nil, err
 			}
 		}
