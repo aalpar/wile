@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Go Interop Primitives for Scheme
-// Exposes Go's concurrency primitives: channels, WaitGroup, RWMutex, Once, Atomic
+// Exposes Go's concurrency primitives: channels, WaitGroup, RWMutex, Once, AtomicBox
 
 package gointerop
 
@@ -511,24 +511,24 @@ func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // =============================================================================
-// Atomic Primitives
+// AtomicBox Primitives
 // =============================================================================
 
-// PrimMakeAtomic creates a new Atomic value
+// PrimMakeAtomic creates a new AtomicBox value
 // (make-atomic initial) -> atomic
 func PrimMakeAtomic(_ context.Context, mc *machine.MachineContext) error {
 	initial := mc.Arg(0)
 
-	a := values.NewAtomic(initial)
+	a := values.NewAtomicBox(initial)
 	mc.SetValue(a)
 	return nil
 }
 
-// PrimAtomicQ tests if an object is an Atomic
+// PrimAtomicQ tests if an object is an AtomicBox
 // (atomic? obj) -> boolean
 func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	_, ok := o.(*values.Atomic)
+	_, ok := o.(*values.AtomicBox)
 	if ok {
 		mc.SetValue(values.TrueValue)
 	} else {
@@ -541,7 +541,7 @@ func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 // (atomic-load a) -> value
 func PrimAtomicLoad(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	a, ok := o.(*values.Atomic)
+	a, ok := o.(*values.AtomicBox)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-load: expected atomic, got %T", o)
 	}
@@ -561,7 +561,7 @@ func PrimAtomicStore(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	val := mc.Arg(1)
 
-	a, ok := o.(*values.Atomic)
+	a, ok := o.(*values.AtomicBox)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-store!: expected atomic, got %T", o)
 	}
@@ -577,7 +577,7 @@ func PrimAtomicSwap(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	newVal := mc.Arg(1)
 
-	a, ok := o.(*values.Atomic)
+	a, ok := o.(*values.AtomicBox)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-swap!: expected atomic, got %T", o)
 	}
@@ -598,7 +598,7 @@ func PrimAtomicCompareAndSwap(_ context.Context, mc *machine.MachineContext) err
 	oldVal := mc.Arg(1)
 	newVal := mc.Arg(2)
 
-	a, ok := o.(*values.Atomic)
+	a, ok := o.(*values.AtomicBox)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-compare-and-swap!: expected atomic, got %T", o)
 	}

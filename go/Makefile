@@ -33,7 +33,9 @@ test:
 
 .PHONY: cover
 cover:
-	$(GO_TEST) -cover -v ./...
+	@mkdir -p build
+	$(GO_TEST) -coverprofile=build/coverage.out ./...
+	$(GO) tool cover -func=build/coverage.out
 
 .PHONY: lint
 lint:

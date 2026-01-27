@@ -319,7 +319,7 @@ func TestOnceDoneQError(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Atomic Primitives Tests
+// AtomicBox Primitives Tests
 // ----------------------------------------------------------------------------
 
 func TestAtomicQ(t *testing.T) {
