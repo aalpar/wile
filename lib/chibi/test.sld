@@ -41,7 +41,7 @@
       (make-parameter #f))
 
     (define current-test-epsilon
-      (make-parameter 0.0000000001))
+      (make-parameter 1e-5))
 
     (define current-test-comparator
       (make-parameter equal?))
@@ -93,6 +93,7 @@
       (newline))
 
     ;; Approximate equality for floating point - exported for macro use
+    ;; Uses relative difference like the original chibi test library.
     ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
       (cond
@@ -108,9 +109,17 @@
          ;; One is infinite/NaN and other is not
          ((or (infinite? a) (infinite? b) (nan? a) (nan? b))
           #f)
-         ;; Normal numeric comparison
+         ;; Both zero (handles -0.0 vs +0.0)
+         ((and (zero? a) (zero? b))
+          #t)
+         ;; One is zero - use absolute difference
+         ((or (zero? a) (zero? b))
+          (< (abs (- a b)) epsilon))
+         ;; Normal numeric comparison using relative difference
+         ;; Compare against the larger absolute value for stability
          (else
-          (< (abs (- a b)) epsilon))))
+          (let ((max-abs (max (abs a) (abs b))))
+            (< (abs (/ (- a b) max-abs)) epsilon)))))
        ((and (pair? a) (pair? b))
         (and (%approx-equal? (car a) (car b) epsilon)
              (%approx-equal? (cdr a) (cdr b) epsilon)))
