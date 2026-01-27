@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"wile/environment"
@@ -31,9 +32,11 @@ var (
 // ErrContinuationEscape is used to signal that a continuation was invoked from within
 // a sub-context. This allows the escape to propagate up through nested foreign function calls.
 type ErrContinuationEscape struct {
-	Continuation *MachineContinuation
+	Continuation *MachineContinuation // Where to resume (inside sub-context for call/cc in dynamic-wind)
 	Value        values.Value
-	Handled      bool // Set to true after the escape has been handled and mc has been restored
+	Handled      bool         // Set to true after the escape has been handled and mc has been restored
+	WindingStack WindingStack // Target winding stack for proper dynamic-wind handling
+	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
 }
 
 func (e *ErrContinuationEscape) Error() string {
@@ -54,6 +57,10 @@ type MachineContext struct {
 	expanderCtx      *ExpanderContext  // set during macro transformer execution for syntax-local-* access
 	exceptionHandler *ExceptionHandler // current exception handler chain for R7RS exceptions
 	debugger         *Debugger         // optional debugger for breakpoints and stepping
+	windingStack     WindingStack      // R7RS dynamic-wind extent tracking
+	parentMC         *MachineContext   // parent context for sub-contexts, enables call/cc escape tracking
+	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
+	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -78,6 +85,43 @@ func NewMachineContextFromMachineClosure(ctx context.Context, cls *MachineClosur
 
 func (p *MachineContext) Parent() *MachineContinuation {
 	return p.cont
+}
+
+// ParentMC returns the parent machine context (for sub-contexts), or nil for top-level contexts.
+func (p *MachineContext) ParentMC() *MachineContext {
+	return p.parentMC
+}
+
+// FindEscapeContinuation walks up the parent context chain to find a continuation
+// that can be used for escaping from a sub-context. This is used by call/cc to
+// capture proper continuations when invoked inside sub-contexts (like dynamic-wind thunks).
+//
+// Returns the first non-nil continuation found by walking up the parentMC chain,
+// or nil if no continuation is found (top-level reached).
+func (p *MachineContext) FindEscapeContinuation() *MachineContinuation {
+	// First check our own continuation
+	if p.cont != nil {
+		return p.cont
+	}
+	// Walk up the parent context chain
+	for mc := p.parentMC; mc != nil; mc = mc.parentMC {
+		if mc.cont != nil {
+			return mc.cont
+		}
+	}
+	return nil
+}
+
+// EscapeCont returns the escape continuation for this context.
+// This is set by foreign functions (like dynamic-wind) that need call/cc
+// inside their sub-contexts to know where to continue after completion.
+func (p *MachineContext) EscapeCont() *MachineContinuation {
+	return p.escapeCont
+}
+
+// SetEscapeCont sets the escape continuation for this context.
+func (p *MachineContext) SetEscapeCont(cont *MachineContinuation) {
+	p.escapeCont = cont
 }
 
 func (p *MachineContext) Template() *NativeTemplate {
@@ -258,6 +302,17 @@ func (p *MachineContext) Run() error {
 // NewSubContext creates a new MachineContext for running sub-calls (e.g., apply, map, for-each).
 // The sub-context shares the global environment but has a fresh call stack, eval stack, and value register.
 // This allows foreign functions to call Scheme closures without corrupting the parent context's state.
+//
+// Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
+// continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
+// chain (nil). For continuations to escape back to the outer context, the escape error propagates
+// up through the call stack and is handled by RunWithEscapeHandling at the top level.
+//
+// The parentMC field tracks the parent context, allowing call/cc to find an outer continuation
+// for proper R7RS continuation semantics when captured inside sub-contexts.
+//
+// The escapeCont field is inherited, allowing nested sub-contexts to know where execution
+// should continue after their completion (set by dynamic-wind and similar constructs).
 func (p *MachineContext) NewSubContext() *MachineContext {
 	return &MachineContext{
 		ctx:         p.ctx,
@@ -266,8 +321,10 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 		env:         p.env.TopLevel(), // share global environment chain
 		value:       nil,
 		evals:       NewStack(),
-		cont:        nil, // fresh call stack
-		expanderCtx: nil, // sub-contexts don't inherit expander context by default
+		cont:        nil,         // fresh call stack - isolated from parent
+		expanderCtx: nil,         // sub-contexts don't inherit expander context by default
+		parentMC:    p,           // track parent for call/cc continuation capture
+		escapeCont:  p.escapeCont, // inherit escape continuation for nested call/cc
 	}
 }
 
@@ -391,4 +448,169 @@ func (p *MachineContext) WrapError(err error, msg string) *SchemeError {
 		msg = err.Error()
 	}
 	return NewSchemeErrorWithCause(msg, source, trace.String(), err)
+}
+
+// WindingStack returns the current winding stack.
+func (p *MachineContext) WindingStack() WindingStack {
+	return p.windingStack
+}
+
+// SetWindingStack sets the winding stack (used by sub-contexts).
+func (p *MachineContext) SetWindingStack(stack WindingStack) {
+	p.windingStack = stack
+}
+
+// PushWindingFrame adds a frame to the winding stack.
+func (p *MachineContext) PushWindingFrame(frame *DynamicWindFrame) {
+	p.windingStack.Push(frame)
+}
+
+// PopWindingFrame removes the innermost frame from the winding stack.
+func (p *MachineContext) PopWindingFrame() *DynamicWindFrame {
+	return p.windingStack.Pop()
+}
+
+// UnwindTo runs after thunks from innermost to the common ancestor.
+// Returns error if any after thunk fails.
+func (p *MachineContext) UnwindTo(commonDepth int) error {
+	// Run after thunks from innermost to outermost (reverse order)
+	for i := len(p.windingStack) - 1; i >= commonDepth; i-- {
+		frame := p.windingStack[i]
+		if frame.After != nil {
+			sub := p.NewSubContext()
+			sub.windingStack = p.windingStack[:i] // Set stack to this level
+			_, err := sub.Apply(frame.After)
+			if err != nil {
+				return err
+			}
+			err = sub.Run()
+			if err != nil && !errors.Is(err, ErrMachineHalt) {
+				// Propagate escapes and exceptions
+				return err
+			}
+		}
+	}
+	// Update current winding stack to common ancestor
+	p.windingStack = p.windingStack[:commonDepth]
+	return nil
+}
+
+// RewindTo runs before thunks from common ancestor to target depth.
+// Returns error if any before thunk fails.
+func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
+	// Run before thunks from outermost to innermost (forward order)
+	for i := commonDepth; i < len(target); i++ {
+		frame := target[i]
+		if frame.Before != nil {
+			sub := p.NewSubContext()
+			sub.windingStack = p.windingStack // Current stack at this point
+			_, err := sub.Apply(frame.Before)
+			if err != nil {
+				return err
+			}
+			err = sub.Run()
+			if err != nil && !errors.Is(err, ErrMachineHalt) {
+				return err
+			}
+		}
+		// Add this frame to current winding stack
+		p.windingStack = append(p.windingStack, frame)
+	}
+	return nil
+}
+
+// RestoreWithWinding restores a continuation with proper dynamic-wind handling.
+// It unwinds from the current dynamic extent, rewinds to the target extent,
+// then restores the machine state.
+//
+// If cont is nil (continuation captured in a sub-context), we still perform
+// the winding operations but don't restore machine state - the caller should
+// handle continued execution appropriately.
+func (p *MachineContext) RestoreWithWinding(cont *MachineContinuation, targetStack WindingStack) error {
+	// Find common ancestor
+	commonDepth := FindCommonWindingPrefix(p.windingStack, targetStack)
+
+	// Unwind: run after thunks for frames being exited
+	if err := p.UnwindTo(commonDepth); err != nil {
+		return err
+	}
+
+	// Rewind: run before thunks for frames being entered
+	if err := p.RewindTo(targetStack, commonDepth); err != nil {
+		return err
+	}
+
+	// Restore the machine state (if we have a valid continuation)
+	if cont != nil {
+		p.Restore(cont)
+	}
+	return nil
+}
+
+// RunWithEscapeHandling runs the VM loop, handling continuation escapes
+// that weren't caught by an enclosing call/cc. This is used at the top level
+// (REPL and file execution) to catch continuations invoked outside their
+// original dynamic extent.
+//
+// When a continuation captured inside a foreign function (like dynamic-wind's thunk)
+// is invoked from outside, the escape error propagates up. This method catches it
+// and restores the continuation with proper dynamic-wind handling.
+//
+// For continuations captured inside sub-contexts (like dynamic-wind thunks):
+//   - Continuation: the inner state (inside the thunk)
+//   - EscapeCont: the outer continuation (after the original sub-context would have completed)
+//
+// After the inner execution completes and unwinds, if there's a pending escape
+// continuation, execution continues from there.
+//
+// When execution completes (either normally or via ErrMachineHalt), any remaining
+// frames on the winding stack are unwound (after thunks are called).
+func (p *MachineContext) RunWithEscapeHandling() error {
+	for {
+		err := p.Run()
+
+		// Check for successful completion (nil or ErrMachineHalt)
+		if err == nil || errors.Is(err, ErrMachineHalt) {
+			// Unwind any remaining frames (call after thunks)
+			if len(p.windingStack) > 0 {
+				if unwindErr := p.UnwindTo(0); unwindErr != nil {
+					return unwindErr
+				}
+			}
+
+			// If there's a pending escape continuation (from a sub-context escape),
+			// restore to it and continue execution
+			if p.pendingEscape != nil {
+				escapeCont := p.pendingEscape
+				p.pendingEscape = nil
+				p.Restore(escapeCont)
+				continue
+			}
+
+			return nil
+		}
+
+		var escapeErr *ErrContinuationEscape
+		if errors.As(err, &escapeErr) && !escapeErr.Handled {
+			if escapeErr.Continuation == nil {
+				// Continuation was nil (truly truncated) - can't recover
+				return err
+			}
+			// Restore with proper winding handling
+			if restoreErr := p.RestoreWithWinding(escapeErr.Continuation, escapeErr.WindingStack); restoreErr != nil {
+				return restoreErr
+			}
+			p.SetValue(escapeErr.Value)
+
+			// If there's an escape continuation (for sub-context escapes), save it
+			// so we can restore to it after the inner execution completes
+			if escapeErr.EscapeCont != nil {
+				p.pendingEscape = escapeErr.EscapeCont
+			}
+
+			continue
+		}
+
+		return err
+	}
 }

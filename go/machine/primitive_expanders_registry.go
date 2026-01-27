@@ -65,6 +65,9 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"define", (*ExpanderTimeContinuation).expandDefineForm},
 		{"lambda", (*ExpanderTimeContinuation).expandLambdaForm},
 		{"case-lambda", (*ExpanderTimeContinuation).expandCaseLambdaForm},
+
+		// Import: loads libraries and makes bindings available during expansion
+		{"import", (*ExpanderTimeContinuation).expandImportForm},
 	}
 
 	return RegisterPhaseBindings(env, env.Expand, primitives,

@@ -786,14 +786,23 @@ func TestContinuationEscapeHandled(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
-// TestContinuationEscapeUnhandled tests OperationForeignFunctionCall with unhandled continuation escape
-func TestContinuationEscapeUnhandled(t *testing.T) {
+// TestContinuationEscapeUnhandledWithValidContinuation tests that unhandled continuation escapes with valid
+// continuations are properly handled by RunWithEscapeHandling at the top level.
+func TestContinuationEscapeUnhandledWithValidContinuation(t *testing.T) {
 	env := newFullRuntimeEnv(t)
 
-	// Create a ForeignFunction that returns an unhandled continuation escape
+	// Create a target continuation that immediately halts (empty template)
+	// This simulates returning from a call/cc where the escape value becomes the result
+	targetTpl := machine.NewNativeTemplate(0, 0, false)
+	// No operations - will halt immediately after restoration
+	targetCont := machine.NewMachineContinuation(nil, targetTpl, env)
+
+	// Create a ForeignFunction that returns an unhandled escape with a valid continuation
 	fn := func(ctx context.Context, mc *machine.MachineContext) error {
 		escape := &machine.ErrContinuationEscape{
-			Handled: false,
+			Handled:      false,
+			Continuation: targetCont,
+			Value:        values.NewInteger(42),
 		}
 		return escape
 	}
@@ -803,11 +812,39 @@ func TestContinuationEscapeUnhandled(t *testing.T) {
 	tpl.AppendOperations(op)
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(context.Background(), cont)
-	err := mc.Run()
-	// Should return the error since it's unhandled
+
+	// Use RunWithEscapeHandling to catch and handle the escape at top level
+	err := mc.RunWithEscapeHandling()
+	// No error expected - continuation was restored and machine halted normally
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+}
+
+// TestContinuationEscapeUnhandledNilContinuation tests that RunWithEscapeHandling returns an error
+// when encountering an unhandled continuation escape with nil continuation.
+// This represents a continuation that was truly truncated and cannot be restored.
+func TestContinuationEscapeUnhandledNilContinuation(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	// Create a ForeignFunction that returns an unhandled continuation escape with nil continuation
+	// This simulates a continuation captured inside a sub-context where the continuation chain is truncated
+	fn := func(ctx context.Context, mc *machine.MachineContext) error {
+		escape := &machine.ErrContinuationEscape{
+			Handled:      false,
+			Continuation: nil, // Truncated continuation from sub-context
+		}
+		return escape
+	}
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	op := machine.NewOperationForeignFunctionCall(fn)
+	tpl.AppendOperations(op)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
+	err := mc.RunWithEscapeHandling()
+	// Should return an error because nil continuation cannot be restored
 	qt.Assert(t, err, qt.IsNotNil)
-	_, ok := err.(*machine.ErrContinuationEscape)
-	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, err.Error(), qt.Contains, "continuation escape")
 }
 
 // TestForeignFunctionNilError tests OperationForeignFunctionCall with nil function

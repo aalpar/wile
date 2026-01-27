@@ -40,15 +40,16 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 	}
 	err := p.Function(ctx, mc)
 	if err != nil {
-		// Check if this is a handled continuation escape.
-		// When an escape is handled, the foreign function sets the Handled flag
-		// and restores mc to the target continuation state.
+		// Check if this is a continuation escape.
+		// Continuation escapes propagate up through foreign function calls until they reach
+		// the PrimCallCC that captured the continuation, which then handles the escape.
 		var escapeErr *ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
 			if escapeErr.Handled {
+				// Already handled by PrimCallCC - mc has been restored to target continuation
 				return mc, nil
 			}
-			// Unhandled continuation escape - propagate as-is
+			// Unhandled escape - propagate up so it can reach PrimCallCC
 			return nil, err
 		}
 

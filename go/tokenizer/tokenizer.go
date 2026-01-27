@@ -617,10 +617,9 @@ func (p *Tokenizer) readHexEscapeToken() {
 }
 
 // readEscapeSequence handles escape sequences within strings and extended tokens.
-// The contextChar parameter specifies the context-specific character that can be escaped
-// ('"' for strings, '|' for extended tokens).
-// Recognizes: \a, \b, \t, \n, \r, \\, \<contextChar>, \xNN; (hex escape), and line continuations.
-func (p *Tokenizer) readEscapeSequence(contextChar rune) {
+// R7RS §6.7 and §7.1.1: Both \" and \| are valid in strings and extended tokens.
+// Recognizes: \a, \b, \t, \n, \r, \\, \", \|, \xNN; (hex escape), and line continuations.
+func (p *Tokenizer) readEscapeSequence() {
 	if p.curr() == 'x' {
 		p.readHexEscapeToken()
 		return
@@ -641,8 +640,10 @@ func (p *Tokenizer) readEscapeSequence(contextChar rune) {
 		p.value += "\r"
 	case isBackSlash(p.curr()): // \\ (back slash)
 		p.value += "\\"
-	case p.curr() == contextChar:
-		p.value += string(contextChar)
+	case p.curr() == '"': // \" (double quote) - R7RS §6.7
+		p.value += "\""
+	case p.curr() == '|': // \| (vertical bar) - R7RS §6.7
+		p.value += "|"
 	default:
 		p.err = NewTokenizerError(MessageExpectingEscape, p.tokenStart, p.tokenEnd)
 		return
@@ -651,12 +652,12 @@ func (p *Tokenizer) readEscapeSequence(contextChar rune) {
 }
 
 func (p *Tokenizer) readIntraExtendedToken() {
-	p.readEscapeSequence('|')
+	p.readEscapeSequence()
 }
 
 // readIntraStringEscape handles escape sequences within strings.
 func (p *Tokenizer) readIntraStringEscape() {
-	p.readEscapeSequence('"')
+	p.readEscapeSequence()
 }
 
 // readString reads a string literal until the closing double-quote.

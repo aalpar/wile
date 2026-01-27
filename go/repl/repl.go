@@ -313,7 +313,7 @@ func (r *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate)
 	cont := machine.NewMachineContinuation(nil, tpl, r.env)
 	mc := machine.NewMachineContext(ctx, cont)
 	mc.SetDebugger(r.debugCtx.Debugger())
-	err := mc.Run()
+	err := mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
 	}

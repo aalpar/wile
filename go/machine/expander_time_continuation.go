@@ -801,6 +801,65 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 }
 
+// expandImportForm processes (import <import-set> ...) during expansion.
+// This loads libraries and makes their bindings (including macros) available
+// for subsequent forms. Without this, imported macros wouldn't be recognized
+// during expansion since imports were only processed during compilation.
+//
+// R7RS §5.2: Import declarations must be processed before expressions that
+// use the imported bindings. For macros, this means processing during expansion.
+func (p *ExpanderTimeContinuation) expandImportForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	// expr is the arguments after 'import': (<import-set> ...)
+	if syntax.IsSyntaxEmptyList(expr) {
+		// Empty import is valid, return unchanged
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	}
+
+	importSets, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, fmt.Errorf("import: expected list of import sets")
+	}
+
+	// Process each import set to load libraries and copy bindings
+	ctx := context.TODO()
+	_, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		importSet, parseErr := parseImportSet(importSetExpr)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		// Load the library
+		lib, loadErr := LoadLibrary(ctx, importSet.LibraryName, p.env)
+		if loadErr != nil {
+			return fmt.Errorf("import: failed to load library %s: %w",
+				importSet.LibraryName.SchemeString(), loadErr)
+		}
+
+		// Apply import modifiers (only, except, prefix, rename) to get final bindings
+		bindings, applyErr := importSet.ApplyToExports(lib)
+		if applyErr != nil {
+			return fmt.Errorf("import: error applying modifiers for %s: %w",
+				importSet.LibraryName.SchemeString(), applyErr)
+		}
+
+		// Copy bindings to the target phase - this makes macros available
+		copyErr := CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)
+		if copyErr != nil {
+			return fmt.Errorf("import: error copying bindings from %s: %w",
+				importSet.LibraryName.SchemeString(), copyErr)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the import form unchanged for later compilation
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
 // expandLambdaForm expands (lambda (args...) body...)
 //
 // R7RS §4.2.2: Lambda parameters shadow outer bindings including macros and

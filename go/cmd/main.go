@@ -78,7 +78,7 @@ func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machi
 func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(ctx, cont)
-	err := mc.Run()
+	err := mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
 	}
@@ -199,31 +199,60 @@ func main() {
 	runREPL(ctx, env)
 }
 
-// runFile processes a Scheme file, exiting on errors
+// runFile processes a Scheme file, exiting on errors.
+// All top-level expressions are wrapped in a single (begin ...) form to enable
+// proper R7RS continuation semantics across expression boundaries.
 func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.RuneReader, filename string) {
 	p := parser.NewParserWithFile(env, true, fin, filename)
+
+	// Collect all expressions from the file
+	var exprs []syntax.SyntaxValue
 	stx, err := p.ReadSyntax(context.TODO())
 	for err == nil {
-		tpl, err2 := compile(env, stx)
-		if err2 != nil {
-			Failf(err2, "Cannot compile expression")
-		}
-		mv, err2 := run(ctx, tpl, env)
-		// Print result for:
-		// - Normal completion (err2 == nil) - when inTail=false at top-level
-		// - ErrMachineHalt - when inTail=true at top-level (RestoreContinuation returns ErrMachineHalt)
-		// Don't print void results
-		if err2 == nil || errors.Is(err2, machine.ErrMachineHalt) {
-			if !mv.IsVoid() {
-				Printf("%s\n", mv.SchemeString())
-			}
-		} else {
-			Failf(err2)
-		}
+		exprs = append(exprs, stx)
 		stx, err = p.ReadSyntax(context.TODO())
 	}
 	if !errors.Is(err, io.EOF) {
 		Failf(err)
+	}
+
+	// If no expressions, nothing to do
+	if len(exprs) == 0 {
+		return
+	}
+
+	// If only one expression, run it directly (no need for begin wrapper)
+	var programStx syntax.SyntaxValue
+	if len(exprs) == 1 {
+		programStx = exprs[0]
+	} else {
+		// Wrap all expressions in (begin expr1 expr2 ... exprN)
+		// This ensures all expressions share a single continuation chain,
+		// enabling proper R7RS continuation semantics across expression boundaries.
+		sctx := syntax.NewZeroValueSourceContext()
+		beginSym := syntax.NewSyntaxSymbol("begin", sctx)
+		allExprs := make([]syntax.SyntaxValue, 0, len(exprs)+1)
+		allExprs = append(allExprs, beginSym)
+		allExprs = append(allExprs, exprs...)
+		programStx = syntax.SyntaxList(sctx, allExprs...)
+	}
+
+	// Compile and run the single wrapped expression
+	tpl, err2 := compile(env, programStx)
+	if err2 != nil {
+		Failf(err2, "Cannot compile expression")
+	}
+	mv, err2 := run(ctx, tpl, env)
+	// Print result for:
+	// - Normal completion (err2 == nil) - when inTail=false at top-level
+	// - ErrMachineHalt - when inTail=true at top-level (RestoreContinuation returns ErrMachineHalt)
+	// Don't print void results
+	if err2 == nil || errors.Is(err2, machine.ErrMachineHalt) {
+		if !mv.IsVoid() {
+			Printf("%s\n", mv.SchemeString())
+		}
+	} else {
+		Failf(err2)
 	}
 }
 

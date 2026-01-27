@@ -265,6 +265,9 @@ func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimCallCC implements the call/cc primitive.
 // Captures current continuation and passes to procedure.
+//
+// R7RS §6.10: call-with-current-continuation packages the current continuation
+// as an "escape procedure" and passes it as an argument to proc.
 func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
@@ -273,19 +276,42 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call/cc: expected a procedure but got %T", proc)
 	}
 
-	// Capture the current continuation
+	// Capture the current continuation.
 	// mc.cont is the continuation that will be restored when this foreign function returns
 	// (i.e., the continuation to the caller of call/cc). We copy it to avoid mutation issues.
-	cont := mc.Parent()
-	if cont != nil {
-		cont = cont.Copy()
+	//
+	// Special case: when call/cc is invoked inside a sub-context (e.g., inside dynamic-wind's
+	// thunk), mc.Parent() is nil. In this case, we capture:
+	//   1. The sub-context's own state as the "inner" continuation (where to resume in the thunk)
+	//   2. The escape continuation set by the enclosing construct (e.g., dynamic-wind)
+	// When restored via RunWithEscapeHandling, the inner continuation executes first, then
+	// after unwinding, execution continues at the escape continuation.
+	var cont *machine.MachineContinuation
+	var escapeCont *machine.MachineContinuation // Only used for sub-context escapes
+
+	if mc.Parent() != nil {
+		cont = mc.Parent().Copy()
+	} else {
+		// We're in a sub-context - capture our own state as the inner continuation.
+		// The offset of 1 means "resume at the next instruction after this foreign function call".
+		cont = machine.NewMachineContinuationFromMachineContext(mc, 1)
+
+		// Use the escape continuation if set (e.g., by dynamic-wind).
+		// This represents where execution should continue after the sub-context completes.
+		if mc.EscapeCont() != nil {
+			escapeCont = mc.EscapeCont().Copy()
+		}
 	}
 
-	// Create a closure that, when called, restores this continuation
-	contClosure := newEscapeContinuationClosure(mc.EnvironmentFrame().TopLevel(), cont)
+	// Capture the current winding stack for proper dynamic-wind handling
+	windingStack := mc.WindingStack().Copy()
+
+	// Create a closure that, when called, restores this continuation with winding
+	contClosure := newEscapeContinuationClosureWithWinding(mc.EnvironmentFrame().TopLevel(), cont, windingStack, escapeCont)
 
 	// Call the procedure with the continuation closure
 	sub := mc.NewSubContext()
+	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.Apply(mcls, contClosure)
 	if err != nil {
 		return err
@@ -295,9 +321,10 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 		// Check if this is a continuation escape
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
-			// Restore the continuation and set the escape value
-			// Then propagate the escape so the caller knows not to increment PC
-			mc.Restore(escapeErr.Continuation)
+			// Restore the continuation with proper winding handling
+			if restoreErr := mc.RestoreWithWinding(escapeErr.Continuation, escapeErr.WindingStack); restoreErr != nil {
+				return restoreErr
+			}
 			mc.SetValue(escapeErr.Value)
 			escapeErr.Handled = true
 			return escapeErr
@@ -312,8 +339,16 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// newEscapeContinuationClosure creates a closure that escapes to the captured continuation when called.
-func newEscapeContinuationClosure(env *environment.EnvironmentFrame, cont *machine.MachineContinuation) *machine.MachineClosure {
+// newEscapeContinuationClosureWithWinding creates a closure that escapes to the captured
+// continuation when called, including winding stack information for proper dynamic-wind handling.
+// The escapeCont parameter is used for continuations captured inside sub-contexts - it represents
+// where execution should continue after the inner continuation completes.
+func newEscapeContinuationClosureWithWinding(
+	env *environment.EnvironmentFrame,
+	cont *machine.MachineContinuation,
+	windingStack machine.WindingStack,
+	escapeCont *machine.MachineContinuation,
+) *machine.MachineClosure {
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
 		// Get the value passed to the continuation (from the closure's argument)
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
@@ -321,6 +356,8 @@ func newEscapeContinuationClosure(env *environment.EnvironmentFrame, cont *machi
 		return &machine.ErrContinuationEscape{
 			Continuation: cont,
 			Value:        val,
+			WindingStack: windingStack,  // Include target winding for restoration
+			EscapeCont:   escapeCont,    // Outer continuation for sub-context escapes
 		}
 	}
 	return machine.NewForeignClosure(env, 1, false, fn)
@@ -328,6 +365,10 @@ func newEscapeContinuationClosure(env *environment.EnvironmentFrame, cont *machi
 
 // PrimDynamicWind implements the (dynamic-wind) primitive.
 // Calls a thunk with before and after handlers that execute on entry and exit.
+//
+// R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
+// Before is called whenever execution enters the dynamic extent of the call to thunk,
+// and after is called whenever it exits.
 func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	before := mc.Arg(0)
 	thunk := mc.Arg(1)
@@ -348,8 +389,12 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: after must be a procedure, got %T", after)
 	}
 
-	// Call before thunk
+	// Create a new winding frame
+	frame := machine.NewDynamicWindFrame(beforeCls, afterCls)
+
+	// 1. Call before thunk (in current dynamic extent)
 	sub := mc.NewSubContext()
+	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.Apply(beforeCls)
 	if err != nil {
 		return err
@@ -365,17 +410,33 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	// Call main thunk
+	// 2. Push frame onto winding stack (we're now in this dynamic extent)
+	mc.PushWindingFrame(frame)
+
+	// 3. Create escape continuation for call/cc inside the thunk.
+	// This points to "after dynamic-wind returns" so that continuations captured
+	// inside the thunk can properly continue the outer computation.
+	// The offset of 1 means "next instruction after this foreign function call".
+	escapeCont := machine.NewMachineContinuationFromMachineContext(mc, 1)
+
+	// 4. Call main thunk (with new winding context and escape continuation)
 	sub2 := mc.NewSubContext()
+	sub2.SetWindingStack(mc.WindingStack()) // Include new frame
+	sub2.SetEscapeCont(escapeCont)          // Allow call/cc to find continuation
 	_, err = sub2.Apply(thunkCls)
 	if err != nil {
+		mc.PopWindingFrame() // Clean up on Apply error
 		return err
 	}
 	thunkErr := sub2.Run()
 	thunkResult := sub2.GetValues()
 
-	// Always call after thunk, even if main thunk escaped
+	// 4. Pop frame from winding stack (exiting this dynamic extent)
+	mc.PopWindingFrame()
+
+	// 5. Call after thunk (back to original dynamic extent)
 	sub3 := mc.NewSubContext()
+	sub3.SetWindingStack(mc.WindingStack())
 	_, err = sub3.Apply(afterCls)
 	if err != nil {
 		return err
@@ -391,7 +452,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	// Now handle thunk's result/error
+	// 6. Handle thunk's result/error
 	if thunkErr != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(thunkErr, &escapeErr) {

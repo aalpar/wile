@@ -53,7 +53,7 @@ func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog 
 	}
 	ctx := context.Background()
 	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
+	err = mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code 
 
 	ctx := context.Background()
 	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
+	err = mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func runSchemeCodeWithEnvAndContext(t *testing.T, ctx context.Context, env *envi
 	}
 
 	mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
+	err = mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
 	}
