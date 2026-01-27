@@ -37,7 +37,6 @@ type ErrContinuationEscape struct {
 	Handled      bool         // Set to true after the escape has been handled and mc has been restored
 	WindingStack WindingStack // Target winding stack for proper dynamic-wind handling
 	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
-	SourceWindingStack WindingStack // Current winding stack when escape was invoked (for proper unwinding)
 }
 
 func (e *ErrContinuationEscape) Error() string {
@@ -643,16 +642,9 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				return err
 			}
 
-			// Determine the source winding stack for unwinding.
-			// If SourceWindingStack is set (escape happened in a sub-context with
-			// different winding state), use that. Otherwise use the current stack.
-			sourceStack := escapeErr.SourceWindingStack
-			if sourceStack == nil {
-				sourceStack = p.windingStack
-			}
-
-			// Restore with proper winding handling using the source stack
-			if restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack); restoreErr != nil {
+			// Use the current winding stack as the source for unwinding.
+			// Restore with proper winding handling
+			if restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, p.windingStack, escapeErr.WindingStack); restoreErr != nil {
 				return restoreErr
 			}
 			p.SetValue(escapeErr.Value)

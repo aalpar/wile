@@ -61,5 +61,10 @@ testclean:
 
 .PHONY: modclean
 modclean:
-	$(GO_CLEAN) -modcache 
+	$(GO_CLEAN) -modcache
+
+.PHONY: tag
+tag:
+	git tag -a $(BUILD_VERSION) -m "Release $(BUILD_VERSION)"
+	@echo "Created tag $(BUILD_VERSION)"
 

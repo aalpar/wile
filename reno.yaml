@@ -1,0 +1,26 @@
+---
+# Reno configuration for Wile release notes
+# See: https://docs.openstack.org/reno/latest/
+
+notesdir: docs/releasenotes/notes
+
+# Sections for release notes
+sections:
+  - [features, New Features]
+  - [issues, Known Issues]
+  - [upgrade, Upgrade Notes]
+  - [deprecations, Deprecation Notes]
+  - [critical, Critical Issues]
+  - [security, Security Issues]
+  - [fixes, Bug Fixes]
+  - [other, Other Notes]
+
+# Template for new release notes
+template: |
+  ---
+  features:
+    - |
+      Add new feature description here.
+  fixes:
+    - |
+      Add bug fix description here.
