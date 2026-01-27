@@ -46,6 +46,9 @@ func init() {
 	registerTypedCompiler("quasiquote", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
 		return ctc.CompileValidatedQuasiquote(ctctx, formName, v)
 	})
+	registerTypedCompiler("dynamic-wind", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
+		return ctc.CompileValidatedDynamicWind(ctctx, formName, v)
+	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)
 	// These extract syntax from ValidatedLiteral and compile it

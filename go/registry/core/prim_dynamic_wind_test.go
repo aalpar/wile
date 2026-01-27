@@ -124,14 +124,7 @@ func TestDynamicWindErrors(t *testing.T) {
 
 // TestDynamicWindR7RSExample tests the classic R7RS §6.10 example.
 // This is the canonical test for dynamic-wind + call/cc interaction.
-//
-// KNOWN LIMITATION: This test currently fails because the winding stack implementation
-// does not properly run the after thunk on normal completion after continuation re-entry.
-// The expected result is (connect talk1 disconnect connect talk2 disconnect)
-// but we get (connect talk1 disconnect connect talk2) - missing final disconnect.
-// See plans/CONTINUATION_ESCAPE_FIX.md for details.
 func TestDynamicWindR7RSExample(t *testing.T) {
-	t.Skip("KNOWN LIMITATION: after thunk not running on normal completion after continuation re-entry")
 	// R7RS §6.10 example:
 	// (let ((path '()) (c #f))
 	//   (let ((add (lambda (s) (set! path (cons s path)))))

@@ -379,3 +379,31 @@ func (v *ValidatedCaseLambda) Source() *syntax.SourceContext {
 func (v *ValidatedCaseLambda) Clauses() []*ValidatedCaseLambdaClause {
 	return v.clauses
 }
+
+// ValidatedDynamicWind represents (dynamic-wind before thunk after)
+//
+// R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
+// Before is called whenever execution enters the dynamic extent of the call to thunk,
+// and after is called whenever it exits.
+type ValidatedDynamicWind struct {
+	formName string
+	source   *syntax.SourceContext
+	Before   ValidatedExpr
+	Thunk    ValidatedExpr
+	After    ValidatedExpr
+}
+
+// FormName returns the name of the form for error messages.
+func (v *ValidatedDynamicWind) FormName() string {
+	return v.formName
+}
+
+// SetFormName sets the form name for error messages.
+func (v *ValidatedDynamicWind) SetFormName(nm string) {
+	v.formName = nm
+}
+
+// Source returns the source context for error reporting.
+func (v *ValidatedDynamicWind) Source() *syntax.SourceContext {
+	return v.source
+}

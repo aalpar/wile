@@ -37,6 +37,7 @@ type ErrContinuationEscape struct {
 	Handled      bool         // Set to true after the escape has been handled and mc has been restored
 	WindingStack WindingStack // Target winding stack for proper dynamic-wind handling
 	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
+	SourceWindingStack WindingStack // Current winding stack when escape was invoked (for proper unwinding)
 }
 
 func (e *ErrContinuationEscape) Error() string {
@@ -162,13 +163,21 @@ func (p *MachineContext) Arg(index int) values.Value {
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.env = cont.env
 	p.template = cont.template
-	p.evals = cont.evals
+	// Must copy evals to avoid corrupting the continuation's saved stack.
+	// Without copying, modifications to p.evals after restoration would mutate
+	// cont.evals, breaking re-invocation of the continuation.
+	p.evals = cont.evals.Copy()
 	p.cont = cont.parent
 	p.pc = cont.pc
 }
 
 // PopContinuation pops the current continuation from the machine context and returns it.
 // It restores the machine context to the state saved in the popped continuation.
+//
+// Note: Unlike Restore(), we do NOT copy evals here because PopContinuation is used
+// for normal function return where the continuation is consumed once. Restore() is
+// used for continuation re-entry (call/cc) where the same continuation may be invoked
+// multiple times, requiring the copy to prevent stack corruption.
 func (p *MachineContext) PopContinuation() *MachineContinuation {
 	q := p.cont
 	p.template = q.template
@@ -527,22 +536,59 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 // the winding operations but don't restore machine state - the caller should
 // handle continued execution appropriately.
 func (p *MachineContext) RestoreWithWinding(cont *MachineContinuation, targetStack WindingStack) error {
-	// Find common ancestor
-	commonDepth := FindCommonWindingPrefix(p.windingStack, targetStack)
+	return p.RestoreWithWindingFrom(cont, p.windingStack, targetStack)
+}
 
-	// Unwind: run after thunks for frames being exited
-	if err := p.UnwindTo(commonDepth); err != nil {
-		return err
+// RestoreWithWindingFrom restores a continuation with proper dynamic-wind handling,
+// using an explicit source winding stack instead of the current context's stack.
+//
+// This is needed when the escape originated from a sub-context that has a different
+// winding stack than the context where RestoreWithWinding is called. For example,
+// when call/cc captures inside a sub-context and the escape propagates up, the
+// source winding stack (where the escape happened) may have frames that the
+// top-level context doesn't know about.
+//
+// Parameters:
+//   - cont: The continuation to restore to
+//   - sourceStack: The winding stack where the escape originated (for unwinding)
+//   - targetStack: The winding stack to restore to (for rewinding)
+func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourceStack, targetStack WindingStack) error {
+	// Find common ancestor between source and target
+	commonDepth := FindCommonWindingPrefix(sourceStack, targetStack)
+
+	// Unwind: run after thunks for frames being exited (from source)
+	// We need to unwind frames that are in sourceStack but not in the common prefix
+	for i := len(sourceStack) - 1; i >= commonDepth; i-- {
+		frame := sourceStack[i]
+		if frame.After != nil {
+			sub := p.NewSubContext()
+			sub.windingStack = sourceStack[:i]
+			_, err := sub.Apply(frame.After)
+			if err != nil {
+				return err
+			}
+			err = sub.Run()
+			if err != nil && !errors.Is(err, ErrMachineHalt) {
+				return err
+			}
+		}
 	}
 
-	// Rewind: run before thunks for frames being entered
+	// Update context's winding stack to common ancestor
+	p.windingStack = sourceStack[:commonDepth]
+
+	// Rewind: run before thunks for frames being entered (to target)
 	if err := p.RewindTo(targetStack, commonDepth); err != nil {
 		return err
 	}
 
 	// Restore the machine state (if we have a valid continuation)
+	// We must copy the continuation before restoring because p.Restore assigns
+	// p.evals = cont.evals directly. Without copying, subsequent invocations of
+	// the same continuation (via call/cc re-entry) would see corrupted stacks
+	// because the stack gets modified during execution.
 	if cont != nil {
-		p.Restore(cont)
+		p.Restore(cont.Copy())
 	}
 	return nil
 }
@@ -596,8 +642,17 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				// Continuation was nil (truly truncated) - can't recover
 				return err
 			}
-			// Restore with proper winding handling
-			if restoreErr := p.RestoreWithWinding(escapeErr.Continuation, escapeErr.WindingStack); restoreErr != nil {
+
+			// Determine the source winding stack for unwinding.
+			// If SourceWindingStack is set (escape happened in a sub-context with
+			// different winding state), use that. Otherwise use the current stack.
+			sourceStack := escapeErr.SourceWindingStack
+			if sourceStack == nil {
+				sourceStack = p.windingStack
+			}
+
+			// Restore with proper winding handling using the source stack
+			if restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack); restoreErr != nil {
 				return restoreErr
 			}
 			p.SetValue(escapeErr.Value)

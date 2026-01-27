@@ -801,3 +801,126 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 	p.recordSource(startPC, v.Source())
 	return nil
 }
+
+// CompileValidatedDynamicWind compiles a validated (dynamic-wind before thunk after) form.
+//
+// R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
+// Before is called whenever execution enters the dynamic extent of the call to thunk,
+// and after is called whenever it exits.
+//
+// The key insight is that by compiling to bytecode, the cleanup code (calling after)
+// is in the bytecode stream. When a continuation is captured inside the thunk and
+// later restored, the cleanup code will run on normal completion.
+//
+// Bytecode structure:
+//
+//	<compile before> PUSH
+//	<compile thunk>  PUSH
+//	<compile after>  PUSH          ; Stack: [before, thunk, after]
+//	PEEK_K 2                       ; value = before
+//	SAVE_CONTINUATION →after_before
+//	APPLY                          ; call before()
+//	after_before:                  ; Stack: [before, thunk, after]
+//	OP_PUSH_WIND                   ; create winding frame
+//	PEEK_K 1                       ; value = thunk
+//	SAVE_CONTINUATION →after_thunk
+//	APPLY                          ; call thunk()
+//	after_thunk:                   ; Stack: [before, thunk, after]
+//	PUSH                           ; save thunk result, Stack: [before, thunk, after, result]
+//	OP_POP_WIND                    ; pop winding frame
+//	PEEK_K 1                       ; value = after
+//	SAVE_CONTINUATION →after_after
+//	APPLY                          ; call after()
+//	after_after:                   ; Stack: [before, thunk, after, result]
+//	PEEK_K 0                       ; value = result (thunk's return value)
+//	DROP DROP DROP DROP            ; clean up stack
+func (p *CompileTimeContinuation) CompileValidatedDynamicWind(_ CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
+	startPC := len(p.template.operations)
+
+	// Phase 1: Compile and push before, thunk, after to stack
+	// Note: We compile in expression context (not tail) since we need all three values
+	exprCtx := NewCompileTimeCallContext(false, true, p.env)
+
+	err := p.compileValidated(exprCtx, v.Before)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	err = p.compileValidated(exprCtx, v.Thunk)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	err = p.compileValidated(exprCtx, v.After)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+	// Stack: [before, thunk, after]
+
+	// Phase 2: Call before thunk
+	// Get before into value register (at depth 2)
+	p.AppendOperations(NewOperationPeekK(2))
+	// Save continuation to return here after call
+	beforeCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply with 0 args (stack is fresh after SaveContinuation)
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterBeforeIndex := p.template.operations.Len()
+	p.template.operations[beforeCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterBeforeIndex - beforeCallReturnIndex)
+	// after_before: Stack is restored to [before, thunk, after]
+
+	// Phase 3: Push winding frame
+	p.AppendOperations(NewOperationPushWind())
+
+	// Phase 4: Call thunk
+	// Get thunk into value register (at depth 1)
+	p.AppendOperations(NewOperationPeekK(1))
+	// Save continuation
+	thunkCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterThunkIndex := p.template.operations.Len()
+	p.template.operations[thunkCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterThunkIndex - thunkCallReturnIndex)
+	// after_thunk: Stack is restored to [before, thunk, after]
+	// Thunk's result is in value register
+
+	// Save thunk result on stack
+	p.AppendOperations(NewOperationPush())
+	// Stack: [before, thunk, after, result]
+
+	// Phase 5: Pop winding frame
+	p.AppendOperations(NewOperationPopWind())
+
+	// Phase 6: Call after thunk
+	// Get after into value register (at depth 1 because result is at top)
+	p.AppendOperations(NewOperationPeekK(1))
+	// Save continuation
+	afterCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterAfterIndex := p.template.operations.Len()
+	p.template.operations[afterCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterAfterIndex - afterCallReturnIndex)
+	// after_after: Stack is restored to [before, thunk, after, result]
+
+	// Phase 7: Return thunk result
+	// Get result into value register (at top of stack)
+	p.AppendOperations(NewOperationPeekK(0))
+	// Clean up stack
+	p.AppendOperations(
+		NewOperationDrop(), // result
+		NewOperationDrop(), // after
+		NewOperationDrop(), // thunk
+		NewOperationDrop(), // before
+	)
+
+	p.recordSource(startPC, v.Source())
+	return nil
+}

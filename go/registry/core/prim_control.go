@@ -321,8 +321,16 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 		// Check if this is a continuation escape
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
+			// Determine the source winding stack for unwinding.
+			// If SourceWindingStack is set (escape happened in a sub-context with
+			// winding frames pushed by bytecode), use that. Otherwise use the
+			// sub-context's current winding stack.
+			sourceStack := escapeErr.SourceWindingStack
+			if sourceStack == nil {
+				sourceStack = sub.WindingStack()
+			}
 			// Restore the continuation with proper winding handling
-			if restoreErr := mc.RestoreWithWinding(escapeErr.Continuation, escapeErr.WindingStack); restoreErr != nil {
+			if restoreErr := mc.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack); restoreErr != nil {
 				return restoreErr
 			}
 			mc.SetValue(escapeErr.Value)
@@ -352,12 +360,18 @@ func newEscapeContinuationClosureWithWinding(
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
 		// Get the value passed to the continuation (from the closure's argument)
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
+		// Capture the current winding stack so we can properly unwind when escaping.
+		// This is critical for dynamic-wind: the escape may be happening from inside
+		// a sub-context that has winding frames pushed, and we need to unwind those
+		// frames before jumping to the target continuation.
+		sourceWindingStack := innerMC.WindingStack().Copy()
 		// Return an escape error that will propagate up through sub-contexts
 		return &machine.ErrContinuationEscape{
-			Continuation: cont,
-			Value:        val,
-			WindingStack: windingStack,  // Include target winding for restoration
-			EscapeCont:   escapeCont,    // Outer continuation for sub-context escapes
+			Continuation:       cont,
+			Value:              val,
+			WindingStack:       windingStack,       // Target winding for restoration
+			EscapeCont:         escapeCont,         // Outer continuation for sub-context escapes
+			SourceWindingStack: sourceWindingStack, // Current winding for proper unwinding
 		}
 	}
 	return machine.NewForeignClosure(env, 1, false, fn)

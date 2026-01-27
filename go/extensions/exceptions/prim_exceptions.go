@@ -150,6 +150,32 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
 	mc.PopExceptionHandler()
 
+	// Unwind the winding stack: run after thunks for any dynamic-wind frames
+	// that were entered between the exception handler installation and the raise point.
+	// This ensures parameterize restores values before the handler sees them.
+	if excErr.WindingStack != nil {
+		// Find common ancestor between exception's winding stack and current
+		currentStack := mc.WindingStack()
+		commonDepth := machine.FindCommonWindingPrefix(excErr.WindingStack, currentStack)
+
+		// Unwind frames that were entered after the handler was installed
+		for i := len(excErr.WindingStack) - 1; i >= commonDepth; i-- {
+			frame := excErr.WindingStack[i]
+			if frame.After != nil {
+				sub := mc.NewSubContext()
+				sub.SetWindingStack(excErr.WindingStack[:i])
+				_, err := sub.Apply(frame.After)
+				if err != nil {
+					return err
+				}
+				err = sub.Run()
+				if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+					return err
+				}
+			}
+		}
+	}
+
 	for {
 		// Call handler with the condition
 		handlerResult, err := callExceptionHandler(mc, excErr.Condition, handler)
@@ -205,9 +231,10 @@ func PrimRaise(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	return &machine.ErrExceptionEscape{
-		Condition:   obj,
-		Continuable: false,
-		Handled:     false,
+		Condition:    obj,
+		Continuable:  false,
+		Handled:      false,
+		WindingStack: mc.WindingStack().Copy(),
 	}
 }
 
@@ -231,6 +258,7 @@ func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
 		Continuable:  true,
 		Continuation: cont,
 		Handled:      false,
+		WindingStack: mc.WindingStack().Copy(),
 	}
 }
 
@@ -260,9 +288,10 @@ func PrimError(_ context.Context, mc *machine.MachineContext) error {
 	errObj := values.NewErrorObject(msgStr.Datum(), irritants...)
 
 	return &machine.ErrExceptionEscape{
-		Condition:   errObj,
-		Continuable: false,
-		Handled:     false,
+		Condition:    errObj,
+		Continuable:  false,
+		Handled:      false,
+		WindingStack: mc.WindingStack().Copy(),
 	}
 }
 
