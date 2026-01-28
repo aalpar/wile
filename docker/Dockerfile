@@ -1,0 +1,79 @@
+# Dockerfile for building the Wile Scheme interpreter
+# Includes Go toolchain and GNU development tools
+#
+# Build from docker/ directory:
+#   ./build.sh
+# Or manually:
+#   docker build -f Dockerfile -t wile ..
+
+FROM golang:1.25-bookworm
+
+# Install GNU development tools and build essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core Tools
+    man \
+    gawk \
+    less \
+    vim \
+    emacs \
+    tar \
+    wdiff \
+    colordiff \
+    diffutils \
+    # Core GNU build tools
+    build-essential \
+    make \
+    autoconf \
+    automake \
+    libtool \
+    # Compilers and linkers
+    gcc \
+    g++ \
+    binutils \
+    # Debugging and profiling
+    gdb \
+    valgrind \
+    strace \
+    # Text processing (useful for Scheme development)
+    gawk \
+    sed \
+    # Version control
+    git \
+    # Archive tools
+    tar \
+    gzip \
+    bzip2 \
+    xz-utils \
+    # Additional development libraries
+    libreadline-dev \
+    libncurses-dev \
+    # Linting (golangci-lint)
+    curl
+
+# Install golangci-lint
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin
+
+# Set working directory
+WORKDIR /wile
+
+# Copy go module files first for better layer caching
+COPY go/go.mod go/go.sum ./go/
+
+# Download dependencies
+WORKDIR /wile/go
+RUN go mod download
+
+# Copy the rest of the source
+WORKDIR /wile
+COPY . .
+
+# Build the project
+WORKDIR /wile/go
+RUN make build
+
+# Verify build
+RUN ../dist/scheme --version || true
+
+# Default command: run tests
+CMD ["make", "test"]
+

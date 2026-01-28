@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+dist/
+go/build/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation and plans (not needed for build)
+plans/
+docs/
+*.md
+!go/**/CLAUDE.md
+
+# Test artifacts
+*.test
+*.out
+coverage.out
