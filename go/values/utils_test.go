@@ -168,3 +168,49 @@ func Test_IsList(t *testing.T) {
 		})
 	}
 }
+
+func Test_ExactInteger(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    Value
+		want  int64
+		wantOk bool
+	}{
+		// Integer cases
+		{"positive integer", NewInteger(42), 42, true},
+		{"zero integer", NewInteger(0), 0, true},
+		{"negative integer", NewInteger(-5), -5, true},
+		{"max int64", NewInteger(9223372036854775807), 9223372036854775807, true},
+
+		// BigInteger cases
+		{"small bigint", NewBigIntegerFromInt64(100), 100, true},
+		{"bigint at int64 max", NewBigIntegerFromString("9223372036854775807", 10), 9223372036854775807, true},
+		{"bigint too large", NewBigIntegerFromString("9223372036854775808", 10), 0, false},
+
+		// Rational cases - integers
+		{"rational 2/1", NewRational(2, 1), 2, true},
+		{"rational 0/1", NewRational(0, 1), 0, true},
+		{"rational -3/1", NewRational(-3, 1), -3, true},
+
+		// Rational cases - non-integers
+		{"rational 1/2", NewRational(1, 2), 0, false},
+		{"rational 5/3", NewRational(5, 3), 0, false},
+
+		// Non-numeric types
+		{"float", NewFloat(2.0), 0, false},
+		{"string", NewString("2"), 0, false},
+		{"symbol", NewSymbol("x"), 0, false},
+		{"nil", nil, 0, false},
+		{"pair", NewCons(NewInteger(1), EmptyList), 0, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ExactInteger(tc.in)
+			qt.Assert(t, ok, qt.Equals, tc.wantOk)
+			if tc.wantOk {
+				qt.Assert(t, got, qt.Equals, tc.want)
+			}
+		})
+	}
+}

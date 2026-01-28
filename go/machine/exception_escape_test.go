@@ -81,8 +81,7 @@ func TestErrExceptionEscape_Continuable(t *testing.T) {
 func TestErrExceptionEscape_WithContinuation(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 

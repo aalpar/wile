@@ -259,12 +259,12 @@ func TestScientificNotationToInteger(t *testing.T) {
 		{"-4e3", -4000},
 		{"1e0", 1},
 		// Negative exponents with sufficient trailing zeros
-		{"100000e-4", 10},      // 5 trailing zeros >= 4
-		{"100000e-5", 1},       // 5 trailing zeros >= 5
-		{"1000e-3", 1},         // 3 trailing zeros >= 3
-		{"-2000e-2", -20},      // 3 trailing zeros >= 2
-		{"+50000e-4", 5},       // 4 trailing zeros >= 4
-		{"10e-1", 1},           // 1 trailing zero >= 1
+		{"100000e-4", 10}, // 5 trailing zeros >= 4
+		{"100000e-5", 1},  // 5 trailing zeros >= 5
+		{"1000e-3", 1},    // 3 trailing zeros >= 3
+		{"-2000e-2", -20}, // 3 trailing zeros >= 2
+		{"+50000e-4", 5},  // 4 trailing zeros >= 4
+		{"10e-1", 1},      // 1 trailing zero >= 1
 	}
 
 	for _, tc := range tcs {
@@ -293,11 +293,11 @@ func TestScientificNotationToFloat(t *testing.T) {
 	}{
 		// Negative exponents without sufficient trailing zeros
 		{"1e-10", 1e-10},
-		{"10e-4", 0.001},       // 1 trailing zero < 4
-		{"123e-5", 0.00123},    // 0 trailing zeros < 5
-		{"+5e-2", 0.05},        // 0 trailing zeros < 2
-		{"-7e-3", -0.007},      // 0 trailing zeros < 3
-		{"100e-4", 0.01},       // 2 trailing zeros < 4
+		{"10e-4", 0.001},    // 1 trailing zero < 4
+		{"123e-5", 0.00123}, // 0 trailing zeros < 5
+		{"+5e-2", 0.05},     // 0 trailing zeros < 2
+		{"-7e-3", -0.007},   // 0 trailing zeros < 3
+		{"100e-4", 0.01},    // 2 trailing zeros < 4
 	}
 
 	for _, tc := range tcs {

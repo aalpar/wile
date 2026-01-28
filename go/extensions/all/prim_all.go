@@ -307,65 +307,81 @@ func PrimMakePromise(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimForce implements the (force) primitive.
-// Forces evaluation of a promise.
-func PrimForce(ctx context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	promise, ok := o.(*values.Promise)
+// executeThunk runs a promise thunk and returns its result.
+func executeThunk(mc *machine.MachineContext, thunk values.Value) (values.Value, error) {
+	mcls, ok := thunk.(*machine.MachineClosure)
 	if !ok {
-		// R7RS says: if not a promise, return the value unchanged
-		mc.SetValue(o)
-		return nil
+		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"force: promise thunk is not a procedure: %T", thunk)
 	}
-
-	// If already forced, return cached result
-	if promise.Forced {
-		mc.SetValue(promise.Result)
-		return nil
-	}
-
-	// Force the promise by invoking the thunk
-	mcls, ok := promise.Thunk.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "force: promise thunk is not a procedure: %T", promise.Thunk)
-	}
-
 	sub := mc.NewSubContext()
 	_, err := sub.Apply(mcls)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	err = sub.Run()
 	if err != nil {
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
-			return err
+			return nil, err
 		}
 		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
+			return nil, err
+		}
+	}
+	return sub.GetValue(), nil
+}
+
+// forcePromise forces a promise and returns its result.
+// This is the core recursive implementation of R7RS force semantics.
+func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.Value, error) {
+	if promise.Forced {
+		return promise.Result, nil
+	}
+
+	result, err := executeThunk(mc, promise.Thunk)
+	if err != nil {
+		return nil, err
+	}
+
+	// Nested call may have already forced this promise
+	if promise.Forced {
+		return promise.Result, nil
+	}
+
+	// Recursively force promise results (delay-force semantics)
+	if rp, ok := result.(*values.Promise); ok && rp != promise {
+		result, err = forcePromise(mc, rp)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	result := sub.GetValue()
-
-	// R7RS iterative forcing: if result is a promise, force it too
-	if resultPromise, ok := result.(*values.Promise); ok {
-		// Update our promise to point to the result promise's contents
-		if resultPromise.Forced {
-			promise.Result = resultPromise.Result
-		} else {
-			promise.Thunk = resultPromise.Thunk
-			// Recursively force
-			mc.SetValue(promise)
-			return PrimForce(ctx, mc)
-		}
-	} else {
-		promise.Result = result
-	}
-
+	promise.Result = result
 	promise.Forced = true
 	promise.Thunk = nil
-	mc.SetValue(promise.Result)
+	return result, nil
+}
+
+// PrimForce implements the (force) primitive.
+// Forces evaluation of a promise with proper memoization.
+//
+// R7RS §4.2.5: The first time a promise is forced, its body is evaluated
+// and the result is memoized; on subsequent forces, the memoized result
+// is returned.
+func PrimForce(_ context.Context, mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	promise, ok := o.(*values.Promise)
+	if !ok {
+		mc.SetValue(o)
+		return nil
+	}
+
+	result, err := forcePromise(mc, promise)
+	if err != nil {
+		return err
+	}
+	mc.SetValue(result)
 	return nil
 }
 

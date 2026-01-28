@@ -24,11 +24,12 @@ import (
 // ValidatorFunc is the signature for validation functions.
 // Parameters:
 //   - ctx: context for cancellation
+//   - env: *environment.EnvironmentFrame - for checking local variable shadowing
 //   - pair: *syntax.SyntaxPair - the form to validate
 //   - result: *validate.ValidationResult - collects errors
 //
 // Returns: validate.ValidatedExpr
-type ValidatorFunc func(ctx context.Context, pair any, result any) any
+type ValidatorFunc func(ctx context.Context, env any, pair any, result any) any
 
 // CompilerFunc is the signature for compilation functions.
 // Parameters:

@@ -27,6 +27,7 @@ type ErrExceptionEscape struct {
 	Continuable  bool                 // Whether handler can return
 	Continuation *MachineContinuation // Return point for continuable exceptions
 	Handled      bool                 // Set true after handler processes it
+	WindingStack WindingStack         // Winding stack at raise point (for proper unwinding)
 }
 
 // Error implements the error interface.

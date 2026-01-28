@@ -33,7 +33,9 @@ test:
 
 .PHONY: cover
 cover:
-	$(GO_TEST) -cover -v ./...
+	@mkdir -p build
+	$(GO_TEST) -coverprofile=build/coverage.out ./...
+	$(GO) tool cover -func=build/coverage.out
 
 .PHONY: lint
 lint:
@@ -61,5 +63,10 @@ testclean:
 
 .PHONY: modclean
 modclean:
-	$(GO_CLEAN) -modcache 
+	$(GO_CLEAN) -modcache
+
+.PHONY: tag
+tag:
+	git tag -a $(BUILD_VERSION) -m "Release $(BUILD_VERSION)"
+	@echo "Created tag $(BUILD_VERSION)"
 

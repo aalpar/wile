@@ -221,6 +221,8 @@
     read-u8
     peek-u8
     u8-ready?
+    read-bytevector
+    read-bytevector!
     ;; Output
     newline
     write-char
@@ -230,6 +232,7 @@
     flush-output-port
     ;; Binary Output (R7RS §6.13.3)
     write-u8
+    write-bytevector
     ;; System interface
     features
     ;; Parameters

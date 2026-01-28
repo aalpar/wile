@@ -17,12 +17,13 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateCaseLambda validates (case-lambda [clause] ...)
 // Each clause is (params body...) like a lambda without the 'lambda' keyword
-func validateCaseLambda(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCaseLambda(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -40,7 +41,7 @@ func validateCaseLambda(_ context.Context, pair *syntax.SyntaxPair, result *Vali
 
 	var clauses []*ValidatedCaseLambdaClause
 	for i := 1; i < len(elements); i++ {
-		clause := validateCaseLambdaClause(context.TODO(), elements[i], result)
+		clause := validateCaseLambdaClause(context.TODO(), env, elements[i], result)
 		if clause != nil {
 			clauses = append(clauses, clause)
 		}
@@ -59,7 +60,7 @@ func validateCaseLambda(_ context.Context, pair *syntax.SyntaxPair, result *Vali
 }
 
 // validateCaseLambdaClause validates a single case-lambda clause: (params body...)
-func validateCaseLambdaClause(ctx context.Context, expr syntax.SyntaxValue, result *ValidationResult) *ValidatedCaseLambdaClause {
+func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) *ValidatedCaseLambdaClause {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		result.addErrorf(getSourceContext(expr), "case-lambda", "clause must be a list, got %T", expr)
@@ -87,7 +88,7 @@ func validateCaseLambdaClause(ctx context.Context, expr syntax.SyntaxValue, resu
 	// Validate body - must have at least one expression
 	var body []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		bodyExpr := validateExpr(ctx, elements[i], result)
+		bodyExpr := validateExpr(ctx, env, elements[i], result)
 		if bodyExpr != nil {
 			body = append(body, bodyExpr)
 		}

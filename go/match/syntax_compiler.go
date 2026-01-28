@@ -51,6 +51,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wile/syntax"
 	"wile/values"
 )
 
@@ -71,8 +72,8 @@ type syntaxCompilerStackEntry struct {
 }
 
 type captureContext struct {
-	children map[int][]*captureContext // Key: ellipsisID
-	bindings map[string]values.Value
+	children map[int][]*captureContext     // Key: ellipsisID
+	bindings map[string]syntax.SyntaxValue // Pattern variable bindings (syntax-native)
 }
 
 // SyntaxCommand represents a pattern bytecode instruction.
@@ -82,13 +83,15 @@ type SyntaxCommand interface {
 
 // SyntaxCompiler compiles pattern syntax into bytecode.
 type SyntaxCompiler struct {
-	codes          []SyntaxCommand
-	variables      map[string]struct{}
-	literals       map[string]struct{}         // literals to match exactly
-	analysis       *PatternAnalysis            // pattern analysis results
-	nextEllipsisID int                         // counter for assigning unique ellipsis IDs
-	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsis       string                      // custom ellipsis identifier (default "...")
+	codes              []SyntaxCommand
+	variables          map[string]struct{}
+	literals           map[string]struct{}         // literals to match exactly
+	analysis           *PatternAnalysis            // pattern analysis results
+	nextEllipsisID     int                         // counter for assigning unique ellipsis IDs
+	ellipsisVars       map[int]map[string]struct{} // ellipsisID -> captured pattern variables
+	ellipsis           string                      // custom ellipsis identifier (default "...")
+	skipMacroKeyword   bool                        // true = skip first element as macro keyword placeholder
+	macroKeywordPassed bool                        // true = first root element has been processed
 }
 
 // NewSyntaxCompiler creates a new syntax compiler with the default ellipsis ("...").
@@ -103,12 +106,21 @@ func NewSyntaxCompilerWithEllipsis(ellipsis string) *SyntaxCompiler {
 		ellipsis = DefaultEllipsis
 	}
 	q := &SyntaxCompiler{
-		variables:    map[string]struct{}{},
-		literals:     map[string]struct{}{},
-		ellipsisVars: map[int]map[string]struct{}{},
-		ellipsis:     ellipsis,
+		variables:        map[string]struct{}{},
+		literals:         map[string]struct{}{},
+		ellipsisVars:     map[int]map[string]struct{}{},
+		ellipsis:         ellipsis,
+		skipMacroKeyword: false, // Default: match all elements. Set to true for syntax-rules.
 	}
 	return q
+}
+
+// SetSkipMacroKeyword enables or disables skipping the first pattern element as a macro keyword.
+// R7RS §4.3.2: The first subform of each syntax-rules pattern is the keyword of the macro
+// being transformed; it is not matched against the macro use.
+// Call this with true when compiling syntax-rules patterns.
+func (q *SyntaxCompiler) SetSkipMacroKeyword(skip bool) {
+	q.skipMacroKeyword = skip
 }
 
 // Compile compiles a pattern pair into bytecode.
@@ -165,6 +177,15 @@ func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []synta
 func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, element values.Value, elementStart int) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 
+	// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro
+	// being transformed; it is not matched against the macro use being transformed.
+	// Skip the first element at the root level (stack depth 1) as it's the macro keyword placeholder.
+	if vis.skipMacroKeyword && !vis.macroKeywordPassed && l == 1 {
+		vis.macroKeywordPassed = true
+		// Don't emit any bytecode for the macro keyword placeholder
+		return stack, false
+	}
+
 	// Handle pair elements (nested lists)
 	if pr, ok := element.(*values.Pair); ok {
 		return compilePairElement(vis, stack, pr, element, elementStart)
@@ -172,12 +193,12 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 
 	// Handle symbol elements
 	if sym, ok := element.(*values.Symbol); ok {
-		compileSymbolElement(vis, &stack[l-1], sym)
-		return stack, false
+		skipCdr := compileSymbolElement(vis, &stack[l-1], sym)
+		return stack, skipCdr
 	}
 
 	// Handle literal values (numbers, strings, etc.)
-	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: element})
+	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: valueToSyntaxValue(element)})
 	return stack, false
 }
 
@@ -210,11 +231,11 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 }
 
 // compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.
-func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) {
+// Returns true if CDR handling should be skipped (e.g., for ellipsis-in-middle patterns).
+func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) bool {
 	// Check for ellipsis (custom or default)
 	if sym.Key == vis.ellipsis {
-		compileEllipsis(vis, entry)
-		return
+		return compileEllipsis(vis, entry)
 	}
 	// Check for wildcard
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
@@ -222,12 +243,13 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	if sym.Key == "_" {
 		if _, isLiteral := vis.literals[sym.Key]; !isLiteral {
 			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
-			return
+			return false
 		}
 		// _ is in literals list, fall through to treat as literal
 	}
 	// Otherwise it's a variable or literal
 	compileSymbolOrLiteral(vis, entry, sym)
+	return false
 }
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
@@ -238,18 +260,25 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 		entry.variables[sym.Key] = struct{}{}
 	} else {
 		// Literal symbol - compare exactly
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
 	}
 }
 
 // compileEllipsis handles the ellipsis pattern, which matches zero or more repetitions.
 // If the previous element contains pattern variables, generates a loop structure.
 // Otherwise, treats the ellipsis as a literal symbol.
-func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) {
+//
+// R7RS §4.3.2 allows ellipsis in the middle of a pattern, e.g., (a ... b c).
+// In this case, the loop must exit when exactly N elements remain (where N is
+// the count of trailing pattern elements).
+//
+// Returns true if CDR handling should be skipped (for ellipsis-in-middle patterns,
+// where the loop exits with the position already at the tail elements).
+func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
 	if !previousElementHasVariables(vis, entry) {
 		// No pattern variables - treat ellipsis as literal
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: &values.Symbol{Key: vis.ellipsis}})
-		return
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(vis.ellipsis, nil)})
+		return false
 	}
 
 	entry.vararg = true
@@ -259,9 +288,41 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) {
 	// Collect variables captured by this ellipsis
 	vis.ellipsisVars[ellipsisID] = collectCapturedVariables(vis, entry)
 
+	// Count trailing elements after the ellipsis (for ellipsis-in-middle support)
+	// entry.pr[0] is "...", entry.pr[1] is what comes after
+	tailCount := countPatternTailElements(entry.pr)
+
 	// Extract and relocate pattern bytecode into loop structure
 	patternCodes := extractPatternBytecode(vis, entry)
-	emitEllipsisLoop(vis, ellipsisID, patternCodes)
+	emitEllipsisLoop(vis, ellipsisID, patternCodes, tailCount)
+
+	// For ellipsis-in-middle patterns, skip CDR handling because:
+	// 1. The loop exits via SkipIfTailCount when exactly tailCount elements remain
+	// 2. The value stack is already positioned at the first tail element
+	// 3. We just need to update entry.pr to point to the tail pattern elements
+	if tailCount > 0 {
+		// Advance entry.pr past the ellipsis to the tail elements
+		entry.pr, _ = entry.pr[1].(*values.Pair)
+		return true
+	}
+	return false
+}
+
+// countPatternTailElements counts the number of pattern elements that follow
+// the ellipsis. This is used for ellipsis-in-middle patterns like (a ... b c).
+func countPatternTailElements(ellipsisPair *values.Pair) int {
+	// ellipsisPair[0] is "...", ellipsisPair[1] is the rest
+	cdr := ellipsisPair[1]
+	count := 0
+	for {
+		pr, ok := cdr.(*values.Pair)
+		if !ok || values.IsEmptyList(pr) {
+			break
+		}
+		count++
+		cdr = pr[1]
+	}
+	return count
 }
 
 // previousElementHasVariables checks if the element before ... contains pattern variables.
@@ -324,19 +385,29 @@ func extractPatternBytecode(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 
 // emitEllipsisLoop generates the loop structure for ellipsis matching:
 //
-//	SkipIfEmpty(exit)   ; Check if list is empty BEFORE loop
+//	SkipIfEmpty(exit)   ; Check if list is empty BEFORE loop (or SkipIfTailCount for ellipsis-in-middle)
 //	PushContext(id)     ; Start capture context for this iteration
 //	[pattern bytecode]  ; Match and capture pattern variables
 //	VisitCdr            ; Advance to next element (if needed)
 //	PopContext(id)      ; Close capture context
 //	Jump(back)          ; Loop to SkipIfEmpty
 //	exit:               ; Continue after loop
-func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []SyntaxCommand) {
+//
+// For ellipsis-in-middle patterns (tailCount > 0), uses SkipIfTailCount instead of
+// SkipIfEmpty. This exits the loop when exactly tailCount elements remain, leaving
+// them for the trailing pattern elements to match.
+func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []SyntaxCommand, tailCount int) {
 	loopStart := len(vis.codes)
 
-	// Placeholder for SkipIfEmpty - will be patched after loop
-	skipIfEmptyIdx := len(vis.codes)
-	vis.codes = append(vis.codes, ByteCodeSkipIfEmpty{Offset: 0})
+	// Placeholder for loop exit check - will be patched after loop
+	skipIdx := len(vis.codes)
+	if tailCount > 0 {
+		// Ellipsis-in-middle: exit when tailCount elements remain
+		vis.codes = append(vis.codes, ByteCodeSkipIfTailCount{Offset: 0, Count: tailCount})
+	} else {
+		// Standard ellipsis at end: exit when list is empty
+		vis.codes = append(vis.codes, ByteCodeSkipIfEmpty{Offset: 0})
+	}
 
 	// Loop body
 	vis.codes = append(vis.codes, ByteCodePushContext{EllipsisID: ellipsisID})
@@ -353,9 +424,13 @@ func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []Syntax
 	jumpOffset := loopStart - len(vis.codes)
 	vis.codes = append(vis.codes, ByteCodeJump{Offset: jumpOffset})
 
-	// Patch SkipIfEmpty to jump past loop
+	// Patch the skip instruction to jump past loop
 	loopEnd := len(vis.codes)
-	vis.codes[skipIfEmptyIdx] = ByteCodeSkipIfEmpty{Offset: loopEnd - skipIfEmptyIdx}
+	if tailCount > 0 {
+		vis.codes[skipIdx] = ByteCodeSkipIfTailCount{Offset: loopEnd - skipIdx, Count: tailCount}
+	} else {
+		vis.codes[skipIdx] = ByteCodeSkipIfEmpty{Offset: loopEnd - skipIdx}
+	}
 }
 
 // isPairPattern checks if bytecode represents a pair pattern (VisitCar...Done).
@@ -374,16 +449,29 @@ func isPairPattern(codes []SyntaxCommand) bool {
 func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, element values.Value, elementStart int) bool {
 	cdr := entry.pr[1]
 	cdrPair, ok := cdr.(*values.Pair)
-	if !ok || values.IsEmptyList(cdrPair) {
-		return false
+	if ok && !values.IsEmptyList(cdrPair) {
+		// Normal case: more elements in proper list
+		vis.codes = append(vis.codes, ByteCodeVisitCdr{})
+		entry.lastElementStart = elementStart
+		entry.lastElement = element
+		entry.mark = len(vis.codes)
+		entry.pr = cdrPair
+		return true
 	}
 
-	vis.codes = append(vis.codes, ByteCodeVisitCdr{})
-	entry.lastElementStart = elementStart
-	entry.lastElement = element
-	entry.mark = len(vis.codes)
-	entry.pr = cdrPair
-	return true
+	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
+	if sym, ok := cdr.(*values.Symbol); ok {
+		if _, isVar := vis.variables[sym.Key]; isVar {
+			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
+			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key})
+			entry.variables[sym.Key] = struct{}{}
+		} else {
+			// The CDR is a literal symbol - compare it
+			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
+		}
+	}
+
+	return false
 }
 
 // insert inserts codes into target at index i, adjusting jump offsets as needed.

@@ -23,12 +23,13 @@ import (
 )
 
 type MachineContinuation struct {
-	parent   *MachineContinuation
-	env      *environment.EnvironmentFrame
-	template *NativeTemplate
-	value    MultipleValues
-	evals    *Stack
-	pc       int
+	parent       *MachineContinuation
+	env          *environment.EnvironmentFrame
+	template     *NativeTemplate
+	value        MultipleValues
+	evals        *Stack
+	pc           int
+	windingStack WindingStack // Captured dynamic extent for R7RS dynamic-wind
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -99,12 +100,13 @@ func (p *MachineContinuation) CallDepth() int {
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := &MachineContinuation{
-		parent:   p.parent,
-		env:      p.env,
-		template: p.template,
-		value:    slices.Clone(p.value),
-		evals:    p.evals.Copy(),
-		pc:       p.pc,
+		parent:       p.parent,
+		env:          p.env,
+		template:     p.template,
+		value:        slices.Clone(p.value),
+		evals:        p.evals.Copy(),
+		pc:           p.pc,
+		windingStack: p.windingStack.Copy(),
 	}
 	return q
 }

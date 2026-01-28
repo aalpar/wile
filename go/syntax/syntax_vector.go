@@ -52,14 +52,7 @@ func (p *SyntaxVector) SourceContext() *SourceContext {
 
 // UnwrapAll recursively unwraps all elements to produce a plain values.Vector.
 func (p *SyntaxVector) UnwrapAll() values.Value {
-	if p.IsVoid() {
-		return values.Void
-	}
-	vq := make([]values.Value, len(p.Values))
-	for i, v := range p.Values {
-		vq[i] = v.UnwrapAll()
-	}
-	return values.NewVector(vq...)
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 func (p *SyntaxVector) Unwrap() values.Value {

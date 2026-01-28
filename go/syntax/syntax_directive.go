@@ -45,7 +45,7 @@ func (p *SyntaxDirective) Unwrap() values.Value {
 
 // UnwrapAll returns the directive name as a string value.
 func (p *SyntaxDirective) UnwrapAll() values.Value {
-	return values.NewString(p.Name)
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // NewSyntaxDirective creates a new reader directive with the given name.

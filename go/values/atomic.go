@@ -20,36 +20,36 @@ import (
 )
 
 var (
-	_ Value = (*Atomic)(nil)
+	_ Value = (*AtomicBox)(nil)
 
-	// Atomic ID counter
+	// AtomicBox ID counter
 	atomicIDCounter uint64
 )
 
-// Atomic provides atomic operations on a Value
+// AtomicBox provides atomic operations on a Value
 // This uses atomic.Value from the standard library
-type Atomic struct {
+type AtomicBox struct {
 	id    uint64
 	value atomic.Value
 }
 
-// NewAtomic creates a new Atomic with the given initial value
-func NewAtomic(initial Value) *Atomic {
+// NewAtomicBox creates a new AtomicBox with the given initial value
+func NewAtomicBox(initial Value) *AtomicBox {
 	id := atomic.AddUint64(&atomicIDCounter, 1)
-	a := &Atomic{id: id}
+	a := &AtomicBox{id: id}
 	if initial != nil {
 		a.value.Store(initial)
 	}
 	return a
 }
 
-// ID returns the Atomic's unique identifier
-func (a *Atomic) ID() uint64 {
+// ID returns the AtomicBox's unique identifier
+func (a *AtomicBox) ID() uint64 {
 	return a.id
 }
 
 // Load atomically loads and returns the value
-func (a *Atomic) Load() Value {
+func (a *AtomicBox) Load() Value {
 	v := a.value.Load()
 	if v == nil {
 		return nil
@@ -58,12 +58,12 @@ func (a *Atomic) Load() Value {
 }
 
 // Store atomically stores the value
-func (a *Atomic) Store(v Value) {
+func (a *AtomicBox) Store(v Value) {
 	a.value.Store(v)
 }
 
 // Swap atomically stores new and returns the old value
-func (a *Atomic) Swap(v Value) Value {
+func (a *AtomicBox) Swap(v Value) Value {
 	old := a.value.Swap(v)
 	if old == nil {
 		return nil
@@ -73,20 +73,20 @@ func (a *Atomic) Swap(v Value) Value {
 
 // CompareAndSwap atomically compares and swaps if current equals old
 // Returns true if the swap was performed
-func (a *Atomic) CompareAndSwap(ol, nw Value) bool {
+func (a *AtomicBox) CompareAndSwap(ol, nw Value) bool {
 	return a.value.CompareAndSwap(ol, nw)
 }
 
 // Value interface implementation
 
 // IsVoid returns true if the atomic is nil.
-func (a *Atomic) IsVoid() bool {
+func (a *AtomicBox) IsVoid() bool {
 	return a == nil
 }
 
 // EqualTo returns true if the atomics are the same object.
-func (a *Atomic) EqualTo(v Value) bool {
-	other, ok := v.(*Atomic)
+func (a *AtomicBox) EqualTo(v Value) bool {
+	other, ok := v.(*AtomicBox)
 	if !ok {
 		return false
 	}
@@ -94,7 +94,7 @@ func (a *Atomic) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme representation of the atomic.
-func (a *Atomic) SchemeString() string {
+func (a *AtomicBox) SchemeString() string {
 	if a == nil {
 		return "#<atomic:void>"
 	}
@@ -106,7 +106,7 @@ func (a *Atomic) SchemeString() string {
 }
 
 // AtomicInt64 provides atomic operations on int64 values
-// This is more efficient than Atomic for integer operations
+// This is more efficient than AtomicBox for integer operations
 type AtomicInt64 struct {
 	id    uint64
 	value int64

@@ -897,11 +897,11 @@ func TestAtanExtended(t *testing.T) {
 	})
 
 	t.Run("two-arg atan2 integer inputs", func(t *testing.T) {
-		assertFloatResult(t, `(atan 1 1)`, math.Pi/4, 1e-10)     // 45 degrees
-		assertFloatResult(t, `(atan 1 0)`, math.Pi/2, 1e-10)     // 90 degrees
-		assertFloatResult(t, `(atan 0 1)`, 0.0, 1e-10)           // 0 degrees
-		assertFloatResult(t, `(atan -1 1)`, -math.Pi/4, 1e-10)   // -45 degrees
-		assertFloatResult(t, `(atan 1 -1)`, 3*math.Pi/4, 1e-10)  // 135 degrees
+		assertFloatResult(t, `(atan 1 1)`, math.Pi/4, 1e-10)      // 45 degrees
+		assertFloatResult(t, `(atan 1 0)`, math.Pi/2, 1e-10)      // 90 degrees
+		assertFloatResult(t, `(atan 0 1)`, 0.0, 1e-10)            // 0 degrees
+		assertFloatResult(t, `(atan -1 1)`, -math.Pi/4, 1e-10)    // -45 degrees
+		assertFloatResult(t, `(atan 1 -1)`, 3*math.Pi/4, 1e-10)   // 135 degrees
 		assertFloatResult(t, `(atan -1 -1)`, -3*math.Pi/4, 1e-10) // -135 degrees
 	})
 

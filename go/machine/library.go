@@ -208,12 +208,22 @@ func (r *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 
 // ImportSet represents a parsed import specification.
 // It can be a simple library reference or include modifiers.
+//
+// PhaseShift supports Racket-style phased imports:
+//   - (import (scheme base))                    ; Phase 0 (runtime) - default
+//   - (import (for-syntax (scheme base)))       ; Phase +1 (expand)
+//   - (import (for-template (scheme base)))     ; Phase -1
+//   - (import (for-meta 2 (scheme base)))       ; Phase +2
+//   - (import (for-meta -1 (scheme base)))      ; Phase -1 (same as for-template)
+//
+// Phase shifts compose additively: (for-syntax (for-syntax lib)) = phase +2
 type ImportSet struct {
 	LibraryName LibraryName       // Base library to import from
 	Only        []string          // If non-nil, only import these names
 	Except      []string          // If non-nil, import all except these
 	Prefix      string            // If non-empty, add this prefix to all names
 	Renames     map[string]string // old-name -> new-name
+	PhaseShift  int               // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
 }
 
 // NewImportSet creates a new import set for a library.
@@ -286,7 +296,23 @@ func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, er
 // CopyLibraryBindingsToEnv copies exported bindings from a library to an environment.
 // bindings is the map from localName -> externalName produced by ApplyToExports.
 // Both runtime and syntax bindings are copied.
+// This is a convenience wrapper that imports to phase 0 (runtime).
 func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame) error {
+	return CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, 0)
+}
+
+// CopyLibraryBindingsToEnvAtPhase copies exported bindings from a library to a specific phase.
+// bindings is the map from localName -> externalName produced by ApplyToExports.
+//
+// Phase semantics:
+//   - targetPhase == 0: Runtime import (default). Runtime bindings go to phase 0,
+//     syntax bindings go to both phase 0 (for export) and phase 1 (for use in macros).
+//   - targetPhase > 0: For-syntax import. Bindings are shifted to the target phase.
+//     Runtime bindings become available during macro expansion at targetPhase.
+//     Syntax bindings go to targetPhase and targetPhase+1.
+//   - targetPhase < 0: For-template import. Bindings shifted to negative phase
+//     (used for generating code that will run at a lower phase).
+func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
 		if internalName == "" {
@@ -317,24 +343,29 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Create binding in the target environment
-		localSym := targetEnv.InternSymbol(values.NewSymbol(localName))
-		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
-		globalIdx := targetEnv.GetGlobalIndex(localSym)
+		// Get the target environment at the specified phase
+		phaseEnv := targetEnv.AtPhase(targetPhase)
+		localSym := phaseEnv.InternSymbol(values.NewSymbol(localName))
+
+		// Create binding in the target phase environment
+		_, _ = phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		globalIdx := phaseEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
-			err := targetEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
+			err := phaseEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
 			if err != nil {
-				return values.WrapForeignErrorf(err, "failed to set binding for %s", localName)
+				return values.WrapForeignErrorf(err, "failed to set binding for %s at phase %d", localName, targetPhase)
 			}
 		}
 
-		// If it's a syntax binding, also copy to expand phase
+		// If it's a syntax binding, also copy to the next phase up (for expansion)
+		// This ensures macros are available during expansion at targetPhase+1
 		if libBinding.BindingType() == environment.BindingTypeSyntax {
-			expandEnv := targetEnv.Expand()
-			_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
-			expandIdx := expandEnv.GetGlobalIndex(localSym)
+			expandPhaseEnv := targetEnv.AtPhase(targetPhase + 1)
+			expandLocalSym := expandPhaseEnv.InternSymbol(values.NewSymbol(localName))
+			_, _ = expandPhaseEnv.MaybeCreateOwnGlobalBinding(expandLocalSym, environment.BindingTypeSyntax)
+			expandIdx := expandPhaseEnv.GetGlobalIndex(expandLocalSym)
 			if expandIdx != nil {
-				_ = expandEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
+				_ = expandPhaseEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
 			}
 		}
 	}

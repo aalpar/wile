@@ -869,6 +869,261 @@ func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimReadBytevector implements the read-bytevector primitive.
+// R7RS §6.13.3: (read-bytevector k [port])
+// Reads the next k bytes from port into a newly allocated bytevector.
+// Returns eof-object if no bytes are available before end of file.
+func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
+	kVal := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	k, ok := kVal.(*values.Integer)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector: expected an integer for k but got %T", kVal)
+	}
+	if k.Value < 0 {
+		return values.NewForeignError("read-bytevector: k must be non-negative")
+	}
+
+	// Get the port from rest arguments
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector: expected a list but got %T", rest)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector: expected a list but got %s", tuple.SchemeString())
+	}
+
+	if tuple.IsEmptyList() {
+		return values.NewForeignError("read-bytevector: no binary input port specified")
+	}
+
+	port := tuple.Car()
+
+	// Read up to k bytes
+	buf := make([]byte, k.Value)
+	var n int
+	var err error
+
+	switch p := port.(type) {
+	case *values.BytevectorInputPort:
+		n, err = p.Read(buf)
+	case *values.BinaryInputPort:
+		n, err = p.Read(buf)
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-bytevector: expected a binary input port but got %T", port)
+	}
+
+	if err == io.EOF && n == 0 {
+		mc.SetValue(values.EofObject)
+		return nil
+	}
+	if err != nil && err != io.EOF {
+		return values.WrapForeignErrorf(err, "read-bytevector: error reading from port")
+	}
+
+	// Create bytevector from read bytes
+	bv := make(values.ByteVector, n)
+	for i := 0; i < n; i++ {
+		bv[i] = values.Byte{Value: buf[i]}
+	}
+	mc.SetValue(&bv)
+	return nil
+}
+
+// PrimReadBytevectorBang implements the read-bytevector! primitive.
+// R7RS §6.13.3: (read-bytevector! bytevector [port [start [end]]])
+// Reads bytes from port into an existing bytevector.
+// Returns the number of bytes read, or eof-object if no bytes available.
+func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error {
+	bvVal := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	bv, ok := bvVal.(*values.ByteVector)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAByteVector, "read-bytevector!: expected a bytevector but got %T", bvVal)
+	}
+
+	// Parse optional arguments: [port [start [end]]]
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: expected a list but got %T", rest)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: expected a list but got %s", tuple.SchemeString())
+	}
+
+	if tuple.IsEmptyList() {
+		return values.NewForeignError("read-bytevector!: no binary input port specified")
+	}
+
+	port := tuple.Car()
+	start := int64(0)
+	end := int64(len(*bv))
+
+	// Check for start/end arguments
+	if tuple.Cdr() != values.EmptyList {
+		tuple2, ok := tuple.Cdr().(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: improper argument list")
+		}
+		if !tuple2.IsEmptyList() {
+			startVal, ok := tuple2.Car().(*values.Integer)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector!: expected an integer for start but got %T", tuple2.Car())
+			}
+			start = startVal.Value
+
+			if tuple2.Cdr() != values.EmptyList {
+				tuple3, ok := tuple2.Cdr().(values.Tuple)
+				if !ok {
+					return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: improper argument list")
+				}
+				if !tuple3.IsEmptyList() {
+					endVal, ok := tuple3.Car().(*values.Integer)
+					if !ok {
+						return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector!: expected an integer for end but got %T", tuple3.Car())
+					}
+					end = endVal.Value
+				}
+			}
+		}
+	}
+
+	// Validate indices
+	bvLen := int64(len(*bv))
+	if start < 0 || start > bvLen {
+		return values.NewForeignError("read-bytevector!: start index out of bounds")
+	}
+	if end < start || end > bvLen {
+		return values.NewForeignError("read-bytevector!: end index out of bounds")
+	}
+
+	// Read into temporary buffer
+	buf := make([]byte, end-start)
+	var n int
+	var err error
+
+	switch p := port.(type) {
+	case *values.BytevectorInputPort:
+		n, err = p.Read(buf)
+	case *values.BinaryInputPort:
+		n, err = p.Read(buf)
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-bytevector!: expected a binary input port but got %T", port)
+	}
+
+	if err == io.EOF && n == 0 {
+		mc.SetValue(values.EofObject)
+		return nil
+	}
+	if err != nil && err != io.EOF {
+		return values.WrapForeignErrorf(err, "read-bytevector!: error reading from port")
+	}
+
+	// Copy bytes into the bytevector
+	for i := 0; i < n; i++ {
+		(*bv)[start+int64(i)] = values.Byte{Value: buf[i]}
+	}
+
+	mc.SetValue(values.NewInteger(int64(n)))
+	return nil
+}
+
+// PrimWriteBytevector implements the write-bytevector primitive.
+// R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
+// Writes the bytes of bytevector to port.
+func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
+	bvVal := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	bv, ok := bvVal.(*values.ByteVector)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAByteVector, "write-bytevector: expected a bytevector but got %T", bvVal)
+	}
+
+	bvLen := int64(len(*bv))
+	start := int64(0)
+	end := bvLen
+
+	// Parse optional arguments: [port [start [end]]]
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: expected a list but got %T", rest)
+	}
+	if !tuple.IsList() {
+		return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: expected a list but got %s", tuple.SchemeString())
+	}
+
+	if tuple.IsEmptyList() {
+		return values.NewForeignError("write-bytevector: no binary output port specified")
+	}
+
+	port := tuple.Car()
+
+	// Check for start/end arguments
+	if tuple.Cdr() != values.EmptyList {
+		tuple2, ok := tuple.Cdr().(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: improper argument list")
+		}
+		if !tuple2.IsEmptyList() {
+			startVal, ok := tuple2.Car().(*values.Integer)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "write-bytevector: expected an integer for start but got %T", tuple2.Car())
+			}
+			start = startVal.Value
+
+			if tuple2.Cdr() != values.EmptyList {
+				tuple3, ok := tuple2.Cdr().(values.Tuple)
+				if !ok {
+					return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: improper argument list")
+				}
+				if !tuple3.IsEmptyList() {
+					endVal, ok := tuple3.Car().(*values.Integer)
+					if !ok {
+						return values.WrapForeignErrorf(values.ErrNotANumber, "write-bytevector: expected an integer for end but got %T", tuple3.Car())
+					}
+					end = endVal.Value
+				}
+			}
+		}
+	}
+
+	// Validate indices
+	if start < 0 || start > bvLen {
+		return values.NewForeignError("write-bytevector: start index out of bounds")
+	}
+	if end < start || end > bvLen {
+		return values.NewForeignError("write-bytevector: end index out of bounds")
+	}
+
+	// Convert to []byte
+	buf := make([]byte, end-start)
+	for i := start; i < end; i++ {
+		buf[i-start] = (*bv)[i].Value
+	}
+
+	// Write to the appropriate port
+	switch p := port.(type) {
+	case *values.BytevectorOutputPort:
+		_, err := p.Write(buf)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "write-bytevector: error writing to port")
+		}
+	case *values.BinaryOutputPort:
+		_, err := p.Write(buf)
+		if err != nil {
+			return values.WrapForeignErrorf(err, "write-bytevector: error writing to port")
+		}
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-bytevector: expected a binary output port but got %T", port)
+	}
+
+	mc.SetValues()
+	return nil
+}
+
 // PrimFlushOutputPort implements the flush-output-port primitive.
 // R7RS §6.13.3: (flush-output-port [port])
 // Flushes any buffered output to the underlying output device.
@@ -893,11 +1148,13 @@ func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
 	switch p := port.(type) {
 	case *values.CharacterOutputPort:
 		if syncer, ok := p.Value.(interface{ Sync() error }); ok {
-			if err := syncer.Sync(); err != nil {
+			err := syncer.Sync()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		} else if flusher, ok := p.Value.(interface{ Flush() error }); ok {
-			if err := flusher.Flush(); err != nil {
+			err := flusher.Flush()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		}
@@ -908,11 +1165,13 @@ func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
 		// Bytevector output ports don't need flushing
 	case *values.BinaryOutputPort:
 		if syncer, ok := p.Value.(interface{ Sync() error }); ok {
-			if err := syncer.Sync(); err != nil {
+			err := syncer.Sync()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		} else if flusher, ok := p.Value.(interface{ Flush() error }); ok {
-			if err := flusher.Flush(); err != nil {
+			err := flusher.Flush()
+			if err != nil {
 				return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 			}
 		}

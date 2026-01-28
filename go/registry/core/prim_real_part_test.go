@@ -24,10 +24,14 @@ import (
 
 func TestRealPartExtended(t *testing.T) {
 	tcs := []schemeCodeTestCase{
-		// Complex
-		{name: "real-part of complex", code: `(real-part 3+4i)`, expected: values.NewFloat(3.0)},
-		{name: "real-part of complex negative", code: `(real-part -3+4i)`, expected: values.NewFloat(-3.0)},
-		{name: "real-part of pure imaginary", code: `(real-part 0+4i)`, expected: values.NewFloat(0.0)},
+		// Exact complex (integer parts parsed as exact BigComplex)
+		{name: "real-part of complex", code: `(real-part 3+4i)`, expected: values.NewBigIntegerFromInt64(3)},
+		{name: "real-part of complex negative", code: `(real-part -3+4i)`, expected: values.NewBigIntegerFromInt64(-3)},
+		{name: "real-part of pure imaginary", code: `(real-part 0+4i)`, expected: values.NewBigIntegerFromInt64(0)},
+
+		// Inexact complex (float parts)
+		{name: "real-part of inexact complex", code: `(real-part 3.0+4.0i)`, expected: values.NewFloat(3.0)},
+		{name: "real-part of inexact complex negative", code: `(real-part -3.0+4.0i)`, expected: values.NewFloat(-3.0)},
 
 		// Real numbers (imaginary part is 0)
 		{name: "real-part of integer", code: `(real-part 5)`, expected: values.NewFloat(5.0)},

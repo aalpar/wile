@@ -26,7 +26,7 @@ func TestInexactQ(t *testing.T) {
 	tcs := []schemeCodeTestCase{
 		// Inexact types
 		{name: "inexact? on float", code: `(inexact? 3.14)`, expected: values.TrueValue},
-		{name: "inexact? on complex", code: `(inexact? 1+2i)`, expected: values.TrueValue},
+		{name: "inexact? on inexact complex", code: `(inexact? 1.0+2.0i)`, expected: values.TrueValue},
 		{name: "inexact? on +inf.0", code: `(inexact? +inf.0)`, expected: values.TrueValue},
 		{name: "inexact? on +nan.0", code: `(inexact? +nan.0)`, expected: values.TrueValue},
 
@@ -34,6 +34,7 @@ func TestInexactQ(t *testing.T) {
 		{name: "inexact? on integer", code: `(inexact? 42)`, expected: values.FalseValue},
 		{name: "inexact? on rational", code: `(inexact? 3/4)`, expected: values.FalseValue},
 		{name: "inexact? on biginteger", code: `(inexact? #z123456789012345678901234567890)`, expected: values.FalseValue},
+		{name: "inexact? on exact complex", code: `(inexact? 1+2i)`, expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

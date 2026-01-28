@@ -24,10 +24,14 @@ import (
 
 func TestImagPartExtended(t *testing.T) {
 	tcs := []schemeCodeTestCase{
-		// Complex
-		{name: "imag-part of complex", code: `(imag-part 3+4i)`, expected: values.NewFloat(4.0)},
-		{name: "imag-part of complex negative", code: `(imag-part 3-4i)`, expected: values.NewFloat(-4.0)},
-		{name: "imag-part of pure real complex", code: `(imag-part 3+0i)`, expected: values.NewFloat(0.0)},
+		// Exact complex (integer parts parsed as exact BigComplex)
+		{name: "imag-part of complex", code: `(imag-part 3+4i)`, expected: values.NewBigIntegerFromInt64(4)},
+		{name: "imag-part of complex negative", code: `(imag-part 3-4i)`, expected: values.NewBigIntegerFromInt64(-4)},
+		{name: "imag-part of pure real complex", code: `(imag-part 3+0i)`, expected: values.NewBigIntegerFromInt64(0)},
+
+		// Inexact complex (float parts)
+		{name: "imag-part of inexact complex", code: `(imag-part 3.0+4.0i)`, expected: values.NewFloat(4.0)},
+		{name: "imag-part of inexact complex negative", code: `(imag-part 3.0-4.0i)`, expected: values.NewFloat(-4.0)},
 
 		// Real numbers (imaginary part is 0)
 		{name: "imag-part of integer", code: `(imag-part 5)`, expected: values.NewFloat(0.0)},

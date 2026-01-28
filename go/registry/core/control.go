@@ -31,7 +31,7 @@ func addControl(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"call-with-current-continuation", 1, false, PrimCallCC},
 		{"call/cc", 1, false, PrimCallCC},
-		{"dynamic-wind", 3, false, PrimDynamicWind},
+		// dynamic-wind is now a compiled form, not a primitive (see machine/compile_validated.go)
 	}, registry.PhaseRuntime)
 
 	// Multiple values

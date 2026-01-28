@@ -308,6 +308,6 @@ func closePort(o values.Value) {
 		if closer, ok := p.Value.(io.Closer); ok {
 			closer.Close() //nolint:errcheck
 		}
-	// String and bytevector ports don't need closing
+		// String and bytevector ports don't need closing
 	}
 }

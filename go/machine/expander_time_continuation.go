@@ -97,6 +97,8 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 
 // ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	var result syntax.SyntaxValue
+	var err error
 	switch stx := expr.(type) {
 	case *syntax.SyntaxPair:
 		// Handle empty list - no expansion needed
@@ -105,7 +107,11 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, 
 		}
 		car := stx.SyntaxCar()
 		cdr := stx.SyntaxCdr().(*syntax.SyntaxPair)
-		return p.ExpandSyntaxOrProcedureCall(ectx, car, cdr)
+		result, err = p.ExpandSyntaxOrProcedureCall(ectx, car, cdr)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
 	case *syntax.SyntaxSymbol:
 		return p.ExpandSymbol(ectx, stx)
 	case *syntax.SyntaxObject:
@@ -248,22 +254,246 @@ func (p *ExpanderTimeContinuation) expandWithSyntax(_ ExpandTimeCallContext, sym
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
-// expandLetSyntax returns the form unchanged. The bindings are transformer
-// specifications, not expressions, and must NOT be macro-expanded. The compiler
-// handles creating the local scope and expanding the body with the new macros.
+// expandLetSyntax fully expands let-syntax during the expansion phase.
+// Creates local macro bindings, expands the body, and returns the expanded result.
+// The let-syntax wrapper disappears - only the expanded body remains.
 //
-// R7RS §4.3.1: let-syntax establishes local macro definitions.
-func (p *ExpanderTimeContinuation) expandLetSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+// R7RS §4.3.1: let-syntax establishes local macro definitions visible only in the body.
+func (p *ExpanderTimeContinuation) expandLetSyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetSyntaxImpl(ectx, sym, expr, false)
 }
 
-// expandLetrecSyntax returns the form unchanged. Like let-syntax, the bindings
-// are transformer specifications that should not be expanded. The difference
-// from let-syntax is that transformers can reference each other (mutual recursion).
+// expandLetrecSyntax fully expands letrec-syntax during the expansion phase.
+// Like let-syntax but transformers can reference each other (mutual recursion).
 //
 // R7RS §4.3.1: letrec-syntax is like let-syntax but with mutual visibility.
-func (p *ExpanderTimeContinuation) expandLetrecSyntax(_ ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+func (p *ExpanderTimeContinuation) expandLetrecSyntax(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetSyntaxImpl(ectx, sym, expr, true)
+}
+
+// expandLetSyntaxImpl implements both let-syntax and letrec-syntax expansion.
+// The recursive parameter controls whether bindings can see each other.
+//
+// This function:
+// 1. Creates a child expand environment with local macro bindings
+// 2. Compiles each syntax-rules transformer
+// 3. Expands body expressions with the child environment
+// 4. Wraps in lambda if body contains defines (for scope isolation)
+// 5. Returns the expanded body - the let-syntax wrapper disappears
+func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, recursive bool) (syntax.SyntaxValue, error) {
+	formName := "let-syntax"
+	if recursive {
+		formName = "letrec-syntax"
+	}
+	sc := sym.SourceContext()
+
+	// expr is (<bindings> <body>) - args after keyword
+	argsPair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || argsPair.IsEmptyList() {
+		return nil, values.NewForeignErrorf("%s: expected bindings and body", formName)
+	}
+
+	// Get the bindings list
+	bindingsStx := argsPair.SyntaxCar()
+	bindingsPair, ok := bindingsStx.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.NewForeignErrorf("%s: expected bindings list", formName)
+	}
+
+	// Get the body
+	bodyStx := argsPair.SyntaxCdr()
+	bodyPair, ok := bodyStx.(*syntax.SyntaxPair)
+	if !ok || bodyPair.IsEmptyList() {
+		return nil, values.NewForeignErrorf("%s: expected body expressions", formName)
+	}
+
+	// Count bindings for local environment allocation
+	numBindings := 0
+	current := bindingsPair
+	for !syntax.IsSyntaxEmptyList(current) {
+		numBindings++
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	// Create child expand environment for macro bindings.
+	// Use p.env directly as the parent (not p.env.Expand()) to preserve
+	// the environment chain for nested let-syntax. When we have:
+	//   (let-syntax ((outer ...))
+	//     (let-syntax ((inner ...)) ...))
+	// The inner let-syntax's environment must have outer's environment
+	// in its parent chain, not the global expand environment.
+	localExpandEnv := environment.NewLocalEnvironment(numBindings)
+	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
+
+	// Create a rebinding scope for the let-syntax body.
+	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
+	// This is used in literalScopesMatch to correctly reject shadowed literals.
+	letScope := syntax.NewRebindingScope()
+
+	// For letrec-syntax, pre-register all keywords so transformers can see each other
+	if recursive {
+		current = bindingsPair
+		for !syntax.IsSyntaxEmptyList(current) {
+			bindingStx := current.SyntaxCar()
+			bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
+			if !ok || bindingPair.IsEmptyList() {
+				return nil, values.NewForeignErrorf("%s: invalid binding", formName)
+			}
+			keywordStx := bindingPair.SyntaxCar()
+			keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
+			if !ok {
+				return nil, values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+			}
+			keyword := keywordSym.Unwrap().(*values.Symbol)
+			// Create binding with letScope so free identifier resolution works
+			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else {
+				break
+			}
+		}
+	}
+
+	// Compile each transformer and store in child expand environment
+	current = bindingsPair
+	for !syntax.IsSyntaxEmptyList(current) {
+		bindingStx := current.SyntaxCar()
+		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
+		if !ok || bindingPair.IsEmptyList() {
+			return nil, values.NewForeignErrorf("%s: invalid binding", formName)
+		}
+
+		// Get keyword
+		keywordStx := bindingPair.SyntaxCar()
+		keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
+		if !ok {
+			return nil, values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+		}
+		keyword := keywordSym.Unwrap().(*values.Symbol)
+
+		// Get transformer expression
+		transformerCdr := bindingPair.SyntaxCdr()
+		transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
+		if !ok || transformerPair.IsEmptyList() {
+			return nil, values.NewForeignErrorf("%s: missing transformer expression", formName)
+		}
+		transformerExpr := transformerPair.SyntaxCar()
+
+		// Check if transformer is a syntax-rules form
+		transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
+		if !ok {
+			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+		car := transformerPairExpr.SyntaxCar()
+		if car == nil {
+			return nil, values.NewForeignErrorf("%s: invalid transformer", formName)
+		}
+		srSym, ok := car.(*syntax.SyntaxSymbol)
+		if !ok {
+			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+		srSymVal := srSym.Unwrap()
+		srSymbol, ok := srSymVal.(*values.Symbol)
+		if !ok || srSymbol.Key != "syntax-rules" {
+			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+		}
+
+		// Compile the syntax-rules transformer
+		closure, err := CompileSyntaxRules(context.TODO(), p.env, transformerPairExpr)
+		if err != nil {
+			return nil, values.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
+		}
+
+		// Store in child expand environment with letScope for free identifier resolution
+		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+		if !created {
+			localIndex = childExpandEnv.GetLocalIndex(keyword)
+		}
+		if localIndex != nil {
+			err := childExpandEnv.SetLocalValue(localIndex, closure)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	// Add the let-syntax scope to the body
+	scopedBody := bodyPair.AddScope(letScope)
+	scopedBodyPair, ok := scopedBody.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, values.NewForeignErrorf("%s: body must be a list", formName)
+	}
+
+	// Create expander with child expand environment for body expansion
+	childExpander := NewExpanderTimeContinuation(childExpandEnv)
+
+	// Expand all body expressions and check for defines
+	var expandedExprs []syntax.SyntaxValue
+	hasDefine := false
+	current = scopedBodyPair
+	for !syntax.IsSyntaxEmptyList(current) {
+		expr := current.SyntaxCar()
+		expandedExpr, err := childExpander.ExpandExpression(ectx, expr)
+		if err != nil {
+			return nil, values.WrapForeignErrorf(err, "%s: failed to expand body expression", formName)
+		}
+		expandedExprs = append(expandedExprs, expandedExpr)
+		if isExpandedDefineForm(expandedExpr) {
+			hasDefine = true
+		}
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else if !syntax.IsSyntaxEmptyList(cdr) {
+			return nil, values.NewForeignErrorf("%s: body must be a proper list", formName)
+		} else {
+			break
+		}
+	}
+
+	// Build result: (begin body...) or ((lambda () (begin body...))) if has defines
+	beginSym := syntax.NewSyntaxSymbol("begin", sc)
+	beginBody := syntax.SyntaxList(sc, expandedExprs...)
+	beginExpr := syntax.NewSyntaxCons(beginSym, beginBody, sc)
+
+	if hasDefine {
+		// Wrap in lambda to create new runtime scope for defines
+		lambdaSym := syntax.NewSyntaxSymbol("lambda", sc)
+		emptyArgs := syntax.NewSyntaxEmptyList(sc)
+		lambdaExpr := syntax.SyntaxList(sc, lambdaSym, emptyArgs, beginExpr)
+		return syntax.SyntaxList(sc, lambdaExpr), nil
+	}
+
+	return beginExpr, nil
+}
+
+// isExpandedDefineForm returns true if the expression is a define form.
+func isExpandedDefineForm(expr syntax.SyntaxValue) bool {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return false
+	}
+	car := pair.SyntaxCar()
+	sym, ok := car.(*syntax.SyntaxSymbol)
+	if !ok {
+		return false
+	}
+	return sym.Sym.Key == "define"
 }
 
 // expandWithBindingScope implements the (with-binding-scope (id ...) body) form.
@@ -299,9 +529,8 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 		return nil, values.NewForeignError("with-binding-scope: expected (with-binding-scope (id ...) body)")
 	}
 
-	// Skip the identifier list - we add scope to the entire body anyway
-	// The identifier list is: pair.SyntaxCar()
-	// Future: could validate that identifiers are symbols
+	// Get the identifier list - these are the identifiers being bound
+	idListStx := pair.SyntaxCar()
 
 	// Get the body
 	cdr := pair.SyntaxCdr()
@@ -312,17 +541,44 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ectx ExpandTimeCallCon
 	body := bodyPair.SyntaxCar()
 
 	// Create a fresh binding scope
-	bindingScope := syntax.NewScope(nil)
+	bindingScope := syntax.NewScope()
 
 	// Add the scope to the entire body
 	// This adds the scope to ALL identifiers in the body, including:
 	// - Lambda parameters (binding sites)
 	// - References to those parameters in the lambda body
 	// - Any other identifiers
-	scopedBody := body.AddScope(bindingScope)
+	scopedBody := syntax.AddScopeToSyntax(body, bindingScope)
 
-	// Continue expanding the scoped body
-	// The with-binding-scope form disappears - we return just the body
+	// Extract bound identifiers and create placeholder bindings for them.
+	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: when a macro
+	// like cond checks if => has been bound, it needs to find these placeholder
+	// bindings in the expand-time environment.
+	boundIds := extractIdentifierList(idListStx)
+	if len(boundIds) > 0 {
+		// Create a child expand environment with placeholder bindings
+		localExpandEnv := environment.NewLocalEnvironment(len(boundIds))
+		childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
+
+		// Add placeholder bindings for each bound identifier.
+		// The scopes include the binding scope we just created.
+		for _, id := range boundIds {
+			// Get the identifier's current scopes and add the binding scope
+			idScopes := id.Scopes()
+			newScopes := make([]*syntax.Scope, len(idScopes)+1)
+			copy(newScopes, idScopes)
+			newScopes[len(idScopes)] = bindingScope
+
+			sym := p.env.InternSymbol(id.Sym)
+			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes)
+		}
+
+		// Continue expansion with the child environment
+		childExpander := NewExpanderTimeContinuation(childExpandEnv)
+		return childExpander.ExpandExpression(ectx, scopedBody)
+	}
+
+	// No bound identifiers - just continue with current environment
 	return p.ExpandExpression(ectx, scopedBody)
 }
 
@@ -393,11 +649,27 @@ func formatIrritants(irritants []string) string {
 }
 
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
+// Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
+// ensuring macros defined in begin are available to subsequent forms.
 func (p *ExpanderTimeContinuation) expandBeginForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) {
-		expandedArgs, err := p.ExpandSyntaxArgumentList(ectx, exprPair)
+		// Collect forms from the begin body
+		forms, err := collectBodyExpressions(exprPair)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect begin body: %w", err)
+		}
+
+		// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
+		// This ensures macros defined in begin are available to subsequent forms
+		expandedForms, err := p.ExpandBodyWithDefineSyntax(ectx, forms)
 		if err != nil {
 			return nil, fmt.Errorf("failed to expand begin body: %w", err)
+		}
+
+		// Rebuild the begin form with expanded contents
+		expandedArgs := syntax.NewSyntaxEmptyList(sym.SourceContext())
+		for i := len(expandedForms) - 1; i >= 0; i-- {
+			expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
 		}
 		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
 	}
@@ -529,31 +801,435 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ectx ExpandTimeCallContext, 
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 }
 
+// expandImportForm processes (import <import-set> ...) during expansion.
+// This loads libraries and makes their bindings (including macros) available
+// for subsequent forms. Without this, imported macros wouldn't be recognized
+// during expansion since imports were only processed during compilation.
+//
+// R7RS §5.2: Import declarations must be processed before expressions that
+// use the imported bindings. For macros, this means processing during expansion.
+func (p *ExpanderTimeContinuation) expandImportForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	// expr is the arguments after 'import': (<import-set> ...)
+	if syntax.IsSyntaxEmptyList(expr) {
+		// Empty import is valid, return unchanged
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	}
+
+	importSets, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, fmt.Errorf("import: expected list of import sets")
+	}
+
+	// Process each import set to load libraries and copy bindings
+	ctx := context.TODO()
+	_, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		importSet, parseErr := parseImportSet(importSetExpr)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		// Load the library
+		lib, loadErr := LoadLibrary(ctx, importSet.LibraryName, p.env)
+		if loadErr != nil {
+			return fmt.Errorf("import: failed to load library %s: %w",
+				importSet.LibraryName.SchemeString(), loadErr)
+		}
+
+		// Apply import modifiers (only, except, prefix, rename) to get final bindings
+		bindings, applyErr := importSet.ApplyToExports(lib)
+		if applyErr != nil {
+			return fmt.Errorf("import: error applying modifiers for %s: %w",
+				importSet.LibraryName.SchemeString(), applyErr)
+		}
+
+		// Copy bindings to the target phase - this makes macros available
+		copyErr := CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)
+		if copyErr != nil {
+			return fmt.Errorf("import: error copying bindings from %s: %w",
+				importSet.LibraryName.SchemeString(), copyErr)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the import form unchanged for later compilation
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
 // expandLambdaForm expands (lambda (args...) body...)
+//
+// R7RS §4.2.2: Lambda parameters shadow outer bindings including macros and
+// primitive forms. This function creates a child environment with the formals
+// as local variable bindings before expanding the body, ensuring that references
+// to parameter names (like `if`, `let`) don't get treated as special forms.
+//
+// R7RS §4.3.2: Auxiliary syntax hygiene. Lambda adds a scope to both formals
+// and body BEFORE expanding inner macros. This ensures that identifiers in the
+// body (like `=>` in a `cond`) carry the lambda's scope, enabling correct
+// `free-identifier=?` comparisons during macro pattern matching.
+//
+// R7RS §5.3: Internal define-syntax forms are processed before expanding the
+// rest of the body, so locally-defined macros are visible to subsequent forms.
 func (p *ExpanderTimeContinuation) expandLambdaForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Keep formals unchanged
 	formals := pair.SyntaxCar()
-	formalsStx := formals
-	// Expand body
 	cdrVal := pair.SyntaxCdr()
 	cdrPair, ok := cdrVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	expandedBody, err := p.ExpandSyntaxArgumentList(ectx, cdrPair)
+	// Create a scope for this lambda's bindings.
+	// This scope is added to both formals and body BEFORE any inner expansion,
+	// ensuring that pattern matching in inner macros (like cond) can correctly
+	// detect when identifiers (like =>) have been bound by this lambda.
+	lambdaScope := syntax.NewScope()
+
+	// Add lambda scope to formals and body
+	formalsStx := syntax.AddScopeToSyntax(formals, lambdaScope)
+	bodyWithScope := cdrPair.AddScope(lambdaScope).(*syntax.SyntaxPair)
+
+	// Extract formal parameter symbols (now with lambda scope included)
+	formalSyms := extractFormalSymbols(formalsStx)
+
+	// Create a child environment with the formals as local variable bindings.
+	// The bindings include the lambda scope, so lookups will find them.
+	childEnv := environment.NewEnvironmentFrameWithParent(
+		environment.NewLocalEnvironment(0),
+		p.env,
+	)
+	for _, fs := range formalSyms {
+		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
+	}
+
+	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions
+	// This makes locally-defined macros visible to later body expressions
+	bodyExprs, err := collectBodyExpressions(bodyWithScope)
 	if err != nil {
-		return nil, fmt.Errorf("lambda: failed to expand body: %w", err)
+		return nil, values.WrapForeignErrorf(err, "lambda: invalid body expression")
+	}
+
+	// Handle the case where body is wrapped in (begin ...) - common from let macro
+	unwrappedExprs, wasBeginWrapped := unwrapBeginBodyWithFlag(bodyExprs)
+
+	// Expand body in the child environment, compiling define-syntax as encountered
+	childExpander := NewExpanderTimeContinuation(childEnv)
+	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(ectx, unwrappedExprs)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "lambda: failed to expand body")
+	}
+
+	// Rebuild the body as a syntax list
+	var expandedBody *syntax.SyntaxPair
+	if wasBeginWrapped {
+		// Re-wrap in begin
+		beginSym := syntax.NewSyntaxSymbol("begin", sym.SourceContext())
+		innerList := syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
+		beginForm := syntax.NewSyntaxCons(beginSym, innerList, sym.SourceContext())
+		expandedBody = syntax.SyntaxList(sym.SourceContext(), beginForm)
+	} else {
+		expandedBody = syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
 	}
 
 	// Build (lambda formals expanded-body...)
 	args := syntax.NewSyntaxCons(formalsStx, expandedBody, sym.SourceContext())
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+}
+
+// collectBodyExpressions collects all expressions from a body syntax pair into a slice.
+func collectBodyExpressions(body *syntax.SyntaxPair) ([]syntax.SyntaxValue, error) {
+	var exprs []syntax.SyntaxValue
+	current := body
+	for !syntax.IsSyntaxEmptyList(current) {
+		exprs = append(exprs, current.SyntaxCar())
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else if syntax.IsSyntaxEmptyList(cdr) {
+			break
+		} else {
+			return nil, fmt.Errorf("body must be a proper list")
+		}
+	}
+	return exprs, nil
+}
+
+// unwrapBeginBodyWithFlag handles the case where a lambda body is a single (begin ...) form.
+// This is common from let macro expansion: (let () body...) -> ((lambda () (begin body...)))
+// Returns the contents of the begin and a flag indicating if unwrapping occurred.
+func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, bool) {
+	if len(exprs) != 1 {
+		return exprs, false
+	}
+	pair, ok := exprs[0].(*syntax.SyntaxPair)
+	if !ok {
+		return exprs, false
+	}
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return exprs, false
+	}
+	sym, ok := carSym.Unwrap().(*values.Symbol)
+	if !ok || sym.Key != "begin" {
+		return exprs, false
+	}
+	// It's (begin ...), extract the contents
+	cdr := pair.Cdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok {
+		return exprs, false
+	}
+	innerExprs, err := collectBodyExpressions(cdrPair)
+	if err != nil {
+		return exprs, false
+	}
+	return innerExprs, true
+}
+
+// extractDefineName extracts the name being defined from a define form.
+// Returns nil if the form is not a define or is malformed.
+//
+// Note: This intentionally excludes define-syntax forms. Macro bindings are
+// handled separately by compileDefineSyntaxFromSyntax which stores them in the
+// expand environment. We only pre-register define bindings so that macros can
+// reference forward-declared variable definitions.
+//
+// Handles:
+//   - (define name value)
+//   - (define (name args...) body...)
+func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
+	pair, ok := form.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil
+	}
+
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return nil
+	}
+
+	sym := carSym.Unwrap().(*values.Symbol)
+	// Only handle define, not define-syntax (macros are handled separately)
+	if sym.Key != "define" {
+		return nil
+	}
+
+	cdr := pair.SyntaxCdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
+		return nil
+	}
+
+	second := cdrPair.SyntaxCar()
+	switch s := second.(type) {
+	case *syntax.SyntaxSymbol:
+		// (define name ...)
+		return s
+	case *syntax.SyntaxPair:
+		// (define (name args...) body...) - extract name from the pair
+		if !syntax.IsSyntaxEmptyList(s) {
+			if nameExpr, ok := s.SyntaxCar().(*syntax.SyntaxSymbol); ok {
+				return nameExpr
+			}
+		}
+	}
+	return nil
+}
+
+// ExpandBodyWithDefineSyntax expands a sequence of body forms, compiling
+// define-syntax forms as encountered so subsequent forms can use the macros.
+//
+// This unifies the expansion pattern used by:
+// - Lambda bodies (internal define-syntax)
+// - Library bodies (top-level define-syntax)
+// - Include files (top-level define-syntax)
+//
+// R7RS §5.3: Internal define-syntax forms must be processed before expanding
+// subsequent body expressions so that locally-defined macros are visible.
+//
+// R7RS §5.3.2: Bodies use letrec* semantics where all defined names are visible
+// to all initializers. This enables forward references within macros - a macro
+// can reference a definition that appears later in the same body.
+func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
+	ectx ExpandTimeCallContext,
+	forms []syntax.SyntaxValue,
+) ([]syntax.SyntaxValue, error) {
+	// Pre-scan: Register placeholder bindings for all define/define-syntax forms
+	// This enables forward hygienic references within the body (R7RS letrec* semantics)
+	for _, form := range forms {
+		nameSym := extractDefineName(form)
+		if nameSym != nil {
+			name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+			scopes := nameSym.Scopes()
+			// Create placeholder binding in current environment (not expand phase)
+			if p.env.LocalEnvironment() != nil {
+				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+			} else {
+				p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+			}
+		}
+	}
+
+	// Now expand sequentially with all bindings visible
+	var result []syntax.SyntaxValue
+	for _, form := range forms {
+		expanded, err := p.ExpandExpression(ectx, form)
+		if err != nil {
+			return nil, err
+		}
+
+		// If define-syntax, compile it now for subsequent forms
+		if isDefineSyntaxSyntax(expanded) {
+			pair := expanded.(*syntax.SyntaxPair)
+			err = compileDefineSyntaxFromSyntax(p.env, pair)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		result = append(result, expanded)
+	}
+	return result, nil
+}
+
+// isDefineSyntaxSyntax checks if a syntax value is a define-syntax form.
+func isDefineSyntaxSyntax(expr syntax.SyntaxValue) bool {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return false
+	}
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return false
+	}
+	sym, ok := carSym.Unwrap().(*values.Symbol)
+	return ok && sym.Key == "define-syntax"
+}
+
+// compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
+// in the expand environment.
+//
+// The env parameter is used for free identifier resolution during compilation (so macros
+// can see local bindings like lambda parameters), while the actual macro binding is stored
+// in env.Expand() for lookup during expansion.
+func compileDefineSyntaxFromSyntax(env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+	expandEnv := env.Expand()
+
+	// Extract: (define-syntax keyword transformer)
+	cdr, ok := dsPair.Cdr().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: malformed")
+	}
+	keywordSym, ok := cdr.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return fmt.Errorf("define-syntax: keyword must be a symbol")
+	}
+	keyword := expandEnv.InternSymbol(keywordSym.Unwrap().(*values.Symbol))
+	symbolScopes := keywordSym.Scopes()
+
+	transformerCdr, ok := cdr.Cdr().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: missing transformer")
+	}
+	transformer, ok := transformerCdr.SyntaxCar().(*syntax.SyntaxPair)
+	if !ok {
+		return fmt.Errorf("define-syntax: transformer must be a list")
+	}
+
+	// Compile the transformer using the full environment for free identifier resolution
+	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
+	closure, err := CompileSyntaxRules(context.TODO(), env, transformer)
+	if err != nil {
+		return err
+	}
+
+	// Store in the expand environment (for macro lookup during expansion)
+	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+	binding := expandEnv.GetGlobalBinding(globalIndex)
+	if binding != nil && symbolScopes != nil {
+		binding.SetScopes(symbolScopes)
+	}
+	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
+}
+
+// formalSymbol pairs a symbol with its scopes for formal parameter tracking.
+type formalSymbol struct {
+	sym    *values.Symbol
+	scopes []*syntax.Scope
+}
+
+// extractFormalSymbols extracts symbols from a lambda formals expression.
+// Handles proper lists (x y z), improper lists (x y . rest), and single symbols (args).
+func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
+	var result []formalSymbol
+
+	switch f := formals.(type) {
+	case *syntax.SyntaxSymbol:
+		// Rest argument: (lambda args body...)
+		result = append(result, formalSymbol{f.Sym, f.Scopes()})
+	case *syntax.SyntaxPair:
+		// List of arguments: (lambda (x y z) body...) or (lambda (x y . rest) body...)
+		current := f
+		for !syntax.IsSyntaxEmptyList(current) {
+			car := current.SyntaxCar()
+			if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+			}
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else if sym, ok := cdr.(*syntax.SyntaxSymbol); ok {
+				// Improper list: (x y . rest)
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+				break
+			} else {
+				break
+			}
+		}
+	}
+
+	return result
+}
+
+// extractIdentifierList extracts SyntaxSymbols from an identifier list.
+// This is used by with-binding-scope to get the bound identifiers.
+// Returns the symbols with their scopes preserved.
+func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
+	var result []*syntax.SyntaxSymbol
+
+	pair, ok := idList.(*syntax.SyntaxPair)
+	if !ok {
+		// Single identifier or empty
+		if sym, ok := idList.(*syntax.SyntaxSymbol); ok {
+			return []*syntax.SyntaxSymbol{sym}
+		}
+		return nil
+	}
+
+	// List of identifiers
+	current := pair
+	for !syntax.IsSyntaxEmptyList(current) {
+		car := current.SyntaxCar()
+		if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+			result = append(result, sym)
+		}
+		cdr := current.SyntaxCdr()
+		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			current = nextPair
+		} else {
+			break
+		}
+	}
+
+	return result
 }
 
 // expandCaseLambdaForm expands (case-lambda (formals body...) ...)
@@ -634,9 +1310,11 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 		return nil, fmt.Errorf("expected a symbol for syntax, got %T", sym.Unwrap())
 	}
 
-	// R7RS §4.2.2: Local variable bindings shadow macros
-	// Check if there's a local variable binding before checking for macros
-	if !p.hasLocalVariableBinding(sym0, sym.Scopes()) {
+	// R7RS §4.2.2: Local variable bindings shadow macros AND primitive forms
+	// Check if there's a local variable binding before checking for macros or primitives
+	hasLocalBinding := p.hasLocalVariableBinding(sym0, sym.Scopes())
+
+	if !hasLocalBinding {
 		// No local variable shadowing - check for macros
 		// First check local bindings in p.env (supports let-syntax local macros)
 		// Then fall back to the global expand environment
@@ -653,17 +1331,16 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ectx ExpandTimeCallCon
 
 		// Check if it's a macro binding
 		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
-			// This is a macro - invoke the transformer (handled below after this block)
+			// This is a macro - invoke the transformer
 			return p.expandMacroInvocation(ectx, sym, expr, bnd)
 		}
-	}
 
-	// Not a macro (or local variable shadows macro)
-	// Check if it's a primitive (quote, if, define-syntax, etc.)
-	symVal := p.env.InternSymbol(sym0)
-	pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
-	if pe != nil {
-		return pe.Expand(p, ectx, sym, expr)
+		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
+		symVal := p.env.InternSymbol(sym0)
+		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
+		if pe != nil {
+			return pe.Expand(p, ectx, sym, expr)
+		}
 	}
 
 	// Regular procedure call - expand arguments (they might contain macro calls)
@@ -690,6 +1367,15 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ectx ExpandTimeCallCont
 	if mc == nil {
 		return nil, fmt.Errorf("failed to create machine context from closure")
 	}
+
+	// Set the expander context so the transformer can access the use-site environment.
+	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
+	// needs to check if input identifiers have lexical bindings at the use site.
+	// For example, in (let ((=> #f)) (cond (#t => 'ok))), the pattern matcher needs
+	// to see that => is bound by the lambda (from let expansion) to correctly
+	// determine that it shouldn't match the literal => in cond's pattern.
+	expanderCtx := NewExpanderContext(p.env, p, ectx)
+	mc.SetExpanderContext(expanderCtx)
 
 	// For syntax-rules transformers, we pass the entire input form as an argument.
 	// The transformer expects the full form including the macro name.

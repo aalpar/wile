@@ -213,21 +213,22 @@ func PrimLength(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimListRef implements the (list-ref) primitive.
 // Returns the element at the given index in a list.
+// R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
-	idx, ok := k.(*values.Integer)
+	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "list-ref: expected an integer index but got %T", k)
+		return values.WrapForeignErrorf(values.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
 	}
-	if idx.Value < 0 {
+	if idx < 0 {
 		return values.NewForeignError("list-ref: index must be non-negative")
 	}
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "list-ref: expected a pair but got %T", o)
 	}
-	for i := int64(0); i < idx.Value; i++ {
+	for i := int64(0); i < idx; i++ {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
 			return values.NewForeignError("list-ref: index out of bounds")
@@ -242,6 +243,7 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimListSet implements the Scheme list-set! primitive.
+// R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 	listVal := mc.Arg(0)
 	idxVal := mc.Arg(1)
@@ -252,11 +254,11 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list-set!: expected a list but got %T", listVal)
 	}
 
-	idx, ok := idxVal.(*values.Integer)
+	idx, ok := values.ExactInteger(idxVal)
 	if !ok {
-		return values.NewForeignError("list-set!: expected an integer index")
+		return values.WrapForeignErrorf(values.ErrNotANumber, "list-set!: expected an exact integer index but got %T", idxVal)
 	}
-	k := int(idx.Value)
+	k := int(idx)
 	if k < 0 {
 		return values.NewForeignError("list-set!: index must be non-negative")
 	}
@@ -285,17 +287,18 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimListTail implements the (list-tail) primitive.
 // Returns the sublist starting at the given index.
+// R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
-	idx, ok := k.(*values.Integer)
+	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "list-tail: expected an integer index but got %T", k)
+		return values.WrapForeignErrorf(values.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
 	}
-	if idx.Value < 0 {
+	if idx < 0 {
 		return values.NewForeignError("list-tail: index must be non-negative")
 	}
-	if idx.Value == 0 {
+	if idx == 0 {
 		mc.SetValue(o)
 		return nil
 	}
@@ -303,10 +306,10 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "list-tail: expected a pair but got %T", o)
 	}
-	for i := int64(0); i < idx.Value; i++ {
+	for i := int64(0); i < idx; i++ {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
-			if i == idx.Value-1 {
+			if i == idx-1 {
 				mc.SetValue(values.EmptyList)
 				return nil
 			}
@@ -314,7 +317,7 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 		}
 		pr, ok = next.(*values.Pair)
 		if !ok {
-			if i == idx.Value-1 {
+			if i == idx-1 {
 				mc.SetValue(next)
 				return nil
 			}

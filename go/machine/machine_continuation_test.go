@@ -25,9 +25,9 @@ import (
 )
 
 func TestMachine_Operations(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironmentFrame()
 	lenv := environment.NewLocalEnvironment(0)
-	env := environment.NewEnvironmentFrame(lenv, genv)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
 	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -36,8 +36,7 @@ func TestMachine_Operations(t *testing.T) {
 }
 
 func TestMachineContinuation_Parent(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	parent := NewMachineContinuation(nil, nil, env)
 	child := NewMachineContinuation(parent, nil, env)
@@ -47,16 +46,14 @@ func TestMachineContinuation_Parent(t *testing.T) {
 }
 
 func TestMachineContinuation_EnvironmentFrame(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.EnvironmentFrame(), qt.Equals, env)
 }
 
 func TestMachineContinuation_Template(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -64,8 +61,7 @@ func TestMachineContinuation_Template(t *testing.T) {
 }
 
 func TestMachineContinuation_SetPC(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.PC(), qt.Equals, 0)
@@ -75,8 +71,7 @@ func TestMachineContinuation_SetPC(t *testing.T) {
 }
 
 func TestMachineContinuation_PushValues(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, len(cont.value), qt.Equals, 0)
@@ -91,8 +86,7 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 }
 
 func TestMachineContinuation_Copy(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	parent := NewMachineContinuation(nil, nil, env)
@@ -118,8 +112,7 @@ func TestMachineContinuation_Copy(t *testing.T) {
 }
 
 func TestMachineContinuation_SchemeString(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.SchemeString(), qt.Equals, "<machine-continuation %0>")
@@ -129,8 +122,7 @@ func TestMachineContinuation_SchemeString(t *testing.T) {
 }
 
 func TestMachineContinuation_IsVoid(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.IsVoid(), qt.IsFalse)
@@ -140,8 +132,7 @@ func TestMachineContinuation_IsVoid(t *testing.T) {
 }
 
 func TestMachineContinuation_EqualTo(t *testing.T) {
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont1 := NewMachineContinuation(nil, tpl, env)

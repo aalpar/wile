@@ -50,6 +50,54 @@ func PrimDiv(_ context.Context, mc *machine.MachineContext) error {
 		func(acc, val values.Number) values.Number { return acc.Divide(val) })
 }
 
+// integerEqualsFloat compares an exact integer to an inexact float.
+// Returns true only if the float exactly represents the integer value.
+//
+// R7RS §6.2.5: Numeric equality must not lose precision. An exact integer
+// and an inexact float are equal only if the float exactly represents
+// the integer's value.
+func integerEqualsFloat(i *values.Integer, f *values.Float) bool {
+	// NaN is not equal to anything
+	if math.IsNaN(f.Value) {
+		return false
+	}
+	// Infinity cannot equal any integer
+	if math.IsInf(f.Value, 0) {
+		return false
+	}
+	// Non-integer floats cannot equal integers
+	if f.Value != math.Trunc(f.Value) {
+		return false
+	}
+	// For integers within float64's exact range (|n| <= 2^53), direct compare
+	const maxExactFloat64Int = int64(1) << 53
+	if i.Value >= -maxExactFloat64Int && i.Value <= maxExactFloat64Int {
+		return float64(i.Value) == f.Value
+	}
+	// For larger integers, convert float to big.Rat and compare exactly
+	r := new(big.Rat).SetFloat64(f.Value)
+	if r == nil || !r.IsInt() {
+		return false
+	}
+	return r.Num().Int64() == i.Value
+}
+
+// bigIntegerEqualsFloat compares a BigInteger to a Float.
+// Returns true only if the float exactly represents the BigInteger value.
+func bigIntegerEqualsFloat(bi *values.BigInteger, f *values.Float) bool {
+	if math.IsNaN(f.Value) || math.IsInf(f.Value, 0) {
+		return false
+	}
+	if f.Value != math.Trunc(f.Value) {
+		return false
+	}
+	r := new(big.Rat).SetFloat64(f.Value)
+	if r == nil || !r.IsInt() {
+		return false
+	}
+	return bi.BigInt().Cmp(r.Num()) == 0
+}
+
 // numericEquals compares two numbers for equality.
 //
 // R7RS §6.2.5: The = procedure returns #t if its arguments are numerically
@@ -67,8 +115,32 @@ func numericEquals(a, b values.Number) bool {
 		// Direct comparison handles infinities correctly
 		return af.Value == bf.Value
 	}
-	// For mixed types or non-Float, use subtraction
-	// (works correctly except for Float infinities, already handled)
+
+	// Handle Integer vs Float specially to preserve precision
+	if intA, ok := a.(*values.Integer); ok {
+		if floatB, ok := b.(*values.Float); ok {
+			return integerEqualsFloat(intA, floatB)
+		}
+	}
+	if intB, ok := b.(*values.Integer); ok {
+		if floatA, ok := a.(*values.Float); ok {
+			return integerEqualsFloat(intB, floatA)
+		}
+	}
+
+	// Handle BigInteger vs Float
+	if bigA, ok := a.(*values.BigInteger); ok {
+		if floatB, ok := b.(*values.Float); ok {
+			return bigIntegerEqualsFloat(bigA, floatB)
+		}
+	}
+	if bigB, ok := b.(*values.BigInteger); ok {
+		if floatA, ok := a.(*values.Float); ok {
+			return bigIntegerEqualsFloat(bigB, floatA)
+		}
+	}
+
+	// For other types, use subtraction
 	return a.Subtract(b).IsZero()
 }
 
@@ -397,10 +469,13 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimExact implements the (exact) primitive.
 // Converts an inexact number to an exact representation.
+//
+// R7RS §6.2.6: The exact procedure returns an exact representation
+// of z that is numerically closest to the argument.
 func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.Rational:
+	case *values.Integer, *values.Rational, *values.BigInteger:
 		mc.SetValue(v)
 	case *values.Float:
 		// Convert float to rational
@@ -408,7 +483,17 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 		if r == nil {
 			return values.NewForeignError("exact: cannot convert infinity or NaN to exact")
 		}
-		mc.SetValue(values.NewRationalFromRat(r))
+		// If denominator is 1, return Integer instead of Rational
+		if r.IsInt() {
+			num := r.Num()
+			if num.IsInt64() {
+				mc.SetValue(values.NewInteger(num.Int64()))
+			} else {
+				mc.SetValue(values.NewBigInteger(num))
+			}
+		} else {
+			mc.SetValue(values.NewRationalFromRat(r))
+		}
 	case *values.Complex:
 		return values.NewForeignError("exact: complex numbers not supported")
 	default:
@@ -419,6 +504,9 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimInexact implements the (inexact) primitive.
 // Converts exact number to inexact.
+//
+// R7RS §6.2.6: The inexact procedure returns an inexact representation
+// of z that is numerically closest to the argument.
 func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -430,6 +518,12 @@ func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewFloat(v.Float64()))
 	case *values.Complex:
 		mc.SetValue(v)
+	case *values.BigInteger:
+		mc.SetValue(v.ToInexact())
+	case *values.BigFloat:
+		mc.SetValue(v)
+	case *values.BigComplex:
+		mc.SetValue(v.ToInexact())
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact: expected a number but got %T", o)
 	}

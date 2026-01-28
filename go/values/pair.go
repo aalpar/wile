@@ -64,15 +64,42 @@ func (p *Pair) SetCdr(v Value) {
 }
 
 // IsList checks if the Pair represents a proper list.
+// Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
+// Returns false for circular lists per R7RS §6.4.
 func (p *Pair) IsList() bool {
-	pr := p
-	if IsVoid(pr) {
+	if p == nil || IsVoid(p) {
 		return false
 	}
-	v, _ := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ Value) error {
-		return nil
-	})
-	return IsEmptyList(v)
+	if p.IsEmptyList() {
+		return true
+	}
+	slow := p
+	fast := p
+	for {
+		// Fast pointer advances two steps
+		next, ok := fast.Cdr().(*Pair)
+		if !ok {
+			return IsEmptyList(fast.Cdr())
+		}
+		fast = next
+		if fast.IsEmptyList() {
+			return true
+		}
+		next, ok = fast.Cdr().(*Pair)
+		if !ok {
+			return IsEmptyList(fast.Cdr())
+		}
+		fast = next
+		if fast.IsEmptyList() {
+			return true
+		}
+		// Slow pointer advances one step
+		slow = slow.Cdr().(*Pair)
+		// Cycle detected
+		if slow == fast {
+			return false
+		}
+	}
 }
 
 // Append appends the given Value vs to the end of the list represented by the Pair.

@@ -17,11 +17,12 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateBegin validates (begin expr...)
-func validateBegin(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateBegin(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -35,7 +36,7 @@ func validateBegin(ctx context.Context, pair *syntax.SyntaxPair, result *Validat
 	// R7RS allows (begin) with no expressions (returns unspecified value)
 	var body []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		expr := validateExpr(ctx, elements[i], result)
+		expr := validateExpr(ctx, env, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 		}

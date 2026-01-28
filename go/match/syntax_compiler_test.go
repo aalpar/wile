@@ -19,11 +19,36 @@ import (
 	"fmt"
 	"testing"
 
+	"wile/syntax"
 	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
 )
+
+// testSyntaxIntC creates a syntax-wrapped integer for test bytecode in compiler tests.
+func testSyntaxIntC(v int64) syntax.SyntaxValue {
+	return syntax.NewSyntaxObject(values.NewInteger(v), nil)
+}
+
+// testSyntaxSymC creates a syntax-wrapped symbol for test bytecode in compiler tests.
+func testSyntaxSymC(key string) syntax.SyntaxValue {
+	return syntax.NewSyntaxSymbol(key, nil)
+}
+
+// bytecodeEqual compares two bytecode slices by their string representation.
+// This avoids issues with qt.DeepEquals not being able to compare unexported fields.
+func bytecodeEqual(a, b []SyntaxCommand) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if fmt.Sprintf("%v", a[i]) != fmt.Sprintf("%v", b[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 func TestUtilsMatcherSuites(t *testing.T) {
 	c := qt.New(t)
@@ -44,7 +69,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 			in: values.List(values.NewInteger(10), values.NewSymbol("a")),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeDone{},
@@ -55,9 +80,9 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			in:        values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
 			out: []SyntaxCommand{
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
 				ByteCodeDone{},
 			},
 		},
@@ -67,14 +92,14 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 			in: values.List(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewInteger(40)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(40)},
 				ByteCodeDone{},
 			},
 		},
@@ -82,11 +107,11 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{},
 			in:        values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(30)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(30)},
 				ByteCodeDone{},
 			},
 		},
@@ -96,16 +121,16 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
 				ByteCodeVisitCdr{},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("a")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("a")},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewSymbol("...")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("...")},
 				ByteCodeDone{},
 			},
 		},
@@ -117,9 +142,9 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
 				ByteCodeVisitCdr{},
 				// SkipIfEmpty checks for empty list before executing loop body
 				ByteCodeSkipIfEmpty{Offset: 9},
@@ -128,7 +153,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeDone{},
 				ByteCodePopContext{},
 				ByteCodeJump{Offset: -8},
@@ -141,7 +166,8 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
 			vst.Compile(context.TODO(), tc.in) //nolint:errcheck
-			c.Assert(vst.codes, qt.DeepEquals, tc.out)
+			c.Assert(bytecodeEqual(vst.codes, tc.out), qt.IsTrue,
+				qt.Commentf("got %v, want %v", vst.codes, tc.out))
 		})
 	}
 }
@@ -249,7 +275,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -258,7 +284,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -269,7 +295,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -278,7 +304,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeDone{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -289,7 +315,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -298,7 +324,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeJump{Offset: +3},
 				ByteCodeDone{},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -309,7 +335,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -318,7 +344,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeJump{Offset: +3},
 				ByteCodeVisitCar{},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -3},
 				ByteCodeVisitCar{},
 			},
@@ -329,7 +355,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -337,7 +363,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeDone{},
 				ByteCodeJump{Offset: -3},
 				ByteCodeVisitCar{},
@@ -349,7 +375,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -357,7 +383,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeDone{},
 				ByteCodeVisitCar{},
@@ -369,7 +395,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -377,7 +403,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 				ByteCodeDone{},
@@ -387,7 +413,8 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 	for i, tc := range tcs {
 		c.Run(fmt.Sprintf("%d: %q", i, tc.in), func(c *qt.C) {
 			q := insert(tc.i, tc.in, []SyntaxCommand{ByteCodeDone{}})
-			c.Assert(q, qt.DeepEquals, tc.out)
+			c.Assert(bytecodeEqual(q, tc.out), qt.IsTrue,
+				qt.Commentf("got %v, want %v", q, tc.out))
 		})
 	}
 }

@@ -26,8 +26,7 @@ import (
 func TestNewExpanderContext(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	expander := NewExpanderTimeContinuation(env)
 	ectx := NewExpandTimeCallContext()
 
@@ -40,8 +39,7 @@ func TestNewExpanderContext(t *testing.T) {
 func TestExpanderContext_IntroductionScope(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	expander := NewExpanderTimeContinuation(env)
 	ectx := NewExpandTimeCallContext()
 
@@ -51,7 +49,7 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 	c.Assert(ctx.IntroductionScope(), qt.IsNil)
 
 	// Set scope
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	ctx.SetIntroductionScope(scope)
 	c.Assert(ctx.IntroductionScope(), qt.Equals, scope)
 }
@@ -59,8 +57,7 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 func TestExpanderContext_UseSiteScope(t *testing.T) {
 	c := qt.New(t)
 
-	genv := environment.NewTopLevelGlobalEnvironmentFrame()
-	env := environment.NewEnvironmentFrame(nil, genv)
+	env := environment.NewTopLevelEnvironmentFrame()
 	expander := NewExpanderTimeContinuation(env)
 	ectx := NewExpandTimeCallContext()
 
@@ -70,7 +67,7 @@ func TestExpanderContext_UseSiteScope(t *testing.T) {
 	c.Assert(ctx.UseSiteScope(), qt.IsNil)
 
 	// Set scope
-	scope := syntax.NewScope(nil)
+	scope := syntax.NewScope()
 	ctx.SetUseSiteScope(scope)
 	c.Assert(ctx.UseSiteScope(), qt.Equals, scope)
 }

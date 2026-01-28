@@ -16,6 +16,7 @@ package helpers
 
 import (
 	"context"
+	"math"
 	"math/big"
 
 	"wile/machine"
@@ -30,8 +31,57 @@ const (
 	FoldOpLCM
 )
 
+// opName returns the Scheme name for the fold operation.
+func opName(op FoldOp) string {
+	switch op {
+	case FoldOpGCD:
+		return "gcd"
+	case FoldOpLCM:
+		return "lcm"
+	default:
+		return "unknown"
+	}
+}
+
+// extractIntegerArg extracts an integer value from a Scheme value.
+// Returns the int64 value, whether it was inexact, and any error.
+// Accepts Integer, BigInteger, or Float (if it represents a whole number).
+//
+// R7RS §6.2.6: gcd and lcm accept either exact or inexact integer arguments.
+func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
+	switch n := v.(type) {
+	case *values.Integer:
+		return n.Value, false, nil
+	case *values.BigInteger:
+		// For BigIntegers that fit in int64, we can still process them
+		// But we'll handle the big path separately
+		if n.BigInt().IsInt64() {
+			return n.BigInt().Int64(), false, nil
+		}
+		// Signal that we need the big.Int path by returning a special error
+		return 0, false, errNeedsBigInt
+	case *values.Float:
+		// Check if the float represents an integer
+		if math.IsNaN(n.Value) || math.IsInf(n.Value, 0) {
+			return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+		}
+		if n.Value != math.Trunc(n.Value) {
+			return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+		}
+		return int64(n.Value), true, nil
+	default:
+		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+	}
+}
+
+// errNeedsBigInt is a sentinel error indicating we need to use the big.Int path.
+var errNeedsBigInt = values.NewForeignError("needs big int")
+
 // IntegerFold is a helper for integer fold operations (gcd, lcm).
 // Takes rest args at index 0, applies absolute value, then folds with combiner.
+//
+// R7RS §6.2.6: gcd and lcm accept either exact or inexact integer arguments
+// and always return an integer. If any argument is inexact, the result is inexact.
 //
 // The fold pattern combines a list into a single value using a binary operation:
 //
@@ -46,6 +96,7 @@ func IntegerFold(
 	identity int64,
 	combiner func(acc, val int64) int64,
 ) error {
+	name := opName(op)
 	o := mc.Arg(0)
 	pr, ok := o.(*values.Pair)
 	if !ok {
@@ -53,24 +104,36 @@ func IntegerFold(
 			mc.SetValue(values.NewInteger(identity))
 			return nil
 		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%d: expected a list but got %T", op, o)
+		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a list but got %T", name, o)
 	}
 	if values.IsEmptyList(pr) {
 		mc.SetValue(values.NewInteger(identity))
 		return nil
 	}
 
-	// Check if we have any BigIntegers - if so, use big.Int path
+	// First pass: check types and detect if we need big.Int path
 	hasBigInt := false
+	hasInexact := false
 	current := pr
 	for !values.IsEmptyList(current) {
-		switch current.Car().(type) {
+		switch v := current.Car().(type) {
 		case *values.BigInteger:
-			hasBigInt = true
+			if !v.BigInt().IsInt64() {
+				hasBigInt = true
+			}
 		case *values.Integer:
 			// ok
+		case *values.Float:
+			// Check if it represents an integer
+			if math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			}
+			if v.Value != math.Trunc(v.Value) {
+				return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			}
+			hasInexact = true
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, current.Car())
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
 		}
 		next, ok := current.Cdr().(*values.Pair)
 		if !ok {
@@ -80,29 +143,34 @@ func IntegerFold(
 	}
 
 	if hasBigInt {
-		return integerFoldBig(mc, op, identity, pr)
+		return integerFoldBig(mc, op, identity, pr, hasInexact)
 	}
 
 	// All integers are small, use int64 path
-	first, ok := pr.Car().(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, pr.Car())
+	firstVal, inexact, err := extractIntegerArg(pr.Car(), name)
+	if err != nil {
+		return err
 	}
-	result := first.Value
+	hasInexact = hasInexact || inexact
+	result := firstVal
 	if result < 0 {
 		result = -result
 	}
 	rest, ok := pr.Cdr().(*values.Pair)
 	if !ok {
-		mc.SetValue(values.NewInteger(result))
+		if hasInexact {
+			mc.SetValue(values.NewFloat(float64(result)))
+		} else {
+			mc.SetValue(values.NewInteger(result))
+		}
 		return nil
 	}
 	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
-		n, ok := next.(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, next)
+		val, inexact, err := extractIntegerArg(next, name)
+		if err != nil {
+			return err
 		}
-		val := n.Value
+		hasInexact = hasInexact || inexact
 		if val < 0 {
 			val = -val
 		}
@@ -113,19 +181,26 @@ func IntegerFold(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%d: not a proper list", op)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
 	}
-	mc.SetValue(values.NewInteger(result))
+	if hasInexact {
+		mc.SetValue(values.NewFloat(float64(result)))
+	} else {
+		mc.SetValue(values.NewInteger(result))
+	}
 	return nil
 }
 
 // integerFoldBig handles gcd/lcm with BigInteger support using big.Int.
+// Also handles inexact results when any argument was inexact.
 func integerFoldBig(
 	mc *machine.MachineContext,
 	op FoldOp,
 	_ int64,
 	pr *values.Pair,
+	hasInexact bool,
 ) error {
+	name := opName(op)
 	// Get the first value
 	var result *big.Int
 	switch v := pr.Car().(type) {
@@ -133,14 +208,22 @@ func integerFoldBig(
 		result = big.NewInt(v.Value)
 	case *values.BigInteger:
 		result = new(big.Int).Set(v.BigInt())
+	case *values.Float:
+		// Float should have been validated as integer in caller
+		result = big.NewInt(int64(v.Value))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, pr.Car())
+		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
 	}
 	result.Abs(result)
 
 	rest, ok := pr.Cdr().(*values.Pair)
 	if !ok {
-		mc.SetValue(values.NewBigInteger(result))
+		if hasInexact {
+			f, _ := new(big.Float).SetInt(result).Float64()
+			mc.SetValue(values.NewFloat(f))
+		} else {
+			mc.SetValue(values.NewBigInteger(result))
+		}
 		return nil
 	}
 
@@ -151,8 +234,11 @@ func integerFoldBig(
 			val = big.NewInt(n.Value)
 		case *values.BigInteger:
 			val = new(big.Int).Set(n.BigInt())
+		case *values.Float:
+			// Float should have been validated as integer in caller
+			val = big.NewInt(int64(n.Value))
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%d: expected an integer but got %T", op, next)
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, next)
 		}
 		val.Abs(val)
 
@@ -175,11 +261,16 @@ func integerFoldBig(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%d: not a proper list", op)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
 	}
 
-	// Return BigInteger for the result
-	mc.SetValue(values.NewBigInteger(result))
+	// Return result with appropriate exactness
+	if hasInexact {
+		f, _ := new(big.Float).SetInt(result).Float64()
+		mc.SetValue(values.NewFloat(f))
+	} else {
+		mc.SetValue(values.NewBigInteger(result))
+	}
 	return nil
 }
 

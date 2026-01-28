@@ -29,6 +29,7 @@ import (
 
 // Engine is the main entry point for embedding Wile.
 type Engine struct {
+	topLevel *environment.TopLevelEnvironment
 	env      *environment.EnvironmentFrame
 	registry *registry.Registry
 }
@@ -62,8 +63,9 @@ func NewEngine(opts ...EngineOption) (*Engine, error) {
 		}
 	}
 
-	// Create environment
-	env := environment.NewTopLevelEnvironmentFrame()
+	// Create TopLevelEnvironment (per-instance symbol interning)
+	topLevel := environment.NewTopLevelEnvironment()
+	env := topLevel.Runtime()
 
 	// Apply registry
 	ctx := context.Background()
@@ -90,6 +92,7 @@ func NewEngine(opts ...EngineOption) (*Engine, error) {
 	}
 
 	q := &Engine{
+		topLevel: topLevel,
 		env:      env,
 		registry: reg,
 	}
@@ -223,6 +226,12 @@ func (e *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 // Environment returns the underlying environment for advanced use.
 func (e *Engine) Environment() *environment.EnvironmentFrame {
 	return e.env
+}
+
+// TopLevelEnvironment returns the TopLevelEnvironment for advanced use.
+// This provides access to per-instance symbol interning and phase management.
+func (e *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
+	return e.topLevel
 }
 
 // internal helpers

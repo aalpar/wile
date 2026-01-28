@@ -25,34 +25,45 @@ var (
 	_ SyntaxValue  = (*SyntaxObject)(nil)
 )
 
-// ScopeID is a unique identifier for a scope in the hygiene system.
-type ScopeID int64
-
-// Scope represents a single scope in the syntax object.
-// It maps symbols to their corresponding ScopeID and maintains a reference to its parent scope.
-// This structure allows for nested scopes, enabling proper variable resolution in a scoped environment.
-// Identifiers match only if their symbol name and scope sets match the same binding.
-// This means two identifiers with the same textual name are distinct if their scopes differ.
+// Scope is an identity marker for macro hygiene.
+// Each macro invocation creates a fresh Scope. Hygiene checking uses pointer
+// equality to determine if a binding's scopes are a subset of a reference's scopes.
+// This implements Flatt's "sets of scopes" model where scopes are just unique tags,
+// not environment hierarchies.
 type Scope struct {
-	keys   map[values.Symbol]ScopeID
-	parent *Scope
+	id uint64 // ensures unique pointer identity (empty structs can share addresses in Go)
+	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
+	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
+	// False for with-binding-scope which only adds scopes for binding hygiene.
+	// This distinction is used in literalScopesMatch to correctly handle auxiliary
+	// syntax like => and else in cond/case.
+	IsRebinding bool
 }
 
-// NewScope creates a new scope with an optional parent
-func NewScope(parent *Scope) *Scope {
-	return &Scope{
-		keys:   make(map[values.Symbol]ScopeID),
-		parent: parent,
-	}
-}
-
-// nextScopeID is a simple counter for generating unique scope IDs
+// nextScopeID is a counter for generating unique scope identities
 var nextScopeID uint64
 
-// NewScopeID generates a unique scope ID
-func NewScopeID() ScopeID {
+// NewScope creates a new scope with unique identity for hygiene tracking.
+// By default, scopes are not rebinding scopes.
+func NewScope() *Scope {
 	nextScopeID++
-	return ScopeID(nextScopeID)
+	return &Scope{id: nextScopeID, IsRebinding: false}
+}
+
+// NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
+// Used by let-syntax and letrec-syntax to mark scopes that could shadow literals.
+func NewRebindingScope() *Scope {
+	nextScopeID++
+	return &Scope{id: nextScopeID, IsRebinding: true}
+}
+
+// ID returns the unique identifier for this scope.
+// This can be used as a macro application ID for tracing.
+func (s *Scope) ID() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.id
 }
 
 // NewSyntaxNil creates a syntax empty list.
@@ -89,38 +100,9 @@ func (p *SyntaxObject) Datum() values.Value {
 	return p.datum
 }
 
-// AddScope returns a new SyntaxObject with an additional scope.
-// It recursively adds the scope to the datum if it's a syntax value.
-// Returns SyntaxValue interface to support recursive scope propagation.
-func (p *SyntaxObject) AddScope(scope *Scope) SyntaxValue {
-	// If the datum is a syntax value, recursively add scope to it
-	newDatum := p.Datum()
-	if stx, ok := p.Datum().(SyntaxValue); ok {
-		if adder, ok := stx.(interface{ AddScope(*Scope) SyntaxValue }); ok {
-			newDatum = adder.AddScope(scope)
-		}
-	}
-	return &SyntaxObject{
-		datum:         newDatum,
-		sourceContext: p.sourceContext.WithScope(scope),
-	}
-}
-
-// Scopes returns the scopes of this syntax object
-func (p *SyntaxObject) Scopes() []*Scope {
-	if p.sourceContext == nil {
-		return nil
-	}
-	return p.sourceContext.Scopes
-}
-
 // UnwrapAll recursively unwraps all syntax wrappers and returns the underlying value.
 func (p *SyntaxObject) UnwrapAll() values.Value {
-	switch v := p.Datum().(type) {
-	case SyntaxValue:
-		return v.UnwrapAll()
-	}
-	return p.Unwrap()
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 func (p *SyntaxObject) Unwrap() values.Value {
@@ -249,7 +231,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 
 	case *SyntaxDatumLabel:
 		// This should not normally happen if the parser resolved the label
-		result := v.UnwrapAll()
+		result := values.NewInteger(int64(v.Label))
 		cache[sv] = result
 		return result
 
@@ -258,9 +240,25 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = result
 		return result
 
+	case *SyntaxComment:
+		result := values.NewString(v.Text)
+		cache[sv] = result
+		return result
+
+	case *SyntaxDirective:
+		result := values.NewString(v.Name)
+		cache[sv] = result
+		return result
+
+	case *SyntaxDatumComment:
+		// Recursively unwrap the commented value
+		result := UnwrapAllShared(v.Value, cache)
+		cache[sv] = result
+		return result
+
 	default:
-		// For other types (SyntaxComment, SyntaxDirective, etc.), use standard UnwrapAll
-		result := sv.UnwrapAll()
+		// All syntax types should be handled above
+		result := sv.Unwrap()
 		cache[sv] = result
 		return result
 	}

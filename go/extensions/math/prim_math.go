@@ -79,6 +79,30 @@ func ToFloat64(v values.Value) (float64, error) {
 	}
 }
 
+// extractReal extracts a float64 from a real number for division operations.
+// Returns the float64 value, whether the input was exact, and any error.
+//
+// R7RS §6.2.6: Division procedures work on all real numbers.
+func extractReal(v values.Value, name string) (float64, bool, error) {
+	switch n := v.(type) {
+	case *values.Integer:
+		return float64(n.Value), true, nil
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
+		return f, true, nil
+	case *values.Float:
+		return n.Value, false, nil
+	case *values.Rational:
+		f, _ := n.Rat().Float64()
+		return f, true, nil
+	case *values.BigFloat:
+		f, _ := n.BigFloatValue().Float64()
+		return f, false, nil
+	default:
+		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+	}
+}
+
 // FloorDivide performs floor division, returning quotient and remainder.
 func FloorDivide(n0, n1 int64) (q, r int64) {
 	q = n0 / n1
@@ -210,6 +234,10 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSqrt implements the (sqrt) primitive.
+//
+// R7RS §6.2.6: The branch cut for sqrt lies along the negative real axis,
+// continuous with quadrant II. This means for values on the negative real axis
+// (including those with -0.0 imaginary part), sqrt returns positive imaginary.
 func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -233,11 +261,39 @@ func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewFloat(math.Sqrt(f)))
 		}
 	case *values.Complex:
-		mc.SetValue(values.NewComplex(cmplx.Sqrt(v.Value)))
+		mc.SetValue(values.NewComplex(complexSqrtR7RS(v.Value)))
+	case *values.BigComplex:
+		// Convert BigComplex to complex128 and compute sqrt
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewComplex(complexSqrtR7RS(complex(realF, imagF))))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
 	return nil
+}
+
+// complexSqrtR7RS computes square root with R7RS branch cut semantics.
+// R7RS §6.2.6 specifies the branch cut lies along the negative real axis,
+// continuous with quadrant II. This means values on the negative real axis
+// (real < 0, imag == 0) should return positive imaginary, regardless of
+// whether the imaginary part is +0.0 or -0.0.
+//
+// Go's cmplx.Sqrt follows IEEE 754 conventions where -0.0 imaginary means
+// "below the real axis", returning negative imaginary. We correct for this
+// by treating -0.0 as +0.0 for branch cut purposes.
+func complexSqrtR7RS(z complex128) complex128 {
+	re := real(z)
+	im := imag(z)
+
+	// If on the negative real axis (real < 0, imag is zero regardless of sign),
+	// ensure we return positive imaginary by using +0.0 for the imaginary part.
+	if re < 0 && im == 0 {
+		// Use positive zero to get the correct branch cut behavior
+		return cmplx.Sqrt(complex(re, 0))
+	}
+
+	return cmplx.Sqrt(z)
 }
 
 // PrimExpt implements the (expt) primitive.
@@ -327,6 +383,31 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(float64(e.Value), 0))))
 		case *values.Rational:
 			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Float64(), 0))))
+		case *values.BigComplex:
+			eReal := e.RealAsBigFloat().Float64()
+			eImag := e.ImagAsBigFloat().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(eReal, eImag))))
+		}
+	case *values.BigComplex:
+		bReal := b.RealAsBigFloat().Float64()
+		bImag := b.ImagAsBigFloat().Float64()
+		bComplex := complex(bReal, bImag)
+		switch e := expNum.(type) {
+		case *values.Complex:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, e.Value)))
+		case *values.Float:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Value, 0))))
+		case *values.Integer:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(float64(e.Value), 0))))
+		case *values.Rational:
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Float64(), 0))))
+		case *values.BigComplex:
+			eReal := e.RealAsBigFloat().Float64()
+			eImag := e.ImagAsBigFloat().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(eReal, eImag))))
+		case *values.BigInteger:
+			ef, _ := e.BigInt().Float64()
+			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
 		}
 	default:
 		var bf float64
@@ -401,9 +482,13 @@ func makeRealNumberPrimitive(op realNumberOp) func(context.Context, *machine.Mac
 }
 
 func integerPassthrough(v *values.Integer) values.Value { return v }
-func rationalToFloat(f func(float64) float64) func(*values.Rational) values.Value {
+
+// rationalToInteger returns an exact integer for exact rational inputs.
+// R7RS §6.2.6: floor, ceiling, truncate, round return integers.
+// When the input is exact (like a rational), the result must also be exact.
+func rationalToInteger(f func(float64) float64) func(*values.Rational) values.Value {
 	return func(v *values.Rational) values.Value {
-		return values.NewFloat(f(v.Float64()))
+		return values.NewInteger(int64(f(v.Float64())))
 	}
 }
 
@@ -411,146 +496,213 @@ var PrimCeiling = makeRealNumberPrimitive(realNumberOp{
 	name:       "ceiling",
 	integerOp:  integerPassthrough,
 	floatOp:    math.Ceil,
-	rationalOp: rationalToFloat(math.Ceil),
+	rationalOp: rationalToInteger(math.Ceil),
 })
 
 var PrimFloor = makeRealNumberPrimitive(realNumberOp{
 	name:       "floor",
 	integerOp:  integerPassthrough,
 	floatOp:    math.Floor,
-	rationalOp: rationalToFloat(math.Floor),
+	rationalOp: rationalToInteger(math.Floor),
 })
 
 var PrimTruncate = makeRealNumberPrimitive(realNumberOp{
 	name:       "truncate",
 	integerOp:  integerPassthrough,
 	floatOp:    math.Trunc,
-	rationalOp: rationalToFloat(math.Trunc),
+	rationalOp: rationalToInteger(math.Trunc),
 })
 
 var PrimRound = makeRealNumberPrimitive(realNumberOp{
 	name:       "round",
 	integerOp:  integerPassthrough,
 	floatOp:    math.Round,
-	rationalOp: rationalToFloat(math.Round),
+	rationalOp: rationalToInteger(math.Round),
 })
 
 // PrimFloorDiv implements the (floor/) primitive.
+//
+// R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
+// Works on any real numbers, returning exact results when both inputs are exact.
 func PrimFloorDiv(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor/: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "floor/")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor/: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "floor/")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("floor/: division by zero")
 	}
-	q, r := FloorDivide(n0.Value, n1.Value)
-	mc.SetValues(values.NewInteger(q), values.NewInteger(r))
+
+	q := math.Floor(n0 / n1)
+	r := n0 - q*n1
+
+	if exact0 && exact1 {
+		mc.SetValues(values.NewInteger(int64(q)), values.NewInteger(int64(r)))
+	} else {
+		mc.SetValues(values.NewFloat(q), values.NewFloat(r))
+	}
 	return nil
 }
 
 // PrimFloorQuotient implements the (floor-quotient) primitive.
+//
+// R7RS §6.2.6: Returns the floor quotient for any real numbers.
 func PrimFloorQuotient(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor-quotient: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "floor-quotient")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor-quotient: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "floor-quotient")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("floor-quotient: division by zero")
 	}
-	q, _ := FloorDivide(n0.Value, n1.Value)
-	mc.SetValue(values.NewInteger(q))
+
+	q := math.Floor(n0 / n1)
+
+	if exact0 && exact1 {
+		mc.SetValue(values.NewInteger(int64(q)))
+	} else {
+		mc.SetValue(values.NewFloat(q))
+	}
 	return nil
 }
 
 // PrimFloorRemainder implements the (floor-remainder) primitive.
+//
+// R7RS §6.2.6: Returns the floor remainder for any real numbers.
 func PrimFloorRemainder(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor-remainder: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "floor-remainder")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "floor-remainder: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "floor-remainder")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("floor-remainder: division by zero")
 	}
-	_, r := FloorDivide(n0.Value, n1.Value)
-	mc.SetValue(values.NewInteger(r))
+
+	q := math.Floor(n0 / n1)
+	r := n0 - q*n1
+
+	if exact0 && exact1 {
+		mc.SetValue(values.NewInteger(int64(r)))
+	} else {
+		mc.SetValue(values.NewFloat(r))
+	}
 	return nil
 }
 
 // PrimTruncateDiv implements the truncate/ primitive.
+//
+// R7RS §6.2.6: Returns two values: truncate quotient and truncate remainder.
+// Works on any real numbers, returning exact results when both inputs are exact.
 func PrimTruncateDiv(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate/: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "truncate/")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate/: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "truncate/")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("truncate/: division by zero")
 	}
-	q := n0.Value / n1.Value
-	r := n0.Value % n1.Value
-	mc.SetValues(values.NewInteger(q), values.NewInteger(r))
+
+	q := math.Trunc(n0 / n1)
+	r := n0 - q*n1
+
+	if exact0 && exact1 {
+		mc.SetValues(values.NewInteger(int64(q)), values.NewInteger(int64(r)))
+	} else {
+		mc.SetValues(values.NewFloat(q), values.NewFloat(r))
+	}
 	return nil
 }
 
 // PrimTruncateQuotient implements the truncate-quotient primitive.
+//
+// R7RS §6.2.6: Returns the truncate quotient for any real numbers.
 func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate-quotient: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "truncate-quotient")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate-quotient: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "truncate-quotient")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("truncate-quotient: division by zero")
 	}
-	mc.SetValue(values.NewInteger(n0.Value / n1.Value))
+
+	q := math.Trunc(n0 / n1)
+
+	if exact0 && exact1 {
+		mc.SetValue(values.NewInteger(int64(q)))
+	} else {
+		mc.SetValue(values.NewFloat(q))
+	}
 	return nil
 }
 
 // PrimTruncateRemainder implements the truncate-remainder primitive.
+//
+// R7RS §6.2.6: Returns the truncate remainder for any real numbers.
 func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	n0, ok := o0.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate-remainder: expected an integer but got %T", o0)
+
+	n0, exact0, err := extractReal(o0, "truncate-remainder")
+	if err != nil {
+		return err
 	}
-	n1, ok := o1.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "truncate-remainder: expected an integer but got %T", o1)
+	n1, exact1, err := extractReal(o1, "truncate-remainder")
+	if err != nil {
+		return err
 	}
-	if n1.Value == 0 {
+
+	if n1 == 0 {
 		return values.NewForeignError("truncate-remainder: division by zero")
 	}
-	mc.SetValue(values.NewInteger(n0.Value % n1.Value))
+
+	q := math.Trunc(n0 / n1)
+	r := n0 - q*n1
+
+	if exact0 && exact1 {
+		mc.SetValue(values.NewInteger(int64(r)))
+	} else {
+		mc.SetValue(values.NewFloat(r))
+	}
 	return nil
 }
 
@@ -558,7 +710,9 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are always finite
+		// BigFloat uses math/big which doesn't support infinity/NaN
 		mc.SetValue(values.TrueValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(!math.IsInf(v.Value, 0) && !math.IsNaN(v.Value)))
@@ -577,7 +731,9 @@ func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are never infinite
+		// BigFloat uses math/big which doesn't support infinity
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsInf(v.Value, 0)))
@@ -596,7 +752,9 @@ func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
+	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
+		// BigInteger, Rational, BigComplex (exact) are never NaN
+		// BigFloat uses math/big which doesn't support NaN
 		mc.SetValue(values.FalseValue)
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsNaN(v.Value)))
@@ -834,16 +992,48 @@ func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMakeRectangular implements make-rectangular.
+// R7RS §6.2.6: If both arguments are exact, the result is exact.
 func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	i := mc.Arg(1)
 
-	_, rIsBigInt := r.(*values.BigInteger)
+	// Check if both arguments are real numbers (not complex)
+	rNum, rOk := r.(values.Number)
+	iNum, iOk := i.(values.Number)
+	if !rOk {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
+	}
+	if !iOk {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
+	}
+
+	// Reject complex numbers - make-rectangular requires real number arguments
+	if !isRealNumber(r) {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", r)
+	}
+	if !isRealNumber(i) {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", i)
+	}
+
+	bothExact := values.ExactnessOf(rNum) == values.Exact && values.ExactnessOf(iNum) == values.Exact
+
+	if bothExact {
+		// Create exact BigComplex
+		realPart := toExactBigComplexPart(rNum)
+		imagPart := toExactBigComplexPart(iNum)
+		if imagPart.IsZero() {
+			mc.SetValue(realPart)
+			return nil
+		}
+		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		return nil
+	}
+
+	// At least one argument is inexact - check if we need BigFloat precision
 	_, rIsBigFloat := r.(*values.BigFloat)
-	_, iIsBigInt := i.(*values.BigInteger)
 	_, iIsBigFloat := i.(*values.BigFloat)
 
-	if rIsBigInt || rIsBigFloat || iIsBigInt || iIsBigFloat {
+	if rIsBigFloat || iIsBigFloat {
 		realPart, err := toBigComplexPart(r, "make-rectangular")
 		if err != nil {
 			return err
@@ -860,6 +1050,7 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
+	// Use regular Complex for inexact numbers
 	var realPart, imagPart float64
 	switch v := r.(type) {
 	case *values.Integer:
@@ -868,6 +1059,8 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		realPart = v.Value
 	case *values.Rational:
 		realPart = v.Float64()
+	case *values.BigInteger:
+		realPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
 	}
@@ -878,11 +1071,44 @@ func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
 		imagPart = v.Value
 	case *values.Rational:
 		imagPart = v.Float64()
+	case *values.BigInteger:
+		imagPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
 	}
 	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
 	return nil
+}
+
+// toExactBigComplexPart converts an exact number to a BigInteger or Rational
+// suitable for use as a BigComplex part.
+func toExactBigComplexPart(n values.Number) values.Number {
+	switch v := n.(type) {
+	case *values.Integer:
+		return values.NewBigIntegerFromInt64(v.Value)
+	case *values.BigInteger:
+		return v
+	case *values.Rational:
+		return v
+	default:
+		panic("toExactBigComplexPart: expected exact number")
+	}
+}
+
+// isRealNumber returns true if the value is a real number (not complex).
+// Real numbers include Integer, BigInteger, Float, BigFloat, and Rational.
+// Complex and BigComplex are only considered real if their imaginary part is zero.
+func isRealNumber(v values.Value) bool {
+	switch n := v.(type) {
+	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
+		return true
+	case *values.Complex:
+		return n.IsReal()
+	case *values.BigComplex:
+		return n.IsReal()
+	default:
+		return false
+	}
 }
 
 func toBigComplexPart(v values.Value, name string) (values.Number, error) {
@@ -984,7 +1210,10 @@ func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))
 	case *values.BigComplex:
-		mc.SetValue(v.Magnitude())
+		// Convert to float64 for magnitude calculation (transcendental operation via sqrt)
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
 	case *values.Integer:
 		val := v.Value
 		if val < 0 {
@@ -1020,7 +1249,10 @@ func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))
 	case *values.BigComplex:
-		mc.SetValue(v.Phase())
+		// Convert to float64 for phase calculation (transcendental operation)
+		realF := v.RealAsBigFloat().Float64()
+		imagF := v.ImagAsBigFloat().Float64()
+		mc.SetValue(values.NewFloat(cmplx.Phase(complex(realF, imagF))))
 	case *values.Integer:
 		if v.Value >= 0 {
 			mc.SetValue(values.NewFloat(0))
@@ -1083,6 +1315,12 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Rational:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	case *values.Complex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigComplex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigInteger:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigFloat:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "number->string: expected a number but got %T", n)

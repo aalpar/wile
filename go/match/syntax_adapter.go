@@ -15,23 +15,22 @@
 package match
 
 // syntax_adapter.go bridges between syntax objects (with hygiene info) and
-// the unhygienic pattern matching VM.
+// the pattern matching VM.
 //
-// Design: The macro system uses a layered architecture (see go/DESIGN.md):
-//   Layer 1: Pattern Matching VM - operates on raw values.Value types
-//   Layer 2: Syntax Adapter (this file) - converts syntax ↔ values
-//   Layer 3: Hygienic Layer - adds/checks scopes during expansion
+// Design: The macro system uses a layered architecture:
+//   - Pattern Matching: Now operates directly on syntax.SyntaxValue types
+//   - Syntax Adapter (this file): Manages hygiene, scope handling, and expansion
+//   - Hygienic Layer: Adds/checks scopes during expansion via intro scope
 //
-// This file implements Layer 2. The SyntaxMatcher wraps the core Matcher,
-// converting syntax objects to raw values for matching, and converting
-// expanded results back to syntax objects (preserving source context).
+// The SyntaxMatcher wraps the core Matcher, handling:
+//   - Literal hygiene checking (R7RS §4.3.2 auxiliary syntax like => and else)
+//   - Template expansion with scope-aware pattern variable substitution
+//   - Free identifier resolution for definition-time bindings
 //
-// Key functions:
-//   - syntaxToValue: Unwraps syntax objects to raw values for pattern matching
-//   - valueToSyntax: Wraps raw values back into syntax objects for the result
-//
-// The hygiene layer (Layer 3) operates after expansion by adding intro scopes
-// to the syntax objects returned by valueToSyntax.
+// Key features:
+//   - Syntax-native matching preserves source context through the entire match
+//   - Pattern variables are captured as syntax.SyntaxValue directly
+//   - Template expansion applies intro scope to newly created syntax (hygiene)
 //
 // Reference: R7RS Section 4.3.2 (syntax-rules)
 
@@ -55,22 +54,59 @@ type globalBindingProvider interface {
 	GetGlobal() any
 }
 
-// SyntaxMatcher adapts the unhygienic Matcher to work with syntax objects.
+// hasLocalBindingProvider is an interface for checking if a local binding was found
+// at macro definition time, even if the binding has no scopes. This distinguishes
+// "local binding with empty scopes" from "no binding at all" - the former should NOT
+// get intro scope added during expansion.
+type hasLocalBindingProvider interface {
+	GetHasLocalBinding() bool
+}
+
+// BindingChecker is an interface for checking if a symbol has a lexical binding.
+// This is used for R7RS auxiliary syntax hygiene: literals like => and else
+// should not match when the identifier has been locally bound.
+// Implemented by machine package to avoid circular imports.
+type BindingChecker interface {
+	// HasBinding checks if sym with the given scopes has a lexical binding.
+	// Returns true if the symbol is bound (to a variable, macro, etc.).
+	HasBinding(sym string, scopes []*syntax.Scope) bool
+
+	// GetBinding returns the binding for sym with the given scopes.
+	// Returns nil if no binding exists. The returned value is opaque but
+	// can be compared for equality to check if two identifiers have the
+	// same binding (per R7RS §4.3.2).
+	GetBinding(sym string, scopes []*syntax.Scope) any
+}
+
+// SyntaxMatcher adapts the core Matcher to work with syntax objects and hygiene.
 //
-// It provides the bridge between:
-//   - Syntax objects (SyntaxPair, SyntaxSymbol) with source locations and scopes
-//   - Raw values (Pair, Sym) that the pattern matching VM operates on
+// It provides:
+//   - Syntax-native pattern matching with source location preservation
+//   - Template expansion with hygiene (intro scope for newly created syntax)
+//   - Literal hygiene checking for R7RS auxiliary syntax
 //
-// The separation allows the pattern matcher to be simple and efficient,
-// while syntax/scope handling is done in the adapter layer.
+// Key features:
 //
-// Key feature: The syntaxMap preserves original syntax objects for captured
-// pattern variables. This is essential for hygiene - content captured from
-// the input must retain its original scopes, not receive new ones.
+// Pattern Variable Capture: Pattern variables are captured directly as
+// syntax.SyntaxValue, preserving source context through the entire match.
+// No conversion to raw values is needed - the Matcher's MatchSyntaxWithLiterals
+// operates on SyntaxPair directly.
+//
+// Literal Hygiene: The literalSyntax map stores pattern literals with their
+// scopes. During matching, if an input symbol has a literal's name but
+// incompatible scopes (e.g., shadowed by let), it won't match the literal.
+// This implements R7RS's requirement that auxiliary syntax like => and else
+// be treated as regular expressions when locally shadowed.
+//
+// R7RS Binding Check: For full R7RS compliance (§4.3.2), we also check if
+// the input identifier has a lexical binding. If it does and the pattern
+// literal doesn't, they don't match. This is handled via the bindingChecker
+// field set during Match().
 type SyntaxMatcher struct {
-	matcher    *Matcher
-	syntaxMap  map[values.Value]syntax.SyntaxValue // Maps raw values to their original syntax
-	ellipsisID string                              // Custom ellipsis identifier (default "...")
+	matcher        *Matcher
+	ellipsisID     string                          // Custom ellipsis identifier (default "...")
+	literalSyntax  map[string]*syntax.SyntaxSymbol // Pattern literals with their scopes for hygiene
+	bindingChecker BindingChecker                  // For R7RS binding lookup during matching
 }
 
 // NewSyntaxMatcher creates a new syntax-aware matcher with default ellipsis ("...").
@@ -89,31 +125,69 @@ func NewSyntaxMatcherWithEllipsisVars(variables map[string]struct{}, codes []Syn
 // The ellipsisID parameter specifies the identifier used for ellipsis patterns
 // (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
 func NewSyntaxMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *SyntaxMatcher {
+	return NewSyntaxMatcherWithLiterals(variables, codes, ellipsisVars, ellipsisID, nil)
+}
+
+// NewSyntaxMatcherWithLiterals creates a syntax-aware matcher with literal syntax for hygiene.
+// The literalSyntax parameter maps literal names to their syntax symbols from the pattern.
+// This enables scope-aware literal matching: if an input symbol has a literal's name but
+// has been shadowed (has additional scopes), it won't match the pattern literal.
+// R7RS §4.3.2 requires this for auxiliary syntax like => and else in cond/case.
+func NewSyntaxMatcherWithLiterals(
+	variables map[string]struct{},
+	codes []SyntaxCommand,
+	ellipsisVars map[int]map[string]struct{},
+	ellipsisID string,
+	literalSyntax map[string]*syntax.SyntaxSymbol,
+) *SyntaxMatcher {
 	if ellipsisID == "" {
 		ellipsisID = DefaultEllipsis
 	}
 	return &SyntaxMatcher{
-		matcher:    NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
-		syntaxMap:  make(map[values.Value]syntax.SyntaxValue),
-		ellipsisID: ellipsisID,
+		matcher:       NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
+		ellipsisID:    ellipsisID,
+		literalSyntax: literalSyntax,
 	}
 }
 
-// Match performs pattern matching on syntax objects
+// Match performs pattern matching on syntax objects.
+// This is the basic method without binding checking. For full R7RS compliance
+// with auxiliary syntax hygiene, use MatchWithBindingChecker instead.
 func (sm *SyntaxMatcher) Match(input syntax.SyntaxValue) error {
-	// Clear the syntax map for this match
-	sm.syntaxMap = make(map[values.Value]syntax.SyntaxValue)
+	return sm.MatchWithBindingChecker(input, nil)
+}
 
-	// Convert syntax to raw values for matching, building the syntax map
-	rawInput := sm.syntaxToValueWithMap(input)
+// MatchWithBindingChecker performs pattern matching on syntax objects with
+// R7RS-compliant auxiliary syntax hygiene.
+//
+// The checker parameter enables R7RS §4.3.2 compliant literal matching:
+// literals match only if both identifiers have the same lexical binding,
+// or both have no lexical binding. If the input has a binding (from let,
+// lambda, etc.) but the pattern literal doesn't, they won't match.
+//
+// Pass nil for checker to use scope-based matching only (less strict).
+func (sm *SyntaxMatcher) MatchWithBindingChecker(input syntax.SyntaxValue, checker BindingChecker) error {
+	// Store binding checker for use in literal matching
+	sm.bindingChecker = checker
+	defer func() { sm.bindingChecker = nil }()
 
-	// Ensure it's a pair as the matcher expects
-	pair, ok := rawInput.(*values.Pair)
+	// Ensure input is a pair
+	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
 		return errors.New("pattern matching requires a pair")
 	}
 
-	return sm.matcher.Match(pair)
+	// Create literal matcher function that uses the binding checker
+	var literalMatcher LiteralMatcher
+	if sm.literalSyntax != nil {
+		literalMatcher = func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
+			patternLit := sm.literalSyntax[patternLiteralKey]
+			return sm.literalScopesMatchWithChecker(inputSym, patternLit)
+		}
+	}
+
+	// Use syntax-native matching to preserve source context
+	return sm.matcher.MatchSyntaxWithLiterals(inputPair, sm.literalSyntax, literalMatcher)
 }
 
 // Expand performs template expansion, preserving syntax wrappers
@@ -150,139 +224,284 @@ func (sm *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introSco
 //   - useSiteCtx: Source context for newly created syntax (use-site vs template-site)
 //   - origin: Origin info for tracking macro expansion chains
 func (sm *SyntaxMatcher) ExpandWithOrigin(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) (syntax.SyntaxValue, error) {
-	// Convert template to raw values
-	rawTemplate := syntaxToValue(template)
-
-	// Perform unhygienic expansion
-	expanded, err := sm.matcher.Expand(rawTemplate)
-	if err != nil {
-		return nil, err
-	}
-
-	// Wrap result back in syntax, using the syntax map to preserve
-	// original syntax objects from captured pattern variables.
-	// The intro scope is only added to newly created syntax objects.
-	// Use use-site context if provided, otherwise fall back to template context.
-	return sm.valueToSyntaxWithOrigin(expanded, template, introScope, freeIds, useSiteCtx, origin), nil
+	// Use syntax-native expansion (same as ExpandWithPatternVarSyntax but without pattern var syntax)
+	return sm.ExpandWithPatternVarSyntax(template, introScope, freeIds, useSiteCtx, origin, nil)
 }
 
-// syntaxToValueWithMap recursively unwraps syntax objects to raw values,
-// building a map from raw values back to their original syntax objects.
-// This preserves the connection needed for hygiene during expansion.
-func (sm *SyntaxMatcher) syntaxToValueWithMap(stx syntax.SyntaxValue) values.Value {
-	if stx == nil {
-		return nil
+// ExpandWithPatternVarSyntax performs template expansion with full nested macro hygiene.
+// This is the scope-aware expansion that correctly handles the case where an outer macro
+// introduces a symbol into an inner macro's template. The patternVarSyntax map contains
+// the syntax symbols from the pattern, allowing scope comparison during substitution.
+//
+// Per Flatt 2016 "sets of scopes" model: when deciding whether to substitute a template
+// symbol with a captured value, we compare the template symbol's scopes with the pattern
+// variable's scopes. Only substitute if the scopes are compatible (pattern var scopes ⊆
+// template symbol scopes). If the template symbol has additional scopes (e.g., from an
+// outer macro's intro scope), it should NOT be substituted.
+//
+// Example: When outer macro `foo` expands `(foo bar x)` producing:
+//
+//	(define-syntax bar (syntax-rules () ((bar x) 'x)))
+//
+// The pattern's `x` has scopes from the outer expansion (S_outer), while the template's
+// `'x` was substituted from the input and has use-site scopes. When `bar` is compiled,
+// both `x` symbols have different scopes, so template `'x` should NOT be substituted
+// when inner macro expands.
+func (sm *SyntaxMatcher) ExpandWithPatternVarSyntax(
+	template syntax.SyntaxValue,
+	introScope *syntax.Scope,
+	freeIds map[string]any,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+) (syntax.SyntaxValue, error) {
+	if len(sm.matcher.captureStack) == 0 {
+		return nil, errors.New("no capture context for expansion")
 	}
 
-	var result values.Value
+	// Perform syntax-preserving expansion with scope comparison
+	return sm.expandSyntaxValue(
+		template,
+		sm.matcher.captureStack[0],
+		nil, // ellipsisVars
+		introScope,
+		freeIds,
+		useSiteCtx,
+		origin,
+		patternVarSyntax,
+	)
+}
 
-	switch s := stx.(type) {
+// expandSyntaxValue recursively expands a syntax template with captured bindings,
+// preserving scope information and using scope comparison for pattern variable substitution.
+// This is the syntax-level expansion that correctly handles nested macro hygiene.
+func (sm *SyntaxMatcher) expandSyntaxValue(
+	template syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	introScope *syntax.Scope,
+	freeIds map[string]any,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+) (syntax.SyntaxValue, error) {
+	if template == nil {
+		return nil, nil
+	}
+
+	switch t := template.(type) {
+	case *syntax.SyntaxSymbol:
+		symVal := t.Unwrap().(*values.Symbol)
+
+		// Check if it's a pattern variable by name
+		if capturedVal, ok := ctx.bindings[symVal.Key]; ok {
+			// Check scope compatibility before substituting
+			// R7RS nested macro hygiene: only substitute if template symbol's scopes
+			// are compatible with pattern variable's scopes
+			if patternVarSyntax != nil {
+				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern {
+					templateScopes := t.Scopes()
+					patternScopes := patternSym.Scopes()
+
+					// For substitution to occur, pattern var scopes must be subset of template scopes
+					// AND template scopes must be subset of pattern scopes (i.e., scope equality)
+					// This ensures symbols introduced by outer macros are not captured by inner patterns
+					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
+						// Scopes don't match - keep template symbol as literal (hygiene!)
+						// Apply intro scope and free ID handling as normal
+						return sm.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+					}
+				}
+			}
+			// Scopes match (or no pattern var syntax) - substitute with captured value
+			return sm.capturedValueToSyntax(capturedVal, introScope, useSiteCtx, origin)
+		}
+
+		// Not a pattern variable - apply hygiene as normal
+		return sm.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+
 	case *syntax.SyntaxPair:
-		if s == nil || syntax.IsSyntaxEmptyList(s) {
-			result = values.EmptyList
-		} else {
-			// Recursively unwrap car and cdr, building the map
-			var car values.Value
-			carVal := s.SyntaxCar()
-			if carVal != nil {
-				carSyntax := carVal
-				car = sm.syntaxToValueWithMap(carSyntax)
-			}
+		if syntax.IsSyntaxEmptyList(t) {
+			return t, nil
+		}
 
-			var cdr values.Value
-			cdrVal := s.SyntaxCdr()
-			if cdrVal != nil {
-				cdrSyntax := cdrVal
-				cdr = sm.syntaxToValueWithMap(cdrSyntax)
-			}
-
-			// Build the result pair
-			if cdr == nil || values.IsEmptyList(cdr) {
-				result = values.NewCons(car, values.EmptyList)
-			} else {
-				cdrPair, ok := cdr.(*values.Pair)
-				if ok {
-					result = values.NewCons(car, cdrPair)
-				} else {
-					result = values.NewCons(car, cdr)
+		// Check for ellipsis escape form: (<ellipsis> <template>)
+		car := t.SyntaxCar()
+		if carSym, ok := car.(*syntax.SyntaxSymbol); ok {
+			if carSym.Unwrap().(*values.Symbol).Key == sm.ellipsisID {
+				cdr := t.SyntaxCdr()
+				if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) {
+					// Escape form - expand inner template without ellipsis handling
+					return sm.expandEscapedSyntaxTemplate(
+						cdrPair.SyntaxCar(),
+						ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
 				}
 			}
 		}
 
-	case *syntax.SyntaxSymbol:
-		result = s.Unwrap()
+		// Check for ellipsis pattern (something <ellipsis>)
+		cdr := t.SyntaxCdr()
+		if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) {
+			if sym, ok := cdrPair.SyntaxCar().(*syntax.SyntaxSymbol); ok {
+				if sym.Unwrap().(*values.Symbol).Key == sm.ellipsisID {
+					// Found ellipsis - handle repetition
+					return sm.expandSyntaxEllipsis(
+						car, cdrPair.SyntaxCdr(),
+						ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+				}
+			}
+		}
 
-	case *syntax.SyntaxObject:
-		result = s.Unwrap()
+		// Regular pair - expand car and cdr
+		expandedCar, err := sm.expandSyntaxValue(car, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		if err != nil {
+			return nil, err
+		}
+		expandedCdr, err := sm.expandSyntaxValue(cdr, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		if err != nil {
+			return nil, err
+		}
+
+		srcCtx := t.SourceContext()
+		if useSiteCtx != nil {
+			srcCtx = useSiteCtx
+		}
+		return syntax.NewSyntaxCons(expandedCar, expandedCdr, srcCtx), nil
+
+	case *syntax.SyntaxVector:
+		// Expand each element
+		expandedElements := make([]syntax.SyntaxValue, len(t.Values))
+		for i, elem := range t.Values {
+			expanded, err := sm.expandSyntaxValue(elem, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+			if err != nil {
+				return nil, err
+			}
+			expandedElements[i] = expanded
+		}
+		srcCtx := t.SourceContext()
+		if useSiteCtx != nil {
+			srcCtx = useSiteCtx
+		}
+		return syntax.NewSyntaxVector(srcCtx, expandedElements...), nil
 
 	default:
-		unwrapper, ok := stx.(interface{ Unwrap() values.Value })
-		if ok {
-			result = unwrapper.Unwrap()
-		} else {
-			val := stx
-			result = val
+		// Self-evaluating values - return as-is
+		return template, nil
+	}
+}
+
+// scopesCompatibleForSubstitution checks if template symbol scopes are compatible with
+// pattern variable scopes for substitution. Returns true if substitution should occur.
+//
+// For nested macro hygiene, we require bidirectional scope matching (set equality):
+// patternScopes ⊆ templateScopes AND templateScopes ⊆ patternScopes
+//
+// This prevents outer macro-introduced symbols from being captured by inner pattern variables.
+func scopesCompatibleForSubstitution(templateScopes, patternScopes []*syntax.Scope) bool {
+	return syntax.ScopesMatch(templateScopes, patternScopes) &&
+		syntax.ScopesMatch(patternScopes, templateScopes)
+}
+
+// applyHygieneToSymbol applies hygiene transformations to a template symbol.
+// This handles free identifiers and intro scope for non-pattern-variable symbols.
+func (sm *SyntaxMatcher) applyHygieneToSymbol(
+	sym *syntax.SyntaxSymbol,
+	introScope *syntax.Scope,
+	freeIds map[string]any,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+) syntax.SyntaxValue {
+	symVal := sym.Unwrap().(*values.Symbol)
+
+	// Determine source context
+	srcCtx := sym.SourceContext()
+	if useSiteCtx != nil {
+		srcCtx = useSiteCtx
+	}
+	if origin != nil && srcCtx != nil {
+		srcCtx = srcCtx.WithOrigin(origin)
+	} else if origin != nil {
+		srcCtx = &syntax.SourceContext{Origin: origin}
+	}
+
+	// Check if this is a free identifier
+	var isFree bool
+	var resolution any
+	if freeIds != nil {
+		resolution, isFree = freeIds[symVal.Key]
+	}
+
+	if isFree && resolution != nil {
+		// Handle free identifier resolution (local or global binding)
+		if lsp, ok := resolution.(localScopesProvider); ok {
+			localScopes := lsp.GetLocalScopes()
+			if len(localScopes) > 0 {
+				// Local binding - use definition-site scopes
+				scopedCtx := &syntax.SourceContext{
+					Text:   srcCtx.Text,
+					File:   srcCtx.File,
+					Start:  srcCtx.Start,
+					End:    srcCtx.End,
+					Origin: srcCtx.Origin,
+					Scopes: localScopes,
+				}
+				return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
+			}
+		}
+
+		if gbp, ok := resolution.(globalBindingProvider); ok {
+			globalBinding := gbp.GetGlobal()
+			if globalBinding != nil {
+				symCtx := srcCtx
+				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+					symCtx = &syntax.SourceContext{
+						Text:   srcCtx.Text,
+						File:   srcCtx.File,
+						Start:  srcCtx.Start,
+						End:    srcCtx.End,
+						Origin: srcCtx.Origin,
+					}
+				}
+				newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
+				return newSym.WithResolvedBinding(globalBinding)
+			}
+		}
+
+		if hlp, ok := resolution.(hasLocalBindingProvider); ok && hlp.GetHasLocalBinding() {
+			return syntax.NewSyntaxSymbol(symVal.Key, srcCtx)
 		}
 	}
 
-	// Store the mapping from raw value to original syntax
-	// This allows us to recover the original scopes during expansion
-	if result != nil {
-		sm.syntaxMap[result] = stx
+	// Not a free identifier or unresolved - create symbol with intro scope
+	templateCtx := srcCtx
+	if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+		templateCtx = srcCtx.WithoutScopes()
 	}
-
-	return result
+	newSym := syntax.NewSyntaxSymbol(symVal.Key, templateCtx)
+	if introScope != nil {
+		newSym = newSym.AddScope(introScope).(*syntax.SyntaxSymbol)
+	}
+	return newSym
 }
 
-// valueToSyntaxWithIntroScope wraps raw values back into syntax objects,
-// using the syntax map to preserve original syntax objects from captured
-// pattern variables. When introScope is provided, it's added to newly
-// created symbols (but not to preserved originals or free identifiers).
-func (sm *SyntaxMatcher) valueToSyntaxWithIntroScope(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any) syntax.SyntaxValue {
-	return sm.valueToSyntaxWithUseSite(val, templateStx, introScope, freeIds, nil)
-}
-
-// valueToSyntaxWithUseSite wraps raw values back into syntax objects,
-// using the syntax map to preserve original syntax objects from captured
-// pattern variables. When introScope is provided, it's added to newly
-// created symbols (but not to preserved originals or free identifiers).
-// When useSiteCtx is provided, it's used as the source context for newly
-// created syntax objects instead of the template's context.
-func (sm *SyntaxMatcher) valueToSyntaxWithUseSite(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext) syntax.SyntaxValue {
-	return sm.valueToSyntaxWithOrigin(val, templateStx, introScope, freeIds, useSiteCtx, nil)
-}
-
-// valueToSyntaxWithOrigin wraps raw values back into syntax objects,
-// using the syntax map to preserve original syntax objects from captured
-// pattern variables. When introScope is provided, it's added to newly
-// created symbols (but not to preserved originals or free identifiers).
-// When useSiteCtx is provided, it's used as the source context for newly
-// created syntax objects instead of the template's context.
-// When origin is provided, it's attached to the source context of newly
-// created syntax objects to track macro expansion chains.
-// The freeIds map contains free identifier names mapped to their pre-resolved
-// bindings (any type, typically *environment.GlobalIndex).
-func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) syntax.SyntaxValue {
-	if val == nil {
-		return nil
+// capturedValueToSyntax converts a captured value back to syntax.
+// Captured values from pattern variable substitution preserve their original scopes.
+// Since bindings now store syntax.SyntaxValue directly, this typically just returns
+// the value if it's already syntax.
+func (sm *SyntaxMatcher) capturedValueToSyntax(
+	val values.Value,
+	introScope *syntax.Scope,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+) (syntax.SyntaxValue, error) {
+	// If the value is already a syntax value (from syntax-native capture), return it directly.
+	// This is the normal case because captureContext.bindings stores syntax.SyntaxValue directly.
+	if sv, ok := val.(syntax.SyntaxValue); ok {
+		return sv, nil
 	}
 
-	// Check if this value has a corresponding original syntax object
-	// If so, return the original to preserve scopes (no intro scope added!)
-	if origStx, ok := sm.syntaxMap[val]; ok {
-		return origStx
-	}
-
-	// Determine source context: use-site context takes precedence if provided,
-	// otherwise fall back to template context
-	var srcCtx *syntax.SourceContext
-	if useSiteCtx != nil {
-		srcCtx = useSiteCtx
-	} else if templateStx != nil {
-		srcCtx = templateStx.SourceContext()
-	}
-
-	// If we have origin info, attach it to the source context
+	// Fallback: wrap the value in syntax (for edge cases like nil or empty list)
+	srcCtx := useSiteCtx
 	if origin != nil && srcCtx != nil {
 		srcCtx = srcCtx.WithOrigin(origin)
 	} else if origin != nil {
@@ -292,122 +511,173 @@ func (sm *SyntaxMatcher) valueToSyntaxWithOrigin(val values.Value, templateStx s
 	switch v := val.(type) {
 	case *values.Pair:
 		if values.IsEmptyList(v) {
-			return syntax.NewSyntaxEmptyList(srcCtx)
+			return syntax.NewSyntaxEmptyList(srcCtx), nil
 		}
-
-		// Recursively wrap car and cdr, checking the map for each
-		car := sm.valueToSyntaxWithOrigin(v[0], templateStx, introScope, freeIds, useSiteCtx, origin)
-
-		var cdr syntax.SyntaxValue
-		if v[1] == nil || values.IsEmptyList(v[1]) {
-			cdr = syntax.NewSyntaxEmptyList(srcCtx)
-		} else {
-			cdr = sm.valueToSyntaxWithOrigin(v[1], templateStx, introScope, freeIds, useSiteCtx, origin)
+		car, err := sm.capturedValueToSyntax(v[0], introScope, useSiteCtx, origin)
+		if err != nil {
+			return nil, err
 		}
-
-		return syntax.NewSyntaxCons(car, cdr, srcCtx)
+		cdr, err := sm.capturedValueToSyntax(v[1], introScope, useSiteCtx, origin)
+		if err != nil {
+			return nil, err
+		}
+		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
 
 	case *values.Symbol:
-		// Check if this is a free identifier (not a pattern variable)
-		// Free identifiers should resolve to their definition-time bindings,
-		// so they must NOT inherit use-site scopes.
-		var isFree bool
-		var resolution any
-		if freeIds != nil {
-			resolution, isFree = freeIds[v.Key]
-		}
-
-		// Handle free identifiers - they can have local or global resolution
-		if isFree && resolution != nil {
-			// Check for local binding resolution first (for let-syntax hygiene)
-			if lsp, ok := resolution.(localScopesProvider); ok {
-				if localScopes := lsp.GetLocalScopes(); localScopes != nil {
-					// Local binding - use ONLY definition-site scopes, NOT use-site scopes
-					// This ensures the identifier resolves to the binding from
-					// macro definition time, not a shadowing binding at use site.
-					// We create a new context with only the definition-site scopes,
-					// discarding any use-site scopes that srcCtx may have.
-					var scopedCtx *syntax.SourceContext
-					if srcCtx != nil {
-						scopedCtx = &syntax.SourceContext{
-							Text:   srcCtx.Text,
-							File:   srcCtx.File,
-							Start:  srcCtx.Start,
-							End:    srcCtx.End,
-							Origin: srcCtx.Origin,
-							Scopes: localScopes, // Use ONLY definition-site scopes
-						}
-					} else {
-						scopedCtx = &syntax.SourceContext{Scopes: localScopes}
-					}
-					sym := syntax.NewSyntaxSymbol(v.Key, scopedCtx)
-					// No intro scope for free identifiers - they refer to outside bindings
-					return sym
-				}
-			}
-
-			// Check for global binding resolution (for cross-library hygiene)
-			if gbp, ok := resolution.(globalBindingProvider); ok {
-				if globalBinding := gbp.GetGlobal(); globalBinding != nil {
-					// Global binding - strip scopes and attach resolved binding
-					symCtx := srcCtx
-					if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-						symCtx = &syntax.SourceContext{
-							Text:   srcCtx.Text,
-							File:   srcCtx.File,
-							Start:  srcCtx.Start,
-							End:    srcCtx.End,
-							Origin: srcCtx.Origin,
-							// Scopes intentionally omitted for global free identifiers
-						}
-					}
-					sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
-					sym = sym.WithResolvedBinding(globalBinding)
-					return sym
-				}
-			}
-
-			// Resolution exists but has no local or global binding (e.g., special forms)
-			// Strip scopes but don't attach binding
-			symCtx := srcCtx
-			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-				symCtx = &syntax.SourceContext{
-					Text:   srcCtx.Text,
-					File:   srcCtx.File,
-					Start:  srcCtx.Start,
-					End:    srcCtx.End,
-					Origin: srcCtx.Origin,
-				}
-			}
-			sym := syntax.NewSyntaxSymbol(v.Key, symCtx)
-			return sym
-		}
-
-		// Not a free identifier - create symbol with intro scope
-		sym := syntax.NewSyntaxSymbol(v.Key, srcCtx)
-		if introScope != nil {
-			sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
-		}
-		return sym
-
-	case *values.Integer:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Float:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.String:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Boolean:
-		return syntax.NewSyntaxObject(v, srcCtx)
-
-	case *values.Character:
-		return syntax.NewSyntaxObject(v, srcCtx)
+		return syntax.NewSyntaxSymbol(v.Key, srcCtx), nil
 
 	default:
-		// For any other value type, wrap in generic syntax object
-		return syntax.NewSyntaxObject(val, srcCtx)
+		return syntax.NewSyntaxObject(val, srcCtx), nil
+	}
+}
+
+// expandSyntaxEllipsis handles template repetition with ellipsis at the syntax level.
+func (sm *SyntaxMatcher) expandSyntaxEllipsis(
+	pattern syntax.SyntaxValue,
+	rest syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	introScope *syntax.Scope,
+	freeIds map[string]any,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+) (syntax.SyntaxValue, error) {
+	// Find which variables in the pattern are bound in child contexts
+	patternVarsInTemplate := sm.findSyntaxPatternVariables(pattern)
+
+	// Find the ellipsis ID that captured these variables
+	ellipsisID := sm.matcher.findMatchingEllipsisID(patternVarsInTemplate)
+	if ellipsisID < 0 {
+		// No matching ellipsis - just expand the rest
+		return sm.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+	}
+
+	// Get children for this specific ellipsis ID
+	children := ctx.children[ellipsisID]
+	if len(children) == 0 {
+		// No repetitions captured, just expand the rest
+		return sm.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+	}
+
+	// Build result by repeating pattern for each child context
+	var results []syntax.SyntaxValue
+	for _, childCtx := range children {
+		// Create a new ellipsis variable set for this expansion
+		newEllipsisVars := make(map[string]struct{})
+		for k, v := range ellipsisVars {
+			newEllipsisVars[k] = v
+		}
+		for v := range patternVarsInTemplate {
+			newEllipsisVars[v] = struct{}{}
+		}
+
+		expanded, err := sm.expandSyntaxValue(pattern, childCtx, newEllipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, expanded)
+	}
+
+	// Expand the rest
+	expandedRest, err := sm.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine results into a list and append the rest
+	srcCtx := useSiteCtx
+	if srcCtx == nil && pattern != nil {
+		srcCtx = pattern.SourceContext()
+	}
+	result := expandedRest
+	for i := len(results) - 1; i >= 0; i-- {
+		result = syntax.NewSyntaxCons(results[i], result, srcCtx)
+	}
+
+	return result, nil
+}
+
+// findSyntaxPatternVariables finds all pattern variables in a syntax template.
+func (sm *SyntaxMatcher) findSyntaxPatternVariables(template syntax.SyntaxValue) map[string]struct{} {
+	vars := make(map[string]struct{})
+	sm.findSyntaxVarsRecursive(template, vars)
+	return vars
+}
+
+func (sm *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, vars map[string]struct{}) {
+	switch t := template.(type) {
+	case *syntax.SyntaxSymbol:
+		symVal := t.Unwrap().(*values.Symbol)
+		if _, ok := sm.matcher.variables[symVal.Key]; ok {
+			vars[symVal.Key] = struct{}{}
+		}
+	case *syntax.SyntaxPair:
+		if !syntax.IsSyntaxEmptyList(t) {
+			sm.findSyntaxVarsRecursive(t.SyntaxCar(), vars)
+			sm.findSyntaxVarsRecursive(t.SyntaxCdr(), vars)
+		}
+	}
+}
+
+// expandEscapedSyntaxTemplate expands a template inside an ellipsis escape form at the syntax level.
+func (sm *SyntaxMatcher) expandEscapedSyntaxTemplate(
+	template syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	introScope *syntax.Scope,
+	freeIds map[string]any,
+	useSiteCtx *syntax.SourceContext,
+	origin *syntax.OriginInfo,
+	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+) (syntax.SyntaxValue, error) {
+	if template == nil {
+		return nil, nil
+	}
+
+	switch t := template.(type) {
+	case *syntax.SyntaxSymbol:
+		symVal := t.Unwrap().(*values.Symbol)
+
+		// Check if it's a pattern variable by name
+		if capturedVal, ok := ctx.bindings[symVal.Key]; ok {
+			// Check scope compatibility before substituting
+			if patternVarSyntax != nil {
+				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern {
+					templateScopes := t.Scopes()
+					patternScopes := patternSym.Scopes()
+
+					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
+						return sm.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+					}
+				}
+			}
+			return sm.capturedValueToSyntax(capturedVal, introScope, useSiteCtx, origin)
+		}
+
+		return sm.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(t) {
+			return t, nil
+		}
+		// In escaped context, don't check for ellipsis patterns
+		car, err := sm.expandEscapedSyntaxTemplate(t.SyntaxCar(), ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		if err != nil {
+			return nil, err
+		}
+		cdr, err := sm.expandEscapedSyntaxTemplate(t.SyntaxCdr(), ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		if err != nil {
+			return nil, err
+		}
+		srcCtx := t.SourceContext()
+		if useSiteCtx != nil {
+			srcCtx = useSiteCtx
+		}
+		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
+
+	default:
+		return template, nil
 	}
 }
 
@@ -575,6 +845,8 @@ func CompileSyntaxPatternWithEllipsis(ctx context.Context, pattern syntax.Syntax
 // CompileSyntaxPatternWithLiterals compiles a syntax pattern into bytecode with literals and custom ellipsis.
 // The literals parameter contains identifiers that should be matched literally (not as pattern variables).
 // The ellipsisID parameter specifies the identifier used for ellipsis patterns.
+// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro being transformed;
+// it is not matched against the macro use being transformed.
 func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, literals map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
 	if ellipsisID == "" {
 		ellipsisID = DefaultEllipsis
@@ -595,6 +867,9 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	if literals != nil {
 		compiler.literals = literals
 	}
+	// Enable macro keyword skipping for syntax-rules patterns.
+	// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro.
+	compiler.SetSkipMacroKeyword(true)
 	err := compiler.Compile(ctx, pair)
 	if err != nil {
 		return nil, err
@@ -607,23 +882,97 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	}, nil
 }
 
-// GetBindings returns the captured pattern variable bindings from the last match,
-// converted back to syntax values. This is used by syntax-case to bind pattern
-// variables in the body's environment.
+// GetBindings returns the captured pattern variable bindings from the last match.
+// Bindings are now stored as syntax.SyntaxValue directly, preserving source context.
+// This is used by syntax-case to bind pattern variables in the body's environment.
 func (sm *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
-	rawBindings := sm.matcher.GetBindings()
-	if rawBindings == nil {
-		return nil
+	return sm.matcher.GetBindings()
+}
+
+// literalScopesMatch checks if an input symbol should match a pattern literal.
+//
+// Per R7RS §4.3.2, a subform in the input matches a literal identifier if and
+// only if it is an identifier and either:
+//   - both its occurrence in the macro expression and its occurrence in the
+//     macro definition have the same lexical binding, or
+//   - the two identifiers are the same and both have no lexical binding.
+//
+// This function returns true if the input symbol refers to the same binding
+// as the pattern literal. It performs two checks:
+//
+// 1. Binding check (R7RS compliant): If a binding checker is available, we check
+// if the input has a lexical binding. Pattern literals (like => and else) are
+// by definition not bound in the macro definition. If the input IS bound
+// (e.g., via let or lambda), it doesn't match the unbound pattern literal.
+//
+// 2. Scope check (for let-syntax): We also check rebinding scopes from
+// let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,
+// the literal has been shadowed by a macro binding.
+//
+// Example with regular let:
+//
+//	(let ((=> #f)) (cond (#t => 'ok)))
+//	The input => has a lexical binding (the let-bound variable)
+//	Pattern => has no lexical binding
+//	They don't match because one is bound and one isn't
+//
+// Example with let-syntax:
+//
+//	(let-syntax ((=> ...)) (cond (#t => 'ok)))
+//	The input => has rebinding scope {letSyntaxScope}
+//	Pattern => has no rebinding scopes, so they don't match
+func (sm *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.SyntaxSymbol) bool {
+	if input == nil || pattern == nil {
+		return false
 	}
 
-	result := make(map[string]syntax.SyntaxValue)
-	for name, rawValue := range rawBindings {
-		// Convert raw value back to syntax using the syntax map
-		if stx, ok := sm.syntaxMap[rawValue]; ok {
-			result[name] = stx
-		} else {
-			// Wrap the raw value in a SyntaxObject if not in map
-			result[name] = syntax.NewSyntaxObject(rawValue, nil)
+	// R7RS §4.3.2 binding check: literals match if both have the same lexical
+	// binding, or both have no lexical binding. After library import, auxiliary
+	// syntax like => gets exported to phase 0, so both input and pattern may
+	// have bindings. We compare the actual bindings, not just whether they exist.
+	if sm.bindingChecker != nil {
+		inputBinding := sm.bindingChecker.GetBinding(input.Sym.Key, input.Scopes())
+		patternBinding := sm.bindingChecker.GetBinding(pattern.Sym.Key, pattern.Scopes())
+
+		// R7RS §4.3.2: literals match if both have the same binding, or both unbound
+		if inputBinding != patternBinding {
+			// Different bindings (or one bound and one not) - don't match
+			return false
+		}
+		// Same binding (including both nil) - continue to scope check below
+	}
+
+	// Also check rebinding scopes for let-syntax shadowing.
+	// This handles cases where the binding checker isn't available,
+	// and provides defense-in-depth for let-syntax cases.
+	inputRebindingScopes := filterRebindingScopes(input.Scopes())
+	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
+
+	// For the input to match the pattern literal, the input must not have
+	// any rebinding scopes that the pattern doesn't have.
+	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+}
+
+// literalScopesMatch is the standalone version for backward compatibility.
+// It only checks rebinding scopes, not actual bindings.
+func literalScopesMatch(input, pattern *syntax.SyntaxSymbol) bool {
+	if input == nil || pattern == nil {
+		return false
+	}
+
+	inputRebindingScopes := filterRebindingScopes(input.Scopes())
+	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
+
+	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+}
+
+// filterRebindingScopes returns only the scopes that are marked as rebinding scopes.
+// These are scopes from let-syntax/letrec-syntax that could shadow auxiliary syntax.
+func filterRebindingScopes(scopes []*syntax.Scope) []*syntax.Scope {
+	var result []*syntax.Scope
+	for _, s := range scopes {
+		if s != nil && s.IsRebinding {
+			result = append(result, s)
 		}
 	}
 	return result

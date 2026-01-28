@@ -355,3 +355,142 @@ func TestBigComplex_ZeroOptimizations(t *testing.T) {
 	result = bc.Multiply(zero)
 	c.Assert(result.IsZero(), qt.IsTrue)
 }
+
+func TestBigComplex_RationalParts(t *testing.T) {
+	c := qt.New(t)
+
+	// Create BigComplex with Rational parts (exact)
+	bc := NewBigComplex(
+		NewRational(3, 2),  // 3/2
+		NewRational(1, 2),  // 1/2
+	)
+
+	// Should be exact
+	c.Assert(bc.IsExact(), qt.IsTrue)
+	c.Assert(bc.Real().(*Rational).Float64(), qt.Equals, 1.5)
+	c.Assert(bc.Imag().(*Rational).Float64(), qt.Equals, 0.5)
+
+	// SchemeString should format correctly
+	c.Assert(bc.SchemeString(), qt.Equals, "3/2+1/2i")
+
+	// Negative imaginary
+	bcNeg := NewBigComplex(
+		NewRational(3, 2),
+		NewRational(-1, 2),
+	)
+	c.Assert(bcNeg.SchemeString(), qt.Equals, "3/2-1/2i")
+}
+
+func TestBigComplex_RationalArithmetic(t *testing.T) {
+	c := qt.New(t)
+
+	bc1 := NewBigComplex(
+		NewRational(3, 2),  // 3/2
+		NewRational(1, 2),  // 1/2
+	)
+	bc2 := NewBigComplex(
+		NewRational(1, 2),  // 1/2
+		NewRational(1, 4),  // 1/4
+	)
+
+	// Add: (3/2 + 1/2i) + (1/2 + 1/4i) = (2 + 3/4i)
+	sum := bc1.Add(bc2)
+	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
+	realPart := sum.(*BigComplex).Real().(*Rational)
+	imagPart := sum.(*BigComplex).Imag().(*Rational)
+	c.Assert(realPart.Float64(), qt.Equals, 2.0)
+	c.Assert(imagPart.Float64(), qt.Equals, 0.75)
+
+	// Subtract: (3/2 + 1/2i) - (1/2 + 1/4i) = (1 + 1/4i)
+	diff := bc1.Subtract(bc2)
+	c.Assert(diff.(*BigComplex).IsExact(), qt.IsTrue)
+	realPart = diff.(*BigComplex).Real().(*Rational)
+	imagPart = diff.(*BigComplex).Imag().(*Rational)
+	c.Assert(realPart.Float64(), qt.Equals, 1.0)
+	c.Assert(imagPart.Float64(), qt.Equals, 0.25)
+
+	// Multiply: (3/2 + 1/2i) * (1/2 + 1/4i) = (3/4 - 1/8) + (3/8 + 1/4)i = 5/8 + 5/8i
+	prod := bc1.Multiply(bc2)
+	c.Assert(prod.(*BigComplex).IsExact(), qt.IsTrue)
+	realPart = prod.(*BigComplex).Real().(*Rational)
+	imagPart = prod.(*BigComplex).Imag().(*Rational)
+	c.Assert(realPart.Float64(), qt.Equals, 0.625) // 5/8
+	c.Assert(imagPart.Float64(), qt.Equals, 0.625) // 5/8
+}
+
+func TestBigComplex_RationalWithScalar(t *testing.T) {
+	c := qt.New(t)
+
+	bc := NewBigComplex(
+		NewRational(3, 2),  // 3/2
+		NewRational(1, 2),  // 1/2
+	)
+
+	// Add Rational: (3/2 + 1/2i) + 1/4 = (7/4 + 1/2i)
+	sum := bc.Add(NewRational(1, 4))
+	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
+	realPart := sum.(*BigComplex).Real().(*Rational)
+	c.Assert(realPart.Float64(), qt.Equals, 1.75) // 7/4
+
+	// Multiply Rational: (3/2 + 1/2i) * 2 = (3 + 1i)
+	prod := bc.Multiply(NewRational(2, 1))
+	c.Assert(prod.(*BigComplex).IsExact(), qt.IsTrue)
+
+	// Divide by Rational: (3/2 + 1/2i) / (1/2) = (3 + 1i)
+	quot := bc.Divide(NewRational(1, 2))
+	c.Assert(quot.(*BigComplex).IsExact(), qt.IsTrue)
+	realPart = quot.(*BigComplex).Real().(*Rational)
+	imagPart := quot.(*BigComplex).Imag().(*Rational)
+	c.Assert(realPart.Float64(), qt.Equals, 3.0)
+	c.Assert(imagPart.Float64(), qt.Equals, 1.0)
+}
+
+func TestBigComplex_RationalExactnessContagion(t *testing.T) {
+	c := qt.New(t)
+
+	exact := NewBigComplex(
+		NewRational(3, 2),
+		NewRational(1, 2),
+	)
+
+	// Adding a Float makes it inexact
+	sumFloat := exact.Add(NewFloat(1.0))
+	c.Assert(sumFloat.(*BigComplex).IsExact(), qt.IsFalse)
+
+	// Adding a BigFloat makes it inexact
+	sumBigFloat := exact.Add(NewBigFloatFromFloat64(1.0))
+	c.Assert(sumBigFloat.(*BigComplex).IsExact(), qt.IsFalse)
+
+	// Adding an Integer keeps it exact (Integer promotes to BigInteger)
+	sumInt := exact.Add(NewInteger(1))
+	c.Assert(sumInt.(*BigComplex).IsExact(), qt.IsTrue)
+
+	// Adding a BigInteger keeps it exact
+	sumBigInt := exact.Add(NewBigIntegerFromInt64(1))
+	c.Assert(sumBigInt.(*BigComplex).IsExact(), qt.IsTrue)
+
+	// Adding another exact Rational keeps it exact
+	sumRat := exact.Add(NewRational(1, 4))
+	c.Assert(sumRat.(*BigComplex).IsExact(), qt.IsTrue)
+}
+
+func TestBigComplex_MixedRationalBigInteger(t *testing.T) {
+	c := qt.New(t)
+
+	// Mixed: Rational real, BigInteger imag
+	bc := NewBigComplex(
+		NewRational(3, 2),
+		NewBigIntegerFromInt64(4),
+	)
+
+	// Should still be exact
+	c.Assert(bc.IsExact(), qt.IsTrue)
+
+	// Add another mixed
+	bc2 := NewBigComplex(
+		NewBigIntegerFromInt64(1),
+		NewRational(1, 2),
+	)
+	sum := bc.Add(bc2)
+	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
+}

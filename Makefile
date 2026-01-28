@@ -55,3 +55,23 @@ modclean:
 tidy:
 	$(MAKE) -C go $@
 
+.PHONY: tag
+tag:
+	$(MAKE) -C go $@
+
+# Release notes using reno
+# Usage: make reno-new NAME=my-feature
+.PHONY: reno-new
+reno-new:
+ifndef NAME
+	$(error NAME is required. Usage: make reno-new NAME=my-feature)
+endif
+	reno new $(NAME)
+
+.PHONY: reno-report
+reno-report:
+	reno report
+
+.PHONY: reno-list
+reno-list:
+	reno list

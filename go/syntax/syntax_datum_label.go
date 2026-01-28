@@ -47,7 +47,7 @@ func (p *SyntaxDatumLabel) Unwrap() values.Value {
 
 // UnwrapAll returns the label number as an integer value.
 func (p *SyntaxDatumLabel) UnwrapAll() values.Value {
-	return values.NewInteger(int64(p.Label))
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // NewSyntaxDatumLabel creates a new datum label reference with the given number.

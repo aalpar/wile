@@ -226,7 +226,7 @@ const bootstrapMacroSource = `
 (define-syntax let-values
   (syntax-rules ()
     ((let-values () body ...)
-     (begin body ...))
+     (let () body ...))
     ((let-values ((formals expr)) body ...)
      (with-binding-scope ()
        (call-with-values
@@ -242,7 +242,7 @@ const bootstrapMacroSource = `
 (define-syntax let*-values
   (syntax-rules ()
     ((let*-values () body ...)
-     (begin body ...))
+     (let () body ...))
     ((let*-values ((formals expr) more ...) body ...)
      (call-with-values
        (lambda () expr)
@@ -253,17 +253,37 @@ const bootstrapMacroSource = `
 ;; Binds multiple variables to values from a multiple-value expression.
 ;; Uses a recursive expansion that collects values into a list, then
 ;; extracts them one by one with set!.
+;; Also supports rest patterns: (define-values (x . rest) expr) and
+;; (define-values var expr) collects all values as a list.
 (define-syntax define-values
   (syntax-rules ()
     ((define-values () expr)
      (call-with-values (lambda () expr) (lambda () (if #f #f))))
     ((define-values (var) expr)
      (define var (call-with-values (lambda () expr) (lambda (x) x))))
+    ;; Dotted pattern base case: (var . rest) where rest is a single symbol
+    ;; This must come AFTER the multi-var dotted case to avoid matching (x y . z)
+    ;; Proper list pattern: (var0 var1 ...)
     ((define-values (var0 var1 ...) expr)
      (begin
        (define var0 (call-with-values (lambda () expr) list))
        (define-values (var1 ...) (apply values (cdr var0)))
-       (set! var0 (car var0))))))
+       (set! var0 (car var0))))
+    ;; Dotted pattern with two+ vars: (var0 var1 . rest) reduces to (var1 . rest)
+    ((define-values (var0 var1 . rest) expr)
+     (begin
+       (define var0 (call-with-values (lambda () expr) list))
+       (define-values (var1 . rest) (apply values (cdr var0)))
+       (set! var0 (car var0))))
+    ;; Dotted pattern base case: (var . rest) binds var to first, rest to remaining list
+    ((define-values (var . rest) expr)
+     (begin
+       (define var (call-with-values (lambda () expr) list))
+       (define rest (cdr var))
+       (set! var (car var))))
+    ;; All values as list: var (no parens)
+    ((define-values var expr)
+     (define var (call-with-values (lambda () expr) list)))))
 
 ;; Iteration
 (define-syntax do

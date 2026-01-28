@@ -100,7 +100,8 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 			return nil, values.NewForeignError("make-thread: thunk must be a procedure")
 		}
 
-		// Create a new machine context for this thread
+		// Create a new machine context for this thread.
+		// Sub-contexts have isolated continuation chains, which is appropriate for threads.
 		sub := mc.NewSubContext()
 		if _, err := sub.Apply(cls); err != nil {
 			return nil, err

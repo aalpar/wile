@@ -17,18 +17,24 @@ package environment
 import (
 	"testing"
 
+	"wile/syntax"
 	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
+// Helper to create a GlobalEnvironmentFrame with proper TopLevelEnvironment
+func newTestGlobalEnvFrame() *GlobalEnvironmentFrame {
+	return NewTopLevelEnvironmentFrame().GlobalEnvironment()
+}
+
 func TestGlobalEnvironment(t *testing.T) {
-	// Create a new Local environment
-	env := NewTopLevelGlobalEnvironmentFrame()
+	// Create a new environment via TopLevelEnvironmentFrame
+	env := newTestGlobalEnvFrame()
 
 	// Check if the environment is initialized correctly
 	if env == nil {
-		t.Fatal("Expected a non-nil Local environment")
+		t.Fatal("Expected a non-nil environment")
 	}
 
 	value0 := values.NewInteger(42)
@@ -36,7 +42,7 @@ func TestGlobalEnvironment(t *testing.T) {
 
 	sym0 := values.NewSymbol("testVar0")
 	sym1 := values.NewSymbol("testVar1")
-	// variable has not been added yet, so GetLocalIndex should return nil
+	// variable has not been added yet, so GetGlobalIndex should return nil
 	gi0 := env.GetGlobalIndex(sym0)
 	qt.Assert(t, gi0, qt.IsNil)
 
@@ -69,7 +75,7 @@ func TestGlobalEnvironment(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_Keys(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	sym1 := values.NewSymbol("var1")
 	sym2 := values.NewSymbol("var2")
@@ -82,7 +88,7 @@ func TestGlobalEnvironmentFrame_Keys(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	sym := values.NewSymbol("test")
 	env.CreateGlobalBinding(sym, BindingTypeVariable)
@@ -100,19 +106,19 @@ func TestGlobalEnvironmentFrame_IsVoid(t *testing.T) {
 	var env *GlobalEnvironmentFrame = nil
 	qt.Assert(t, env.IsVoid(), qt.IsTrue)
 
-	env2 := NewTopLevelGlobalEnvironmentFrame()
+	env2 := newTestGlobalEnvFrame()
 	qt.Assert(t, env2.IsVoid(), qt.IsFalse)
 }
 
 func TestGlobalEnvironmentFrame_SchemeString(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 	str := env.SchemeString()
 	qt.Assert(t, str, qt.Equals, "#<global-environment>")
 }
 
 func TestGlobalEnvironmentFrame_EqualTo(t *testing.T) {
-	env1 := NewTopLevelGlobalEnvironmentFrame()
-	env2 := NewTopLevelGlobalEnvironmentFrame()
+	env1 := newTestGlobalEnvFrame()
+	env2 := newTestGlobalEnvFrame()
 
 	// Two fresh global environments are equal (same structure)
 	qt.Assert(t, env1.EqualTo(env2), qt.IsTrue)
@@ -130,14 +136,14 @@ func TestGlobalEnvironmentFrame_EqualTo(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_LibraryRegistry(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	// Initially nil
 	qt.Assert(t, env.LibraryRegistry(), qt.IsNil)
 }
 
 func TestGlobalEnvironmentFrame_SetLibraryRegistry(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	// Test is minimal since LibraryRegistry type is in machine package
 	// Just verify we can call SetLibraryRegistry without panic
@@ -146,7 +152,7 @@ func TestGlobalEnvironmentFrame_SetLibraryRegistry(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_InternSyntax(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	// Create a syntax value to intern
 	sym := values.NewSymbol("test")
@@ -157,7 +163,7 @@ func TestGlobalEnvironmentFrame_InternSyntax(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_GetGlobalIndex_NotFound(t *testing.T) {
-	env := NewTopLevelGlobalEnvironmentFrame()
+	env := newTestGlobalEnvFrame()
 
 	// Get index for symbol that doesn't exist
 	sym := values.NewSymbol("nonexistent")
@@ -166,14 +172,78 @@ func TestGlobalEnvironmentFrame_GetGlobalIndex_NotFound(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_EqualTo_NilCases(t *testing.T) {
-	env2 := NewTopLevelGlobalEnvironmentFrame()
+	env2 := newTestGlobalEnvFrame()
 
 	// Non-nil equals nil literal returns false
 	qt.Assert(t, env2.EqualTo(nil), qt.IsFalse)
 
 	// Different binding counts
 	sym := values.NewSymbol("test")
-	env3 := NewTopLevelGlobalEnvironmentFrame()
+	env3 := newTestGlobalEnvFrame()
 	env3.CreateGlobalBinding(sym, BindingTypeVariable)
 	qt.Assert(t, env2.EqualTo(env3), qt.IsFalse)
+}
+
+func TestGlobalEnvironmentFrame_SymbolInterning(t *testing.T) {
+	// Create two separate top-level environments
+	topLevel1 := NewTopLevelEnvironment()
+	topLevel2 := NewTopLevelEnvironment()
+	env1 := topLevel1.Runtime().GlobalEnvironment()
+	env2 := topLevel2.Runtime().GlobalEnvironment()
+
+	// Intern a symbol in env1
+	sym1 := values.NewSymbol("foo")
+	interned1 := env1.InternSymbol(sym1)
+	qt.Assert(t, interned1, qt.Equals, sym1)
+
+	// Intern the same symbol name in env2
+	sym2 := values.NewSymbol("foo")
+	interned2 := env2.InternSymbol(sym2)
+
+	// With per-instance interning, they should be different pointers
+	// (unless the global fallback is used, which we removed)
+	qt.Assert(t, interned2 != interned1, qt.IsTrue,
+		qt.Commentf("per-instance symbol interning: same name should return different pointers"))
+}
+
+func TestGlobalEnvironmentFrame_SyntaxInterningViaTopLevel(t *testing.T) {
+	// Create source environment
+	topLevel := NewTopLevelEnvironment()
+	env := topLevel.Runtime().GlobalEnvironment()
+
+	key := values.NewInteger(42)
+	stx := syntax.NewSyntaxSymbol("test", nil)
+	interned1 := env.InternSyntax(key, stx)
+	qt.Assert(t, interned1, qt.Equals, stx)
+
+	// Interning the same key again should return the same value
+	stx2 := syntax.NewSyntaxSymbol("different", nil)
+	interned2 := env.InternSyntax(key, stx2)
+	qt.Assert(t, interned2, qt.Equals, stx, // Should return original, not stx2
+		qt.Commentf("interning same key returns original value"))
+}
+
+func TestGlobalEnvironmentFrame_NewWithoutTopLevel_Panics(t *testing.T) {
+	// Create a bare GlobalEnvironmentFrame without TopLevelEnvironment
+	env := NewGlobalEnvironmentFrame()
+
+	// InternSymbol should panic
+	qt.Assert(t, func() {
+		env.InternSymbol(values.NewSymbol("test"))
+	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
+
+	// InternSyntax should panic
+	qt.Assert(t, func() {
+		env.InternSyntax(values.NewInteger(1), nil)
+	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
+
+	// LibraryRegistry should panic
+	qt.Assert(t, func() {
+		env.LibraryRegistry()
+	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
+
+	// SetLibraryRegistry should panic
+	qt.Assert(t, func() {
+		env.SetLibraryRegistry(nil)
+	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
 }

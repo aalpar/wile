@@ -22,12 +22,17 @@ import (
 
 var _ values.Value = (*SourceContext)(nil)
 
-// OriginInfo tracks macro expansion chains for better error reporting.
-// Each OriginInfo represents one macro expansion in the chain.
+// OriginInfo tracks macro expansion chains for debugging and error reporting.
+// Each OriginInfo represents one macro expansion in the chain, enabling:
+//   - Tracing generated code back to the macro that created it
+//   - Identifying which invocation (by unique ID) produced specific code
+//   - Locating the template source that was expanded
 type OriginInfo struct {
-	Identifier string         // Macro name that caused expansion (e.g., "let", "my-macro")
-	Location   *SourceContext // Where the macro was invoked (use-site)
-	Parent     *OriginInfo    // Previous link in origin chain (for nested macros)
+	Identifier       string         // Macro name that caused expansion (e.g., "let", "my-macro")
+	ApplicationID    uint64         // Unique ID for this macro invocation (from intro scope)
+	Location         *SourceContext // Where the macro was invoked (use-site)
+	TemplateLocation *SourceContext // Where the macro template was defined (definition-site)
+	Parent           *OriginInfo    // Previous link in origin chain (for nested macros)
 }
 
 // Depth returns the length of the origin chain.
@@ -117,6 +122,23 @@ func (p *SourceContext) WithOrigin(origin *OriginInfo) *SourceContext {
 	}
 }
 
+// WithoutScopes returns a new SourceContext with scopes cleared.
+// Used when creating template identifiers that should not inherit
+// use-site scopes during macro expansion (Flatt 2016 hygiene model).
+func (p *SourceContext) WithoutScopes() *SourceContext {
+	if p == nil {
+		return nil
+	}
+	return &SourceContext{
+		Text:   p.Text,
+		File:   p.File,
+		Start:  p.Start,
+		End:    p.End,
+		Origin: p.Origin,
+		// Scopes intentionally omitted
+	}
+}
+
 // WithScope returns a new SourceContext with an additional scope.
 //
 // This is the primitive operation for adding hygiene scopes to syntax objects.
@@ -145,8 +167,8 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 		File:   p.File,
 		Start:  p.Start,
 		End:    p.End,
-		Scopes: newScopes,
 		Origin: p.Origin,
+		Scopes: newScopes,
 	}
 }
 
@@ -168,8 +190,8 @@ func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
 		File:   p.File,
 		Start:  p.Start,
 		End:    p.End,
-		Scopes: newScopes,
 		Origin: p.Origin,
+		Scopes: newScopes,
 	}
 }
 

@@ -40,14 +40,33 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 	}
 	err := p.Function(ctx, mc)
 	if err != nil {
-		// Check if this is a handled continuation escape.
-		// When an escape is handled, the foreign function sets the Handled flag
-		// and restores mc to the target continuation state.
+		// Check if this is a continuation escape.
+		// Continuation escapes propagate up through foreign function calls until they reach
+		// the PrimCallCC that captured the continuation, which then handles the escape.
 		var escapeErr *ErrContinuationEscape
-		if errors.As(err, &escapeErr) && escapeErr.Handled {
-			return mc, nil
+		if errors.As(err, &escapeErr) {
+			if escapeErr.Handled {
+				// Already handled by PrimCallCC - mc has been restored to target continuation
+				return mc, nil
+			}
+			// Unhandled escape - propagate up so it can reach PrimCallCC
+			return nil, err
 		}
-		return nil, err
+
+		// Check if this is already a Scheme exception - propagate as-is
+		var excErr *ErrExceptionEscape
+		if errors.As(err, &excErr) {
+			return nil, err
+		}
+
+		// Convert Go error to Scheme exception so guard/with-exception-handler can catch it.
+		// Create an error object that wraps the original Go error for debugging.
+		errObj := values.NewErrorObjectWithCause(err.Error(), err)
+		return nil, &ErrExceptionEscape{
+			Condition:   errObj,
+			Continuable: false,
+			Handled:     false,
+		}
 	}
 	mc.pc++
 	return mc, nil

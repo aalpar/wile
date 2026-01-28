@@ -165,6 +165,31 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 		} else {
 			mc.SetValue(values.FalseValue)
 		}
+	case *values.BigComplex:
+		// Check if imaginary part is zero and real part is an integer
+		if v.IsReal() {
+			realPart := v.Real()
+			switch rp := realPart.(type) {
+			case *values.BigInteger:
+				mc.SetValue(values.TrueValue)
+			case *values.Rational:
+				if rp.IsInteger() {
+					mc.SetValue(values.TrueValue)
+				} else {
+					mc.SetValue(values.FalseValue)
+				}
+			case *values.BigFloat:
+				if rp.BigFloatValue().IsInt() {
+					mc.SetValue(values.TrueValue)
+				} else {
+					mc.SetValue(values.FalseValue)
+				}
+			default:
+				mc.SetValue(values.FalseValue)
+			}
+		} else {
+			mc.SetValue(values.FalseValue)
+		}
 	default:
 		mc.SetValue(values.FalseValue)
 	}
@@ -181,11 +206,10 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
 		mc.SetValue(values.TrueValue)
 	case *values.Complex:
-		if imag(v.Value) == 0 {
-			mc.SetValue(values.TrueValue)
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
+		// R7RS: A complex is real only if imaginary part is exactly zero.
+		// Complex uses float64 parts (always inexact), so cannot be exactly zero.
+		// If the imaginary was exact 0 at parse time, parser returns Float instead.
+		mc.SetValue(values.FalseValue)
 	case *values.BigComplex:
 		if v.IsReal() {
 			mc.SetValue(values.TrueValue)
@@ -211,26 +235,16 @@ func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		// Float is rational if it's finite (not NaN or Inf)
 		f := v.Value
-		if f != f { // NaN check
-			mc.SetValue(values.FalseValue)
-		} else if f > 1e308 || f < -1e308 { // Infinity check (approximate)
+		if math.IsNaN(f) || math.IsInf(f, 0) {
 			mc.SetValue(values.FalseValue)
 		} else {
 			mc.SetValue(values.TrueValue)
 		}
 	case *values.Complex:
-		if imag(v.Value) == 0 {
-			r := real(v.Value)
-			if r != r { // NaN check
-				mc.SetValue(values.FalseValue)
-			} else if r > 1e308 || r < -1e308 {
-				mc.SetValue(values.FalseValue)
-			} else {
-				mc.SetValue(values.TrueValue)
-			}
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
+		// R7RS: A complex is rational only if imaginary part is exactly zero.
+		// Complex uses float64 parts (always inexact), so cannot be exactly zero.
+		// If the imaginary was exact 0 at parse time, parser returns Float instead.
+		mc.SetValue(values.FalseValue)
 	default:
 		mc.SetValue(values.FalseValue)
 	}

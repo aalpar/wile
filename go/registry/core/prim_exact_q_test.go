@@ -30,9 +30,12 @@ func TestExactQ(t *testing.T) {
 		{name: "exact? on rational", code: `(exact? 3/4)`, expected: values.TrueValue},
 		{name: "exact? on biginteger", code: `(exact? #z123456789012345678901234567890)`, expected: values.TrueValue},
 
+		// Exact complex (integer parts)
+		{name: "exact? on exact complex", code: `(exact? 1+2i)`, expected: values.TrueValue},
+
 		// Inexact types
 		{name: "exact? on float", code: `(exact? 3.14)`, expected: values.FalseValue},
-		{name: "exact? on complex", code: `(exact? 1+2i)`, expected: values.FalseValue},
+		{name: "exact? on inexact complex", code: `(exact? 1.0+2.0i)`, expected: values.FalseValue},
 		{name: "exact? on +inf.0", code: `(exact? +inf.0)`, expected: values.FalseValue},
 		{name: "exact? on +nan.0", code: `(exact? +nan.0)`, expected: values.FalseValue},
 	}

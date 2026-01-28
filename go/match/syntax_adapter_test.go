@@ -37,7 +37,6 @@ func TestSyntaxMatcher(t *testing.T) {
 		matcher := NewSyntaxMatcher(variables, codes)
 		qt.Assert(t, matcher, qt.IsNotNil)
 		qt.Assert(t, matcher.matcher, qt.IsNotNil)
-		qt.Assert(t, matcher.syntaxMap, qt.IsNotNil)
 	})
 
 	t.Run("NewSyntaxMatcherWithEllipsisVars", func(t *testing.T) {
@@ -143,7 +142,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create intro scope
-		introScope := syntax.NewScope(nil)
+		introScope := syntax.NewScope()
 		freeIds := make(map[string]any)
 
 		template := syntax.NewSyntaxSymbol("x", srcCtx)
@@ -425,7 +424,7 @@ func TestExpandWithUseSite(t *testing.T) {
 	)
 
 	// Expand with use-site context
-	introScope := syntax.NewScope(nil)
+	introScope := syntax.NewScope()
 	freeIds := map[string]any{"let": nil}
 	result, err := matcher.ExpandWithUseSite(template, introScope, freeIds, useSiteSc)
 	c.Assert(err, qt.IsNil)
@@ -695,4 +694,125 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	c.Assert(resultSc.File, qt.Equals, "input.scm")
 	// Pattern variables keep their original context, so no origin should be added
 	c.Assert(resultSc.Origin, qt.IsNil)
+}
+
+// mockBindingChecker implements BindingChecker for testing.
+type mockBindingChecker struct {
+	bindings map[string]any // sym -> binding (nil means no binding)
+}
+
+func (m *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	binding, ok := m.bindings[sym]
+	return ok && binding != nil
+}
+
+func (m *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+	return m.bindings[sym]
+}
+
+// TestLiteralScopesMatchWithChecker_BothHaveSameBinding verifies that when both
+// input and pattern have the same binding (e.g., after library import), they match.
+// This tests the fix for R7RS §4.3.2 auxiliary syntax after (import (scheme base)).
+func TestLiteralScopesMatchWithChecker_BothHaveSameBinding(t *testing.T) {
+	c := qt.New(t)
+
+	srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	inputSym := syntax.NewSyntaxSymbol("=>", srcCtx)
+	patternSym := syntax.NewSyntaxSymbol("=>", srcCtx)
+
+	// Both symbols resolve to the same binding (simulating imported auxiliary syntax)
+	sharedBinding := &struct{ name string }{name: "arrow-binding"}
+
+	literalSyntax := map[string]*syntax.SyntaxSymbol{
+		"=>": patternSym,
+	}
+	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
+	matcher.bindingChecker = &mockBindingChecker{
+		bindings: map[string]any{
+			"=>": sharedBinding, // Same binding for both
+		},
+	}
+
+	// Should match because both have the same binding
+	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
+	c.Assert(result, qt.IsTrue, qt.Commentf("both have same binding, should match"))
+}
+
+// TestLiteralScopesMatchWithChecker_DifferentBindings verifies that when input
+// and pattern have different bindings (e.g., let-shadowed), they don't match.
+func TestLiteralScopesMatchWithChecker_DifferentBindings(t *testing.T) {
+	c := qt.New(t)
+
+	// Input has a let-binding scope
+	letScope := syntax.NewScope()
+	inputSrcCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{letScope}}
+	inputSym := syntax.NewSyntaxSymbol("=>", inputSrcCtx)
+
+	// Pattern has no scopes (from macro definition)
+	patternSrcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	patternSym := syntax.NewSyntaxSymbol("=>", patternSrcCtx)
+
+	// Input has a different binding (let-bound) than pattern (global)
+	inputBinding := &struct{ name string }{name: "let-binding"}
+	patternBinding := &struct{ name string }{name: "global-binding"}
+
+	literalSyntax := map[string]*syntax.SyntaxSymbol{
+		"=>": patternSym,
+	}
+	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
+
+	// Create a checker that returns different bindings based on scopes
+	// Input (with scopes) gets input binding, pattern (no scopes) gets pattern binding
+	matcher.bindingChecker = &mockBindingCheckerWithScopes{
+		inputBinding:   inputBinding,
+		patternBinding: patternBinding,
+	}
+
+	// Should NOT match because bindings are different
+	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
+	c.Assert(result, qt.IsFalse, qt.Commentf("different bindings, should not match"))
+}
+
+// TestLiteralScopesMatchWithChecker_BothUnbound verifies that when both input
+// and pattern have no binding, they match if they have the same name.
+func TestLiteralScopesMatchWithChecker_BothUnbound(t *testing.T) {
+	c := qt.New(t)
+
+	srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	inputSym := syntax.NewSyntaxSymbol("=>", srcCtx)
+	patternSym := syntax.NewSyntaxSymbol("=>", srcCtx)
+
+	literalSyntax := map[string]*syntax.SyntaxSymbol{
+		"=>": patternSym,
+	}
+	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
+	matcher.bindingChecker = &mockBindingChecker{
+		bindings: map[string]any{}, // No bindings
+	}
+
+	// Should match because both are unbound (nil == nil)
+	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
+	c.Assert(result, qt.IsTrue, qt.Commentf("both unbound, should match"))
+}
+
+// mockBindingCheckerWithScopes returns different bindings for input vs pattern.
+type mockBindingCheckerWithScopes struct {
+	inputBinding   any
+	patternBinding any
+}
+
+func (m *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	// Determine if this is input (has scopes) or pattern (no scopes)
+	if len(scopes) > 0 {
+		return m.inputBinding != nil
+	}
+	return m.patternBinding != nil
+}
+
+func (m *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) any {
+	// Determine if this is input (has scopes) or pattern (no scopes)
+	if len(scopes) > 0 {
+		return m.inputBinding
+	}
+	return m.patternBinding
 }

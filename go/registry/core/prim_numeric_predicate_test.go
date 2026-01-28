@@ -220,6 +220,21 @@ func TestNumericEquals(t *testing.T) {
 		{"= +inf.0 -inf.0", `(= +inf.0 -inf.0)`, values.FalseValue},
 		// NaN is never equal to anything, including itself
 		{"= +nan.0 +nan.0", `(= +nan.0 +nan.0)`, values.FalseValue},
+
+		// Precision boundary tests at 2^53
+		// 2^53 = 9007199254740992 is the largest integer that can be exactly
+		// represented as a float64. Values above this lose precision.
+		{"= at 2^53 boundary exact", `(= 9007199254740992 9007199254740992.0)`, values.TrueValue},
+		{"= 2^53+1 vs 2^53 float", `(= 9007199254740993 9007199254740992.0)`, values.FalseValue},
+		{"= 2^53 float vs 2^53+1", `(= 9007199254740992.0 9007199254740993)`, values.FalseValue},
+		{"= negative boundary", `(= -9007199254740993 -9007199254740992.0)`, values.FalseValue},
+		// Integer to float where float is non-integer
+		{"= integer and non-integer float", `(= 5 5.5)`, values.FalseValue},
+		// Integer to infinity
+		{"= integer and +inf.0", `(= 1000000 +inf.0)`, values.FalseValue},
+		{"= integer and -inf.0", `(= -1000000 -inf.0)`, values.FalseValue},
+		// Integer to NaN
+		{"= integer and +nan.0", `(= 42 +nan.0)`, values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -432,11 +447,17 @@ func TestExactnessPredicatesExtended(t *testing.T) {
 		// exact-integer? on BigFloat (always false - inexact)
 		{"exact-integer? on bigfloat", `(exact-integer? #m4.0)`, values.FalseValue},
 
-		// exact? on complex
-		{"exact? on complex", `(exact? 1+2i)`, values.FalseValue},
+		// exact? on exact complex (integer parts are parsed as exact BigComplex)
+		{"exact? on complex", `(exact? 1+2i)`, values.TrueValue},
 
-		// inexact? on complex
-		{"inexact? on complex", `(inexact? 1+2i)`, values.TrueValue},
+		// inexact? on exact complex
+		{"inexact? on complex", `(inexact? 1+2i)`, values.FalseValue},
+
+		// exact? on inexact complex (float parts)
+		{"exact? on inexact complex", `(exact? 1.0+2.0i)`, values.FalseValue},
+
+		// inexact? on inexact complex (float parts)
+		{"inexact? on inexact complex", `(inexact? 1.0+2.0i)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -45,9 +45,46 @@ import (
 	"context"
 	"fmt"
 
+	"wile/environment"
+	"wile/match"
 	"wile/syntax"
 	"wile/values"
 )
+
+// envBindingChecker implements match.BindingChecker for R7RS auxiliary syntax hygiene.
+// It checks if an identifier has a lexical binding in the current environment.
+type envBindingChecker struct {
+	env *environment.EnvironmentFrame
+}
+
+// Verify envBindingChecker implements match.BindingChecker
+var _ match.BindingChecker = (*envBindingChecker)(nil)
+
+// HasBinding checks if the given symbol with scopes has a lexical binding.
+// This is used by the pattern matcher to determine if an input identifier
+// should match a pattern literal. Per R7RS §4.3.2, literals match only if
+// both have the same lexical binding, or both have no lexical binding.
+func (e *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	if e.env == nil {
+		return false
+	}
+	s := values.NewSymbol(sym)
+	binding := e.env.GetBindingWithScopes(s, scopes)
+	return binding != nil
+}
+
+// GetBinding returns the binding for the given symbol with scopes.
+// This is used for R7RS §4.3.2 auxiliary syntax hygiene: we compare the
+// actual bindings (not just whether they exist) to determine if a literal
+// matches. Two identifiers match only if they have the same binding.
+func (e *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+	if e.env == nil {
+		return nil
+	}
+	s := values.NewSymbol(sym)
+	binding := e.env.GetBindingWithScopes(s, scopes)
+	return binding
+}
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
 //
@@ -126,14 +163,28 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 		}
 	}
 
+	// Create binding checker for R7RS auxiliary syntax hygiene.
+	// This allows the pattern matcher to check if an identifier like => or else
+	// has been locally bound, in which case it shouldn't match the pattern literal.
+	//
+	// We use the expander context's environment (the use-site environment) rather
+	// than mctx.env (the macro definition-time environment). This is critical for
+	// checking if identifiers like => are bound by enclosing forms (like lambda
+	// from let expansion) at the macro use site.
+	bindingEnv := mctx.env
+	if mctx.expanderCtx != nil && mctx.expanderCtx.Env() != nil {
+		bindingEnv = mctx.expanderCtx.Env()
+	}
+	bindingChecker := &envBindingChecker{env: bindingEnv}
+
 	// Try each clause in order
 	for i, clause := range clauses {
-		// Try to match the pattern
-		err := clause.matcher.Match(input)
+		// Try to match the pattern with R7RS binding checking
+		err := clause.matcher.MatchWithBindingChecker(input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site
-			introScope := syntax.NewScope(nil)
+			introScope := syntax.NewScope()
 
 			// Convert freeIds from map[string]*environment.GlobalIndex to map[string]any
 			// This is needed because the match package uses any to avoid circular imports
@@ -148,7 +199,9 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 			// - Free identifiers (like 'if', 'lambda') don't get intro scope but carry resolved bindings
 			// - Use-site context is used for newly created syntax objects (better error messages)
 			// - Origin info tracks the macro expansion chain
-			expanded, err := clause.matcher.ExpandWithOrigin(clause.template, introScope, freeIdsAny, useSiteCtx, origin)
+			// - Pattern variable syntax enables nested macro hygiene via scope comparison
+			expanded, err := clause.matcher.ExpandWithPatternVarSyntax(
+				clause.template, introScope, freeIdsAny, useSiteCtx, origin, clause.patternVarSyntax)
 			if err != nil {
 				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}
@@ -220,11 +273,8 @@ func addScopeToSyntaxSkipFreeIds(val values.Value, scope *syntax.Scope, freeIds 
 			// while skipping free identifiers
 			return addScopeToPairSkipFreeIds(s, scope, freeIds)
 
-		case *syntax.SyntaxObject:
-			return s.AddScope(scope)
-
 		default:
-			// For other syntax types, return as-is
+			// Other syntax types (SyntaxObject, etc.) don't need scopes
 			return stx
 		}
 	}
@@ -300,10 +350,8 @@ func addScopeToSyntax(val values.Value, scope *syntax.Scope) values.Value {
 			return s.AddScope(scope)
 		case *syntax.SyntaxPair:
 			return s.AddScope(scope)
-		case *syntax.SyntaxObject:
-			return s.AddScope(scope)
 		default:
-			// For other syntax types, return as-is
+			// Other syntax types (SyntaxObject, etc.) don't need scopes
 			return stx
 		}
 	}

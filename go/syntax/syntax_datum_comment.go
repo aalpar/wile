@@ -62,8 +62,7 @@ func (p *SyntaxDatumComment) Unwrap() values.Value {
 
 // UnwrapAll recursively unwraps the commented value.
 func (p *SyntaxDatumComment) UnwrapAll() values.Value {
-	sv := p.Value
-	return sv.UnwrapAll()
+	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
 }
 
 // EqualTo compares datum comments by label and value.

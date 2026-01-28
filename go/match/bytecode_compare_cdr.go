@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package environment
+package match
 
 import (
-	"testing"
+	"fmt"
 
-	qt "github.com/frankban/quicktest"
+	"wile/syntax"
 )
 
-func TestNewMetaFrame(t *testing.T) {
-	mf := NewMetaFrame()
-	qt.Assert(t, mf, qt.Not(qt.IsNil))
-	qt.Assert(t, mf.parent, qt.IsNil)
+// ByteCodeCompareCdr compares the cdr of the current pair with a literal syntax value.
+// This is used for improper list patterns where the tail is a literal,
+// e.g., (a . b) where b is a literal symbol to match exactly.
+type ByteCodeCompareCdr struct {
+	Value syntax.SyntaxValue
+}
+
+func (p ByteCodeCompareCdr) String() string {
+	return fmt.Sprintf("CompareCdr(%v)", p.Value)
 }

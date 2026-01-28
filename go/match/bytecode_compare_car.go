@@ -17,12 +17,12 @@ package match
 import (
 	"fmt"
 
-	"wile/values"
+	"wile/syntax"
 )
 
-// ByteCodeCompareCar compares the current car position with a literal value.
+// ByteCodeCompareCar compares the current car position with a literal syntax value.
 type ByteCodeCompareCar struct {
-	Value values.Value
+	Value syntax.SyntaxValue
 }
 
 func (p ByteCodeCompareCar) String() string {

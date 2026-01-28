@@ -406,3 +406,204 @@ func TestParseIdentifierListFromDatum_NotASymbol(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "expected identifier symbol")
 }
+
+// Phase shift tests
+
+func TestParseImportSetFromDatum_ForSyntax(t *testing.T) {
+	// (for-syntax (scheme base))
+	importSet := values.NewCons(
+		values.NewSymbol("for-syntax"),
+		values.NewCons(
+			values.NewCons(
+				values.NewSymbol("scheme"),
+				values.NewCons(values.NewSymbol("base"), values.EmptyList),
+			),
+			values.EmptyList,
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
+}
+
+func TestParseImportSetFromDatum_ForTemplate(t *testing.T) {
+	// (for-template (scheme base))
+	importSet := values.NewCons(
+		values.NewSymbol("for-template"),
+		values.NewCons(
+			values.NewCons(
+				values.NewSymbol("scheme"),
+				values.NewCons(values.NewSymbol("base"), values.EmptyList),
+			),
+			values.EmptyList,
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
+}
+
+func TestParseImportSetFromDatum_ForMeta(t *testing.T) {
+	// (for-meta 2 (scheme base))
+	importSet := values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.NewCons(
+			values.NewInteger(2),
+			values.NewCons(
+				values.NewCons(
+					values.NewSymbol("scheme"),
+					values.NewCons(values.NewSymbol("base"), values.EmptyList),
+				),
+				values.EmptyList,
+			),
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
+}
+
+func TestParseImportSetFromDatum_ForMetaNegative(t *testing.T) {
+	// (for-meta -1 (scheme base))
+	importSet := values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.NewCons(
+			values.NewInteger(-1),
+			values.NewCons(
+				values.NewCons(
+					values.NewSymbol("scheme"),
+					values.NewCons(values.NewSymbol("base"), values.EmptyList),
+				),
+				values.EmptyList,
+			),
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
+}
+
+func TestParseImportSetFromDatum_NestedForSyntax(t *testing.T) {
+	// (for-syntax (for-syntax (scheme base))) should be phase +2
+	importSet := values.NewCons(
+		values.NewSymbol("for-syntax"),
+		values.NewCons(
+			values.NewCons(
+				values.NewSymbol("for-syntax"),
+				values.NewCons(
+					values.NewCons(
+						values.NewSymbol("scheme"),
+						values.NewCons(values.NewSymbol("base"), values.EmptyList),
+					),
+					values.EmptyList,
+				),
+			),
+			values.EmptyList,
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
+}
+
+func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
+	// (for-syntax (only (scheme base) car cdr))
+	importSet := values.NewCons(
+		values.NewSymbol("for-syntax"),
+		values.NewCons(
+			values.NewCons(
+				values.NewSymbol("only"),
+				values.NewCons(
+					values.NewCons(
+						values.NewSymbol("scheme"),
+						values.NewCons(values.NewSymbol("base"), values.EmptyList),
+					),
+					values.NewCons(
+						values.NewSymbol("car"),
+						values.NewCons(values.NewSymbol("cdr"), values.EmptyList),
+					),
+				),
+			),
+			values.EmptyList,
+		),
+	)
+
+	result, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
+	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
+}
+
+func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {
+	// (for-syntax) - missing import set
+	importSet := values.NewCons(
+		values.NewSymbol("for-syntax"),
+		values.EmptyList,
+	)
+
+	_, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	// Error comes from trying to parse empty list as import set
+	qt.Assert(t, err.Error(), qt.Contains, "not a pair")
+}
+
+func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
+	// (for-meta) - missing phase level
+	importSet := values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.EmptyList,
+	)
+
+	_, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	// Error comes from trying to get the phase level from empty list
+	qt.Assert(t, err.Error(), qt.Contains, "not an integer")
+}
+
+func TestParseImportSetFromDatum_ForMeta_NotInteger(t *testing.T) {
+	// (for-meta "bad" (scheme base))
+	importSet := values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.NewCons(
+			values.NewString("bad"),
+			values.NewCons(
+				values.NewCons(
+					values.NewSymbol("scheme"),
+					values.NewCons(values.NewSymbol("base"), values.EmptyList),
+				),
+				values.EmptyList,
+			),
+		),
+	)
+
+	_, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "for-meta: expected integer phase level")
+}
+
+func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
+	// (for-meta 1) - missing import set after phase level
+	importSet := values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.NewCons(
+			values.NewInteger(1),
+			values.EmptyList,
+		),
+	)
+
+	_, err := ParseImportSetFromDatum(importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	// Error comes from trying to parse empty list as import set
+	qt.Assert(t, err.Error(), qt.Contains, "not a pair")
+}

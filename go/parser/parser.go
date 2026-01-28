@@ -71,8 +71,8 @@ type Parser struct {
 	cur         tokenizer.Token
 	err         error
 	skipComment bool
-	foldCase    bool   // R7RS §2.1: #!fold-case mode for identifiers
-	file        string // source file name for error reporting
+	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
+	file        string                     // source file name for error reporting
 	datumLabels map[int]syntax.SyntaxValue // R7RS §2.4 datum labels (#n= and #n#)
 }
 
@@ -482,6 +482,49 @@ func countTrailingZeros(s string) int {
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
+
+	// Skip comments when skipComment is enabled
+	// This handles comments inside lists, vectors, and other compound structures
+	for p.skipComment {
+		cur := p.curr()
+		switch cur.Type() {
+		case tokenizer.TokenizerStateLineCommentBody, tokenizer.TokenizerStateBlockCommentBody:
+			// Skip the comment and advance to next token
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		case tokenizer.TokenizerStateDatumCommentBegin:
+			// Skip the datum comment begin token
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			// Read and discard the commented datum
+			_, _, p.err = p.readSyntax()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			// Advance past the commented datum
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		case tokenizer.TokenizerStateDirective:
+			// Process fold-case directives even when skipping
+			d := p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
+			p.processFoldCaseDirective(d)
+			p.cur, p.err = p.toks.Next()
+			if p.err != nil {
+				return nil, p.cur, p.err
+			}
+			continue
+		}
+		break
+	}
+
 	cur := p.curr()
 	switch cur.Type() {
 	case tokenizer.TokenizerStateCons:
@@ -593,6 +636,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
+			// After skipping comments, we may have landed on a delimiter (close paren or cons)
+			// In that case, readSyntax returns nil and we should exit the loop
+			if v == nil {
+				break
+			}
 			pr0 = pr.(*syntax.SyntaxPair)
 			pr0.SetCar(v)
 			pr0.SetCdr(p.wrapSyntaxPair(nil, nil, p.cur))
@@ -665,7 +713,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, p.err
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
-			break
+			// Empty bytevector case: #u8()
+			q = p.wrapSyntax(q0, p.cur)
+			return q, p.cur, nil
 		}
 		i, ok := stx.Unwrap().(*values.Integer)
 		for {
@@ -862,7 +912,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginary:
 		// Pure imaginary numbers like +3i, -2i, +i, -i
-		var q1 *values.Complex
+		var q1 values.Number
 		q1, p.err = p.parseImaginary(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -888,7 +938,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		// Full complex numbers like 1+2i, 3-4i, 1.5+2.5i, +1+2i, -3-4i
-		var q1 *values.Complex
+		// R7RS §6.2.2: Exact if both parts are integer/rational, inexact otherwise
+		var q1 values.Number
 		q1, p.err = p.parseComplex(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -906,7 +957,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginary:
 		// Pure imaginary numbers (unsigned, typically after radix prefix)
-		var q1 *values.Complex
+		var q1 values.Number
 		q1, p.err = p.parseImaginary(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -930,14 +981,38 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q1 := values.NewComplexFromParts(0, math.NaN())
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateMarkerNumberExact, tokenizer.TokenizerStateMarkerNumberInexact:
-		// #e or #i prefix - just read the next number
-		// For now, we don't track exactness in the value types
+	case tokenizer.TokenizerStateMarkerNumberExact:
+		// #e prefix - read the next number and convert to exact
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		return p.readSyntax()
+		q, tok, err := p.readSyntax()
+		if err != nil {
+			return nil, tok, err
+		}
+		// Convert to exact
+		exactVal, err := p.makeExact(q)
+		if err != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", err)
+		}
+		return exactVal, tok, nil
+	case tokenizer.TokenizerStateMarkerNumberInexact:
+		// #i prefix - read the next number and convert to inexact
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		q, tok, err := p.readSyntax()
+		if err != nil {
+			return nil, tok, err
+		}
+		// Convert to inexact
+		inexactVal, err := p.makeInexact(q)
+		if err != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", err)
+		}
+		return inexactVal, tok, nil
 	case tokenizer.TokenizerStateBigIntegerDefaultBase:
 		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
 	case tokenizer.TokenizerStateBigIntegerBase10:
@@ -1024,7 +1099,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCloseParen:
 		return q, p.cur, nil
 	}
-	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %s", p.cur.String())
+	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
 }
 
 func (p *Parser) listSyntax(t tokenizer.Token, os ...syntax.SyntaxValue) syntax.SyntaxValue {
@@ -1067,19 +1142,40 @@ func (p *Parser) parseRational(s string) (*values.Rational, error) {
 }
 
 // parseImaginary parses an imaginary number string like "+3i", "-2i", "+i", "-i"
-func (p *Parser) parseImaginary(s string) (*values.Complex, error) {
+// R7RS §6.2.2: Returns exact BigComplex for integer imaginary parts,
+// inexact Complex for floating-point imaginary parts.
+func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	// Remove the trailing 'i'
 	s = strings.TrimSuffix(s, "i")
 
-	// Handle "+i" and "-i" cases
+	// Handle "+i" and "-i" cases - these are exact
 	if s == "+" || s == "" {
-		return values.NewComplexFromParts(0, 1), nil
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(1),
+		), nil
 	}
 	if s == "-" {
-		return values.NewComplexFromParts(0, -1), nil
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(-1),
+		), nil
 	}
 
-	// Parse the numeric part
+	// Check if the imaginary coefficient is an integer (exact) or float (inexact)
+	if isIntegerString(s) {
+		// Parse as exact integer
+		imag, err := parseExactPart(s)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			imag,
+		), nil
+	}
+
+	// Parse the numeric part as inexact float
 	imag, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, err
@@ -1119,9 +1215,72 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	return values.NewComplexFromParts(real, imag), nil
 }
 
+// isRationalString checks if a string represents a rational number (contains /).
+func isRationalString(s string) bool {
+	return strings.Contains(s, "/")
+}
+
+// isIntegerString checks if a string represents an integer (no . or /).
+func isIntegerString(s string) bool {
+	// Handle signed numbers
+	start := 0
+	if len(s) > 0 && (s[0] == '+' || s[0] == '-') {
+		start = 1
+	}
+	if start >= len(s) {
+		return false
+	}
+	for i := start; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isExactPartString checks if a string represents an exact number (integer or rational).
+func isExactPartString(s string) bool {
+	// Handle pure sign cases for imaginary: +i and -i map to exact 1 or -1
+	if s == "+" || s == "-" {
+		return true
+	}
+	return isIntegerString(s) || isRationalString(s)
+}
+
+// parseExactPart parses an exact number string (integer or rational) and returns
+// a BigInteger or Rational suitable for use as a BigComplex part.
+func parseExactPart(s string) (values.Number, error) {
+	// Handle pure sign cases for imaginary: +i -> 1, -i -> -1
+	if s == "+" {
+		return values.NewBigIntegerFromInt64(1), nil
+	}
+	if s == "-" {
+		return values.NewBigIntegerFromInt64(-1), nil
+	}
+
+	if isRationalString(s) {
+		r := new(big.Rat)
+		_, ok := r.SetString(s)
+		if !ok {
+			return nil, errors.New("invalid rational: " + s)
+		}
+		return values.NewRationalFromRat(r), nil
+	}
+
+	// Integer
+	i := new(big.Int)
+	_, ok := i.SetString(s, 10)
+	if !ok {
+		return nil, errors.New("invalid integer: " + s)
+	}
+	return values.NewBigInteger(i), nil
+}
+
 // parseComplex parses a complex number string like "1+2i", "3-4i", "1.5+2.5i", "1+i", "5-i"
 // Also handles infnan: "+inf.0+inf.0i", "1+inf.0i", "3+nan.0i"
-func (p *Parser) parseComplex(s string) (*values.Complex, error) {
+// R7RS §6.2.2: Returns an exact BigComplex if both parts are exact (integer/rational),
+// otherwise returns an inexact Complex.
+func (p *Parser) parseComplex(s string) (values.Number, error) {
 	// Remove the trailing 'i'
 	s = strings.TrimSuffix(s, "i")
 
@@ -1142,7 +1301,7 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 			if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
 				strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
 				strings.HasPrefix(rest, "+i") || strings.HasPrefix(rest, "-i") ||
-				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.') {
+				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/') {
 				signPos = i
 				break
 			}
@@ -1159,13 +1318,37 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	realPart := s[:signPos]
 	imagPart := s[signPos:] // includes the sign
 
-	// Parse real part
+	// Check if both parts are exact (integer or rational)
+	// If so, create an exact BigComplex; otherwise use inexact Complex
+	if isExactPartString(realPart) && isExactPartString(imagPart) {
+		realNum, err := parseExactPart(realPart)
+		if err != nil {
+			return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
+		}
+		imagNum, err := parseExactPart(imagPart)
+		if err != nil {
+			return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
+		}
+		return values.NewBigComplex(realNum, imagNum), nil
+	}
+
+	// Parse as inexact complex
 	rel, err := p.parseRealPart(realPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
 
-	// Parse imaginary part
+	// R7RS: If the imaginary part is exact zero, treat the number as real.
+	// e.g., -2.5+0i should be just -2.5 (a Float), not a Complex.
+	// This is because exact 0 means "definitely zero", while inexact 0.0 means
+	// "approximately zero" and could have rounding errors.
+	if isExactPartString(imagPart) {
+		parsedImag, parseErr := parseExactPart(imagPart)
+		if parseErr == nil && parsedImag.IsZero() {
+			return values.NewFloat(rel), nil
+		}
+	}
+
 	img, err := p.parseImagPart(imagPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
@@ -1174,7 +1357,7 @@ func (p *Parser) parseComplex(s string) (*values.Complex, error) {
 	return values.NewComplexFromParts(rel, img), nil
 }
 
-// parseFloatOrInfnan parses a float that may be inf.0 or nan.0
+// parseFloatOrInfnan parses a float that may be inf.0, nan.0, or a rational
 func parseFloatOrInfnan(s string) (float64, error) {
 	switch s {
 	case "+inf.0":
@@ -1184,6 +1367,27 @@ func parseFloatOrInfnan(s string) (float64, error) {
 	case "+nan.0", "-nan.0":
 		return math.NaN(), nil
 	}
+
+	// Check for rational number (contains '/')
+	slashIdx := strings.Index(s, "/")
+	if slashIdx != -1 {
+		numStr := s[:slashIdx]
+		denStr := s[slashIdx+1:]
+
+		num, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return 0, err
+		}
+		den, err := strconv.ParseFloat(denStr, 64)
+		if err != nil {
+			return 0, err
+		}
+		if den == 0 {
+			return 0, errors.New("division by zero in rational")
+		}
+		return num / den, nil
+	}
+
 	return strconv.ParseFloat(s, 64)
 }
 
@@ -1255,4 +1459,123 @@ func TrimSuffixFolded(s, suffix string) string {
 		lastj -= n1
 	}
 	return s[:lasti]
+}
+
+// makeExact converts a syntax-wrapped number to its exact representation.
+// R7RS §6.2.6: exact converts an inexact number to exact.
+// For integers and rationals, they are already exact.
+// For floats, they are converted to rationals or integers if they represent whole numbers.
+func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	val := stx.Unwrap()
+	num, ok := val.(values.Number)
+	if !ok {
+		return nil, errors.New("not a number")
+	}
+
+	var exactNum values.Value
+	switch v := num.(type) {
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		// Already exact
+		exactNum = v
+	case *values.Float:
+		// Convert float to exact
+		f := v.Value
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, errors.New("cannot convert inf or nan to exact")
+		}
+		// Check if it's a whole number
+		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			exactNum = values.NewInteger(int64(f))
+		} else {
+			// Convert to rational using big.Rat
+			r := new(big.Rat).SetFloat64(f)
+			exactNum = values.NewRationalFromRat(r)
+		}
+	case *values.BigFloat:
+		// Convert BigFloat to exact
+		bf := v.BigFloatValue()
+		if bf.IsInf() {
+			return nil, errors.New("cannot convert inf to exact")
+		}
+		// Try to convert to integer first
+		if bf.IsInt() {
+			i, _ := bf.Int(nil)
+			exactNum = values.NewBigInteger(i)
+		} else {
+			// Convert to rational
+			r, _ := bf.Rat(nil)
+			exactNum = values.NewRationalFromRat(r)
+		}
+	case *values.Complex:
+		// Convert complex to exact BigComplex
+		re := v.Real()
+		im := v.Imag()
+		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
+			return nil, errors.New("cannot convert complex with inf or nan to exact")
+		}
+		reRat := new(big.Rat).SetFloat64(re)
+		imRat := new(big.Rat).SetFloat64(im)
+		reNum := values.NewRationalFromRat(reRat)
+		imNum := values.NewRationalFromRat(imRat)
+		exactNum = values.NewBigComplex(reNum, imNum)
+	case *values.BigComplex:
+		// Already exact or convert to exact
+		if v.IsExact() {
+			exactNum = v
+		} else {
+			return nil, errors.New("cannot convert inexact BigComplex to exact")
+		}
+	default:
+		return nil, errors.New("unsupported number type for exact conversion")
+	}
+
+	// Re-wrap with the same syntax context
+	return p.rewrapSyntax(stx, exactNum), nil
+}
+
+// makeInexact converts a syntax-wrapped number to its inexact representation.
+// R7RS §6.2.6: inexact converts an exact number to inexact.
+func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	val := stx.Unwrap()
+	num, ok := val.(values.Number)
+	if !ok {
+		return nil, errors.New("not a number")
+	}
+
+	var inexactNum values.Value
+	switch v := num.(type) {
+	case *values.Float, *values.BigFloat:
+		// Already inexact
+		inexactNum = v
+	case *values.Complex:
+		// Already inexact
+		inexactNum = v
+	case *values.Integer:
+		inexactNum = values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		inexactNum = values.NewFloat(f)
+	case *values.Rational:
+		f, _ := v.Rat().Float64()
+		inexactNum = values.NewFloat(f)
+	case *values.BigComplex:
+		// Convert to inexact Complex
+		reFloat := v.RealAsBigFloat().Float64()
+		imFloat := v.ImagAsBigFloat().Float64()
+		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
+	default:
+		return nil, errors.New("unsupported number type for inexact conversion")
+	}
+
+	return p.rewrapSyntax(stx, inexactNum), nil
+}
+
+// rewrapSyntax wraps a new value with the same syntax context as the original.
+func (p *Parser) rewrapSyntax(orig syntax.SyntaxValue, newVal values.Value) syntax.SyntaxValue {
+	// Get the source context from the original syntax value
+	var sctx *syntax.SourceContext
+	if so, ok := orig.(*syntax.SyntaxObject); ok {
+		sctx = so.SourceContext()
+	}
+	return syntax.NewSyntaxObject(newVal, sctx)
 }

@@ -15,8 +15,10 @@
 package machine
 
 import (
+	"math"
 	"slices"
 
+	"wile/environment"
 	"wile/syntax"
 	"wile/values"
 )
@@ -80,14 +82,38 @@ func (p *NativeTemplate) SetName(name string) {
 }
 
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
-	for i, l := range p.literals {
-		if l.EqualTo(v) {
-			return LiteralIndex(i)
+	// Don't deduplicate environments - each closure needs its own instance
+	// because environments are mutable and context-dependent. The parent
+	// chain is set at runtime by OperationMakeClosure, so structural
+	// equality doesn't capture lexical context.
+	_, isEnv := v.(*environment.EnvironmentFrame)
+	if !isEnv {
+		for i, l := range p.literals {
+			if literalIdentical(l, v) {
+				return LiteralIndex(i)
+			}
 		}
 	}
 	l := len(p.literals)
 	p.literals = append(p.literals, v)
 	return LiteralIndex(l)
+}
+
+// literalIdentical returns true if two values are identical for literal
+// deduplication purposes. This is stricter than EqualTo for floating point
+// values: -0.0 and +0.0 are numerically equal but have different bit
+// representations and must be kept as separate literals to preserve IEEE 754
+// signed zero semantics in operations like atan2.
+func literalIdentical(a, b values.Value) bool {
+	// For floats, check both numeric equality and sign bit equality
+	if af, ok := a.(*values.Float); ok {
+		if bf, ok := b.(*values.Float); ok {
+			return af.Value == bf.Value && math.Signbit(af.Value) == math.Signbit(bf.Value)
+		}
+		return false
+	}
+	// For all other types, use standard EqualTo
+	return a.EqualTo(b)
 }
 
 func (p *NativeTemplate) findLiteral(v values.Value) values.Value {

@@ -17,11 +17,12 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 )
 
 // validateCall validates (proc arg...)
-func validateCall(ctx context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCall(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -38,12 +39,12 @@ func validateCall(ctx context.Context, pair *syntax.SyntaxPair, result *Validati
 	}
 
 	// Validate the procedure expression
-	proc := validateExpr(ctx, elements[0], result)
+	proc := validateExpr(ctx, env, elements[0], result)
 
 	// Validate all arguments
 	var args []ValidatedExpr
 	for i := 1; i < len(elements); i++ {
-		arg := validateExpr(ctx, elements[i], result)
+		arg := validateExpr(ctx, env, elements[i], result)
 		if arg != nil {
 			args = append(args, arg)
 		}

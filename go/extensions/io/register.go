@@ -59,6 +59,9 @@ func addReadWrite(r *registry.Registry) error {
 		{"peek-u8", 1, true, PrimPeekU8},
 		{"u8-ready?", 1, true, PrimU8ReadyQ},
 		{"write-u8", 2, true, PrimWriteU8},
+		{"read-bytevector", 2, true, PrimReadBytevector},
+		{"read-bytevector!", 2, true, PrimReadBytevectorBang},
+		{"write-bytevector", 2, true, PrimWriteBytevector},
 	}, registry.PhaseRuntime)
 	return nil
 }

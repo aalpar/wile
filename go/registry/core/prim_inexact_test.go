@@ -49,6 +49,34 @@ func TestInexact(t *testing.T) {
 	}
 }
 
+func TestInexactBigNumbers(t *testing.T) {
+	// BigInteger to float
+	t.Run("inexact on BigInteger", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(inexact (expt 2 100))`)
+		qt.Assert(t, err, qt.IsNil)
+		// 2^100 as float
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, f.Value > 1e30, qt.IsTrue) // 2^100 ≈ 1.27e30
+	})
+
+	// BigFloat - already inexact
+	t.Run("inexact on BigFloat", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(inexact #m3.14159265358979323846)`)
+		qt.Assert(t, err, qt.IsNil)
+		_, ok := result.(*values.BigFloat)
+		qt.Assert(t, ok, qt.IsTrue)
+	})
+
+	// BigComplex with exact parts - converts to inexact BigComplex
+	t.Run("inexact on exact BigComplex", func(t *testing.T) {
+		// Create exact BigComplex via arithmetic on BigIntegers
+		result, err := runSchemeCode(t, `(inexact? (inexact (make-rectangular (expt 2 100) (expt 2 50))))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	})
+}
+
 func TestInexactErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "inexact on non-number string", code: `(inexact "hello")`},

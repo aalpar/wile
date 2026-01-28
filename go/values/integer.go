@@ -355,10 +355,13 @@ func (p *Integer) IsVoid() bool {
 //
 // R7RS §6.2.6: The = procedure compares numerical values for equality.
 // This implements structural equality for the Integer type specifically.
+// Handles comparison with both Integer and BigInteger types.
 func (p *Integer) EqualTo(v Value) bool {
-	other, ok := v.(*Integer)
-	if ok {
+	switch other := v.(type) {
+	case *Integer:
 		return p.Value == other.Value
+	case *BigInteger:
+		return other.BigInt().Cmp(big.NewInt(p.Value)) == 0
 	}
 	return false
 }

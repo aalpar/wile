@@ -25,21 +25,21 @@ var (
 )
 
 // BigComplex represents an arbitrary-precision complex number.
-// The real and imaginary parts can be either BigInteger (exact) or BigFloat (inexact).
+// The real and imaginary parts can be *BigInteger, *Rational (exact), or *BigFloat (inexact).
 //
 // R7RS §6.2.1: Complex numbers are part of the numeric tower hierarchy:
 //
 //	number ⊃ complex ⊃ real ⊃ rational ⊃ integer
 //
-// R7RS §6.2.2: BigComplex is exact if both parts are BigInteger,
+// R7RS §6.2.2: BigComplex is exact if both parts are BigInteger or Rational,
 // inexact if either part is BigFloat. Operations follow exactness contagion rules.
 type BigComplex struct {
-	real Number // *BigInteger or *BigFloat only
-	imag Number // *BigInteger or *BigFloat only
+	real Number // *BigInteger, *Rational, or *BigFloat only
+	imag Number // *BigInteger, *Rational, or *BigFloat only
 }
 
 // NewBigComplex creates a new BigComplex from real and imaginary parts.
-// Parts must be *BigInteger or *BigFloat. Other types will panic.
+// Parts must be *BigInteger, *Rational, or *BigFloat. Other types will panic.
 func NewBigComplex(real, imag Number) *BigComplex {
 	validateBigComplexPart(real)
 	validateBigComplexPart(imag)
@@ -62,10 +62,10 @@ func NewBigComplexFromBigFloats(real, imag *BigFloat) *BigComplex {
 // validateBigComplexPart ensures the part is a valid type for BigComplex.
 func validateBigComplexPart(n Number) {
 	switch n.(type) {
-	case *BigInteger, *BigFloat:
+	case *BigInteger, *BigFloat, *Rational:
 		return
 	default:
-		panic("BigComplex parts must be BigInteger or BigFloat")
+		panic("BigComplex parts must be BigInteger, Rational, or BigFloat")
 	}
 }
 
@@ -89,13 +89,16 @@ func (p *BigComplex) ImagAsBigFloat() *BigFloat {
 	return toBigFloat(p.imag)
 }
 
-// toBigFloat converts a BigInteger or BigFloat to BigFloat.
+// toBigFloat converts a BigInteger, Rational, or BigFloat to BigFloat.
 func toBigFloat(n Number) *BigFloat {
 	switch v := n.(type) {
 	case *BigFloat:
 		return v
 	case *BigInteger:
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetInt(v.value)
+		return &BigFloat{value: bf}
+	case *Rational:
+		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
 	}
 	panic("toBigFloat: unexpected type")
@@ -116,28 +119,37 @@ func promoteToBigComplexPart(n Number) Number {
 		return v
 	case *BigFloat:
 		return v
+	case *Rational:
+		return v // Preserve exactness
 	case *Integer:
 		return NewBigIntegerFromInt64(v.Value)
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
-	case *Rational:
-		// Convert rational to BigFloat for inexact arithmetic
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return &BigFloat{value: bf}
 	}
 	panic("promoteToBigComplexPart: unexpected type")
 }
 
 // addParts adds two BigComplex-compatible parts.
 func addParts(a, b Number) Number {
-	// Both are either BigInteger or BigFloat
+	// Parts are BigInteger, Rational, or BigFloat
 	switch va := a.(type) {
 	case *BigInteger:
 		switch vb := b.(type) {
 		case *BigInteger:
 			return va.Add(vb)
+		case *Rational:
+			return vb.Add(va) // Rational + BigInteger = Rational
 		case *BigFloat:
 			return toBigFloat(va).Add(vb)
+		}
+	case *Rational:
+		switch vb := b.(type) {
+		case *Rational:
+			return va.Add(vb) // Rational + Rational = Rational
+		case *BigInteger:
+			return va.Add(vb) // Rational + BigInteger = Rational
+		case *BigFloat:
+			return toBigFloat(va).Add(vb) // Goes inexact
 		}
 	case *BigFloat:
 		return va.Add(toBigFloat(b))
@@ -150,6 +162,19 @@ func subtractParts(a, b Number) Number {
 	switch va := a.(type) {
 	case *BigInteger:
 		switch vb := b.(type) {
+		case *BigInteger:
+			return va.Subtract(vb)
+		case *Rational:
+			// BigInteger - Rational: convert BigInteger to Rational
+			ra := NewRationalFromBigInt(va.value, big.NewInt(1))
+			return ra.Subtract(vb)
+		case *BigFloat:
+			return toBigFloat(va).Subtract(vb)
+		}
+	case *Rational:
+		switch vb := b.(type) {
+		case *Rational:
+			return va.Subtract(vb)
 		case *BigInteger:
 			return va.Subtract(vb)
 		case *BigFloat:
@@ -168,6 +193,17 @@ func multiplyParts(a, b Number) Number {
 		switch vb := b.(type) {
 		case *BigInteger:
 			return va.Multiply(vb)
+		case *Rational:
+			return vb.Multiply(va) // Rational * BigInteger = Rational
+		case *BigFloat:
+			return toBigFloat(va).Multiply(vb)
+		}
+	case *Rational:
+		switch vb := b.(type) {
+		case *Rational:
+			return va.Multiply(vb)
+		case *BigInteger:
+			return va.Multiply(vb)
 		case *BigFloat:
 			return toBigFloat(va).Multiply(vb)
 		}
@@ -175,6 +211,35 @@ func multiplyParts(a, b Number) Number {
 		return va.Multiply(toBigFloat(b))
 	}
 	panic("multiplyParts: unexpected type")
+}
+
+// divideParts divides two BigComplex-compatible parts, preserving exactness when possible.
+func divideParts(a, b Number) Number {
+	switch va := a.(type) {
+	case *BigInteger:
+		switch vb := b.(type) {
+		case *BigInteger:
+			return va.Divide(vb) // Returns Rational
+		case *Rational:
+			// BigInteger / Rational = BigInteger * (1/Rational) = Rational
+			ra := NewRationalFromBigInt(va.value, big.NewInt(1))
+			return ra.Divide(vb)
+		case *BigFloat:
+			return toBigFloat(va).Divide(vb)
+		}
+	case *Rational:
+		switch vb := b.(type) {
+		case *Rational:
+			return va.Divide(vb)
+		case *BigInteger:
+			return va.Divide(vb)
+		case *BigFloat:
+			return toBigFloat(va).Divide(vb)
+		}
+	case *BigFloat:
+		return va.Divide(toBigFloat(b))
+	}
+	panic("divideParts: unexpected type")
 }
 
 // addSame adds two BigComplex numbers of the same type.
@@ -271,8 +336,8 @@ func (p *BigComplex) Add(o Number) Number {
 		bf := NewBigFloatFromFloat64(v.Value)
 		return p.Add(bf)
 	case *Rational:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return p.Add(&BigFloat{value: bf})
+		newReal := addParts(p.real, v)
+		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
 	case *Complex:
 		bc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
@@ -309,8 +374,8 @@ func (p *BigComplex) Subtract(o Number) Number {
 		bf := NewBigFloatFromFloat64(v.Value)
 		return p.Subtract(bf)
 	case *Rational:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return p.Subtract(&BigFloat{value: bf})
+		newReal := subtractParts(p.real, v)
+		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
 	case *Complex:
 		bc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
@@ -369,8 +434,9 @@ func (p *BigComplex) Multiply(o Number) Number {
 		bf := NewBigFloatFromFloat64(v.Value)
 		return p.Multiply(bf)
 	case *Rational:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return p.Multiply(&BigFloat{value: bf})
+		newReal := multiplyParts(p.real, v)
+		newImag := multiplyParts(p.imag, v)
+		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	case *Complex:
 		bc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
@@ -409,8 +475,9 @@ func (p *BigComplex) Divide(o Number) Number {
 		newImag := toBigFloat(numerImag).Divide(toBigFloat(denom))
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	case *BigInteger:
-		newReal := toBigFloat(p.real).Divide(toBigFloat(v))
-		newImag := toBigFloat(p.imag).Divide(toBigFloat(v))
+		// Use exact division to preserve exactness when possible
+		newReal := divideParts(p.real, v)
+		newImag := divideParts(p.imag, v)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	case *BigFloat:
 		newReal := toBigFloat(p.real).Divide(v)
@@ -423,8 +490,9 @@ func (p *BigComplex) Divide(o Number) Number {
 		bf := NewBigFloatFromFloat64(v.Value)
 		return p.Divide(bf)
 	case *Rational:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return p.Divide(&BigFloat{value: bf})
+		newReal := divideParts(p.real, v)
+		newImag := divideParts(p.imag, v)
+		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	case *Complex:
 		bc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
@@ -440,12 +508,14 @@ func (p *BigComplex) Negate() Number {
 	return NewBigComplex(negatePart(p.real), negatePart(p.imag))
 }
 
-// negatePart negates a BigComplex part (BigInteger or BigFloat).
+// negatePart negates a BigComplex part (BigInteger, Rational, or BigFloat).
 func negatePart(n Number) Number {
 	switch v := n.(type) {
 	case *BigInteger:
 		return v.Negate()
 	case *BigFloat:
+		return v.Negate()
+	case *Rational:
 		return v.Negate()
 	}
 	panic("negatePart: unexpected type")
@@ -496,13 +566,20 @@ func (p *BigComplex) IsReal() bool {
 	return p.imag.IsZero()
 }
 
-// IsExact returns true if both parts are BigInteger.
+// IsExact returns true if both parts are exact (BigInteger or Rational).
 //
 // R7RS §6.2.2: A complex number is exact if both real and imaginary parts are exact.
 func (p *BigComplex) IsExact() bool {
-	_, realExact := p.real.(*BigInteger)
-	_, imagExact := p.imag.(*BigInteger)
-	return realExact && imagExact
+	return isExactPart(p.real) && isExactPart(p.imag)
+}
+
+// isExactPart returns true if the number is an exact type (BigInteger or Rational).
+func isExactPart(n Number) bool {
+	switch n.(type) {
+	case *BigInteger, *Rational:
+		return true
+	}
+	return false
 }
 
 // ToExact converts this BigComplex to an exact representation.
@@ -522,11 +599,13 @@ func (p *BigComplex) ToExact() Number {
 	return NewBigComplex(realExact, imagExact)
 }
 
-// toExactPart converts a BigComplex part to BigInteger.
-func toExactPart(n Number) *BigInteger {
+// toExactPart converts a BigComplex part to an exact type (BigInteger or Rational).
+func toExactPart(n Number) Number {
 	switch v := n.(type) {
 	case *BigInteger:
 		return v
+	case *Rational:
+		return v // Already exact
 	case *BigFloat:
 		// Truncate to integer
 		i, _ := v.value.Int(nil)
@@ -592,6 +671,8 @@ func (p *BigComplex) SchemeString() string {
 		isNeg = v.IsNegative()
 	case *BigFloat:
 		isNeg = v.IsNegative()
+	case *Rational:
+		isNeg = v.Rat().Sign() < 0
 	}
 	if isNeg {
 		return realStr + imagStr + "i"

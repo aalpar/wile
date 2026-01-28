@@ -62,11 +62,12 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Extract literals list (CAR of rest)
 	literalsExpr := rest.SyntaxCar()
 
-	literals := make(map[string]struct{})
+	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
 	if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
 		if !literalsPair.IsEmptyList() {
 			// syntax-case always uses the default ellipsis "..."
-			err := extractLiterals(literalsPair, literals, match.DefaultEllipsis)
+			// Use extractLiteralsWithSyntax to enable scope-aware literal matching
+			err := extractLiteralsWithSyntax(literalsPair, nil, literalSyntax, match.DefaultEllipsis)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}
@@ -125,7 +126,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		}
 
 		// Compile the clause
-		err := p.compileSyntaxCaseClause(ctctx, pattern, fender, body, literals, clauseIndex, &successJumps, &failJumps)
+		err := p.compileSyntaxCaseClause(ctctx, pattern, fender, body, literalSyntax, clauseIndex, &successJumps, &failJumps)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "syntax-case: error compiling clause %d", clauseIndex+1)
 		}
@@ -166,15 +167,16 @@ type jumpPatch struct {
 func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	ctctx CompileTimeCallContext,
 	pattern, fender, body syntax.SyntaxValue,
-	literals map[string]struct{},
+	literalSyntax map[string]*syntax.SyntaxSymbol,
 	clauseIndex int,
 	successJumps, failJumps *[]jumpPatch,
 ) error {
 	// Collect pattern variables from the pattern
 	// Note: isFirst=false because syntax-case patterns don't have a required leading keyword
 	// (unlike syntax-rules which always has the macro name as the first element)
+	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	patternVars := make(map[string]struct{})
-	err := collectPatternVariables(pattern, literals, false, patternVars)
+	err := collectPatternVariables(pattern, literalSyntax, false, patternVars)
 	if err != nil {
 		return err
 	}

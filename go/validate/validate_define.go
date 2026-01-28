@@ -17,13 +17,14 @@ package validate
 import (
 	"context"
 
+	"wile/environment"
 	"wile/syntax"
 	"wile/values"
 )
 
 // validateDefine validates both forms:
 // (define name expr) and (define (name params...) body...)
-func validateDefine(_ context.Context, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefine(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -45,11 +46,11 @@ func validateDefine(_ context.Context, pair *syntax.SyntaxPair, result *Validati
 	switch s := second.(type) {
 	case *syntax.SyntaxSymbol:
 		// (define name expr) - simple variable definition
-		return validateDefineVariable(context.TODO(), source, s, elements, result)
+		return validateDefineVariable(context.TODO(), env, source, s, elements, result)
 
 	case *syntax.SyntaxPair:
 		// (define (name params...) body...) - function definition
-		return validateDefineFunction(context.TODO(), source, s, elements, result)
+		return validateDefineFunction(context.TODO(), env, source, s, elements, result)
 
 	default:
 		result.addErrorf(source, "define", "expected symbol or list after define, got %T", second)
@@ -58,13 +59,13 @@ func validateDefine(_ context.Context, pair *syntax.SyntaxPair, result *Validati
 }
 
 // validateDefineVariable validates (define name expr)
-func validateDefineVariable(ctx context.Context, source *syntax.SourceContext, name *syntax.SyntaxSymbol, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateDefineVariable(ctx context.Context, env *environment.EnvironmentFrame, source *syntax.SourceContext, name *syntax.SyntaxSymbol, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	if len(elements) != 3 {
 		result.addErrorf(source, "define", "variable definition requires exactly 1 value, got %d", len(elements)-2)
 		return nil
 	}
 
-	value := validateExpr(ctx, elements[2], result)
+	value := validateExpr(ctx, env, elements[2], result)
 	if value == nil {
 		return nil
 	}
@@ -79,7 +80,7 @@ func validateDefineVariable(ctx context.Context, source *syntax.SourceContext, n
 }
 
 // validateDefineFunction validates (define (name params...) body...)
-func validateDefineFunction(ctx context.Context, source *syntax.SourceContext, nameAndParams *syntax.SyntaxPair, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
+func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFrame, source *syntax.SourceContext, nameAndParams *syntax.SyntaxPair, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	// Extract the function name from car of the list
 	nameExpr := nameAndParams.Car()
 	name, ok := asSyntaxSymbol(nameExpr.(syntax.SyntaxValue))
@@ -104,7 +105,7 @@ func validateDefineFunction(ctx context.Context, source *syntax.SourceContext, n
 
 	var body []ValidatedExpr
 	for i := 2; i < len(elements); i++ {
-		expr := validateExpr(ctx, elements[i], result)
+		expr := validateExpr(ctx, env, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 		}

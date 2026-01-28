@@ -61,36 +61,36 @@ func TestRounding(t *testing.T) {
 			code:     "(floor -100.1)",
 			expected: values.NewFloat(-101.0),
 		},
-		// Floor tests - rationals
+		// Floor tests - rationals (exact inputs → exact outputs per R7RS)
 		{
 			name:     "floor 5/2 positive",
 			code:     "(floor 5/2)",
-			expected: values.NewFloat(2.0),
+			expected: values.NewInteger(2),
 		},
 		{
 			name:     "floor -5/2 negative",
 			code:     "(floor -5/2)",
-			expected: values.NewFloat(-3.0),
+			expected: values.NewInteger(-3),
 		},
 		{
 			name:     "floor 7/3",
 			code:     "(floor 7/3)",
-			expected: values.NewFloat(2.0),
+			expected: values.NewInteger(2),
 		},
 		{
 			name:     "floor -7/3 negative",
 			code:     "(floor -7/3)",
-			expected: values.NewFloat(-3.0),
+			expected: values.NewInteger(-3),
 		},
 		{
 			name:     "floor 1/2",
 			code:     "(floor 1/2)",
-			expected: values.NewFloat(0.0),
+			expected: values.NewInteger(0),
 		},
 		{
 			name:     "floor -1/2 negative",
 			code:     "(floor -1/2)",
-			expected: values.NewFloat(-1.0),
+			expected: values.NewInteger(-1),
 		},
 		// Ceiling tests - floats and integers
 		{
@@ -128,36 +128,36 @@ func TestRounding(t *testing.T) {
 			code:     "(ceiling -100.9)",
 			expected: values.NewFloat(-100.0),
 		},
-		// Ceiling tests - rationals
+		// Ceiling tests - rationals (exact inputs → exact outputs per R7RS)
 		{
 			name:     "ceiling 5/2 positive",
 			code:     "(ceiling 5/2)",
-			expected: values.NewFloat(3.0),
+			expected: values.NewInteger(3),
 		},
 		{
 			name:     "ceiling -5/2 negative",
 			code:     "(ceiling -5/2)",
-			expected: values.NewFloat(-2.0),
+			expected: values.NewInteger(-2),
 		},
 		{
 			name:     "ceiling 7/3",
 			code:     "(ceiling 7/3)",
-			expected: values.NewFloat(3.0),
+			expected: values.NewInteger(3),
 		},
 		{
 			name:     "ceiling -7/3 negative",
 			code:     "(ceiling -7/3)",
-			expected: values.NewFloat(-2.0),
+			expected: values.NewInteger(-2),
 		},
 		{
 			name:     "ceiling 1/2",
 			code:     "(ceiling 1/2)",
-			expected: values.NewFloat(1.0),
+			expected: values.NewInteger(1),
 		},
 		{
 			name:     "ceiling -1/2 negative",
 			code:     "(ceiling -1/2)",
-			expected: values.NewFloat(0.0),
+			expected: values.NewInteger(0),
 		},
 		// Round tests - floats and integers
 		{
@@ -210,36 +210,36 @@ func TestRounding(t *testing.T) {
 			code:     "(round 3.8)",
 			expected: values.NewFloat(4.0),
 		},
-		// Round tests - rationals
+		// Round tests - rationals (exact inputs → exact outputs per R7RS)
 		{
 			name:     "round 5/2 half away from zero",
 			code:     "(round 5/2)",
-			expected: values.NewFloat(3.0), // 2.5 rounds to 3 (away from zero)
+			expected: values.NewInteger(3), // 2.5 rounds to 3 (away from zero)
 		},
 		{
 			name:     "round 7/2 half away from zero",
 			code:     "(round 7/2)",
-			expected: values.NewFloat(4.0), // 3.5 rounds to 4 (away from zero)
+			expected: values.NewInteger(4), // 3.5 rounds to 4 (away from zero)
 		},
 		{
 			name:     "round 7/3",
 			code:     "(round 7/3)",
-			expected: values.NewFloat(2.0), // 2.333... rounds to 2
+			expected: values.NewInteger(2), // 2.333... rounds to 2
 		},
 		{
 			name:     "round -5/2 negative half",
 			code:     "(round -5/2)",
-			expected: values.NewFloat(-3.0), // -2.5 rounds to -3 (away from zero)
+			expected: values.NewInteger(-3), // -2.5 rounds to -3 (away from zero)
 		},
 		{
 			name:     "round 8/3",
 			code:     "(round 8/3)",
-			expected: values.NewFloat(3.0), // 2.666... rounds to 3
+			expected: values.NewInteger(3), // 2.666... rounds to 3
 		},
 		{
 			name:     "round 1/3",
 			code:     "(round 1/3)",
-			expected: values.NewFloat(0.0), // 0.333... rounds to 0
+			expected: values.NewInteger(0), // 0.333... rounds to 0
 		},
 		// Truncate tests - floats and integers
 		{
@@ -277,36 +277,36 @@ func TestRounding(t *testing.T) {
 			code:     "(truncate -999.999)",
 			expected: values.NewFloat(-999.0),
 		},
-		// Truncate tests - rationals
+		// Truncate tests - rationals (exact inputs → exact outputs per R7RS)
 		{
 			name:     "truncate 5/2 positive",
 			code:     "(truncate 5/2)",
-			expected: values.NewFloat(2.0),
+			expected: values.NewInteger(2),
 		},
 		{
 			name:     "truncate -5/2 negative",
 			code:     "(truncate -5/2)",
-			expected: values.NewFloat(-2.0),
+			expected: values.NewInteger(-2),
 		},
 		{
 			name:     "truncate 7/3",
 			code:     "(truncate 7/3)",
-			expected: values.NewFloat(2.0),
+			expected: values.NewInteger(2),
 		},
 		{
 			name:     "truncate -7/3 negative",
 			code:     "(truncate -7/3)",
-			expected: values.NewFloat(-2.0),
+			expected: values.NewInteger(-2),
 		},
 		{
 			name:     "truncate 1/2",
 			code:     "(truncate 1/2)",
-			expected: values.NewFloat(0.0),
+			expected: values.NewInteger(0),
 		},
 		{
 			name:     "truncate -1/2 negative",
 			code:     "(truncate -1/2)",
-			expected: values.NewFloat(0.0),
+			expected: values.NewInteger(0),
 		},
 	}
 

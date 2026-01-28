@@ -438,47 +438,59 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 // The last expression is compiled in tail position per R7RS 3.5. Appends RestoreContinuation
 // at the end to return from the closure.
 //
-// This function is called after parameters have been bound to the local environment.
-// The body expressions are compiled into the child template (tpl), not the parent's template.
+// R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
+// throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
-	// Create a new compiler continuation that emits bytecode into the child template.
-	// This is separate from the parent's compiler (p) because lambda bodies live in
-	// their own bytecode templates, executed when the closure is called.
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-
-	// Create the call context for body expressions. Key settings:
-	// - inTail=true: the context starts in tail position (lambda body is a tail context)
-	// - inExpression: inherited from parent (affects how definitions are handled)
-	// - env: the child environment where parameters are bound
 	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
 
-	// Compile each body expression in sequence.
-	// Per R7RS 3.5, only the LAST expression in a lambda body is in tail position.
-	// This enables tail-call optimization: (lambda (x) (setup) (tail-call x))
+	// R7RS §5.3.2: Internal definitions use letrec* semantics
+	// Pass 1: Pre-declare all define bindings so forward references work
+	for _, bodyExpr := range clause.Body() {
+		childCompiler.predeclareDefineBindingFromValidated(bodyExpr)
+	}
+
+	// Pass 2: Compile all expressions (with all bindings now visible)
 	for i, bodyExpr := range clause.Body() {
 		isLast := i == len(clause.Body())-1
-
-		// Non-last expressions: force out of tail position.
-		// Their values are discarded (overwritten by subsequent expressions).
 		bodyCtx := lambdaBodyContext.NotInTail()
 		if isLast {
-			// Last expression: keep in tail position from lambdaBodyContext.
-			// If this expression is a call, it becomes a tail call (no stack growth).
 			bodyCtx = lambdaBodyContext
 		}
-
 		err := childCompiler.compileValidated(bodyCtx, bodyExpr)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Append the return operation to complete the closure's bytecode.
-	// RestoreContinuation pops the saved continuation from the call stack and
-	// jumps back to the caller. The value register contains the result of the
-	// last body expression, which becomes the closure's return value.
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	return nil
+}
+
+// predeclareDefineBindingFromValidated pre-creates a binding for a validated define form.
+// This enables forward references within lambda bodies per R7RS §5.3.2.
+func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr validate.ValidatedExpr) {
+	def, ok := expr.(*validate.ValidatedDefine)
+	if !ok {
+		return // Not a define, skip
+	}
+
+	sym := p.env.InternSymbol(def.Name().Sym)
+	symbolScopes := def.Name().Scopes()
+
+	if p.env.LocalEnvironment() != nil {
+		// Local scope: create local binding
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
+	} else {
+		// Global scope: create global binding
+		gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+		if !created {
+			binding := p.env.GetGlobalBinding(gi)
+			if binding != nil && symbolScopes != nil {
+				binding.SetScopes(symbolScopes)
+			}
+		}
+	}
 }
 
 // bindRestParameter binds the rest parameter (if any) to the local environment.
@@ -696,23 +708,24 @@ func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCa
 // are evaluated left-to-right; the value of the last expression becomes
 // the value of the entire begin form.
 //
+// R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names
+// are visible throughout the body, enabling forward references between defines.
+//
 // Example: (begin (display "hello") (newline) 42) => 42 (after printing)
 func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedBegin) error {
 	startPC := len(p.template.operations)
 
-	// Compile each expression in sequence. The key consideration is tail position:
-	// only the LAST expression can be in tail position per R7RS 3.5.
-	// Earlier expressions are evaluated for side effects; their values are discarded.
+	// R7RS §5.3.2: Internal definitions use letrec* semantics
+	// Pass 1: Pre-declare all define bindings so forward references work
+	for _, expr := range v.Body() {
+		p.predeclareDefineBindingFromValidated(expr)
+	}
+
+	// Pass 2: Compile each expression in sequence
 	for i, expr := range v.Body() {
 		isLast := i == len(v.Body())-1
-
-		// Non-last expressions: force out of tail position.
-		// Their return values are implicitly discarded (overwritten by next expression).
 		exprCtx := ctctx.NotInTail()
 		if isLast {
-			// Last expression: inherit the tail position from the enclosing context.
-			// If begin is in tail position, so is its last expression. This enables
-			// tail-call optimization for patterns like: (begin (setup) (tail-call))
 			exprCtx = ctctx
 		}
 
@@ -785,6 +798,129 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 	if err != nil {
 		return err
 	}
+	p.recordSource(startPC, v.Source())
+	return nil
+}
+
+// CompileValidatedDynamicWind compiles a validated (dynamic-wind before thunk after) form.
+//
+// R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
+// Before is called whenever execution enters the dynamic extent of the call to thunk,
+// and after is called whenever it exits.
+//
+// The key insight is that by compiling to bytecode, the cleanup code (calling after)
+// is in the bytecode stream. When a continuation is captured inside the thunk and
+// later restored, the cleanup code will run on normal completion.
+//
+// Bytecode structure:
+//
+//	<compile before> PUSH
+//	<compile thunk>  PUSH
+//	<compile after>  PUSH          ; Stack: [before, thunk, after]
+//	PEEK_K 2                       ; value = before
+//	SAVE_CONTINUATION →after_before
+//	APPLY                          ; call before()
+//	after_before:                  ; Stack: [before, thunk, after]
+//	OP_PUSH_WIND                   ; create winding frame
+//	PEEK_K 1                       ; value = thunk
+//	SAVE_CONTINUATION →after_thunk
+//	APPLY                          ; call thunk()
+//	after_thunk:                   ; Stack: [before, thunk, after]
+//	PUSH                           ; save thunk result, Stack: [before, thunk, after, result]
+//	OP_POP_WIND                    ; pop winding frame
+//	PEEK_K 1                       ; value = after
+//	SAVE_CONTINUATION →after_after
+//	APPLY                          ; call after()
+//	after_after:                   ; Stack: [before, thunk, after, result]
+//	PEEK_K 0                       ; value = result (thunk's return value)
+//	DROP DROP DROP DROP            ; clean up stack
+func (p *CompileTimeContinuation) CompileValidatedDynamicWind(_ CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
+	startPC := len(p.template.operations)
+
+	// Phase 1: Compile and push before, thunk, after to stack
+	// Note: We compile in expression context (not tail) since we need all three values
+	exprCtx := NewCompileTimeCallContext(false, true, p.env)
+
+	err := p.compileValidated(exprCtx, v.Before)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	err = p.compileValidated(exprCtx, v.Thunk)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	err = p.compileValidated(exprCtx, v.After)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+	// Stack: [before, thunk, after]
+
+	// Phase 2: Call before thunk
+	// Get before into value register (at depth 2)
+	p.AppendOperations(NewOperationPeekK(2))
+	// Save continuation to return here after call
+	beforeCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply with 0 args (stack is fresh after SaveContinuation)
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterBeforeIndex := p.template.operations.Len()
+	p.template.operations[beforeCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterBeforeIndex - beforeCallReturnIndex)
+	// after_before: Stack is restored to [before, thunk, after]
+
+	// Phase 3: Push winding frame
+	p.AppendOperations(NewOperationPushWind())
+
+	// Phase 4: Call thunk
+	// Get thunk into value register (at depth 1)
+	p.AppendOperations(NewOperationPeekK(1))
+	// Save continuation
+	thunkCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterThunkIndex := p.template.operations.Len()
+	p.template.operations[thunkCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterThunkIndex - thunkCallReturnIndex)
+	// after_thunk: Stack is restored to [before, thunk, after]
+	// Thunk's result is in value register
+
+	// Save thunk result on stack
+	p.AppendOperations(NewOperationPush())
+	// Stack: [before, thunk, after, result]
+
+	// Phase 5: Pop winding frame
+	p.AppendOperations(NewOperationPopWind())
+
+	// Phase 6: Call after thunk
+	// Get after into value register (at depth 1 because result is at top)
+	p.AppendOperations(NewOperationPeekK(1))
+	// Save continuation
+	afterCallReturnIndex := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	// Apply
+	p.AppendOperations(NewOperationApply())
+	// Patch the return offset
+	afterAfterIndex := p.template.operations.Len()
+	p.template.operations[afterCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterAfterIndex - afterCallReturnIndex)
+	// after_after: Stack is restored to [before, thunk, after, result]
+
+	// Phase 7: Return thunk result
+	// Get result into value register (at top of stack)
+	p.AppendOperations(NewOperationPeekK(0))
+	// Clean up stack
+	p.AppendOperations(
+		NewOperationDrop(), // result
+		NewOperationDrop(), // after
+		NewOperationDrop(), // thunk
+		NewOperationDrop(), // before
+	)
+
 	p.recordSource(startPC, v.Source())
 	return nil
 }

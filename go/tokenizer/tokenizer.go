@@ -617,10 +617,9 @@ func (p *Tokenizer) readHexEscapeToken() {
 }
 
 // readEscapeSequence handles escape sequences within strings and extended tokens.
-// The contextChar parameter specifies the context-specific character that can be escaped
-// ('"' for strings, '|' for extended tokens).
-// Recognizes: \a, \b, \t, \n, \r, \\, \<contextChar>, \xNN; (hex escape), and line continuations.
-func (p *Tokenizer) readEscapeSequence(contextChar rune) {
+// R7RS §6.7 and §7.1.1: Both \" and \| are valid in strings and extended tokens.
+// Recognizes: \a, \b, \t, \n, \r, \\, \", \|, \xNN; (hex escape), and line continuations.
+func (p *Tokenizer) readEscapeSequence() {
 	if p.curr() == 'x' {
 		p.readHexEscapeToken()
 		return
@@ -641,8 +640,10 @@ func (p *Tokenizer) readEscapeSequence(contextChar rune) {
 		p.value += "\r"
 	case isBackSlash(p.curr()): // \\ (back slash)
 		p.value += "\\"
-	case p.curr() == contextChar:
-		p.value += string(contextChar)
+	case p.curr() == '"': // \" (double quote) - R7RS §6.7
+		p.value += "\""
+	case p.curr() == '|': // \| (vertical bar) - R7RS §6.7
+		p.value += "|"
 	default:
 		p.err = NewTokenizerError(MessageExpectingEscape, p.tokenStart, p.tokenEnd)
 		return
@@ -651,12 +652,12 @@ func (p *Tokenizer) readEscapeSequence(contextChar rune) {
 }
 
 func (p *Tokenizer) readIntraExtendedToken() {
-	p.readEscapeSequence('|')
+	p.readEscapeSequence()
 }
 
 // readIntraStringEscape handles escape sequences within strings.
 func (p *Tokenizer) readIntraStringEscape() {
-	p.readEscapeSequence('"')
+	p.readEscapeSequence()
 }
 
 // readString reads a string literal until the closing double-quote.
@@ -980,13 +981,23 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 	p.state = TokenizerStateCharMnemonicOrHexEscape
 	switch {
 	case p.curr() == 'x':
-		p.state = TokenizerStateCharHexEscape
+		// Peek ahead to see if hex digits follow - if not, #\x is just the character 'x'
 		p.next()
 		if p.err != nil {
-			return utf8.RuneError
+			// EOF after #\x means just the character 'x'
+			p.err = nil
+			p.state = TokenizerStateCharGraphic
+			return 'x'
+		}
+		if !isDigit(16, p.curr()) {
+			// No hex digits follow, so #\x is the graphic character 'x'
+			// (the next char will be handled by the caller)
+			p.state = TokenizerStateCharGraphic
+			return 'x'
 		}
 		// R7RS: \x<hex scalar value>; where hex scalar value is any Unicode code point
 		// (0 to 0x10FFFF) except surrogates (0xD800-0xDFFF)
+		p.state = TokenizerStateCharHexEscape
 		x, n := p.readUnsignedBaseNInteger(16, 0) //nolint:errcheck
 		if n == 0 {
 			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape, p.tokenStart, p.tokenEnd)
@@ -1353,7 +1364,50 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			p.mayReadSignedImaginaryPart(true, r) //nolint:errcheck
 		} else {
 			p.state = TokenizerStateUnsignedComplex
-			p.next()
+			p.next() // consume sign
+			if p.err != nil {
+				return
+			}
+			// Check for unit imaginary (+i or -i) - must peek to distinguish from inf.0
+			if p.curr() == 'i' {
+				p.next() // consume 'i'
+				if p.err != nil {
+					return
+				}
+				// If followed by 'n', it might be inf.0i - continue parsing
+				if p.curr() == 'n' {
+					// Parse "nf.0" portion of inf.0
+					n := p.scan([]byte("nf"))
+					if p.err != nil {
+						return
+					}
+					if n != 0 {
+						p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
+						return
+					}
+					if !isDot(p.curr()) {
+						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+						return
+					}
+					p.next()
+					if p.err != nil {
+						return
+					}
+					if !isDigit(r, p.curr()) {
+						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+						return
+					}
+					p.readUnsignedBaseNNumber(r, 0)
+					if p.err != nil {
+						return
+					}
+					if isImaginary(p.curr()) {
+						p.next()
+					}
+				}
+				// Otherwise just unit imaginary, already consumed 'i'
+				return
+			}
 			p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
 			if p.err != nil {
 				return
@@ -1487,7 +1541,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 	// Branch 1: Starts with explicit sign (+/-)
 	switch {
 	case p.curr() == 'i':
-		// TODO: refactor readInf
+		// Could be inf.0 - caller already handles unit imaginary 'i'
 		p.readInf("inf", r) //nolint:errcheck
 		return
 	case p.curr() == 'n':
@@ -1626,10 +1680,44 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		}
 	}
 
-	// Check for +i or -i (pure imaginary unit) or +inf or -inf
+	// Check for +i or -i (pure imaginary unit) or +inf.0i or -inf.0i
 	if p.curr() == 'i' {
-		// Check for +inf.0i or -inf.0i
-		p.scanForImaginaryNumberSpecials(r, "inf") //nolint:errcheck
+		p.next() // consume 'i'
+		if p.err != nil {
+			return
+		}
+		// If NOT followed by 'n', it's pure imaginary (+i or -i) - we're done
+		if p.curr() != 'n' {
+			return
+		}
+		// Could be inf.0i - continue parsing "nf.0<digits>i"
+		n := p.scan([]byte("nf"))
+		if p.err != nil {
+			return
+		}
+		if n != 0 {
+			p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
+			return
+		}
+		if !isDot(p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.next()
+		if p.err != nil {
+			return
+		}
+		if !isDigit(r, p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.readUnsignedBaseNNumber(r, 0)
+		if p.err != nil {
+			return
+		}
+		if isImaginary(p.curr()) {
+			p.next()
+		}
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
@@ -1637,7 +1725,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	}
 
-	// Check for numeric coefficient: +3i, +3.5i, etc.
+	// Check for numeric coefficient: +3i, +3.5i, +3/4i, etc.
 	if !isDigit(r, p.curr()) {
 		return
 	}
@@ -1645,8 +1733,9 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 	if p.err != nil {
 		return
 	}
-	// Check for decimal part
+	// Check for decimal part, rational part, or exponent
 	if isDot(p.curr()) {
+		// Decimal: +3.5i
 		p.next()
 		if p.err != nil {
 			return
@@ -1658,6 +1747,20 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 			}
 		}
 		p.mayReadExponent(r) //nolint:errcheck
+		if p.err != nil {
+			return
+		}
+	} else if p.curr() == '/' {
+		// Rational: +3/4i
+		p.next()
+		if p.err != nil {
+			return
+		}
+		if !isDigit(r, p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return
 		}
