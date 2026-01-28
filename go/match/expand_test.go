@@ -391,9 +391,9 @@ func TestEllipsisInMiddle(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
-		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
-		qt.Assert(t, bindings["x"], values.SchemeEquals, values.NewInteger(6))
-		qt.Assert(t, bindings["y"], values.SchemeEquals, values.NewInteger(7))
+		qt.Assert(t, bindings["a"].UnwrapAll(), values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["x"].UnwrapAll(), values.SchemeEquals, values.NewInteger(6))
+		qt.Assert(t, bindings["y"].UnwrapAll(), values.SchemeEquals, values.NewInteger(7))
 	})
 
 	t.Run("Simple ellipsis in middle - multiple iterations", func(t *testing.T) {
@@ -430,9 +430,9 @@ func TestEllipsisInMiddle(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
-		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
-		qt.Assert(t, bindings["x"], values.SchemeEquals, values.NewInteger(6))
-		qt.Assert(t, bindings["y"], values.SchemeEquals, values.NewInteger(7))
+		qt.Assert(t, bindings["a"].UnwrapAll(), values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["x"].UnwrapAll(), values.SchemeEquals, values.NewInteger(6))
+		qt.Assert(t, bindings["y"].UnwrapAll(), values.SchemeEquals, values.NewInteger(7))
 	})
 
 	t.Run("Ellipsis in middle with template expansion", func(t *testing.T) {
@@ -527,8 +527,8 @@ func TestImproperListPattern(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
-		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
-		qt.Assert(t, bindings["rest"], values.SchemeEquals, values.List(values.NewInteger(2), values.NewInteger(3)))
+		qt.Assert(t, bindings["a"].UnwrapAll(), values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["rest"].UnwrapAll(), values.SchemeEquals, values.List(values.NewInteger(2), values.NewInteger(3)))
 	})
 
 	t.Run("Improper list pattern with single element rest", func(t *testing.T) {
@@ -559,7 +559,7 @@ func TestImproperListPattern(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
-		qt.Assert(t, bindings["a"], values.SchemeEquals, values.NewInteger(1))
-		qt.Assert(t, bindings["rest"], values.SchemeEquals, values.List(values.NewInteger(2)))
+		qt.Assert(t, bindings["a"].UnwrapAll(), values.SchemeEquals, values.NewInteger(1))
+		qt.Assert(t, bindings["rest"].UnwrapAll(), values.SchemeEquals, values.List(values.NewInteger(2)))
 	})
 }

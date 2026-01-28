@@ -51,6 +51,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wile/syntax"
 	"wile/values"
 )
 
@@ -71,8 +72,8 @@ type syntaxCompilerStackEntry struct {
 }
 
 type captureContext struct {
-	children map[int][]*captureContext // Key: ellipsisID
-	bindings map[string]values.Value
+	children map[int][]*captureContext     // Key: ellipsisID
+	bindings map[string]syntax.SyntaxValue // Pattern variable bindings (syntax-native)
 }
 
 // SyntaxCommand represents a pattern bytecode instruction.
@@ -197,7 +198,7 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 	}
 
 	// Handle literal values (numbers, strings, etc.)
-	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: element})
+	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: valueToSyntaxValue(element)})
 	return stack, false
 }
 
@@ -259,7 +260,7 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 		entry.variables[sym.Key] = struct{}{}
 	} else {
 		// Literal symbol - compare exactly
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: sym})
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
 	}
 }
 
@@ -276,7 +277,7 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
 	if !previousElementHasVariables(vis, entry) {
 		// No pattern variables - treat ellipsis as literal
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: &values.Symbol{Key: vis.ellipsis}})
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(vis.ellipsis, nil)})
 		return false
 	}
 
@@ -466,7 +467,7 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 			entry.variables[sym.Key] = struct{}{}
 		} else {
 			// The CDR is a literal symbol - compare it
-			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: sym})
+			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
 		}
 	}
 

@@ -26,6 +26,8 @@ type Environment interface {
 // EnvironmentNavigation is the interface for navigating between
 // environment frames, including meta phases and local/global scopes.
 type EnvironmentNavigation interface {
+	// TODO: remove LocalEnvironment and GlobalEnvironment methods once
+	// meta environments are fully integrated.
 	Meta()
 	Parent() Environment
 	LocalEnvironment() Environment

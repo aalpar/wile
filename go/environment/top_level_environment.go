@@ -49,6 +49,7 @@ type TopLevelEnvironment struct {
 
 	// libraryRegistry is the R7RS library registry.
 	// Stored as any to avoid circular dependency with machine package.
+	// TODO: consider defining an interface for library registries.
 	libraryRegistry any
 
 	// runtime is the phase 0 (runtime) environment frame.

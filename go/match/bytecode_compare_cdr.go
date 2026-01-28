@@ -17,14 +17,14 @@ package match
 import (
 	"fmt"
 
-	"wile/values"
+	"wile/syntax"
 )
 
-// ByteCodeCompareCdr compares the cdr of the current pair with a literal value.
+// ByteCodeCompareCdr compares the cdr of the current pair with a literal syntax value.
 // This is used for improper list patterns where the tail is a literal,
 // e.g., (a . b) where b is a literal symbol to match exactly.
 type ByteCodeCompareCdr struct {
-	Value values.Value
+	Value syntax.SyntaxValue
 }
 
 func (p ByteCodeCompareCdr) String() string {

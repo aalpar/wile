@@ -37,7 +37,6 @@ func TestSyntaxMatcher(t *testing.T) {
 		matcher := NewSyntaxMatcher(variables, codes)
 		qt.Assert(t, matcher, qt.IsNotNil)
 		qt.Assert(t, matcher.matcher, qt.IsNotNil)
-		qt.Assert(t, matcher.syntaxMap, qt.IsNotNil)
 	})
 
 	t.Run("NewSyntaxMatcherWithEllipsisVars", func(t *testing.T) {

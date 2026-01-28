@@ -517,16 +517,6 @@ Go generics can't express "same type" constraints for binary operations across a
 
 **Implementation**: All `return nil` cases in Big* types must change to `panic(ErrNotANumber)` or `panic(ErrDivisionByZero)`.
 
-## Pre-Implementation Checklist
-
-Before starting Phase 0, complete the following:
-
-- [x] Create `values/numeric_tower_coverage_test.go` with 245 test cases (7×7×5)
-- [x] Document which tests currently panic vs return nil vs succeed
-- [x] Review precision loss scenarios (see below)
-- [x] Decide on Complex comparison semantics (see below)
-- [x] Add R7RS citations to plan for each semantic decision
-
 ### Complex Comparison Semantics
 
 **R7RS §6.2.6 states**: "For any of the `<` `=` `>` `<=` `>=` procedures, if any argument is complex, an error is signaled."

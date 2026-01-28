@@ -45,8 +45,8 @@ import (
 // local bindings (via their scope set at macro definition time).
 //
 // This type implements the localScopesProvider, globalBindingProvider, and
-// hasLocalBindingProvider interfaces used by match.valueToSyntaxWithOrigin to
-// handle hygiene without circular imports.
+// hasLocalBindingProvider interfaces used by the match package's expansion
+// functions to handle hygiene without circular imports.
 type FreeIdResolution struct {
 	// Global is set if the free identifier refers to a global binding.
 	// This enables cross-library macro hygiene by pre-resolving the binding.
@@ -64,7 +64,7 @@ type FreeIdResolution struct {
 }
 
 // GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
-// Implements the interface expected by match.valueToSyntaxWithOrigin.
+// Implements the localScopesProvider interface for match package hygiene.
 func (f *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
 	if f == nil {
 		return nil
@@ -74,7 +74,7 @@ func (f *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
 
 // GetGlobal returns the global binding's index, or nil if this is a local binding.
 // Returns any to avoid circular import with environment package in match.
-// Implements the interface expected by match.valueToSyntaxWithOrigin.
+// Implements the globalBindingProvider interface for match package hygiene.
 func (f *FreeIdResolution) GetGlobal() any {
 	if f == nil {
 		return nil

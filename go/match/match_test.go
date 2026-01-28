@@ -19,11 +19,22 @@ import (
 	"log"
 	"testing"
 
+	"wile/syntax"
 	"wile/values"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
 )
+
+// testSyntaxInt creates a syntax-wrapped integer for test bytecode.
+func testSyntaxInt(v int64) syntax.SyntaxValue {
+	return syntax.NewSyntaxObject(values.NewInteger(v), nil)
+}
+
+// testSyntaxSym creates a syntax-wrapped symbol for test bytecode.
+func testSyntaxSym(key string) syntax.SyntaxValue {
+	return syntax.NewSyntaxSymbol(key, nil)
+}
 
 func TestUtilsMatchSuites(t *testing.T) {
 	c := qt.New(t)
@@ -43,11 +54,11 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 			variables: map[string]struct{}{},
 			target:    values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
 			in: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(30)},
+				ByteCodeCompareCar{Value: testSyntaxInt(30)},
 				ByteCodeDone{},
 			},
 			matches: true,
@@ -57,9 +68,9 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 			target:    values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
 			in: []SyntaxCommand{
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeDone{},
 			},
 			matches: true,
@@ -68,14 +79,14 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 			variables: map[string]struct{}{"a": {}},
 			target:    values.List(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
 			in: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: values.NewInteger(40)},
+				ByteCodeCompareCar{Value: testSyntaxInt(40)},
 				ByteCodeDone{},
 			},
 			matches: true,
@@ -88,16 +99,16 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 				values.List(values.NewSymbol("a"), values.NewSymbol("b")),
 				values.List(values.NewSymbol("a"), values.NewSymbol("b"))),
 			in: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
 				// mark
 				ByteCodePushContext{},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: values.NewSymbol("a")},
+				ByteCodeCompareCar{Value: testSyntaxSym("a")},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
 				ByteCodePopContext{},
 				ByteCodeJump{Offset: -7},
@@ -113,16 +124,16 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 				values.List(values.NewSymbol("y"), values.NewSymbol("b")),
 				values.List(values.NewSymbol("z"), values.NewSymbol("b"))),
 			in: []SyntaxCommand{
-				ByteCodeCompareCar{Value: values.NewInteger(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewInteger(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
 				// mark
 				ByteCodePushContext{},
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: values.NewSymbol("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
 				ByteCodePopContext{},
 				ByteCodeJump{Offset: -7},
@@ -154,7 +165,7 @@ func TestExpand(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		match := &Matcher{}
-		match.captureStack = []*captureContext{{bindings: map[string]values.Value{}}}
+		match.captureStack = []*captureContext{{bindings: map[string]syntax.SyntaxValue{}}}
 		_, err := match.Expand(tc.in)
 		log.Printf("")
 		qt.Assert(t, err, qt.IsNil)
@@ -208,7 +219,7 @@ func TestMatchEdgeCases(t *testing.T) {
 	t.Run("VisitCdr on non-pair", func(t *testing.T) {
 		variables := map[string]struct{}{}
 		codes := []SyntaxCommand{
-			ByteCodeCompareCar{Value: values.NewInteger(10)},
+			ByteCodeCompareCar{Value: testSyntaxInt(10)},
 			ByteCodeVisitCdr{},
 			ByteCodeDone{},
 		}
@@ -252,7 +263,7 @@ func TestMatchEdgeCases(t *testing.T) {
 	t.Run("CompareCar mismatch", func(t *testing.T) {
 		variables := map[string]struct{}{}
 		codes := []SyntaxCommand{
-			ByteCodeCompareCar{Value: values.NewInteger(10)},
+			ByteCodeCompareCar{Value: testSyntaxInt(10)},
 			ByteCodeDone{},
 		}
 
@@ -266,10 +277,10 @@ func TestMatchEdgeCases(t *testing.T) {
 	t.Run("SkipIfEmpty with void", func(t *testing.T) {
 		variables := map[string]struct{}{}
 		codes := []SyntaxCommand{
-			ByteCodeCompareCar{Value: values.NewInteger(10)},
+			ByteCodeCompareCar{Value: testSyntaxInt(10)},
 			ByteCodeVisitCdr{},
 			ByteCodeSkipIfEmpty{Offset: 2},
-			ByteCodeCompareCar{Value: values.NewInteger(20)},
+			ByteCodeCompareCar{Value: testSyntaxInt(20)},
 			ByteCodeDone{},
 		}
 
@@ -289,7 +300,7 @@ func TestExpandEdgeCases(t *testing.T) {
 			ellipsisID: DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
-			bindings: map[string]values.Value{},
+			bindings: map[string]syntax.SyntaxValue{},
 			children: make(map[int][]*captureContext),
 		}}
 
@@ -313,7 +324,7 @@ func TestExpandEdgeCases(t *testing.T) {
 			ellipsisID:   DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
-			bindings: map[string]values.Value{},
+			bindings: map[string]syntax.SyntaxValue{},
 			children: make(map[int][]*captureContext),
 		}}
 
@@ -337,7 +348,7 @@ func TestExpandEdgeCases(t *testing.T) {
 			ellipsisID:   DefaultEllipsis,
 		}
 		matcher.captureStack = []*captureContext{{
-			bindings: map[string]values.Value{},
+			bindings: map[string]syntax.SyntaxValue{},
 			children: map[int][]*captureContext{
 				0: {}, // Empty children
 			},
