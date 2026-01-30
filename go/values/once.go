@@ -62,7 +62,7 @@ func (o *Once) Done() bool {
 	return atomic.LoadUint32(&o.done) == 1
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the once is nil.
 func (o *Once) IsVoid() bool {

@@ -974,3 +974,307 @@ func TestGuardNested(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Exception in Handler Tests (R7RS §6.11)
+// =============================================================================
+
+// TestExceptionInHandler tests R7RS §6.11 semantics when the exception handler
+// itself raises an exception. R7RS: "the current exception handler is the one
+// that was in place when the handler being called was installed."
+func TestExceptionInHandler(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "inner handler raises, outer handler catches",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape (list 'outer e)))
+						(lambda ()
+							(with-exception-handler
+								(lambda (e) (raise (list 'reraised e)))
+								(lambda () (raise 'original)))))))`,
+			out: values.List(values.NewSymbol("outer"),
+				values.List(values.NewSymbol("reraised"), values.NewSymbol("original"))),
+		},
+		{
+			name: "handler raises different exception type",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape (error-object-message e)))
+						(lambda ()
+							(with-exception-handler
+								(lambda (e) (error "handler failed" e))
+								(lambda () (raise 'bad)))))))`,
+			out: values.NewString("handler failed"),
+		},
+		{
+			name: "handler raises continuable to outer handler",
+			code: `(with-exception-handler
+				(lambda (e) (list 'outer-handled e))
+				(lambda ()
+					(with-exception-handler
+						(lambda (e) (raise-continuable (list 'wrapped e)))
+						(lambda () (raise-continuable 'start)))))`,
+			out: values.List(values.NewSymbol("outer-handled"),
+				values.List(values.NewSymbol("wrapped"), values.NewSymbol("start"))),
+		},
+		{
+			name: "three layers - innermost raises to middle, middle raises to outer",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape (list 'L1 e)))
+						(lambda ()
+							(with-exception-handler
+								(lambda (e) (raise (list 'L2 e)))
+								(lambda ()
+									(with-exception-handler
+										(lambda (e) (raise (list 'L3 e)))
+										(lambda () (raise 'origin)))))))))`,
+			out: values.List(values.NewSymbol("L1"),
+				values.List(values.NewSymbol("L2"),
+					values.List(values.NewSymbol("L3"), values.NewSymbol("origin")))),
+		},
+		{
+			name: "handler error object propagates to outer",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e)
+							(escape (list (error-object? e)
+							              (error-object-message e))))
+						(lambda ()
+							(with-exception-handler
+								(lambda (e) (error "inner handler broke"))
+								(lambda () (raise 'trigger)))))))`,
+			out: values.List(values.TrueValue, values.NewString("inner handler broke")),
+		},
+		{
+			name: "guard handler raises to outer guard",
+			code: `(guard (outer-exn
+					((string? outer-exn) (string-append "outer: " outer-exn)))
+				(guard (inner-exn
+						((number? inner-exn) 'was-number))
+					(raise "not-a-number")))`,
+			out: values.NewString("outer: not-a-number"),
+		},
+		{
+			name: "guard body raises error, handler clause re-raises transformed value",
+			code: `(call/cc
+				(lambda (escape)
+					(with-exception-handler
+						(lambda (e) (escape e))
+						(lambda ()
+							(guard (exn
+								((number? exn) (raise (* exn 10))))
+								(raise 5))))))`,
+			out: values.NewInteger(50),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// =============================================================================
+// Deeply Nested Guard Tests (R7RS §4.2.7)
+// =============================================================================
+
+// TestGuardDeeplyNested tests deeply nested guard forms with exceptions
+// propagating through multiple levels.
+func TestGuardDeeplyNested(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "two nested guards - inner catches",
+			code: `(guard (outer (else 'outer-caught))
+				(guard (inner ((number? inner) (+ inner 100)))
+					(raise 42)))`,
+			out: values.NewInteger(142),
+		},
+		{
+			name: "two nested guards - inner misses, outer catches",
+			code: `(guard (outer ((symbol? outer) (list 'outer-caught outer)))
+				(guard (inner ((number? inner) 'was-number))
+					(raise 'not-a-number)))`,
+			out: values.List(values.NewSymbol("outer-caught"), values.NewSymbol("not-a-number")),
+		},
+		{
+			name: "three nested guards - innermost catches",
+			code: `(guard (L1 (else 'L1))
+				(guard (L2 (else 'L2))
+					(guard (L3 ((number? L3) (* L3 2)))
+						(raise 7))))`,
+			out: values.NewInteger(14),
+		},
+		{
+			name: "three nested guards - middle catches",
+			code: `(guard (L1 (else 'L1))
+				(guard (L2 ((symbol? L2) (list 'L2 L2)))
+					(guard (L3 ((number? L3) 'was-number))
+						(raise 'oops))))`,
+			out: values.List(values.NewSymbol("L2"), values.NewSymbol("oops")),
+		},
+		{
+			name: "three nested guards - outermost catches",
+			code: `(guard (L1 ((list? L1) (length L1)))
+				(guard (L2 ((number? L2) 'was-number))
+					(guard (L3 ((string? L3) 'was-string))
+						(raise '(a b c)))))`,
+			out: values.NewInteger(3),
+		},
+		{
+			name: "four nested guards - deepest catches",
+			code: `(guard (L1 (else 'L1))
+				(guard (L2 (else 'L2))
+					(guard (L3 (else 'L3))
+						(guard (L4 ((eq? L4 'target) 'hit))
+							(raise 'target)))))`,
+			out: values.NewSymbol("hit"),
+		},
+		{
+			name: "four nested guards - outermost catches",
+			code: `(guard (L1 ((char? L1) (list 'L1-caught L1)))
+				(guard (L2 ((number? L2) 'L2))
+					(guard (L3 ((string? L3) 'L3))
+						(guard (L4 ((symbol? L4) 'L4))
+							(raise #\x)))))`,
+			out: values.List(values.NewSymbol("L1-caught"), values.NewCharacter('x')),
+		},
+		{
+			name: "nested guards with body computation at each level",
+			code: `(guard (L1 ((number? L1) (+ L1 1000)))
+				(let ((a 10))
+					(guard (L2 ((string? L2) 'was-string))
+						(let ((b (* a 2)))
+							(guard (L3 ((symbol? L3) 'was-symbol))
+								(let ((c (+ b 5)))
+									(raise c)))))))`,
+			out: values.NewInteger(1025), // c = 25, + 1000 = 1025
+		},
+		{
+			name: "nested guards - normal return bypasses all guards",
+			code: `(guard (L1 (else 'L1))
+				(guard (L2 (else 'L2))
+					(guard (L3 (else 'L3))
+						(+ 10 20 30))))`,
+			out: values.NewInteger(60),
+		},
+		{
+			name: "nested guard with => clause at inner level",
+			code: `(guard (outer (else 'outer))
+				(guard (inner ((number? inner) => (lambda (n) (* n n))))
+					(raise 9)))`,
+			out: values.NewInteger(81),
+		},
+		{
+			name: "nested guard with error objects propagating",
+			code: `(guard (outer
+					((error-object? outer)
+					 (string-append "caught: " (error-object-message outer))))
+				(guard (inner ((number? inner) 'was-number))
+					(error "deep failure" 'x 'y)))`,
+			out: values.NewString("caught: deep failure"),
+		},
+		{
+			name: "guard inside loop-like recursion",
+			code: `(let loop ((n 3) (acc '()))
+				(if (= n 0)
+					acc
+					(loop (- n 1)
+						(cons
+							(guard (exn ((number? exn) exn))
+								(raise n))
+							acc))))`,
+			out: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestFileErrorPredicate tests the file-error? predicate (R7RS §6.11)
+func TestFileErrorPredicate(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "file-error? on open-input-file with nonexistent file",
+			code: `(file-error? (guard (exn (else exn)) (open-input-file " no such file ")))`,
+			out:  values.TrueValue,
+		},
+		{
+			name: "file-error? on generic error returns #f",
+			code: `(file-error? (guard (exn (else exn)) (error "generic")))`,
+			out:  values.FalseValue,
+		},
+		{
+			name: "file-error? on non-error returns #f",
+			code: `(file-error? 42)`,
+			out:  values.FalseValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestReadErrorPredicate tests the read-error? predicate (R7RS §6.11)
+func TestReadErrorPredicate(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "read-error? on malformed input",
+			code: `(read-error? (guard (exn (else exn)) (read (open-input-string "#\\badname"))))`,
+			out:  values.TrueValue,
+		},
+		{
+			name: "read-error? on generic error returns #f",
+			code: `(read-error? (guard (exn (else exn)) (error "generic")))`,
+			out:  values.FalseValue,
+		},
+		{
+			name: "read-error? on non-error returns #f",
+			code: `(read-error? "hello")`,
+			out:  values.FalseValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}

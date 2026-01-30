@@ -960,7 +960,7 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 		return
 	case p.curr() == 'z' || p.curr() == 'Z': // big int #z
 		p.state = TokenizerStateBigIntegerBase10
-		p.readBigNum(isExponentMarker)
+		p.readBigNum(isExtendedExponentMarkerForRadix)
 		return
 	default:
 		p.state = TokenizerStateMarker
@@ -1098,7 +1098,7 @@ func (p *Tokenizer) readDirective() {
 // If onMismatch is provided, it's called when the keyword doesn't match;
 // otherwise an error is set.
 func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMismatch func()) {
-	n := p.scan([]byte(s))
+	n := p.scanCaseInsensitive([]byte(s))
 	if p.err != nil {
 		return
 	}
@@ -1218,7 +1218,7 @@ func (p *Tokenizer) readImaginaryOrSignedInfinity(r int) {
 	if p.err != nil {
 		return
 	}
-	if p.curr() != 'n' { // +i -i
+	if p.curr() != 'n' && p.curr() != 'N' { // +i -i
 		// TODO +i -i
 		p.state = TokenizerStateSignedImaginary
 		return
@@ -1377,7 +1377,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 				// If followed by 'n', it might be inf.0i - continue parsing
 				if p.curr() == 'n' {
 					// Parse "nf.0" portion of inf.0
-					n := p.scan([]byte("nf"))
+					n := p.scanCaseInsensitive([]byte("nf"))
 					if p.err != nil {
 						return
 					}
@@ -1508,7 +1508,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		case isImaginary(p.curr()):
 			p.readImaginaryOrSignedInfinity(r)
 			return
-		case p.curr() == 'n':
+		case p.curr() == 'n' || p.curr() == 'N':
 			p.readSignedNan(r)
 			return
 		case isSignSubsequent(p.curr()):
@@ -1631,7 +1631,7 @@ func (p *Tokenizer) mayReadExponent(r int) {
 }
 
 func (p *Tokenizer) scanForImaginaryNumberSpecials(r int, txt string) {
-	n := p.scan([]byte(txt))
+	n := p.scanCaseInsensitive([]byte(txt))
 	if p.err != nil {
 		return
 	}
@@ -1691,7 +1691,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 			return
 		}
 		// Could be inf.0i - continue parsing "nf.0<digits>i"
-		n := p.scan([]byte("nf"))
+		n := p.scanCaseInsensitive([]byte("nf"))
 		if p.err != nil {
 			return
 		}
@@ -2291,7 +2291,7 @@ func isQuote(c rune) bool {
 
 // isImaginary returns true if c is 'i'.
 func isImaginary(c rune) bool {
-	return c == 'i'
+	return c == 'i' || c == 'I'
 }
 
 // isExtendedExponentMarker returns true if c is an exponent marker character.

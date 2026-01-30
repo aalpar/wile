@@ -143,7 +143,7 @@ func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
 		return v
 	}
 	changed := false
-	newElements := values.NewVectorWithLength(v.Len())
+	newElements := values.NewVectorWithLength(v.Length())
 	for i, elem := range *v {
 		deduped := p.DeduplicateLiteral(elem)
 		(*newElements)[i] = deduped

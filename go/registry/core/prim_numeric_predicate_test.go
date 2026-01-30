@@ -418,6 +418,41 @@ func TestNumericGreaterThanOrEqual(t *testing.T) {
 	}
 }
 
+// TestComparison_TypeErrors tests that numeric comparisons reject non-numeric arguments.
+// R7RS §6.2.6: =, <, >, <=, >= require numeric arguments.
+func TestComparison_TypeErrors(t *testing.T) {
+	t.Run("= string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(= "hello" 1)`)
+	})
+	t.Run("= boolean first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(= #t 1)`)
+	})
+	t.Run("< string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(< "hello" 1)`)
+	})
+	t.Run("< boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(< 1 #t)`)
+	})
+	t.Run("> string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(> "hello" 1)`)
+	})
+	t.Run("> boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(> 1 #t)`)
+	})
+	t.Run("<= string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(<= "hello" 1)`)
+	})
+	t.Run("<= boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(<= 1 #t)`)
+	})
+	t.Run(">= string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(>= "hello" 1)`)
+	})
+	t.Run(">= boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(>= 1 #t)`)
+	})
+}
+
 // ----------------------------------------------------------------------------
 // Enhanced Type Predicate Tests with BigInteger
 // ----------------------------------------------------------------------------

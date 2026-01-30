@@ -36,7 +36,7 @@ const (
 // Thread-safe: All operations are protected by a read-write mutex
 // to support concurrent macro expansion.
 type PhaseRegistry struct {
-	mu sync.RWMutex
+	mu   sync.RWMutex
 	envs map[int]*EnvironmentFrame
 	// topLevelEnv is the owning TopLevelEnvironment (nil for legacy environments)
 	topLevelEnv *TopLevelEnvironment

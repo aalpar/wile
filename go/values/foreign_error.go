@@ -63,13 +63,13 @@ var (
 	ErrNotASyntaxObject            = NewStaticError("not a syntax object")
 	ErrNotASymbol                  = NewStaticError("not a symbol")
 	ErrInvalidSyntax               = NewStaticError("invalid syntax")
+	ErrInvalidArgument             = NewStaticError("invalid argument")
 	ErrDuplicateBinding            = NewStaticError("duplicate binding")
 	ErrNotAClosure                 = NewStaticError("not a closure")
 	ErrUnknownCharacterMnemonic    = NewStaticError("unknown character mnemonic")
 	ErrNotAnInteger                = NewStaticError("not an integer")
 	ErrNotALocalEnvironmentFrame   = NewStaticError("not a local environment frame")
 	ErrNotAMachineTemplate         = NewStaticError("not a machine template")
-	ErrEndOfFile                   = NewStaticError("end of file")
 	ErrUnexpectedNil               = NewStaticError("unexpected nil value")
 	ErrUnexpectedTransformer       = NewStaticError("unexpected transformer")
 	ErrNotAString                  = NewStaticError("not a string")
@@ -92,6 +92,7 @@ var (
 	ErrNotARWMutex           = NewStaticError("not a rw-mutex")
 	ErrNotAOnce              = NewStaticError("not a once")
 	ErrNotAnAtomic           = NewStaticError("not an atomic")
+	ErrPortClosed            = NewStaticError("port is closed")
 )
 
 // StaticError represents a compile-time or static error.
@@ -157,12 +158,10 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	}
 }
 
-// Datum returns the underlying wrapped error.
-func (p *ForeignError) Datum() error {
-	return p.err
-}
-
 func (p *ForeignError) Unwrap() error {
+	if p == nil {
+		return nil
+	}
 	return p.err
 }
 
@@ -171,4 +170,58 @@ func (q *ForeignError) Error() string {
 		return fmt.Sprintf("%s: %s", q.message, q.err.Error())
 	}
 	return q.message
+}
+
+// ForeignFileError represents an error from a file system operation.
+// R7RS §6.11: detected by file-error? predicate.
+type ForeignFileError struct {
+	*ForeignError
+	Filename string // the file path that caused the error
+	Op       string // the operation (e.g., "open-input-file", "delete-file")
+}
+
+func (p *ForeignFileError) Unwrap() error {
+	if p == nil || p.ForeignError == nil {
+		return nil
+	}
+	return p.ForeignError.Unwrap()
+}
+
+// WrapForeignFileError wraps an OS error with file context.
+func WrapForeignFileError(err error, op string, filename string) *ForeignFileError {
+	q := &ForeignFileError{
+		ForeignError: WrapForeignErrorf(err, "%s: %s: %v", op, filename, err),
+		Filename:     filename,
+		Op:           op,
+	}
+	return q
+}
+
+// ForeignReadError represents an error from a read or parse operation.
+// R7RS §6.11: detected by read-error? predicate.
+type ForeignReadError struct {
+	*ForeignError
+}
+
+func (p *ForeignReadError) Unwrap() error {
+	if p == nil || p.ForeignError == nil {
+		return nil
+	}
+	return p.ForeignError.Unwrap()
+}
+
+// WrapForeignReadErrorf wraps an error as a read error.
+func WrapForeignReadErrorf(err error, msg string, vs ...any) *ForeignReadError {
+	q := &ForeignReadError{
+		ForeignError: WrapForeignErrorf(err, msg, vs...),
+	}
+	return q
+}
+
+// NewForeignReadErrorf creates a new read error with a formatted message.
+func NewForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
+	q := &ForeignReadError{
+		ForeignError: NewForeignErrorf(msg, vs...),
+	}
+	return q
 }

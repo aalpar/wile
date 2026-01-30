@@ -122,6 +122,12 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 			p.err = err
 			return nil, p.err
 		}
+		// R7RS: unexpected close parenthesis at top level is a read error
+		if q == nil && p.cur != nil && p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+			p.toks = nil
+			p.err = NewParserErrorf(p.cur, "unexpected close parenthesis")
+			return nil, p.err
+		}
 		// Advance to the next token for the next ReadSyntax() call
 		p.cur, p.err = p.toks.Next()
 		// EOF is fine - it means there's nothing more to read
@@ -390,76 +396,20 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 }
 
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
-// Returns an integer if the result is a whole number, otherwise a float.
-// For positive exponents: always integer (may promote to BigInteger).
-// For negative exponents: integer if mantissa has enough trailing zeros, otherwise float.
+// Per R7RS §7.1.1, the exponent marker indicates inexact notation, so all scientific
+// notation produces Float (inexact). The #e prefix can convert to exact after parsing.
 func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := p.cur.String()
 
-	// Find the exponent marker (e or E)
+	// Find the exponent marker
 	expIdx := strings.IndexAny(s, "eEsSfFdDlL")
 	if expIdx == -1 {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
 	}
 
-	mantissaStr := s[:expIdx]
-	expStr := s[expIdx+1:]
-
-	// Parse exponent
-	exp, err := strconv.ParseInt(expStr, 10, 64)
-	if err != nil {
-		return nil, p.cur, NewParserErrorf(p.cur, "invalid exponent in scientific notation: %s", s)
-	}
-
-	// Parse mantissa as big.Int (strip sign for trailing zero counting)
-	mantissaStrNoSign := strings.TrimLeft(mantissaStr, "+-")
-	mantissa := new(big.Int)
-	_, ok := mantissa.SetString(mantissaStrNoSign, 10)
-	if !ok {
-		return nil, p.cur, NewParserErrorf(p.cur, "invalid mantissa in scientific notation: %s", s)
-	}
-
-	// Check sign
-	negative := strings.HasPrefix(mantissaStr, "-")
-
-	if exp >= 0 {
-		// Positive exponent: result is mantissa * 10^exp (always integer)
-		multiplier := new(big.Int).Exp(big.NewInt(10), big.NewInt(exp), nil)
-		result := new(big.Int).Mul(mantissa, multiplier)
-		if negative {
-			result.Neg(result)
-		}
-		// Try to fit in int64
-		if result.IsInt64() {
-			q := p.wrapSyntax(values.NewInteger(result.Int64()), p.cur)
-			return q, p.cur, nil
-		}
-		q := p.wrapSyntax(values.NewBigInteger(result), p.cur)
-		return q, p.cur, nil
-	}
-
-	// Negative exponent: check if mantissa has enough trailing zeros
-	trailingZeros := countTrailingZeros(mantissaStrNoSign)
-	absExp := -exp
-
-	if int64(trailingZeros) >= absExp {
-		// Result is integer: mantissa / 10^|exp|
-		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(absExp), nil)
-		result := new(big.Int).Div(mantissa, divisor)
-		if negative {
-			result.Neg(result)
-		}
-		// Try to fit in int64
-		if result.IsInt64() {
-			q := p.wrapSyntax(values.NewInteger(result.Int64()), p.cur)
-			return q, p.cur, nil
-		}
-		q := p.wrapSyntax(values.NewBigInteger(result), p.cur)
-		return q, p.cur, nil
-	}
-
-	// Result is float
-	f, err := strconv.ParseFloat(s, 64)
+	// Normalize exponent marker to 'e' for strconv.ParseFloat
+	normalized := s[:expIdx] + "e" + s[expIdx+1:]
+	f, err := strconv.ParseFloat(normalized, 64)
 	if err != nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
 	}
@@ -467,17 +417,16 @@ func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token,
 	return q, p.cur, nil
 }
 
-// countTrailingZeros counts the number of trailing zeros in a numeric string.
-func countTrailingZeros(s string) int {
-	count := 0
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '0' {
-			count++
-		} else {
-			break
-		}
+// normalizeExponentMarker replaces R7RS exponent markers (s, f, d, l) with 'e'
+// so that strconv.ParseFloat can parse the number.
+func normalizeExponentMarker(s string) string {
+	idx := strings.IndexAny(s, "sSfFdDlL")
+	if idx == -1 {
+		return s
 	}
-	return count
+	q := []byte(s)
+	q[idx] = 'e'
+	return string(q)
 }
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
@@ -703,7 +652,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVectorUnsignedByteMarker:
 		var stx syntax.SyntaxValue
-		q0 := values.NewByteVector()
+		q0 := values.NewByteVectorFromIntegers()
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -722,7 +671,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if !ok {
 				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
 			}
-			*q0 = append(*q0, *values.NewByte(uint8(i.Value)))
+			*q0 = append(*q0, values.NewByte(uint8(i.Value)))
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {
 				return nil, p.cur, p.err
@@ -770,7 +719,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSyntax:
 		return p.readQuoteForm(ConstSyntax)
 	case tokenizer.TokenizerStateSymbol:
-		q = p.wrapSyntaxSymbol(p.cur.String(), p.cur)
+		q = p.wrapSyntaxSymbol(p.cur.Value(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedInteger:
 		var a int64
@@ -795,7 +744,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedDecimalFraction:
 		var a float64
-		a, p.err = strconv.ParseFloat(p.cur.String(), 64)
+		a, p.err = strconv.ParseFloat(normalizeExponentMarker(p.cur.String()), 64)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
@@ -827,7 +776,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSignedDecimalFraction:
 		// Signed decimal fractions like "-3.24", "+3.24"
 		var a float64
-		a, p.err = strconv.ParseFloat(p.cur.String(), 64)
+		a, p.err = strconv.ParseFloat(normalizeExponentMarker(p.cur.String()), 64)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
@@ -841,7 +790,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.parseScientificNotation()
 	case tokenizer.TokenizerStateUnsignedRationalFraction:
 		// Unsigned rational fractions like "3/4"
-		var q1 *values.Rational
+		var q1 values.Number
 		q1, p.err = p.parseRational(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -850,7 +799,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedRationalFraction:
 		// Signed rational fractions like "-1/2", "+3/4"
-		var q1 *values.Rational
+		var q1 values.Number
 		q1, p.err = p.parseRational(p.cur.String())
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -1092,7 +1041,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateString:
-		// Use Value() to get the processed string (escapes converted, quotes stripped)
+		// Use wrt() to get the processed string (escapes converted, quotes stripped)
 		q1 := values.NewString(p.cur.Value())
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -1131,14 +1080,16 @@ func (p *Parser) Close() error {
 	return err
 }
 
-// parseRational parses a rational number string like "3/4" or "-1/2"
-func (p *Parser) parseRational(s string) (*values.Rational, error) {
+// parseRational parses a rational number string like "3/4" or "-1/2".
+// Reduces the result via Simplify, so "10/2" becomes Integer(5).
+func (p *Parser) parseRational(s string) (values.Number, error) {
 	r := new(big.Rat)
 	_, ok := r.SetString(s)
 	if !ok {
 		return nil, NewParserErrorf(p.cur, "invalid rational number: %s", s)
 	}
-	return values.NewRationalFromRat(r), nil
+	q := values.NewRationalFromRat(r)
+	return values.Simplify(q), nil
 }
 
 // parseImaginary parses an imaginary number string like "+3i", "-2i", "+i", "-i"
@@ -1146,7 +1097,7 @@ func (p *Parser) parseRational(s string) (*values.Rational, error) {
 // inexact Complex for floating-point imaginary parts.
 func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	// Remove the trailing 'i'
-	s = strings.TrimSuffix(s, "i")
+	s = TrimSuffixFolded(s, "i")
 
 	// Handle "+i" and "-i" cases - these are exact
 	if s == "+" || s == "" {
@@ -1282,7 +1233,7 @@ func parseExactPart(s string) (values.Number, error) {
 // otherwise returns an inexact Complex.
 func (p *Parser) parseComplex(s string) (values.Number, error) {
 	// Remove the trailing 'i'
-	s = strings.TrimSuffix(s, "i")
+	s = TrimSuffixFolded(s, "i")
 
 	// Find the position of the sign separating real and imaginary parts
 	// Skip position 0 since the real part might start with a sign

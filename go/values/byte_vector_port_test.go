@@ -15,21 +15,30 @@
 package values
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
 
+func toBytes(bv *ByteVector) []byte {
+	out := make([]byte, len(*bv))
+	for i, v := range *bv {
+		out[i] = v.Value
+	}
+	return out
+}
+
 func TestBytevectorInputPort_NewBytevectorInputPort(t *testing.T) {
-	bv := []byte{1, 2, 3}
-	port := NewBytevectorInputPort(bv)
+	bv := NewByteVectorFromBytes(1, 2, 3)
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(bv)))
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestBytevectorInputPort_Read(t *testing.T) {
-	bv := []byte{1, 2, 3, 4, 5}
-	port := NewBytevectorInputPort(bv)
+	bv := NewByteVectorFromBytes(1, 2, 3, 4, 5)
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(bv)))
 
 	buf := make([]byte, 3)
 	n, err := port.Read(buf)
@@ -39,118 +48,126 @@ func TestBytevectorInputPort_Read(t *testing.T) {
 }
 
 func TestBytevectorInputPort_ReadByte(t *testing.T) {
-	bv := []byte{42, 99}
-	port := NewBytevectorInputPort(bv)
+	bv := NewByteVectorFromBytes(42, 99)
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(bv)))
 
 	b1, err := port.ReadByte()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, b1, qt.Equals, byte(42))
+	qt.Assert(t, b1, qt.Equals, NewByte(42).Value)
 
 	b2, err := port.ReadByte()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, b2, qt.Equals, byte(99))
+	qt.Assert(t, b2, qt.Equals, NewByte(99).Value)
 }
 
 func TestBytevectorInputPort_UnreadByte(t *testing.T) {
-	bv := []byte{1, 2}
-	port := NewBytevectorInputPort(bv)
+	bv := NewByteVectorFromBytes(1, 2)
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(bv)))
 
 	b1, _ := port.ReadByte()
-	qt.Assert(t, b1, qt.Equals, byte(1))
+	qt.Assert(t, b1, qt.Equals, NewByte(1).Value)
 
 	err := port.UnreadByte()
 	qt.Assert(t, err, qt.IsNil)
 
 	b2, _ := port.ReadByte()
-	qt.Assert(t, b2, qt.Equals, byte(1))
+	qt.Assert(t, b2, qt.Equals, NewByte(1).Value)
 }
 
 func TestBytevectorInputPort_IsVoid(t *testing.T) {
-	port := NewBytevectorInputPort([]byte{1})
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(NewByteVectorFromBytes(1))))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *BytevectorInputPort
+	var nilPort *ByteVectorInputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBytevectorInputPort_Datum(t *testing.T) {
-	port := NewBytevectorInputPort([]byte{1})
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(NewByteVectorFromBytes(1))))
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestBytevectorInputPort_EqualTo(t *testing.T) {
-	port1 := NewBytevectorInputPort([]byte{1})
-	port2 := NewBytevectorInputPort([]byte{1})
+	port1 := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(NewByteVectorFromBytes(1))))
+	port2 := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(NewByteVectorFromBytes(1))))
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
 }
 
 func TestBytevectorInputPort_SchemeString(t *testing.T) {
-	port := NewBytevectorInputPort([]byte{1})
+	port := NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(NewByteVectorFromBytes(1))))
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "bytevector-input-port"), qt.IsTrue)
 }
 
 func TestBytevectorOutputPort_NewBytevectorOutputPort(t *testing.T) {
-	port := NewBytevectorOutputPort()
+	port := NewByteVectorOutputPortFromWriter(bytes.NewBuffer(nil))
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestBytevectorOutputPort_Write(t *testing.T) {
-	port := NewBytevectorOutputPort()
-	n, err := port.Write([]byte{1, 2, 3})
+	buf := bytes.NewBuffer(nil)
+	port := NewByteVectorOutputPortFromWriter(buf)
+	n, err := port.Write(NewByteVectorFromBytes(1, 2, 3).AsBytes())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, n, qt.Equals, 3)
+	port.Flush()
 
-	bv := port.GetBytevector()
-	qt.Assert(t, bv, qt.DeepEquals, []byte{1, 2, 3})
+	bv := buf.Bytes()
+	qt.Assert(t, bv, qt.DeepEquals, NewByteVectorFromBytes(1, 2, 3).AsBytes())
 }
 
 func TestBytevectorOutputPort_WriteByte(t *testing.T) {
-	port := NewBytevectorOutputPort()
-	err := port.WriteByte(42)
+	buf := bytes.NewBuffer(nil)
+	port := NewByteVectorOutputPortFromWriter(buf)
+	err := port.WriteByte(NewByte(42).Value)
 	qt.Assert(t, err, qt.IsNil)
+	port.Flush()
 
-	bv := port.GetBytevector()
-	qt.Assert(t, bv, qt.DeepEquals, []byte{42})
+	bv := buf.Bytes()
+	qt.Assert(t, bv, qt.DeepEquals, NewByteVectorFromBytes(42).AsBytes())
 }
 
 func TestBytevectorOutputPort_GetBytevector(t *testing.T) {
-	port := NewBytevectorOutputPort()
-	port.Write([]byte{1, 2}) //nolint:errcheck
-	port.WriteByte(3)        //nolint:errcheck
-	port.Write([]byte{4, 5}) //nolint:errcheck
+	buf := bytes.NewBuffer(nil)
+	port := NewByteVectorOutputPortFromWriter(buf)
+	// write using helpers; ignore errors where intended
+	_, _ = port.Write(NewByteVectorFromBytes(1, 2).AsBytes())
+	_ = port.WriteByte(NewByte(3).Value)
+	_, _ = port.Write(NewByteVectorFromBytes(4, 5).AsBytes())
+	_ = port.Flush()
 
-	bv := port.GetBytevector()
+	bv := buf.Bytes()
 	qt.Assert(t, bv, qt.DeepEquals, []byte{1, 2, 3, 4, 5})
 }
 
 func TestBytevectorOutputPort_IsVoid(t *testing.T) {
-	port := NewBytevectorOutputPort()
+	buf := bytes.NewBuffer(nil)
+	port := NewByteVectorOutputPortFromWriter(buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *BytevectorOutputPort
+	var nilPort *ByteVectorOutputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBytevectorOutputPort_Datum(t *testing.T) {
-	port := NewBytevectorOutputPort()
+	buf := bytes.NewBuffer(nil)
+	port := NewByteVectorOutputPortFromWriter(buf)
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestBytevectorOutputPort_EqualTo(t *testing.T) {
-	port1 := NewBytevectorOutputPort()
-	port2 := NewBytevectorOutputPort()
+	port1 := NewByteVectorOutputPortFromWriter(bytes.NewBuffer(nil))
+	port2 := NewByteVectorOutputPortFromWriter(bytes.NewBuffer(nil))
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
-
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
 }
 
 func TestBytevectorOutputPort_SchemeString(t *testing.T) {
-	port := NewBytevectorOutputPort()
+	port := NewByteVectorOutputPortFromWriter(bytes.NewBuffer(nil))
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "bytevector-output-port"), qt.IsTrue)
 }

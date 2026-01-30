@@ -35,7 +35,7 @@ func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
 	}
 	file, err := os.Open(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "open-input-file: %v", err)
+		return values.WrapForeignFileError(err, "open-input-file", filename.Value)
 	}
 	mc.SetValue(values.NewCharacterInputPortFromReader(file))
 	return nil
@@ -51,7 +51,7 @@ func PrimOpenOutputFile(_ context.Context, mc *machine.MachineContext) error {
 	}
 	file, err := os.Create(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "open-output-file: %v", err)
+		return values.WrapForeignFileError(err, "open-output-file", filename.Value)
 	}
 	mc.SetValue(values.NewCharacterOutputPortFromWriter(file))
 	return nil
@@ -67,9 +67,9 @@ func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) erro
 	}
 	file, err := os.Open(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "open-binary-input-file: %v", err)
+		return values.WrapForeignFileError(err, "open-binary-input-file", filename.Value)
 	}
-	mc.SetValue(values.NewBinaryInputPort(file))
+	mc.SetValue(values.NewBinaryInputPortFromReader(file))
 	return nil
 }
 
@@ -83,9 +83,9 @@ func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) err
 	}
 	file, err := os.Create(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "open-binary-output-file: %v", err)
+		return values.WrapForeignFileError(err, "open-binary-output-file", filename.Value)
 	}
-	mc.SetValue(values.NewBinaryOutputPort(file))
+	mc.SetValue(values.NewBinaryOutputPortFromWriter(file))
 	return nil
 }
 
@@ -112,7 +112,7 @@ func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
 	}
 	err := os.Remove(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "delete-file: %v", err)
+		return values.WrapForeignFileError(err, "delete-file", filename.Value)
 	}
 	mc.SetValues()
 	return nil
@@ -142,7 +142,7 @@ func callWithFile(
 
 	file, err := opener(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "%s: %v", name, err)
+		return values.WrapForeignFileError(err, name, filename.Value)
 	}
 	defer file.Close() //nolint:errcheck
 
@@ -223,7 +223,7 @@ func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) erro
 	// Open the file
 	file, err := os.Open(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "with-input-from-file: %v", err)
+		return values.WrapForeignFileError(err, "with-input-from-file", filename.Value)
 	}
 	defer file.Close() //nolint:errcheck
 
@@ -257,7 +257,7 @@ func PrimWithOutputToFile(ctx context.Context, mc *machine.MachineContext) error
 	// Open the file for writing (create or truncate)
 	file, err := os.Create(filename.Value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "with-output-to-file: %v", err)
+		return values.WrapForeignFileError(err, "with-output-to-file", filename.Value)
 	}
 	defer file.Close() //nolint:errcheck
 

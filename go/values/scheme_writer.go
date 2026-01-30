@@ -19,6 +19,23 @@ import (
 	"strings"
 )
 
+// WriteMode controls how the SchemeWriter handles shared structure.
+//
+// R7RS §6.13.3 specifies three output procedures with different sharing semantics:
+//   - write: datum labels only for circular references (WriteModeWrite)
+//   - write-shared: datum labels for all shared references (WriteModeWriteShared)
+//   - write-simple: no datum labels at all (handled separately via SchemeString)
+type WriteMode int
+
+const (
+	// WriteModeWrite labels only circular references.
+	// R7RS §6.13.3: write outputs datum labels only for objects that are part of a cycle.
+	WriteModeWrite WriteMode = iota
+	// WriteModeWriteShared labels all multiply-referenced objects.
+	// R7RS §6.13.3: write-shared outputs datum labels for all shared structure.
+	WriteModeWriteShared
+)
+
 // SchemeWriter provides cycle-aware writing of Scheme values.
 // It detects shared and circular structures and outputs them using
 // datum labels (#n= for definitions and #n# for references) per R7RS §2.4.
@@ -36,9 +53,12 @@ type SchemeWriter struct {
 	needsLabelVector map[*Vector]bool
 	// displayMode indicates whether to use display format (no quotes on strings).
 	displayMode bool
+	// writeMode controls whether to label all shared or only circular references.
+	writeMode WriteMode
 }
 
 // NewSchemeWriter creates a new SchemeWriter for cycle-aware output.
+// Default mode is WriteModeWrite (labels only circular references).
 func NewSchemeWriter() *SchemeWriter {
 	q := &SchemeWriter{
 		seenPairs:        make(map[*Pair]int),
@@ -46,6 +66,7 @@ func NewSchemeWriter() *SchemeWriter {
 		needsLabelPair:   make(map[*Pair]bool),
 		needsLabelVector: make(map[*Vector]bool),
 		nextLabel:        0,
+		writeMode:        WriteModeWrite,
 	}
 	return q
 }
@@ -55,6 +76,15 @@ func NewSchemeWriter() *SchemeWriter {
 func (w *SchemeWriter) WriteString(v Value) string {
 	// First pass: identify which objects are referenced multiple times
 	w.findShared(v)
+
+	// For WriteModeWrite, filter to only circular references
+	if w.writeMode == WriteModeWrite {
+		w.filterToCircular(v)
+	}
+
+	// Reset seen maps for the output pass
+	w.seenPairs = make(map[*Pair]int)
+	w.seenVectors = make(map[*Vector]int)
 
 	// Second pass: generate output with labels
 	q := &strings.Builder{}
@@ -93,6 +123,64 @@ func (w *SchemeWriter) findShared(v Value) {
 			w.findShared(elem)
 		}
 	}
+}
+
+// filterToCircular removes non-circular entries from needsLabelPair/needsLabelVector.
+// An object is circular if it is reachable from itself — i.e., it appears on the
+// DFS recursion stack when revisited. This uses gray/black DFS coloring.
+func (w *SchemeWriter) filterToCircular(v Value) {
+	circularPairs := make(map[*Pair]bool)
+	circularVectors := make(map[*Vector]bool)
+	onStackPairs := make(map[*Pair]bool)
+	onStackVectors := make(map[*Vector]bool)
+	visitedPairs := make(map[*Pair]bool)
+	visitedVectors := make(map[*Vector]bool)
+
+	var walk func(v Value)
+	walk = func(v Value) {
+		switch val := v.(type) {
+		case *Pair:
+			if val == nil || val.IsEmptyList() {
+				return
+			}
+			if onStackPairs[val] {
+				// Found a cycle — this object is circular
+				circularPairs[val] = true
+				return
+			}
+			if visitedPairs[val] {
+				return
+			}
+			visitedPairs[val] = true
+			onStackPairs[val] = true
+			walk(val.Car())
+			walk(val.Cdr())
+			delete(onStackPairs, val)
+
+		case *Vector:
+			if val == nil || len(*val) == 0 {
+				return
+			}
+			if onStackVectors[val] {
+				circularVectors[val] = true
+				return
+			}
+			if visitedVectors[val] {
+				return
+			}
+			visitedVectors[val] = true
+			onStackVectors[val] = true
+			for _, elem := range *val {
+				walk(elem)
+			}
+			delete(onStackVectors, val)
+		}
+	}
+
+	walk(v)
+
+	w.needsLabelPair = circularPairs
+	w.needsLabelVector = circularVectors
 }
 
 // write outputs a value, handling cycles with datum labels.
@@ -152,7 +240,7 @@ func (w *SchemeWriter) writePair(sb *strings.Builder, p *Pair) {
 		fmt.Fprintf(sb, "#%d=", label)
 	}
 
-	// Write the pair content
+	// WriteByte the pair content
 	sb.WriteString("(")
 	w.writePairContents(sb, p)
 	sb.WriteString(")")
@@ -169,7 +257,7 @@ func (w *SchemeWriter) writePairContents(sb *strings.Builder, p *Pair) {
 		}
 		first = false
 
-		// Write car
+		// WriteByte car
 		w.write(sb, curr.Car())
 
 		// Check cdr
@@ -238,9 +326,19 @@ func (w *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 }
 
 // WriteValueToString writes a Scheme value to a string with cycle detection.
-// This is a convenience function that creates a SchemeWriter and writes the value.
+// Uses WriteModeWrite: datum labels only for circular references.
+// R7RS §6.13.3: write outputs datum labels only for objects that are part of a cycle.
 func WriteValueToString(v Value) string {
 	w := NewSchemeWriter()
+	return w.WriteString(v)
+}
+
+// WriteSharedValueToString writes a Scheme value to a string with shared structure detection.
+// Uses WriteModeWriteShared: datum labels for all multiply-referenced objects.
+// R7RS §6.13.3: write-shared outputs datum labels for all shared structure.
+func WriteSharedValueToString(v Value) string {
+	w := NewSchemeWriter()
+	w.writeMode = WriteModeWriteShared
 	return w.WriteString(v)
 }
 

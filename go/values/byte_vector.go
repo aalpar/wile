@@ -18,27 +18,132 @@ import (
 	"strings"
 )
 
-var _ Value = (*ByteVector)(nil)
+var (
+	_ Value      = (*ByteVector)(nil)
+	_ Collection = (*ByteVector)(nil)
+	_ Indexable  = (*ByteVector)(nil)
+)
 
 // ByteVector represents a Scheme bytevector.
-type ByteVector []Byte
+type ByteVector []*Byte
 
 // NewByteVector creates a new bytevector from integer values.
-func NewByteVector(vs ...*Integer) *ByteVector {
+func NewByteVector(vs ...*Byte) *ByteVector {
 	if len(vs) == 0 {
 		return &ByteVector{}
 	}
-	q := ByteVector(make([]Byte, len(vs)))
+	bs := make([]*Byte, len(vs))
+	q := ByteVector(bs)
 	for i := range vs {
 		// FIXME: handle overflow, ugly but necessary
-		b := NewByte(uint8((*vs[i]).Value))
-		q[i] = *b
+		b := NewByte((*vs[i]).Value)
+		q[i] = b
 	}
 	return &q
 }
 
+func NewByteVectorFromBytes(vs ...byte) *ByteVector {
+	if len(vs) == 0 {
+		return NewByteVector()
+	}
+	bs := make([]*Byte, len(vs))
+	q := ByteVector(bs)
+	for i := range vs {
+		b := NewByte(vs[i])
+		q[i] = b
+	}
+	return &q
+}
+
+// NewByteVectorFromIntegers creates a new bytevector from integer values.
+func NewByteVectorFromIntegers(vs ...*Integer) *ByteVector {
+	if len(vs) == 0 {
+		return &ByteVector{}
+	}
+	bs := make([]*Byte, len(vs))
+	q := ByteVector(bs)
+	for i := range vs {
+		// FIXME: handle overflow, ugly but necessary
+		b := NewByte(uint8((*vs[i]).Value))
+		q[i] = b
+	}
+	return &q
+}
+
+func (p *ByteVector) Get(i int) Value {
+	return (*p)[i]
+}
+
+func (p *ByteVector) Set(i int, value Value) {
+	x, ok := value.(*Byte)
+	if !ok {
+		panic(NewForeignErrorf("bytevector element must be a byte: %v", ErrNotAByte))
+	}
+	(*p)[i] = x
+}
+
+// AsList converts the vector to a proper list (linked list of pairs).
+// Returns void (nil Pair) if the vector is void.
+// Returns EmptyList if the vector is empty.
+// Otherwise returns a newly constructed list containing the vector's elements.
+func (p *ByteVector) AsList() Tuple {
+	if p.IsVoid() {
+		return (*Pair)(nil)
+	}
+	l := len(*p)
+	switch l {
+	case 0:
+		return EmptyList
+	case 1:
+		return &Pair{(*p)[0], EmptyList}
+	}
+	q := &Pair{(*p)[0], &Pair{}}
+	curr := q
+	for _, v := range (*p)[1:] {
+		curr = curr[1].(*Pair)
+		curr[0] = v
+		curr[1] = &Pair{}
+	}
+	curr[1] = EmptyList
+	return q
+}
+
+func (p *ByteVector) Length() int {
+	return len(*p)
+}
+
+// AsBytes converts the bytevector to a Go byte slice.
+// The starti and endi parameters specify the range of bytes to include.
+// If starti is negative, it is treated as 0.
+// If endi is greater than the length of the bytevector or non-positive, it is treated as the length of the bytevector.
+// If starti is greater than endi, it is treated as equal to endi.
+func (p *ByteVector) AsBytes(is ...int) []byte {
+	starti := 0
+	endi := p.Length()
+	if len(is) >= 1 {
+		starti = is[0]
+	}
+	if len(is) >= 2 {
+		endi = is[1]
+	}
+	if endi > p.Length() || endi < 0 {
+		endi = p.Length()
+	}
+	if starti < 0 {
+		starti = 0
+	}
+	if starti > endi {
+		starti = endi
+	}
+	out := make([]byte, endi-starti)
+	for i, v := range (*p)[starti:endi] {
+		out[i] = v.Value
+	}
+	return out
+}
+
 // Datum returns the underlying byte slice.
-func (p *ByteVector) Datum() []Byte {
+func (p *ByteVector) Datum() []*Byte {
 	return *p
 }
 

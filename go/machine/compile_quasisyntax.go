@@ -94,7 +94,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 					return true
 				}
 				// At depth > 1, check the argument at depth-1
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntime(arg, depth-1)
@@ -102,7 +102,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 				return false
 			case "quasisyntax":
 				// Nested quasisyntax - check body at depth+1
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntime(body, depth+1)
@@ -157,13 +157,13 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 			case "unsyntax":
 				if depth == 1 {
 					// At depth 1, evaluate the expression
-					if v.Len() == 2 {
+					if v.Length() == 2 {
 						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 						return cdr.SyntaxCar()
 					}
 				}
 				// At depth > 1, produce literal unsyntax form with processed arg
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(arg, depth-1)
@@ -183,7 +183,7 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 				)
 
 			case "unsyntax-splicing":
-				if depth > 1 && v.Len() == 2 {
+				if depth > 1 && v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(arg, depth-1)
@@ -204,7 +204,7 @@ func (p *CompileTimeContinuation) expandQuasisyntax(stx syntax.SyntaxValue, dept
 
 			case "quasisyntax":
 				// Nested quasisyntax - process body at depth+1
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					processedBody := p.expandQuasisyntax(body, depth+1)
@@ -313,7 +313,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
 			if ok && carSymName == "unsyntax-splicing" && depth == 1 {
 				// unsyntax-splicing at depth 1 - splice the value directly
-				if carPair.Len() == 2 {
+				if carPair.Length() == 2 {
 					cdr := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					appendArgs = append(appendArgs, arg)

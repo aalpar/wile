@@ -51,8 +51,8 @@ func (eofType) EqualTo(v Value) bool {
 	return ok
 }
 
-// EofObject is the singleton EOF value.
-var EofObject Value = eofType{}
+// EOFObject is the singleton EOF value.
+var EOFObject Value = eofType{}
 
 // Table represents a key-value mapping interface.
 type Table interface {
@@ -72,18 +72,20 @@ type Wrapped interface {
 
 type Indexable interface {
 	Value
-	Len() int
+	Length() int
 	Get(int) Value
 	Set(int, Value)
 }
 
 // Collection represents a container that can be converted to a list.
 type Collection interface {
+	Value
 	AsList() Tuple
 }
 
 // Set represents an unordered collection of unique values.
 type Set interface {
+	Value
 	AsList() Tuple
 }
 
@@ -93,7 +95,7 @@ type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
 // Tuple represents a list-like sequence of values.
 type Tuple interface {
 	Value
-	Len() int
+	Length() int
 	Append(value Value) Value
 	ForEach(ctx context.Context, fn ForEachFunc) (Value, error)
 	IsEmptyList() bool
@@ -114,7 +116,26 @@ type SourceLocation interface {
 
 // Port represents an I/O port with source location tracking.
 type Port interface {
-	SourceLocation
+	Value
+	Close() error
+}
+
+// InputPort represents an I/O port with source location tracking.
+type InputPort interface {
+	Port
+	Read([]byte) (int, error)
+}
+
+// OutputPort represents an I/O port with source location tracking.
+type OutputPort interface {
+	Port
+	Write([]byte) (int, error)
+	Flush() error
+}
+
+type InputOutputPort interface {
+	InputPort
+	OutputPort
 }
 
 // Value is the base interface for all Scheme values.

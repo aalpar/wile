@@ -724,7 +724,7 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 			cdr = syntaxToValue(cdrSyntax)
 			// } else {
 			// If it's already a value, use it directly
-			//	cdr = cdrVal.(values.Value)
+			//	cdr = cdrVal.(values.wrt)
 			//}
 		}
 

@@ -597,12 +597,12 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 			switch carSymName {
 			case "unquote":
 				if depth == 1 {
-					if v.Len() == 2 {
+					if v.Length() == 2 {
 						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 						return cdr.SyntaxCar()
 					}
 				}
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasiquote(arg, depth-1)
@@ -619,7 +619,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 
 			case "unquote-splicing":
-				if depth > 1 && v.Len() == 2 {
+				if depth > 1 && v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasiquote(arg, depth-1)
@@ -636,7 +636,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 
 			case "quasiquote":
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					processedBody := p.expandQuasiquote(body, depth+1)
@@ -718,7 +718,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				if carSymName, ok := p.getSymbolName(elemPair.SyntaxCar()); ok {
 					if carSymName == "unquote-splicing" && depth == 1 {
 						flushNormal()
-						if elemPair.Len() == 2 {
+						if elemPair.Length() == 2 {
 							cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
 							expr := cdrPair.SyntaxCar()
 							segments = append(segments, segment{typ: segSplice, expr: expr})
@@ -900,7 +900,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 			if ok {
 				if carSymName == "unquote-splicing" && depth == 1 {
 					flushNormal()
-					if carPair.Len() != 2 {
+					if carPair.Length() != 2 {
 						// Malformed - treat as normal
 						currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
 					} else {
@@ -972,7 +972,7 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 				}
 				// Nested unquote at depth > 1 - check if the argument needs runtime
 				// For ,,x at depth 2: the inner ,x is at depth 1 and needs eval
-				if v.Len() == 2 {
+				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					argSyntax := arg
@@ -1290,6 +1290,10 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	case *syntax.SyntaxSymbol:
 		// Simple export: symbol name
 		name := s.Unwrap().(*values.Symbol).Key
+		if name == "" {
+			panic(fmt.Sprintf("parseExportSpec: empty symbol key, SyntaxSymbol=%v, Unwrap=%v (%T), scopes=%v, source=%v",
+				s, s.Unwrap(), s.Unwrap(), s.Scopes(), s.SourceContext()))
+		}
 		lib.AddExport(name, name)
 		return nil
 

@@ -299,6 +299,91 @@ func TestDelayForceTailCall(t *testing.T) {
 	}
 }
 
+// TestForceExceptionInDelayBody tests that forcing a promise whose body raises
+// an error propagates the error, and that re-forcing re-evaluates the thunk.
+//
+// R7RS §4.2.5: If the body of a delay raises an exception, the promise remains
+// unforced and subsequent force calls re-evaluate the thunk.
+func TestForceExceptionInDelayBody(t *testing.T) {
+	tcs := []struct {
+		name    string
+		code    string
+		out     values.Value
+		wantErr bool
+	}{
+		{
+			name:    "force a promise whose body raises an error",
+			code:    `(force (delay (error "boom")))`,
+			wantErr: true,
+		},
+		{
+			name: "re-forcing after exception re-evaluates thunk",
+			code: `(let ((count 0))
+				(let ((p (delay (begin (set! count (+ count 1))
+				                       (if (= count 1) (error "first") count)))))
+					(guard (e (#t 'caught))
+						(force p))
+					(force p)))`,
+			out: values.NewInteger(2),
+		},
+		{
+			name:    "error message preserved through force",
+			code:    `(force (delay (error "test message")))`,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			if tc.wantErr {
+				qt.Assert(t, err, qt.IsNotNil)
+			} else {
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, result, values.SchemeEquals, tc.out)
+			}
+		})
+	}
+}
+
+// TestForceCircularPromise tests deeply nested and recursive promise chains.
+//
+// R7RS §4.2.5: force must recursively force promises returned by promise
+// bodies. This verifies that chains of delay-wrapped promises resolve correctly.
+func TestForceCircularPromise(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "4-deep nested delay chain",
+			code: "(force (delay (delay (delay (delay 42)))))",
+			out:  values.NewInteger(42),
+		},
+		{
+			name: "promise returning a different promise",
+			code: `(let ((p1 (delay 99)))
+				(let ((p2 (delay (force p1))))
+					(force p2)))`,
+			out: values.NewInteger(99),
+		},
+		{
+			name: "delay-force chain resolves correctly",
+			code: `(force (delay-force (delay-force (delay-force (delay 7)))))`,
+			out:  values.NewInteger(7),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
 // TestMakePromiseEdgeCases tests make-promise edge cases
 func TestMakePromiseEdgeCases(t *testing.T) {
 	tcs := []struct {

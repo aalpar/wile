@@ -15,6 +15,8 @@
 package tokenizer
 
 import (
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -208,6 +210,14 @@ func TestTokenizer_InfNanValues(t *testing.T) {
 		{"-inf.0", TokenizerStateSignedInf},
 		{"+nan.0", TokenizerStateSignedNan},
 		{"-nan.0", TokenizerStateSignedNan},
+		// Case-insensitive entry points (R7RS §7.1.1)
+		{"+INF.0", TokenizerStateSignedInf},
+		{"-INF.0", TokenizerStateSignedInf},
+		{"+NAN.0", TokenizerStateSignedNan},
+		{"-NAN.0", TokenizerStateSignedNan},
+		{"+InF.0", TokenizerStateSignedInf},
+		{"-iNF.0", TokenizerStateSignedInf},
+		{"+Nan.0", TokenizerStateSignedNan},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
@@ -373,6 +383,83 @@ func TestTokenizer_ExponentEdgeCases(t *testing.T) {
 			tok, err := p.Next()
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, tok.Type(), qt.Equals, tc.state)
+		})
+	}
+}
+
+// Test R7RS exponent markers s/f/d/l (R7RS §7.1.1)
+func TestTokenizer_ExtendedExponentMarkers(t *testing.T) {
+	tests := []tokenizerTestCase{
+		// Unsigned integer with s/f/d/l markers
+		{"1s10", TokenizerStateUnsignedScientificNotation},
+		{"1f10", TokenizerStateUnsignedScientificNotation},
+		{"1d10", TokenizerStateUnsignedScientificNotation},
+		{"1l10", TokenizerStateUnsignedScientificNotation},
+		// Uppercase variants
+		{"1S10", TokenizerStateUnsignedScientificNotation},
+		{"1F10", TokenizerStateUnsignedScientificNotation},
+		{"1D10", TokenizerStateUnsignedScientificNotation},
+		{"1L10", TokenizerStateUnsignedScientificNotation},
+		// Signed
+		{"+1s10", TokenizerStateSignedScientificNotation},
+		{"-1f10", TokenizerStateSignedScientificNotation},
+		{"+1d10", TokenizerStateSignedScientificNotation},
+		{"-1l10", TokenizerStateSignedScientificNotation},
+		// With decimals
+		{"1.5s3", TokenizerStateUnsignedDecimalFraction},
+		{"1.5f3", TokenizerStateUnsignedDecimalFraction},
+		{"1.5d3", TokenizerStateUnsignedDecimalFraction},
+		{"1.5l3", TokenizerStateUnsignedDecimalFraction},
+		// Signed with decimals
+		{"+1.5s3", TokenizerStateSignedDecimalFraction},
+		{"-1.5f3", TokenizerStateSignedDecimalFraction},
+		// With negative exponent
+		{"1s-3", TokenizerStateUnsignedScientificNotation},
+		{"1f-3", TokenizerStateUnsignedScientificNotation},
+		// With positive exponent sign
+		{"1d+3", TokenizerStateUnsignedScientificNotation},
+		{"1l+3", TokenizerStateUnsignedScientificNotation},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			p := NewTokenizer(strings.NewReader(tc.in), false)
+			tok, err := p.Next()
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, tok.Type(), qt.Equals, tc.state)
+		})
+	}
+}
+
+// Test R7RS exponent markers s/f/d/l with big numbers
+func TestTokenizer_ExtendedExponentMarkers_BigNumbers(t *testing.T) {
+	tcs := []struct {
+		bs    string
+		scan  string
+		err0  error
+		state TokenizerState
+	}{
+		// Big integer with s/f/d/l markers
+		{"#z1s10", "#z1s10", io.EOF, TokenizerStateBigIntegerBase10},
+		{"#z1f10", "#z1f10", io.EOF, TokenizerStateBigIntegerBase10},
+		{"#z1d10", "#z1d10", io.EOF, TokenizerStateBigIntegerBase10},
+		{"#z1l10", "#z1l10", io.EOF, TokenizerStateBigIntegerBase10},
+		// Big float with s/f/d/l markers
+		{"#m1s10", "#m1s10", io.EOF, TokenizerStateBigFloat},
+		{"#m1f10", "#m1f10", io.EOF, TokenizerStateBigFloat},
+		{"#m1.5d3", "#m1.5d3", io.EOF, TokenizerStateBigFloat},
+		{"#m1.5l3", "#m1.5l3", io.EOF, TokenizerStateBigFloat},
+	}
+	for i, tc := range tcs {
+		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.bs), func(c *qt.C) {
+			p := NewTokenizer(strings.NewReader(tc.bs), false)
+			p.mark()
+			p.read()
+			err := p.err
+			state := p.state
+			p.span()
+			c.Check(err, qt.ErrorIs, tc.err0)
+			c.Check(state, qt.Equals, tc.state)
+			c.Check(p.span(), qt.Equals, tc.scan)
 		})
 	}
 }

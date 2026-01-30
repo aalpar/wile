@@ -617,7 +617,7 @@ func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*Synt
 	// operations that implement the pattern matching and expansion
 
 	// For now, store the clauses as a literal and use a special operation
-	// Need to create a values.Value wrapper for the clauses
+	// Need to create a values.wrt wrapper for the clauses
 	clausesValue := &clausesWrapper{clauses: clauses}
 	clausesIdx := template.MaybeAppendLiteral(clausesValue)
 	template.AppendOperations(

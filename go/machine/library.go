@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"wile/environment"
@@ -95,6 +96,10 @@ func NewCompiledLibrary(name LibraryName, env *environment.EnvironmentFrame) *Co
 // AddExport adds an export to the library.
 // If internalName is empty, it defaults to externalName (no rename).
 func (lib *CompiledLibrary) AddExport(externalName, internalName string) {
+	if externalName == "" {
+		panic(fmt.Sprintf("AddExport called with empty externalName, internalName=%q\n%s",
+			internalName, string(debug.Stack())))
+	}
 	if internalName == "" {
 		internalName = externalName
 	}

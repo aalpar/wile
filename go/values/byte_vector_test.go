@@ -26,11 +26,11 @@ func TestByteVector_SchemeString(t *testing.T) {
 		out string
 	}{
 		{
-			in:  NewByteVector(NewInteger(10)),
+			in:  NewByteVectorFromIntegers(NewInteger(10)),
 			out: "#u8( 10 )",
 		},
 		{
-			in:  NewByteVector(NewInteger(10), NewInteger(20)),
+			in:  NewByteVectorFromIntegers(NewInteger(10), NewInteger(20)),
 			out: "#u8( 10 20 )",
 		},
 	}
@@ -48,13 +48,13 @@ func TestByteVector_EqualTo(t *testing.T) {
 		out bool
 	}{
 		{
-			in0: NewByteVector(NewInteger(10)),
-			in1: NewByteVector(NewInteger(20)),
+			in0: NewByteVectorFromIntegers(NewInteger(10)),
+			in1: NewByteVectorFromIntegers(NewInteger(20)),
 			out: false,
 		},
 		{
-			in0: NewByteVector(NewInteger(10)),
-			in1: NewByteVector(NewInteger(10)),
+			in0: NewByteVectorFromIntegers(NewInteger(10)),
+			in1: NewByteVectorFromIntegers(NewInteger(10)),
 			out: true,
 		},
 	}

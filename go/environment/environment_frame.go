@@ -30,7 +30,7 @@ import (
 //	│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)    │
 //	│                                                                         │
 //	│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)     │
-//	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                │
+//	│  syntaxInterns ──── map[wrt]SyntaxValue (thread-safe)                │
 //	│  phases ─────────── *PhaseRegistry                                     │
 //	│  libraryRegistry ── any (*machine.LibraryRegistry)                     │
 //	│  runtime ────────── *EnvironmentFrame (phase 0)                        │
@@ -706,4 +706,3 @@ func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) sy
 	}
 	return p.topLevel.InternSyntax(k, v)
 }
-

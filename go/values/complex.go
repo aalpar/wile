@@ -15,8 +15,10 @@
 package values
 
 import (
-	"fmt"
+	"math"
 	"math/cmplx"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -348,11 +350,33 @@ func (p *Complex) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme representation of this complex number.
+// R7RS §6.2.6: Ensures decimal point for inexact values, lowercase inf/nan.
 func (p *Complex) SchemeString() string {
 	r := real(p.Value)
 	i := imag(p.Value)
-	if i >= 0 {
-		return fmt.Sprintf("%g+%gi", r, i)
+	realStr := formatComplexComponent(r)
+	imagStr := formatComplexComponent(i)
+	if len(imagStr) > 0 && imagStr[0] != '-' && imagStr[0] != '+' {
+		return realStr + "+" + imagStr + "i"
 	}
-	return fmt.Sprintf("%g%gi", r, i)
+	return realStr + imagStr + "i"
+}
+
+// formatComplexComponent formats a float64 for use as a complex number component.
+// Ensures R7RS-compliant output: decimal point for inexact values, lowercase inf/nan.
+func formatComplexComponent(f float64) string {
+	if math.IsInf(f, 1) {
+		return "+inf.0"
+	}
+	if math.IsInf(f, -1) {
+		return "-inf.0"
+	}
+	if math.IsNaN(f) {
+		return "+nan.0"
+	}
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.ContainsRune(s, '.') {
+		s += ".0"
+	}
+	return s
 }

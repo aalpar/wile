@@ -27,6 +27,12 @@ Code Maintenance
 
 Code Cleanup
 ------------
+### Re-Work Numeric Tower
+- [ ] Refactor Numeric Tower
+
+### Include Examples
+- [ ] Include examples
+
 ### Investigate Symbol Interning Semantic
 - [ ] Symbol interning semantics should be looked up in R7RS.  Look at benefits of environment interning with global interning.
 
@@ -603,8 +609,8 @@ R7RS Missing Features
 - [ ] **Note:** Works in REPL; issue may be in library loading, not tokenizer
 
 **Exponent Markers:**
-- [ ] Only `e`/`E` supported
-- [ ] R7RS also allows `s`, `f`, `d`, `l` for short/single/double/long precision hints
+- [x] All R7RS exponent markers supported: `e`, `s`, `f`, `d`, `l` (and uppercase variants)
+- [x] Precision hints mapped to strengths but treated as equivalent to `e` at runtime
 
 **Inexact Digit Placeholder:**
 - [ ] R7RS allows `#` in inexact numbers (e.g., `1.2###`)

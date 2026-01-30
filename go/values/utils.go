@@ -61,9 +61,17 @@ func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 	return o, nil
 }
 
+// equalPairKey identifies a pair of compound values being compared.
+// Go compares interface values in arrays by type and pointer for pointer types,
+// so [2]any{pairA, pairB} works as a map key without unsafe.
+type equalPairKey [2]any
+
 // EqualTo compares two values for structural equality.
 // Handles nil and void values specially: nil equals nil, void equals void.
-// For other values, delegates to the Value.EqualTo method.
+// For compound types (Pair, Vector, ArrayList), uses optimistic bisimilarity
+// with a visited set to terminate on circular structures per R7RS §6.1.
+// This is the same technique used by Chez Scheme and Racket: when a
+// (pointer-a, pointer-b) pair is re-encountered during recursion, return true.
 func EqualTo(a, b Value) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -71,7 +79,122 @@ func EqualTo(a, b Value) bool {
 	if a.IsVoid() || b.IsVoid() {
 		return a.IsVoid() == b.IsVoid()
 	}
-	return a.EqualTo(b)
+	visited := make(map[equalPairKey]bool)
+	return equalToDeep(a, b, visited)
+}
+
+// equalToDeep dispatches compound types to cycle-aware helpers,
+// and delegates everything else to a.EqualTo(b).
+func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
+	switch pa := a.(type) {
+	case *Pair:
+		pb, ok := b.(*Pair)
+		if !ok {
+			return false
+		}
+		return pairEqualToDeep(pa, pb, visited)
+	case *Vector:
+		pb, ok := b.(*Vector)
+		if !ok {
+			return false
+		}
+		return vectorEqualToDeep(pa, pb, visited)
+	case *ArrayList:
+		pb, ok := b.(*ArrayList)
+		if !ok {
+			return false
+		}
+		return arrayListEqualToDeep(pa, pb, visited)
+	default:
+		return a.EqualTo(b)
+	}
+}
+
+// pairEqualToDeep compares two Pairs with cycle detection.
+// Mirrors the iterative structure of Pair.EqualTo but records visited
+// pointer pairs and recurses elements via equalToDeep.
+func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
+	if p == v {
+		return true
+	}
+	p0 := p
+	v0 := v
+	for !p0.IsEmptyList() && !v0.IsEmptyList() {
+		key := equalPairKey{p0, v0}
+		if visited[key] {
+			return true
+		}
+		visited[key] = true
+
+		if !equalToDeep(p0[0], v0[0], visited) {
+			return false
+		}
+		if IsVoid(p0[1]) || IsVoid(v0[1]) {
+			if IsVoid(p0[1]) && IsVoid(v0[1]) {
+				return true
+			}
+			return p0[1] == v0[1]
+		}
+		if p0[1] == v0[1] {
+			break
+		}
+		pv0, _ := p0[1].(*Pair)
+		vv0, _ := v0[1].(*Pair)
+		if pv0 == nil || vv0 == nil {
+			return equalToDeep(p0[1], v0[1], visited)
+		}
+		p0 = pv0
+		v0 = vv0
+	}
+	return p0.IsEmptyList() == v0.IsEmptyList()
+}
+
+// vectorEqualToDeep compares two Vectors with cycle detection.
+func vectorEqualToDeep(p, other *Vector, visited map[equalPairKey]bool) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+	if len(*p) != len(*other) {
+		return false
+	}
+	key := equalPairKey{p, other}
+	if visited[key] {
+		return true
+	}
+	visited[key] = true
+	for i := range *p {
+		if !equalToDeep((*p)[i], (*other)[i], visited) {
+			return false
+		}
+	}
+	return true
+}
+
+// arrayListEqualToDeep compares two ArrayLists with cycle detection.
+func arrayListEqualToDeep(p, v *ArrayList, visited map[equalPairKey]bool) bool {
+	if p == nil || v == nil {
+		return p == v
+	}
+	if len(*p) != len(*v) {
+		return false
+	}
+	key := equalPairKey{p, v}
+	if visited[key] {
+		return true
+	}
+	visited[key] = true
+	for i := range *p {
+		if IsVoid((*p)[i]) || IsVoid((*v)[i]) {
+			if IsVoid((*p)[i]) && IsVoid((*v)[i]) {
+				continue
+			}
+			return false
+		}
+		if !equalToDeep((*p)[i], (*v)[i], visited) {
+			return false
+		}
+	}
+	return true
 }
 
 // NewTemporaryVariableName generates a unique symbol for use as a temporary variable.

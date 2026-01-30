@@ -287,7 +287,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#u8( 10 20 )",
-			expect: values.NewByteVector(values.NewInteger(10), values.NewInteger(20)),
+			expect: values.NewByteVectorFromIntegers(values.NewInteger(10), values.NewInteger(20)),
 		},
 		{
 			in:     "( 10 . 20 )",
@@ -1072,7 +1072,8 @@ func TestParserError(t *testing.T) {
 // ============================================================================
 
 func TestParseRational(t *testing.T) {
-	tcs := []struct {
+	// Cases that remain Rational after Simplify
+	rationalCases := []struct {
 		input string
 		num   int64
 		denom int64
@@ -1081,19 +1082,43 @@ func TestParseRational(t *testing.T) {
 		{"3/4", 3, 4},
 		{"-1/2", -1, 2},
 		{"+3/4", 3, 4},
-		{"0/1", 0, 1},
 		{"10/3", 10, 3},
 		{"-7/8", -7, 8},
-		{"100/200", 1, 2}, // Should be normalized
+		{"100/200", 1, 2}, // big.Rat normalizes to 1/2
 	}
-	for _, tc := range tcs {
+	for _, tc := range rationalCases {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironmentFrame()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 			r, err := p.parseRational(tc.input)
 			c.Assert(err, qt.IsNil)
-			c.Assert(r.Num().Int64(), qt.Equals, tc.num)
-			c.Assert(r.Denom().Int64(), qt.Equals, tc.denom)
+			rat, ok := r.(*values.Rational)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Rational, got %T: %v", r, r))
+			c.Assert(rat.Num().Int64(), qt.Equals, tc.num)
+			c.Assert(rat.Denom().Int64(), qt.Equals, tc.denom)
+		})
+	}
+
+	// Cases that reduce to Integer after Simplify
+	integerCases := []struct {
+		input  string
+		expect int64
+	}{
+		{"0/1", 0},
+		{"10/2", 5},
+		{"6/3", 2},
+		{"-9/3", -3},
+		{"0/10", 0},
+	}
+	for _, tc := range integerCases {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+			r, err := p.parseRational(tc.input)
+			c.Assert(err, qt.IsNil)
+			intVal, ok := r.(*values.Integer)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T: %v", r, r))
+			c.Assert(intVal.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1266,6 +1291,12 @@ func TestParseComplex(t *testing.T) {
 		{"-1/2-3/4i", -0.5, -0.75},
 		{"3/4+5/8i", 0.75, 0.625},
 		{"7/2+9/4i", 3.5, 2.25},
+
+		// Uppercase I (R7RS §7.1.1: case-insensitive numeric literals)
+		{"1+2I", 1, 2},
+		{"3-4I", 3, -4},
+		{"1+I", 1, 1},
+		{"1-I", 1, -1},
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -1924,6 +1955,45 @@ func TestParseComplexScientificNotation(t *testing.T) {
 	}
 }
 
+// TestParser_ExtendedExponentMarkers tests R7RS s/f/d/l exponent markers (R7RS §7.1.1).
+// All markers are treated as equivalent to 'e' — they produce the same numeric values.
+func TestParser_ExtendedExponentMarkers(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect values.Value
+	}{
+		// All markers produce Float (inexact) per R7RS §7.1.1
+		{"1s10", values.NewFloat(1e10)},
+		{"1f10", values.NewFloat(1e10)},
+		{"1d10", values.NewFloat(1e10)},
+		{"1l10", values.NewFloat(1e10)},
+		// Uppercase
+		{"1S10", values.NewFloat(1e10)},
+		{"1F10", values.NewFloat(1e10)},
+		{"1D10", values.NewFloat(1e10)},
+		{"1L10", values.NewFloat(1e10)},
+		// Signed
+		{"+1s10", values.NewFloat(1e10)},
+		{"-1f10", values.NewFloat(-1e10)},
+		// Negative exponent produces float
+		{"1s-2", values.NewFloat(0.01)},
+		{"1f-2", values.NewFloat(0.01)},
+		// With decimal mantissa
+		{"1.5s3", values.NewFloat(1500)},
+		{"1.5f3", values.NewFloat(1500)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironmentFrame()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+		})
+	}
+}
+
 func TestParseComplexZeroParts(t *testing.T) {
 	tcs := []struct {
 		input string
@@ -2442,15 +2512,15 @@ func TestParser_NestedLists(t *testing.T) {
 
 	outerList, ok := syn.UnwrapAll().(*values.Pair)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(outerList.Len(), qt.Equals, 2)
+	c.Assert(outerList.Length(), qt.Equals, 2)
 
 	// Check first inner list
 	innerList1 := outerList.Car().(*values.Pair)
-	c.Assert(innerList1.Len(), qt.Equals, 2)
+	c.Assert(innerList1.Length(), qt.Equals, 2)
 
 	// Check second inner list
 	innerList2 := outerList.Cdr().(*values.Pair).Car().(*values.Pair)
-	c.Assert(innerList2.Len(), qt.Equals, 3)
+	c.Assert(innerList2.Length(), qt.Equals, 3)
 }
 
 // TestParser_VectorWithMixedTypes tests vectors with different value types
@@ -2488,7 +2558,7 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 
 	// The cdr should be the list (a b c d)
 	quotedList := pair.Cdr().(*values.Pair).Car().(*values.Pair)
-	c.Assert(quotedList.Len(), qt.Equals, 4)
+	c.Assert(quotedList.Length(), qt.Equals, 4)
 }
 
 // TestParser_CharacterMnemonicCoverage tests all character mnemonics
@@ -2570,7 +2640,7 @@ func TestParser_ReadSyntaxPreservesTokenizer(t *testing.T) {
 	syn1, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	list1 := syn1.UnwrapAll().(*values.Pair)
-	c.Assert(list1.Len(), qt.Equals, 2)
+	c.Assert(list1.Length(), qt.Equals, 2)
 
 	// Tokenizer should still exist
 	c.Assert(p.toks, qt.Not(qt.IsNil))
@@ -2579,7 +2649,7 @@ func TestParser_ReadSyntaxPreservesTokenizer(t *testing.T) {
 	syn2, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	list2 := syn2.UnwrapAll().(*values.Pair)
-	c.Assert(list2.Len(), qt.Equals, 2)
+	c.Assert(list2.Length(), qt.Equals, 2)
 }
 
 // TestParser_ComplexNumberSignSeparatorEdgeCases tests edge cases in sign detection
@@ -2637,7 +2707,7 @@ func TestParser_ListWithMultipleElements(t *testing.T) {
 
 	list, ok := syn.UnwrapAll().(*values.Pair)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(list.Len(), qt.Equals, 8)
+	c.Assert(list.Length(), qt.Equals, 8)
 }
 
 // TestParser_ByteVectorLoop tests byte vector parsing loop
@@ -2691,7 +2761,7 @@ func TestParser_QuasiquoteSingleElement(t *testing.T) {
 	// Should be (quasiquote x)
 	list := syn.UnwrapAll().(*values.Pair)
 	c.Assert(list.Car(), values.SchemeEquals, values.NewSymbol("quasiquote"))
-	c.Assert(list.Len(), qt.Equals, 2) // (quasiquote x) is length 2
+	c.Assert(list.Length(), qt.Equals, 2) // (quasiquote x) is length 2
 }
 
 // TestParser_UnquoteSplicing tests listSyntax with 2 elements
@@ -2706,7 +2776,7 @@ func TestParser_UnquoteSplicing(t *testing.T) {
 	// Should be (unquote-splicing foo)
 	list := syn.UnwrapAll().(*values.Pair)
 	c.Assert(list.Car(), values.SchemeEquals, values.NewSymbol("unquote-splicing"))
-	c.Assert(list.Len(), qt.Equals, 2)
+	c.Assert(list.Length(), qt.Equals, 2)
 }
 
 // TestParser_SignedNumbers tests signed integer and float parsing

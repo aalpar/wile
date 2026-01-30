@@ -44,6 +44,19 @@ func TestMapComprehensive(t *testing.T) {
 
 		// Unequal lengths - stops at shortest
 		{name: "unequal lengths", code: `(map + '(1 2 3) '(10 20))`, expected: values.List(values.NewInteger(11), values.NewInteger(22))},
+
+		// Single element list
+		{name: "single element list", code: `(map (lambda (x) (* x 10)) '(5))`, expected: values.List(values.NewInteger(50))},
+
+		// Four lists
+		{name: "four lists", code: `(map list '(a b) '(1 2) '(x y) '(#t #f))`,
+			expected: values.List(
+				values.List(values.NewSymbol("a"), values.NewInteger(1), values.NewSymbol("x"), values.TrueValue),
+				values.List(values.NewSymbol("b"), values.NewInteger(2), values.NewSymbol("y"), values.FalseValue))},
+
+		// Order verified via accumulation
+		{name: "order verified via accumulation", code: `(let ((order '())) (map (lambda (x) (set! order (cons x order)) x) '(1 2 3)) order)`,
+			expected: values.List(values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,11 +71,32 @@ func TestMapErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "map non-procedure", code: `(map 5 '(1 2 3))`},
 		{name: "map with non-list", code: `(map + 5)`},
+		{name: "error propagation", code: `(map (lambda (x) (error "boom")) '(1))`},
+		{name: "improper list as single argument", code: `(map + '(1 2 . 3))`},
+		{name: "improper list as second argument", code: `(map + '(1 2) '(3 . 4))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestMapExceptionGuard(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name: "guard catches exception mid-iteration",
+			code: `(guard (e (#t 'caught))
+				(map (lambda (x) (if (= x 3) (error "mid-map") x)) '(1 2 3 4 5)))`,
+			expected: values.NewSymbol("caught"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
 	}
 }

@@ -61,7 +61,16 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 
 		// Convert Go error to Scheme exception so guard/with-exception-handler can catch it.
 		// Create an error object that wraps the original Go error for debugging.
-		errObj := values.NewErrorObjectWithCause(err.Error(), err)
+		// Use errors.As to detect ForeignFileError/ForeignReadError and set the appropriate kind.
+		kind := values.NativeErrorKindGeneric
+		var fileErr *values.ForeignFileError
+		var readErr *values.ForeignReadError
+		if errors.As(err, &fileErr) {
+			kind = values.NativeErrorKindFile
+		} else if errors.As(err, &readErr) {
+			kind = values.NativeErrorKindRead
+		}
+		errObj := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
 		return nil, &ErrExceptionEscape{
 			Condition:   errObj,
 			Continuable: false,

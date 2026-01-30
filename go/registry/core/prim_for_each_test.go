@@ -49,6 +49,30 @@ func TestForEachComprehensive(t *testing.T) {
 				called)`,
 			expected: values.FalseValue,
 		},
+		// Single element
+		{
+			name: "for-each single element",
+			code: `(let ((result 0)) (for-each (lambda (x) (set! result x)) '(42)) result)`,
+			expected: values.NewInteger(42),
+		},
+		// Three lists
+		{
+			name: "for-each three lists",
+			code: `(let ((result '())) (for-each (lambda (a b c) (set! result (cons (+ a b c) result))) '(1 2) '(10 20) '(100 200)) result)`,
+			expected: values.List(values.NewInteger(222), values.NewInteger(111)),
+		},
+		// Returns void
+		{
+			name:     "for-each returns void",
+			code:     `(for-each (lambda (x) x) '(1 2 3))`,
+			expected: values.Void,
+		},
+		// Unequal lengths - stops at shortest
+		{
+			name:     "for-each unequal lengths",
+			code:     `(let ((count 0)) (for-each (lambda (a b) (set! count (+ count 1))) '(1 2 3) '(10 20)) count)`,
+			expected: values.NewInteger(2),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +87,7 @@ func TestForEachErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "for-each non-procedure", code: `(for-each 5 '(1 2 3))`},
 		{name: "for-each with non-list", code: `(for-each (lambda (x) x) 5)`},
+		{name: "error propagation", code: `(for-each (lambda (x) (error "boom")) '(1))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

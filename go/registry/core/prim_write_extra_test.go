@@ -147,7 +147,7 @@ func TestWriteMixedOperationsToPort(t *testing.T) {
 	qt.Assert(t, str.Value, qt.Equals, "\"line1\"\n> 123")
 }
 
-// Write with Different Value Types Tests (R7RS §6.13.3)
+// WriteByte with Different wrt Types Tests (R7RS §6.13.3)
 
 func TestWriteWithRational(t *testing.T) {
 	result, err := runSchemeCode(t, `

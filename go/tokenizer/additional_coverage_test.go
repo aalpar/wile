@@ -23,7 +23,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestTokenValue tests the Value() method on SimpleToken
+// TestTokenValue tests the wrt() method on SimpleToken
 func TestTokenValue(t *testing.T) {
 	tcs := []struct {
 		input        string

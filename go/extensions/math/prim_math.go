@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"math/cmplx"
 	"strconv"
+	"strings"
 
 	"wile/machine"
 	"wile/utils"
@@ -101,6 +102,23 @@ func extractReal(v values.Value, name string) (float64, bool, error) {
 	default:
 		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
 	}
+}
+
+// ensureInexactDecimal ensures a float string has a decimal point, even in
+// scientific notation. "5e-324" becomes "5.0e-324", "1" becomes "1.0".
+func ensureInexactDecimal(s string) string {
+	eIdx := strings.IndexAny(s, "eE")
+	if eIdx >= 0 {
+		mantissa := s[:eIdx]
+		if !strings.ContainsRune(mantissa, '.') {
+			return mantissa + ".0" + s[eIdx:]
+		}
+		return s
+	}
+	if !strings.ContainsRune(s, '.') {
+		return s + ".0"
+	}
+	return s
 }
 
 // FloorDivide performs floor division, returning quotient and remainder.
@@ -1311,7 +1329,17 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Integer:
 		mc.SetValue(values.NewString(strconv.FormatInt(v.Value, radix)))
 	case *values.Float:
-		mc.SetValue(values.NewString(strconv.FormatFloat(v.Value, 'g', -1, 64)))
+		if math.IsInf(v.Value, 1) {
+			mc.SetValue(values.NewString("+inf.0"))
+		} else if math.IsInf(v.Value, -1) {
+			mc.SetValue(values.NewString("-inf.0"))
+		} else if math.IsNaN(v.Value) {
+			mc.SetValue(values.NewString("+nan.0"))
+		} else {
+			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
+			s = ensureInexactDecimal(s)
+			mc.SetValue(values.NewString(s))
+		}
 	case *values.Rational:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	case *values.Complex:

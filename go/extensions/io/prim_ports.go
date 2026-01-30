@@ -15,9 +15,9 @@
 package io
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"io"
 
 	"wile/machine"
 	"wile/utils"
@@ -29,9 +29,7 @@ import (
 func PrimPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.CharacterInputPort, *values.CharacterOutputPort,
-		*values.StringInputPort, *values.StringOutputPort,
-		*values.BytevectorInputPort, *values.BytevectorOutputPort:
+	case *values.StringInputPort, *values.StringOutputPort, *values.CharacterInputPort, *values.CharacterOutputPort, *values.ByteVectorInputOutputPort, *values.ByteVectorInputPort, *values.ByteVectorOutputPort, *values.ByteVectorBufferdOutputPort:
 		mc.SetValue(values.TrueValue)
 	default:
 		mc.SetValue(values.FalseValue)
@@ -44,7 +42,7 @@ func PrimPortQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimInputPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.CharacterInputPort, *values.StringInputPort, *values.BytevectorInputPort, *values.BinaryInputPort:
+	case *values.CharacterInputPort, *values.ByteVectorInputPort, *values.ByteVectorInputOutputPort, *values.BinaryInputPort, *values.StringInputPort:
 		mc.SetValue(values.TrueValue)
 	default:
 		mc.SetValue(values.FalseValue)
@@ -57,7 +55,7 @@ func PrimInputPortQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimOutputPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.CharacterOutputPort, *values.StringOutputPort, *values.BytevectorOutputPort, *values.BinaryOutputPort:
+	case *values.CharacterOutputPort, *values.StringOutputPort, *values.ByteVectorOutputPort, *values.ByteVectorBufferdOutputPort, *values.BinaryOutputPort, *values.ByteVectorInputOutputPort:
 		mc.SetValue(values.TrueValue)
 	default:
 		mc.SetValue(values.FalseValue)
@@ -67,27 +65,55 @@ func PrimOutputPortQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimInputPortOpenQ implements the (input-port-open?) primitive.
 // Returns #t if input port is open.
+//
+// R7RS §6.13.1: Returns #t if port is still open and capable of performing input.
 func PrimInputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	_, ok := o.(*values.CharacterInputPort)
-	if !ok {
+	type closeable interface{ IsClosed() bool }
+	switch p := o.(type) {
+	case *values.CharacterInputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.ByteVectorInputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.ByteVectorInputOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.BinaryInputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.StringInputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case closeable:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	default:
 		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "input-port-open?: expected an input port but got %T", o)
 	}
-	// For now, we assume all ports are open (proper tracking would require port state)
-	mc.SetValue(values.TrueValue)
 	return nil
 }
 
 // PrimOutputPortOpenQ implements the output-port-open? primitive.
 // Returns #t if the output port is open, #f otherwise.
+//
+// R7RS §6.13.1: Returns #t if port is still open and capable of performing output.
 func PrimOutputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	_, ok := o.(*values.CharacterOutputPort)
-	if !ok {
+	type closeable interface{ IsClosed() bool }
+	switch p := o.(type) {
+	case *values.CharacterOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.ByteVectorOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.ByteVectorBufferdOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.ByteVectorInputOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.BinaryOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case *values.StringOutputPort:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	case closeable:
+		mc.SetValue(utils.BoolToBoolean(!p.IsClosed()))
+	default:
 		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "output-port-open?: expected an output port but got %T", o)
 	}
-	// For now, we assume all ports are open (proper tracking would require port state)
-	mc.SetValue(values.TrueValue)
 	return nil
 }
 
@@ -97,40 +123,42 @@ func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch p := o.(type) {
 	case *values.CharacterInputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			err := closer.Close()
-			if err != nil {
-				return values.WrapForeignErrorf(err, "close-port: %v", err)
-			}
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
 		}
 	case *values.CharacterOutputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			err := closer.Close()
-			if err != nil {
-				return values.WrapForeignErrorf(err, "close-port: %v", err)
-			}
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
 		}
 	case *values.StringInputPort:
-		// String ports don't need closing, just no-op
+		p.Close()
 	case *values.StringOutputPort:
-		// String ports don't need closing, just no-op
-	case *values.BytevectorInputPort:
-		// Bytevector ports don't need closing, just no-op
-	case *values.BytevectorOutputPort:
-		// Bytevector ports don't need closing, just no-op
+		p.Close()
+	case *values.ByteVectorBufferdOutputPort:
+		p.Close()
+	case *values.ByteVectorInputOutputPort:
+		p.Close()
+	case *values.ByteVectorInputPort:
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
+		}
+	case *values.ByteVectorOutputPort:
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
+		}
 	case *values.BinaryInputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			err := closer.Close()
-			if err != nil {
-				return values.WrapForeignErrorf(err, "close-port: %v", err)
-			}
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
 		}
 	case *values.BinaryOutputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			err := closer.Close()
-			if err != nil {
-				return values.WrapForeignErrorf(err, "close-port: %v", err)
-			}
+		err := p.Close()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "close-port: %v", err)
 		}
 	default:
 		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "close-port: expected a port but got %T", o)
@@ -142,7 +170,7 @@ func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
 // PrimEofObject implements the (eof-object) primitive.
 // Returns the EOF object.
 func PrimEofObject(_ context.Context, mc *machine.MachineContext) error {
-	mc.SetValue(values.EofObject)
+	mc.SetValue(values.EOFObject)
 	return nil
 }
 
@@ -150,7 +178,7 @@ func PrimEofObject(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is the EOF object.
 func PrimEofObjectQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	mc.SetValue(utils.BoolToBoolean(o == values.EofObject))
+	mc.SetValue(utils.BoolToBoolean(o == values.EOFObject))
 	return nil
 }
 
@@ -161,13 +189,13 @@ func PrimOpenInputString(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "open-input-string: expected a string but got %T", o)
 	}
-	mc.SetValue(values.NewStringInputPort(s.Value))
+	mc.SetValue(values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)))
 	return nil
 }
 
 // PrimOpenOutputString implements the Scheme open-output-string primitive.
 func PrimOpenOutputString(_ context.Context, mc *machine.MachineContext) error {
-	mc.SetValue(values.NewStringOutputPort())
+	mc.SetValue(values.NewStringOutputPortWithBuffer(&bytes.Buffer{}))
 	return nil
 }
 
@@ -178,7 +206,7 @@ func PrimGetOutputString(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAStringOutputPort, "get-output-string: expected a string output port but got %T", o)
 	}
-	mc.SetValue(&values.String{Value: p.GetString()})
+	mc.SetValue(&values.String{Value: p.String()})
 	return nil
 }
 
@@ -194,30 +222,49 @@ func PrimOpenInputBytevector(_ context.Context, mc *machine.MachineContext) erro
 	for i, b := range *bv {
 		data[i] = b.Value
 	}
-	mc.SetValue(values.NewBytevectorInputPort(data))
+	mc.SetValue(values.NewByteVectorInputPortFromReader(bytes.NewReader(data)))
 	return nil
 }
 
 // PrimOpenOutputBytevector implements the Scheme open-output-bytevector primitive.
 func PrimOpenOutputBytevector(_ context.Context, mc *machine.MachineContext) error {
-	mc.SetValue(values.NewBytevectorOutputPort())
+	tup, ok := mc.Arg(0).(values.Tuple)
+	if ok && tup.Length() > 1 {
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "open-output-bytevector: expected one or zero arguments but got %d", tup.Length())
+	}
+	if tup.Length() == 0 {
+		mc.SetValue(values.NewByteVectorBufferdOutputPort())
+		return nil
+	}
+	bvec, ok := tup.Car().(values.OutputPort)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "open-output-bytevector: expected an output port but got %T", tup.Car())
+	}
+	mc.SetValue(bvec)
 	return nil
 }
 
 // PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
 func PrimGetOutputBytevector(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	p, ok := o.(*values.BytevectorOutputPort)
-	if !ok {
+	var q *values.ByteVector
+	var err error
+	switch v := o.(type) {
+	case *values.ByteVectorInputOutputPort:
+		q, err = v.ReadByteVector()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "get-output-bytevector: %v", err)
+		}
+	case *values.ByteVectorBufferdOutputPort:
+		q, err = v.ReadByteVector()
+		if err != nil {
+			return values.WrapForeignErrorf(err, "get-output-bytevector: %v", err)
+		}
+	default:
 		return values.WrapForeignErrorf(values.ErrNotABytevectorOutputPort, "get-output-bytevector: expected a bytevector output port but got %T", o)
 	}
 	// Make a copy of the bytes and convert to ByteVector ([]Byte)
-	data := p.GetBytevector()
-	result := make(values.ByteVector, len(data))
-	for i, b := range data {
-		result[i] = values.Byte{Value: b}
-	}
-	mc.SetValue(&result)
+	mc.SetValue(q)
 	return nil
 }
 
@@ -226,8 +273,7 @@ func PrimGetOutputBytevector(_ context.Context, mc *machine.MachineContext) erro
 func PrimTextualPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.CharacterInputPort, *values.CharacterOutputPort,
-		*values.StringInputPort, *values.StringOutputPort:
+	case *values.CharacterInputPort, *values.CharacterOutputPort, *values.StringInputPort, *values.StringOutputPort:
 		mc.SetValue(values.TrueValue)
 	default:
 		mc.SetValue(values.FalseValue)
@@ -240,8 +286,7 @@ func PrimTextualPortQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimBinaryPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch o.(type) {
-	case *values.BytevectorInputPort, *values.BytevectorOutputPort,
-		*values.BinaryInputPort, *values.BinaryOutputPort:
+	case *values.ByteVectorInputPort, *values.ByteVectorOutputPort, *values.ByteVectorBufferdOutputPort, *values.ByteVectorInputOutputPort, *values.BinaryInputPort, *values.BinaryOutputPort:
 		mc.SetValue(values.TrueValue)
 	default:
 		mc.SetValue(values.FalseValue)
@@ -293,21 +338,13 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 func closePort(o values.Value) {
 	switch p := o.(type) {
 	case *values.CharacterInputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			closer.Close() //nolint:errcheck
-		}
+		p.Close() //nolint:errcheck
 	case *values.CharacterOutputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			closer.Close() //nolint:errcheck
-		}
+		p.Close() //nolint:errcheck
 	case *values.BinaryInputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			closer.Close() //nolint:errcheck
-		}
+		p.Close() //nolint:errcheck
 	case *values.BinaryOutputPort:
-		if closer, ok := p.Value.(io.Closer); ok {
-			closer.Close() //nolint:errcheck
-		}
+		p.Close() //nolint:errcheck
 		// String and bytevector ports don't need closing
 	}
 }

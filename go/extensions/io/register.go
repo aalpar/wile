@@ -93,7 +93,7 @@ func addPorts(r *registry.Registry) error {
 	// Bytevector ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"open-input-bytevector", 1, false, PrimOpenInputBytevector},
-		{"open-output-bytevector", 0, false, PrimOpenOutputBytevector},
+		{"open-output-bytevector", 1, true, PrimOpenOutputBytevector},
 		{"get-output-bytevector", 1, false, PrimGetOutputBytevector},
 	}, registry.PhaseRuntime)
 

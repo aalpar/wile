@@ -15,29 +15,77 @@
 package values
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 )
 
 var _ Value = (*BinaryOutputPort)(nil)
+var _ io.Writer = (*BinaryOutputPort)(nil)
+var _ io.ByteWriter = (*BinaryOutputPort)(nil)
+var _ io.Closer = (*BinaryOutputPort)(nil)
 
 // BinaryOutputPort represents a Scheme binary output port.
 type BinaryOutputPort struct {
-	Value io.Writer
+	wrt    *bufio.Writer
+	clsr   io.Closer
+	closed bool
 }
 
-// NewBinaryOutputPort creates a new binary output port wrapping the given writer.
-func NewBinaryOutputPort(wrt io.Writer) *BinaryOutputPort {
-	return &BinaryOutputPort{Value: wrt}
+// NewBinaryOutputPort creates a new binary output port wrapping the given buf.
+func NewBinaryOutputPort(wrt *bufio.Writer) *BinaryOutputPort {
+	return &BinaryOutputPort{wrt: wrt}
 }
 
-func (p *BinaryOutputPort) Write(buf []byte) (int, error) {
-	return p.Value.Write(buf)
+// NewBinaryOutputPortFromWriter creates a new input port reading from the given byte slice.
+func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
+	q := &BinaryOutputPort{wrt: bufio.NewWriter(writer)}
+	closer, ok := writer.(io.Closer)
+	if ok {
+		q.clsr = closer
+	}
+	return q
+}
+
+// Write writes bytes to the port.
+func (p *BinaryOutputPort) Write(bs []byte) (int, error) {
+	if p.closed {
+		return 0, ErrPortClosed
+	}
+	return p.wrt.Write(bs)
+}
+
+// WriteByte writes a single byte to the port.
+func (p *BinaryOutputPort) WriteByte(b byte) error {
+	if p.closed {
+		return ErrPortClosed
+	}
+	return p.wrt.WriteByte(b)
+}
+
+// Flush flushes the port's buffer.
+func (p *BinaryOutputPort) Flush() error {
+	if p.closed {
+		return ErrPortClosed
+	}
+	return p.wrt.Flush()
+}
+
+func (p *BinaryOutputPort) Close() error {
+	defer func() { p.closed = true }()
+	if p.clsr != nil {
+		return p.clsr.Close()
+	}
+	return nil
+}
+
+func (p *BinaryOutputPort) IsClosed() bool {
+	return p.closed
 }
 
 // Datum returns the underlying io.Writer.
 func (p *BinaryOutputPort) Datum() io.Writer {
-	return p.Value
+	return p.wrt
 }
 
 // IsVoid returns true if the port is nil.
@@ -45,15 +93,15 @@ func (p *BinaryOutputPort) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both ports wrap the same writer.
+// EqualTo returns true if both ports wrap the same buf.
 func (p *BinaryOutputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*BinaryOutputPort); ok {
-		return p.Value == other.Value
+		return p.wrt == other.wrt
 	}
 	return false
 }
 
 // SchemeString returns the Scheme representation of the port.
 func (p *BinaryOutputPort) SchemeString() string {
-	return fmt.Sprintf("<binary-output-port %p>", p.Value)
+	return fmt.Sprintf("<binary-output-port %p>", p.wrt)
 }

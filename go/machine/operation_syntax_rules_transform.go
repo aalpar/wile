@@ -89,7 +89,7 @@ func (e *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
 //
 // Execution context:
-//   - Value register: contains clausesWrapper with compiled pattern/template pairs
+//   - wrt register: contains clausesWrapper with compiled pattern/template pairs
 //   - Local parameter 0: contains the input form (the macro invocation)
 //
 // The operation is part of the transformer closure created by CompileSyntaxRules.

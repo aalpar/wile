@@ -15,30 +15,87 @@
 package values
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 )
 
 var _ Value = (*CharacterOutputPort)(nil)
+var _ io.WriteCloser = (*CharacterOutputPort)(nil)
+var _ io.StringWriter = (*CharacterOutputPort)(nil)
 
 // need to be implemented here so that we have a custom interface that can be used without calling Datum() and doing type assertions elsewhere.
 // _ Port  = (Port)(*CharacterInputPort)(nil)
 
 // CharacterOutputPort represents a Scheme textual output port.
 type CharacterOutputPort struct {
-	Value io.Writer
+	wrt    *bufio.Writer
+	clsr   io.Closer
+	closed bool
 }
 
-// NewCharacterOutputPortFromWriter creates a new character output port wrapping the given writer.
-func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
-	q := &CharacterOutputPort{Value: wrt}
+// NewCharacterOutputPort creates a new character input port from an io.Reader.
+func NewCharacterOutputPort(wrt *bufio.Writer) *CharacterOutputPort {
+	q := &CharacterOutputPort{wrt: wrt}
 	return q
+}
+
+// NewCharacterOutputPortFromWriter creates a new character output port wrapping the given buf.
+func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
+	q := NewCharacterOutputPort(bufio.NewWriter(wrt))
+	closer, ok := wrt.(io.Closer)
+	if ok {
+		q.clsr = closer
+	}
+	return q
+}
+
+func (p *CharacterOutputPort) Close() error {
+	defer func() { p.closed = true }()
+	p.Flush()
+	if p.clsr != nil {
+		return p.clsr.Close()
+	}
+	return nil
+}
+
+func (p *CharacterOutputPort) IsClosed() bool {
+	return p.closed
+}
+
+func (p *CharacterOutputPort) Flush() error {
+	if p.closed {
+		return ErrPortClosed
+	}
+	return p.wrt.Flush()
+}
+
+func (p *CharacterOutputPort) Write(bs []byte) (int, error) {
+	if p.closed {
+		return 0, ErrPortClosed
+	}
+	return p.wrt.Write(bs)
+}
+
+func (p *CharacterOutputPort) WriteString(s string) (int, error) {
+	if p.closed {
+		return 0, ErrPortClosed
+	}
+	return p.wrt.WriteString(s)
+}
+
+// WriteRune writes a single rune to the port's buf.
+func (p *CharacterOutputPort) WriteRune(rn rune) (int, error) {
+	if p.closed {
+		return 0, ErrPortClosed
+	}
+	return p.wrt.WriteRune(rn)
 }
 
 // Datum returns the underlying data of the CharacterOutputPort as an io.Writer.
 // there is no RunWriter interface in the standard library, so we just use io.Writer here.
 func (p *CharacterOutputPort) Datum() io.Writer {
-	return p.Value
+	return p.wrt
 }
 
 // IsVoid returns true if the port is nil.
@@ -46,15 +103,15 @@ func (p *CharacterOutputPort) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both ports wrap the same writer.
+// EqualTo returns true if both ports wrap the same buf.
 func (p *CharacterOutputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*CharacterOutputPort); ok {
-		return p.Value == other.Value
+		return p.wrt == other.wrt
 	}
 	return false
 }
 
 // SchemeString returns the Scheme representation of the port.
 func (p *CharacterOutputPort) SchemeString() string {
-	return fmt.Sprintf("<character-output-port %p>", p.Value)
+	return fmt.Sprintf("<character-output-port %p>", p.wrt)
 }

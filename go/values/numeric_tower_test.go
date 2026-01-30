@@ -261,14 +261,14 @@ func TestTowerAdd(t *testing.T) {
 		{"Integer+Integer", NewInteger(3), NewInteger(4), "7"},
 		{"Float+Float", NewFloat(3.5), NewFloat(4.5), "8"},
 		{"Rational+Rational", NewRational(1, 2), NewRational(1, 3), "5/6"},
-		{"Complex+Complex", NewComplex(complex(1, 2)), NewComplex(complex(3, 4)), "4+6i"},
+		{"Complex+Complex", NewComplex(complex(1, 2)), NewComplex(complex(3, 4)), "4.0+6.0i"},
 
 		// Cross-type operations (should promote to common type)
 		{"Integer+Float", NewInteger(3), NewFloat(4.5), "7.5"},
 		{"Float+Integer", NewFloat(4.5), NewInteger(3), "7.5"},
 		{"Integer+Rational", NewInteger(1), NewRational(1, 2), "3/2"},
 		{"Rational+Float", NewRational(1, 2), NewFloat(0.5), "1"},
-		{"Integer+Complex", NewInteger(3), NewComplex(complex(1, 2)), "4+2i"},
+		{"Integer+Complex", NewInteger(3), NewComplex(complex(1, 2)), "4.0+2.0i"},
 
 		// Result simplification
 		{"Integer+Integer=0", NewInteger(3), NewInteger(-3), "0"},
@@ -293,7 +293,7 @@ func TestTowerSubtract(t *testing.T) {
 		{"Integer-Integer", NewInteger(7), NewInteger(4), "3"},
 		{"Float-Float", NewFloat(7.5), NewFloat(4.5), "3"},
 		{"Integer-Float", NewInteger(7), NewFloat(4.5), "2.5"},
-		{"Complex-Complex", NewComplex(complex(5, 6)), NewComplex(complex(1, 2)), "4+4i"},
+		{"Complex-Complex", NewComplex(complex(5, 6)), NewComplex(complex(1, 2)), "4.0+4.0i"},
 	}
 
 	for _, tt := range tests {

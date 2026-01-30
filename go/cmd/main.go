@@ -56,36 +56,6 @@ const (
 	SchemeLibraryPathEnv = "SCHEME_LIBRARY_PATH"
 )
 
-func compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
-
-	ectx := machine.NewExpandTimeCallContext()
-	stx1, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
-	if err != nil {
-		return nil, fmt.Errorf("expansion error: %w", err)
-	}
-
-	// Use inTail=false for top-level expressions. Top-level is NOT tail position
-	// because there's no outer function to return to.
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, stx1)
-	if err != nil {
-		return nil, fmt.Errorf("compilation error: %w", err)
-	}
-	return tpl, err
-}
-
-func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(ctx, cont)
-	err := mc.RunWithEscapeHandling()
-	if err != nil {
-		return nil, err
-	}
-	q := mc.GetValues()
-	return q, err
-}
-
 // initLibraryRegistry creates and configures the library registry with search paths.
 // Search path order (highest priority first):
 //  1. -L command line flag paths
@@ -238,11 +208,11 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 	}
 
 	// Compile and run the single wrapped expression
-	tpl, err2 := compile(env, programStx)
+	tpl, err2 := repl.Compile(env, programStx)
 	if err2 != nil {
 		Failf(err2, "Cannot compile expression")
 	}
-	mv, err2 := run(ctx, tpl, env)
+	mv, err2 := repl.Run(ctx, tpl, env)
 	// Print result for:
 	// - Normal completion (err2 == nil) - when inTail=false at top-level
 	// - ErrMachineHalt - when inTail=true at top-level (RestoreContinuation returns ErrMachineHalt)

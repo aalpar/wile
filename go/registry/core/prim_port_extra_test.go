@@ -101,7 +101,7 @@ func TestOutputPortOpenPredicate(t *testing.T) {
 func TestEofObject(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.EofObject)
+	qt.Assert(t, result, values.SchemeEquals, values.EOFObject)
 }
 
 func TestEofObjectPredicateWithEof(t *testing.T) {
@@ -147,10 +147,13 @@ func TestPortPredicatesOnBytevectorPorts(t *testing.T) {
 }
 
 func TestPortOpenPredicatesOnBytevectorPorts(t *testing.T) {
-	// Note: BytevectorInputPort and BytevectorOutputPort are not currently
-	// recognized by input-port-open? and output-port-open?, so we skip these tests.
-	// This is a known limitation that may be addressed in the future.
-	t.Skip("BytevectorInputPort/OutputPort not supported by *-port-open? predicates")
+	result, err := runSchemeCode(t, `(input-port-open? (open-input-bytevector #u8(1 2 3)))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+
+	result, err = runSchemeCode(t, `(output-port-open? (open-output-bytevector))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
 }
 
 func TestPortPredicatesWithCurrentPorts(t *testing.T) {

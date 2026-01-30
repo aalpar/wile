@@ -38,7 +38,7 @@ func NewCons(car, cdr Value) *Pair {
 	return q
 }
 
-// Datum returns the underlying data of the Pair as a [2]Value array.
+// Datum returns the underlying data of the Pair as a [2]buf array.
 func (p *Pair) Datum() [2]Value {
 	return [2]Value{p[0], p[1]}
 }
@@ -131,7 +131,7 @@ func (p *Pair) Append(vs Value) Value {
 
 // Len returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
-func (p *Pair) Len() int {
+func (p *Pair) Length() int {
 	q := 0
 	r, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1

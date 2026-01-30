@@ -81,7 +81,7 @@ func TestStringValueWithPair(t *testing.T) {
 
 func TestStringValueWithoutStringer(t *testing.T) {
 	// Test StringValue with a type that doesn't implement fmt.Stringer
-	// CharacterOutputPort implements values.Value but not fmt.Stringer
+	// CharacterOutputPort implements values.wrt but not fmt.Stringer
 	buf := &bytes.Buffer{}
 	port := values.NewCharacterOutputPortFromWriter(buf)
 	result := stringValue(port)
@@ -237,12 +237,35 @@ func TestListToString(t *testing.T) {
 					values.List(values.NewCharacter('a'), values.NewCharacter('b'), values.NewCharacter('c')))),
 			out: values.NewString("abc"),
 		},
+		{
+			name: "list->string empty list",
+			prog: values.List(values.NewSymbol("list->string"),
+				values.List(values.NewSymbol("quote"), values.EmptyList)),
+			out: values.NewString(""),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+func TestListToStringUnicode(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "list->string unicode chars",
+			code:     `(list->string (list #\α #\β #\γ))`,
+			expected: values.NewString("αβγ"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -268,6 +291,60 @@ func TestStringToSymbol(t *testing.T) {
 	}
 }
 
+func TestStringToSymbolEdgeCases(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string->symbol empty string round-trip",
+			code:     `(symbol->string (string->symbol ""))`,
+			expected: values.NewString(""),
+		},
+		{
+			name:     "string->symbol unicode round-trip",
+			code:     `(symbol->string (string->symbol "你好"))`,
+			expected: values.NewString("你好"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestStringSymbolRoundTrip(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "ASCII round-trip",
+			code:     `(symbol->string (string->symbol "hello"))`,
+			expected: values.NewString("hello"),
+		},
+		{
+			name:     "empty round-trip",
+			code:     `(symbol->string (string->symbol ""))`,
+			expected: values.NewString(""),
+		},
+		{
+			name:     "unicode round-trip",
+			code:     `(symbol->string (string->symbol "café"))`,
+			expected: values.NewString("café"),
+		},
+		{
+			name:     "Chinese round-trip",
+			code:     `(symbol->string (string->symbol "你好"))`,
+			expected: values.NewString("你好"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestSymbolToString(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -286,6 +363,28 @@ func TestSymbolToString(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+func TestSymbolToStringEdgeCases(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "symbol->string empty symbol",
+			code:     `(symbol->string (string->symbol ""))`,
+			expected: values.NewString(""),
+		},
+		{
+			name:     "symbol->string unicode symbol",
+			code:     `(symbol->string (string->symbol "αβγ"))`,
+			expected: values.NewString("αβγ"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1352,6 +1451,30 @@ func TestStringMap(t *testing.T) {
 			code:     `(string-map (lambda (a b) (if (char<? a b) b a)) "abc" "bac")`,
 			expected: values.NewString("bbc"),
 		},
+		// Single char
+		{
+			name:     "string-map single char",
+			code:     `(string-map char-upcase "a")`,
+			expected: values.NewString("A"),
+		},
+		// Unequal lengths - stops at shortest
+		{
+			name:     "string-map unequal lengths",
+			code:     `(string-map (lambda (a b) a) "abcde" "xy")`,
+			expected: values.NewString("ab"),
+		},
+		// Three strings
+		{
+			name:     "string-map three strings",
+			code:     `(string-map (lambda (a b c) a) "abc" "def" "ghi")`,
+			expected: values.NewString("abc"),
+		},
+		// Unicode identity
+		{
+			name:     "string-map Unicode identity",
+			code:     "(string-map (lambda (c) c) \"\u03b1\u03b2\u03b3\")",
+			expected: values.NewString("\u03b1\u03b2\u03b3"),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1392,6 +1515,26 @@ func TestStringForEach(t *testing.T) {
 			name:     "string-for-each empty string",
 			code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "") count)`,
 			expected: values.NewInteger(0),
+		},
+		// Order verification
+		{
+			name:     "string-for-each order verification",
+			code:     `(let ((result '())) (string-for-each (lambda (c) (set! result (cons c result))) "abc") result)`,
+			expected: values.List(values.NewCharacter('c'), values.NewCharacter('b'), values.NewCharacter('a')),
+		},
+		// Two strings with side effects
+		{
+			name: "string-for-each two strings",
+			code: `(let ((result '())) (string-for-each (lambda (a b) (set! result (cons (list a b) result))) "ab" "xy") result)`,
+			expected: values.List(
+				values.List(values.NewCharacter('b'), values.NewCharacter('y')),
+				values.List(values.NewCharacter('a'), values.NewCharacter('x'))),
+		},
+		// Unequal lengths - stops at shortest
+		{
+			name:     "string-for-each unequal lengths",
+			code:     `(let ((count 0)) (string-for-each (lambda (a b) (set! count (+ count 1))) "abcde" "xy") count)`,
+			expected: values.NewInteger(2),
 		},
 	}
 	for _, tc := range tcs {

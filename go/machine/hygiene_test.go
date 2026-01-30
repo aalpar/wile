@@ -340,7 +340,7 @@ func TestScopeCreation(t *testing.T) {
 
 	// Debug: Check what the binding actually contains
 	qt.Assert(t, binding.Value(), qt.Not(qt.IsNil))
-	t.Logf("Binding type: %v, Value type: %T", binding.BindingType(), binding.Value())
+	t.Logf("Binding type: %v, wrt type: %T", binding.BindingType(), binding.Value())
 
 	// Check the closure template
 	closure := binding.Value().(*machine.MachineClosure)
