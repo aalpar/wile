@@ -1,6 +1,6 @@
 # Numeric Tower Refactor Plan
 
-## Status Summary (2026-01-27)
+## Status Summary (2026-01-30)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -11,7 +11,7 @@
 | Phase 4 | 🔄 Pending | Migrate public Add/Sub/etc. to use Tower* functions |
 | Phase 5 | 🔄 Pending | Remove legacy type-switch code (~500 lines) |
 
-**Current state**: The Tower* functions work correctly and handle all 49 type combinations. The legacy public methods (Add, Subtract, etc.) still use type switches but are tested and working. Phase 4 migration is optional—the infrastructure is complete and available.
+**Current state**: The Tower* functions work correctly and handle all 49 type combinations. The legacy public methods (Add, Subtract, etc.) still use type switches but are tested and working. Phases 4–5 are internal cleanup that reduces code and simplifies maintenance but doesn't change behavior.
 
 ---
 
@@ -483,7 +483,7 @@ After Phase 4 migration:
 
 1. Remove duplicate switch statements from all types (~600 lines)
 2. Remove redundant helper functions (e.g., `promoteToBigComplexPart`)
-3. ✅ CLAUDE.md in values/ package already updated with Tower documentation
+3. ✅ CLAUDE.local.md in values/ package already updated with Tower documentation
 4. ✅ Architecture documented in this plan
 
 **Deliverable**: 🔄 Clean, minimal implementation (pending Phase 4).

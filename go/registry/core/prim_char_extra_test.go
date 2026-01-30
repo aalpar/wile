@@ -556,3 +556,626 @@ func TestDigitValueUnicode(t *testing.T) {
 		})
 	}
 }
+
+// TestCharAlphabeticUnicode tests char-alphabetic? with Unicode characters
+// from multiple scripts. Per R7RS §6.6, char-alphabetic? returns #t for
+// characters with the Unicode "Alphabetic" property.
+func TestCharAlphabeticUnicode(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// Latin
+		{
+			name: "Latin uppercase A",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('A')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "Latin lowercase z",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('z')),
+			out:  values.TrueValue,
+		},
+		// Greek
+		{
+			name: "Greek lowercase alpha",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('α')), // U+03B1
+			out:  values.TrueValue,
+		},
+		{
+			name: "Greek uppercase omega",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('Ω')), // U+03A9
+			out:  values.TrueValue,
+		},
+		// Cyrillic
+		{
+			name: "Cyrillic uppercase Ya",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('Я')), // U+042F
+			out:  values.TrueValue,
+		},
+		{
+			name: "Cyrillic lowercase de",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('д')), // U+0434
+			out:  values.TrueValue,
+		},
+		// Hebrew
+		{
+			name: "Hebrew alef",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('א')), // U+05D0
+			out:  values.TrueValue,
+		},
+		// Arabic
+		{
+			name: "Arabic ain",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ع')), // U+0639
+			out:  values.TrueValue,
+		},
+		// CJK
+		{
+			name: "CJK ideograph",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('中')), // U+4E2D
+			out:  values.TrueValue,
+		},
+		// Turkish special letters
+		{
+			name: "Turkish dotted capital I",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('İ')), // U+0130
+			out:  values.TrueValue,
+		},
+		{
+			name: "Turkish dotless lowercase i",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ı')), // U+0131
+			out:  values.TrueValue,
+		},
+		// German sharp S
+		{
+			name: "German lowercase sharp s",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ß')), // U+00DF
+			out:  values.TrueValue,
+		},
+		{
+			name: "German capital sharp S",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.TrueValue,
+		},
+		// Non-alphabetic characters
+		{
+			name: "ASCII digit 0 is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('0')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Arabic-Indic digit 3 is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('٣')), // U+0663
+			out:  values.FalseValue,
+		},
+		{
+			name: "space is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter(' ')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "newline is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('\n')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "plus sign is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('+')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "at sign is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('@')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "emoji is not alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('😀')), // U+1F600
+			out:  values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharNumericUnicode tests char-numeric? with Unicode characters from
+// multiple numeral systems. Per R7RS §6.6, char-numeric? returns #t for
+// characters with the Unicode "Numeric_Type=Decimal" property.
+func TestCharNumericUnicode(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// ASCII digits
+		{
+			name: "ASCII digit 0",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('0')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "ASCII digit 9",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('9')),
+			out:  values.TrueValue,
+		},
+		// Arabic-Indic
+		{
+			name: "Arabic-Indic 0",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('٠')), // U+0660
+			out:  values.TrueValue,
+		},
+		// Devanagari
+		{
+			name: "Devanagari 5",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('५')), // U+096B
+			out:  values.TrueValue,
+		},
+		// Thai
+		{
+			name: "Thai 7",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('๗')), // U+0E57
+			out:  values.TrueValue,
+		},
+		// Non-numeric characters
+		{
+			name: "letter a is not numeric",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('a')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Greek alpha is not numeric",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('α')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Roman numeral V is not numeric (Nl category, not Nd)",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('Ⅴ')), // U+2164
+			out:  values.FalseValue,
+		},
+		{
+			name: "superscript 2 is not numeric (No category, not Nd)",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('²')), // U+00B2
+			out:  values.FalseValue,
+		},
+		{
+			name: "Turkish dotted capital I is not numeric",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('İ')), // U+0130
+			out:  values.FalseValue,
+		},
+		{
+			name: "Turkish dotless i is not numeric",
+			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('ı')), // U+0131
+			out:  values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharWhitespaceUnicode tests char-whitespace? with Unicode whitespace
+// characters. Per R7RS §6.6, char-whitespace? returns #t for characters
+// with the Unicode "White_Space" property.
+func TestCharWhitespaceUnicode(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// ASCII whitespace
+		{
+			name: "space",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter(' ')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "tab",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\t')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "newline",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\n')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "carriage return",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\r')),
+			out:  values.TrueValue,
+		},
+		// Unicode whitespace
+		{
+			name: "no-break space",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u00A0')), // U+00A0
+			out:  values.TrueValue,
+		},
+		{
+			name: "em space",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u2003')), // U+2003
+			out:  values.TrueValue,
+		},
+		{
+			name: "ideographic space (CJK)",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u3000')), // U+3000
+			out:  values.TrueValue,
+		},
+		{
+			name: "line separator",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u2028')), // U+2028
+			out:  values.TrueValue,
+		},
+		{
+			name: "paragraph separator",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u2029')), // U+2029
+			out:  values.TrueValue,
+		},
+		// Non-whitespace characters
+		{
+			name: "letter a is not whitespace",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('a')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Greek alpha is not whitespace",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('α')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "zero-width space is not whitespace (U+200B)",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('\u200B')), // U+200B
+			out:  values.FalseValue,
+		},
+		{
+			name: "digit 0 is not whitespace",
+			prog: values.List(values.NewSymbol("char-whitespace?"), values.NewCharacter('0')),
+			out:  values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharUpperCaseUnicode tests char-upper-case? with Unicode uppercase
+// characters from multiple scripts. Per R7RS §6.6, char-upper-case? returns
+// #t for characters with the Unicode "Uppercase" property.
+func TestCharUpperCaseUnicode(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// Latin
+		{
+			name: "Latin uppercase A",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('A')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "Latin uppercase Z",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('Z')),
+			out:  values.TrueValue,
+		},
+		// Greek
+		{
+			name: "Greek uppercase sigma",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('Σ')), // U+03A3
+			out:  values.TrueValue,
+		},
+		{
+			name: "Greek uppercase omega",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('Ω')), // U+03A9
+			out:  values.TrueValue,
+		},
+		// Cyrillic
+		{
+			name: "Cyrillic uppercase Ya",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('Я')), // U+042F
+			out:  values.TrueValue,
+		},
+		// Turkish
+		{
+			name: "Turkish dotted capital I",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('İ')), // U+0130
+			out:  values.TrueValue,
+		},
+		// German capital sharp S
+		{
+			name: "German capital sharp S",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.TrueValue,
+		},
+		// Accented
+		{
+			name: "uppercase E-acute",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('É')), // U+00C9
+			out:  values.TrueValue,
+		},
+		// Non-uppercase characters
+		{
+			name: "lowercase a is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('a')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Greek lowercase alpha is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('α')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Cyrillic lowercase ya is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('я')), // U+044F
+			out:  values.FalseValue,
+		},
+		{
+			name: "Turkish dotless i is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('ı')), // U+0131
+			out:  values.FalseValue,
+		},
+		{
+			name: "German lowercase sharp s is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('ß')), // U+00DF
+			out:  values.FalseValue,
+		},
+		{
+			name: "CJK ideograph has no case",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('中')), // U+4E2D
+			out:  values.FalseValue,
+		},
+		{
+			name: "digit 0 is not uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('0')),
+			out:  values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharLowerCaseUnicode tests char-lower-case? with Unicode lowercase
+// characters from multiple scripts. Per R7RS §6.6, char-lower-case? returns
+// #t for characters with the Unicode "Lowercase" property.
+func TestCharLowerCaseUnicode(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// Latin
+		{
+			name: "Latin lowercase a",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('a')),
+			out:  values.TrueValue,
+		},
+		{
+			name: "Latin lowercase z",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('z')),
+			out:  values.TrueValue,
+		},
+		// Greek
+		{
+			name: "Greek lowercase sigma",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('σ')), // U+03C3
+			out:  values.TrueValue,
+		},
+		{
+			name: "Greek lowercase omega",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ω')), // U+03C9
+			out:  values.TrueValue,
+		},
+		// Cyrillic
+		{
+			name: "Cyrillic lowercase ya",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('я')), // U+044F
+			out:  values.TrueValue,
+		},
+		// Turkish
+		{
+			name: "Turkish dotless lowercase i",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ı')), // U+0131
+			out:  values.TrueValue,
+		},
+		// German
+		{
+			name: "German lowercase sharp s",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ß')), // U+00DF
+			out:  values.TrueValue,
+		},
+		// Accented
+		{
+			name: "lowercase e-acute",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('é')), // U+00E9
+			out:  values.TrueValue,
+		},
+		// Non-lowercase characters
+		{
+			name: "uppercase A is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('A')),
+			out:  values.FalseValue,
+		},
+		{
+			name: "Greek uppercase sigma is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('Σ')), // U+03A3
+			out:  values.FalseValue,
+		},
+		{
+			name: "Cyrillic uppercase Ya is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('Я')), // U+042F
+			out:  values.FalseValue,
+		},
+		{
+			name: "Turkish dotted capital I is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('İ')), // U+0130
+			out:  values.FalseValue,
+		},
+		{
+			name: "German capital sharp S is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.FalseValue,
+		},
+		{
+			name: "CJK ideograph has no case",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('中')), // U+4E2D
+			out:  values.FalseValue,
+		},
+		{
+			name: "digit 0 is not lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('0')),
+			out:  values.FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharCaseConversionTurkish tests Turkish special casing behavior.
+// R7RS specifies locale-independent Unicode operations, so these use
+// Unicode's simple case mappings (not Turkish locale rules).
+func TestCharCaseConversionTurkish(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// char-upcase: U+0131 (dotless i) -> U+0049 (ASCII I)
+		// Go's unicode.ToUpper maps U+0131 to U+0049 per Unicode simple
+		// case mapping, not the Turkish-locale mapping to U+0130.
+		{
+			name: "upcase dotless i to ASCII I",
+			prog: values.List(values.NewSymbol("char-upcase"), values.NewCharacter('ı')), // U+0131
+			out:  values.NewCharacter('I'),                                                // U+0049
+		},
+		// char-downcase: U+0130 (dotted capital I) -> U+0069 (ASCII i)
+		// Go's unicode.ToLower maps U+0130 to U+0069, which is correct per
+		// Unicode simple case mapping (not Turkish locale).
+		{
+			name: "downcase dotted capital I to ASCII i",
+			prog: values.List(values.NewSymbol("char-downcase"), values.NewCharacter('İ')), // U+0130
+			out:  values.NewCharacter('i'),                                                  // U+0069
+		},
+		// char-foldcase: U+0130 -> U+0069 (simple case fold)
+		{
+			name: "foldcase dotted capital I to ASCII i",
+			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('İ')), // U+0130
+			out:  values.NewCharacter('i'),                                                  // U+0069
+		},
+		// Predicate checks
+		{
+			name: "dotted capital I is uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('İ')), // U+0130
+			out:  values.TrueValue,
+		},
+		{
+			name: "dotless i is lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ı')), // U+0131
+			out:  values.TrueValue,
+		},
+		{
+			name: "dotted capital I is alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('İ')), // U+0130
+			out:  values.TrueValue,
+		},
+		{
+			name: "dotless i is alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ı')), // U+0131
+			out:  values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestCharCaseConversionGermanSS tests German sharp S case conversion.
+// char-foldcase uses simple (1:1) folding per R7RS §6.6, while
+// string-foldcase uses full folding (ß -> "ss") per R7RS §6.7.
+func TestCharCaseConversionGermanSS(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog values.Value
+		out  values.Value
+	}{
+		// char-downcase: U+1E9E (capital sharp S) -> U+00DF (lowercase sharp s)
+		{
+			name: "downcase capital sharp S to lowercase",
+			prog: values.List(values.NewSymbol("char-downcase"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.NewCharacter('ß'),                                                  // U+00DF
+		},
+		// char-upcase: U+00DF (lowercase sharp s) -> unchanged (no 1:1 uppercase)
+		// Go's unicode.ToUpper('ß') returns 'ß' unchanged.
+		{
+			name: "upcase lowercase sharp s stays unchanged",
+			prog: values.List(values.NewSymbol("char-upcase"), values.NewCharacter('ß')), // U+00DF
+			out:  values.NewCharacter('ß'),                                                // U+00DF
+		},
+		// char-foldcase: U+1E9E -> U+00DF (simple fold via simpleCaseFold)
+		{
+			name: "foldcase capital sharp S to lowercase",
+			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.NewCharacter('ß'),                                                  // U+00DF
+		},
+		// char-foldcase: U+00DF stays unchanged (simple fold)
+		{
+			name: "foldcase lowercase sharp s stays unchanged",
+			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('ß')), // U+00DF
+			out:  values.NewCharacter('ß'),                                                  // U+00DF
+		},
+		// Predicate checks
+		{
+			name: "lowercase sharp s is lowercase",
+			prog: values.List(values.NewSymbol("char-lower-case?"), values.NewCharacter('ß')), // U+00DF
+			out:  values.TrueValue,
+		},
+		{
+			name: "capital sharp S is uppercase",
+			prog: values.List(values.NewSymbol("char-upper-case?"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.TrueValue,
+		},
+		{
+			name: "lowercase sharp s is alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ß')), // U+00DF
+			out:  values.TrueValue,
+		},
+		{
+			name: "capital sharp S is alphabetic",
+			prog: values.List(values.NewSymbol("char-alphabetic?"), values.NewCharacter('ẞ')), // U+1E9E
+			out:  values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runProgramAST(t, tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}

@@ -250,5 +250,5 @@ cd go && go test -v ./values/ -run "TestTower|TestNumericTower"
 - R7RS §6.2.1 - Numerical types (tower definition)
 - R7RS §6.2.2 - Exactness (contagion rules)
 - R7RS §6.2.3 - Implementation restrictions
-- `go/values/CLAUDE.md` - Package documentation
+- `go/values/CLAUDE.local.md` - Package documentation
 - `plans/NUMERIC_TOWER_REFACTOR.md` - Design rationale

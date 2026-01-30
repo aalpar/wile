@@ -47,7 +47,7 @@ See [NUMERIC_TOWER.md](NUMERIC_TOWER.md) for full documentation.
 ## R7RS Conformance
 
 **Plan:** `plans/R7RS_CONFORMANCE_PLAN.md`
-**Status:** ~90% complete for `(scheme base)`
+**Status:** Complete — full R7RS-small conformance achieved
 
 ### String Operations
 
@@ -191,11 +191,11 @@ All numeric primitives tested with:
 
 ## Library System
 
-**Status:** ~90% complete
+**Status:** Complete
 
 | Library | Status | Notes |
 |---------|--------|-------|
-| `(scheme base)` | ~90% | Missing: `case`, `letrec*`, `let-syntax`, `letrec-syntax`, `syntax-error`, `define-values` |
+| `(scheme base)` | 100% | |
 | `(scheme char)` | 100% | |
 | `(scheme complex)` | 100% | |
 | `(scheme cxr)` | 100% | |
