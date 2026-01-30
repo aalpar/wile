@@ -29,11 +29,6 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	restVal := mc.Arg(1)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "apply: expected a procedure but got %T", proc)
-	}
-
 	// R7RS: (apply proc arg1 ... args) combines arg1 ... with the final list args
 	// restVal is a list containing (arg1 ... args) where args is the final list
 	restTuple, ok := restVal.(values.Tuple)
@@ -75,6 +70,22 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 		if !values.IsEmptyList(v) {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument is an improper list")
 		}
+	}
+
+	// Resolve the callable to a MachineClosure, handling case-lambda dispatch.
+	var mcls *machine.MachineClosure
+	switch p := proc.(type) {
+	case *machine.MachineClosure:
+		mcls = p
+	case *machine.CaseLambdaClosure:
+		var found bool
+		mcls, found = p.FindMatchingClause(len(prefixArgs))
+		if !found {
+			return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+				"apply: no matching clause in case-lambda for %d arguments", len(prefixArgs))
+		}
+	default:
+		return values.WrapForeignErrorf(values.ErrNotAProcedure, "apply: expected a procedure but got %T", proc)
 	}
 
 	sub := mc.NewSubContext()

@@ -149,7 +149,7 @@ func (p *ArrayList) IsList() bool {
 }
 
 // Len returns the number of elements in this ArrayList.
-func (p *ArrayList) Len() int {
+func (p *ArrayList) Length() int {
 	if !p.IsList() {
 		panic(ErrNotAList)
 	}

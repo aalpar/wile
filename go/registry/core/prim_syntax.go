@@ -128,7 +128,7 @@ func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) erro
 	arg := mc.Arg(0)
 
 	// Count the length of the list
-	count := arg.(values.Tuple).Len()
+	count := arg.(values.Tuple).Length()
 	// Generate fresh identifiers
 	result := values.EmptyList
 	for i := count - 1; i >= 0; i-- {

@@ -252,9 +252,9 @@ func TestPair_Length(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
 			if tc.panicMatches != "" {
-				qt.Assert(t, func() { tc.in.Len() }, qt.PanicMatches, tc.panicMatches)
+				qt.Assert(t, func() { tc.in.Length() }, qt.PanicMatches, tc.panicMatches)
 			} else {
-				got := tc.in.Len()
+				got := tc.in.Length()
 				qt.Assert(t, got, qt.Equals, tc.out)
 			}
 		})

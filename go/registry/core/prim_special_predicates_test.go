@@ -155,6 +155,34 @@ func TestNanQWithRationalAndComplex(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
+// Special Predicate Type Error Tests
+// ----------------------------------------------------------------------------
+
+// TestSpecialPredicates_TypeErrors verifies that finite?, infinite?, and nan?
+// reject non-numeric arguments. These predicates require a number argument
+// per R7RS §6.2.6.
+func TestSpecialPredicates_TypeErrors(t *testing.T) {
+	predicates := []string{"finite?", "infinite?", "nan?"}
+	badArgs := []struct {
+		label string
+		arg   string
+	}{
+		{"string", `"hello"`},
+		{"boolean", "#t"},
+		{"symbol", "'foo"},
+		{"list", "'(1 2)"},
+	}
+
+	for _, pred := range predicates {
+		for _, ba := range badArgs {
+			t.Run(pred+" "+ba.label, func(t *testing.T) {
+				runSchemeCodeExpectError(t, "("+pred+" "+ba.arg+")")
+			})
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------
 // Real-Part Tests with Various Number Types
 // ----------------------------------------------------------------------------
 
@@ -168,7 +196,7 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 			name: "real-part of complex",
 			code: "(real-part 3+4i)",
 			// 3+4i is exact (integer parts), so returns exact 3
-			out:  values.NewBigIntegerFromInt64(3),
+			out: values.NewBigIntegerFromInt64(3),
 		},
 		{
 			name: "real-part of integer",
@@ -189,13 +217,13 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 			name: "real-part of negative complex",
 			code: "(real-part -3+4i)",
 			// -3+4i is exact (integer parts), so returns exact -3
-			out:  values.NewBigIntegerFromInt64(-3),
+			out: values.NewBigIntegerFromInt64(-3),
 		},
 		{
 			name: "real-part of complex with negative real",
 			code: "(real-part -5-2i)",
 			// -5-2i is exact (integer parts), so returns exact -5
-			out:  values.NewBigIntegerFromInt64(-5),
+			out: values.NewBigIntegerFromInt64(-5),
 		},
 		{
 			name: "real-part of rational with negative numerator",
@@ -211,13 +239,13 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 			name: "real-part of complex with zero real",
 			code: "(real-part 0+5i)",
 			// 0+5i is exact (integer parts), so returns exact 0
-			out:  values.NewBigIntegerFromInt64(0),
+			out: values.NewBigIntegerFromInt64(0),
 		},
 		{
 			name: "real-part of purely real complex",
 			code: "(real-part 7+0i)",
 			// 7+0i is exact (integer parts), so returns exact 7
-			out:  values.NewBigIntegerFromInt64(7),
+			out: values.NewBigIntegerFromInt64(7),
 		},
 	}
 	for _, tc := range tcs {

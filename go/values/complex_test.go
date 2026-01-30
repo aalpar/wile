@@ -203,12 +203,26 @@ func TestComplex_EqualTo(t *testing.T) {
 }
 
 func TestComplex_SchemeString(t *testing.T) {
-	c1 := NewComplex(complex(3, 4))
-	qt.Assert(t, c1.SchemeString(), qt.Equals, "3+4i")
-
-	c2 := NewComplex(complex(3, -4))
-	qt.Assert(t, c2.SchemeString(), qt.Equals, "3-4i")
-
-	c3 := NewComplex(complex(0, 0))
-	qt.Assert(t, c3.SchemeString(), qt.Equals, "0+0i")
+	tests := []struct {
+		name   string
+		value  complex128
+		expect string
+	}{
+		{"positive_imag", complex(3, 4), "3.0+4.0i"},
+		{"negative_imag", complex(3, -4), "3.0-4.0i"},
+		{"zero", complex(0, 0), "0.0+0.0i"},
+		{"integer_like", complex(100, 1), "100.0+1.0i"},
+		{"pos_inf_both", complex(math.Inf(1), math.Inf(1)), "+inf.0+inf.0i"},
+		{"neg_inf_pos_inf", complex(math.Inf(-1), math.Inf(1)), "-inf.0+inf.0i"},
+		{"neg_inf_both", complex(math.Inf(-1), math.Inf(-1)), "-inf.0-inf.0i"},
+		{"pos_inf_neg_inf", complex(math.Inf(1), math.Inf(-1)), "+inf.0-inf.0i"},
+		{"nan_both", complex(math.NaN(), math.NaN()), "+nan.0+nan.0i"},
+		{"decimal", complex(1.5, 2.5), "1.5+2.5i"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewComplex(tt.value)
+			qt.Assert(t, c.SchemeString(), qt.Equals, tt.expect)
+		})
+	}
 }

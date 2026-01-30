@@ -22,7 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// Display vs Write Comparison Tests (R7RS §6.13.3)
+// Display vs WriteByte Comparison Tests (R7RS §6.13.3)
 
 func TestDisplayVsWriteString(t *testing.T) {
 	// display should output without quotes

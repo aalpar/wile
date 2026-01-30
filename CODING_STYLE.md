@@ -30,7 +30,7 @@ func (p *EnvironmentFrame) GetBinding(sym *Symbol) *Binding { ... }
 
 ## Variable Naming
 
-### Constructor Intermediate Variable: `q`
+### Return Values: `q`
 
 All `New*` constructors use `q` for the intermediate variable:
 
@@ -55,6 +55,7 @@ func NewCons(car, cdr Value) *Pair {
 | `l` | Length variable |
 | `v` | Temporary value in type switches |
 | `ok` | Boolean result from type assertions |
+| `q` | Return value |
 | `err` | Error values |
 | `o` | "Other" operand in binary operations |
 | `pr` | Pair reference in list traversal |

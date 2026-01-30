@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"math"
 	"testing"
 
 	"wile/values"
@@ -317,6 +318,124 @@ func TestRounding(t *testing.T) {
 			qt.Assert(t, result, values.SchemeEquals, tt.expected)
 		})
 	}
+}
+
+// TestRounding_TypeErrors tests that rounding functions reject non-numeric arguments.
+// R7RS §6.2.6: floor, ceiling, round, truncate require numeric arguments.
+func TestRounding_TypeErrors(t *testing.T) {
+	t.Run("floor of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(floor "hello")`)
+	})
+	t.Run("floor of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(floor #t)`)
+	})
+	t.Run("ceiling of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(ceiling "hello")`)
+	})
+	t.Run("ceiling of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(ceiling #t)`)
+	})
+	t.Run("round of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(round "hello")`)
+	})
+	t.Run("round of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(round #t)`)
+	})
+	t.Run("truncate of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(truncate "hello")`)
+	})
+	t.Run("truncate of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(truncate #t)`)
+	})
+}
+
+// TestRounding_SpecialValues tests rounding functions with +inf.0, -inf.0, and +nan.0.
+// R7RS §6.2.6: These functions return their argument for infinite and NaN inputs.
+func TestRounding_SpecialValues(t *testing.T) {
+	t.Run("floor of +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(floor +inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+	})
+	t.Run("floor of -inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(floor -inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+	})
+	t.Run("floor of +nan.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(floor +nan.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+	})
+	t.Run("ceiling of +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(ceiling +inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+	})
+	t.Run("ceiling of -inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(ceiling -inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+	})
+	t.Run("ceiling of +nan.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(ceiling +nan.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+	})
+	t.Run("round of +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(round +inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+	})
+	t.Run("round of -inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(round -inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+	})
+	t.Run("round of +nan.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(round +nan.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+	})
+	t.Run("truncate of +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(truncate +inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+	})
+	t.Run("truncate of -inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(truncate -inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+	})
+	t.Run("truncate of +nan.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(truncate +nan.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+	})
 }
 
 func TestFloorDivQuotientRemainder(t *testing.T) {

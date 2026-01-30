@@ -59,7 +59,7 @@ func (wg *WaitGroup) Wait() {
 	wg.wg.Wait()
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the wait group is nil.
 func (wg *WaitGroup) IsVoid() bool {

@@ -50,7 +50,7 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 	}
 	bv := make(values.ByteVector, size.Value)
 	for i := range bv {
-		bv[i] = values.Byte{Value: fill}
+		bv[i] = &values.Byte{Value: fill}
 	}
 	mc.SetValue(&bv)
 	return nil
@@ -69,7 +69,7 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector: expected a list but got %T", o)
 	}
-	var bytes []values.Byte
+	var bytes []*values.Byte
 	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
@@ -78,7 +78,7 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 		if intVal.Value < 0 || intVal.Value > 255 {
 			return values.NewForeignError("bytevector: value must be a byte (0-255)")
 		}
-		bytes = append(bytes, values.Byte{Value: uint8(intVal.Value)})
+		bytes = append(bytes, values.NewByte(uint8(intVal.Value)))
 		return nil
 	})
 	if err != nil {
@@ -148,7 +148,7 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 	if byteVal.Value < 0 || byteVal.Value > 255 {
 		return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
 	}
-	(*bv)[idx.Value] = values.Byte{Value: uint8(byteVal.Value)}
+	(*bv)[idx.Value] = values.NewByte(uint8(byteVal.Value))
 	mc.SetValues()
 	return nil
 }
@@ -285,13 +285,13 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
-	var result []values.Byte
+	result := values.NewByteVector()
 	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
 		}
-		result = append(result, *bv...)
+		*result = append(*result, *bv...)
 		return nil
 	})
 	if err != nil {
@@ -300,8 +300,7 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector-append: not a proper list")
 	}
-	bv := values.ByteVector(result)
-	mc.SetValue(&bv)
+	mc.SetValue(result)
 	return nil
 }
 
@@ -409,7 +408,7 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	bytes := []byte(s[start:end])
 	bv := make(values.ByteVector, len(bytes))
 	for i, b := range bytes {
-		bv[i] = values.Byte{Value: b}
+		bv[i] = values.NewByte(b)
 	}
 	mc.SetValue(&bv)
 	return nil

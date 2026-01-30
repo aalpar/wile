@@ -246,9 +246,9 @@ func newGlobalEnvironmentFrameWithTopLevel(topLevel *TopLevelEnvironment) *Globa
 // newPhaseRegistryWithTopLevel creates a new PhaseRegistry owned by the given TopLevelEnvironment.
 func newPhaseRegistryWithTopLevel(topLevel *TopLevelEnvironment) *PhaseRegistry {
 	q := &PhaseRegistry{
-		envs:            make(map[int]*EnvironmentFrame),
-		topLevelEnv:     topLevel,
-		topLevelEnvFrm:  topLevel.runtime,
+		envs:           make(map[int]*EnvironmentFrame),
+		topLevelEnv:    topLevel,
+		topLevelEnvFrm: topLevel.runtime,
 	}
 	// TopLevel is phase 0 (runtime)
 	q.envs[PhaseRuntime] = topLevel.runtime

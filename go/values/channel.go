@@ -170,7 +170,7 @@ func (c *Channel) Chan() chan Value {
 	return c.ch
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if this channel is nil.
 func (c *Channel) IsVoid() bool {

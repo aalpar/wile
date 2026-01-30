@@ -169,11 +169,69 @@ func Test_IsList(t *testing.T) {
 	}
 }
 
+func TestEqualTo_CircularPair(t *testing.T) {
+	c := qt.New(t)
+
+	// Self-referential pair: x = (1 . x)
+	x := NewCons(NewInteger(1), EmptyList)
+	x.SetCdr(x)
+	c.Assert(EqualTo(x, x), qt.IsTrue)
+
+	// Two structurally identical circular pairs: a = (1 . a), b = (1 . b)
+	a := NewCons(NewInteger(1), EmptyList)
+	a.SetCdr(a)
+	b := NewCons(NewInteger(1), EmptyList)
+	b.SetCdr(b)
+	c.Assert(EqualTo(a, b), qt.IsTrue)
+
+	// Different circular pairs: c = (1 . c), d = (2 . d)
+	d := NewCons(NewInteger(1), EmptyList)
+	d.SetCdr(d)
+	e := NewCons(NewInteger(2), EmptyList)
+	e.SetCdr(e)
+	c.Assert(EqualTo(d, e), qt.IsFalse)
+
+	// Circular list: (1 2 1 2 ...) vs itself
+	p1 := NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList))
+	p1.Cdr().(*Pair).SetCdr(p1)
+	p2 := NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList))
+	p2.Cdr().(*Pair).SetCdr(p2)
+	c.Assert(EqualTo(p1, p2), qt.IsTrue)
+}
+
+func TestEqualTo_CircularVector(t *testing.T) {
+	c := qt.New(t)
+
+	// Vector containing itself: #(v)
+	v := NewVector(NewInteger(0))
+	v.Set(0, v)
+	c.Assert(EqualTo(v, v), qt.IsTrue)
+
+	// Two vectors each containing themselves
+	v1 := NewVector(NewInteger(0))
+	v1.Set(0, v1)
+	v2 := NewVector(NewInteger(0))
+	v2.Set(0, v2)
+	c.Assert(EqualTo(v1, v2), qt.IsTrue)
+}
+
+func TestEqualTo_NonCircular(t *testing.T) {
+	c := qt.New(t)
+
+	// Ensure non-circular comparisons still work
+	c.Assert(EqualTo(List(NewInteger(1), NewInteger(2)), List(NewInteger(1), NewInteger(2))), qt.IsTrue)
+	c.Assert(EqualTo(List(NewInteger(1)), List(NewInteger(2))), qt.IsFalse)
+	c.Assert(EqualTo(NewVector(NewInteger(1)), NewVector(NewInteger(1))), qt.IsTrue)
+	c.Assert(EqualTo(NewVector(NewInteger(1)), NewVector(NewInteger(2))), qt.IsFalse)
+	c.Assert(EqualTo(NewInteger(42), NewInteger(42)), qt.IsTrue)
+	c.Assert(EqualTo(nil, nil), qt.IsTrue)
+}
+
 func Test_ExactInteger(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    Value
-		want  int64
+		name   string
+		in     Value
+		want   int64
 		wantOk bool
 	}{
 		// Integer cases

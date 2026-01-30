@@ -437,7 +437,7 @@ func TestAtomicCompareAndSwap(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// CAS succeeds when comparing with the same reference
-	// Note: Go's atomic.Value.CompareAndSwap compares by identity, not value
+	// Note: Go's atomic.wrt.CompareAndSwap compares by identity, not value
 	result, err := evalScheme(t, env, `
 		(let* ((val 42)
 		       (a (make-atomic val)))
@@ -447,7 +447,7 @@ func TestAtomicCompareAndSwap(t *testing.T) {
 	c.Assert(result, qt.Equals, values.TrueValue)
 
 	// CAS fails when comparing with a different reference (even if same value)
-	// This is expected behavior for Go's atomic.Value
+	// This is expected behavior for Go's atomic.wrt
 	// Note: Use 100000 (outside integer cache range -32768 to 32767) to ensure different references
 	result, err = evalScheme(t, env, `
 		(let ((a (make-atomic 100000)))

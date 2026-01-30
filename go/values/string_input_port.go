@@ -15,51 +15,102 @@
 package values
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
+	"io"
 )
 
 var _ Value = (*StringInputPort)(nil)
+var _ Port = (*StringInputPort)(nil)
+var _ InputPort = (*StringInputPort)(nil)
+var _ TextualReader = (*StringInputPort)(nil)
+var _ io.ReadCloser = (*StringInputPort)(nil)
+var _ io.RuneScanner = (*StringInputPort)(nil)
 
-// StringInputPort represents a Scheme input port reading from a string.
+// StringInputPort represents a Scheme string output port backed by a buffer.
 type StringInputPort struct {
-	reader *strings.Reader
+	buf    *bytes.Buffer
+	closed bool
 }
 
-// NewStringInputPort creates a new input port reading from the given string.
-func NewStringInputPort(s string) *StringInputPort {
-	return &StringInputPort{reader: strings.NewReader(s)}
+// NewStringInputPort creates a new string output port.
+func NewStringInputPort() *StringInputPort {
+	return &StringInputPort{
+		buf: &bytes.Buffer{},
+	}
 }
 
-// ReadRune reads and returns the next rune from the port.
-func (p *StringInputPort) ReadRune() (rune, int, error) {
-	return p.reader.ReadRune()
+// NewStringInputPortWithBuffer creates a new string output port.
+func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
+	q := &StringInputPort{
+		buf: buffer,
+	}
+	return q
 }
 
-// UnreadRune unreads the last rune read, allowing it to be read again.
+// Read reads data from the port into p.
+func (p2 *StringInputPort) Read(p []byte) (n int, err error) {
+	if p2.closed {
+		return 0, ErrPortClosed
+	}
+	return p2.buf.Read(p)
+}
+
+// ReadRune reads a rune from the port.
+func (p *StringInputPort) ReadRune() (r rune, size int, err error) {
+	if p.closed {
+		return 0, 0, ErrPortClosed
+	}
+	return p.buf.ReadRune()
+}
+
+// UnreadRune unreads the last rune read from the port.
 func (p *StringInputPort) UnreadRune() error {
-	return p.reader.UnreadRune()
+	if p.closed {
+		return ErrPortClosed
+	}
+	return p.buf.UnreadRune()
 }
 
-// Datum returns the underlying strings.Reader.
-func (p *StringInputPort) Datum() *strings.Reader {
-	return p.reader
+func (p *StringInputPort) Flush() error {
+	if p.closed {
+		return ErrPortClosed
+	}
+	return nil
 }
 
-// IsVoid returns true if this port is nil.
+func (p *StringInputPort) Close() error {
+	defer func() { p.closed = true }()
+	return nil
+}
+
+func (p *StringInputPort) IsClosed() bool {
+	return p.closed
+}
+
+// Datum returns the underlying buffer.
+func (p *StringInputPort) Datum() *bytes.Buffer {
+	return p.buf
+}
+
+// IsVoid returns true if the port is nil.
 func (p *StringInputPort) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both ports share the same reader.
+// EqualTo returns true if both ports use the same buffer.
 func (p *StringInputPort) EqualTo(v Value) bool {
 	if other, ok := v.(*StringInputPort); ok {
-		return p.reader == other.reader
+		return p.buf == other.buf
 	}
 	return false
 }
 
-// SchemeString returns the Scheme representation of this port.
+func (p *StringInputPort) String() string {
+	return p.buf.String()
+}
+
+// SchemeString returns the Scheme representation of the port.
 func (p *StringInputPort) SchemeString() string {
-	return fmt.Sprintf("<string-input-port %p>", p.reader)
+	return fmt.Sprintf("<string-input-output-port %p>", p.buf)
 }

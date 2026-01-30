@@ -98,6 +98,13 @@ func TestSignedImaginaryPartVariations(t *testing.T) {
 		{input: "1+nan.0i", expectedType: TokenizerStateUnsignedComplex},
 		{input: "1-nan.0i", expectedType: TokenizerStateUnsignedComplex},
 
+		// Uppercase I (R7RS §7.1.1: case-insensitive numeric literals)
+		{input: "1+2I", expectedType: TokenizerStateUnsignedComplex},
+		{input: "3-4I", expectedType: TokenizerStateUnsignedComplex},
+		{input: "1+I", expectedType: TokenizerStateUnsignedComplex},
+		{input: "1-I", expectedType: TokenizerStateUnsignedComplex},
+		{input: "1.5+2.5I", expectedType: TokenizerStateUnsignedComplex},
+
 		// Signed versions
 		{input: "+1+2i", expectedType: TokenizerStateSignedComplex},
 		{input: "+1-2i", expectedType: TokenizerStateSignedComplex},

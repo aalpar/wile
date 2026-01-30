@@ -361,8 +361,8 @@ func TestBigComplex_RationalParts(t *testing.T) {
 
 	// Create BigComplex with Rational parts (exact)
 	bc := NewBigComplex(
-		NewRational(3, 2),  // 3/2
-		NewRational(1, 2),  // 1/2
+		NewRational(3, 2), // 3/2
+		NewRational(1, 2), // 1/2
 	)
 
 	// Should be exact
@@ -385,12 +385,12 @@ func TestBigComplex_RationalArithmetic(t *testing.T) {
 	c := qt.New(t)
 
 	bc1 := NewBigComplex(
-		NewRational(3, 2),  // 3/2
-		NewRational(1, 2),  // 1/2
+		NewRational(3, 2), // 3/2
+		NewRational(1, 2), // 1/2
 	)
 	bc2 := NewBigComplex(
-		NewRational(1, 2),  // 1/2
-		NewRational(1, 4),  // 1/4
+		NewRational(1, 2), // 1/2
+		NewRational(1, 4), // 1/4
 	)
 
 	// Add: (3/2 + 1/2i) + (1/2 + 1/4i) = (2 + 3/4i)
@@ -422,8 +422,8 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 	c := qt.New(t)
 
 	bc := NewBigComplex(
-		NewRational(3, 2),  // 3/2
-		NewRational(1, 2),  // 1/2
+		NewRational(3, 2), // 3/2
+		NewRational(1, 2), // 1/2
 	)
 
 	// Add Rational: (3/2 + 1/2i) + 1/4 = (7/4 + 1/2i)

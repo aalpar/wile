@@ -88,7 +88,7 @@ func tryOperation(op func() Number) (result operationResult) {
 }
 
 // TestNumericTower_Add tests all type combinations for Add
-// All combinations should succeed - any panic or nil is a bug
+// All combinations should succeed - any panic or nil is a buf
 func TestNumericTower_Add(t *testing.T) {
 	c := qt.New(t)
 	numbers := makeTestNumbers()
@@ -115,7 +115,7 @@ func TestNumericTower_Add(t *testing.T) {
 }
 
 // TestNumericTower_Subtract tests all type combinations for Subtract
-// All combinations should succeed - any panic or nil is a bug
+// All combinations should succeed - any panic or nil is a buf
 func TestNumericTower_Subtract(t *testing.T) {
 	c := qt.New(t)
 	numbers := makeTestNumbers()
@@ -141,7 +141,7 @@ func TestNumericTower_Subtract(t *testing.T) {
 }
 
 // TestNumericTower_Multiply tests all type combinations for Multiply
-// All combinations should succeed - any panic or nil is a bug
+// All combinations should succeed - any panic or nil is a buf
 func TestNumericTower_Multiply(t *testing.T) {
 	c := qt.New(t)
 	numbers := makeTestNumbers()
@@ -167,7 +167,7 @@ func TestNumericTower_Multiply(t *testing.T) {
 }
 
 // TestNumericTower_Divide tests all type combinations for Divide
-// All combinations should succeed - any panic or nil is a bug
+// All combinations should succeed - any panic or nil is a buf
 func TestNumericTower_Divide(t *testing.T) {
 	c := qt.New(t)
 	numbers := makeTestNumbers()
@@ -193,7 +193,7 @@ func TestNumericTower_Divide(t *testing.T) {
 }
 
 // TestNumericTower_LessThan tests all type combinations for LessThan
-// All combinations should succeed - any panic is a bug (missing type case)
+// All combinations should succeed - any panic is a buf (missing type case)
 func TestNumericTower_LessThan(t *testing.T) {
 	numbers := makeTestNumbers()
 

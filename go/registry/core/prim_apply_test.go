@@ -48,6 +48,16 @@ func TestApplyComprehensive(t *testing.T) {
 		// Apply with cons
 		{name: "apply cons", code: `(apply cons '(1 2))`, expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
 		{name: "apply car", code: `(apply car '((1 2 3)))`, expected: values.NewInteger(1)},
+
+		// case-lambda dispatch
+		{name: "case-lambda two args", code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(3 4))`, expected: values.NewInteger(7)},
+		{name: "case-lambda one arg", code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(42))`, expected: values.NewInteger(42)},
+
+		// Nested apply
+		{name: "nested apply", code: `(apply apply (list + '(1 2 3)))`, expected: values.NewInteger(6)},
+
+		// Build list with prefix args
+		{name: "build list with prefix", code: `(apply list 1 2 '(3 4 5))`, expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,6 +114,8 @@ func TestApplyErrors(t *testing.T) {
 		{name: "apply non-procedure", code: `(apply 5 '(1 2))`},
 		{name: "apply without list", code: `(apply + 1 2 3)`},
 		{name: "apply with improper list", code: `(apply + '(1 . 2))`},
+		{name: "too many args", code: `(apply (lambda (x y) (+ x y)) '(1 2 3))`},
+		{name: "too few args", code: `(apply (lambda (x y) (+ x y)) '(1))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

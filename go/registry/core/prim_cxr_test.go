@@ -206,18 +206,25 @@ func TestCxR4Level(t *testing.T) {
 
 func TestCxRErrors(t *testing.T) {
 	tests := []schemeCodeErrorTestCase{
-		{
-			name: "caaar on non-pair",
-			code: `(caaar 'not-a-pair)`,
-		},
-		{
-			name: "caddr on too short list",
-			code: `(caddr '(1))`,
-		},
-		{
-			name: "caaaar on non-pair",
-			code: `(caaaar '(((1))))`,
-		},
+		// 2-level errors
+		{"caar on non-pair", `(caar 42)`},
+		{"caar on empty list", `(caar '())`},
+		{"caar car is not pair", `(caar '(1 2))`},
+		{"cadr on empty list", `(cadr '())`},
+		{"cadr on single element list", `(cadr '(1))`},
+		{"cdar on empty list", `(cdar '())`},
+		{"cdar car is not pair", `(cdar '(1))`},
+		{"cddr on empty list", `(cddr '())`},
+		{"cddr on single element list", `(cddr '(1))`},
+
+		// 3-level errors
+		{"caaar on non-pair", `(caaar 'not-a-pair)`},
+		{"caddr on too short list", `(caddr '(1))`},
+		{"caaar inner too shallow", `(caaar '((1)))`},
+
+		// 4-level errors
+		{"caaaar on non-pair", `(caaaar '(((1))))`},
+		{"cadddr on too short list", `(cadddr '(1 2))`},
 	}
 
 	for _, tc := range tests {

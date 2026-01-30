@@ -55,9 +55,9 @@ func (p *Vector) Set(i int, value Value) {
 	(*p)[i] = value
 }
 
-// Len returns the number of elements in the vector.
+// Length returns the number of elements in the vector.
 // Returns 0 if the vector is void (nil pointer).
-func (p *Vector) Len() int {
+func (p *Vector) Length() int {
 	if p.IsVoid() {
 		return 0
 	}

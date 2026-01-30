@@ -259,7 +259,7 @@ func (m *Mutex) MarkAbandoned() {
 	}
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the mutex is nil.
 func (m *Mutex) IsVoid() bool {

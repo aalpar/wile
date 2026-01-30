@@ -34,8 +34,8 @@ var (
 type ErrContinuationEscape struct {
 	Continuation *MachineContinuation // Where to resume (inside sub-context for call/cc in dynamic-wind)
 	Value        values.Value
-	Handled      bool         // Set to true after the escape has been handled and mc has been restored
-	WindingStack WindingStack // Target winding stack for proper dynamic-wind handling
+	Handled      bool                 // Set to true after the escape has been handled and mc has been restored
+	WindingStack WindingStack         // Target winding stack for proper dynamic-wind handling
 	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
 }
 
@@ -54,11 +54,11 @@ type MachineContext struct {
 	cont             *MachineContinuation // current continuation
 	template         *NativeTemplate
 	pc               int
-	expanderCtx      *ExpanderContext  // set during macro transformer execution for syntax-local-* access
-	exceptionHandler *ExceptionHandler // current exception handler chain for R7RS exceptions
-	debugger         *Debugger         // optional debugger for breakpoints and stepping
-	windingStack     WindingStack      // R7RS dynamic-wind extent tracking
-	parentMC         *MachineContext   // parent context for sub-contexts, enables call/cc escape tracking
+	expanderCtx      *ExpanderContext     // set during macro transformer execution for syntax-local-* access
+	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
+	debugger         *Debugger            // optional debugger for breakpoints and stepping
+	windingStack     WindingStack         // R7RS dynamic-wind extent tracking
+	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
 	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 }
@@ -329,9 +329,9 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 		env:         p.env.TopLevel(), // share global environment chain
 		value:       nil,
 		evals:       NewStack(),
-		cont:        nil,         // fresh call stack - isolated from parent
-		expanderCtx: nil,         // sub-contexts don't inherit expander context by default
-		parentMC:    p,           // track parent for call/cc continuation capture
+		cont:        nil,          // fresh call stack - isolated from parent
+		expanderCtx: nil,          // sub-contexts don't inherit expander context by default
+		parentMC:    p,            // track parent for call/cc continuation capture
 		escapeCont:  p.escapeCont, // inherit escape continuation for nested call/cc
 	}
 }

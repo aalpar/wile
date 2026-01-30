@@ -86,7 +86,7 @@ func (m *RWMutex) TryRLock() bool {
 	return m.mu.TryRLock()
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the RWMutex is nil.
 func (m *RWMutex) IsVoid() bool {

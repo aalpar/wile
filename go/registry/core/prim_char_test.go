@@ -619,11 +619,16 @@ func TestCharConversionErrors(t *testing.T) {
 		{name: "char->integer with integer", code: `(char->integer 65)`},
 		{name: "char->integer with string", code: `(char->integer "a")`},
 		{name: "char->integer with symbol", code: `(char->integer 'a)`},
-		// integer->char errors
+		// integer->char type errors
 		{name: "integer->char with character", code: `(integer->char #\a)`},
 		{name: "integer->char with string", code: `(integer->char "65")`},
-		// Note: R7RS also requires errors for negative integers, surrogate values (D800-DFFF),
-		// and values > 10FFFF, but the current implementation doesn't validate these yet.
+		// integer->char range errors (R7RS §6.6)
+		{name: "integer->char negative", code: `(integer->char -1)`},
+		{name: "integer->char surrogate low", code: `(integer->char #xD800)`},
+		{name: "integer->char surrogate mid", code: `(integer->char #xDB00)`},
+		{name: "integer->char surrogate high", code: `(integer->char #xDFFF)`},
+		{name: "integer->char above max", code: `(integer->char #x110000)`},
+		{name: "integer->char large value", code: `(integer->char 2000000)`},
 		// char-upcase errors
 		{name: "char-upcase with integer", code: `(char-upcase 97)`},
 		{name: "char-upcase with string", code: `(char-upcase "a")`},
@@ -641,6 +646,74 @@ func TestCharConversionErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// Edge case tests for integer->char (R7RS §6.6 Unicode scalar value boundaries)
+
+func TestIntegerToChar_EdgeCases(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "null char (0)",
+			code:     `(char->integer (integer->char 0))`,
+			expected: values.NewInteger(0),
+		},
+		{
+			name:     "just below surrogate (#xD7FF)",
+			code:     `(char->integer (integer->char #xD7FF))`,
+			expected: values.NewInteger(55295),
+		},
+		{
+			name:     "just above surrogate (#xE000)",
+			code:     `(char->integer (integer->char #xE000))`,
+			expected: values.NewInteger(57344),
+		},
+		{
+			name:     "max code point (#x10FFFF)",
+			code:     `(char->integer (integer->char #x10FFFF))`,
+			expected: values.NewInteger(1114111),
+		},
+		{
+			name:     "lambda (955)",
+			code:     `(char->integer (integer->char 955))`,
+			expected: values.NewInteger(955),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// Edge case tests for char->integer (high Unicode code points)
+
+func TestCharToInteger_EdgeCases(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "null char",
+			code:     `(char->integer #\null)`,
+			expected: values.NewInteger(0),
+		},
+		{
+			name:     "lambda round-trip",
+			code:     `(integer->char (char->integer #\λ))`,
+			expected: values.NewCharacter('λ'),
+		},
+		{
+			name:     "high code point round-trip",
+			code:     `(char->integer (integer->char #x10FFFF))`,
+			expected: values.NewInteger(1114111),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
 	}
 }

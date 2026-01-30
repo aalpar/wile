@@ -263,7 +263,7 @@ func (t *Thread) Done() <-chan struct{} {
 	return t.done
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if this thread is nil.
 func (t *Thread) IsVoid() bool {

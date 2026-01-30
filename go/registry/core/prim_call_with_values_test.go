@@ -57,6 +57,9 @@ func TestCallWithValuesErrors(t *testing.T) {
 		{name: "producer not procedure", code: `(call-with-values 5 (lambda (x) x))`},
 		{name: "consumer not procedure", code: `(call-with-values (lambda () 1) 5)`},
 		{name: "arity mismatch", code: `(call-with-values (lambda () (values 1 2)) (lambda (x) x))`},
+		{name: "exception in producer", code: `(call-with-values (lambda () (error "boom")) list)`},
+		{name: "exception in consumer", code: `(call-with-values (lambda () (values 1 2)) (lambda (x y) (error "boom")))`},
+		{name: "arity mismatch three to two", code: `(call-with-values (lambda () (values 1 2 3)) (lambda (x y) (+ x y)))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

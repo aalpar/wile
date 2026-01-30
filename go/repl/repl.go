@@ -198,7 +198,7 @@ func (r *REPL) Run(ctx context.Context) error {
 		rl.SetPrompt(r.prompt)
 
 		// Compile
-		tpl, compileErr := r.compile(stx)
+		tpl, compileErr := Compile(r.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(r.errOut, "Exception: %v\n", compileErr)
 			continue
@@ -261,14 +261,14 @@ func (r *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.Reset()
 
-		tpl, compileErr := r.compile(stx)
+		tpl, compileErr := Compile(r.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(r.errOut, "Exception: %v\n", compileErr)
 			fmt.Fprint(r.out, r.prompt)
 			continue
 		}
 
-		mv, runErr := r.run(ctx, tpl)
+		mv, runErr := Run(ctx, tpl, r.env)
 		if runErr != nil {
 			fmt.Fprintf(r.errOut, "Exception: %v\n", runErr)
 			fmt.Fprint(r.out, r.prompt)
@@ -285,28 +285,6 @@ func (r *REPL) RunSimple(ctx context.Context) error {
 // Debugger returns the REPL's debugger for external configuration.
 func (r *REPL) Debugger() *machine.Debugger {
 	return r.debugCtx.Debugger()
-}
-
-func (r *REPL) compile(expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
-
-	ectx := machine.NewExpandTimeCallContext()
-	stx1, err := machine.NewExpanderTimeContinuation(r.env).ExpandExpression(ectx, expr)
-	if err != nil {
-		return nil, fmt.Errorf("expansion error: %w", err)
-	}
-
-	// Use inTail=false for top-level expressions
-	cctx := machine.NewCompileTimeCallContext(false, true, r.env)
-	err = machine.NewCompiletimeContinuation(tpl, r.env).CompileExpression(cctx, stx1)
-	if err != nil {
-		return nil, fmt.Errorf("compilation error: %w", err)
-	}
-	return tpl, nil
-}
-
-func (r *REPL) run(ctx context.Context, tpl *machine.NativeTemplate) (machine.MultipleValues, error) {
-	return r.runWithDebugger(ctx, tpl)
 }
 
 func (r *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate) (machine.MultipleValues, error) {
@@ -373,4 +351,36 @@ func (lr *lineReader) ReadLine() (string, error) {
 		}
 		lr.r.WriteByte(buf[0])
 	}
+}
+
+// Compile expands and compiles a syntax expression into a native template.
+// This is a standalone function that can be used outside of a REPL context.
+func Compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+	tpl := machine.NewNativeTemplate(0, 0, false)
+
+	ectx := machine.NewExpandTimeCallContext()
+	stx1, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
+	if err != nil {
+		return nil, fmt.Errorf("expansion error: %w", err)
+	}
+
+	// Use inTail=false for top-level expressions
+	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, stx1)
+	if err != nil {
+		return nil, fmt.Errorf("compilation error: %w", err)
+	}
+	return tpl, nil
+}
+
+// Run executes a compiled template and returns the result values.
+// This is a standalone function that can be used outside of a REPL context.
+func Run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(ctx, cont)
+	err := mc.RunWithEscapeHandling()
+	if err != nil {
+		return nil, err
+	}
+	return mc.GetValues(), nil
 }

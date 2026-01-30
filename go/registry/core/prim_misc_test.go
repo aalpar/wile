@@ -312,24 +312,29 @@ func TestListPredicateWithEmptyList(t *testing.T) {
 	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
 }
 
-func TestProcedurePredicateOnBuiltin(t *testing.T) {
-	// Test procedure? on built-in primitive
-	code := "(procedure? +)"
-	result, err := runSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
-}
+func TestProcedurePredicateComprehensive(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// R7RS §6.1: procedure? returns #t for all procedure types
+		{name: "builtin", code: `(procedure? +)`, expected: values.TrueValue},
+		{name: "lambda", code: `(procedure? (lambda (x) x))`, expected: values.TrueValue},
+		{name: "continuation is procedure", code: `(call-with-current-continuation (lambda (k) (procedure? k)))`, expected: values.TrueValue},
+		{name: "case-lambda is procedure", code: `(procedure? (case-lambda ((x) x) ((x y) (+ x y))))`, expected: values.TrueValue},
+		{name: "closure with captured state", code: `(let ((x 10)) (procedure? (lambda () x)))`, expected: values.TrueValue},
 
-func TestProcedurePredicateOnLambda(t *testing.T) {
-	code := "(procedure? (lambda (x) x))"
-	result, err := runSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
-}
-
-func TestProcedurePredicateOnNonProcedure(t *testing.T) {
-	code := "(procedure? 5)"
-	result, err := runSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		// Non-procedure types
+		{name: "number", code: `(procedure? 5)`, expected: values.FalseValue},
+		{name: "empty list", code: `(procedure? '())`, expected: values.FalseValue},
+		{name: "string", code: `(procedure? "hello")`, expected: values.FalseValue},
+		{name: "boolean", code: `(procedure? #t)`, expected: values.FalseValue},
+		{name: "character", code: `(procedure? #\a)`, expected: values.FalseValue},
+		{name: "vector", code: `(procedure? '#(1 2))`, expected: values.FalseValue},
+		{name: "pair", code: `(procedure? (cons 1 2))`, expected: values.FalseValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
 }

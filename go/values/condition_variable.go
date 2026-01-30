@@ -151,7 +151,7 @@ func (cv *ConditionVariable) WaiterCount() int {
 	return cv.waiters
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the condition variable is nil.
 func (cv *ConditionVariable) IsVoid() bool {

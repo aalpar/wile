@@ -29,7 +29,7 @@ import (
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.
 //
 // Expects:
-//   - Value register: syntaxCaseClause with compiled pattern
+//   - wrt register: syntaxCaseClause with compiled pattern
 //   - Top of eval stack: input syntax object
 //
 // Results:

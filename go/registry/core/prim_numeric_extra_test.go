@@ -87,7 +87,7 @@ func TestExactnessPredicates(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Special Value Predicate Tests
+// Special wrt Predicate Tests
 // ----------------------------------------------------------------------------
 
 func TestSpecialValuePredicates(t *testing.T) {

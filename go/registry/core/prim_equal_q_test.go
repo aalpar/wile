@@ -16,6 +16,7 @@ package core_test
 
 import (
 	"testing"
+	"time"
 
 	"wile/values"
 
@@ -100,4 +101,63 @@ func TestEqualityHierarchy(t *testing.T) {
 			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
 	}
+}
+
+// R7RS §6.1: "The equal? procedure must terminate even if its arguments
+// are circular data structures."
+
+func TestEqualQCircular_SelfReferentialList(t *testing.T) {
+	result, err := runSchemeCodeWithTimeout(t, `
+		(let ((x (list 1 2 3)))
+		  (set-cdr! (cdr (cdr x)) x)
+		  (equal? x x))
+	`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+}
+
+func TestEqualQCircular_TwoIdenticalCircularLists(t *testing.T) {
+	result, err := runSchemeCodeWithTimeout(t, `
+		(let ((a (list 1 2))
+		      (b (list 1 2)))
+		  (set-cdr! (cdr a) a)
+		  (set-cdr! (cdr b) b)
+		  (equal? a b))
+	`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+}
+
+func TestEqualQCircular_DifferentCircularLists(t *testing.T) {
+	result, err := runSchemeCodeWithTimeout(t, `
+		(let ((a (list 1))
+		      (b (list 2)))
+		  (set-cdr! a a)
+		  (set-cdr! b b)
+		  (equal? a b))
+	`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+}
+
+func TestEqualQCircular_CircularVector(t *testing.T) {
+	result, err := runSchemeCodeWithTimeout(t, `
+		(let ((v (vector 0)))
+		  (vector-set! v 0 v)
+		  (equal? v v))
+	`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+}
+
+func TestEqualQCircular_PairContainingCircularVector(t *testing.T) {
+	result, err := runSchemeCodeWithTimeout(t, `
+		(let ((v (vector 0)))
+		  (vector-set! v 0 v)
+		  (let ((a (list v))
+		        (b (list v)))
+		    (equal? a b)))
+	`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
 }

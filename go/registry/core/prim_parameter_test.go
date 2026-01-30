@@ -275,6 +275,194 @@ func TestParameterAsProcedure(t *testing.T) {
 }
 
 // =============================================================================
+// Parameter Mutation via Call Tests (R7RS §4.2.6)
+//
+// R7RS §4.2.6: Parameter objects can be called with one argument to set
+// the value directly (applying the converter if present).
+// =============================================================================
+
+func TestParameterMutationViaCall(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "set parameter value by calling with 1 arg",
+			code: `(let ((p (make-parameter 10)))
+				(p 20)
+				(p))`,
+			out: values.NewInteger(20),
+		},
+		{
+			name: "mutation applies converter",
+			code: `(let ((p (make-parameter 0 (lambda (x) (* x 10)))))
+				(p 3)
+				(p))`,
+			out: values.NewInteger(30),
+		},
+		{
+			name: "mutation persists outside parameterize after direct set",
+			code: `(let ((p (make-parameter 'a)))
+				(p 'b)
+				(p))`,
+			out: values.NewSymbol("b"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// =============================================================================
+// Parameter Converter Error Tests (R7RS §4.2.6)
+//
+// R7RS §4.2.6: The converter is applied to the value passed to parameterize.
+// If the converter raises an error, the parameterize body is not entered.
+// =============================================================================
+
+func TestParameterConverterErrors(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "converter error caught by guard",
+			code: `(let ((p (make-parameter 0 (lambda (x)
+						(if (not (number? x))
+							(error "not a number" x)
+							x)))))
+				(guard (e (#t 'caught))
+					(parameterize ((p "bad"))
+						(p))))`,
+			out: values.NewSymbol("caught"),
+		},
+		{
+			name: "original value preserved after converter error",
+			code: `(let ((p (make-parameter 42 (lambda (x)
+						(if (not (number? x))
+							(error "not a number")
+							x)))))
+				(guard (e (#t (p)))
+					(parameterize ((p "bad"))
+						'unreachable)))`,
+			out: values.NewInteger(42),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// =============================================================================
+// Deeply Nested Parameterize Tests (R7RS §4.2.6)
+//
+// R7RS §4.2.6: parameterize forms can be nested arbitrarily; each level
+// restores the previous value on exit.
+// =============================================================================
+
+func TestDeeplyNestedParameterize(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "3 levels deep returns innermost value",
+			code: `(let ((p (make-parameter 0)))
+				(parameterize ((p 1))
+					(parameterize ((p 2))
+						(parameterize ((p 3))
+							(p)))))`,
+			out: values.NewInteger(3),
+		},
+		{
+			name: "all levels restore correctly",
+			code: `(let ((p (make-parameter 0)))
+				(parameterize ((p 1))
+					(parameterize ((p 2))
+						(parameterize ((p 3))
+							'ignore))
+					(p)))`,
+			out: values.NewInteger(1),
+		},
+		{
+			name: "multiple parameters at multiple levels",
+			code: `(let ((a (make-parameter 'a0))
+				      (b (make-parameter 'b0)))
+				(parameterize ((a 'a1) (b 'b1))
+					(parameterize ((a 'a2))
+						(parameterize ((b 'b3))
+							(list (a) (b))))))`,
+			out: values.List(values.NewSymbol("a2"), values.NewSymbol("b3")),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// =============================================================================
+// Parameterize with call/cc Tests (R7RS §4.2.6, §6.10)
+//
+// R7RS §4.2.6: parameterize is defined in terms of dynamic-wind, so
+// continuations captured inside parameterize should restore parameter
+// values correctly when invoked.
+// =============================================================================
+
+func TestParameterizeWithCallCC(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "call/cc escape from parameterize returns modified value",
+			code: `(let ((p (make-parameter 'original)))
+				(call-with-current-continuation
+					(lambda (escape)
+						(parameterize ((p 'modified))
+							(escape (p))))))`,
+			out: values.NewSymbol("modified"),
+		},
+		{
+			name: "parameter restored after call/cc escape",
+			code: `(let ((p (make-parameter 'original)))
+				(call-with-current-continuation
+					(lambda (escape)
+						(parameterize ((p 'modified))
+							(escape 'done))))
+				(p))`,
+			out: values.NewSymbol("original"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// =============================================================================
 // current-input-port / current-output-port Parameter Tests
 // =============================================================================
 

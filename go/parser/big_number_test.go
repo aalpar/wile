@@ -245,59 +245,37 @@ func TestIntegerNoOverflow(t *testing.T) {
 	}
 }
 
-// TestScientificNotationToInteger tests that scientific notation with positive exponents
-// or negative exponents with sufficient trailing zeros yields integers.
-func TestScientificNotationToInteger(t *testing.T) {
-	tcs := []struct {
-		input  string
-		expect int64
-	}{
-		// Positive exponents - always integer
-		{"1e10", 10000000000},
-		{"2e5", 200000},
-		{"+3e2", 300},
-		{"-4e3", -4000},
-		{"1e0", 1},
-		// Negative exponents with sufficient trailing zeros
-		{"100000e-4", 10}, // 5 trailing zeros >= 4
-		{"100000e-5", 1},  // 5 trailing zeros >= 5
-		{"1000e-3", 1},    // 3 trailing zeros >= 3
-		{"-2000e-2", -20}, // 3 trailing zeros >= 2
-		{"+50000e-4", 5},  // 4 trailing zeros >= 4
-		{"10e-1", 1},      // 1 trailing zero >= 1
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.input, func(t *testing.T) {
-			c := qt.New(t)
-			env := environment.NewTopLevelEnvironmentFrame()
-			p := NewParser(env, true, strings.NewReader(tc.input))
-
-			syn, err := p.ReadSyntax(context.TODO())
-			c.Assert(err, qt.IsNil)
-
-			obj := syn.Unwrap()
-			intVal, ok := obj.(*values.Integer)
-			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T: %v", obj, obj))
-			c.Assert(intVal.Value, qt.Equals, tc.expect)
-		})
-	}
-}
-
-// TestScientificNotationToFloat tests that scientific notation with negative exponents
-// and insufficient trailing zeros yields floats.
+// TestScientificNotationToFloat tests that all scientific notation produces Float (inexact)
+// per R7RS §7.1.1. The exponent marker indicates inexact notation.
 func TestScientificNotationToFloat(t *testing.T) {
 	tcs := []struct {
 		input  string
 		expect float64
 	}{
+		// Positive exponents — still inexact per R7RS
+		{"1e10", 1e10},
+		{"2e5", 2e5},
+		{"+3e2", 3e2},
+		{"-4e3", -4e3},
+		{"1e0", 1.0},
+		// Negative exponents with sufficient trailing zeros
+		{"100000e-4", 10.0},
+		{"100000e-5", 1.0},
+		{"1000e-3", 1.0},
+		{"-2000e-2", -20.0},
+		{"+50000e-4", 5.0},
+		{"10e-1", 1.0},
 		// Negative exponents without sufficient trailing zeros
 		{"1e-10", 1e-10},
-		{"10e-4", 0.001},    // 1 trailing zero < 4
-		{"123e-5", 0.00123}, // 0 trailing zeros < 5
-		{"+5e-2", 0.05},     // 0 trailing zeros < 2
-		{"-7e-3", -0.007},   // 0 trailing zeros < 3
-		{"100e-4", 0.01},    // 2 trailing zeros < 4
+		{"10e-4", 0.001},
+		{"123e-5", 0.00123},
+		{"+5e-2", 0.05},
+		{"-7e-3", -0.007},
+		{"100e-4", 0.01},
+		// Large values
+		{"1e20", 1e20},
+		{"1e19", 1e19},
+		{"-5e19", -5e19},
 	}
 
 	for _, tc := range tcs {
@@ -319,16 +297,16 @@ func TestScientificNotationToFloat(t *testing.T) {
 	}
 }
 
-// TestScientificNotationToBigInteger tests that large scientific notation results
-// are promoted to BigInteger.
-func TestScientificNotationToBigInteger(t *testing.T) {
+// TestScientificNotationExactPrefix tests that #e prefix converts scientific notation
+// Float back to exact Integer per R7RS §6.2.6.
+func TestScientificNotationExactPrefix(t *testing.T) {
 	tcs := []struct {
 		input  string
-		expect string
+		expect int64
 	}{
-		{"1e20", "100000000000000000000"},
-		{"1e19", "10000000000000000000"}, // Just over int64 max (~9.2e18)
-		{"-5e19", "-50000000000000000000"},
+		{"#e1e2", 100},
+		{"#e2e5", 200000},
+		{"#e1e0", 1},
 	}
 
 	for _, tc := range tcs {
@@ -341,12 +319,9 @@ func TestScientificNotationToBigInteger(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			obj := syn.Unwrap()
-			bigInt, ok := obj.(*values.BigInteger)
-			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T: %v", obj, obj))
-
-			expected := new(big.Int)
-			expected.SetString(tc.expect, 10)
-			c.Assert(bigInt.BigInt().Cmp(expected), qt.Equals, 0)
+			intVal, ok := obj.(*values.Integer)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Integer, got %T: %v", obj, obj))
+			c.Assert(intVal.Value, qt.Equals, tc.expect)
 		})
 	}
 }

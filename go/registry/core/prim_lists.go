@@ -224,6 +224,9 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 	if idx < 0 {
 		return values.NewForeignError("list-ref: index must be non-negative")
 	}
+	if values.IsEmptyList(o) {
+		return values.NewForeignError("list-ref: index out of bounds for empty list")
+	}
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "list-ref: expected a pair but got %T", o)

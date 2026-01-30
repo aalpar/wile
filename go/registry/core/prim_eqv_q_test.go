@@ -69,6 +69,18 @@ func TestEqvQComprehensive(t *testing.T) {
 		// Strings - literals are interned, so they ARE eqv?
 		{name: "literal strings interned", code: `(eqv? "hello" "hello")`, expected: values.TrueValue},
 
+		// Bytevectors - eqv? compares by identity, not contents (R7RS §6.1)
+		{name: "bytevector literal same contents (interned)", code: `(eqv? #u8(1 2 3) #u8(1 2 3))`, expected: values.TrueValue},
+		{name: "bytevector different contents", code: `(eqv? #u8(1 2 3) #u8(4 5 6))`, expected: values.FalseValue},
+		{name: "bytevector vs non-bytevector", code: `(eqv? #u8(1 2 3) '(1 2 3))`, expected: values.FalseValue},
+		{name: "empty bytevectors (interned)", code: `(eqv? #u8() #u8())`, expected: values.TrueValue},
+
+		// Ports - eqv? on ports compares identity (R7RS §6.1)
+		{name: "same port via let", code: `(let ((p (open-input-string "hello"))) (eqv? p p))`, expected: values.TrueValue},
+		{name: "different ports same content", code: `(eqv? (open-input-string "hello") (open-input-string "hello"))`, expected: values.FalseValue},
+		{name: "same output port via let", code: `(let ((p (open-output-string))) (eqv? p p))`, expected: values.TrueValue},
+		{name: "different output ports", code: `(eqv? (open-output-string) (open-output-string))`, expected: values.FalseValue},
+
 		// Procedures
 		{name: "same procedure", code: `(eqv? + +)`, expected: values.TrueValue},
 		{name: "different procedures", code: `(eqv? + -)`, expected: values.FalseValue},

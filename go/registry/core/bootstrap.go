@@ -183,9 +183,10 @@ const bootstrapMacroSource = `
     ((guard-aux var (else result ...))
      (begin result ...))
     ((guard-aux var (test => proc) clause ...)
-     (if test
-         (proc var)
-         (guard-aux var clause ...)))
+     (let ((t test))
+       (if t
+           (proc t)
+           (guard-aux var clause ...))))
     ((guard-aux var (test result ...) clause ...)
      (if test
          (begin result ...)

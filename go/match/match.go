@@ -17,7 +17,7 @@ package match
 // match.go implements the pattern matching VM for syntax-rules.
 //
 // This is Layer 1 of the macro system - the unhygienic core that operates
-// on raw values.Value types. It knows nothing about syntax objects or scopes;
+// on raw values.wrt types. It knows nothing about syntax objects or scopes;
 // those are handled by the syntax adapter layer (syntax_adapter.go).
 //
 // The VM uses two stacks:

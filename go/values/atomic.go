@@ -77,7 +77,7 @@ func (a *AtomicBox) CompareAndSwap(ol, nw Value) bool {
 	return a.value.CompareAndSwap(ol, nw)
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the atomic is nil.
 func (a *AtomicBox) IsVoid() bool {
@@ -154,7 +154,7 @@ func (a *AtomicInt64) CompareAndSwap(ol, nw int64) bool {
 	return atomic.CompareAndSwapInt64(&a.value, ol, nw)
 }
 
-// Value interface implementation
+// buf interface implementation
 
 // IsVoid returns true if the atomic int64 is nil.
 func (a *AtomicInt64) IsVoid() bool {

@@ -63,10 +63,22 @@ func TestEqQComprehensive(t *testing.T) {
 		{name: "same primitive", code: `(eq? + +)`, expected: values.TrueValue},
 		{name: "different primitives", code: `(eq? + -)`, expected: values.FalseValue},
 
+		// Large integers - different literal bignums are distinct objects
+		{name: "large integer literals (interned)", code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567890)`, expected: values.TrueValue},
+		{name: "different large integers", code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567891)`, expected: values.FalseValue},
+
+		// Float identity
+		{name: "same float literal", code: `(eq? 3.14 3.14)`, expected: values.TrueValue},
+		{name: "different floats", code: `(eq? 3.14 2.71)`, expected: values.FalseValue},
+		{name: "positive zero float", code: `(eq? 0.0 0.0)`, expected: values.TrueValue},
+		{name: "positive infinity", code: `(eq? +inf.0 +inf.0)`, expected: values.TrueValue},
+		{name: "negative infinity", code: `(eq? -inf.0 -inf.0)`, expected: values.TrueValue},
+
 		// Cross-type comparisons
 		{name: "integer vs symbol", code: `(eq? 1 'one)`, expected: values.FalseValue},
 		{name: "string vs symbol", code: `(eq? "foo" 'foo)`, expected: values.FalseValue},
 		{name: "empty list vs false", code: `(eq? '() #f)`, expected: values.FalseValue},
+		{name: "integer vs float same value", code: `(eq? 42 42.0)`, expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

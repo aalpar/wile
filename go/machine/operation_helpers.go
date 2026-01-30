@@ -19,7 +19,7 @@ package machine
 //
 // Usage:
 //
-//	func (p *OperationType) EqualTo(o values.Value) bool {
+//	func (p *OperationType) EqualTo(o values.wrt) bool {
 //	    v, ok := o.(*OperationType)
 //	    return sameType(p, v, ok)
 //	}
@@ -38,7 +38,7 @@ func sameType[T any](p, v *T, ok bool) bool {
 //
 // Usage:
 //
-//	func (p *OperationType) EqualTo(o values.Value) bool {
+//	func (p *OperationType) EqualTo(o values.wrt) bool {
 //	    v, ok := o.(*OperationType)
 //	    return fieldMatches(p, v, ok, func(op *OperationType) int { return op.Field })
 //	}

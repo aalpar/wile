@@ -77,9 +77,14 @@ var PrimBytevectorQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 })
 
 // PrimProcedureQ implements the procedure? predicate.
+// R7RS §6.1: Returns #t for all procedure types including case-lambda closures.
 var PrimProcedureQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*machine.MachineClosure)
-	return ok
+	switch o.(type) {
+	case *machine.MachineClosure, *machine.CaseLambdaClosure:
+		return true
+	default:
+		return false
+	}
 })
 
 // Manual predicate implementations

@@ -172,6 +172,12 @@ func TestSubtraction_Errors(t *testing.T) {
 	t.Run("subtract no arguments", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(-)`)
 	})
+	t.Run("subtract string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(- "hello" 1)`)
+	})
+	t.Run("subtract boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(- 1 #t)`)
+	})
 }
 
 func TestMultiplication(t *testing.T) {
@@ -340,6 +346,13 @@ func TestDivision_Errors(t *testing.T) {
 
 	t.Run("integer division by zero", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(/ 1 0)`)
+	})
+
+	t.Run("divide string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(/ "hello" 2)`)
+	})
+	t.Run("divide boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(/ 1 #t)`)
 	})
 }
 
@@ -845,6 +858,12 @@ func TestQuotient_Errors(t *testing.T) {
 	t.Run("quotient by zero", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(quotient 7 0)`)
 	})
+	t.Run("quotient string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(quotient "hello" 3)`)
+	})
+	t.Run("quotient boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(quotient 7 #t)`)
+	})
 }
 
 func TestRemainder(t *testing.T) {
@@ -877,6 +896,12 @@ func TestRemainder(t *testing.T) {
 func TestRemainder_Errors(t *testing.T) {
 	t.Run("remainder by zero", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(remainder 7 0)`)
+	})
+	t.Run("remainder string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(remainder "hello" 3)`)
+	})
+	t.Run("remainder boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(remainder 7 #t)`)
 	})
 }
 
@@ -914,6 +939,12 @@ func TestModulo(t *testing.T) {
 func TestModulo_Errors(t *testing.T) {
 	t.Run("modulo by zero", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(modulo 7 0)`)
+	})
+	t.Run("modulo string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(modulo "hello" 3)`)
+	})
+	t.Run("modulo boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(modulo 7 #t)`)
 	})
 }
 
@@ -985,6 +1016,12 @@ func TestMax_Errors(t *testing.T) {
 	t.Run("max no arguments", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(max)`)
 	})
+	t.Run("max string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(max "hello" 1)`)
+	})
+	t.Run("max boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(max 1 #t)`)
+	})
 }
 
 func TestMin(t *testing.T) {
@@ -1054,5 +1091,83 @@ func TestMin_SpecialValues(t *testing.T) {
 func TestMin_Errors(t *testing.T) {
 	t.Run("min no arguments", func(t *testing.T) {
 		runSchemeCodeExpectError(t, `(min)`)
+	})
+	t.Run("min string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(min "hello" 1)`)
+	})
+	t.Run("min boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(min 1 #t)`)
+	})
+}
+
+func TestAddition_Errors(t *testing.T) {
+	t.Run("add string arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(+ "hello" 1)`)
+	})
+	t.Run("add boolean arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(+ #t 1)`)
+	})
+}
+
+func TestMultiplication_Errors(t *testing.T) {
+	t.Run("multiply string arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(* "hello" 2)`)
+	})
+	t.Run("multiply boolean arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(* #t 2)`)
+	})
+}
+
+func TestAbs_Errors(t *testing.T) {
+	t.Run("abs of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(abs "hello")`)
+	})
+	t.Run("abs of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(abs #t)`)
+	})
+}
+
+func TestSquare_Errors(t *testing.T) {
+	t.Run("square of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(square "hello")`)
+	})
+	t.Run("square of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(square #t)`)
+	})
+}
+
+func TestSqrt_Errors(t *testing.T) {
+	t.Run("sqrt of string", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(sqrt "hello")`)
+	})
+	t.Run("sqrt of boolean", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(sqrt #t)`)
+	})
+}
+
+func TestExpt_Errors(t *testing.T) {
+	t.Run("expt string base", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(expt "hello" 2)`)
+	})
+	t.Run("expt boolean exponent", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(expt 2 #t)`)
+	})
+}
+
+func TestGcd_Errors(t *testing.T) {
+	t.Run("gcd string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(gcd "hello" 4)`)
+	})
+	t.Run("gcd boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(gcd 4 #t)`)
+	})
+}
+
+func TestLcm_Errors(t *testing.T) {
+	t.Run("lcm string first arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(lcm "hello" 4)`)
+	})
+	t.Run("lcm boolean second arg", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(lcm 4 #t)`)
 	})
 }
