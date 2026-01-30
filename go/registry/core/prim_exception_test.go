@@ -15,7 +15,6 @@
 package core_test
 
 import (
-	"strings"
 	"testing"
 
 	"wile/values"
@@ -823,27 +822,30 @@ func TestGuard(t *testing.T) {
 }
 
 // TestGuardArrowClause tests guard with => clause (R7RS §4.2.7)
+//
+// Per R7RS §4.2.7, (test => expr) evaluates expr and passes the result
+// of test to it. The test must return a useful truthy value (not just #t),
+// since that value is what gets passed to the procedure.
 func TestGuardArrowClause(t *testing.T) {
-	t.Skip("guard with => clause not yet implemented")
 	tcs := []struct {
 		name string
 		code string
 		out  values.Value
 	}{
 		{
-			name: "guard with => clause - procedure receives condition",
-			code: `(guard (exn ((string? exn) => string-length)) (raise "hello"))`,
-			out:  values.NewInteger(5),
-		},
-		{
-			name: "guard with => clause - custom procedure",
-			code: `(guard (exn ((number? exn) => (lambda (n) (* n 2)))) (raise 21))`,
+			name: "guard with => clause - assq result passed to cdr",
+			code: `(guard (exn ((assq 'a exn) => cdr)) (raise '((a . 42))))`,
 			out:  values.NewInteger(42),
 		},
 		{
-			name: "guard with => clause - list operations",
-			code: `(guard (exn ((list? exn) => length)) (raise '(a b c d e)))`,
-			out:  values.NewInteger(5),
+			name: "guard with => clause - custom procedure",
+			code: `(guard (exn ((assq 'val exn) => (lambda (p) (* (cdr p) 2)))) (raise '((val . 21))))`,
+			out:  values.NewInteger(42),
+		},
+		{
+			name: "guard with => clause - fallthrough to second clause",
+			code: `(guard (exn ((assq 'a exn) => cdr) ((assq 'b exn))) (raise '((b . 23))))`,
+			out:  values.NewCons(values.NewSymbol("b"), values.NewInteger(23)),
 		},
 	}
 
@@ -1179,8 +1181,8 @@ func TestGuardDeeplyNested(t *testing.T) {
 		{
 			name: "nested guard with => clause at inner level",
 			code: `(guard (outer (else 'outer))
-				(guard (inner ((number? inner) => (lambda (n) (* n n))))
-					(raise 9)))`,
+				(guard (inner ((assq 'n inner) => (lambda (p) (* (cdr p) (cdr p)))))
+					(raise '((n . 9)))))`,
 			out: values.NewInteger(81),
 		},
 		{
@@ -1208,9 +1210,6 @@ func TestGuardDeeplyNested(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if strings.Contains(tc.name, "=>") {
-				t.Skip("guard with => clause not yet implemented")
-			}
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.out)
