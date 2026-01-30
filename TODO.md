@@ -42,48 +42,11 @@ Code Cleanup
 ### FreeIdResolution
 - [ ] Try and find a more specific type for the interface, instead of 'any'.
 
-### Match Package SyntaxValue Usage
-**Status:** ✅ DESIGN IS CORRECT - No cleanup needed
-
-The match package intentionally uses a three-layer architecture:
-1. **Layer 1 (Core):** `Matcher` operates on raw `values.Value` types
-2. **Layer 2 (Adapter):** `SyntaxMatcher` converts between `syntax.SyntaxValue` and `values.Value`
-3. **Layer 3 (Hygiene):** Scope addition happens AFTER expansion in `valueToSyntaxWithOrigin()`
-
-This separation is documented and intentional per Flatt 2016 model.
-
----
-
 ### Scope Matching Optimization
 - [ ] **Location:** `go/syntax/` and `go/match/`
 - [ ] **Issue:** Scope set matching is mostly brute force O(n×m) comparison
 - [ ] **Goal:** Investigate optimization opportunities (hash-based set comparison, scope indexing)
 - [ ] **Impact:** Performance improvement for complex macro expansions
-
----
-
-### Phase System
-**Status:** ✅ ALREADY SIMPLIFIED
-
-The phase system has been modernized:
-- `PhaseRegistry` uses O(1) indexed map-based access with `GetOrCreate(phase int)`
-- Thread-safe via `sync.RWMutex`
-- Constants: `PhaseTemplate = -1`, `PhaseRuntime = 0`, `PhaseExpand = 1`, `PhaseCompile = 2`
-- Convenience methods: `env.AtPhase(n)`, `env.Runtime()`, `env.Expand()`, `env.Compile()`
-
-**Remaining cleanup:**
-- [ ] Remove unused `MetaFrame` type in `go/environment/meta_frame.go` (only 27 lines, appears abandoned)
-
----
-
-### begin-for-syntax
-**Status:** ✅ FULLY IMPLEMENTED
-
-Implementation in `go/machine/compile_begin_for_syntax.go`:
-- Handles `(begin-for-syntax expr ...)` for compile-time evaluation
-- Uses expand-time environment for expansion
-- Creates temporary template, compiles each expression, executes at compile time
-- Returns `nil` - no runtime code emitted
 
 ---
 
@@ -97,29 +60,6 @@ Implementation in `go/machine/compile_begin_for_syntax.go`:
 
 **Potential opportunity:**
 - [ ] Consolidate duplicate logic between quasiquote and quasisyntax implementations (different files)
-
----
-
-### Let-syntax and Letrec-syntax
-**Status:** ✅ IMPLEMENTED
-
-Both are handled at compile time in the machine/expander, not bootstrap macros.
-- `let-syntax`: Creates local syntax bindings scoped to body
-- `letrec-syntax`: Creates mutually-recursive local syntax bindings
-
-No simplification needed.
-
----
-
-### Number Comparison Methods
-**Status:** ✅ COMPLETE
-
-All numeric types implement `Compare(o Number) int`:
-- `Integer.Compare()`, `Float.Compare()`, `Rational.Compare()`, `Complex.Compare()`
-- `BigInteger.Compare()`, `BigFloat.Compare()`
-- Cross-type comparison semantics with type promotion
-
-Method naming uses `Compare` consistently (not `CompareTo`).
 
 ---
 
@@ -270,18 +210,6 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 
 ---
 
-### Vardec Functions
-**Status:** ❓ NOT FOUND
-
-Search found no "vardec" functions in the codebase. Either:
-- Already removed in a previous commit
-- Refers to something renamed
-- Outdated TODO item
-
-**Action:** Close or clarify what "vardec" referred to.
-
----
-
 ### Tokenizer Warnings
 - [ ] **Issue:** Unreachable code and unhandled errors in tokenizer
 - [ ] **Location:** `go/tokenizer/tokenizer.go` (lines mentioned: 1641, 1664)
@@ -399,175 +327,51 @@ func TestPrimName(t *testing.T) {
 }
 ```
 
-### Arithmetic (17 primitives)
-- [x] `prim_arithmetic_test.go` - +, -, *, /, quotient, remainder, modulo, gcd, lcm, expt, sqrt, square, max, min, abs, floor, ceiling, round, truncate (all tested)
+### Arithmetic
 - [ ] `prim_exact_integer_sqrt_test.go` - exact-integer-sqrt, test: perfect squares, non-perfect (returns two values)
 - [ ] `prim_rationalize_test.go` - rationalize, test: tolerance parameter
 
-### Transcendental Functions (8 primitives)
-- [x] `prim_trig_test.go` - exp, log, sin, cos, tan, asin, acos, atan (all tested including complex inputs, special values)
-
-### Complex Numbers (6 primitives)
-- [x] `prim_complex_test.go` - make-rectangular, real-part, imag-part, magnitude (all tested)
-- [x] `prim_complex_extra_test.go` - make-polar, angle (all tested including round-trip tests)
-
-### Numeric Predicates (15 primitives)
-- [x] `prim_numeric_predicate_test.go` - zero?, odd?, even?, positive?, negative?, exact?, inexact?, exact-integer?, finite?, infinite?, nan?, number?, complex?, real?, rational?, integer? (all tested with multiple numeric types including BigInteger, BigFloat, special values)
-- [x] `prim_predicate_test.go` - zero?, positive?, negative?, odd?, even? (additional coverage)
-- [x] `prim_special_predicates_test.go` - finite?, infinite?, nan?, real-part (tested with rational and complex)
-- [x] `prim_exact_q_test.go`, `prim_inexact_q_test.go`, `prim_exact_integer_q_test.go` - additional exactness predicate tests
-
-### Numeric Comparisons (5 primitives)
-- [x] `prim_numeric_predicate_test.go` - =, <, >, <=, >= (all tested with mixed types, chains, BigInteger, special values, NaN behavior)
-
-### Numeric Conversion (6 primitives)
-- [x] `prim_exact_test.go` - exact (tested with integer, float, rational, error cases including inf/nan)
-- [x] `prim_inexact_test.go` - inexact (tested with integer, float, rational, complex)
-- [x] `prim_complex_test.go`, `prim_numeric_conversion_test.go` - numerator, denominator (tested with rationals, integers, floats)
-- [x] `prim_numeric_conversion_test.go` - number->string, string->number (tested with radix 2,8,10,16, invalid strings, various numeric types)
-
-### Division Operations (6 primitives)
-- [x] `prim_division_test.go` - floor/, floor-quotient, floor-remainder, truncate/, truncate-quotient, truncate-remainder (all tested with various numeric types, positive/negative numbers, multiple values return)
-
-### List Operations (20 primitives)
-- [x] `prim_list_test.go` - car, cdr, cons, list, null?, pair?, list?, set-car!, set-cdr!, list-set!, make-list, append, length, reverse, list-ref, list-tail, memq, memv, member, assq, assv, assoc (all tested with various types, edge cases, error conditions)
-
-### Equality Predicates (3 primitives)
-- [x] `prim_eq_q_test.go` - eq?, test: identical objects, symbols, small integers
-- [x] `prim_eqv_q_test.go` - eqv?, test: numbers, characters, booleans
-- [x] `prim_equal_q_test.go` - equal?, test: deep comparison, lists, vectors, strings
-
-### String Operations (12 primitives)
-- [x] `prim_string_test.go` - string-length, string-ref, substring, string-append, string->list, list->string, string->symbol, symbol->string, make-string, string-copy, string-upcase, string-downcase, string-foldcase, string-set!, string-fill!, string-copy!, string-map, string-for-each, string, string? (all tested with ASCII, Unicode, edge cases)
-
-### String Comparisons (10 primitives)
-- [x] `prim_string_compare_test.go` - string=?, string<?, string>?, string<=?, string>=?, string-ci=?, string-ci<?, string-ci>?, string-ci<=?, string-ci>=? (all tested with variadic args, case-insensitive, Unicode)
-
-### Character Operations (12 primitives)
-- [x] `prim_char_test.go` - char=?, char<?, char>?, char<=?, char>=?, char->integer, integer->char, char-ci=?, char-ci<?, char-ci>?, char-ci<=?, char-ci>=?, char-alphabetic?, char-numeric?, char-whitespace?, char-upper-case?, char-lower-case?, char-upcase, char-downcase, char-foldcase, digit-value (all tested including variadic, case-insensitive, Unicode)
-
-### Vector Operations (6 primitives)
-- [x] `prim_vector_test.go` - make-vector, vector-length, vector-ref, vector->list, list->vector (all tested)
+### Vector Operations
 - [ ] `prim_vector_set_test.go` - vector-set!, test: mutation (used in other tests but no dedicated tests)
 
-### Bytevector Operations (10 primitives)
-- [x] `prim_bytevector_test.go` - bytevector?, make-bytevector, bytevector, bytevector-length, bytevector-u8-ref, bytevector-u8-set!, bytevector-copy, bytevector-append, utf8->string, string->utf8 (all tested with edge cases, round-trip tests)
+### Bytevector Operations
 - [ ] `prim_bytevector_copy_bang_test.go` - bytevector-copy!, test: mutation with start/end indices
 
-### I/O Ports (25 primitives)
+### I/O Ports
 - [ ] `prim_open_input_file_test.go`
 - [ ] `prim_open_output_file_test.go`
-- [x] `prim_open_binary_input_file_test.go`
-- [x] `prim_open_binary_output_file_test.go`
 - [ ] `prim_open_input_string_test.go`
 - [ ] `prim_open_output_string_test.go`
 - [ ] `prim_open_input_bytevector_test.go`
 - [ ] `prim_open_output_bytevector_test.go`
 - [ ] `prim_get_output_string_test.go`
 - [ ] `prim_get_output_bytevector_test.go`
-- [x] `prim_close_port_test.go`
 - [ ] `prim_input_port_q_test.go`
 - [ ] `prim_output_port_q_test.go`
 - [ ] `prim_port_q_test.go`
 - [ ] `prim_input_port_open_q_test.go`
 - [ ] `prim_output_port_open_q_test.go`
-- [x] `prim_current_input_port_test.go` (in prim_current_port_test.go)
-- [x] `prim_current_output_port_test.go` (in prim_current_port_test.go)
-- [x] `prim_call_with_input_file_test.go`
-- [x] `prim_call_with_output_file_test.go`
-- [x] `prim_with_input_from_file_test.go`
-- [x] `prim_with_output_to_file_test.go`
-- [x] `prim_eof_object_test.go`
-- [x] `prim_eof_object_q_test.go` (in prim_eof_object_test.go)
 
-### Read/Write (8 primitives)
+### Read/Write
 - [ ] `prim_read_test.go`
 - [ ] `prim_read_syntax_test.go`
 - [ ] `prim_read_token_test.go`
 - [ ] `prim_write_test.go`
-- [x] `prim_write_simple_test.go`
-- [x] `prim_write_shared_test.go`
 - [ ] `prim_display_test.go`
 - [ ] `prim_write_char_test.go`
 - [ ] `prim_newline_test.go`
 
-### Control Flow (8 primitives)
-- [x] `prim_apply_test.go` - apply, test: with list, with multiple args + list
-- [x] `prim_map_test.go` - map, test: single list, multiple lists, empty lists
-- [x] `prim_for_each_test.go` - for-each, test: side effects, return value
+### Control Flow
 - [ ] `prim_call_cc_test.go` - expand existing tests for edge cases
-- [x] `prim_call_with_values_test.go` - test: producer/consumer pattern
-- [x] `prim_values_test.go` - values, test: zero, one, multiple values
-- [x] `prim_dynamic_wind_test.go` - test: before/after thunks, with continuations
-- [x] `prim_not_test.go` - not, test: #f->#t, everything else->#f
 
-### Exception Handling (6 primitives)
-- [x] `prim_with_exception_handler_test.go` (in prim_exception_test.go)
-- [x] `prim_raise_test.go` (in prim_exception_test.go)
-- [x] `prim_raise_continuable_test.go` (in prim_exception_test.go)
-- [x] `prim_error_test.go` (in prim_exception_test.go)
-- [x] `prim_error_object_q_test.go` (in prim_exception_test.go)
-- [x] `prim_error_object_message_test.go` (in prim_exception_test.go)
-- [x] `prim_error_object_irritants_test.go` (in prim_exception_test.go)
-
-### Promises (4 primitives)
-- [x] `prim_make_promise_test.go` (in prim_promise_test.go)
-- [x] `prim_make_lazy_promise_test.go` (in prim_promise_test.go)
-- [x] `prim_force_test.go` - test: memoization, multiple force calls (in prim_promise_test.go)
-
-### Parameters (2 primitives)
-- [x] `prim_make_parameter_test.go` - test: with/without converter (in prim_parameter_test.go)
-
-### Environment/Eval (6 primitives)
-- [x] `prim_eval_test.go` (in prim_eval_env_test.go)
-- [x] `prim_environment_test.go` (in prim_eval_env_test.go)
-- [x] `prim_interaction_environment_test.go` (in prim_eval_env_test.go)
-- [x] `prim_scheme_report_environment_test.go` (in prim_eval_env_test.go)
-- [x] `prim_null_environment_test.go` (in prim_eval_env_test.go)
-- [x] `prim_load_test.go` (in prim_delete_load_test.go)
-
-### Syntax Operations (8 primitives)
-- [x] `prim_datum_to_syntax_test.go` (in prim_identifier_test.go)
-- [x] `prim_syntax_to_datum_test.go` (in prim_identifier_test.go)
-- [x] `prim_identifier_q_test.go` (in prim_identifier_test.go)
-- [x] `prim_bound_identifier_equal_q_test.go` (in prim_identifier_test.go)
-- [x] `prim_free_identifier_equal_q_test.go` (in prim_identifier_test.go)
-- [x] `prim_syntax_local_value_test.go` (in prim_identifier_test.go)
-- [x] `prim_syntax_local_introduce_test.go` (in prim_identifier_test.go)
-- [x] `prim_syntax_local_identifier_as_binding_test.go` (in prim_identifier_test.go)
-- [x] `prim_make_compile_time_value_test.go` (in prim_identifier_test.go)
-
-### Expansion (3 primitives)
+### Expansion
 - [ ] `prim_expand_test.go`
 - [ ] `prim_expand_once_test.go`
 - [ ] `prim_compile_test.go`
 
-### File System (2 primitives)
-- [x] `prim_file_exists_q_test.go` (in prim_file_env_test.go)
-- [x] `prim_delete_file_test.go` (in prim_delete_load_test.go)
-
-### Process/Environment (5 primitives)
-- [x] `prim_command_line_test.go` (in prim_file_env_test.go)
+### Process/Environment
 - [ ] `prim_exit_test.go`
 - [ ] `prim_emergency_exit_test.go`
-- [x] `prim_get_environment_variable_test.go` (in prim_file_env_test.go)
-- [x] `prim_get_environment_variables_test.go` (in prim_file_env_test.go)
-- [x] `prim_features_test.go` (in prim_misc_test.go)
-
-### Time (4 primitives)
-- [x] `prim_current_second_test.go` (in prim_misc_test.go)
-- [x] `prim_current_jiffy_test.go` (in prim_misc_test.go)
-- [x] `prim_jiffies_per_second_test.go` (in prim_misc_test.go)
-- [x] `prim_time_test.go` (in prim_srfi18_time_test.go)
-
-### Threading - SRFI-18 (3 primitives)
-- [x] `prim_thread_test.go`
-- [x] `prim_mutex_test.go`
-- [x] `prim_condvar_test.go`
-
-### Go Concurrency (2 primitives)
-- [x] `prim_channel_test.go`
-- [x] `prim_sync_test.go` - WaitGroup, RWMutex, Once, Atomic
 
 ### Miscellaneous
 - [ ] `prim_utils_test.go`
@@ -576,8 +380,6 @@ func TestPrimName(t *testing.T) {
 
 Code Refactoring (see REFACTORING_PROPOSAL.md)
 ----------------------------------------------
-- [x] Migrate primitives from `runtime/primitives/` to `registry/core/` and `extensions/*/`
-- [x] Move primitive tests to `registry/core/`
 - [ ] Add `go/registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
 - [ ] Add `go/machine/operation_helpers.go` - EqualTo helper functions (~300 lines saved)
 - [ ] Migrate ~27 operation files to use EqualTo helpers
@@ -594,38 +396,9 @@ R7RS Missing Features
 - [x] **Escape sequences:** Calls `readIntraExtendedToken()` → `readEscapeSequence('|')`
 - [ ] **Verification needed:** Confirm all R7RS escape sequences supported (`\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, `\x<hex>;`)
 
-**Hex Escape Semicolon Terminator:**
-- [x] **IMPLEMENTED:** `readHexEscapeToken()` at line 599-617 validates semicolon terminator
-- [x] Error message: `MessageExpectingHexSequenceTerminator`
-
-**String Line Continuation:**
-- [x] **IMPLEMENTED:** `skipLineContinuation()` at lines 698-715
-- [x] Skips intraline whitespace after backslash
-- [x] Calls `scanLineEnding()` then skips more whitespace
-
-**Scientific Notation in Library Files:**
-- [ ] **Issue:** Numbers like `1e-10` fail to parse in `.sld` files
-- [ ] **Error:** "strconv.ParseInt: parsing '1e-10': invalid syntax"
-- [ ] **Note:** Works in REPL; issue may be in library loading, not tokenizer
-
-**Exponent Markers:**
-- [x] All R7RS exponent markers supported: `e`, `s`, `f`, `d`, `l` (and uppercase variants)
-- [x] Precision hints mapped to strengths but treated as equivalent to `e` at runtime
-
 **Inexact Digit Placeholder:**
 - [ ] R7RS allows `#` in inexact numbers (e.g., `1.2###`)
 - [ ] Not implemented
-
----
-
-### Syntax/Macros
-
-**Core Macros Status:**
-- [x] `case` macro (R7RS §4.2.1): IMPLEMENTED in bootstrap.go lines 109-131
-- [x] `letrec*` macro (R7RS §4.2.2): IMPLEMENTED in bootstrap.go lines 79-82
-- [x] `let-syntax` / `letrec-syntax` (R7RS §4.3.1): IMPLEMENTED in machine/expander
-- [x] `syntax-error` (R7RS §4.3.1): REGISTERED in specialforms.go line 43
-- [x] `define-values` (R7RS §5.3.3): IMPLEMENTED in bootstrap.go lines 257-268
 
 ---
 
@@ -701,12 +474,6 @@ Dead Code Removal
 - [ ] These are only used in `go/syntax/coverage_test.go`
 - [ ] Main code uses different scope manipulation methods
 
-### Phase 6 (Optional): Fix Method Signature
-- [x] `NativeError.Unwrap()` already returns `error` (line 127 of `go/values/native_error.go`)
-- [x] Correctly implements Go's `errors.Unwrap` interface
-
----
-
 Future Extensions
 -----------------
 
@@ -744,49 +511,8 @@ Future Extensions
 
 See **DESIGN_MULTITHREADING.md** for full implementation plan.
 
-**Approach:** SRFI-18 standard API + Go-native extensions (channels, sync primitives)
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Thread infrastructure, thread-safe globals | Complete |
-| 2 | Basic thread primitives (make-thread, thread-start!, thread-join!) | Complete |
-| 3 | Mutex primitives (make-mutex, mutex-lock!, mutex-unlock!) | Complete |
-| 4 | Condition variables | Complete |
-| 5 | Go channels (make-channel, channel-send!, channel-receive, channel-select) | Complete |
-| 6 | Go sync extensions (WaitGroup, RWMutex, Once, atomics) | Complete |
-| 7 | Exception handling integration | Complete |
-| 8 | call/cc and dynamic-wind integration | Not started |
-
-**Key challenges:**
-- MachineContext thread safety (each thread gets own context)
-- Global environment synchronization (RWMutex on bindings)
-- call/cc scope limited to single thread
-- dynamic-wind cleanup on thread termination
-
----
-
-### Records (SRFI-9)
-
-Record types for user-defined data structures. SRFI-9 is the de facto standard for R7RS-small implementations.
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | `define-record-type` macro | Complete (in bootstrap.go) |
-| 2 | Constructor, predicate, accessor generation | Complete |
-| 3 | Mutator (setter) generation | Complete |
-| 4 | Integration with `equal?` and `write` | Complete |
-
-**Syntax:**
-```scheme
-(define-record-type <point>
-  (make-point x y)
-  point?
-  (x point-x point-x-set!)
-  (y point-y point-y-set!))
-```
-
-**References:**
-- https://srfi.schemers.org/srfi-9/srfi-9.html
+SRFI-18 standard API + Go-native extensions (channels, sync primitives) are complete through Phase 7. Remaining:
+- [ ] Phase 8: call/cc and dynamic-wind integration with threads (call/cc scope limited to single thread, dynamic-wind cleanup on thread termination)
 
 ---
 
@@ -871,26 +597,7 @@ Track variable definition sites and enable source-level debugging at runtime.
 
 See **DESIGN_SOURCE_TRACKING.md** for full implementation plan.
 
-**Implementation status:** ✅ Infrastructure complete
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Binding source locations | ✅ Complete |
-| 2 | Source map in templates | ✅ Complete |
-| 3 | Stack traces | ✅ Complete |
-| 4 | Debugger support (breakpoints, stepping) | ✅ Complete |
-
-**What's implemented:**
-- `Binding.source` field for variable definition sites
-- `SourceMap` type for PC → source location mapping
-- `NativeTemplate.sourceMap` and `NativeTemplate.name` fields
-- `StackFrame` and `StackTrace` types
-- `SchemeError` type with source location and stack trace
-- `Debugger` type with breakpoints and stepping modes
-- `MachineContext.CaptureStackTrace()` and `CurrentSource()` methods
-- Debugger integration in VM `Run()` loop
-
-**Remaining work to fully utilize:**
+Infrastructure is complete (binding source locations, source maps, stack traces, debugger with breakpoints/stepping). Remaining work:
 - [ ] Wire up compilation to record source locations in source map
 - [ ] Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
