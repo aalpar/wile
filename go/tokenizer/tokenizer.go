@@ -1436,12 +1436,11 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 	}
 	if isDotSubsequent(p.curr()) {
 		p.state = TokenizerStateSymbol
-		// TODO Sym
-		// consume '.' or
 		p.next()
 		for p.err == nil && isSubsequent(p.curr()) {
 			p.next()
 		}
+		p.value = p.text
 	}
 	if !isDigit(r, p.curr()) {
 		return
@@ -1502,6 +1501,8 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		p.state = TokenizerStateSymbol
 		p.next()
 		if p.err != nil {
+			// Bare sign at EOF — populate value from text
+			p.value = p.text
 			return
 		}
 		switch {
@@ -1516,6 +1517,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			for p.err == nil && isSymbolSubsequent(p.curr()) {
 				p.next()
 			}
+			p.value = p.text
 			return
 		case isDot(p.curr()):
 			p.readSignedDecimalFractionOrExponentWithImaginary(r)
@@ -1524,6 +1526,8 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 			p.readIntegerAndFraction(true, r)
 			return
 		}
+		// Bare sign (+/-) as symbol
+		p.value = p.text
 		return
 	case isDot(p.curr()):
 		p.readConsOrDecimalFractionWithExponent(r)

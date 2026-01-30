@@ -1290,10 +1290,6 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	case *syntax.SyntaxSymbol:
 		// Simple export: symbol name
 		name := s.Unwrap().(*values.Symbol).Key
-		if name == "" {
-			panic(fmt.Sprintf("parseExportSpec: empty symbol key, SyntaxSymbol=%v, Unwrap=%v (%T), scopes=%v, source=%v",
-				s, s.Unwrap(), s.Unwrap(), s.Scopes(), s.SourceContext()))
-		}
 		lib.AddExport(name, name)
 		return nil
 
