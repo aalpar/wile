@@ -113,10 +113,90 @@ This prevents unintended variable capture in macros:
   tmp)  ; => 5, not captured by macro's tmp
 ```
 
+## Embedding in Go
+
+Wile provides a public API for embedding Scheme in Go programs via the `wile` package.
+
+### Basic Usage
+
+```go
+import "github.com/aalpar/wile/go/wile"
+
+// Create an engine
+engine, err := wile.NewEngine()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Evaluate a single expression
+result, err := engine.Eval(ctx, "(+ 1 2 3)")
+fmt.Println(result.SchemeString()) // "6"
+
+// Evaluate multiple expressions (returns last result)
+result, err = engine.EvalMultiple(ctx, `
+  (define x 10)
+  (define y 20)
+  (+ x y)
+`)
+```
+
+### Compile Once, Run Many Times
+
+```go
+compiled, err := engine.Compile("(+ x 1)")
+result, err := engine.Run(ctx, compiled)
+```
+
+### Bridging Go and Scheme
+
+Define Go values in Scheme's environment:
+
+```go
+engine.Define("my-var", wile.NewInteger(100))
+val, ok := engine.Get("my-var")
+```
+
+Register a Go function as a Scheme primitive:
+
+```go
+engine.RegisterPrimitive(wile.PrimitiveSpec{
+    Name:       "go-add",
+    ParamCount: 2,
+    Impl: func(ctx context.Context, mc *machine.MachineContext, args ...values.Value) error {
+        a := args[0].(*values.Integer).Value
+        b := args[1].(*values.Integer).Value
+        mc.SetValue(values.NewInteger(a + b))
+        return nil
+    },
+})
+// Now callable from Scheme: (go-add 3 4) => 7
+```
+
+Call a Scheme procedure from Go:
+
+```go
+proc, _ := engine.Get("my-scheme-function")
+result, err := engine.Call(ctx, proc, wile.NewInteger(42))
+```
+
+### Value Constructors
+
+| Constructor | Creates |
+|---|---|
+| `wile.NewInteger(n)` | Exact integer |
+| `wile.NewFloat(f)` | Inexact real |
+| `wile.NewString(s)` | String |
+| `wile.NewSymbol(s)` | Symbol |
+| `wile.NewBoolean(b)` | `#t` / `#f` |
+| `wile.NewList(vals...)` | Proper list |
+| `wile.Null` | Empty list `'()` |
+| `wile.Void` | Void value |
+
 ## Documentation
 
 - `PRIMITIVES.md` - Complete reference of supported types and primitives
-- `go/DESIGN.md` - Detailed macro system design
+- `docs/design/DESIGN.md` - Detailed macro system design
+- `docs/design/EMBEDDING.md` - Embedding API design
 - `BIBLIOGRAPHY.md` - Academic references
 - `TODO.md` - Implementation status and pending tasks
 
