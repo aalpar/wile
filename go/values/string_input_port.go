@@ -21,6 +21,9 @@ import (
 )
 
 var _ Value = (*StringInputPort)(nil)
+var _ Port = (*StringInputPort)(nil)
+var _ InputPort = (*StringInputPort)(nil)
+var _ TextualReader = (*StringInputPort)(nil)
 var _ io.ReadCloser = (*StringInputPort)(nil)
 var _ io.RuneScanner = (*StringInputPort)(nil)
 

@@ -21,6 +21,10 @@ import (
 )
 
 var _ Value = (*ByteVectorBufferdOutputPort)(nil)
+var _ Port = (*ByteVectorBufferdOutputPort)(nil)
+var _ OutputPort = (*ByteVectorBufferdOutputPort)(nil)
+var _ BinaryWriter = (*ByteVectorBufferdOutputPort)(nil)
+var _ ByteVectorExtractor = (*ByteVectorBufferdOutputPort)(nil)
 var _ io.WriteCloser = (*ByteVectorBufferdOutputPort)(nil)
 var _ io.ByteWriter = (*ByteVectorBufferdOutputPort)(nil)
 

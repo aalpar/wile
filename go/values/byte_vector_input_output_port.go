@@ -21,10 +21,13 @@ import (
 )
 
 var _ Value = (*ByteVectorInputOutputPort)(nil)
+var _ Port = (*ByteVectorInputOutputPort)(nil)
+var _ InputOutputPort = (*ByteVectorInputOutputPort)(nil)
+var _ BinaryReader = (*ByteVectorInputOutputPort)(nil)
+var _ BinaryWriter = (*ByteVectorInputOutputPort)(nil)
+var _ ByteVectorExtractor = (*ByteVectorInputOutputPort)(nil)
 var _ io.WriteCloser = (*ByteVectorInputOutputPort)(nil)
 var _ io.ByteWriter = (*ByteVectorInputOutputPort)(nil)
-
-var _ Value = (*ByteVectorInputOutputPort)(nil)
 var _ io.ReadCloser = (*ByteVectorInputOutputPort)(nil)
 var _ io.ByteReader = (*ByteVectorInputOutputPort)(nil)
 
@@ -86,6 +89,14 @@ func (p *ByteVectorInputOutputPort) ReadByte() (byte, error) {
 		return 0, ErrPortClosed
 	}
 	return p.buf.ReadByte()
+}
+
+// UnreadByte unreads the last byte read, allowing it to be read again.
+func (p *ByteVectorInputOutputPort) UnreadByte() error {
+	if p.closed {
+		return ErrPortClosed
+	}
+	return p.buf.UnreadByte()
 }
 
 func (p *ByteVectorInputOutputPort) ReadByteVector() (*ByteVector, error) {

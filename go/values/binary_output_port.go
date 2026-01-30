@@ -21,6 +21,9 @@ import (
 )
 
 var _ Value = (*BinaryOutputPort)(nil)
+var _ Port = (*BinaryOutputPort)(nil)
+var _ OutputPort = (*BinaryOutputPort)(nil)
+var _ BinaryWriter = (*BinaryOutputPort)(nil)
 var _ io.Writer = (*BinaryOutputPort)(nil)
 var _ io.ByteWriter = (*BinaryOutputPort)(nil)
 var _ io.Closer = (*BinaryOutputPort)(nil)

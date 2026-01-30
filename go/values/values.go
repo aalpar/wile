@@ -114,28 +114,71 @@ type SourceLocation interface {
 	Line() int
 }
 
-// Port represents an I/O port with source location tracking.
+// Port represents a Scheme I/O port.
+//
+// R7RS §6.13: All port types support close and open-state queries.
 type Port interface {
 	Value
 	Close() error
+	IsClosed() bool
 }
 
-// InputPort represents an I/O port with source location tracking.
+// InputPort represents a Scheme input port.
 type InputPort interface {
 	Port
 	Read([]byte) (int, error)
 }
 
-// OutputPort represents an I/O port with source location tracking.
+// OutputPort represents a Scheme output port.
 type OutputPort interface {
 	Port
 	Write([]byte) (int, error)
 	Flush() error
 }
 
+// InputOutputPort represents a bidirectional Scheme port.
 type InputOutputPort interface {
 	InputPort
 	OutputPort
+}
+
+// TextualReader represents a textual input port capable of rune-level I/O.
+//
+// R7RS §6.13.2: Textual input ports support read-char, peek-char, read-line, etc.
+type TextualReader interface {
+	InputPort
+	ReadRune() (rune, int, error)
+	UnreadRune() error
+}
+
+// TextualWriter represents a textual output port capable of rune-level I/O.
+//
+// R7RS §6.13.3: Textual output ports support write-char, write-string, etc.
+type TextualWriter interface {
+	OutputPort
+	WriteRune(rune) (int, error)
+}
+
+// BinaryReader represents a binary input port capable of byte-level I/O.
+//
+// R7RS §6.13.3: Binary input ports support read-u8, peek-u8, read-bytevector, etc.
+type BinaryReader interface {
+	InputPort
+	ReadByte() (byte, error)
+	UnreadByte() error
+}
+
+// BinaryWriter represents a binary output port capable of byte-level I/O.
+//
+// R7RS §6.13.3: Binary output ports support write-u8, write-bytevector, etc.
+type BinaryWriter interface {
+	OutputPort
+	WriteByte(byte) error
+}
+
+// ByteVectorExtractor represents a port that can extract its accumulated bytes.
+type ByteVectorExtractor interface {
+	ReadByteVector() (*ByteVector, error)
 }
 
 // Value is the base interface for all Scheme values.

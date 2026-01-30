@@ -21,11 +21,11 @@ import (
 )
 
 var _ Value = (*CharacterOutputPort)(nil)
+var _ Port = (*CharacterOutputPort)(nil)
+var _ OutputPort = (*CharacterOutputPort)(nil)
+var _ TextualWriter = (*CharacterOutputPort)(nil)
 var _ io.WriteCloser = (*CharacterOutputPort)(nil)
 var _ io.StringWriter = (*CharacterOutputPort)(nil)
-
-// need to be implemented here so that we have a custom interface that can be used without calling Datum() and doing type assertions elsewhere.
-// _ Port  = (Port)(*CharacterInputPort)(nil)
 
 // CharacterOutputPort represents a Scheme textual output port.
 type CharacterOutputPort struct {

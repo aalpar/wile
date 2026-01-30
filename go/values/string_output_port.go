@@ -21,6 +21,9 @@ import (
 )
 
 var _ Value = (*StringOutputPort)(nil)
+var _ Port = (*StringOutputPort)(nil)
+var _ OutputPort = (*StringOutputPort)(nil)
+var _ TextualWriter = (*StringOutputPort)(nil)
 var _ io.WriteCloser = (*StringOutputPort)(nil)
 var _ io.StringWriter = (*StringOutputPort)(nil)
 
@@ -59,6 +62,14 @@ func (p *StringOutputPort) Write(bs []byte) (n int, err error) {
 		return 0, ErrPortClosed
 	}
 	return p.buf.Write(bs)
+}
+
+// WriteRune writes a single rune to the port's buffer.
+func (p *StringOutputPort) WriteRune(rn rune) (int, error) {
+	if p.closed {
+		return 0, ErrPortClosed
+	}
+	return p.buf.WriteRune(rn)
 }
 
 // Flush is a no-op for StringOutputPort.

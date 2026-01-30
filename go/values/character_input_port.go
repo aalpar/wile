@@ -21,13 +21,12 @@ import (
 )
 
 var _ Value = (*CharacterInputPort)(nil)
+var _ Port = (*CharacterInputPort)(nil)
+var _ InputPort = (*CharacterInputPort)(nil)
+var _ TextualReader = (*CharacterInputPort)(nil)
 var _ io.Reader = (*CharacterInputPort)(nil)
 var _ io.Closer = (*CharacterInputPort)(nil)
 var _ io.RuneScanner = (*CharacterInputPort)(nil)
-
-// TODO: type should implement Port interface.  Port interface not yet defined.  Exposed methods may include IsOpen, Close, etc.
-// need to be implemented here so that we have a custom interface that can be used without calling Datum() and doing type assertions elsewhere.
-// _ Port  = (Port)(*CharacterInputPort)(nil)
 
 // CharacterInputPort represents a Scheme textual input port.
 type CharacterInputPort struct {

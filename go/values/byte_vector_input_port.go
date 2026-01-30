@@ -21,6 +21,9 @@ import (
 )
 
 var _ Value = (*ByteVectorInputPort)(nil)
+var _ Port = (*ByteVectorInputPort)(nil)
+var _ InputPort = (*ByteVectorInputPort)(nil)
+var _ BinaryReader = (*ByteVectorInputPort)(nil)
 var _ io.ReadCloser = (*ByteVectorInputPort)(nil)
 var _ io.ByteScanner = (*ByteVectorInputPort)(nil)
 
@@ -54,7 +57,7 @@ func (p *ByteVectorInputPort) Read(bs []byte) (int, error) {
 }
 
 // ReadByte reads and returns the next byte from the port.
-func (p *ByteVectorInputPort) ReadByte() (uint8, error) {
+func (p *ByteVectorInputPort) ReadByte() (byte, error) {
 	if p.closed {
 		return 0, ErrPortClosed
 	}
