@@ -39,6 +39,7 @@ var Builder = registry.NewRegistryBuilder(
 	addBytevectors,
 	addSyntax,
 	addParameters,
+	addPrompts,
 	addBootstrapMacros,
 )
 

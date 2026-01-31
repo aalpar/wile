@@ -51,6 +51,8 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 		return mc.ApplyCaseLambda(cls, vs...)
 	case *Parameter:
 		return applyParameter(ctx, mc, cls, vs)
+	case *ComposableContinuation:
+		return applyComposableContinuation(mc, cls, vs)
 	default:
 		return mc, mc.Error(fmt.Sprintf("expected a closure, got %s", mc.value[0].SchemeString()))
 	}
@@ -110,4 +112,34 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, a
 	default:
 		return mc, mc.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
 	}
+}
+
+// applyComposableContinuation applies a composable continuation by splicing
+// its captured frames onto the current continuation chain. The continuation
+// is deep-copied for safe re-invocation.
+//
+// See: Flatt, Yu, Findler, Felleisen "Adding Delimited and Composable Control
+// to a Production Programming Environment" (ICFP 2007).
+func applyComposableContinuation(mc *MachineContext, cc *ComposableContinuation, args []values.Value) (*MachineContext, error) {
+	if len(args) != 1 {
+		return mc, mc.Error(fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
+	}
+
+	// Deep-copy the segment for safe re-invocation
+	segment := cc.Cont().DeepCopy()
+
+	// Graft the segment's bottom frame onto the current continuation chain
+	GraftContinuation(segment, mc.cont)
+
+	// Handle dynamic-wind: unwind current extents not in captured stack,
+	// rewind captured extents not in current stack.
+	err := mc.RestoreWithWindingFrom(nil, mc.windingStack, cc.WindingStack())
+	if err != nil {
+		return mc, err
+	}
+
+	// Restore from the top of the segment (resume captured computation)
+	mc.Restore(segment)
+	mc.SetValue(args[0])
+	return mc, nil
 }

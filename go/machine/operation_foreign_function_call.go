@@ -53,6 +53,13 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 			return nil, err
 		}
 
+		// Check if this is a prompt abort - propagate up to the matching
+		// call-with-continuation-prompt handler.
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
+			return nil, err
+		}
+
 		// Check if this is already a Scheme exception - propagate as-is
 		var excErr *ErrExceptionEscape
 		if errors.As(err, &excErr) {
