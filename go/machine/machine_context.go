@@ -61,6 +61,7 @@ type MachineContext struct {
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
 	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
+	promptTag        *PromptTag           // prompt tag for this context (set by call-with-continuation-prompt)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -130,6 +131,11 @@ func (p *MachineContext) Template() *NativeTemplate {
 
 func (p *MachineContext) PC() int {
 	return p.pc
+}
+
+// SetPC sets the program counter. Used by PrimCallCC for inline lambda execution.
+func (p *MachineContext) SetPC(v int) {
+	p.pc = v
 }
 
 func (p *MachineContext) SetValues(vs ...values.Value) {
@@ -593,6 +599,83 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	return nil
 }
 
+// FindPrompt walks the continuation chain to find the nearest frame with
+// a matching prompt tag. Also checks the context's own prompt tag (set by
+// call-with-continuation-prompt on sub-contexts). Returns the matching
+// frame and true, or nil and false.
+//
+// When the prompt is on the context itself (not a continuation frame), returns
+// nil and true — the caller should treat this as "prompt at the boundary of
+// this sub-context" and slice the entire continuation chain.
+func (p *MachineContext) FindPrompt(tag *PromptTag) (*MachineContinuation, bool) {
+	for frame := p.cont; frame != nil; frame = frame.parent {
+		if frame.promptTag == tag {
+			return frame, true
+		}
+	}
+	if p.promptTag == tag {
+		return nil, true
+	}
+	return nil, false
+}
+
+// SliceContinuationAt deep-copies the continuation chain segment from p.cont
+// down to (but not including) the prompt frame. The returned chain's bottom
+// frame has parent = nil, making it a standalone segment suitable for
+// composable continuation capture.
+func (p *MachineContext) SliceContinuationAt(prompt *MachineContinuation) *MachineContinuation {
+	if p.cont == nil || p.cont == prompt {
+		return nil
+	}
+	// Deep copy frames from p.cont to just before prompt
+	top := p.cont.Copy()
+	top.parent = nil
+	current := top
+	src := p.cont.parent
+	for src != nil && src != prompt {
+		frameCopy := src.Copy()
+		frameCopy.parent = nil
+		current.parent = frameCopy
+		current = frameCopy
+		src = src.parent
+	}
+	return top
+}
+
+// GraftContinuation walks the segment chain to its bottom frame and sets
+// its parent to target, effectively splicing the segment onto the target chain.
+func GraftContinuation(segment, target *MachineContinuation) {
+	if segment == nil {
+		return
+	}
+	current := segment
+	for current.parent != nil {
+		current = current.parent
+	}
+	current.parent = target
+}
+
+// SetPromptTag sets the prompt tag on this context. Used by
+// call-with-continuation-prompt to mark sub-contexts as prompt boundaries.
+func (p *MachineContext) SetPromptTag(tag *PromptTag) {
+	p.promptTag = tag
+}
+
+// PromptTag returns the prompt tag for this context, or nil.
+func (p *MachineContext) PromptTag() *PromptTag {
+	return p.promptTag
+}
+
+// SaveContinuationWithPrompt pushes a new continuation frame that acts as a
+// continuation prompt. The frame captures current state (like SaveContinuation)
+// and is additionally tagged with a prompt tag and handler.
+func (p *MachineContext) SaveContinuationWithPrompt(off int, tag *PromptTag, handler *MachineClosure) {
+	p.cont = NewMachineContinuationFromMachineContext(p, off)
+	p.cont.promptTag = tag
+	p.cont.promptHandler = handler
+	p.evals = NewStack()
+}
+
 // RunWithEscapeHandling runs the VM loop, handling continuation escapes
 // that weren't caught by an enclosing call/cc. This is used at the top level
 // (REPL and file execution) to catch continuations invoked outside their
@@ -658,6 +741,43 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				p.pendingEscape = escapeErr.EscapeCont
 			}
 
+			continue
+		}
+
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
+			prompt, found := p.FindPrompt(abortErr.Tag)
+			if !found {
+				return fmt.Errorf("abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
+			}
+
+			// Unwind dynamic-wind from current to prompt's winding depth.
+			// The prompt frame's winding stack captures the extent at prompt installation.
+			targetStack := prompt.windingStack
+			restoreErr := p.RestoreWithWindingFrom(nil, p.windingStack, targetStack)
+			if restoreErr != nil {
+				return restoreErr
+			}
+
+			// Restore to the prompt frame (skip past it)
+			p.Restore(prompt)
+
+			// Invoke the handler with the abort values
+			handler := prompt.PromptHandler()
+			if handler != nil {
+				_, applyErr := p.Apply(handler, abortErr.Values...)
+				if applyErr != nil {
+					return applyErr
+				}
+				// Compensate: Apply sets pc=0, but Run() will start from pc.
+				// No compensation needed since we just Apply'd fresh.
+			} else {
+				if len(abortErr.Values) > 0 {
+					p.SetValue(abortErr.Values[0])
+				} else {
+					p.SetValue(values.Void)
+				}
+			}
 			continue
 		}
 

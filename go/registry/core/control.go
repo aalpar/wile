@@ -21,10 +21,10 @@ import (
 
 func addControl(r *registry.Registry) error {
 	// Higher-order functions
+	// Note: map and for-each are implemented in Scheme (see bootstrap.go)
+	// so their iteration becomes capturable Scheme frames for call/cc.
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"apply", 2, true, PrimApply},
-		{"map", 2, true, PrimMap},
-		{"for-each", 2, true, PrimForEach},
 	}, registry.PhaseRuntime)
 
 	// Continuations

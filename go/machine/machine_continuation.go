@@ -23,13 +23,15 @@ import (
 )
 
 type MachineContinuation struct {
-	parent       *MachineContinuation
-	env          *environment.EnvironmentFrame
-	template     *NativeTemplate
-	value        MultipleValues
-	evals        *Stack
-	pc           int
-	windingStack WindingStack // Captured dynamic extent for R7RS dynamic-wind
+	parent        *MachineContinuation
+	env           *environment.EnvironmentFrame
+	template      *NativeTemplate
+	value         MultipleValues
+	evals         *Stack
+	pc            int
+	windingStack  WindingStack     // Captured dynamic extent for R7RS dynamic-wind
+	promptTag     *PromptTag       // Non-nil marks this frame as a continuation prompt
+	promptHandler *MachineClosure  // Handler invoked on abort to this prompt
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -100,13 +102,48 @@ func (p *MachineContinuation) CallDepth() int {
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := &MachineContinuation{
-		parent:       p.parent,
-		env:          p.env,
-		template:     p.template,
-		value:        slices.Clone(p.value),
-		evals:        p.evals.Copy(),
-		pc:           p.pc,
-		windingStack: p.windingStack.Copy(),
+		parent:        p.parent,
+		env:           p.env,
+		template:      p.template,
+		value:         slices.Clone(p.value),
+		evals:         p.evals.Copy(),
+		pc:            p.pc,
+		windingStack:  p.windingStack.Copy(),
+		promptTag:     p.promptTag,
+		promptHandler: p.promptHandler,
+	}
+	return q
+}
+
+func (p *MachineContinuation) PromptTag() *PromptTag          { return p.promptTag }
+func (p *MachineContinuation) SetPromptTag(t *PromptTag)      { p.promptTag = t }
+func (p *MachineContinuation) PromptHandler() *MachineClosure { return p.promptHandler }
+func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) { p.promptHandler = h }
+
+// NewMachineContinuationWithPrompt creates a continuation frame that acts as
+// a continuation prompt. The tag identifies the prompt for abort/capture, and
+// the handler is invoked when an abort reaches this prompt.
+func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame, tag *PromptTag, handler *MachineClosure) *MachineContinuation {
+	q := NewMachineContinuation(parent, tpl, env)
+	q.promptTag = tag
+	q.promptHandler = handler
+	return q
+}
+
+// DeepCopy creates a deep copy of the entire continuation chain.
+// Each frame in the chain is copied, with parent pointers updated to
+// point to the copied frames. This is needed for composable continuations
+// which must be safely re-invoked multiple times.
+func (p *MachineContinuation) DeepCopy() *MachineContinuation {
+	if p == nil {
+		return nil
+	}
+	q := p.Copy()
+	current := q
+	for current.parent != nil {
+		parentCopy := current.parent.Copy()
+		current.parent = parentCopy
+		current = parentCopy
 	}
 	return q
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"wile/machine"
 	"wile/parser"
@@ -625,7 +626,7 @@ func TestDynamicWindEscape(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
+	err = mc.RunWithEscapeHandling()
 	qt.Assert(t, err, qt.IsNil)
 
 	// After should have run, setting v[0] to 2
@@ -703,6 +704,83 @@ func TestCallCCMultiInvoke(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestCallCCSubContextReentry tests that continuations captured inside
+// Go-implemented primitives (map, for-each, call-with-values) that use
+// NewSubContext() can be re-entered and resume the full computation,
+// including the primitive's iteration loop and the outer continuation.
+//
+// Currently these tests FAIL because the Go for-loop in PrimMap/PrimForEach
+// is not part of the captured Scheme continuation. When a continuation captured
+// inside map's callback is re-invoked, only the callback body re-executes —
+// the map iteration and outer computation are lost.
+//
+// Fixing this requires either:
+//   - Implementing map/for-each in Scheme (so iteration is Scheme frames)
+//   - Adding delimited continuations (shift/reset or prompts)
+//   - CPS-transforming the Go primitives to save iteration state
+//
+// R7RS §6.10: "call-with-current-continuation packages the current
+// continuation as an escape procedure." The "current continuation" at
+// a call/cc inside map's callback includes the rest of the map iteration
+// and the outer computation.
+func TestCallCCSubContextReentry(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			// Re-entering a continuation captured inside map should
+			// resume the map iteration from that element onward.
+			name: "map continuation re-entry resumes iteration",
+			code: `(let ((k #f))
+				(let ((result
+					(map (lambda (x)
+						(if (and (= x 2) (not k))
+							(call/cc (lambda (c) (set! k c) 200))
+							(* x 10)))
+						(list 1 2 3))))
+					(if k
+						(let ((saved-k k))
+							(set! k #f)
+							(saved-k 999))
+						result)))`,
+			// When re-entered with 999: map callback for x=2 returns 999,
+			// map continues to x=3 producing 30, map returns (10 999 30).
+			// Outer let rebinds result, k is now #f, returns result.
+			expected: values.List(
+				values.NewInteger(10),
+				values.NewInteger(999),
+				values.NewInteger(30)),
+		},
+		{
+			// Re-entering a continuation captured inside for-each should
+			// resume the for-each iteration for remaining elements.
+			name: "for-each continuation re-entry resumes iteration",
+			code: `(let ((k #f) (count 0))
+				(for-each (lambda (x)
+					(set! count (+ count 1))
+					(if (and (= x 2) (not k))
+						(call/cc (lambda (c) (set! k c)))))
+					(list 1 2 3))
+				(if (and k (< count 5))
+					(let ((saved-k k))
+						(set! k #f)
+						(saved-k #f))
+					count))`,
+			// First pass: count goes 1, 2 (captures k here), 3.
+			// Re-entry at call/cc in x=2: (set! count) already ran, count=3.
+			// call/cc returns #f, k is not captured again (k is truthy).
+			// for-each continues to x=3: count becomes 4.
+			// k was cleared, returns count = 4.
+			expected: values.NewInteger(4),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCodeWithTimeout(t, tc.code, 5*time.Second)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.expected)
 		})
@@ -821,6 +899,140 @@ func TestCallWithValues_Errors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			runSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}
+
+// TestCallCCCoroutines tests cooperative coroutines built on call/cc.
+// This is a regression test for a bug where continuations captured inside
+// nested call/cc sub-contexts had truncated continuation chains, causing
+// top-level forms after (scheduler-run) to be silently dropped.
+func TestCallCCCoroutines(t *testing.T) {
+	tcs := []struct {
+		name    string
+		code    string
+		check   func(t *testing.T, result values.Value)
+		timeout time.Duration
+	}{
+		{
+			name: "yield resumes after scheduler-run",
+			// The primary regression: forms after (scheduler-run) must execute.
+			code: `(let ((p (open-output-string)))
+				(define *queue* '())
+				(define (enqueue! thunk) (set! *queue* (append *queue* (list thunk))))
+				(define (dequeue!) (let ((n (car *queue*))) (set! *queue* (cdr *queue*)) n))
+				(define (scheduler-run) (if (not (null? *queue*)) ((dequeue!))))
+				(define (spawn thunk) (enqueue! (lambda () (thunk) (scheduler-run))))
+				(define (yield) (call/cc (lambda (k) (enqueue! (lambda () (k #f))) (scheduler-run))))
+
+				(spawn (lambda () (display "A1 " p) (yield) (display "A2 " p)))
+				(spawn (lambda () (display "B1 " p) (yield) (display "B2 " p)))
+
+				(scheduler-run)
+				(display "done" p)
+				(get-output-string p))`,
+			check: func(t *testing.T, result values.Value) {
+				t.Helper()
+				s, ok := result.(*values.String)
+				qt.Assert(t, ok, qt.IsTrue)
+				// "done" must appear — this is the regression condition.
+				qt.Assert(t, strings.Contains(s.Value, "done"), qt.IsTrue,
+					qt.Commentf("expected 'done' in output, got: %q", s.Value))
+				// All coroutine steps must appear at least once.
+				for _, step := range []string{"A1", "B1", "A2", "B2"} {
+					qt.Assert(t, strings.Contains(s.Value, step), qt.IsTrue,
+						qt.Commentf("expected %q in output, got: %q", step, s.Value))
+				}
+			},
+			timeout: 5 * time.Second,
+		},
+		{
+			name: "single coroutine yield and resume",
+			code: `(let ((p (open-output-string)))
+				(define *queue* '())
+				(define (enqueue! thunk) (set! *queue* (append *queue* (list thunk))))
+				(define (dequeue!) (let ((n (car *queue*))) (set! *queue* (cdr *queue*)) n))
+				(define (scheduler-run) (if (not (null? *queue*)) ((dequeue!))))
+				(define (spawn thunk) (enqueue! (lambda () (thunk) (scheduler-run))))
+				(define (yield) (call/cc (lambda (k) (enqueue! (lambda () (k #f))) (scheduler-run))))
+
+				(spawn (lambda () (display "1 " p) (yield) (display "2 " p)))
+
+				(scheduler-run)
+				(display "end" p)
+				(get-output-string p))`,
+			check: func(t *testing.T, result values.Value) {
+				t.Helper()
+				s, ok := result.(*values.String)
+				qt.Assert(t, ok, qt.IsTrue)
+				qt.Assert(t, strings.Contains(s.Value, "1"), qt.IsTrue)
+				qt.Assert(t, strings.Contains(s.Value, "2"), qt.IsTrue)
+				qt.Assert(t, strings.Contains(s.Value, "end"), qt.IsTrue,
+					qt.Commentf("expected 'end' in output, got: %q", s.Value))
+			},
+			timeout: 5 * time.Second,
+		},
+		{
+			name: "cross-context continuation escape",
+			// A's continuation invoked from inside B's call/cc context.
+			code: `(let ((p (open-output-string)))
+				(define *queue* '())
+				(define (enqueue! thunk) (set! *queue* (append *queue* (list thunk))))
+				(define (dequeue!) (let ((n (car *queue*))) (set! *queue* (cdr *queue*)) n))
+				(define (scheduler-run) (if (not (null? *queue*)) ((dequeue!))))
+				(define (spawn thunk) (enqueue! (lambda () (thunk) (scheduler-run))))
+				(define (yield) (call/cc (lambda (k) (enqueue! (lambda () (k #f))) (scheduler-run))))
+
+				(spawn (lambda () (display "X " p) (yield) (display "Y " p)))
+				(spawn (lambda () (display "P " p) (yield) (display "Q " p)))
+
+				(scheduler-run)
+				(get-output-string p))`,
+			check: func(t *testing.T, result values.Value) {
+				t.Helper()
+				s, ok := result.(*values.String)
+				qt.Assert(t, ok, qt.IsTrue)
+				for _, step := range []string{"X", "P", "Y", "Q"} {
+					qt.Assert(t, strings.Contains(s.Value, step), qt.IsTrue,
+						qt.Commentf("expected %q in output, got: %q", step, s.Value))
+				}
+			},
+			timeout: 5 * time.Second,
+		},
+		{
+			name: "call/cc inside nested function",
+			// call/cc inside a helper function, not at top level.
+			code: `(begin
+				(define (f) (+ 1 (call/cc (lambda (k) (k 10)))))
+				(f))`,
+			check: func(t *testing.T, result values.Value) {
+				t.Helper()
+				qt.Assert(t, result, values.SchemeEquals, values.NewInteger(11))
+			},
+			timeout: 5 * time.Second,
+		},
+		{
+			name: "saved continuation invoked later",
+			code: `(begin
+				(define k-saved #f)
+				(define count 0)
+				(let ((result (call/cc (lambda (k) (set! k-saved k) 'first))))
+					(set! count (+ count 1))
+					(if (< count 3)
+						(k-saved 'again)
+						count)))`,
+			check: func(t *testing.T, result values.Value) {
+				t.Helper()
+				qt.Assert(t, result, values.SchemeEquals, values.NewInteger(3))
+			},
+			timeout: 5 * time.Second,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCodeWithTimeout(t, tc.code, tc.timeout)
+			qt.Assert(t, err, qt.IsNil)
+			tc.check(t, result)
 		})
 	}
 }

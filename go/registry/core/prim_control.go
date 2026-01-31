@@ -108,177 +108,22 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimMap implements the (map) primitive.
-// Applies a procedure to elements of one or more lists and returns a list of results.
-func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
-	proc := mc.Arg(0)
-	listsVal := mc.Arg(1)
-
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "map: expected a procedure but got %T", proc)
-	}
-
-	if values.IsEmptyList(listsVal) {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "map: expected at least one list")
-	}
-
-	// Collect all lists into a slice
-	var lists []values.Value
-	current := listsVal
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "map: improper argument list")
-		}
-		lists = append(lists, tuple.Car())
-		current = tuple.Cdr()
-	}
-
-	// Check if any list is empty
-	for i, lst := range lists {
-		if values.IsEmptyList(lst) {
-			mc.SetValue(values.EmptyList)
-			return nil
-		}
-		if _, ok := lst.(values.Tuple); !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "map: argument %d is not a list", i+1)
-		}
-	}
-
-	var results values.Vector
-	sub := mc.NewSubContext()
-
-	// Iterate through all lists in parallel
-	for {
-		// Collect one element from each list
-		args := make(values.Vector, len(lists))
-		allDone := false
-		for i, lst := range lists {
-			if values.IsEmptyList(lst) {
-				allDone = true
-				break
-			}
-			tuple, ok := lst.(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "map: argument %d is an improper list", i+1)
-			}
-			args[i] = tuple.Car()
-			lists[i] = tuple.Cdr()
-		}
-		if allDone {
-			break
-		}
-
-		// Apply proc to collected arguments
-		_, err := sub.Apply(mcls, args...)
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
-		}
-		results = append(results, sub.GetValue())
-	}
-
-	mc.SetValue(values.List(results...))
-	return nil
-}
-
-// PrimForEach implements the (for-each) primitive.
-// Applies procedure to each list element for side effects.
-func PrimForEach(ctx context.Context, mc *machine.MachineContext) error {
-	proc := mc.Arg(0)
-	listsVal := mc.Arg(1)
-
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "for-each: expected a procedure but got %T", proc)
-	}
-
-	if values.IsEmptyList(listsVal) {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "for-each: expected at least one list")
-	}
-
-	// Collect all lists into a slice
-	var lists []values.Value
-	current := listsVal
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "for-each: improper argument list")
-		}
-		lists = append(lists, tuple.Car())
-		current = tuple.Cdr()
-	}
-
-	// Check if any list is empty
-	for i, lst := range lists {
-		if values.IsEmptyList(lst) {
-			mc.SetValues()
-			return nil
-		}
-		if _, ok := lst.(values.Tuple); !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "for-each: argument %d is not a list", i+1)
-		}
-	}
-
-	sub := mc.NewSubContext()
-
-	// Iterate through all lists in parallel
-	for {
-		// Collect one element from each list
-		args := make(values.Vector, len(lists))
-		allDone := false
-		for i, lst := range lists {
-			if values.IsEmptyList(lst) {
-				allDone = true
-				break
-			}
-			tuple, ok := lst.(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "for-each: argument %d is an improper list", i+1)
-			}
-			args[i] = tuple.Car()
-			lists[i] = tuple.Cdr()
-		}
-		if allDone {
-			break
-		}
-
-		// Apply proc to collected arguments
-		_, err := sub.Apply(mcls, args...)
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
-		}
-	}
-
-	mc.SetValues()
-	return nil
-}
-
 // PrimCallCC implements the call/cc primitive.
 // Captures current continuation and passes to procedure.
 //
 // R7RS §6.10: call-with-current-continuation packages the current continuation
 // as an "escape procedure" and passes it as an argument to proc.
+//
+// Two execution modes:
+//
+// Inline mode (mc.Parent() != nil): The lambda runs directly in the current VM context.
+// This preserves the full continuation chain, ensuring continuations captured inside the
+// lambda include the complete call stack back to the top level. This is critical for
+// cooperative coroutines and other patterns that capture/invoke multiple continuations.
+//
+// Sub-context mode (mc.Parent() == nil): Falls back to running the lambda in an isolated
+// sub-context. Used when call/cc is invoked inside another foreign function's sub-context
+// (e.g., inside apply or dynamic-wind) where there's no saved continuation to return to.
 func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
@@ -287,40 +132,37 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call/cc: expected a procedure but got %T", proc)
 	}
 
-	// Capture the current continuation.
-	// mc.cont is the continuation that will be restored when this foreign function returns
-	// (i.e., the continuation to the caller of call/cc). We copy it to avoid mutation issues.
-	//
-	// Special case: when call/cc is invoked inside a sub-context (e.g., inside dynamic-wind's
-	// thunk), mc.Parent() is nil. In this case, we capture:
-	//   1. The sub-context's own state as the "inner" continuation (where to resume in the thunk)
-	//   2. The escape continuation set by the enclosing construct (e.g., dynamic-wind)
-	// When restored via RunWithEscapeHandling, the inner continuation executes first, then
-	// after unwinding, execution continues at the escape continuation.
+	// Capture the current continuation and winding stack.
 	var cont *machine.MachineContinuation
-	var escapeCont *machine.MachineContinuation // Only used for sub-context escapes
-
+	var escapeCont *machine.MachineContinuation
 	if mc.Parent() != nil {
 		cont = mc.Parent().Copy()
 	} else {
-		// We're in a sub-context - capture our own state as the inner continuation.
-		// The offset of 1 means "resume at the next instruction after this foreign function call".
+		// Sub-context: capture our own state as the inner continuation.
 		cont = machine.NewMachineContinuationFromMachineContext(mc, 1)
-
-		// Use the escape continuation if set (e.g., by dynamic-wind).
-		// This represents where execution should continue after the sub-context completes.
 		if mc.EscapeCont() != nil {
 			escapeCont = mc.EscapeCont().Copy()
 		}
 	}
-
-	// Capture the current winding stack for proper dynamic-wind handling
 	windingStack := mc.WindingStack().Copy()
 
-	// Create a closure that, when called, restores this continuation with winding
 	contClosure := newEscapeContinuationClosureWithWinding(mc.EnvironmentFrame().TopLevel(), cont, windingStack, escapeCont)
 
-	// Call the procedure with the continuation closure
+	if mc.Parent() != nil {
+		// Inline mode: apply the lambda directly in the current VM context.
+		// When the lambda returns normally, RestoreContinuation pops mc.cont,
+		// resuming from the caller of call/cc. When the lambda invokes the
+		// continuation, the escape propagates through the VM to RunWithEscapeHandling.
+		_, err := mc.Apply(mcls, contClosure)
+		if err != nil {
+			return err
+		}
+		// Compensate for OperationForeignFunctionCall's mc.pc++ (Apply set pc=0).
+		mc.SetPC(mc.PC() - 1)
+		return nil
+	}
+
+	// Sub-context mode: run the lambda in an isolated context.
 	sub := mc.NewSubContext()
 	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.Apply(mcls, contClosure)
@@ -329,14 +171,13 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub.Run()
 	if err != nil {
-		// Check if this is a continuation escape
 		var escapeErr *machine.ErrContinuationEscape
 		if errors.As(err, &escapeErr) {
-			// Use sub's winding stack as the source for unwinding.
-			// This is correct because sub is where the bytecode runs, so any
-			// dynamic-wind frames are on sub's winding stack.
+			// Only handle escapes targeting OUR continuation.
+			if escapeErr.Continuation != cont {
+				return err
+			}
 			sourceStack := sub.WindingStack()
-			// Restore the continuation with proper winding handling
 			restoreErr := mc.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, escapeErr.WindingStack)
 			if restoreErr != nil {
 				return restoreErr
@@ -350,7 +191,6 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	// If we get here, the procedure returned normally (didn't invoke the continuation)
 	mc.SetValue(sub.GetValue())
 	return nil
 }

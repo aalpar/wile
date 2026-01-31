@@ -286,6 +286,41 @@ const bootstrapMacroSource = `
     ((define-values var expr)
      (define var (call-with-values (lambda () expr) list)))))
 
+;; Higher-order list operations
+;; Implemented in Scheme so that iteration produces capturable Scheme
+;; continuation frames (enabling call/cc inside map/for-each callbacks).
+(define map
+  (case-lambda
+    ((f lst)
+     (let loop ((lst lst))
+       (if (null? lst) '()
+           (cons (f (car lst)) (loop (cdr lst))))))
+    ((f lst . lsts)
+     (let loop ((all (cons lst lsts)))
+       (if (let any-null? ((ls all))
+             (if (null? ls) #f
+                 (if (null? (car ls)) #t
+                     (any-null? (cdr ls)))))
+           '()
+           (cons (apply f (map car all))
+                 (loop (map cdr all))))))))
+
+(define for-each
+  (case-lambda
+    ((f lst)
+     (let loop ((lst lst))
+       (if (null? lst) (if #f #f)
+           (begin (f (car lst)) (loop (cdr lst))))))
+    ((f lst . lsts)
+     (let loop ((all (cons lst lsts)))
+       (if (let any-null? ((ls all))
+             (if (null? ls) #f
+                 (if (null? (car ls)) #t
+                     (any-null? (cdr ls)))))
+           (if #f #f)
+           (begin (apply f (map car all))
+                  (loop (map cdr all))))))))
+
 ;; Iteration
 (define-syntax do
   (syntax-rules ()
