@@ -51,14 +51,14 @@ func TestForEachComprehensive(t *testing.T) {
 		},
 		// Single element
 		{
-			name: "for-each single element",
-			code: `(let ((result 0)) (for-each (lambda (x) (set! result x)) '(42)) result)`,
+			name:     "for-each single element",
+			code:     `(let ((result 0)) (for-each (lambda (x) (set! result x)) '(42)) result)`,
 			expected: values.NewInteger(42),
 		},
 		// Three lists
 		{
-			name: "for-each three lists",
-			code: `(let ((result '())) (for-each (lambda (a b c) (set! result (cons (+ a b c) result))) '(1 2) '(10 20) '(100 200)) result)`,
+			name:     "for-each three lists",
+			code:     `(let ((result '())) (for-each (lambda (a b c) (set! result (cons (+ a b c) result))) '(1 2) '(10 20) '(100 200)) result)`,
 			expected: values.List(values.NewInteger(222), values.NewInteger(111)),
 		},
 		// Returns void

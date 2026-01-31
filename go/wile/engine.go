@@ -100,22 +100,22 @@ func NewEngine(opts ...EngineOption) (*Engine, error) {
 }
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
-func (e *Engine) Eval(ctx context.Context, code string) (Value, error) {
-	compiled, err := e.Compile(code)
+func (p *Engine) Eval(ctx context.Context, code string) (Value, error) {
+	compiled, err := p.Compile(code)
 	if err != nil {
 		return nil, err
 	}
-	return e.Run(ctx, compiled)
+	return p.Run(ctx, compiled)
 }
 
 // EvalMultiple evaluates multiple expressions, returning the last result.
-func (e *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
+func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 	reader := strings.NewReader(code)
-	p := parser.NewParser(e.env, true, reader)
+	pr := parser.NewParser(p.env, true, reader)
 
 	var lastResult Value
 	for {
-		stx, err := p.ReadSyntax(ctx)
+		stx, err := pr.ReadSyntax(ctx)
 		if err != nil {
 			if isEOF(err) {
 				break
@@ -123,12 +123,12 @@ func (e *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 			return nil, err
 		}
 
-		compiled, err := e.compileExpr(stx)
+		compiled, err := p.compileExpr(stx)
 		if err != nil {
 			return nil, err
 		}
 
-		result, err := e.runCompiled(ctx, compiled)
+		result, err := p.runCompiled(ctx, compiled)
 		if err != nil {
 			return nil, err
 		}
@@ -139,35 +139,35 @@ func (e *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 }
 
 // Compile parses and compiles code without executing.
-func (e *Engine) Compile(code string) (*CompiledCode, error) {
+func (p *Engine) Compile(code string) (*CompiledCode, error) {
 	reader := strings.NewReader(code)
-	p := parser.NewParser(e.env, true, reader)
+	pr := parser.NewParser(p.env, true, reader)
 
-	stx, err := p.ReadSyntax(context.Background())
+	stx, err := pr.ReadSyntax(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	return e.compileExpr(stx)
+	return p.compileExpr(stx)
 }
 
 // Run executes previously compiled code.
-func (e *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
-	return e.runCompiled(ctx, cc)
+func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
+	return p.runCompiled(ctx, cc)
 }
 
 // Define binds a value to a name in the top-level environment.
-func (e *Engine) Define(name string, value Value) error {
-	sym := e.env.InternSymbol(values.NewSymbol(name))
-	e.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	return e.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), unwrapValue(value))
+func (p *Engine) Define(name string, value Value) error {
+	sym := p.env.InternSymbol(values.NewSymbol(name))
+	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), unwrapValue(value))
 }
 
 // Get retrieves a value by name from the environment.
-func (e *Engine) Get(name string) (Value, bool) {
-	sym := e.env.InternSymbol(values.NewSymbol(name))
+func (p *Engine) Get(name string) (Value, bool) {
+	sym := p.env.InternSymbol(values.NewSymbol(name))
 	idx := environment.NewGlobalIndex(sym)
-	binding := e.env.GetGlobalBinding(idx)
+	binding := p.env.GetGlobalBinding(idx)
 	if binding == nil {
 		return nil, false
 	}
@@ -175,22 +175,22 @@ func (e *Engine) Get(name string) (Value, bool) {
 }
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
-func (e *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
-	sym := e.env.InternSymbol(values.NewSymbol(spec.Name))
-	e.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
+	sym := p.env.InternSymbol(values.NewSymbol(spec.Name))
+	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
-		e.env,
+		p.env,
 		spec.ParamCount,
 		spec.IsVariadic,
 		spec.Impl,
 	)
 
-	return e.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 }
 
 // Call invokes a Scheme procedure with arguments.
-func (e *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
+func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
 	closure, ok := unwrapValue(proc).(*machine.MachineClosure)
 	if !ok {
 		return nil, &Error{Message: "not a procedure"}
@@ -203,7 +203,7 @@ func (e *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 
 	// Create a template and continuation to start the machine
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cont := machine.NewMachineContinuation(nil, tpl, e.env)
+	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
 
 	// Create sub-context and apply the closure
@@ -224,37 +224,37 @@ func (e *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 }
 
 // Environment returns the underlying environment for advanced use.
-func (e *Engine) Environment() *environment.EnvironmentFrame {
-	return e.env
+func (p *Engine) Environment() *environment.EnvironmentFrame {
+	return p.env
 }
 
 // TopLevelEnvironment returns the TopLevelEnvironment for advanced use.
 // This provides access to per-instance symbol interning and phase management.
-func (e *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
-	return e.topLevel
+func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
+	return p.topLevel
 }
 
 // internal helpers
 
-func (e *Engine) compileExpr(stx syntax.SyntaxValue) (*CompiledCode, error) {
+func (p *Engine) compileExpr(stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	ectx := machine.NewExpandTimeCallContext()
-	expanded, err := machine.NewExpanderTimeContinuation(e.env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, err
 	}
 
-	cctx := machine.NewCompileTimeCallContext(false, true, e.env)
-	err = machine.NewCompiletimeContinuation(tpl, e.env).CompileExpression(cctx, expanded)
+	cctx := machine.NewCompileTimeCallContext(false, true, p.env)
+	err = machine.NewCompiletimeContinuation(tpl, p.env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CompiledCode{template: tpl, env: e.env}, nil
+	return &CompiledCode{template: tpl, env: p.env}, nil
 }
 
-func (e *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
+func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
 	mc := machine.NewMachineContext(ctx, cont)
 	err := mc.Run()

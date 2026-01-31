@@ -27,48 +27,48 @@ type SyntaxVectorSuite struct {
 	sctx *SourceContext
 }
 
-func (s *SyntaxVectorSuite) Init(c *qt.C) {
+func (p *SyntaxVectorSuite) Init(c *qt.C) {
 	sidx0 := NewSourceIndexes(0, 0, 0)
 	sidx1 := NewSourceIndexes(0, 0, 0)
-	s.sctx = NewSourceContext("test", "test.scm", sidx0, sidx1)
+	p.sctx = NewSourceContext("test", "test.scm", sidx0, sidx1)
 }
 
-func (s *SyntaxVectorSuite) TestNewSyntaxVector_Empty(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestNewSyntaxVector_Empty(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
 	c.Assert(vec, qt.IsNotNil)
 	c.Assert(len(vec.Values), qt.Equals, 0)
-	c.Assert(vec.SourceContext(), qt.Equals, s.sctx)
+	c.Assert(vec.SourceContext(), qt.Equals, p.sctx)
 }
 
-func (s *SyntaxVectorSuite) TestNewSyntaxVector_WithValues(c *qt.C) {
-	v1 := NewSyntaxObject(values.NewInteger(1), s.sctx)
-	v2 := NewSyntaxObject(values.NewInteger(2), s.sctx)
-	v3 := NewSyntaxObject(values.NewInteger(3), s.sctx)
+func (p *SyntaxVectorSuite) TestNewSyntaxVector_WithValues(c *qt.C) {
+	v1 := NewSyntaxObject(values.NewInteger(1), p.sctx)
+	v2 := NewSyntaxObject(values.NewInteger(2), p.sctx)
+	v3 := NewSyntaxObject(values.NewInteger(3), p.sctx)
 
-	vec := NewSyntaxVector(s.sctx, v1, v2, v3)
+	vec := NewSyntaxVector(p.sctx, v1, v2, v3)
 	c.Assert(len(vec.Values), qt.Equals, 3)
 	c.Assert(vec.Values[0], qt.Equals, v1)
 	c.Assert(vec.Values[1], qt.Equals, v2)
 	c.Assert(vec.Values[2], qt.Equals, v3)
 }
 
-func (s *SyntaxVectorSuite) TestSourceContext(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
-	c.Assert(vec.SourceContext(), qt.Equals, s.sctx)
+func (p *SyntaxVectorSuite) TestSourceContext(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
+	c.Assert(vec.SourceContext(), qt.Equals, p.sctx)
 }
 
-func (s *SyntaxVectorSuite) TestIsVoid_NotNil(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestIsVoid_NotNil(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
 	c.Assert(vec.IsVoid(), qt.IsFalse)
 }
 
-func (s *SyntaxVectorSuite) TestIsVoid_Nil(c *qt.C) {
+func (p *SyntaxVectorSuite) TestIsVoid_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	c.Assert(vec.IsVoid(), qt.IsTrue)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrap_Empty(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestUnwrap_Empty(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
 	result := vec.Unwrap()
 
 	resultVec, ok := result.(*values.Vector)
@@ -76,10 +76,10 @@ func (s *SyntaxVectorSuite) TestUnwrap_Empty(c *qt.C) {
 	c.Assert(len(*resultVec), qt.Equals, 0)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
-	v1 := NewSyntaxObject(values.NewInteger(1), s.sctx)
-	v2 := NewSyntaxObject(values.NewInteger(2), s.sctx)
-	vec := NewSyntaxVector(s.sctx, v1, v2)
+func (p *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
+	v1 := NewSyntaxObject(values.NewInteger(1), p.sctx)
+	v2 := NewSyntaxObject(values.NewInteger(2), p.sctx)
+	vec := NewSyntaxVector(p.sctx, v1, v2)
 
 	result := vec.Unwrap()
 	resultVec, ok := result.(*values.Vector)
@@ -90,14 +90,14 @@ func (s *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
 	c.Assert((*resultVec)[1], qt.Equals, v2)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
+func (p *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.Unwrap()
 	c.Assert(result, qt.Equals, values.Void)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
 	result := vec.UnwrapAll()
 
 	resultVec, ok := result.(*values.Vector)
@@ -105,10 +105,10 @@ func (s *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
 	c.Assert(len(*resultVec), qt.Equals, 0)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
-	v1 := NewSyntaxObject(values.NewInteger(1), s.sctx)
-	v2 := NewSyntaxObject(values.NewInteger(2), s.sctx)
-	vec := NewSyntaxVector(s.sctx, v1, v2)
+func (p *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
+	v1 := NewSyntaxObject(values.NewInteger(1), p.sctx)
+	v2 := NewSyntaxObject(values.NewInteger(2), p.sctx)
+	vec := NewSyntaxVector(p.sctx, v1, v2)
 
 	result := vec.UnwrapAll()
 	resultVec, ok := result.(*values.Vector)
@@ -119,15 +119,15 @@ func (s *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
 	c.Assert((*resultVec)[1], values.SchemeEquals, values.NewInteger(2))
 }
 
-func (s *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
+func (p *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
 	// Create nested syntax: #(#(1 2) #(3 4))
-	inner1 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
-	inner2 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(3), s.sctx),
-		NewSyntaxObject(values.NewInteger(4), s.sctx))
-	outer := NewSyntaxVector(s.sctx, inner1, inner2)
+	inner1 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
+	inner2 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(3), p.sctx),
+		NewSyntaxObject(values.NewInteger(4), p.sctx))
+	outer := NewSyntaxVector(p.sctx, inner1, inner2)
 
 	result := outer.UnwrapAll()
 	expected := values.NewVector(
@@ -136,75 +136,75 @@ func (s *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
 	c.Assert(result, values.SchemeEquals, expected)
 }
 
-func (s *SyntaxVectorSuite) TestUnwrapAll_Nil(c *qt.C) {
+func (p *SyntaxVectorSuite) TestUnwrapAll_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.UnwrapAll()
 	c.Assert(result, qt.Equals, values.Void)
 }
 
-func (s *SyntaxVectorSuite) TestSchemeString_Empty(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestSchemeString_Empty(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
 	c.Assert(vec.SchemeString(), qt.Equals, "#'()")
 }
 
-func (s *SyntaxVectorSuite) TestSchemeString_WithValues(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx),
-		NewSyntaxObject(values.NewInteger(3), s.sctx))
+func (p *SyntaxVectorSuite) TestSchemeString_WithValues(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx),
+		NewSyntaxObject(values.NewInteger(3), p.sctx))
 	c.Assert(vec.SchemeString(), qt.Equals, "#'(#'1 #'2 #'3)")
 }
 
-func (s *SyntaxVectorSuite) TestSchemeString_Nil(c *qt.C) {
+func (p *SyntaxVectorSuite) TestSchemeString_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	c.Assert(vec.SchemeString(), qt.Equals, "#'<void>")
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_Same(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
+func (p *SyntaxVectorSuite) TestEqualTo_Same(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
 	c.Assert(vec.EqualTo(vec), qt.IsTrue)
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_Equal(c *qt.C) {
-	vec1 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
-	vec2 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
+func (p *SyntaxVectorSuite) TestEqualTo_Equal(c *qt.C) {
+	vec1 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
+	vec2 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
 	c.Assert(vec1.EqualTo(vec2), qt.IsFalse)
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_DifferentLength(c *qt.C) {
-	vec1 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
-	vec2 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx))
+func (p *SyntaxVectorSuite) TestEqualTo_DifferentLength(c *qt.C) {
+	vec1 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
+	vec2 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx))
 	c.Assert(vec1.EqualTo(vec2), qt.IsFalse)
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_DifferentValues(c *qt.C) {
-	vec1 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(2), s.sctx))
-	vec2 := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx),
-		NewSyntaxObject(values.NewInteger(3), s.sctx))
+func (p *SyntaxVectorSuite) TestEqualTo_DifferentValues(c *qt.C) {
+	vec1 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(2), p.sctx))
+	vec2 := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx),
+		NewSyntaxObject(values.NewInteger(3), p.sctx))
 	c.Assert(vec1.EqualTo(vec2), qt.IsFalse)
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_NotSyntaxVector(c *qt.C) {
-	vec := NewSyntaxVector(s.sctx,
-		NewSyntaxObject(values.NewInteger(1), s.sctx))
+func (p *SyntaxVectorSuite) TestEqualTo_NotSyntaxVector(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx,
+		NewSyntaxObject(values.NewInteger(1), p.sctx))
 	c.Assert(vec.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
-func (s *SyntaxVectorSuite) TestEqualTo_Empty(c *qt.C) {
-	vec1 := NewSyntaxVector(s.sctx)
-	vec2 := NewSyntaxVector(s.sctx)
+func (p *SyntaxVectorSuite) TestEqualTo_Empty(c *qt.C) {
+	vec1 := NewSyntaxVector(p.sctx)
+	vec2 := NewSyntaxVector(p.sctx)
 	c.Assert(vec1.EqualTo(vec2), qt.IsFalse)
 }
 

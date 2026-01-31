@@ -14,7 +14,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Pair | Cons cell with car and cdr, basis for lists |
 | Null | Empty list `()` |
 | Vector | Fixed-size mutable array, e.g., `#(1 2 3)` |
-| String | Immutable UTF-8 text |
+| String | Mutable UTF-8 text |
 | Bytevector | Fixed-size byte array, e.g., `#u8(0 1 2)` |
 | Procedure | Lambda or primitive function |
 
@@ -53,6 +53,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 |------|-------------|
 | Promise | Delayed computation for lazy evaluation |
 | Continuation | Captured execution context |
+| Continuation Prompt Tag | Delimiter for delimited continuations |
 
 ### Error Types
 
@@ -110,6 +111,17 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `define-for-syntax` | Define binding for macro expansion phase |
 | `begin-for-syntax` | Sequence expressions at macro expansion phase |
 | `eval-when` | Control evaluation timing |
+| `dynamic-wind` | Establish before/after thunks |
+| `syntax-error` | Signal compile-time error |
+
+### Auxiliary Syntax
+
+| Form | Description |
+|------|-------------|
+| `else` | Auxiliary keyword for `cond` and `case` |
+| `=>` | Auxiliary keyword for `cond` and `case` |
+| `...` | Ellipsis for `syntax-rules` patterns |
+| `_` | Wildcard for `syntax-rules` patterns |
 
 ## Derived Forms (Macros)
 
@@ -117,10 +129,12 @@ Complete list of supported types, primitives, and special forms in Wile.
 |------|-------------|
 | `and` | Short-circuit logical and |
 | `or` | Short-circuit logical or |
-| `let` | Local bindings (parallel) |
+| `let` | Local bindings (parallel), including named let |
 | `let*` | Local bindings (sequential) |
 | `letrec` | Recursive local bindings |
+| `letrec*` | Recursive local bindings (sequential) |
 | `cond` | Multi-way conditional |
+| `case` | Dispatch on value |
 | `when` | One-armed conditional with implicit begin |
 | `unless` | Negated one-armed conditional |
 | `delay` | Create a promise (lazy evaluation) |
@@ -130,6 +144,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `define-record-type` | Define a record type with constructor and accessors |
 | `let-values` | Bind multiple values |
 | `let*-values` | Bind multiple values sequentially |
+| `define-values` | Define multiple values |
 | `do` | Iteration construct |
 
 ## Arithmetic
@@ -155,6 +170,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
+| `void?` | Test for void value |
 | `null?` | Test for empty list |
 | `pair?` | Test for pair |
 | `number?` | Test for number |
@@ -163,6 +179,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `symbol?` | Test for symbol |
 | `procedure?` | Test for procedure |
 | `vector?` | Test for vector |
+| `bytevector?` | Test for bytevector |
 | `char?` | Test for character |
 | `port?` | Test for port |
 | `list?` | Test for proper list |
@@ -189,6 +206,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Primitive | Description |
 |-----------|-------------|
 | `not` | Logical negation |
+| `boolean=?` | Boolean equality (variadic) |
 
 ## Equality Predicates
 
@@ -197,6 +215,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `eq?` | Identity comparison |
 | `eqv?` | Equivalence comparison |
 | `equal?` | Recursive structural equality |
+| `symbol=?` | Symbol equality (variadic) |
 
 ## Identifier Comparison
 
@@ -231,12 +250,13 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `list-ref` | Get element by index |
 | `list-set!` | Set element by index |
 | `list-tail` | Get tail starting at index |
+| `list-copy` | Shallow copy a list |
 | `memq` | Find element using eq? |
 | `memv` | Find element using eqv? |
-| `member` | Find element using equal? |
+| `member` | Find element using equal? or custom comparator |
 | `assq` | Association list lookup using eq? |
 | `assv` | Association list lookup using eqv? |
-| `assoc` | Association list lookup using equal? |
+| `assoc` | Association list lookup using equal? or custom comparator |
 
 ## CxR Accessors (2-level)
 
@@ -329,6 +349,13 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `infinite?` | Test for infinity |
 | `nan?` | Test for NaN |
 
+## Number/String Conversion
+
+| Primitive | Description |
+|-----------|-------------|
+| `number->string` | Convert number to string |
+| `string->number` | Parse number from string |
+
 ## Complex Numbers
 
 | Primitive | Description |
@@ -344,9 +371,16 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
+| `string` | Create string from characters |
+| `make-string` | Create string of given length filled with character |
 | `string-length` | Length of string |
 | `string-ref` | Character at index |
+| `string-set!` | Set character at index |
 | `string-append` | Concatenate strings |
+| `substring` | Extract substring |
+| `string-copy` | Copy string (with optional start/end) |
+| `string-copy!` | Copy characters into a string |
+| `string-fill!` | Fill string range with character |
 | `string=?` | String equality |
 | `string<?` | String less than |
 | `string>?` | String greater than |
@@ -359,9 +393,9 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `string-ci>=?` | Case-insensitive string greater than or equal |
 | `string-upcase` | Convert string to uppercase |
 | `string-downcase` | Convert string to lowercase |
-| `substring` | Extract substring |
-| `number->string` | Convert number to string |
-| `string->number` | Parse number from string |
+| `string-foldcase` | Unicode case fold for comparison |
+| `string-map` | Map procedure over string characters |
+| `string-for-each` | Apply procedure to string characters |
 | `symbol->string` | Convert symbol to string |
 | `string->symbol` | Convert string to symbol |
 | `string->list` | Convert string to list of characters |
@@ -376,6 +410,11 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `char>?` | Character greater than |
 | `char<=?` | Character less than or equal |
 | `char>=?` | Character greater than or equal |
+| `char-ci=?` | Case-insensitive character equality |
+| `char-ci<?` | Case-insensitive character less than |
+| `char-ci>?` | Case-insensitive character greater than |
+| `char-ci<=?` | Case-insensitive character less than or equal |
+| `char-ci>=?` | Case-insensitive character greater than or equal |
 | `char->integer` | Convert character to integer code point |
 | `integer->char` | Convert integer code point to character |
 | `char-alphabetic?` | Test for alphabetic character |
@@ -399,18 +438,25 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `vector-set!` | Set element at index |
 | `vector->list` | Convert vector to list |
 | `list->vector` | Convert list to vector |
+| `vector-copy` | Copy vector (with optional start/end) |
+| `vector-copy!` | Copy elements into a vector |
+| `vector-fill!` | Fill vector range with value |
+| `vector-append` | Concatenate vectors |
+| `vector-map` | Map procedure over vectors |
+| `vector-for-each` | Apply procedure to vector elements |
+| `vector->string` | Convert vector of characters to string |
+| `string->vector` | Convert string to vector of characters |
 
 ## Bytevector Operations
 
 | Primitive | Description |
 |-----------|-------------|
-| `bytevector?` | Test for bytevector |
 | `make-bytevector` | Create bytevector of given length |
 | `bytevector` | Create bytevector from arguments |
 | `bytevector-length` | Length of bytevector |
 | `bytevector-u8-ref` | Get byte at index |
 | `bytevector-u8-set!` | Set byte at index |
-| `bytevector-copy` | Copy bytevector |
+| `bytevector-copy` | Copy bytevector (with optional start/end) |
 | `bytevector-copy!` | Copy bytes into bytevector |
 | `bytevector-append` | Concatenate bytevectors |
 | `utf8->string` | Decode UTF-8 bytevector to string |
@@ -420,16 +466,55 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
+| `read` | Read a datum |
 | `read-token` | Read a single token |
 | `read-syntax` | Read datum as syntax object |
-| `read` | Read a datum |
-| `newline` | Write newline |
+| `read-char` | Read a character |
+| `peek-char` | Peek at next character without consuming |
+| `read-line` | Read a line of text |
+| `read-string` | Read a string of given length |
+| `char-ready?` | Test if character is ready for reading |
 | `write` | Write datum in machine-readable form |
 | `write-char` | Write a character |
+| `write-string` | Write a string (with optional start/end) |
 | `display` | Write datum in human-readable form |
+| `newline` | Write newline |
+| `write-simple` | Write datum without shared structure |
+| `write-shared` | Write datum showing shared structure |
+| `flush-output-port` | Flush output port buffer |
+
+## Binary I/O
+
+| Primitive | Description |
+|-----------|-------------|
+| `read-u8` | Read a byte |
+| `peek-u8` | Peek at next byte without consuming |
+| `u8-ready?` | Test if byte is ready for reading |
+| `write-u8` | Write a byte |
+| `read-bytevector` | Read bytevector of given length |
+| `read-bytevector!` | Read bytes into existing bytevector |
+| `write-bytevector` | Write bytevector (with optional start/end) |
+
+## Port Operations
+
+| Primitive | Description |
+|-----------|-------------|
+| `port?` | Test for port |
+| `input-port?` | Test for input port |
+| `output-port?` | Test for output port |
+| `textual-port?` | Test for textual port |
+| `binary-port?` | Test for binary port |
+| `input-port-open?` | Test if input port is open |
+| `output-port-open?` | Test if output port is open |
+| `close-port` | Close a port |
+| `close-input-port` | Close an input port |
+| `close-output-port` | Close an output port |
+| `call-with-port` | Call procedure with port, closing on return |
 | `current-input-port` | Parameter for current input port |
 | `current-output-port` | Parameter for current output port |
 | `current-error-port` | Parameter for current error port |
+| `eof-object` | Return the EOF object |
+| `eof-object?` | Test for EOF object |
 
 ## File I/O
 
@@ -437,25 +522,14 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `open-input-file` | Open file for reading |
 | `open-output-file` | Open file for writing |
-| `close-port` | Close a port |
-| `close-input-port` | Close an input port |
-| `close-output-port` | Close an output port |
-| `input-port?` | Test for input port |
-| `output-port?` | Test for output port |
-| `input-port-open?` | Test if input port is open |
-| `output-port-open?` | Test if output port is open |
-| `file-exists?` | Test if file exists |
-| `delete-file` | Delete a file |
-| `eof-object` | Return the EOF object |
-| `eof-object?` | Test for EOF object |
-| `call-with-input-file` | Call procedure with input file port |
-| `call-with-output-file` | Call procedure with output file port |
 | `open-binary-input-file` | Open binary file for reading |
 | `open-binary-output-file` | Open binary file for writing |
+| `call-with-input-file` | Call procedure with input file port |
+| `call-with-output-file` | Call procedure with output file port |
 | `with-input-from-file` | Execute with file as current input |
 | `with-output-to-file` | Execute with file as current output |
-| `write-simple` | Write datum without shared structure |
-| `write-shared` | Write datum showing shared structure |
+| `file-exists?` | Test if file exists |
+| `delete-file` | Delete a file |
 
 ## String and Bytevector Ports
 
@@ -467,24 +541,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `open-input-bytevector` | Create input port from bytevector |
 | `open-output-bytevector` | Create output bytevector port |
 | `get-output-bytevector` | Get accumulated bytevector from output port |
-
-## Process Context
-
-| Primitive | Description |
-|-----------|-------------|
-| `command-line` | Get command-line arguments |
-| `exit` | Exit with status code |
-| `emergency-exit` | Exit immediately without cleanup |
-| `get-environment-variable` | Get environment variable value |
-| `get-environment-variables` | Get all environment variables |
-
-## Time
-
-| Primitive | Description |
-|-----------|-------------|
-| `current-second` | Current time in seconds since epoch |
-| `current-jiffy` | Current time in jiffies |
-| `jiffies-per-second` | Number of jiffies per second |
 
 ## Higher-Order Functions
 
@@ -500,7 +556,17 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `call-with-current-continuation` | Capture current continuation |
 | `call/cc` | Alias for call-with-current-continuation |
-| `dynamic-wind` | Establish before/after thunks |
+
+## Delimited Continuations
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-continuation-prompt-tag` | Create a continuation prompt tag |
+| `default-continuation-prompt-tag` | Get the default prompt tag |
+| `continuation-prompt-tag?` | Test for continuation prompt tag |
+| `call-with-continuation-prompt` | Install a prompt and call thunk |
+| `abort-current-continuation` | Escape to nearest prompt |
+| `call-with-composable-continuation` | Capture composable delimited continuation |
 
 ## Multiple Values
 
@@ -513,19 +579,15 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
-| `error-object?` | Test for error object |
-| `error-object-message` | Get error message |
-| `error-object-irritants` | Get error irritants |
 | `with-exception-handler` | Install exception handler |
 | `raise` | Raise an exception |
 | `raise-continuable` | Raise a continuable exception |
 | `error` | Signal an error |
-
-## Feature Detection
-
-| Primitive | Description |
-|-----------|-------------|
-| `features` | List of supported features |
+| `error-object?` | Test for error object |
+| `error-object-message` | Get error message |
+| `error-object-irritants` | Get error irritants |
+| `read-error?` | Test for read error |
+| `file-error?` | Test for file error |
 
 ## Promises
 
@@ -534,6 +596,13 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `promise?` | Test for promise |
 | `make-promise` | Create an already-forced promise |
 | `force` | Force evaluation of promise |
+
+## Parameters
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-parameter` | Create a parameter object |
+| `parameter?` | Test for parameter |
 
 ## Evaluation
 
@@ -557,18 +626,11 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `expand` | Fully expand an expression |
 | `expand-once` | Expand one level of macros |
+| `compile` | Compile an expression |
 | `syntax-local-value` | Get compile-time value of binding |
 | `make-compile-time-value` | Create a compile-time value |
 | `syntax-local-introduce` | Introduce syntax marks |
 | `syntax-local-identifier-as-binding` | Convert identifier to binding form |
-| `compile` | Compile an expression |
-
-## Parameters
-
-| Primitive | Description |
-|-----------|-------------|
-| `make-parameter` | Create a parameter object |
-| `parameter?` | Test for parameter |
 
 ## Records
 
@@ -582,6 +644,30 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `record-predicate` | Get record predicate |
 | `record-accessor` | Get record field accessor |
 | `record-modifier` | Get record field modifier |
+
+## Process Context
+
+| Primitive | Description |
+|-----------|-------------|
+| `command-line` | Get command-line arguments |
+| `exit` | Exit with status code |
+| `emergency-exit` | Exit immediately without cleanup |
+| `get-environment-variable` | Get environment variable value |
+| `get-environment-variables` | Get all environment variables |
+
+## Time
+
+| Primitive | Description |
+|-----------|-------------|
+| `current-second` | Current time in seconds since epoch |
+| `current-jiffy` | Current time in jiffies |
+| `jiffies-per-second` | Number of jiffies per second |
+
+## Feature Detection
+
+| Primitive | Description |
+|-----------|-------------|
+| `features` | List of supported features |
 
 ## Threads (SRFI-18)
 
@@ -690,4 +776,3 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `atomic-store!` | Store atomic value |
 | `atomic-swap!` | Swap atomic value, return old |
 | `atomic-compare-and-swap!` | Compare and swap atomically |
-

@@ -32,7 +32,7 @@ import (
 // getComplexParts extracts real and imaginary parts as float64 from
 // a complex number. Also handles real numbers (Float, Integer) which
 // are complex with zero imaginary part per R7RS numeric tower.
-func getComplexParts(n values.Number) (real, imag float64) {
+func getComplexParts(n values.Number) (rel, iam float64) {
 	switch v := n.(type) {
 	case *values.Complex:
 		return v.Real(), v.Imag()
@@ -1304,9 +1304,9 @@ func TestParseComplex(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(tc.input))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(floatEquals(real, tc.real, 1e-10), qt.IsTrue)
-			c.Assert(floatEquals(imag, tc.imag, 1e-10), qt.IsTrue)
+			rel, iam := getComplexParts(z)
+			c.Assert(floatEquals(rel, tc.real, 1e-10), qt.IsTrue)
+			c.Assert(floatEquals(iam, tc.imag, 1e-10), qt.IsTrue)
 		})
 	}
 }
@@ -1389,9 +1389,9 @@ func TestReadSyntaxImaginary(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			val := syn.UnwrapAll()
-			real, imag := getComplexParts(val.(values.Number))
-			c.Assert(real, qt.Equals, tc.real)
-			c.Assert(imag, qt.Equals, tc.imag)
+			rel, iam := getComplexParts(val.(values.Number))
+			c.Assert(rel, qt.Equals, tc.real)
+			c.Assert(iam, qt.Equals, tc.imag)
 			if tc.exact {
 				bc, ok := val.(*values.BigComplex)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigComplex, got %T", val))
@@ -1435,9 +1435,9 @@ func TestReadSyntaxComplex(t *testing.T) {
 			// Complex numbers can be either *values.Complex (inexact) or *values.BigComplex (exact)
 			z, ok := syn.UnwrapAll().(values.Number)
 			c.Assert(ok, qt.IsTrue)
-			real, imag := getComplexParts(z)
-			c.Assert(floatEquals(real, tc.real, 1e-10), qt.IsTrue)
-			c.Assert(floatEquals(imag, tc.imag, 1e-10), qt.IsTrue)
+			rel, iam := getComplexParts(z)
+			c.Assert(floatEquals(rel, tc.real, 1e-10), qt.IsTrue)
+			c.Assert(floatEquals(iam, tc.imag, 1e-10), qt.IsTrue)
 		})
 	}
 }
@@ -1837,24 +1837,24 @@ func TestParseComplexInfNan(t *testing.T) {
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
 
-			real, imag := getComplexParts(z)
+			rel, iam := getComplexParts(z)
 
 			// Check real part
 			if tc.realNaN {
-				c.Assert(math.IsNaN(real), qt.IsTrue, qt.Commentf("real should be NaN"))
+				c.Assert(math.IsNaN(rel), qt.IsTrue, qt.Commentf("real should be NaN"))
 			} else if tc.realInf != 0 {
-				c.Assert(math.IsInf(real, tc.realInf), qt.IsTrue, qt.Commentf("real should be inf(%d)", tc.realInf))
+				c.Assert(math.IsInf(rel, tc.realInf), qt.IsTrue, qt.Commentf("real should be inf(%d)", tc.realInf))
 			} else {
-				c.Assert(real, qt.Equals, tc.wantReal)
+				c.Assert(rel, qt.Equals, tc.wantReal)
 			}
 
 			// Check imaginary part
 			if tc.imagNaN {
-				c.Assert(math.IsNaN(imag), qt.IsTrue, qt.Commentf("imag should be NaN"))
+				c.Assert(math.IsNaN(iam), qt.IsTrue, qt.Commentf("imag should be NaN"))
 			} else if tc.imagInf != 0 {
-				c.Assert(math.IsInf(imag, tc.imagInf), qt.IsTrue, qt.Commentf("imag should be inf(%d)", tc.imagInf))
+				c.Assert(math.IsInf(iam, tc.imagInf), qt.IsTrue, qt.Commentf("imag should be inf(%d)", tc.imagInf))
 			} else {
-				c.Assert(imag, qt.Equals, tc.wantImag)
+				c.Assert(iam, qt.Equals, tc.wantImag)
 			}
 		})
 	}
@@ -1894,9 +1894,9 @@ func TestParseComplexUnitImaginary(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(""))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(real, qt.Equals, tc.real)
-			c.Assert(imag, qt.Equals, tc.imag)
+			rel, iam := getComplexParts(z)
+			c.Assert(rel, qt.Equals, tc.real)
+			c.Assert(iam, qt.Equals, tc.imag)
 		})
 	}
 }
@@ -1948,9 +1948,9 @@ func TestParseComplexScientificNotation(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(""))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(floatEquals(real, tc.real, 1e-15), qt.IsTrue, qt.Commentf("real: got %v want %v", real, tc.real))
-			c.Assert(floatEquals(imag, tc.imag, 1e-15), qt.IsTrue, qt.Commentf("imag: got %v want %v", imag, tc.imag))
+			rel, iam := getComplexParts(z)
+			c.Assert(floatEquals(rel, tc.real, 1e-15), qt.IsTrue, qt.Commentf("real: got %v want %v", rel, tc.real))
+			c.Assert(floatEquals(iam, tc.imag, 1e-15), qt.IsTrue, qt.Commentf("imag: got %v want %v", iam, tc.imag))
 		})
 	}
 }
@@ -2028,9 +2028,9 @@ func TestParseComplexZeroParts(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(""))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(real, qt.Equals, tc.real)
-			c.Assert(imag, qt.Equals, tc.imag)
+			rel, iam := getComplexParts(z)
+			c.Assert(rel, qt.Equals, tc.real)
+			c.Assert(iam, qt.Equals, tc.imag)
 		})
 	}
 }
@@ -2061,9 +2061,9 @@ func TestParseComplexDecimalForms(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(""))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(floatEquals(real, tc.real, 1e-15), qt.IsTrue, qt.Commentf("real: got %v want %v", real, tc.real))
-			c.Assert(floatEquals(imag, tc.imag, 1e-15), qt.IsTrue, qt.Commentf("imag: got %v want %v", imag, tc.imag))
+			rel, iam := getComplexParts(z)
+			c.Assert(floatEquals(rel, tc.real, 1e-15), qt.IsTrue, qt.Commentf("real: got %v want %v", rel, tc.real))
+			c.Assert(floatEquals(iam, tc.imag, 1e-15), qt.IsTrue, qt.Commentf("imag: got %v want %v", iam, tc.imag))
 		})
 	}
 }
@@ -2086,9 +2086,9 @@ func TestParseComplexLargeNumbers(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(""))
 			z, err := p.parseComplex(tc.input)
 			c.Assert(err, qt.IsNil)
-			real, imag := getComplexParts(z)
-			c.Assert(floatEquals(real, tc.real, tc.real*1e-10), qt.IsTrue, qt.Commentf("real: got %v want %v", real, tc.real))
-			c.Assert(floatEquals(imag, tc.imag, tc.imag*1e-10), qt.IsTrue, qt.Commentf("imag: got %v want %v", imag, tc.imag))
+			rel, iam := getComplexParts(z)
+			c.Assert(floatEquals(rel, tc.real, tc.real*1e-10), qt.IsTrue, qt.Commentf("real: got %v want %v", rel, tc.real))
+			c.Assert(floatEquals(iam, tc.imag, tc.imag*1e-10), qt.IsTrue, qt.Commentf("imag: got %v want %v", iam, tc.imag))
 		})
 	}
 }
@@ -2606,9 +2606,9 @@ func TestParser_ComplexWithScientificNotation_EdgeCase(t *testing.T) {
 	// Test with uppercase E which is allowed by R7RS
 	z, err := p.parseComplex("1E2+3E2i")
 	c.Assert(err, qt.IsNil)
-	real, imag := getComplexParts(z)
-	c.Assert(floatEquals(real, 100, 1e-10), qt.IsTrue)
-	c.Assert(floatEquals(imag, 300, 1e-10), qt.IsTrue)
+	rel, iam := getComplexParts(z)
+	c.Assert(floatEquals(rel, 100, 1e-10), qt.IsTrue)
+	c.Assert(floatEquals(iam, 300, 1e-10), qt.IsTrue)
 }
 
 // TestParser_ByteVectorWithMultipleValues tests byte vector parsing

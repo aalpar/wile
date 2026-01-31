@@ -41,16 +41,16 @@ func NewOnce() *Once {
 }
 
 // ID returns the Once's unique identifier
-func (o *Once) ID() uint64 {
-	return o.id
+func (p *Once) ID() uint64 {
+	return p.id
 }
 
 // Do calls the function only once
 // Returns true if this call executed the function, false if it was already called
-func (o *Once) Do(f func()) bool {
+func (p *Once) Do(f func()) bool {
 	called := false
-	o.once.Do(func() {
-		atomic.StoreUint32(&o.done, 1)
+	p.once.Do(func() {
+		atomic.StoreUint32(&p.done, 1)
 		called = true
 		f()
 	})
@@ -58,34 +58,34 @@ func (o *Once) Do(f func()) bool {
 }
 
 // Done returns true if Do has been called
-func (o *Once) Done() bool {
-	return atomic.LoadUint32(&o.done) == 1
+func (p *Once) Done() bool {
+	return atomic.LoadUint32(&p.done) == 1
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the once is nil.
-func (o *Once) IsVoid() bool {
-	return o == nil
+func (p *Once) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the onces are the same object.
-func (o *Once) EqualTo(v Value) bool {
+func (p *Once) EqualTo(v Value) bool {
 	other, ok := v.(*Once)
 	if !ok {
 		return false
 	}
-	return o == other
+	return p == other
 }
 
 // SchemeString returns the Scheme representation of the once.
-func (o *Once) SchemeString() string {
-	if o == nil {
+func (p *Once) SchemeString() string {
+	if p == nil {
 		return "#<once:void>"
 	}
 	status := "pending"
-	if o.Done() {
+	if p.Done() {
 		status = "done"
 	}
-	return fmt.Sprintf("#<once id=%d %s>", o.id, status)
+	return fmt.Sprintf("#<once id=%d %s>", p.id, status)
 }

@@ -100,37 +100,37 @@ func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
 }
 
 // Run starts the REPL with readline support, falling back to simple mode if needed.
-func (r *REPL) Run(ctx context.Context) error {
+func (p *REPL) Run(ctx context.Context) error {
 	rl, err := readline.NewFromConfig(&readline.Config{
-		Prompt:          r.prompt,
+		Prompt:          p.prompt,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "",
-		HistoryFile:     r.historyFile,
+		HistoryFile:     p.historyFile,
 		HistoryLimit:    1000,
 	})
 	if err != nil {
 		// Fall back to simple REPL if readline fails
-		return r.RunSimple(ctx)
+		return p.RunSimple(ctx)
 	}
 	defer rl.Close() //nolint:errcheck
 
 	// Set up break callback
-	r.debugCtx.Debugger().OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
-		r.debugCtx.SetCurrentMC(mc)
+	p.debugCtx.Debugger().OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
+		p.debugCtx.SetCurrentMC(mc)
 		if bp != nil {
-			fmt.Fprintf(r.out, "\nBreakpoint %d hit", bp.ID)
+			fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
 			source := mc.CurrentSource()
 			if source != nil {
-				fmt.Fprintf(r.out, " at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+				fmt.Fprintf(p.out, " at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
 			}
-			fmt.Fprintln(r.out)
+			fmt.Fprintln(p.out)
 		} else {
-			fmt.Fprint(r.out, "\nStepped")
+			fmt.Fprint(p.out, "\nStepped")
 			source := mc.CurrentSource()
 			if source != nil {
-				fmt.Fprintf(r.out, " to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+				fmt.Fprintf(p.out, " to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
 			}
-			fmt.Fprintln(r.out)
+			fmt.Fprintln(p.out)
 		}
 	})
 
@@ -148,23 +148,23 @@ func (r *REPL) Run(ctx context.Context) error {
 			if err == readline.ErrInterrupt {
 				// Ctrl-C: clear current input and continue
 				inputBuffer.Reset()
-				rl.SetPrompt(r.prompt)
+				rl.SetPrompt(p.prompt)
 				continue
 			}
 			if err == io.EOF {
 				// Ctrl-D: exit
-				fmt.Fprintln(r.out)
+				fmt.Fprintln(p.out)
 				return nil
 			}
 			// Other error
-			fmt.Fprintf(r.errOut, "Error reading input: %v\n", err)
+			fmt.Fprintf(p.errOut, "Error reading input: %v\n", err)
 			continue
 		}
 
 		// Check for debug commands before parsing as Scheme
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, ",") && inputBuffer.Len() == 0 {
-			r.debugCtx.HandleDebugCommand(trimmed, r.out)
+			p.debugCtx.HandleDebugCommand(trimmed, p.out)
 			continue
 		}
 
@@ -177,50 +177,50 @@ func (r *REPL) Run(ctx context.Context) error {
 		// Try to parse the accumulated input
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		p := parser.NewParser(r.env, true, rdr)
+		parser := parser.NewParser(p.env, true, rdr)
 
-		stx, parseErr := p.ReadSyntax(ctx)
+		stx, parseErr := parser.ReadSyntax(ctx)
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
 				// Incomplete expression - prompt for more input
-				rl.SetPrompt(r.contPrompt)
+				rl.SetPrompt(p.contPrompt)
 				continue
 			}
 			// Parse error - display and reset
-			fmt.Fprintf(r.errOut, "Exception: %v\n", parseErr)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", parseErr)
 			inputBuffer.Reset()
-			rl.SetPrompt(r.prompt)
+			rl.SetPrompt(p.prompt)
 			continue
 		}
 
 		// Successfully parsed - evaluate
 		inputBuffer.Reset()
-		rl.SetPrompt(r.prompt)
+		rl.SetPrompt(p.prompt)
 
 		// Compile
-		tpl, compileErr := Compile(r.env, stx)
+		tpl, compileErr := Compile(p.env, stx)
 		if compileErr != nil {
-			fmt.Fprintf(r.errOut, "Exception: %v\n", compileErr)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			continue
 		}
 
 		// Run with debugger
-		mv, runErr := r.runWithDebugger(ctx, tpl)
+		mv, runErr := p.runWithDebugger(ctx, tpl)
 		if runErr != nil {
-			fmt.Fprintf(r.errOut, "Exception: %v\n", runErr)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
 			continue
 		}
 
 		// Print result (unless void)
 		if !mv.IsVoid() {
-			fmt.Fprintln(r.out, mv.SchemeString())
+			fmt.Fprintln(p.out, mv.SchemeString())
 		}
 	}
 }
 
 // RunSimple runs a basic REPL without readline support.
-func (r *REPL) RunSimple(ctx context.Context) error {
-	fmt.Fprint(r.out, r.prompt)
+func (p *REPL) RunSimple(ctx context.Context) error {
+	fmt.Fprint(p.out, p.prompt)
 	reader := newLineReader(os.Stdin)
 	var inputBuffer strings.Builder
 
@@ -234,10 +234,10 @@ func (r *REPL) RunSimple(ctx context.Context) error {
 		line, err := reader.ReadLine()
 		if err != nil {
 			if err == io.EOF {
-				fmt.Fprintln(r.out)
+				fmt.Fprintln(p.out)
 				return nil
 			}
-			fmt.Fprintf(r.errOut, "Error reading input: %v\n", err)
+			fmt.Fprintf(p.errOut, "Error reading input: %v\n", err)
 			continue
 		}
 
@@ -245,52 +245,52 @@ func (r *REPL) RunSimple(ctx context.Context) error {
 		inputBuffer.WriteString("\n")
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		p := parser.NewParser(r.env, true, rdr)
+		parser := parser.NewParser(p.env, true, rdr)
 
-		stx, parseErr := p.ReadSyntax(ctx)
+		stx, parseErr := parser.ReadSyntax(ctx)
 		if parseErr != nil {
 			if isIncompleteInput(parseErr) {
-				fmt.Fprint(r.out, r.contPrompt)
+				fmt.Fprint(p.out, p.contPrompt)
 				continue
 			}
-			fmt.Fprintf(r.errOut, "Exception: %v\n", parseErr)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", parseErr)
 			inputBuffer.Reset()
-			fmt.Fprint(r.out, r.prompt)
+			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
 		inputBuffer.Reset()
 
-		tpl, compileErr := Compile(r.env, stx)
+		tpl, compileErr := Compile(p.env, stx)
 		if compileErr != nil {
-			fmt.Fprintf(r.errOut, "Exception: %v\n", compileErr)
-			fmt.Fprint(r.out, r.prompt)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
+			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
-		mv, runErr := Run(ctx, tpl, r.env)
+		mv, runErr := Run(ctx, tpl, p.env)
 		if runErr != nil {
-			fmt.Fprintf(r.errOut, "Exception: %v\n", runErr)
-			fmt.Fprint(r.out, r.prompt)
+			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
+			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
 		if !mv.IsVoid() {
-			fmt.Fprintf(r.out, "%s\n", mv.SchemeString())
+			fmt.Fprintf(p.out, "%s\n", mv.SchemeString())
 		}
-		fmt.Fprint(r.out, r.prompt)
+		fmt.Fprint(p.out, p.prompt)
 	}
 }
 
 // Debugger returns the REPL's debugger for external configuration.
-func (r *REPL) Debugger() *machine.Debugger {
-	return r.debugCtx.Debugger()
+func (p *REPL) Debugger() *machine.Debugger {
+	return p.debugCtx.Debugger()
 }
 
-func (r *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate) (machine.MultipleValues, error) {
-	cont := machine.NewMachineContinuation(nil, tpl, r.env)
+func (p *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate) (machine.MultipleValues, error) {
+	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
-	mc.SetDebugger(r.debugCtx.Debugger())
+	mc.SetDebugger(p.debugCtx.Debugger())
 	err := mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err
@@ -334,10 +334,10 @@ func newLineReader(r io.Reader) *lineReader {
 	}
 }
 
-func (lr *lineReader) ReadLine() (string, error) {
+func (p *lineReader) ReadLine() (string, error) {
 	buf := make([]byte, 1)
 	for {
-		n, err := lr.f.Read(buf)
+		n, err := p.f.Read(buf)
 		if err != nil {
 			return "", err
 		}
@@ -345,11 +345,11 @@ func (lr *lineReader) ReadLine() (string, error) {
 			continue
 		}
 		if buf[0] == '\n' {
-			line := lr.r.String()
-			lr.r.Reset()
+			line := p.r.String()
+			p.r.Reset()
 			return line, nil
 		}
-		lr.r.WriteByte(buf[0])
+		p.r.WriteByte(buf[0])
 	}
 }
 

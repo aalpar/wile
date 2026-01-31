@@ -1116,22 +1116,22 @@ func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	// Check if the imaginary coefficient is an integer (exact) or float (inexact)
 	if isIntegerString(s) {
 		// Parse as exact integer
-		imag, err := parseExactPart(s)
+		iam, err := parseExactPart(s)
 		if err != nil {
 			return nil, err
 		}
 		return values.NewBigComplex(
 			values.NewBigIntegerFromInt64(0),
-			imag,
+			iam,
 		), nil
 	}
 
 	// Parse the numeric part as inexact float
-	imag, err := strconv.ParseFloat(s, 64)
+	iam, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return nil, err
 	}
-	return values.NewComplexFromParts(0, imag), nil
+	return values.NewComplexFromParts(0, iam), nil
 }
 
 // parsePolarComplex parses a polar complex number string like "1@1.5708", "+2@0.5", "-3@1.0"
@@ -1160,10 +1160,10 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	}
 
 	// Convert polar to rectangular: real = r*cos(θ), imag = r*sin(θ)
-	real := mag * math.Cos(angle)
-	imag := mag * math.Sin(angle)
+	rel := mag * math.Cos(angle)
+	iam := mag * math.Sin(angle)
 
-	return values.NewComplexFromParts(real, imag), nil
+	return values.NewComplexFromParts(rel, iam), nil
 }
 
 // isRationalString checks if a string represents a rational number (contains /).

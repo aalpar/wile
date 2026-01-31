@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"wile/environment"
 	"wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -40,7 +41,7 @@ func TestNullEnvironment(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 			// Result should be a SchemeEnvironment
-			_, ok := result.(*values.SchemeEnvironment)
+			_, ok := result.(*environment.SchemeEnvironment)
 			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SchemeEnvironment, got %T", result))
 		})
 	}
@@ -64,7 +65,7 @@ func TestSchemeReportEnvironment(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 			// Result should be a SchemeEnvironment
-			_, ok := result.(*values.SchemeEnvironment)
+			_, ok := result.(*environment.SchemeEnvironment)
 			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SchemeEnvironment, got %T", result))
 		})
 	}

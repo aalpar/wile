@@ -59,11 +59,11 @@ func NewRebindingScope() *Scope {
 
 // ID returns the unique identifier for this scope.
 // This can be used as a macro application ID for tracing.
-func (s *Scope) ID() uint64 {
-	if s == nil {
+func (p *Scope) ID() uint64 {
+	if p == nil {
 		return 0
 	}
-	return s.id
+	return p.id
 }
 
 // NewSyntaxNil creates a syntax empty list.

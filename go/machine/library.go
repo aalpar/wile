@@ -54,24 +54,24 @@ func NewLibraryName(parts ...string) LibraryName {
 }
 
 // String returns a human-readable representation like "scheme/base".
-func (n LibraryName) String() string {
-	return strings.Join(n.Parts, "/")
+func (p LibraryName) String() string {
+	return strings.Join(p.Parts, "/")
 }
 
 // SchemeString returns the Scheme representation like "(scheme base)".
-func (n LibraryName) SchemeString() string {
-	return "(" + strings.Join(n.Parts, " ") + ")"
+func (p LibraryName) SchemeString() string {
+	return "(" + strings.Join(p.Parts, " ") + ")"
 }
 
 // Key returns a unique string key for map lookups.
-func (n LibraryName) Key() string {
-	return strings.Join(n.Parts, "/")
+func (p LibraryName) Key() string {
+	return strings.Join(p.Parts, "/")
 }
 
 // ToFilePath converts a library name to a file path.
 // (scheme base) -> "scheme/base.sld"
-func (n LibraryName) ToFilePath() string {
-	return strings.Join(n.Parts, string(os.PathSeparator)) + ".sld"
+func (p LibraryName) ToFilePath() string {
+	return strings.Join(p.Parts, string(os.PathSeparator)) + ".sld"
 }
 
 // CompiledLibrary holds a loaded and compiled library.
@@ -94,23 +94,23 @@ func NewCompiledLibrary(name LibraryName, env *environment.EnvironmentFrame) *Co
 
 // AddExport adds an export to the library.
 // If internalName is empty, it defaults to externalName (no rename).
-func (lib *CompiledLibrary) AddExport(externalName, internalName string) {
+func (p *CompiledLibrary) AddExport(externalName, internalName string) {
 	if internalName == "" {
 		internalName = externalName
 	}
-	lib.Exports[externalName] = internalName
+	p.Exports[externalName] = internalName
 }
 
 // IsExported returns true if the given external name is exported.
-func (lib *CompiledLibrary) IsExported(externalName string) bool {
-	_, ok := lib.Exports[externalName]
+func (p *CompiledLibrary) IsExported(externalName string) bool {
+	_, ok := p.Exports[externalName]
 	return ok
 }
 
 // GetInternalName returns the internal name for an exported external name.
 // Returns empty string if not exported.
-func (lib *CompiledLibrary) GetInternalName(externalName string) string {
-	return lib.Exports[externalName]
+func (p *CompiledLibrary) GetInternalName(externalName string) string {
+	return p.Exports[externalName]
 }
 
 // LibraryRegistry manages loaded libraries and handles library loading.
@@ -136,57 +136,57 @@ func NewLibraryRegistry() *LibraryRegistry {
 }
 
 // SetSearchPaths sets the library search paths.
-func (r *LibraryRegistry) SetSearchPaths(paths []string) {
-	r.searchPaths = paths
+func (p *LibraryRegistry) SetSearchPaths(paths []string) {
+	p.searchPaths = paths
 }
 
 // GetSearchPaths returns the current library search paths.
-func (r *LibraryRegistry) GetSearchPaths() []string {
-	return r.searchPaths
+func (p *LibraryRegistry) GetSearchPaths() []string {
+	return p.searchPaths
 }
 
 // AddSearchPath adds a path to the beginning of the search path list.
-func (r *LibraryRegistry) AddSearchPath(path string) {
-	r.searchPaths = append([]string{path}, r.searchPaths...)
+func (p *LibraryRegistry) AddSearchPath(path string) {
+	p.searchPaths = append([]string{path}, p.searchPaths...)
 }
 
 // Register adds a compiled library to the registry.
-func (r *LibraryRegistry) Register(lib *CompiledLibrary) error {
+func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
 	key := lib.Name.Key()
-	if _, exists := r.libraries[key]; exists {
+	if _, exists := p.libraries[key]; exists {
 		return fmt.Errorf("library %s already registered", lib.Name.SchemeString())
 	}
-	r.libraries[key] = lib
+	p.libraries[key] = lib
 	return nil
 }
 
 // Lookup returns a library by name, or nil if not found.
-func (r *LibraryRegistry) Lookup(name LibraryName) *CompiledLibrary {
-	return r.libraries[name.Key()]
+func (p *LibraryRegistry) Lookup(name LibraryName) *CompiledLibrary {
+	return p.libraries[name.Key()]
 }
 
 // IsLoading returns true if the library is currently being loaded.
 // Used to detect circular dependencies.
-func (r *LibraryRegistry) IsLoading(name LibraryName) bool {
-	return r.loading[name.Key()]
+func (p *LibraryRegistry) IsLoading(name LibraryName) bool {
+	return p.loading[name.Key()]
 }
 
 // StartLoading marks a library as being loaded.
-func (r *LibraryRegistry) StartLoading(name LibraryName) {
-	r.loading[name.Key()] = true
+func (p *LibraryRegistry) StartLoading(name LibraryName) {
+	p.loading[name.Key()] = true
 }
 
 // FinishLoading marks a library as finished loading.
-func (r *LibraryRegistry) FinishLoading(name LibraryName) {
-	delete(r.loading, name.Key())
+func (p *LibraryRegistry) FinishLoading(name LibraryName) {
+	delete(p.loading, name.Key())
 }
 
 // FindLibraryFile searches for a library file in the search paths.
 // Returns the full path to the file, or an error if not found.
-func (r *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
+func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 	relativePath := name.ToFilePath()
 
-	for _, searchPath := range r.searchPaths {
+	for _, searchPath := range p.searchPaths {
 		fullPath := filepath.Join(searchPath, relativePath)
 		if _, err := os.Stat(fullPath); err == nil {
 			return fullPath, nil
@@ -195,7 +195,7 @@ func (r *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 
 	// Also try .scm extension
 	relativePathScm := strings.TrimSuffix(relativePath, ".sld") + ".scm"
-	for _, searchPath := range r.searchPaths {
+	for _, searchPath := range p.searchPaths {
 		fullPath := filepath.Join(searchPath, relativePathScm)
 		if _, err := os.Stat(fullPath); err == nil {
 			return fullPath, nil
@@ -203,7 +203,7 @@ func (r *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 	}
 
 	return "", fmt.Errorf("library %s not found in search paths: %v",
-		name.SchemeString(), r.searchPaths)
+		name.SchemeString(), p.searchPaths)
 }
 
 // ImportSet represents a parsed import specification.
@@ -236,7 +236,7 @@ func NewImportSet(name LibraryName) *ImportSet {
 
 // ApplyToExports applies the import modifiers and returns the final bindings.
 // Returns a map of local-name -> external-name (the name in the library).
-func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, error) {
+func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, error) {
 	result := make(map[string]string)
 
 	// Start with all exports
@@ -245,9 +245,9 @@ func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, er
 	}
 
 	// Apply 'only' filter
-	if is.Only != nil {
+	if p.Only != nil {
 		filtered := make(map[string]string)
-		for _, name := range is.Only {
+		for _, name := range p.Only {
 			if _, ok := result[name]; !ok {
 				return nil, fmt.Errorf("identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
@@ -258,8 +258,8 @@ func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, er
 	}
 
 	// Apply 'except' filter
-	if is.Except != nil {
-		for _, name := range is.Except {
+	if p.Except != nil {
+		for _, name := range p.Except {
 			if _, ok := result[name]; !ok {
 				return nil, fmt.Errorf("identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
@@ -269,10 +269,10 @@ func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, er
 	}
 
 	// Apply renames
-	if len(is.Renames) > 0 {
+	if len(p.Renames) > 0 {
 		renamed := make(map[string]string)
 		for localName, externalName := range result {
-			if newName, ok := is.Renames[localName]; ok {
+			if newName, ok := p.Renames[localName]; ok {
 				renamed[newName] = externalName
 			} else {
 				renamed[localName] = externalName
@@ -282,10 +282,10 @@ func (is *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, er
 	}
 
 	// Apply prefix
-	if is.Prefix != "" {
+	if p.Prefix != "" {
 		prefixed := make(map[string]string)
 		for localName, externalName := range result {
-			prefixed[is.Prefix+localName] = externalName
+			prefixed[p.Prefix+localName] = externalName
 		}
 		result = prefixed
 	}

@@ -147,17 +147,17 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 }
 
 // ContainsVariables returns whether a subtree contains pattern variables
-func (a *PatternAnalysis) ContainsVariables(pair *values.Pair) bool {
+func (p *PatternAnalysis) ContainsVariables(pair *values.Pair) bool {
 	if pair == nil {
 		return false
 	}
-	return a.containsVariables[pair]
+	return p.containsVariables[pair]
 }
 
 // GetVariables returns the set of variables in a subtree
-func (a *PatternAnalysis) GetVariables(pair *values.Pair) map[string]struct{} {
+func (p *PatternAnalysis) GetVariables(pair *values.Pair) map[string]struct{} {
 	if pair == nil {
 		return nil
 	}
-	return a.variablesInSubtree[pair]
+	return p.variablesInSubtree[pair]
 }

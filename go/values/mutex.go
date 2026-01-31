@@ -39,8 +39,8 @@ const (
 	MutexAbandoned                        // Owner terminated while holding lock
 )
 
-func (s MutexState) String() string {
-	switch s {
+func (p MutexState) String() string {
+	switch p {
 	case MutexUnlocked:
 		return "not-owned"
 	case MutexLockedOwned:
@@ -82,48 +82,48 @@ func NewMutex(name string) *Mutex {
 }
 
 // ID returns the mutex's unique identifier
-func (m *Mutex) ID() uint64 {
-	return m.id
+func (p *Mutex) ID() uint64 {
+	return p.id
 }
 
 // Name returns the mutex's name
-func (m *Mutex) Name() string {
-	return m.name
+func (p *Mutex) Name() string {
+	return p.name
 }
 
 // Specific returns the mutex's specific field
-func (m *Mutex) Specific() Value {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.specific
+func (p *Mutex) Specific() Value {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.specific
 }
 
 // SetSpecific sets the mutex's specific field
-func (m *Mutex) SetSpecific(v Value) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.specific = v
+func (p *Mutex) SetSpecific(v Value) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.specific = v
 }
 
 // State returns the current state of the mutex
-func (m *Mutex) State() MutexState {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.state
+func (p *Mutex) State() MutexState {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.state
 }
 
 // StateValue returns the state as a Scheme value
 // Returns: 'not-owned, 'abandoned, or the owner thread
-func (m *Mutex) StateValue() Value {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (p *Mutex) StateValue() Value {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	switch m.state {
+	switch p.state {
 	case MutexUnlocked:
 		return NewSymbol("not-owned")
 	case MutexLockedOwned:
-		if m.owner != nil {
-			return m.owner
+		if p.owner != nil {
+			return p.owner
 		}
 		return NewSymbol("not-owned")
 	case MutexLockedNotOwned:
@@ -136,33 +136,33 @@ func (m *Mutex) StateValue() Value {
 }
 
 // Owner returns the current owner thread, or nil if not owned
-func (m *Mutex) Owner() *Thread {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.owner
+func (p *Mutex) Owner() *Thread {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.owner
 }
 
 // Lock acquires the mutex with optional timeout and owner
 // Returns true if acquired, false if timeout
-func (m *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// Check for abandoned state
-	if m.state == MutexAbandoned {
+	if p.state == MutexAbandoned {
 		// Clear abandoned state and acquire
-		m.state = MutexLockedOwned
-		m.owner = owner
-		return true, &AbandonedMutexException{Mutex: m}
+		p.state = MutexLockedOwned
+		p.owner = owner
+		return true, &AbandonedMutexException{Mutex: p}
 	}
 
 	// If already unlocked, acquire immediately
-	if m.state == MutexUnlocked {
+	if p.state == MutexUnlocked {
 		if owner != nil {
-			m.state = MutexLockedOwned
-			m.owner = owner
+			p.state = MutexLockedOwned
+			p.owner = owner
 		} else {
-			m.state = MutexLockedNotOwned
+			p.state = MutexLockedNotOwned
 		}
 		return true, nil
 	}
@@ -170,26 +170,26 @@ func (m *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 	// Need to wait
 	if timeout == nil {
 		// Wait indefinitely
-		for m.state != MutexUnlocked && m.state != MutexAbandoned {
-			m.cond.Wait()
+		for p.state != MutexUnlocked && p.state != MutexAbandoned {
+			p.cond.Wait()
 		}
-		if m.state == MutexAbandoned {
-			m.state = MutexLockedOwned
-			m.owner = owner
-			return true, &AbandonedMutexException{Mutex: m}
+		if p.state == MutexAbandoned {
+			p.state = MutexLockedOwned
+			p.owner = owner
+			return true, &AbandonedMutexException{Mutex: p}
 		}
 		if owner != nil {
-			m.state = MutexLockedOwned
-			m.owner = owner
+			p.state = MutexLockedOwned
+			p.owner = owner
 		} else {
-			m.state = MutexLockedNotOwned
+			p.state = MutexLockedNotOwned
 		}
 		return true, nil
 	}
 
 	// Wait with timeout
 	deadline := time.Now().Add(*timeout)
-	for m.state != MutexUnlocked && m.state != MutexAbandoned {
+	for p.state != MutexUnlocked && p.state != MutexAbandoned {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return false, nil // timeout
@@ -200,11 +200,11 @@ func (m *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 		go func() {
 			select {
 			case <-time.After(remaining):
-				m.cond.Broadcast() // Wake up to check timeout
+				p.cond.Broadcast() // Wake up to check timeout
 			case <-done:
 			}
 		}()
-		m.cond.Wait()
+		p.cond.Wait()
 		close(done)
 
 		if time.Now().After(deadline) {
@@ -212,75 +212,75 @@ func (m *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 		}
 	}
 
-	if m.state == MutexAbandoned {
-		m.state = MutexLockedOwned
-		m.owner = owner
-		return true, &AbandonedMutexException{Mutex: m}
+	if p.state == MutexAbandoned {
+		p.state = MutexLockedOwned
+		p.owner = owner
+		return true, &AbandonedMutexException{Mutex: p}
 	}
 
 	if owner != nil {
-		m.state = MutexLockedOwned
-		m.owner = owner
+		p.state = MutexLockedOwned
+		p.owner = owner
 	} else {
-		m.state = MutexLockedNotOwned
+		p.state = MutexLockedNotOwned
 	}
 	return true, nil
 }
 
 // Unlock releases the mutex
 // If cv is provided, atomically unlock and wait on condition variable
-func (m *Mutex) Unlock(cv *ConditionVariable, timeout *time.Duration) bool {
-	m.mu.Lock()
+func (p *Mutex) Unlock(cv *ConditionVariable, timeout *time.Duration) bool {
+	p.mu.Lock()
 
 	// Release the mutex
-	m.state = MutexUnlocked
-	m.owner = nil
-	m.cond.Signal()
+	p.state = MutexUnlocked
+	p.owner = nil
+	p.cond.Signal()
 
 	if cv == nil {
-		m.mu.Unlock()
+		p.mu.Unlock()
 		return true
 	}
 
 	// Atomically release mutex and wait on condition variable
-	m.mu.Unlock()
-	return cv.Wait(m, timeout)
+	p.mu.Unlock()
+	return cv.Wait(p, timeout)
 }
 
 // MarkAbandoned marks the mutex as abandoned (called when owner thread terminates)
-func (m *Mutex) MarkAbandoned() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (p *Mutex) MarkAbandoned() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if m.state == MutexLockedOwned || m.state == MutexLockedNotOwned {
-		m.state = MutexAbandoned
-		m.owner = nil
-		m.cond.Broadcast()
+	if p.state == MutexLockedOwned || p.state == MutexLockedNotOwned {
+		p.state = MutexAbandoned
+		p.owner = nil
+		p.cond.Broadcast()
 	}
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the mutex is nil.
-func (m *Mutex) IsVoid() bool {
-	return m == nil
+func (p *Mutex) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the mutexes are the same object.
-func (m *Mutex) EqualTo(v Value) bool {
+func (p *Mutex) EqualTo(v Value) bool {
 	other, ok := v.(*Mutex)
 	if !ok {
 		return false
 	}
-	return m == other // Mutex identity is reference equality
+	return p == other // Mutex identity is reference equality
 }
 
 // SchemeString returns the Scheme representation of the mutex.
-func (m *Mutex) SchemeString() string {
-	if m == nil {
+func (p *Mutex) SchemeString() string {
+	if p == nil {
 		return "#<mutex:void>"
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return fmt.Sprintf("#<mutex:%s id=%d state=%s>", m.name, m.id, m.state)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return fmt.Sprintf("#<mutex:%s id=%d state=%s>", p.name, p.id, p.state)
 }

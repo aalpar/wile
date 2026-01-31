@@ -41,47 +41,47 @@ func NewSourceIndexes(index, column, line int) SourceIndexes {
 }
 
 // Index returns the absolute byte position in the source.
-func (i SourceIndexes) Index() int {
-	return i.index
+func (p SourceIndexes) Index() int {
+	return p.index
 }
 
 // Column returns the column number within the current line (0-based).
-func (i SourceIndexes) Column() int {
-	return i.column
+func (p SourceIndexes) Column() int {
+	return p.column
 }
 
 // Line returns the line number (1-based).
-func (i SourceIndexes) Line() int {
-	return i.line
+func (p SourceIndexes) Line() int {
+	return p.line
 }
 
 // Inc advances the position by n characters on the same line.
-func (i *SourceIndexes) Inc(n int) int {
-	i.index += n
-	i.column += n
-	return i.index
+func (p *SourceIndexes) Inc(n int) int {
+	p.index += n
+	p.column += n
+	return p.index
 }
 
 // NewLine advances to the start of a new line.
-func (i *SourceIndexes) NewLine() int {
-	i.index++
-	i.column = 0
-	i.line++
-	return i.index
+func (p *SourceIndexes) NewLine() int {
+	p.index++
+	p.column = 0
+	p.line++
+	return p.index
 }
 
 // Tab advances the position by n tab stops on the same line.
-func (i *SourceIndexes) Tab() int {
-	i.index++
-	i.column += 8 - (i.column % 8)
-	return i.index
+func (p *SourceIndexes) Tab() int {
+	p.index++
+	p.column += 8 - (p.column % 8)
+	return p.index
 }
 
 // SchemeString returns a string representation of the position.
-func (i SourceIndexes) SchemeString() string {
+func (p SourceIndexes) SchemeString() string {
 	q := &strings.Builder{}
 	q.WriteString("<indexes ")
-	fmt.Fprintf(q, "%d:%d:%d", i.index, i.column, i.line)
+	fmt.Fprintf(q, "%d:%d:%d", p.index, p.column, p.line)
 	q.WriteString(">")
 	return q.String()
 }
@@ -92,18 +92,18 @@ func (p SourceIndexes) IsVoid() bool {
 }
 
 // EqualTo returns true if the positions are equal.
-func (i SourceIndexes) EqualTo(o values.Value) bool {
+func (p SourceIndexes) EqualTo(o values.Value) bool {
 	v, ok := o.(SourceIndexes)
 	if !ok {
 		return false
 	}
-	if i.index != v.index {
+	if p.index != v.index {
 		return false
 	}
-	if i.column != v.column {
+	if p.column != v.column {
 		return false
 	}
-	if i.line != v.line {
+	if p.line != v.line {
 		return false
 	}
 	return true

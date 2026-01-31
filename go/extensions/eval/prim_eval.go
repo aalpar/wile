@@ -36,15 +36,12 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	envSpec := mc.Arg(1)
 
 	// Get the environment frame from the SchemeEnvironment
-	schemeEnv, ok := envSpec.(*values.SchemeEnvironment)
+	schemeEnv, ok := envSpec.(*environment.SchemeEnvironment)
 	if !ok {
 		return values.NewForeignErrorf("eval: expected an environment specifier but got %T", envSpec)
 	}
 
-	env, ok := schemeEnv.Frame.(*environment.EnvironmentFrame)
-	if !ok {
-		return values.NewForeignError("eval: environment frame is invalid")
-	}
+	env := schemeEnv.Frame
 
 	// Convert datum to syntax value
 	sctx := syntax.NewZeroValueSourceContext()
@@ -158,7 +155,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 func PrimInteractionEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	// Return the current top-level environment wrapped as a SchemeEnvironment
 	topLevel := mc.EnvironmentFrame().TopLevel()
-	mc.SetValue(values.NewSchemeEnvironment("interaction-environment", topLevel))
+	mc.SetValue(environment.NewSchemeEnvironment("interaction-environment", topLevel))
 	return nil
 }
 
@@ -177,7 +174,7 @@ func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) 
 		// Return the current top-level environment
 		// In a full implementation, this would return a restricted environment
 		topLevel := mc.EnvironmentFrame().TopLevel()
-		mc.SetValue(values.NewSchemeEnvironment("scheme-report-environment", topLevel))
+		mc.SetValue(environment.NewSchemeEnvironment("scheme-report-environment", topLevel))
 		return nil
 	default:
 		return values.NewForeignError("scheme-report-environment: unsupported version, expected 5 or 7")
@@ -199,7 +196,7 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 		// Create a new empty top-level environment with only syntax bindings
 		// For now, we return a fresh top-level environment
 		newEnv := environment.NewTopLevelEnvironmentFrame()
-		mc.SetValue(values.NewSchemeEnvironment("null-environment", newEnv))
+		mc.SetValue(environment.NewSchemeEnvironment("null-environment", newEnv))
 		return nil
 	default:
 		return values.NewForeignError("null-environment: unsupported version, expected 5 or 7")
@@ -231,7 +228,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Handle empty arguments case
 	if values.IsEmptyList(argsVal) {
-		mc.SetValue(values.NewSchemeEnvironment("environment", newEnv))
+		mc.SetValue(environment.NewSchemeEnvironment("environment", newEnv))
 		return nil
 	}
 
@@ -278,7 +275,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "environment: improper import spec list")
 	}
 
-	mc.SetValue(values.NewSchemeEnvironment("environment", newEnv))
+	mc.SetValue(environment.NewSchemeEnvironment("environment", newEnv))
 	return nil
 }
 

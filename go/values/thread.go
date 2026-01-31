@@ -49,8 +49,8 @@ const (
 	ThreadTerminated                    // Finished execution
 )
 
-func (s ThreadState) String() string {
-	switch s {
+func (p ThreadState) String() string {
+	switch p {
 	case ThreadNew:
 		return "new"
 	case ThreadRunnable:
@@ -107,41 +107,41 @@ func NewThread(thunk Value, name string) *Thread {
 }
 
 // ID returns the thread's unique identifier
-func (t *Thread) ID() uint64 {
-	return t.id
+func (p *Thread) ID() uint64 {
+	return p.id
 }
 
 // Name returns the thread's name
-func (t *Thread) Name() string {
-	return t.name
+func (p *Thread) Name() string {
+	return p.name
 }
 
 // Specific returns the thread's specific field (thread-local storage)
-func (t *Thread) Specific() Value {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.specific
+func (p *Thread) Specific() Value {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.specific
 }
 
 // SetSpecific sets the thread's specific field
-func (t *Thread) SetSpecific(v Value) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.specific = v
+func (p *Thread) SetSpecific(v Value) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.specific = v
 }
 
 // State returns the current state of the thread
-func (t *Thread) State() ThreadState {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.state
+func (p *Thread) State() ThreadState {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.state
 }
 
 // StateSymbol returns the state as a Scheme symbol
-func (t *Thread) StateSymbol() *Symbol {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	switch t.state {
+func (p *Thread) StateSymbol() *Symbol {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	switch p.state {
 	case ThreadNew:
 		return NewSymbol("new")
 	case ThreadRunnable:
@@ -156,43 +156,43 @@ func (t *Thread) StateSymbol() *Symbol {
 }
 
 // Start begins execution of the thread
-func (t *Thread) Start() error {
-	t.mu.Lock()
-	if t.state != ThreadNew {
-		t.mu.Unlock()
+func (p *Thread) Start() error {
+	p.mu.Lock()
+	if p.state != ThreadNew {
+		p.mu.Unlock()
 		return ErrThreadAlreadyStarted
 	}
-	if t.RunFunc == nil {
-		t.mu.Unlock()
+	if p.RunFunc == nil {
+		p.mu.Unlock()
 		return NewForeignError("thread-start!: no run function set")
 	}
 
-	t.state = ThreadRunnable
-	t.ctx, t.cancel = context.WithCancel(context.Background())
-	t.mu.Unlock()
+	p.state = ThreadRunnable
+	p.ctx, p.cancel = context.WithCancel(context.Background())
+	p.mu.Unlock()
 
 	go func() {
-		defer close(t.done)
+		defer close(p.done)
 		defer func() {
 			r := recover()
 			if r != nil {
-				t.mu.Lock()
-				t.state = ThreadTerminated
-				t.exception = fmt.Errorf("thread panic: %v", r)
-				t.mu.Unlock()
+				p.mu.Lock()
+				p.state = ThreadTerminated
+				p.exception = fmt.Errorf("thread panic: %v", r)
+				p.mu.Unlock()
 			}
 		}()
 
-		result, err := t.RunFunc(t.ctx, t.thunk)
+		result, err := p.RunFunc(p.ctx, p.thunk)
 
-		t.mu.Lock()
-		t.state = ThreadTerminated
+		p.mu.Lock()
+		p.state = ThreadTerminated
 		if err != nil {
-			t.exception = err
+			p.exception = err
 		} else {
-			t.result = result
+			p.result = result
 		}
-		t.mu.Unlock()
+		p.mu.Unlock()
 	}()
 
 	return nil
@@ -200,91 +200,91 @@ func (t *Thread) Start() error {
 
 // Join waits for the thread to terminate with optional timeout
 // Returns the thread's result or an error
-func (t *Thread) Join(timeout *time.Duration) (Value, error) {
+func (p *Thread) Join(timeout *time.Duration) (Value, error) {
 	if timeout == nil {
-		<-t.done
+		<-p.done
 	} else {
 		select {
-		case <-t.done:
+		case <-p.done:
 			// Thread completed
 		case <-time.After(*timeout):
 			return nil, ErrJoinTimeout
 		}
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if t.exception != nil {
-		return nil, &UncaughtThreadException{Reason: t.exception}
+	if p.exception != nil {
+		return nil, &UncaughtThreadException{Reason: p.exception}
 	}
-	return t.result, nil
+	return p.result, nil
 }
 
 // Terminate forcefully terminates the thread
-func (t *Thread) Terminate() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (p *Thread) Terminate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if t.state == ThreadTerminated {
+	if p.state == ThreadTerminated {
 		return
 	}
 
-	if t.cancel != nil {
-		t.cancel()
+	if p.cancel != nil {
+		p.cancel()
 	}
-	t.state = ThreadTerminated
-	t.exception = &TerminatedThreadException{Thread: t}
+	p.state = ThreadTerminated
+	p.exception = &TerminatedThreadException{Thread: p}
 }
 
 // Yield yields execution to other threads
-func (t *Thread) Yield() {
+func (p *Thread) Yield() {
 	// In Go, this is a hint to the scheduler
 	// runtime.Gosched() is called in the primitive
 }
 
 // Sleep pauses the thread for the given duration
-func (t *Thread) Sleep(d time.Duration) {
-	t.mu.Lock()
-	t.state = ThreadBlocked
-	t.mu.Unlock()
+func (p *Thread) Sleep(d time.Duration) {
+	p.mu.Lock()
+	p.state = ThreadBlocked
+	p.mu.Unlock()
 
 	time.Sleep(d)
 
-	t.mu.Lock()
-	if t.state == ThreadBlocked {
-		t.state = ThreadRunnable
+	p.mu.Lock()
+	if p.state == ThreadBlocked {
+		p.state = ThreadRunnable
 	}
-	t.mu.Unlock()
+	p.mu.Unlock()
 }
 
 // Done returns a channel that's closed when the thread terminates
-func (t *Thread) Done() <-chan struct{} {
-	return t.done
+func (p *Thread) Done() <-chan struct{} {
+	return p.done
 }
 
 // buf interface implementation
 
 // IsVoid returns true if this thread is nil.
-func (t *Thread) IsVoid() bool {
-	return t == nil
+func (p *Thread) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if both threads are the same object.
-func (t *Thread) EqualTo(v Value) bool {
+func (p *Thread) EqualTo(v Value) bool {
 	other, ok := v.(*Thread)
 	if !ok {
 		return false
 	}
-	return t == other // Thread identity is reference equality
+	return p == other // Thread identity is reference equality
 }
 
 // SchemeString returns the Scheme representation of this thread.
-func (t *Thread) SchemeString() string {
-	if t == nil {
+func (p *Thread) SchemeString() string {
+	if p == nil {
 		return "#<thread:void>"
 	}
-	return fmt.Sprintf("#<thread:%s id=%d state=%s>", t.name, t.id, t.state)
+	return fmt.Sprintf("#<thread:%s id=%d state=%s>", p.name, p.id, p.state)
 }
 
 // Thread exception types for SRFI-18
@@ -292,7 +292,7 @@ func (t *Thread) SchemeString() string {
 // JoinTimeoutException is raised when thread-join! times out
 type JoinTimeoutException struct{}
 
-func (e *JoinTimeoutException) Error() string {
+func (p *JoinTimeoutException) Error() string {
 	return "thread-join!: timeout"
 }
 
@@ -301,9 +301,9 @@ type TerminatedThreadException struct {
 	Thread *Thread
 }
 
-func (e *TerminatedThreadException) Error() string {
-	if e.Thread != nil {
-		return fmt.Sprintf("thread terminated: %s", e.Thread.name)
+func (p *TerminatedThreadException) Error() string {
+	if p.Thread != nil {
+		return fmt.Sprintf("thread terminated: %s", p.Thread.name)
 	}
 	return "thread terminated"
 }
@@ -313,15 +313,15 @@ type UncaughtThreadException struct {
 	Reason error
 }
 
-func (e *UncaughtThreadException) Error() string {
-	if e.Reason != nil {
-		return fmt.Sprintf("uncaught exception in thread: %v", e.Reason)
+func (p *UncaughtThreadException) Error() string {
+	if p.Reason != nil {
+		return fmt.Sprintf("uncaught exception in thread: %v", p.Reason)
 	}
 	return "uncaught exception in thread"
 }
 
-func (e *UncaughtThreadException) Unwrap() error {
-	return e.Reason
+func (p *UncaughtThreadException) Unwrap() error {
+	return p.Reason
 }
 
 // AbandonedMutexException is raised when a mutex owner terminates
@@ -329,6 +329,6 @@ type AbandonedMutexException struct {
 	Mutex Value // *Mutex, but avoid circular import
 }
 
-func (e *AbandonedMutexException) Error() string {
+func (p *AbandonedMutexException) Error() string {
 	return "mutex abandoned by terminated thread"
 }

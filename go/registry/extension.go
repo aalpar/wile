@@ -35,11 +35,11 @@ func NewExtension(name string, fn func(*Registry) error) Extension {
 }
 
 // Name returns the extension name.
-func (e *ExtensionFunc) Name() string {
-	return e.name
+func (p *ExtensionFunc) Name() string {
+	return p.name
 }
 
 // AddToRegistry registers primitives with the registry.
-func (e *ExtensionFunc) AddToRegistry(r *Registry) error {
-	return e.fn(r)
+func (p *ExtensionFunc) AddToRegistry(r *Registry) error {
+	return p.fn(r)
 }

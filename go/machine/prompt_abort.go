@@ -31,6 +31,6 @@ type ErrPromptAbort struct {
 	Values []values.Value
 }
 
-func (e *ErrPromptAbort) Error() string {
-	return fmt.Sprintf("abort to prompt %s", e.Tag.SchemeString())
+func (p *ErrPromptAbort) Error() string {
+	return fmt.Sprintf("abort to prompt %s", p.Tag.SchemeString())
 }

@@ -65,14 +65,14 @@ func NewDebugger() *Debugger {
 }
 
 // SetBreakpoint adds a breakpoint at the given source location.
-func (d *Debugger) SetBreakpoint(file string, line, column int) BreakpointID {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (p *Debugger) SetBreakpoint(file string, line, column int) BreakpointID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	id := d.nextID
-	d.nextID++
+	id := p.nextID
+	p.nextID++
 
-	d.breakpoints[id] = &Breakpoint{
+	p.breakpoints[id] = &Breakpoint{
 		ID:      id,
 		File:    file,
 		Line:    line,
@@ -83,23 +83,23 @@ func (d *Debugger) SetBreakpoint(file string, line, column int) BreakpointID {
 }
 
 // RemoveBreakpoint removes a breakpoint.
-func (d *Debugger) RemoveBreakpoint(id BreakpointID) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (p *Debugger) RemoveBreakpoint(id BreakpointID) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if _, ok := d.breakpoints[id]; ok {
-		delete(d.breakpoints, id)
+	if _, ok := p.breakpoints[id]; ok {
+		delete(p.breakpoints, id)
 		return true
 	}
 	return false
 }
 
 // EnableBreakpoint enables a breakpoint.
-func (d *Debugger) EnableBreakpoint(id BreakpointID) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (p *Debugger) EnableBreakpoint(id BreakpointID) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if bp, ok := d.breakpoints[id]; ok {
+	if bp, ok := p.breakpoints[id]; ok {
 		bp.Enabled = true
 		return true
 	}
@@ -107,11 +107,11 @@ func (d *Debugger) EnableBreakpoint(id BreakpointID) bool {
 }
 
 // DisableBreakpoint disables a breakpoint.
-func (d *Debugger) DisableBreakpoint(id BreakpointID) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (p *Debugger) DisableBreakpoint(id BreakpointID) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if bp, ok := d.breakpoints[id]; ok {
+	if bp, ok := p.breakpoints[id]; ok {
 		bp.Enabled = false
 		return true
 	}
@@ -119,28 +119,28 @@ func (d *Debugger) DisableBreakpoint(id BreakpointID) bool {
 }
 
 // Breakpoints returns all breakpoints.
-func (d *Debugger) Breakpoints() []*Breakpoint {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+func (p *Debugger) Breakpoints() []*Breakpoint {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	result := make([]*Breakpoint, 0, len(d.breakpoints))
-	for _, bp := range d.breakpoints {
+	result := make([]*Breakpoint, 0, len(p.breakpoints))
+	for _, bp := range p.breakpoints {
 		result = append(result, bp)
 	}
 	return result
 }
 
 // CheckBreakpoint checks if execution should break at current location.
-func (d *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
+func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 	source := mc.CurrentSource()
 	if source == nil {
 		return nil
 	}
 
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	for _, bp := range d.breakpoints {
+	for _, bp := range p.breakpoints {
 		if !bp.Enabled {
 			continue
 		}
@@ -155,62 +155,62 @@ func (d *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 }
 
 // ShouldStep checks if we should break due to stepping.
-func (d *Debugger) ShouldStep(mc *MachineContext) bool {
-	if !d.stepping {
+func (p *Debugger) ShouldStep(mc *MachineContext) bool {
+	if !p.stepping {
 		return false
 	}
 
-	switch d.stepMode {
+	switch p.stepMode {
 	case StepInto:
 		return mc.CurrentSource() != nil
 	case StepOver:
 		// Only break if we're in the same or shallower frame
-		return mc.CurrentSource() != nil && mc.CallDepth() <= d.stepFrameDepth
+		return mc.CurrentSource() != nil && mc.CallDepth() <= p.stepFrameDepth
 	case StepOut:
 		// Only break if we've returned from the target frame
-		return mc.cont != d.stepFrame
+		return mc.cont != p.stepFrame
 	}
 	return false
 }
 
 // Continue resumes execution.
-func (d *Debugger) Continue() {
-	d.stepping = false
+func (p *Debugger) Continue() {
+	p.stepping = false
 }
 
 // StepInto enables step-into mode.
-func (d *Debugger) StepInto() {
-	d.stepping = true
-	d.stepMode = StepInto
+func (p *Debugger) StepInto() {
+	p.stepping = true
+	p.stepMode = StepInto
 }
 
 // StepOver enables step-over mode.
-func (d *Debugger) StepOver(mc *MachineContext) {
-	d.stepping = true
-	d.stepMode = StepOver
-	d.stepFrameDepth = mc.CallDepth()
+func (p *Debugger) StepOver(mc *MachineContext) {
+	p.stepping = true
+	p.stepMode = StepOver
+	p.stepFrameDepth = mc.CallDepth()
 }
 
 // StepOut enables step-out mode.
-func (d *Debugger) StepOut(mc *MachineContext) {
-	d.stepping = true
-	d.stepMode = StepOut
-	d.stepFrame = mc.cont
+func (p *Debugger) StepOut(mc *MachineContext) {
+	p.stepping = true
+	p.stepMode = StepOut
+	p.stepFrame = mc.cont
 }
 
 // OnBreak sets the callback for when a breakpoint is hit.
-func (d *Debugger) OnBreak(fn func(mc *MachineContext, bp *Breakpoint)) {
-	d.onBreak = fn
+func (p *Debugger) OnBreak(fn func(mc *MachineContext, bp *Breakpoint)) {
+	p.onBreak = fn
 }
 
 // TriggerBreak calls the break callback if set.
-func (d *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
-	if d.onBreak != nil {
-		d.onBreak(mc, bp)
+func (p *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
+	if p.onBreak != nil {
+		p.onBreak(mc, bp)
 	}
 }
 
 // IsStepping returns whether the debugger is in stepping mode.
-func (d *Debugger) IsStepping() bool {
-	return d.stepping
+func (p *Debugger) IsStepping() bool {
+	return p.stepping
 }

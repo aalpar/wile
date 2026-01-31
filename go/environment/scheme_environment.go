@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package environment
 
-import "fmt"
+import (
+	"fmt"
 
-var _ Value = (*SchemeEnvironment)(nil)
+	"wile/values"
+)
+
+var _ values.Value = (*SchemeEnvironment)(nil)
 
 // SchemeEnvironment represents a first-class environment for use with eval.
 // It wraps an environment frame for use as a Scheme value.
@@ -25,11 +29,11 @@ type SchemeEnvironment struct {
 	Name string
 	// Frame is the actual environment frame - stored as interface{} to avoid
 	// circular dependency with environment package
-	Frame interface{}
+	Frame *EnvironmentFrame
 }
 
 // NewSchemeEnvironment creates a new scheme environment.
-func NewSchemeEnvironment(name string, frame interface{}) *SchemeEnvironment {
+func NewSchemeEnvironment(name string, frame *EnvironmentFrame) *SchemeEnvironment {
 	return &SchemeEnvironment{
 		Name:  name,
 		Frame: frame,
@@ -37,23 +41,23 @@ func NewSchemeEnvironment(name string, frame interface{}) *SchemeEnvironment {
 }
 
 // IsVoid returns true if the environment is nil.
-func (e *SchemeEnvironment) IsVoid() bool {
-	return e == nil
+func (p *SchemeEnvironment) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the environments are the same object.
-func (e *SchemeEnvironment) EqualTo(v Value) bool {
+func (p *SchemeEnvironment) EqualTo(v values.Value) bool {
 	other, ok := v.(*SchemeEnvironment)
 	if !ok {
 		return false
 	}
-	return e == other // Environments are compared by identity
+	return p == other // Environments are compared by identity
 }
 
 // SchemeString returns the Scheme representation of the environment.
-func (e *SchemeEnvironment) SchemeString() string {
-	if e.Name != "" {
-		return fmt.Sprintf("#<environment %s>", e.Name)
+func (p *SchemeEnvironment) SchemeString() string {
+	if p.Name != "" {
+		return fmt.Sprintf("#<environment %s>", p.Name)
 	}
 	return "#<environment>"
 }

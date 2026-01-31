@@ -26,6 +26,6 @@ type CompiledCode struct {
 }
 
 // String returns a string representation of the compiled code.
-func (c *CompiledCode) String() string {
+func (p *CompiledCode) String() string {
 	return "#<compiled-code>"
 }

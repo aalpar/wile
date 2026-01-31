@@ -65,31 +65,31 @@ type FreeIdResolution struct {
 
 // GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
 // Implements the localScopesProvider interface for match package hygiene.
-func (f *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
-	if f == nil {
+func (p *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
+	if p == nil {
 		return nil
 	}
-	return f.LocalScopes
+	return p.LocalScopes
 }
 
 // GetGlobal returns the global binding's index, or nil if this is a local binding.
 // Returns any to avoid circular import with environment package in match.
 // Implements the globalBindingProvider interface for match package hygiene.
-func (f *FreeIdResolution) GetGlobal() any {
-	if f == nil {
+func (p *FreeIdResolution) GetGlobal() any {
+	if p == nil {
 		return nil
 	}
-	return f.Global
+	return p.Global
 }
 
 // GetHasLocalBinding returns true if a local binding was found at macro definition time.
 // This is used to distinguish "local binding with empty scopes" from "no binding at all".
 // Implements the hasLocalBindingProvider interface.
-func (f *FreeIdResolution) GetHasLocalBinding() bool {
-	if f == nil {
+func (p *FreeIdResolution) GetHasLocalBinding() bool {
+	if p == nil {
 		return false
 	}
-	return f.HasLocalBinding
+	return p.HasLocalBinding
 }
 
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.
@@ -126,7 +126,7 @@ type clausesWrapper struct {
 	clauses []*SyntaxRulesClause
 }
 
-func (c *clausesWrapper) EqualTo(other values.Value) bool {
+func (p *clausesWrapper) EqualTo(other values.Value) bool {
 	_, ok := other.(*clausesWrapper)
 	if !ok {
 		return false
@@ -135,11 +135,11 @@ func (c *clausesWrapper) EqualTo(other values.Value) bool {
 	return false
 }
 
-func (c *clausesWrapper) IsVoid() bool {
+func (p *clausesWrapper) IsVoid() bool {
 	return false
 }
 
-func (c *clausesWrapper) SchemeString() string {
+func (p *clausesWrapper) SchemeString() string {
 	return "#<syntax-rules-clauses>"
 }
 

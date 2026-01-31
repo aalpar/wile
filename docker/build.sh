@@ -1,6 +1,7 @@
 #!/bin/bash
-# Build the Wile Docker image from the docker/ directory
+# Build the Wile Docker image.
+# Delegates to build/docker-build.sh.
 set -e
 
-cd "$(dirname "$0")"
-docker build -f Dockerfile -t wile ..
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$REPO_ROOT/build/docker-build.sh"

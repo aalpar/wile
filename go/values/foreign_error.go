@@ -108,8 +108,8 @@ func NewStaticError(msg string) *StaticError {
 	return q
 }
 
-func (q *StaticError) Error() string {
-	return q.message
+func (p *StaticError) Error() string {
+	return p.message
 }
 
 // ForeignError is an error that wraps an error from foreign code, such as C code.
@@ -165,11 +165,11 @@ func (p *ForeignError) Unwrap() error {
 	return p.err
 }
 
-func (q *ForeignError) Error() string {
-	if q.err != nil {
-		return fmt.Sprintf("%s: %s", q.message, q.err.Error())
+func (p *ForeignError) Error() string {
+	if p.err != nil {
+		return fmt.Sprintf("%s: %s", p.message, p.err.Error())
 	}
-	return q.message
+	return p.message
 }
 
 // ForeignFileError represents an error from a file system operation.

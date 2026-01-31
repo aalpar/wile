@@ -54,62 +54,62 @@ func NewConditionVariable(name string) *ConditionVariable {
 }
 
 // ID returns the condition variable's unique identifier
-func (cv *ConditionVariable) ID() uint64 {
-	return cv.id
+func (p *ConditionVariable) ID() uint64 {
+	return p.id
 }
 
 // Name returns the condition variable's name
-func (cv *ConditionVariable) Name() string {
-	return cv.name
+func (p *ConditionVariable) Name() string {
+	return p.name
 }
 
 // Specific returns the condition variable's specific field
-func (cv *ConditionVariable) Specific() Value {
-	cv.mu.Lock()
-	defer cv.mu.Unlock()
-	return cv.specific
+func (p *ConditionVariable) Specific() Value {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.specific
 }
 
 // SetSpecific sets the condition variable's specific field
-func (cv *ConditionVariable) SetSpecific(v Value) {
-	cv.mu.Lock()
-	defer cv.mu.Unlock()
-	cv.specific = v
+func (p *ConditionVariable) SetSpecific(v Value) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.specific = v
 }
 
 // Signal wakes one waiting thread
-func (cv *ConditionVariable) Signal() {
-	cv.mu.Lock()
-	defer cv.mu.Unlock()
-	cv.cond.Signal()
+func (p *ConditionVariable) Signal() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cond.Signal()
 }
 
 // Broadcast wakes all waiting threads
-func (cv *ConditionVariable) Broadcast() {
-	cv.mu.Lock()
-	defer cv.mu.Unlock()
-	cv.cond.Broadcast()
+func (p *ConditionVariable) Broadcast() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cond.Broadcast()
 }
 
 // Wait waits on the condition variable
 // The mutex must be held when calling Wait
 // Returns true if signaled, false if timeout
-func (cv *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
-	cv.mu.Lock()
-	cv.waiters++
-	cv.mu.Unlock()
+func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
+	p.mu.Lock()
+	p.waiters++
+	p.mu.Unlock()
 
 	defer func() {
-		cv.mu.Lock()
-		cv.waiters--
-		cv.mu.Unlock()
+		p.mu.Lock()
+		p.waiters--
+		p.mu.Unlock()
 	}()
 
 	if timeout == nil {
 		// Wait indefinitely
-		cv.mu.Lock()
-		cv.cond.Wait()
-		cv.mu.Unlock()
+		p.mu.Lock()
+		p.cond.Wait()
+		p.mu.Unlock()
 		return true
 	}
 
@@ -118,18 +118,18 @@ func (cv *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 	signaled := make(chan struct{})
 
 	go func() {
-		cv.mu.Lock()
-		cv.cond.Wait()
-		cv.mu.Unlock()
+		p.mu.Lock()
+		p.cond.Wait()
+		p.mu.Unlock()
 		close(signaled)
 	}()
 
 	go func() {
 		select {
 		case <-time.After(*timeout):
-			cv.mu.Lock()
-			cv.cond.Broadcast() // Wake the waiter so it can exit
-			cv.mu.Unlock()
+			p.mu.Lock()
+			p.cond.Broadcast() // Wake the waiter so it can exit
+			p.mu.Unlock()
 		case <-done:
 		}
 	}()
@@ -145,32 +145,32 @@ func (cv *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 }
 
 // WaiterCount returns the number of threads waiting on this condition variable
-func (cv *ConditionVariable) WaiterCount() int {
-	cv.mu.Lock()
-	defer cv.mu.Unlock()
-	return cv.waiters
+func (p *ConditionVariable) WaiterCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.waiters
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the condition variable is nil.
-func (cv *ConditionVariable) IsVoid() bool {
-	return cv == nil
+func (p *ConditionVariable) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the condition variables are the same object.
-func (cv *ConditionVariable) EqualTo(v Value) bool {
+func (p *ConditionVariable) EqualTo(v Value) bool {
 	other, ok := v.(*ConditionVariable)
 	if !ok {
 		return false
 	}
-	return cv == other // Identity is reference equality
+	return p == other // Identity is reference equality
 }
 
 // SchemeString returns the Scheme representation of this condition variable.
-func (cv *ConditionVariable) SchemeString() string {
-	if cv == nil {
+func (p *ConditionVariable) SchemeString() string {
+	if p == nil {
 		return "#<condition-variable:void>"
 	}
-	return fmt.Sprintf("#<condition-variable:%s id=%d>", cv.name, cv.id)
+	return fmt.Sprintf("#<condition-variable:%s id=%d>", p.name, p.id)
 }

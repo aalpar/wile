@@ -45,78 +45,78 @@ type PhaseRegistry struct {
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
-func (r *PhaseRegistry) Get(phase int) *EnvironmentFrame {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.envs[phase]
+func (p *PhaseRegistry) Get(phase int) *EnvironmentFrame {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.envs[phase]
 }
 
 // GetOrCreate returns the environment for the given phase, creating it if needed.
 // Phase 0 always returns the TopLevel environment.
 // Other phases are lazily created with their own GlobalEnvironmentFrame.
-func (r *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
+func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 	// Fast path: check with read lock
-	r.mu.RLock()
-	env := r.envs[phase]
-	r.mu.RUnlock()
+	p.mu.RLock()
+	env := p.envs[phase]
+	p.mu.RUnlock()
 	if env != nil {
 		return env
 	}
 
 	// Slow path: create with write lock
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	env = r.envs[phase]
+	env = p.envs[phase]
 	if env != nil {
 		return env
 	}
 
 	// Create new phase environment
-	env = r.createPhaseEnv(phase)
-	r.envs[phase] = env
+	env = p.createPhaseEnv(phase)
+	p.envs[phase] = env
 	return env
 }
 
 // createPhaseEnv creates a new environment frame for the given phase.
 // Must be called with write lock held.
-func (r *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
+func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	global := NewGlobalEnvironmentFrame()
-	global.topLevel = r.topLevelEnv
+	global.topLevel = p.topLevelEnv
 
 	q := &EnvironmentFrame{
-		parent:     r.topLevelEnvFrm, // Phase envs parent to runtime frame
+		parent:     p.topLevelEnvFrm, // Phase envs parent to runtime frame
 		local:      nil,
 		global:     global,
 		phaseLevel: phase,
-		phases:     r,
-		topLevel:   r.topLevelEnv,
+		phases:     p,
+		topLevel:   p.topLevelEnv,
 	}
 	return q
 }
 
 // Phases returns all currently instantiated phase levels.
 // Useful for debugging and introspection.
-func (r *PhaseRegistry) Phases() []int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (p *PhaseRegistry) Phases() []int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	result := make([]int, 0, len(r.envs))
-	for phase := range r.envs {
+	result := make([]int, 0, len(p.envs))
+	for phase := range p.envs {
 		result = append(result, phase)
 	}
 	return result
 }
 
 // TopLevelFrame returns the runtime (phase 0) environment frame.
-func (r *PhaseRegistry) TopLevelFrame() *EnvironmentFrame {
-	return r.topLevelEnvFrm
+func (p *PhaseRegistry) TopLevelFrame() *EnvironmentFrame {
+	return p.topLevelEnvFrm
 }
 
 // TopLevelEnv returns the owning TopLevelEnvironment.
 // Returns nil for legacy environments created without TopLevelEnvironment.
-func (r *PhaseRegistry) TopLevelEnv() *TopLevelEnvironment {
-	return r.topLevelEnv
+func (p *PhaseRegistry) TopLevelEnv() *TopLevelEnvironment {
+	return p.topLevelEnv
 }

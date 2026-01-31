@@ -79,7 +79,6 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
 func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Value) (values.Value, error) {
-
 	sub := mc.NewSubContext()
 	sub.SetExceptionHandler(mc.ExceptionHandler())
 
@@ -122,7 +121,6 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 // Returns the result of the resumed execution, or an error.
 // If cont is nil (raise-continuable was in tail position), returns value directly.
 func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
-
 	if cont == nil {
 		// raise-continuable was in tail position - no continuation to resume
 		// The handler's return value becomes the final result
@@ -146,7 +144,6 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 // handleException processes an exception by calling the handler and, for continuable
 // exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
 func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Value) error {
-
 	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
 	mc.PopExceptionHandler()
 

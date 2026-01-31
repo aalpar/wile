@@ -40,22 +40,22 @@ type BigComplex struct {
 
 // NewBigComplex creates a new BigComplex from real and imaginary parts.
 // Parts must be *BigInteger, *Rational, or *BigFloat. Other types will panic.
-func NewBigComplex(real, imag Number) *BigComplex {
-	validateBigComplexPart(real)
-	validateBigComplexPart(imag)
-	q := &BigComplex{real: real, imag: imag}
+func NewBigComplex(rel, iam Number) *BigComplex {
+	validateBigComplexPart(rel)
+	validateBigComplexPart(iam)
+	q := &BigComplex{real: rel, imag: iam}
 	return q
 }
 
 // NewBigComplexFromBigIntegers creates an exact BigComplex from BigInteger parts.
-func NewBigComplexFromBigIntegers(real, imag *BigInteger) *BigComplex {
-	q := &BigComplex{real: real, imag: imag}
+func NewBigComplexFromBigIntegers(rel, iam *BigInteger) *BigComplex {
+	q := &BigComplex{real: rel, imag: iam}
 	return q
 }
 
 // NewBigComplexFromBigFloats creates an inexact BigComplex from BigFloat parts.
-func NewBigComplexFromBigFloats(real, imag *BigFloat) *BigComplex {
-	q := &BigComplex{real: real, imag: imag}
+func NewBigComplexFromBigFloats(rel, iam *BigFloat) *BigComplex {
+	q := &BigComplex{real: rel, imag: iam}
 	return q
 }
 
@@ -105,11 +105,11 @@ func toBigFloat(n Number) *BigFloat {
 }
 
 // maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
-func maybeSimplify(real, imag Number) Number {
-	if imag.IsZero() {
-		return real
+func maybeSimplify(rel, iam Number) Number {
+	if iam.IsZero() {
+		return rel
 	}
-	return NewBigComplex(real, imag)
+	return NewBigComplex(rel, iam)
 }
 
 // promoteToBigComplexPart converts any Number to a BigComplex-compatible part.

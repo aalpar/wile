@@ -95,20 +95,20 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	cont.evals.Push(values.NewInteger(42))
 	cont.value = NewMultipleValues(values.NewInteger(100))
 
-	copy := cont.Copy()
+	cpy := cont.Copy()
 
 	// Verify copy is a different object
-	qt.Assert(t, copy != cont, qt.IsTrue)
+	qt.Assert(t, cpy != cont, qt.IsTrue)
 	// Verify fields match
-	qt.Assert(t, copy.parent, qt.Equals, cont.parent)
-	qt.Assert(t, copy.env, qt.Equals, cont.env)
-	qt.Assert(t, copy.template, qt.Equals, cont.template)
-	qt.Assert(t, copy.pc, qt.Equals, cont.pc)
+	qt.Assert(t, cpy.parent, qt.Equals, cont.parent)
+	qt.Assert(t, cpy.env, qt.Equals, cont.env)
+	qt.Assert(t, cpy.template, qt.Equals, cont.template)
+	qt.Assert(t, cpy.pc, qt.Equals, cont.pc)
 	// Verify value slice is copied
-	qt.Assert(t, copy.value[0], values.SchemeEquals, cont.value[0])
-	qt.Assert(t, &copy.value[0] != &cont.value[0], qt.IsTrue)
+	qt.Assert(t, cpy.value[0], values.SchemeEquals, cont.value[0])
+	qt.Assert(t, &cpy.value[0] != &cont.value[0], qt.IsTrue)
 	// Verify evals stack is copied
-	qt.Assert(t, copy.evals != cont.evals, qt.IsTrue)
+	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }
 
 func TestMachineContinuation_SchemeString(t *testing.T) {

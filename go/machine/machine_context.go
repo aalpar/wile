@@ -39,7 +39,7 @@ type ErrContinuationEscape struct {
 	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
 }
 
-func (e *ErrContinuationEscape) Error() string {
+func (p *ErrContinuationEscape) Error() string {
 	return "continuation escape"
 }
 

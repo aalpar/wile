@@ -36,19 +36,19 @@ func NewSourceMap() *SourceMap {
 
 // Add records a source location for a PC range.
 // Merges with previous entry if source is the same.
-func (sm *SourceMap) Add(startPC, endPC int, source *syntax.SourceContext) {
+func (p *SourceMap) Add(startPC, endPC int, source *syntax.SourceContext) {
 	if startPC >= endPC {
 		return // Empty range
 	}
-	if len(sm.entries) > 0 {
-		last := &sm.entries[len(sm.entries)-1]
+	if len(p.entries) > 0 {
+		last := &p.entries[len(p.entries)-1]
 		if last.EndPC == startPC && sourceEqual(last.Source, source) {
 			// Extend previous entry
 			last.EndPC = endPC
 			return
 		}
 	}
-	sm.entries = append(sm.entries, SourceMapEntry{
+	p.entries = append(p.entries, SourceMapEntry{
 		StartPC: startPC,
 		EndPC:   endPC,
 		Source:  source,
@@ -57,15 +57,15 @@ func (sm *SourceMap) Add(startPC, endPC int, source *syntax.SourceContext) {
 
 // Lookup finds the source location for a given PC.
 // Returns nil if no mapping exists.
-func (sm *SourceMap) Lookup(pc int) *syntax.SourceContext {
-	if sm == nil || len(sm.entries) == 0 {
+func (p *SourceMap) Lookup(pc int) *syntax.SourceContext {
+	if p == nil || len(p.entries) == 0 {
 		return nil
 	}
 	// Binary search for efficiency
-	lo, hi := 0, len(sm.entries)
+	lo, hi := 0, len(p.entries)
 	for lo < hi {
 		mid := (lo + hi) / 2
-		entry := &sm.entries[mid]
+		entry := &p.entries[mid]
 		switch {
 		case pc < entry.StartPC:
 			hi = mid
@@ -79,11 +79,11 @@ func (sm *SourceMap) Lookup(pc int) *syntax.SourceContext {
 }
 
 // Len returns the number of entries in the source map.
-func (sm *SourceMap) Len() int {
-	if sm == nil {
+func (p *SourceMap) Len() int {
+	if p == nil {
 		return 0
 	}
-	return len(sm.entries)
+	return len(p.entries)
 }
 
 // sourceEqual compares two source contexts for equality (by location only).

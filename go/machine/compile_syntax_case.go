@@ -332,14 +332,14 @@ type syntaxCaseClause struct {
 	ellipsisVars map[int]map[string]struct{}
 }
 
-func (c *syntaxCaseClause) EqualTo(other values.Value) bool {
+func (p *syntaxCaseClause) EqualTo(other values.Value) bool {
 	return false
 }
 
-func (c *syntaxCaseClause) IsVoid() bool {
+func (p *syntaxCaseClause) IsVoid() bool {
 	return false
 }
 
-func (c *syntaxCaseClause) SchemeString() string {
+func (p *syntaxCaseClause) SchemeString() string {
 	return "#<syntax-case-clause>"
 }

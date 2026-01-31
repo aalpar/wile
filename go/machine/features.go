@@ -123,8 +123,8 @@ type featureIdentifier struct {
 	name string
 }
 
-func (f *featureIdentifier) IsSatisfied(registry *LibraryRegistry) bool {
-	return IsFeatureSupported(f.name)
+func (p *featureIdentifier) IsSatisfied(registry *LibraryRegistry) bool {
+	return IsFeatureSupported(p.name)
 }
 
 // libraryRequirement checks if a library is available.
@@ -132,16 +132,16 @@ type libraryRequirement struct {
 	name LibraryName
 }
 
-func (f *libraryRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry) bool {
 	if registry == nil {
 		return false
 	}
 	// Check if library is already loaded
-	if registry.Lookup(f.name) != nil {
+	if registry.Lookup(p.name) != nil {
 		return true
 	}
 	// Check if library file exists
-	_, err := registry.FindLibraryFile(f.name)
+	_, err := registry.FindLibraryFile(p.name)
 	return err == nil
 }
 
@@ -150,8 +150,8 @@ type andRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (f *andRequirement) IsSatisfied(registry *LibraryRegistry) bool {
-	for _, req := range f.requirements {
+func (p *andRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+	for _, req := range p.requirements {
 		if !req.IsSatisfied(registry) {
 			return false
 		}
@@ -164,8 +164,8 @@ type orRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (f *orRequirement) IsSatisfied(registry *LibraryRegistry) bool {
-	for _, req := range f.requirements {
+func (p *orRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+	for _, req := range p.requirements {
 		if req.IsSatisfied(registry) {
 			return true
 		}
@@ -178,14 +178,14 @@ type notRequirement struct {
 	requirement FeatureRequirement
 }
 
-func (f *notRequirement) IsSatisfied(registry *LibraryRegistry) bool {
-	return !f.requirement.IsSatisfied(registry)
+func (p *notRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+	return !p.requirement.IsSatisfied(registry)
 }
 
 // elseRequirement is always satisfied (used for else clause).
 type elseRequirement struct{}
 
-func (f *elseRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *elseRequirement) IsSatisfied(registry *LibraryRegistry) bool {
 	return true
 }
 

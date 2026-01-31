@@ -48,28 +48,28 @@ func NewDynamicWindFrame(before, after *MachineClosure) *DynamicWindFrame {
 type WindingStack []*DynamicWindFrame
 
 // Copy creates a shallow copy of the winding stack.
-func (w WindingStack) Copy() WindingStack {
-	return slices.Clone(w)
+func (p WindingStack) Copy() WindingStack {
+	return slices.Clone(p)
 }
 
 // Depth returns the number of active dynamic-wind frames.
-func (w WindingStack) Depth() int {
-	return len(w)
+func (p WindingStack) Depth() int {
+	return len(p)
 }
 
 // Push adds a frame to the winding stack.
-func (w *WindingStack) Push(frame *DynamicWindFrame) {
-	*w = append(*w, frame)
+func (p *WindingStack) Push(frame *DynamicWindFrame) {
+	*p = append(*p, frame)
 }
 
 // Pop removes the innermost frame from the winding stack.
-func (w *WindingStack) Pop() *DynamicWindFrame {
-	if len(*w) == 0 {
+func (p *WindingStack) Pop() *DynamicWindFrame {
+	if len(*p) == 0 {
 		return nil
 	}
-	n := len(*w) - 1
-	frame := (*w)[n]
-	*w = (*w)[:n]
+	n := len(*p) - 1
+	frame := (*p)[n]
+	*p = (*p)[:n]
 	return frame
 }
 
