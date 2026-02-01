@@ -40,9 +40,9 @@ func TestNullEnvironment(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
-			// Result should be a SchemeEnvironment
-			_, ok := result.(*environment.SchemeEnvironment)
-			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SchemeEnvironment, got %T", result))
+			// Result should be a TopLevelEnvironment
+			_, ok := result.(*environment.TopLevelEnvironment)
+			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected TopLevelEnvironment, got %T", result))
 		})
 	}
 }
@@ -64,9 +64,9 @@ func TestSchemeReportEnvironment(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
-			// Result should be a SchemeEnvironment
-			_, ok := result.(*environment.SchemeEnvironment)
-			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SchemeEnvironment, got %T", result))
+			// Result should be a TopLevelEnvironment
+			_, ok := result.(*environment.TopLevelEnvironment)
+			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected TopLevelEnvironment, got %T", result))
 		})
 	}
 }
