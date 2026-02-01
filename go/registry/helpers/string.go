@@ -40,32 +40,15 @@ func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string
 // StringCompareVariadic is a helper for variadic string comparison primitives.
 // It extracts strings from the variadic args and applies the comparator pairwise.
 func StringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
-	s1 := mc.Arg(0)
-	str1, ok := s1.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, s1)
-	}
-
-	rest := mc.Arg(1)
-	prev := str1.Value
-
-	for rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
-		}
-		str, ok := pair.Car().(*values.String)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, pair.Car())
-		}
-		if !cmp(prev, str.Value) {
-			mc.SetValue(values.FalseValue)
-			return nil
-		}
-		prev = str.Value
-		rest = pair.Cdr()
-	}
-
-	mc.SetValue(values.TrueValue)
-	return nil
+	return variadicCompare(mc, name,
+		func(v values.Value) (*values.String, bool) {
+			s, ok := v.(*values.String)
+			return s, ok
+		},
+		func(s *values.String) string {
+			return s.Value
+		},
+		cmp,
+		values.ErrNotAString,
+		"a string")
 }

@@ -446,8 +446,13 @@ func variadicCompare[T any, V values.Value](
 // stringCompareVariadic is a helper for variadic string comparison primitives.
 func stringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
 	return variadicCompare(mc, name,
-		func(v values.Value) (*values.String, bool) { s, ok := v.(*values.String); return s, ok },
-		func(s *values.String) string { return s.Value },
+		func(v values.Value) (*values.String, bool) {
+			s, ok := v.(*values.String)
+			return s, ok
+		},
+		func(s *values.String) string {
+			return s.Value
+		},
 		cmp,
 		values.ErrNotAString,
 		"a string")
@@ -842,8 +847,13 @@ func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
 // charCompareVariadic is a helper for variadic character comparison primitives.
 func charCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
 	return variadicCompare(mc, name,
-		func(v values.Value) (*values.Character, bool) { c, ok := v.(*values.Character); return c, ok },
-		func(c *values.Character) rune { return c.Value },
+		func(v values.Value) (*values.Character, bool) {
+			c, ok := v.(*values.Character)
+			return c, ok
+		},
+		func(c *values.Character) rune {
+			return c.Value
+		},
 		cmp,
 		values.ErrNotACharacter,
 		"a character")

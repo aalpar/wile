@@ -2,6 +2,10 @@
 
 This document describes the coding conventions used throughout the Wile Scheme interpreter codebase.
 
+## Functions
+
+Never write single-line functions. Always spread function bodies across multiple lines, even for simple implementations.
+
 ## Return Values
 
 | Letter | Usage                                                                                                                                                                                          |

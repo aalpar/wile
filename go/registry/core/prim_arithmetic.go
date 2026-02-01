@@ -342,7 +342,9 @@ func integerDivisionOp(
 // Accepts exact and inexact integers per R7RS.
 func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 	return integerDivisionOp(mc, "quotient",
-		func(a, b int64) int64 { return a / b },
+		func(a, b int64) int64 {
+			return a / b
+		},
 		(*big.Int).Quo)
 }
 
@@ -351,7 +353,9 @@ func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 // Accepts exact and inexact integers per R7RS.
 func PrimRemainder(_ context.Context, mc *machine.MachineContext) error {
 	return integerDivisionOp(mc, "remainder",
-		func(a, b int64) int64 { return a % b },
+		func(a, b int64) int64 {
+			return a % b
+		},
 		(*big.Int).Rem)
 }
 

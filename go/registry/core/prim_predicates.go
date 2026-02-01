@@ -415,8 +415,12 @@ func parityCheck(
 // Accepts any integer, including inexact integers (e.g., 3.0).
 func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
 	return parityCheck(mc, "odd?",
-		func(n int64) bool { return n%2 != 0 },
-		func(n *big.Int) bool { return n.Bit(0) == 1 })
+		func(n int64) bool {
+			return n%2 != 0
+		},
+		func(n *big.Int) bool {
+			return n.Bit(0) == 1
+		})
 }
 
 // PrimEvenQ implements the even? predicate.
@@ -425,6 +429,10 @@ func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
 // Accepts any integer, including inexact integers (e.g., 4.0).
 func PrimEvenQ(_ context.Context, mc *machine.MachineContext) error {
 	return parityCheck(mc, "even?",
-		func(n int64) bool { return n%2 == 0 },
-		func(n *big.Int) bool { return n.Bit(0) == 0 })
+		func(n int64) bool {
+			return n%2 == 0
+		},
+		func(n *big.Int) bool {
+			return n.Bit(0) == 0
+		})
 }

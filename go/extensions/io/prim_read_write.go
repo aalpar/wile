@@ -51,6 +51,44 @@ func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.Out
 	return p, nil
 }
 
+// extractOptionalPositions extracts optional start and end positions from a tuple.
+// The tuple is expected to contain [start [end]] as integers.
+// Returns the extracted start and end values, or the provided defaults if not present.
+func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64, name string) (int64, int64, error) {
+	start := defaultStart
+	end := defaultEnd
+
+	if tuple.Cdr() != values.EmptyList {
+		tuple2, ok := tuple.Cdr().(values.Tuple)
+		if !ok {
+			return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+		}
+		if !tuple2.IsEmptyList() {
+			startVal, ok := tuple2.Car().(*values.Integer)
+			if !ok {
+				return 0, 0, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer for start but got %T", name, tuple2.Car())
+			}
+			start = startVal.Value
+
+			if tuple2.Cdr() != values.EmptyList {
+				tuple3, ok := tuple2.Cdr().(values.Tuple)
+				if !ok {
+					return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+				}
+				if !tuple3.IsEmptyList() {
+					endVal, ok := tuple3.Car().(*values.Integer)
+					if !ok {
+						return 0, 0, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer for end but got %T", name, tuple3.Car())
+					}
+					end = endVal.Value
+				}
+			}
+		}
+	}
+
+	return start, end, nil
+}
+
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -828,36 +866,11 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	}
 
 	port := tuple.Car()
-	start := int64(0)
-	end := int64(len(*bv))
 
-	// Check for start/end arguments
-	if tuple.Cdr() != values.EmptyList {
-		tuple2, ok := tuple.Cdr().(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: improper argument list")
-		}
-		if !tuple2.IsEmptyList() {
-			startVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector!: expected an integer for start but got %T", tuple2.Car())
-			}
-			start = startVal.Value
-
-			if tuple2.Cdr() != values.EmptyList {
-				tuple3, ok := tuple2.Cdr().(values.Tuple)
-				if !ok {
-					return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: improper argument list")
-				}
-				if !tuple3.IsEmptyList() {
-					endVal, ok := tuple3.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector!: expected an integer for end but got %T", tuple3.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	// Extract optional start/end arguments
+	start, end, err := extractOptionalPositions(tuple, 0, int64(len(*bv)), "read-bytevector!")
+	if err != nil {
+		return err
 	}
 
 	// Validate indices
@@ -926,33 +939,10 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 	port := tuple.Car()
 
-	// Check for start/end arguments
-	if tuple.Cdr() != values.EmptyList {
-		tuple2, ok := tuple.Cdr().(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: improper argument list")
-		}
-		if !tuple2.IsEmptyList() {
-			startVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "write-bytevector: expected an integer for start but got %T", tuple2.Car())
-			}
-			start = startVal.Value
-
-			if tuple2.Cdr() != values.EmptyList {
-				tuple3, ok := tuple2.Cdr().(values.Tuple)
-				if !ok {
-					return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: improper argument list")
-				}
-				if !tuple3.IsEmptyList() {
-					endVal, ok := tuple3.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotANumber, "write-bytevector: expected an integer for end but got %T", tuple3.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	// Extract optional start/end arguments
+	start, end, err := extractOptionalPositions(tuple, 0, bvLen, "write-bytevector")
+	if err != nil {
+		return err
 	}
 
 	// Validate indices
@@ -969,7 +959,7 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-bytevector: expected a binary output port but got %T", port)
 	}
 	data := bv.AsBytes(int(start), int(end))
-	_, err := p.Write(data)
+	_, err = p.Write(data)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-bytevector: error writing to port")
 	}
