@@ -117,7 +117,7 @@ func NewScopeWithProvenance(reason ScopeReason, formName string, loc *SourceCont
 ### Human-Readable Display
 
 ```go
-func (s *Scope) String() string {
+func (p *Scope) String() string {
     if s == nil {
         return "#<scope:nil>"
     }
@@ -131,7 +131,7 @@ func (s *Scope) String() string {
     return fmt.Sprintf("#<scope:%d>", s.id)
 }
 
-func (s *Scope) reasonString() string {
+func (p *Scope) reasonString() string {
     switch s.reason {
     case ScopeReasonBindingForm:
         return "bind"

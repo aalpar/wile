@@ -56,7 +56,7 @@ The `IntroScope` pointer serves as the unique identifier. You can:
 
 Add method to `Scope`:
 ```go
-func (s *Scope) ID() uint64 {
+func (p *Scope) ID() uint64 {
     if s == nil {
         return 0
     }

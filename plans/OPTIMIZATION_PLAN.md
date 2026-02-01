@@ -275,8 +275,8 @@ type TaggedValue uintptr
 
 const tagInteger = 0x1  // Low bit set = immediate integer
 
-func (v TaggedValue) IsInteger() bool { return v&1 != 0 }
-func (v TaggedValue) AsInteger() int64 { return int64(v) >> 1 }
+func (p TaggedValue) IsInteger() bool { return v&1 != 0 }
+func (p TaggedValue) AsInteger() int64 { return int64(v) >> 1 }
 ```
 
 **Benefits:**

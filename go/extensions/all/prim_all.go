@@ -394,39 +394,63 @@ func PrimMakeLazyPromise(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // =============================================================================
-// String Primitives
+// Generic Variadic Comparison Helper
 // =============================================================================
 
-// stringCompareVariadic is a helper for variadic string comparison primitives.
-func stringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
-	s1 := mc.Arg(0)
-	str1, ok := s1.(*values.String)
+// variadicCompare is a generic helper for variadic comparison primitives.
+// It extracts values from Scheme objects, compares them pairwise, and returns a boolean result.
+func variadicCompare[T any, V values.Value](
+	mc *machine.MachineContext,
+	name string,
+	extract func(values.Value) (V, bool),
+	getValue func(V) T,
+	cmp func(T, T) bool,
+	errType error,
+	typeName string,
+) error {
+	first := mc.Arg(0)
+	val1, ok := extract(first)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, s1)
+		return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, first)
 	}
 
 	rest := mc.Arg(1)
-	prev := str1.Value
+	prev := getValue(val1)
 
 	for rest != values.EmptyList {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
 		}
-		str, ok := tuple.Car().(*values.String)
+		val, ok := extract(tuple.Car())
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, tuple.Car())
+			return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, tuple.Car())
 		}
-		if !cmp(prev, str.Value) {
+		current := getValue(val)
+		if !cmp(prev, current) {
 			mc.SetValue(values.FalseValue)
 			return nil
 		}
-		prev = str.Value
+		prev = current
 		rest = tuple.Cdr()
 	}
 
 	mc.SetValue(values.TrueValue)
 	return nil
+}
+
+// =============================================================================
+// String Primitives
+// =============================================================================
+
+// stringCompareVariadic is a helper for variadic string comparison primitives.
+func stringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
+	return variadicCompare(mc, name,
+		func(v values.Value) (*values.String, bool) { s, ok := v.(*values.String); return s, ok },
+		func(s *values.String) string { return s.Value },
+		cmp,
+		values.ErrNotAString,
+		"a string")
 }
 
 // PrimStringCopyTo implements the string-copy! primitive.
@@ -817,34 +841,12 @@ func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
 
 // charCompareVariadic is a helper for variadic character comparison primitives.
 func charCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
-	c1 := mc.Arg(0)
-	ch1, ok := c1.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
-	}
-
-	rest := mc.Arg(1)
-	prev := ch1.Value
-
-	for rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
-		}
-		ch, ok := tuple.Car().(*values.Character)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, tuple.Car())
-		}
-		if !cmp(prev, ch.Value) {
-			mc.SetValue(values.FalseValue)
-			return nil
-		}
-		prev = ch.Value
-		rest = tuple.Cdr()
-	}
-
-	mc.SetValue(values.TrueValue)
-	return nil
+	return variadicCompare(mc, name,
+		func(v values.Value) (*values.Character, bool) { c, ok := v.(*values.Character); return c, ok },
+		func(c *values.Character) rune { return c.Value },
+		cmp,
+		values.ErrNotACharacter,
+		"a character")
 }
 
 // PrimCharCiEqVariadic implements the variadic char-ci=? primitive.

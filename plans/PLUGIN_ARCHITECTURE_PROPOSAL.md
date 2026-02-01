@@ -146,7 +146,7 @@ func NewRegistry() *Registry {
 }
 
 // AddPrimitive registers a primitive with the given phases.
-func (r *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
+func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
     r.mu.Lock()
     defer r.mu.Unlock()
     r.primitives = append(r.primitives, PrimitiveRegistration{
@@ -156,7 +156,7 @@ func (r *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
 }
 
 // AddPrimitives registers multiple primitives with the given phases.
-func (r *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
+func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
     r.mu.Lock()
     defer r.mu.Unlock()
     for _, spec := range specs {
@@ -168,7 +168,7 @@ func (r *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
 }
 
 // Apply registers all primitives and runs init functions on an environment.
-func (r *Registry) Apply(ctx context.Context, env *environment.TopLevelEnvironmentFrame) error {
+func (p *Registry) Apply(ctx context.Context, env *environment.TopLevelEnvironmentFrame) error {
     // ... registration logic
 }
 ```
@@ -208,7 +208,7 @@ func NewRegistryBuilder(funcs ...func(*Registry) error) RegistryBuilder {
 }
 
 // AddToRegistry applies all registration functions to the registry.
-func (b RegistryBuilder) AddToRegistry(r *Registry) error {
+func (p RegistryBuilder) AddToRegistry(r *Registry) error {
     for _, f := range b {
         if err := f(r); err != nil {
             return err
@@ -236,25 +236,25 @@ type Engine struct {
 func NewEngine(opts ...EngineOption) (*Engine, error)
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
-func (e *Engine) Eval(ctx context.Context, code string) (Value, error)
+func (p *Engine) Eval(ctx context.Context, code string) (Value, error)
 
 // Compile parses and compiles code without executing.
-func (e *Engine) Compile(code string) (*CompiledCode, error)
+func (p *Engine) Compile(code string) (*CompiledCode, error)
 
 // Run executes previously compiled code.
-func (e *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error)
+func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error)
 
 // Define binds a value to a name in the top-level environment.
-func (e *Engine) Define(name string, value Value) error
+func (p *Engine) Define(name string, value Value) error
 
 // Get retrieves a value by name from the environment.
-func (e *Engine) Get(name string) (Value, bool)
+func (p *Engine) Get(name string) (Value, bool)
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
-func (e *Engine) RegisterPrimitive(spec PrimitiveSpec) error
+func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error
 
 // Call invokes a Scheme procedure with arguments.
-func (e *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error)
+func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error)
 ```
 
 ### Core vs Extension Primitives
@@ -455,7 +455,7 @@ type REPL struct {
 func New(engine *wile.Engine, opts ...Option) (*REPL, error)
 
 // Run starts the REPL loop.
-func (r *REPL) Run(ctx context.Context) error
+func (p *REPL) Run(ctx context.Context) error
 ```
 
 This design means:

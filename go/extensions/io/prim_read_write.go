@@ -29,6 +29,28 @@ import (
 	"wile/values"
 )
 
+// getOptionalOutputPort extracts an optional output port from a variadic argument list.
+// If the list is empty, returns the current output port.
+// Otherwise, extracts and validates the port from the list's car.
+func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
+	o := mc.Arg(argIndex)
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
+	}
+	if !tuple.IsList() {
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
+	}
+	if tuple.IsEmptyList() {
+		return GetCurrentOutputPort(), nil
+	}
+	p, ok := tuple.Car().(values.OutputPort)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", tuple.Car())
+	}
+	return p, nil
+}
+
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -158,26 +180,12 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
 func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	o := mc.Arg(1)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-	var writer values.OutputPort
-	if tuple.IsEmptyList() {
-		writer = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", tuple.Car())
-		}
-		writer = p
+	writer, err := getOptionalOutputPort(mc, 1)
+	if err != nil {
+		return err
 	}
 	// Use cycle-aware writer to handle circular structures
-	_, err := writer.Write([]byte(values.WriteValueToString(obj)))
+	_, err = writer.Write([]byte(values.WriteValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
@@ -227,26 +235,12 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
 func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	o := mc.Arg(1)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-	var writer values.OutputPort
-	if tuple.IsEmptyList() {
-		writer = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", tuple.Car())
-		}
-		writer = p
+	writer, err := getOptionalOutputPort(mc, 1)
+	if err != nil {
+		return err
 	}
 	// Use cycle-aware writer to handle circular structures
-	_, err := writer.Write([]byte(values.DisplayValueToString(obj)))
+	_, err = writer.Write([]byte(values.DisplayValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
@@ -326,26 +320,12 @@ func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 // (write-shared obj) or (write-shared obj port)
 func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	o := mc.Arg(1)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-shared: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-shared: expected a list but got %s", tuple.SchemeString())
-	}
-	var writer values.OutputPort
-	if tuple.IsEmptyList() {
-		writer = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-shared: expected an output port but got %T", tuple.Car())
-		}
-		writer = p
+	writer, err := getOptionalOutputPort(mc, 1)
+	if err != nil {
+		return err
 	}
 	// Use cycle-aware writer with datum labels for all shared structure
-	_, err := writer.Write([]byte(values.WriteSharedValueToString(obj)))
+	_, err = writer.Write([]byte(values.WriteSharedValueToString(obj)))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-shared: error writing to output port")
 	}
