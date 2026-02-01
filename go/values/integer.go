@@ -111,6 +111,7 @@ func (p *Integer) compareSame(o *Integer) int {
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
 // When adding Integer + BigInteger, result is BigInteger (exact).
 // When adding Integer + Float/Complex, result is Float/Complex (inexact).
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -146,6 +147,7 @@ func (p *Integer) Add(o Number) Number {
 //
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -181,6 +183,7 @@ func (p *Integer) Subtract(o Number) Number {
 // Exception: Exact zero dominates—(* 0 x) may return exact 0 even when
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Multiply(o Number) Number {
 	if o.IsZero() {
 		return o
@@ -218,6 +221,7 @@ func (p *Integer) Multiply(o Number) Number {
 //
 // R7RS §6.2.2 Exactness: exact / exact = exact (Integer or Rational),
 // exact / inexact = inexact (Float or Complex).
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)

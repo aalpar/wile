@@ -117,6 +117,7 @@ func (p *BigInteger) compareSame(o *BigInteger) int {
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
 // exact + inexact = inexact (Float/Complex).
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -155,6 +156,7 @@ func (p *BigInteger) Add(o Number) Number {
 //
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -191,6 +193,7 @@ func (p *BigInteger) Subtract(o Number) Number {
 // Exception: Exact zero dominates—(* 0 x) may return exact 0 even when
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
 		return NewBigIntegerFromInt64(0)

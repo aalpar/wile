@@ -76,6 +76,7 @@ func (p *Float) compareSame(o *Float) int {
 }
 
 // Add returns the sum of two numbers.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -102,6 +103,7 @@ func (p *Float) Add(o Number) Number {
 }
 
 // Subtract returns the difference of two numbers.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p

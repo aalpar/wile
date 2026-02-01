@@ -311,6 +311,7 @@ func (p *BigComplex) compareSame(o *BigComplex) int {
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigComplex) Add(o Number) Number {
 	if o.IsZero() {
 		return p
@@ -352,6 +353,7 @@ func (p *BigComplex) Add(o Number) Number {
 //
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
+//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigComplex) Subtract(o Number) Number {
 	if o.IsZero() {
 		return p
