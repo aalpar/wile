@@ -38,7 +38,7 @@ func TestOpenBinaryOutputFile(t *testing.T) {
 	}{
 		{
 			name: "open-binary-output-file returns output port",
-			code: fmt.Sprintf(`(output-port? (open-binary-output-file "%s"))`, tmpfile),
+			code: fmt.Sprintf(`(output-port? (open-binary-output-file %q))`, tmpfile),
 			out:  values.TrueValue,
 		},
 		// Note: port? does not currently recognize BinaryOutputPort as a port.
@@ -61,7 +61,7 @@ func TestOpenBinaryOutputFileAndClose(t *testing.T) {
 	tmpfile := filepath.Join(os.TempDir(), "test_obof_close.bin")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
-	code := fmt.Sprintf(`(let ((p (open-binary-output-file "%s")))
+	code := fmt.Sprintf(`(let ((p (open-binary-output-file %q)))
 		(close-port p)
 		#t)`, tmpfile)
 

@@ -67,8 +67,10 @@ func (p *Scope) ID() uint64 {
 }
 
 // NewSyntaxNil creates a syntax empty list.
-// Deprecated: Use NewSyntaxEmptyList instead. This function exists for backward
-// compatibility but delegates to NewSyntaxEmptyList.
+//
+// Deprecated: Use NewSyntaxEmptyList instead.
+//
+// This function exists for backward compatibility but delegates to NewSyntaxEmptyList.
 func NewSyntaxNil(sctx *SourceContext) *SyntaxPair {
 	return NewSyntaxEmptyList(sctx)
 }

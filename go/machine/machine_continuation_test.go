@@ -185,8 +185,9 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 func TestMachineContinuationMethodsAdditional(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
-	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+	tpl.operations = append(tpl.operations,
+		NewOperationLoadVoid(),
+		NewOperationRestoreContinuation())
 
 	cont := NewMachineContinuation(nil, tpl, env)
 

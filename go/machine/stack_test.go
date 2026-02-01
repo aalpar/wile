@@ -284,11 +284,11 @@ func TestStackIsVoid(t *testing.T) {
 
 	// NewStack() with no args creates a nil slice (variadic with no args)
 	s2 := NewStack()
-	qt.Assert(t, (*s2).IsVoid(), qt.IsTrue) // nil slice is void
+	qt.Assert(t, s2.IsVoid(), qt.IsTrue) // nil slice is void
 
 	// NewStack with values creates non-nil slice
 	s3 := NewStack(values.NewInteger(1))
-	qt.Assert(t, (*s3).IsVoid(), qt.IsFalse)
+	qt.Assert(t, s3.IsVoid(), qt.IsFalse)
 }
 
 // TestStackString tests stack String method
@@ -297,7 +297,7 @@ func TestStackString(t *testing.T) {
 	s.Push(values.NewInteger(1))
 	s.Push(values.NewInteger(2))
 
-	str := (*s).String()
+	str := s.String()
 	qt.Assert(t, str, qt.Contains, "[")
 	qt.Assert(t, str, qt.Contains, "1")
 	qt.Assert(t, str, qt.Contains, "2")

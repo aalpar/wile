@@ -713,7 +713,7 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 				car = syntaxToValue(carSyntax)
 			} else {
 				// If it's already a value, use it directly
-				car = carVal.(values.Value)
+				car = carVal
 			}
 		}
 

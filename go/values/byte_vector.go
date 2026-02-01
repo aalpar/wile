@@ -36,7 +36,7 @@ func NewByteVector(vs ...*Byte) *ByteVector {
 	q := ByteVector(bs)
 	for i := range vs {
 		// FIXME: handle overflow, ugly but necessary
-		b := NewByte((*vs[i]).Value)
+		b := NewByte(vs[i].Value)
 		q[i] = b
 	}
 	return &q
@@ -64,7 +64,7 @@ func NewByteVectorFromIntegers(vs ...*Integer) *ByteVector {
 	q := ByteVector(bs)
 	for i := range vs {
 		// FIXME: handle overflow, ugly but necessary
-		b := NewByte(uint8((*vs[i]).Value))
+		b := NewByte(uint8(vs[i].Value))
 		q[i] = b
 	}
 	return &q

@@ -611,7 +611,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			pr = v.(syntax.SyntaxValue)
+			pr = v
 			// ??
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {

@@ -225,35 +225,43 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a string but got a %T", next)
 		}
 
-		// Find and open the file
-		file, filePath, err := findFile(p, ctctx, fn.Value)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
-		}
-		if file == nil {
-			return values.NewForeignErrorf("include: file not found: %q", fn.Value)
-		}
-		defer file.Close() //nolint:errcheck
-
-		// Create parser for the file
-		reader := bufio.NewReader(file)
-		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
-
-		// Read all forms from the file first, then process them with letrec* semantics
-		var forms []syntax.SyntaxValue
-		for {
-			stx, readErr := fileParser.ReadSyntax(context.TODO())
-			if readErr != nil {
-				if errors.Is(readErr, io.EOF) {
-					break
-				}
-				return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+		// Process file in closure to ensure defer runs after each iteration
+		err := func() error {
+			// Find and open the file
+			file, filePath, err := findFile(p, ctctx, fn.Value)
+			if err != nil {
+				return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
 			}
-			forms = append(forms, stx)
-		}
+			if file == nil {
+				return values.NewForeignErrorf("include: file not found: %q", fn.Value)
+			}
+			defer file.Close()
 
-		// Process forms with letrec* semantics: pre-declare all bindings first
-		err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+			// Create parser for the file
+			reader := bufio.NewReader(file)
+			fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
+
+			// Read all forms from the file first, then process them with letrec* semantics
+			var forms []syntax.SyntaxValue
+			for {
+				stx, readErr := fileParser.ReadSyntax(context.TODO())
+				if readErr != nil {
+					if errors.Is(readErr, io.EOF) {
+						break
+					}
+					return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+				}
+				forms = append(forms, stx)
+			}
+
+			// Process forms with letrec* semantics: pre-declare all bindings first
+			err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}()
 		if err != nil {
 			return err
 		}

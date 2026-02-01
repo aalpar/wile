@@ -845,9 +845,10 @@ func TestNativeTemplateOperationsArray(t *testing.T) {
 	tpl := NewNativeTemplate(2, 1, false)
 
 	// Add operations
-	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
-	tpl.operations = append(tpl.operations, NewOperationPush())
-	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+	tpl.operations = append(tpl.operations,
+		NewOperationLoadVoid(),
+		NewOperationPush(),
+		NewOperationRestoreContinuation())
 
 	qt.Assert(t, tpl.operations.Len(), qt.Equals, 3)
 }
