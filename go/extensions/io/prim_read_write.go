@@ -227,7 +227,10 @@ func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -263,7 +266,10 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing character to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -282,7 +288,10 @@ func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -312,7 +321,10 @@ func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing newline to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -345,7 +357,10 @@ func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-simple: error writing to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "write-simple: error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -367,7 +382,10 @@ func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-shared: error writing to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "write-shared: error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
@@ -644,7 +662,10 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-string: error writing to output port")
 	}
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "write-string: error flushing output port")
+	}
 	mc.SetValues()
 	return nil
 }
