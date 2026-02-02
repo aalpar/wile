@@ -34,10 +34,50 @@ func NewOperationForeignFunctionCall(ffn ForeignFunction) *OperationForeignFunct
 	}
 }
 
-func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+// goErrorToSchemeException converts a Go error to a Scheme exception escape.
+// It detects ForeignFileError and ForeignReadError to set the appropriate
+// NativeError kind per R7RS §6.11.
+func goErrorToSchemeException(err error) error {
+	kind := values.NativeErrorKindGeneric
+	var fileErr *values.ForeignFileError
+	var readErr *values.ForeignReadError
+	if errors.As(err, &fileErr) {
+		kind = values.NativeErrorKindFile
+	} else if errors.As(err, &readErr) {
+		kind = values.NativeErrorKindRead
+	}
+	errObj := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
+	return &ErrExceptionEscape{
+		Condition:   errObj,
+		Continuable: false,
+		Handled:     false,
+	}
+}
+
+func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineContext) (rmc *MachineContext, rerr error) {
 	if p.Function == nil {
 		return nil, fmt.Errorf("foreign function is nil")
 	}
+	// Recover panics from the values package (e.g., ErrDivisionByZero, ErrNotANumber,
+	// ErrNotAList) and convert them to Scheme exceptions. The Number interface methods
+	// signal these conditions via panic because the interface returns Number, not
+	// (Number, error). Recovered panics are always plain Go errors, never continuation
+	// escapes or prompt aborts, so they go directly through error-to-exception conversion.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		var err error
+		switch v := r.(type) {
+		case error:
+			err = v
+		default:
+			err = fmt.Errorf("%v", v)
+		}
+		rmc = nil
+		rerr = goErrorToSchemeException(err)
+	}()
 	err := p.Function(ctx, mc)
 	if err != nil {
 		// Check if this is a continuation escape.
@@ -69,20 +109,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 		// Convert Go error to Scheme exception so guard/with-exception-handler can catch it.
 		// Create an error object that wraps the original Go error for debugging.
 		// Use errors.As to detect ForeignFileError/ForeignReadError and set the appropriate kind.
-		kind := values.NativeErrorKindGeneric
-		var fileErr *values.ForeignFileError
-		var readErr *values.ForeignReadError
-		if errors.As(err, &fileErr) {
-			kind = values.NativeErrorKindFile
-		} else if errors.As(err, &readErr) {
-			kind = values.NativeErrorKindRead
-		}
-		errObj := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
-		return nil, &ErrExceptionEscape{
-			Condition:   errObj,
-			Continuable: false,
-			Handled:     false,
-		}
+		return nil, goErrorToSchemeException(err)
 	}
 	mc.pc++
 	return mc, nil

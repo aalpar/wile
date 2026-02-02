@@ -198,6 +198,21 @@ type Comparable interface {
 //
 // R7RS §6.2.1: Numbers form a tower: number ⊃ complex ⊃ real ⊃ rational ⊃ integer.
 // All numeric types implement this interface for uniform arithmetic operations.
+//
+// # Error signaling
+//
+// Arithmetic methods signal errors by panicking with a static sentinel error
+// (e.g., ErrDivisionByZero, ErrNotANumber). This follows the same convention
+// used by Go's math/big package, where (*big.Int).Div, (*big.Int).QuoRem,
+// and (*big.Float).Quo all panic on division by zero, and mirrors Go's own
+// runtime behavior for built-in integer division.
+//
+// The panic convention is a deliberate design choice: arithmetic methods return
+// Number (not (Number, error)), keeping the interface algebraic and composable.
+// Callers that need error values should recover panics at their boundary.
+// The VM does this in OperationForeignFunctionCall.Apply, which recovers panics
+// and converts them to Scheme exceptions catchable by guard and
+// with-exception-handler.
 type Number interface {
 	Value
 	Add(Number) Number
