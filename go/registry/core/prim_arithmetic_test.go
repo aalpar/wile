@@ -1171,3 +1171,58 @@ func TestLcm_Errors(t *testing.T) {
 		runSchemeCodeExpectError(t, `(lcm 4 #t)`)
 	})
 }
+
+// TestDivisionByZero_SchemeException verifies that division by zero across all
+// numeric types is caught at the VM boundary and converted to a proper Scheme
+// exception that guard can handle. This tests the recover in
+// OperationForeignFunctionCall.Apply, not just the values package panic.
+func TestDivisionByZero_SchemeException(t *testing.T) {
+	c := qt.New(t)
+	tcs := []schemeCodeTestCase{
+		// Integer / 0
+		{"integer div zero caught by guard",
+			`(guard (exn (#t "caught")) (/ 1 0))`,
+			values.NewString("caught")},
+		// BigInteger / 0 (Issue #22)
+		{"biginteger div zero caught by guard",
+			`(guard (exn (#t "caught")) (/ (expt 2 100) 0))`,
+			values.NewString("caught")},
+		// Float / 0
+		{"float div zero caught by guard",
+			`(guard (exn (#t "caught")) (/ 1.5 0))`,
+			values.NewString("caught")},
+		// Rational / 0
+		{"rational div zero caught by guard",
+			`(guard (exn (#t "caught")) (/ 1/3 0))`,
+			values.NewString("caught")},
+		// Complex / 0
+		{"complex div zero caught by guard",
+			`(guard (exn (#t "caught")) (/ 1+2i 0))`,
+			values.NewString("caught")},
+	}
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			result, err := runSchemeCode(t, tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestDivisionByZero_ReturnsError verifies that division by zero returns an
+// error through the VM rather than panicking.
+func TestDivisionByZero_ReturnsError(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{"integer / 0", `(/ 1 0)`},
+		{"biginteger / 0", `(/ (expt 2 100) 0)`},
+		{"float / 0", `(/ 1.5 0)`},
+		{"rational / 0", `(/ 1/3 0)`},
+		{"complex / 0", `(/ 1+2i 0)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
