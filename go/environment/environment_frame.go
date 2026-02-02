@@ -472,7 +472,7 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 			if binding != nil {
 				bindingScopes := binding.Scopes()
 				// Check if scopes match
-				if bindingScopes == nil || len(bindingScopes) == 0 {
+				if len(bindingScopes) == 0 {
 					// Binding has no scopes (top-level or pre-hygiene)
 					// This is a valid candidate with scope count 0
 					candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})

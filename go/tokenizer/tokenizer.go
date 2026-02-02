@@ -397,7 +397,7 @@ func (p *Tokenizer) Next() (Token, error) {
 		val := p.value
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
 		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
-		return q, nil
+		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
 }

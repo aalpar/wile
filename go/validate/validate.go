@@ -121,7 +121,7 @@ func hasLocalVariableBinding(env *environment.EnvironmentFrame, sym *values.Symb
 
 	// Check scope compatibility for hygiene
 	bindingScopes := binding.Scopes()
-	if bindingScopes == nil || len(bindingScopes) == 0 {
+	if len(bindingScopes) == 0 {
 		// Binding has no scopes (user code) - matches any use
 		return true
 	}

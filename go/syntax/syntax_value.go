@@ -203,11 +203,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = vec
 		// Recursively unwrap elements
 		for i, elem := range v.Values {
-			if syntaxElem, ok := elem.(SyntaxValue); ok {
-				vec.Set(i, UnwrapAllShared(syntaxElem, cache))
-			} else {
-				vec.Set(i, elem)
-			}
+			vec.Set(i, UnwrapAllShared(elem, cache))
 		}
 		return vec
 

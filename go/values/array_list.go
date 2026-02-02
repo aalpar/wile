@@ -220,9 +220,8 @@ func (p *ArrayList) AsList() Value {
 	end := (*p)[l-1]
 	if IsEmptyList(end) {
 		return q
-	} else {
-		current[1] = end
 	}
+	current[1] = end
 	return q
 }
 

@@ -151,25 +151,25 @@ func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallCo
 // declareDefineBinding creates the binding for a define form before compiling its value.
 // This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
 // Returns the interned symbol for use by the caller when storing the compiled value.
-func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) (*values.Symbol, error) {
+func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) *values.Symbol {
 	// Get the interned symbol for the name (validator guarantees it's a SyntaxSymbol)
 	sym := p.env.InternSymbol(v.Name().Sym)
 	symbolScopes := v.Name().Scopes()
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
 		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
-		return sym, nil
+		return sym
 	}
 	gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
 	if created && symbolScopes == nil {
-		return sym, nil
+		return sym
 	}
 	binding := p.env.GetGlobalBinding(gi)
 	if binding == nil {
-		return sym, nil
+		return sym
 	}
 	binding.SetScopes(symbolScopes)
-	return sym, nil
+	return sym
 }
 
 // compileValidatedDefineVar compiles the simple variable form of define.
@@ -195,16 +195,13 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// For variable defines, this still happens early, but since the value expression
 	// cannot reference itself (unlike function defines), the order is less critical.
 	// The binding is created but not yet populated with a value.
-	sym, err := p.declareDefineBinding(v)
-	if err != nil {
-		return err
-	}
+	sym := p.declareDefineBinding(v)
 
 	// Step 2: Compile the value expression.
 	// The expression is NOT in tail position because define is a definition, not
 	// an expression that returns a meaningful value. The result goes into the
 	// value register, ready to be stored.
-	err = p.compileValidated(ctctx.NotInTail(), v.SubExp())
+	err := p.compileValidated(ctctx.NotInTail(), v.SubExp())
 	if err != nil {
 		return err
 	}
@@ -284,10 +281,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	// Step 1: Declare the binding early for self-recursion support.
 	// This must happen before compiling the body so that references to the
 	// function name within the body resolve correctly.
-	sym, err := p.declareDefineBinding(v)
-	if err != nil {
-		return err
-	}
+	sym := p.declareDefineBinding(v)
 
 	// Step 2: Set up the closure's environment and bytecode template.
 	// The local environment holds parameter bindings; the child environment
@@ -302,7 +296,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, childEnv, tpl, lenv, v)
+	err := p.compileClosure(ctctx, childEnv, tpl, lenv, v)
 	if err != nil {
 		return err
 	}

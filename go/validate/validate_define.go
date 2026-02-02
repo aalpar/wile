@@ -92,10 +92,6 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 	// Extract and validate parameters from cdr
 	paramsCdr := nameAndParams.Cdr()
 	params := validateParams(paramsCdr.(syntax.SyntaxValue), result)
-	if params == nil && result.Errors != nil {
-		// params can be nil for () but we should have errors if validation failed
-		// Check if we actually had errors or just empty params
-	}
 
 	// Validate body - must have at least one expression
 	if len(elements) < 3 {
