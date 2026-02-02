@@ -102,12 +102,12 @@ func RunSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return RunSchemeCodeWithContext(t, ctx, code)
+	return RunSchemeCodeWithContext(ctx, t, code)
 }
 
 // RunSchemeCodeWithContext parses and runs Scheme source code with the given context.
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
-func RunSchemeCodeWithContext(t *testing.T, ctx context.Context, code string) (values.Value, error) {
+func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
 	engine, err := wile.NewEngine()
 	if err != nil {

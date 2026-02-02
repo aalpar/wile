@@ -943,7 +943,7 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 	bvLen := int64(len(*bv))
 	start := int64(0)
-	end := bvLen
+	end := int64(0)
 
 	// Parse optional arguments: [port [start [end]]]
 	tuple, ok := rest.(values.Tuple)

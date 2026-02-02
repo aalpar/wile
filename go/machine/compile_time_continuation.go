@@ -790,12 +790,13 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 		}
 		return nil
 	})
-	if errors.Is(err, values.ErrStopIteration) {
+	if !errors.Is(err, values.ErrStopIteration) {
 		// Normal termination of iteration
-	} else if err != nil {
-		panic(err)
-	} else if !syntax.IsSyntaxEmptyList(v) {
-		panic(values.ErrNotAList)
+		if err != nil {
+			panic(err)
+		} else if !syntax.IsSyntaxEmptyList(v) {
+			panic(values.ErrNotAList)
+		}
 	}
 	if !hasSplice {
 		// Simple case: (list elem1 elem2 ...)

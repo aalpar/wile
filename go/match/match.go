@@ -137,7 +137,7 @@ func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
 				// Not in loop context, extra elements means no match
 				return 0, ErrNotAMatch
 			}
-		} else if cdr != nil && !syntax.IsSyntaxEmptyList(cdr) {
+		} else if !syntax.IsSyntaxEmptyList(cdr) {
 			// Improper list or other non-pair cdr when we expected end
 			return 0, ErrNotAMatch
 		}
@@ -585,7 +585,7 @@ func (p *Matcher) Match(target *values.Pair) error {
 						// Not in loop context, extra elements means no match
 						return ErrNotAMatch
 					}
-				} else if cdr != nil && !values.IsEmptyList(cdr) {
+				} else if !values.IsEmptyList(cdr) {
 					// Improper list or other non-pair cdr when we expected end
 					return ErrNotAMatch
 				}

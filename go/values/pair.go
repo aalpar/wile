@@ -163,9 +163,7 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return Void, nil
 	}
-	ok := false
 	pr := p
-	pr0 := p
 	i := 0
 	for pr != nil && !pr.IsEmptyList() {
 		hasNext := !IsEmptyList(pr[1])
@@ -173,7 +171,7 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		pr0, ok = pr[1].(*Pair)
+		pr0, ok := pr[1].(*Pair)
 		if !ok {
 			return pr[1], nil
 		}

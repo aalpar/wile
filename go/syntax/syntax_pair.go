@@ -252,9 +252,7 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 	if p == nil {
 		return values.Void, nil
 	}
-	ok := false
 	pr := p
-	pr0 := p
 	i := 0
 	for pr != nil && !pr.IsEmptyList() {
 		hasNext := !values.IsEmptyList(pr.Cdr())
@@ -262,7 +260,7 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 		if err != nil {
 			return nil, err
 		}
-		pr0, ok = pr.Cdr().(*SyntaxPair)
+		pr0, ok := pr.Cdr().(*SyntaxPair)
 		if !ok {
 			return pr.Cdr(), nil
 		}
@@ -277,9 +275,7 @@ func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (S
 	if p == nil {
 		return SyntaxVoid, nil
 	}
-	ok := false
 	pr := p
-	pr0 := p
 	i := 0
 	for pr != nil && !pr.IsEmptyList() {
 		hasNext := !IsSyntaxEmptyList(pr.Cdr().(SyntaxValue))
@@ -287,7 +283,7 @@ func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (S
 		if err != nil {
 			return nil, err
 		}
-		pr0, ok = pr.Cdr().(*SyntaxPair)
+		pr0, ok := pr.Cdr().(*SyntaxPair)
 		if !ok {
 			return pr.Cdr().(SyntaxValue), nil
 		}

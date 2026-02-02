@@ -505,7 +505,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	err = mc.Run()
+	_ = mc.Run()
 	// FIXME: should return ErrMachineHalt
 	//	qt.Assert(t, err, qt.ErrorIs, ErrMachineHalt)
 	qt.Assert(t, mc.value, qt.HasLen, 1)

@@ -78,7 +78,7 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 		mctx.pc++
 		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
 		// so we record #f in the value register and return no runtime error.
-		return mctx, nil // nolint:errcheck
+		return mctx, nil // nolint:errcheck, nilerr
 	}
 
 	// Match succeeded - store bindings and matcher
