@@ -6,6 +6,7 @@ GO_CLEAN=$(GO) clean
 GO_MOD=$(GO) mod
 
 SOURCES=$(shell find . -type f -name "*.go" -print)
+EMBED_SOURCES=$(shell find . -type f -name "*.scm" -print)
 SOURCE_DIRS=$(shell go list -f "{{.Dir}}" ./...)
 BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell cat ../VERSION 2>/dev/null || echo "0.0.0")
@@ -33,7 +34,7 @@ MY_BIN=scheme
 .PHONY: build
 build: $(DIST_DIR)/$(MY_BIN)
 
-$(DIST_DIR)/$(MY_BIN): $(SOURCES)
+$(DIST_DIR)/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
 	$(GO_BUILD) -o $(DIST_DIR)/$(MY_BIN) -ldflags "-X main.BuildSHA=$(BUILD_SHA) -X main.BuildVersion=$(BUILD_VERSION)" ./cmd
 
 # Compile tests for all packages without running them.
