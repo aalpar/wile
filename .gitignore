@@ -31,3 +31,4 @@ Thumbs.db
 # Anthropic files
 .claude/
 *.local.md
+.mcp.json
