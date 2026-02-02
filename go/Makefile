@@ -111,3 +111,24 @@ modclean:
 tag:
 	git tag -a $(BUILD_VERSION) -m "Release $(BUILD_VERSION)"
 	@echo "Created tag $(BUILD_VERSION)"
+
+# Bump the major version in ../VERSION (resets minor and patch to 0, preserves pre-release suffix).
+#   make bump-major
+#   v0.8.5-alpha → v1.0.0-alpha
+.PHONY: bump-major
+bump-major:
+	../tools/sh/bump-version.sh major
+
+# Bump the minor version in ../VERSION (resets patch to 0, preserves pre-release suffix).
+#   make bump-minor
+#   v0.8.5-alpha → v0.9.0-alpha
+.PHONY: bump-minor
+bump-minor:
+	../tools/sh/bump-version.sh minor
+
+# Bump the patch version in ../VERSION (preserves pre-release suffix).
+#   make bump-patch
+#   v0.8.5-alpha → v0.8.6-alpha
+.PHONY: bump-patch
+bump-patch:
+	../tools/sh/bump-version.sh patch
