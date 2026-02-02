@@ -28,10 +28,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-type dummyExpandTimeCallContext struct{}
+type dummyExpandTimeCallContext struct{} //nolint:unused
 
 func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("foo", nil)
 	result, err := cont.ExpandSymbol(NewExpandTimeCallContext(), sym)
@@ -44,7 +44,7 @@ func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 }
 
 func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	num := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 	result, err := cont.ExpandSelfEvaluating(NewExpandTimeCallContext(), num)
@@ -57,7 +57,7 @@ func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 }
 
 func TestExpandExpression_Symbol(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("bar", nil)
 	cctx := NewExpandTimeCallContext()
@@ -74,7 +74,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// Test that macro expansion works with a dummy transformer.
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	gi, ok := env.CreateGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
@@ -127,7 +127,7 @@ func TestExpandExpression_List(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 
@@ -167,7 +167,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	cctx := NewExpandTimeCallContext()
 
@@ -188,7 +188,7 @@ func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestAddScopeToSyntaxViaDefineSyntax tests the addScopeToSyntax helper in syntax rules transform
 func TestAddScopeToSyntaxViaDefineSyntax(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -333,7 +333,7 @@ func TestAddScopeToSyntaxCoverage(t *testing.T) {
 
 // TestExpandSetForm tests set! form expansion
 func TestExpandSetForm(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -363,7 +363,7 @@ func TestExpandSetForm(t *testing.T) {
 
 // TestExpandCaseLambdaForm tests case-lambda expansion
 func TestExpandCaseLambdaForm(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

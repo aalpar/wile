@@ -25,7 +25,7 @@ import (
 )
 
 func TestNewMachineContext(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	// Create a parent continuation to verify parent chain works
@@ -57,7 +57,7 @@ func TestNewMachineContext(t *testing.T) {
 }
 
 func TestNewMachineContext_NilParent(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create a continuation with nil parent
 	cont := NewMachineContinuation(nil, nil, env)
@@ -71,7 +71,7 @@ func TestNewMachineContext_NilParent(t *testing.T) {
 
 func TestNewMachineContext_RoundTrip(t *testing.T) {
 	// Test that saving and restoring a continuation preserves state
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -101,7 +101,7 @@ func TestNewMachineContext_RoundTrip(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_0(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewMachineContinuation(nil, nil, env)
 	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.cont, qt.IsNil)
@@ -115,7 +115,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_1(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SaveContinuation(10)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
@@ -129,7 +129,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_2(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	bottom0 := mc.cont
 	mc.SaveContinuation(10)
@@ -153,7 +153,7 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Test SetValues and GetValues
@@ -174,7 +174,7 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 }
 
 func TestMachineContext_CurrentContinuation(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -190,7 +190,7 @@ func TestMachineContext_CurrentContinuation(t *testing.T) {
 }
 
 func TestMachineContext_NewSubContext(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -213,7 +213,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 }
 
 func TestMachineContext_Restore(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	env1 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	env2 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	tpl1 := NewNativeTemplate(1, 0, false)
@@ -244,7 +244,7 @@ func TestMachineContext_Restore(t *testing.T) {
 }
 
 func TestMachineContext_Apply_FixedArity(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -270,7 +270,7 @@ func TestMachineContext_Apply_FixedArity(t *testing.T) {
 }
 
 func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -285,7 +285,7 @@ func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
 }
 
 func TestMachineContext_Apply_Variadic(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// Variadic with 2 required parameters plus rest
@@ -308,7 +308,7 @@ func TestMachineContext_Apply_Variadic(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(3, 0, true)
@@ -323,7 +323,7 @@ func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create two clauses with different arities
 	lenv1 := environment.NewLocalEnvironment(1)
@@ -356,7 +356,7 @@ func TestMachineContext_ApplyCaseLambda(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
@@ -383,7 +383,7 @@ func TestErrContinuationEscape_Error(t *testing.T) {
 }
 
 func TestNewMachineContextFromMachineClosure(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -398,7 +398,7 @@ func TestNewMachineContextFromMachineClosure(t *testing.T) {
 }
 
 func TestMachineContext_Error(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
@@ -414,7 +414,7 @@ func TestMachineContext_Error(t *testing.T) {
 }
 
 func TestMachineContext_Error_NoSource(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// No template means no source
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
@@ -427,7 +427,7 @@ func TestMachineContext_Error_NoSource(t *testing.T) {
 }
 
 func TestMachineContext_WrapError(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -441,7 +441,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 }
 
 func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -458,7 +458,7 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestExecuteSimpleProcedureCall tests actually running a procedure call
 func TestExecuteSimpleProcedureCall(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	prog := "((lambda (x) x) 42)"
 	sv := parseSchemeExpr(t, env, prog)
@@ -476,7 +476,7 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 
 // TestExecuteVariadicProcedure tests running a variadic procedure
 func TestExecuteVariadicProcedure(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// (lambda args args) called with (1 2 3) should return (1 2 3)
 	prog := "((lambda args args) 1 2 3)"
@@ -493,7 +493,7 @@ func TestExecuteVariadicProcedure(t *testing.T) {
 
 // TestMachineContextNewSubContext tests creating a sub-context
 func TestMachineContextNewSubContext(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -509,7 +509,7 @@ func TestMachineContextNewSubContext(t *testing.T) {
 
 // TestMachineContextSetValues tests SetValues and GetValues
 func TestMachineContextSetValues(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.operations = append(tpl.operations,
 		NewOperationLoadVoid(),
@@ -528,7 +528,7 @@ func TestMachineContextSetValues(t *testing.T) {
 
 // TestMachineContextSetValue tests SetValue and GetValue
 func TestMachineContextSetValue(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.operations = append(tpl.operations,
 		NewOperationLoadVoid(),
@@ -545,7 +545,7 @@ func TestMachineContextSetValue(t *testing.T) {
 
 // TestMachineContextApplySimple tests mc.Apply with a simple closure
 func TestMachineContextApplySimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -563,7 +563,7 @@ func TestMachineContextApplySimple(t *testing.T) {
 
 // TestMachineContextValueMethods tests MachineContext value get/set
 func TestMachineContextValueMethods(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -581,7 +581,7 @@ func TestMachineContextValueMethods(t *testing.T) {
 
 // TestMachineContextNewSubContextAdditional tests additional sub-context paths
 func TestMachineContextNewSubContextAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)

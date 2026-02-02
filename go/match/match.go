@@ -309,11 +309,12 @@ func (p *Matcher) MatchSyntax(target *syntax.SyntaxPair) error {
 			// Move to next element in the list
 			cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
 			cdrPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok {
+			switch {
+			case ok:
 				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: cdrPair}
-			} else if syntax.IsSyntaxEmptyList(cdr) || cdr == nil {
+			case syntax.IsSyntaxEmptyList(cdr) || cdr == nil:
 				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
-			} else {
+			default:
 				return ErrNotAMatch
 			}
 		default:
@@ -482,11 +483,12 @@ func (p *Matcher) MatchSyntaxWithLiterals(target *syntax.SyntaxPair, literalSynt
 			// Move to next element in the list
 			cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
 			cdrPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok {
+			switch {
+			case ok:
 				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: cdrPair}
-			} else if syntax.IsSyntaxEmptyList(cdr) || cdr == nil {
+			case syntax.IsSyntaxEmptyList(cdr) || cdr == nil:
 				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
-			} else {
+			default:
 				return ErrNotAMatch
 			}
 		default:
@@ -686,11 +688,12 @@ func (p *Matcher) Match(target *values.Pair) error {
 			// Move to next element in the list
 			cdr := p.valueStack[lvs-1].pr[1]
 			cdrPair, ok := cdr.(*values.Pair)
-			if ok {
+			switch {
+			case ok:
 				p.valueStack[lvs-1] = valuePathEntry{pr: cdrPair}
-			} else if values.IsEmptyList(cdr) || cdr == nil {
+			case values.IsEmptyList(cdr) || cdr == nil:
 				p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
-			} else {
+			default:
 				return ErrNotAMatch
 			}
 		default:

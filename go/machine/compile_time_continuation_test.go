@@ -31,7 +31,7 @@ import (
 )
 
 func TestCompileContext_CompileLambda(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	prog := values.List(values.NewSymbol("lambda"), values.NewSymbol("x"), values.NewSymbol("x"))
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -75,7 +75,7 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 }
 
 func TestCompileContext_CompileLambdaCall(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	prog := values.List(values.List(values.NewSymbol("lambda"), values.NewSymbol("x"), values.NewSymbol("x")), values.NewString("hello"))
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -128,7 +128,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 }
 
 func TestCompileContext_CompileDefine(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	prog := values.List(values.NewSymbol("define"),
 		values.NewSymbol("x"),
 		values.NewString("y"))
@@ -159,7 +159,7 @@ func TestCompileContext_CompileDefine(t *testing.T) {
 }
 
 func TestCompileContext_CompileQuote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	var prog values.Value = values.List(
 		values.NewSymbol("quote"),
 		values.NewSymbol("x"))
@@ -188,7 +188,7 @@ func TestCompileContext_CompileQuote(t *testing.T) {
 }
 
 func TestCompileContext_CompileQuasiquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	var prog values.Value = values.List(
 		values.NewSymbol("quasiquote"),
 		values.NewSymbol("x"))
@@ -312,7 +312,7 @@ func TestCompileContext_CompileNestedQuasiquote(t *testing.T) {
 // This is a helper for testing that compiles and runs Scheme code.
 func evalSchemeString(code string) (values.Value, error) {
 	ctx := context.Background()
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Register required primitives
 	err := RegisterSyntaxCompilers(env)
@@ -384,7 +384,7 @@ func evalSchemeString(code string) (values.Value, error) {
 }
 
 func TestCompileContext_CompileIf(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	// top-level closure with no parameters (thunk)
 	prog := values.List(values.NewSymbol("if"),
 		values.NewBoolean(false),
@@ -419,7 +419,7 @@ func TestCompileContext_CompileIf(t *testing.T) {
 }
 
 func TestCompileContext_CompileSetBang(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	symX := env.InternSymbol(values.NewSymbol("x"))
 	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -459,7 +459,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 }
 
 func TestCompileContext_CompileBegin_0(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	symX := env.InternSymbol(values.NewSymbol("x"))
 	// top-level closure with no parameters (thunk)
 	prog := values.List(values.NewSymbol("begin"),
@@ -514,7 +514,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 }
 
 func TestCompileContext_CompileBegin_1(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	prog := values.List(values.NewSymbol("begin"), values.NewString("true"), values.NewString("false"))
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -541,7 +541,7 @@ func TestCompileContext_CompileBegin_1(t *testing.T) {
 }
 
 func TestCompileContext_CompileMeta(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	prog := values.List(values.NewSymbol("meta"), values.NewString("first"), values.NewString("second"))
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -618,7 +618,7 @@ func newTopLevelEnv(env *environment.EnvironmentFrame) *environment.EnvironmentF
 }
 
 func TestCondExpandRegistered(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	if err != nil {
 		t.Fatalf("RegisterSyntaxCompilers failed: %v", err)
@@ -650,7 +650,7 @@ func TestCondExpandRegistered(t *testing.T) {
 // Without TCO: depth grows to ~100 (one frame per recursive call)
 // With TCO: depth stays constant at ~2-3 (no frame accumulation)
 func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Track maximum call depth seen during execution
 	var maxCallDepth int
@@ -740,7 +740,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 }
 
 func TestCompileContext_CompileCaseLambda(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (case-lambda
@@ -772,7 +772,7 @@ func TestCompileContext_CompileCaseLambda(t *testing.T) {
 }
 
 func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// ((case-lambda
@@ -804,7 +804,7 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // compileProcedureArgumentList and CompileProcedureCall
 func TestCompileProcedureCallWithArgs(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -870,7 +870,7 @@ func TestCompileLambdaParameterListVariants(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+			env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 			sv := parseSchemeExpr(t, env, tc.prog)
 			cont, err := newTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
@@ -895,7 +895,7 @@ func TestSyntaxCompilerNameMethod(t *testing.T) {
 
 // TestExpandQuasiquoteAndQuote tests the expander for quasiquote and quote
 func TestExpandQuasiquoteAndQuote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -918,7 +918,7 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 
 // TestCompileSymbolUnboundError tests compile error for unbound symbol
 func TestCompileSymbolUnboundError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -932,7 +932,7 @@ func TestCompileSymbolUnboundError(t *testing.T) {
 
 // TestCompileLambdaDuplicateParamError tests error for duplicate lambda params
 func TestCompileLambdaDuplicateParamError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (lambda (x x) x) should error due to duplicate parameter
@@ -949,7 +949,7 @@ func TestCompileLambdaDuplicateParamError(t *testing.T) {
 
 // TestCompileLambdaInvalidParamError tests error for invalid lambda parameter
 func TestCompileLambdaInvalidParamError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (lambda (1) 42) should error - 1 is not a valid parameter
@@ -965,7 +965,7 @@ func TestCompileLambdaInvalidParamError(t *testing.T) {
 
 // TestCompileNestedQuasiquote tests doubly-nested quasiquote
 func TestCompileNestedQuasiquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -993,7 +993,7 @@ func TestCompileNestedQuasiquote(t *testing.T) {
 
 // TestCompileCaseLambda tests compiling case-lambda
 func TestCompileCaseLambda(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1012,7 +1012,7 @@ func TestCompileCaseLambda(t *testing.T) {
 
 // TestCompileDefineWithFn tests compiling define with lambda form
 func TestCompileDefineWithFn(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1027,7 +1027,7 @@ func TestCompileDefineWithFn(t *testing.T) {
 
 // TestCompileDefineVar tests compiling define with value
 func TestCompileDefineVar(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1046,7 +1046,7 @@ func TestCompileDefineVar(t *testing.T) {
 
 // TestCompileSetBang tests compiling set!
 func TestCompileSetBang(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1069,7 +1069,7 @@ func TestCompileSetBang(t *testing.T) {
 
 // TestCompileIfBranches tests compiling if with both branches
 func TestCompileIfBranches(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1094,7 +1094,7 @@ func TestCompileIfBranches(t *testing.T) {
 
 // TestExpandQuasiquoteAndQuoteDirect tests the expander methods directly
 func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1134,7 +1134,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 
 // TestCompileUnquoteError tests error when compiling unquote outside quasiquote
 func TestCompileUnquoteError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1148,7 +1148,7 @@ func TestCompileUnquoteError(t *testing.T) {
 
 // TestCompileUnquoteSplicingError tests error when compiling unquote-splicing outside quasiquote
 func TestCompileUnquoteSplicingError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1162,7 +1162,7 @@ func TestCompileUnquoteSplicingError(t *testing.T) {
 
 // TestCompileQuasiquoteSimple tests quasiquote without unquote (no list/append needed)
 func TestCompileQuasiquoteSimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1177,7 +1177,7 @@ func TestCompileQuasiquoteSimple(t *testing.T) {
 
 // TestCompileProcedureCallTail tests tail call compilation
 func TestCompileProcedureCallTail(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1201,7 +1201,7 @@ func TestCompileProcedureCallTail(t *testing.T) {
 
 // TestCompileProcedureCallNonTail tests non-tail call compilation
 func TestCompileProcedureCallNonTail(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1217,7 +1217,7 @@ func TestCompileProcedureCallNonTail(t *testing.T) {
 
 // TestCompileBeginSequence tests begin with multiple expressions
 func TestCompileBeginSequence(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1232,7 +1232,7 @@ func TestCompileBeginSequence(t *testing.T) {
 
 // TestCompileIfNoAlternate tests if without else
 func TestCompileIfNoAlternate(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1256,7 +1256,7 @@ func TestCompileIfNoAlternate(t *testing.T) {
 
 // TestCompileLambdaWithRestParameter tests lambda with rest parameter
 func TestCompileLambdaWithRestParameter(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1274,7 +1274,7 @@ func TestCompileLambdaWithRestParameter(t *testing.T) {
 
 // TestCompileLambdaRestOnly tests lambda with only rest parameter
 func TestCompileLambdaRestOnly(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1289,7 +1289,7 @@ func TestCompileLambdaRestOnly(t *testing.T) {
 
 // TestCompileCondExpandNotFeature tests cond-expand with not feature
 func TestCompileCondExpandNotFeature(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1305,7 +1305,7 @@ func TestCompileCondExpandNotFeature(t *testing.T) {
 
 // TestCompileCondExpandAndFeature tests cond-expand with and feature
 func TestCompileCondExpandAndFeature(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1321,7 +1321,7 @@ func TestCompileCondExpandAndFeature(t *testing.T) {
 
 // TestCompileCondExpandOrFeature tests cond-expand with or feature
 func TestCompileCondExpandOrFeature(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1337,7 +1337,7 @@ func TestCompileCondExpandOrFeature(t *testing.T) {
 
 // TestCompileCondExpandLibraryFeature tests cond-expand with library feature
 func TestCompileCondExpandLibraryFeature(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1353,7 +1353,7 @@ func TestCompileCondExpandLibraryFeature(t *testing.T) {
 
 // TestCompileSymbolBranches tests various branches of CompileSymbol
 func TestCompileSymbolBranches(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1377,7 +1377,7 @@ func TestCompileSymbolBranches(t *testing.T) {
 
 // TestCompileSymbolLocalBinding tests compiling local bindings
 func TestCompileSymbolLocalBinding(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1393,7 +1393,7 @@ func TestCompileSymbolLocalBinding(t *testing.T) {
 
 // historical but the test remains valid for verifying primitive form compilation.
 func TestCompileSyntaxPrimitiveBranches(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1423,7 +1423,7 @@ func TestCompileSyntaxPrimitiveBranches(t *testing.T) {
 
 // TestCompileMultipleForms tests compiling multiple forms
 func TestCompileMultipleForms(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1447,7 +1447,7 @@ func TestCompileMultipleForms(t *testing.T) {
 
 // TestCompileSelfEvaluating tests compiling self-evaluating values
 func TestCompileSelfEvaluating(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name   string
@@ -1478,7 +1478,7 @@ func TestCompileSelfEvaluating(t *testing.T) {
 
 // TestCompileNestedLambda tests nested lambda expressions
 func TestCompileNestedLambda(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1494,7 +1494,7 @@ func TestCompileNestedLambda(t *testing.T) {
 
 // TestCompileComplexIf tests complex if expressions
 func TestCompileComplexIf(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1510,7 +1510,7 @@ func TestCompileComplexIf(t *testing.T) {
 
 // TestCompileUnquoteOutsideQuasiquote tests that unquote outside quasiquote returns error
 func TestCompileUnquoteOutsideQuasiquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1523,7 +1523,7 @@ func TestCompileUnquoteOutsideQuasiquote(t *testing.T) {
 
 // TestCompileUnquoteSplicingOutsideQuasiquote tests that unquote-splicing outside quasiquote returns error
 func TestCompileUnquoteSplicingOutsideQuasiquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1536,7 +1536,7 @@ func TestCompileUnquoteSplicingOutsideQuasiquote(t *testing.T) {
 
 // TestQuasiquoteWithUnquote tests basic quasiquote with unquote
 func TestQuasiquoteWithUnquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1549,7 +1549,7 @@ func TestQuasiquoteWithUnquote(t *testing.T) {
 
 // TestQuasiquoteNested tests nested quasiquote
 func TestQuasiquoteNested(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1562,7 +1562,7 @@ func TestQuasiquoteNested(t *testing.T) {
 
 // TestQuasiquoteWithDotPair tests quasiquote with dotted pair
 func TestQuasiquoteWithDotPair(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1575,7 +1575,7 @@ func TestQuasiquoteWithDotPair(t *testing.T) {
 
 // TestQuasiquoteVector tests quasiquote with vector
 func TestQuasiquoteVector(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1588,7 +1588,7 @@ func TestQuasiquoteVector(t *testing.T) {
 
 // TestCompileDefineFn tests define with function shorthand
 func TestCompileDefineFn(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1605,7 +1605,7 @@ func TestCompileDefineFn(t *testing.T) {
 
 // TestCompileDefineFnVariadic tests define with variadic function shorthand
 func TestCompileDefineFnVariadic(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1622,7 +1622,7 @@ func TestCompileDefineFnVariadic(t *testing.T) {
 
 // TestCompileSymbolGlobal tests compiling a global symbol reference
 func TestCompileSymbolGlobal(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1650,7 +1650,7 @@ func TestCompileSymbolGlobal(t *testing.T) {
 
 // TestCompileSetBangGlobal tests set! on global variable
 func TestCompileSetBangGlobal(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1688,7 +1688,7 @@ func TestCompileSetBangGlobal(t *testing.T) {
 
 // TestCompileBegin tests begin form
 func TestCompileBegin(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1705,7 +1705,7 @@ func TestCompileBegin(t *testing.T) {
 
 // TestCompileLambdaMultiExprBody tests lambda with multiple expressions in body
 func TestCompileLambdaMultiExprBody(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1722,7 +1722,7 @@ func TestCompileLambdaMultiExprBody(t *testing.T) {
 
 // TestCompileCaseLambdaMultiClause tests case-lambda with multiple clauses
 func TestCompileCaseLambdaMultiClause(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1739,7 +1739,7 @@ func TestCompileCaseLambdaMultiClause(t *testing.T) {
 
 // TestCompileQuoteSymbol tests quoting a symbol
 func TestCompileQuoteSymbol(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1758,7 +1758,7 @@ func TestCompileQuoteSymbol(t *testing.T) {
 
 // TestCompileQuoteVector tests quoting a vector
 func TestCompileQuoteVector(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1777,7 +1777,7 @@ func TestCompileQuoteVector(t *testing.T) {
 
 // TestCompileIfThenOnly tests if with only then branch
 func TestCompileIfThenOnly(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1794,7 +1794,7 @@ func TestCompileIfThenOnly(t *testing.T) {
 
 // TestCompileIfFalsePath tests if with false condition
 func TestCompileIfFalsePath(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1811,7 +1811,7 @@ func TestCompileIfFalsePath(t *testing.T) {
 
 // TestCompileDefineVarSimple tests define simple variable
 func TestCompileDefineVarSimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1827,7 +1827,7 @@ func TestCompileDefineVarSimple(t *testing.T) {
 
 // TestCompileLambdaWithMultipleParams tests lambda with multiple parameters
 func TestCompileLambdaWithMultipleParams(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1844,7 +1844,7 @@ func TestCompileLambdaWithMultipleParams(t *testing.T) {
 
 // TestCompileLambdaRest tests lambda with rest parameter only
 func TestCompileLambdaRest(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1860,7 +1860,7 @@ func TestCompileLambdaRest(t *testing.T) {
 
 // TestCompileQuoteList tests quoting a list
 func TestCompileQuoteList(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1879,7 +1879,7 @@ func TestCompileQuoteList(t *testing.T) {
 
 // TestCompileSelfEvaluatingNil tests compiling void/nil
 func TestCompileSelfEvaluatingNil(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1892,7 +1892,7 @@ func TestCompileSelfEvaluatingNil(t *testing.T) {
 
 // TestCompileSelfEvaluatingNilDirect tests CompileSelfEvaluating with nil directly
 func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
 	ctctx := NewCompileTimeCallContext(false, true, env)
@@ -1906,7 +1906,7 @@ func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
 
 // TestCompileSyntaxRulesSimple tests simple syntax-rules
 func TestCompileSyntaxRulesSimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -1925,7 +1925,7 @@ func TestCompileSyntaxRulesSimple(t *testing.T) {
 func TestCompiledLibraryMethods(t *testing.T) {
 	name := NewLibraryName("test", "lib")
 	lib := &CompiledLibrary{
-		Name:    name,
+		Name:    name, //nolint:govet
 		Exports: make(map[string]string),
 	}
 
@@ -1935,7 +1935,7 @@ func TestCompiledLibraryMethods(t *testing.T) {
 
 // TestCompileSelfEvaluatingValues tests compilation of self-evaluating values
 func TestCompileSelfEvaluatingValues(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -1960,7 +1960,7 @@ func TestCompileSelfEvaluatingValues(t *testing.T) {
 
 // TestCompileSymbolVariants tests various symbol compilation paths
 func TestCompileSymbolVariants(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -1983,7 +1983,7 @@ func TestCompileSymbolVariants(t *testing.T) {
 
 // TestCompileDefineSyntaxErrors tests define-syntax error cases
 func TestCompileDefineSyntaxErrors(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -2004,7 +2004,7 @@ func TestCompileDefineSyntaxErrors(t *testing.T) {
 
 // TestCompileExpressionListError tests expression list compilation with improper list
 func TestCompileExpressionListError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// begin with multiple expressions exercises compileExpressionList
 	testCases := []struct {
@@ -2027,7 +2027,7 @@ func TestCompileExpressionListError(t *testing.T) {
 
 // TestCompileValidatedCallEdgeCases tests edge cases in call compilation
 func TestCompileValidatedCallEdgeCases(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Test tail call optimization
 	testCases := []struct {
@@ -2050,7 +2050,7 @@ func TestCompileValidatedCallEdgeCases(t *testing.T) {
 
 // TestCompileSetBangErrors tests set! error cases
 func TestCompileSetBangErrors(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -2071,7 +2071,7 @@ func TestCompileSetBangErrors(t *testing.T) {
 
 // TestQuasiquoteNeedsRuntime tests quasiquoteNeedsRuntime paths
 func TestQuasiquoteNeedsRuntime(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	testCases := []struct {
 		name string
@@ -2095,7 +2095,7 @@ func TestQuasiquoteNeedsRuntime(t *testing.T) {
 
 // TestCompileIncludeErrorAdditional tests include error paths
 func TestCompileIncludeErrorAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// include with empty string should error
 	sv := parseSchemeExpr(t, env, "(include \"\")")
@@ -2105,7 +2105,7 @@ func TestCompileIncludeErrorAdditional(t *testing.T) {
 
 // TestCompileQuasiquotePairNestedUnquote tests nested unquote in quasiquote
 func TestCompileQuasiquotePairNestedUnquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2130,7 +2130,7 @@ func TestCompileQuasiquotePairNestedUnquote(t *testing.T) {
 
 // TestCompileQuasiquoteUnquoteSplicingInList tests unquote-splicing in list context
 func TestCompileQuasiquoteUnquoteSplicingInList(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2146,7 +2146,7 @@ func TestCompileQuasiquoteUnquoteSplicingInList(t *testing.T) {
 
 // TestCompileSymbolLocal tests CompileSymbol for local variables
 func TestCompileSymbolLocal(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2162,7 +2162,7 @@ func TestCompileSymbolLocal(t *testing.T) {
 
 // TestCompileSymbolNoBinding tests CompileSymbol with unbound symbol
 func TestCompileSymbolNoBinding(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2174,7 +2174,7 @@ func TestCompileSymbolNoBinding(t *testing.T) {
 
 // TestCompilePrimitiveOrProcedureCallWithPair tests procedure call with pair in function position
 func TestCompilePrimitiveOrProcedureCallWithPair(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2190,7 +2190,7 @@ func TestCompilePrimitiveOrProcedureCallWithPair(t *testing.T) {
 
 // TestCompileValidatedLambdaVariadic tests variadic lambda compilation
 func TestCompileValidatedLambdaVariadic(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -2213,7 +2213,7 @@ func TestCompileValidatedLambdaVariadic(t *testing.T) {
 
 // TestCompileValidatedDefineFnDotted tests define with dotted parameter list
 func TestCompileValidatedDefineFnDotted(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

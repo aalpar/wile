@@ -72,7 +72,7 @@ func TestOperationDrop_EqualTo_NilCases(t *testing.T) {
 func TestOperationDrop_Apply(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 

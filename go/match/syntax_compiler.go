@@ -146,7 +146,7 @@ func compile(ctx context.Context, vis *SyntaxCompiler, v0 *values.Pair) bool {
 
 // compileCurrentLevel processes all elements at the current nesting level.
 // Returns the updated stack (with current level popped and Done emitted).
-func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry {
+func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry { //nolint:unparam
 	l := len(stack)
 	for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
 		elementStart := len(vis.codes)

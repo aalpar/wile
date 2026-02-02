@@ -76,7 +76,9 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 		// Match failed
 		mctx.SetValue(values.FalseValue)
 		mctx.pc++
-		return mctx, nil
+		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
+		// so we record #f in the value register and return no runtime error.
+		return mctx, nil // nolint:errcheck
 	}
 
 	// Match succeeded - store bindings and matcher

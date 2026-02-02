@@ -209,7 +209,7 @@ func TestPlatformFeaturesAdditional(t *testing.T) {
 
 // TestCondExpandWithElse tests cond-expand with else clause
 func TestCondExpandWithElse(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -227,7 +227,7 @@ func TestCondExpandWithElse(t *testing.T) {
 
 // TestCondExpandR7RS tests cond-expand with r7rs feature
 func TestCondExpandR7RS(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -245,7 +245,7 @@ func TestCondExpandR7RS(t *testing.T) {
 
 // TestCondExpandAnd tests cond-expand with and requirement
 func TestCondExpandAnd(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -262,7 +262,7 @@ func TestCondExpandAnd(t *testing.T) {
 
 // TestCondExpandOr tests cond-expand with or requirement
 func TestCondExpandOr(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -279,7 +279,7 @@ func TestCondExpandOr(t *testing.T) {
 
 // TestCondExpandNot tests cond-expand with not requirement
 func TestCondExpandNot(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

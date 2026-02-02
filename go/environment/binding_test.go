@@ -94,7 +94,7 @@ func TestBinding_SchemeString(t *testing.T) {
 }
 
 func TestBinding_IsVoid(t *testing.T) {
-	var nilBinding *Binding = nil
+	var nilBinding *Binding
 	qt.Assert(t, nilBinding.IsVoid(), qt.IsTrue)
 
 	b := NewBinding(values.Void, BindingTypeVariable)

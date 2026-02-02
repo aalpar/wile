@@ -451,7 +451,7 @@ func TestEnvironmentFrame_SchemeString(t *testing.T) {
 }
 
 func TestEnvironmentFrame_IsVoid(t *testing.T) {
-	var env *EnvironmentFrame = nil
+	var env *EnvironmentFrame
 	qt.Assert(t, env.IsVoid(), qt.IsTrue)
 
 	env2 := NewTopLevelEnvironmentFrame()
@@ -528,7 +528,7 @@ func TestEnvironmentFrame_SetLocalValue_NoLocal(t *testing.T) {
 }
 
 func TestEnvironmentFrame_EqualTo_NilAndDifferent(t *testing.T) {
-	var env1 *EnvironmentFrame = nil
+	var env1 *EnvironmentFrame
 	env2 := NewTopLevelEnvironmentFrame()
 
 	// Nil equals nil

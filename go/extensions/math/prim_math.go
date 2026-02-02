@@ -1329,13 +1329,14 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Integer:
 		mc.SetValue(values.NewString(strconv.FormatInt(v.Value, radix)))
 	case *values.Float:
-		if math.IsInf(v.Value, 1) {
+		switch {
+		case math.IsInf(v.Value, 1):
 			mc.SetValue(values.NewString("+inf.0"))
-		} else if math.IsInf(v.Value, -1) {
+		case math.IsInf(v.Value, -1):
 			mc.SetValue(values.NewString("-inf.0"))
-		} else if math.IsNaN(v.Value) {
+		case math.IsNaN(v.Value):
 			mc.SetValue(values.NewString("+nan.0"))
-		} else {
+		default:
 			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
 			s = ensureInexactDecimal(s)
 			mc.SetValue(values.NewString(s))

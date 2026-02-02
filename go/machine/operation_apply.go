@@ -64,7 +64,7 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 // With 1 arg: sets the value (after applying converter if present).
 // After setting the return value, we restore the saved continuation to return
 // to the caller, just like a closure's RestoreContinuation would do.
-func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, args []values.Value) (*MachineContext, error) {
+func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, args []values.Value) (*MachineContext, error) { //nolint:unparam
 	switch len(args) {
 	case 0:
 		// Get: return current value

@@ -175,7 +175,7 @@ func TestExpand(t *testing.T) {
 func TestMatchEdgeCases(t *testing.T) {
 	t.Run("Match with unknown opcode", func(t *testing.T) {
 		// Create a custom opcode that's not recognized
-		type UnknownOpCode struct{}
+		type UnknownOpCode struct{} //nolint:unused
 		variables := map[string]struct{}{}
 		// We can't actually test this without modifying the code to expose unknown opcodes
 		// So we'll skip this test

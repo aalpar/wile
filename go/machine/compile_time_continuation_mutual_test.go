@@ -38,7 +38,7 @@ func TestCompileContext_CompileDefine_MutualRecursion_NotSupported(t *testing.T)
 	// Only self-recursion is enabled by the early binding fix.
 	// For true mutual recursion, use letrec or define both functions with lambda first.
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Attempting mutual recursion with function definition form
@@ -70,7 +70,7 @@ func TestCompileContext_CompileDefine_MutualRecursion_NotSupported(t *testing.T)
 }
 
 func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test self-recursion with function definition form

@@ -103,7 +103,7 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_IsVoid(t *testing.T) {
-	var env *GlobalEnvironmentFrame = nil
+	var env *GlobalEnvironmentFrame
 	qt.Assert(t, env.IsVoid(), qt.IsTrue)
 
 	env2 := newTestGlobalEnvFrame()

@@ -235,7 +235,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			if file == nil {
 				return values.NewForeignErrorf("include: file not found: %q", fn.Value)
 			}
-			defer file.Close()
+			defer file.Close() //nolint:errcheck
 
 			// Create parser for the file
 			reader := bufio.NewReader(file)
@@ -1175,7 +1175,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
 	} else {
 		// Fallback for tests that don't set up the factory
-		libEnv = environment.NewTopLevelEnvironmentFrame()
+		libEnv = environment.NewTopLevelEnvironment().Runtime()
 	}
 
 	lib := NewCompiledLibrary(libName, libEnv)
@@ -1982,7 +1982,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 //
 // Body expressions are expanded before compilation to resolve macros that
 // may have been bound by the enclosing let-syntax/letrec-syntax.
-func (p *CompileTimeContinuation) compileBeginBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileBeginBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair) error { //nolint:unused
 	if syntax.IsSyntaxEmptyList(body) {
 		return values.NewForeignError("expected at least one body expression")
 	}

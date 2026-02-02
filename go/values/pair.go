@@ -252,11 +252,12 @@ func (p *Pair) SchemeString() string {
 func stringValue(o Value) string {
 	q := ""
 	strnr, ok := o.(fmt.Stringer)
-	if ok {
+	switch {
+	case ok:
 		q = strnr.String()
-	} else if o != nil {
+	case o != nil:
 		q = o.SchemeString()
-	} else {
+	default:
 		q = "#<void>"
 	}
 	return q

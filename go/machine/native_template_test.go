@@ -324,7 +324,7 @@ func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Test with nil Pair
-	var nilPair *values.Pair = nil
+	var nilPair *values.Pair
 	result := tpl.DeduplicateLiteral(nilPair)
 	qt.Assert(t, result, qt.Equals, nilPair)
 
@@ -333,7 +333,7 @@ func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
 	qt.Assert(t, result, qt.Equals, values.EmptyList)
 
 	// Test with nil Vector
-	var nilVec *values.Vector = nil
+	var nilVec *values.Vector
 	result = tpl.DeduplicateLiteral(nilVec)
 	qt.Assert(t, result, qt.Equals, nilVec)
 

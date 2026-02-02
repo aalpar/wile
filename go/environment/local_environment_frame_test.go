@@ -117,7 +117,7 @@ func TestLocalEnvironmentFrame_SchemeString(t *testing.T) {
 }
 
 func TestLocalEnvironmentFrame_IsVoid(t *testing.T) {
-	var le *LocalEnvironmentFrame = nil
+	var le *LocalEnvironmentFrame
 	qt.Assert(t, le.IsVoid(), qt.IsTrue)
 
 	le2 := NewLocalEnvironment(0)

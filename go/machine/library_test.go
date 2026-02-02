@@ -88,7 +88,7 @@ func TestLibraryRegistry(t *testing.T) {
 func TestCompiledLibrary(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
 
@@ -110,7 +110,7 @@ func TestImportSet(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a library with exports
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
 	lib.AddExport("foo", "")
@@ -163,7 +163,7 @@ func TestImportSetErrors(t *testing.T) {
 	c := qt.New(t)
 
 	// Create a library with limited exports
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
 	lib.AddExport("foo", "")
@@ -183,7 +183,7 @@ func TestImportSetErrors(t *testing.T) {
 }
 
 func TestCompileDefineLibrary_Basic(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Parse a simple library definition
 	libDef := parseLibrarySyntax(t, env, `
@@ -207,7 +207,7 @@ func TestCompileDefineLibrary_Basic(t *testing.T) {
 }
 
 func TestCompileDefineLibrary_Empty(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Parse an empty library definition
 	libDef := parseLibrarySyntax(t, env, `(define-library (empty lib))`)
@@ -226,7 +226,7 @@ func TestCompileDefineLibrary_Empty(t *testing.T) {
 }
 
 func TestCompileImport_LibraryNotFound(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Set up a library registry (required for imports)
 	registry := machine.NewLibraryRegistry()
@@ -250,7 +250,7 @@ func TestCompileImport_LibraryNotFound(t *testing.T) {
 }
 
 func TestCompileImport_NoRegistry(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	// Intentionally NOT setting up a library registry
 
 	// Parse an import declaration
@@ -271,7 +271,7 @@ func TestCompileImport_NoRegistry(t *testing.T) {
 }
 
 func TestCompileExport_TopLevelError(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Parse an export declaration
 	exportDef := parseLibrarySyntax(t, env, `(export foo bar)`)
@@ -477,7 +477,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	c := qt.New(t)
 
 	// Create source library with runtime and syntax bindings
-	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	srcEnv := environment.NewTopLevelEnvironment().Runtime()
 	libName := machine.NewLibraryName("test", "copylib")
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
@@ -498,7 +498,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	lib.AddExport("bar", "")
 
 	// Create target environment
-	targetEnv := environment.NewTopLevelEnvironmentFrame()
+	targetEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create bindings map (localName -> externalName)
 	bindings := map[string]string{
@@ -528,7 +528,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	c := qt.New(t)
 
 	// Create source library
-	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	srcEnv := environment.NewTopLevelEnvironment().Runtime()
 	libName := machine.NewLibraryName("test", "renamelib")
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
@@ -540,7 +540,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	lib.AddExport("foo", "internal-foo")
 
 	// Create target environment
-	targetEnv := environment.NewTopLevelEnvironmentFrame()
+	targetEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	// Rename on import: "my-foo" -> "foo"
 	bindings := map[string]string{
@@ -561,12 +561,12 @@ func TestCopyLibraryBindingsToEnv_MissingBinding(t *testing.T) {
 	c := qt.New(t)
 
 	// Create library with no bindings
-	srcEnv := environment.NewTopLevelEnvironmentFrame()
+	srcEnv := environment.NewTopLevelEnvironment().Runtime()
 	libName := machine.NewLibraryName("test", "empty")
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 	lib.AddExport("missing", "")
 
-	targetEnv := environment.NewTopLevelEnvironmentFrame()
+	targetEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	bindings := map[string]string{
 		"missing": "missing",
@@ -656,7 +656,7 @@ func TestLibraryNameToFilePath(t *testing.T) {
 // TestLibraryRegistryRegisterAndLookupAdditional tests Register and Lookup
 func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
 	reg := machine.NewLibraryRegistry()
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "mylib"), env)
 	reg.Register(lib) //nolint:errcheck
 

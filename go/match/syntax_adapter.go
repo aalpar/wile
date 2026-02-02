@@ -488,6 +488,8 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 // Captured values from pattern variable substitution preserve their original scopes.
 // Since bindings now store syntax.SyntaxValue directly, this typically just returns
 // the value if it's already syntax.
+//
+//nolint:unparam
 func (p *SyntaxMatcher) capturedValueToSyntax(
 	val values.Value,
 	introScope *syntax.Scope,
@@ -621,6 +623,8 @@ func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, var
 }
 
 // expandEscapedSyntaxTemplate expands a template inside an ellipsis escape form at the syntax level.
+//
+//nolint:unparam
 func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
@@ -955,7 +959,7 @@ func (p *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.Syn
 
 // literalScopesMatch is the standalone version for backward compatibility.
 // It only checks rebinding scopes, not actual bindings.
-func literalScopesMatch(input, pattern *syntax.SyntaxSymbol) bool {
+func literalScopesMatch(input, pattern *syntax.SyntaxSymbol) bool { //nolint:unused
 	if input == nil || pattern == nil {
 		return false
 	}

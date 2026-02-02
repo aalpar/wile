@@ -27,7 +27,7 @@ import (
 
 // Helper to compile Scheme code and return the template
 func compileScheme(t *testing.T, code string) *NativeTemplate {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 
@@ -114,7 +114,7 @@ func TestSourceRecording_Begin(t *testing.T) {
 
 func TestSourceRecording_Call(t *testing.T) {
 	// First define a function, then call it
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Define a simple function
 	rdr := strings.NewReader("(define (id x) x)")
@@ -147,7 +147,7 @@ func TestSourceRecording_Call(t *testing.T) {
 
 func TestSourceRecording_SetBang(t *testing.T) {
 	// Define x first, then set!
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// First compile (define x 1)
 	rdr := strings.NewReader("(define x 1)")
@@ -189,7 +189,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	code := `(define (identity a)
   a)`
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "multiline.scm")
 

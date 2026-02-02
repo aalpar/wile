@@ -309,13 +309,13 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 }
 
 // compileClause compiles a single pattern-template pair using the default ellipsis.
-func compileClause(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
+func compileClause(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) { //nolint:unused
 	return compileClauseWithEllipsis(ctx, env, pattern, template, literals, match.DefaultEllipsis)
 }
 
 // compileClauseWithEllipsis compiles a single pattern-template pair with a custom ellipsis.
 // The env parameter is used to resolve free identifiers to their definition-time bindings.
-func compileClauseWithEllipsis(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) {
+func compileClauseWithEllipsis(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) { //nolint:unused
 	return compileClauseWithEllipsisAndLiterals(ctx, env, pattern, template, literals, nil, ellipsis)
 }
 
@@ -388,7 +388,7 @@ func compileClauseWithEllipsisAndLiterals(
 // bindings:
 // - For global bindings: stores GlobalIndex for cross-library hygiene
 // - For local bindings: stores scopes so the identifier resolves to definition-time binding
-func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution) {
+func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution) { //nolint:unused
 	collectFreeIdentifiersWithEllipsis(env, template, patternVars, freeIds, match.DefaultEllipsis)
 }
 
@@ -564,6 +564,8 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 // if an input symbol has the same name but different scopes (shadowed),
 // it won't match the pattern literal.
 // R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
+//
+//nolint:unparam
 func extractLiteralsWithSyntax(
 	literalsList *syntax.SyntaxPair,
 	literals map[string]struct{},
@@ -598,7 +600,7 @@ func extractLiteralsWithSyntax(
 }
 
 // createTransformerClosure creates a closure that implements the transformer
-func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*MachineClosure, error) {
+func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*MachineClosure, error) { //nolint:unparam
 	// Create a native template that implements the transformer logic
 	// This will be called with the input form on the eval stack
 

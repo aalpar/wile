@@ -2020,7 +2020,7 @@ func TestSimpleToken_IsVoid(t *testing.T) {
 	c.Assert(st.IsVoid(), qt.IsFalse)
 
 	// Nil token
-	var nilTok *SimpleToken = nil
+	var nilTok *SimpleToken
 	c.Assert(nilTok.IsVoid(), qt.IsTrue)
 }
 

@@ -62,11 +62,12 @@ func (p *ArrayList) Append(vs Value) Value {
 		return NewArrayList(vs)
 	}
 	q := p.Copy()
-	if IsVoid(vs) {
+	switch {
+	case IsVoid(vs):
 		*q = append(*q, Void)
-	} else if IsEmptyList(vs) {
+	case IsEmptyList(vs):
 		*q = append(*q, EmptyList)
-	} else {
+	default:
 		*q = append(*q, vs)
 	}
 	return q

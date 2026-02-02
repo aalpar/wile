@@ -26,7 +26,7 @@ import (
 // Tests moved from coverage_additional_test.go
 // TestExtractLiteralsFromSyntaxRules tests extractLiterals function via syntax-rules
 func TestExtractLiteralsFromSyntaxRules(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

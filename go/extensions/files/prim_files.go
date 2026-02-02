@@ -120,6 +120,8 @@ func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
 
 // callWithFile is a helper for call-with-input-file and call-with-output-file.
 // Takes filename at index 0, proc at index 1. Opens file, creates port, calls proc.
+//
+//nolint:unparam
 func callWithFile(
 	ctx context.Context,
 	mc *machine.MachineContext,
@@ -181,7 +183,7 @@ func PrimCallWithOutputFile(ctx context.Context, mc *machine.MachineContext) err
 }
 
 // runThunk runs a thunk in a sub-context and returns the result.
-func runThunk(ctx context.Context, mc *machine.MachineContext, thunk *machine.MachineClosure) error {
+func runThunk(ctx context.Context, mc *machine.MachineContext, thunk *machine.MachineClosure) error { //nolint:unparam
 	sub := mc.NewSubContext()
 	_, err := sub.Apply(thunk)
 	if err != nil {

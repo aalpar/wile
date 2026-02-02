@@ -95,12 +95,13 @@ func PrimChannelReceive(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	v, ok := ch.Receive()
-	if !ok {
+	switch {
+	case !ok:
 		// Channel is closed
 		mc.SetValue(values.Void)
-	} else if v == nil {
+	case v == nil:
 		mc.SetValue(values.Void)
-	} else {
+	default:
 		mc.SetValue(v)
 	}
 	return nil
