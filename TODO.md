@@ -79,11 +79,7 @@ Code Cleanup
 ---
 
 ### Auxiliary Syntax Exports
-- [ ] **Issue:** R7RS requires `(scheme base)` to export `else`, `=>`, `...`, `_` as auxiliary syntax
-- [ ] **Current State:** These are registered as compile-time bindings in `specialforms.go` (lines 44-51)
-- [ ] **Problem:** Export mechanism expects runtime `values.Value` objects; these are pattern literals
-- [ ] **Required:** Implement auxiliary syntax binding mechanism that allows library exports of non-value bindings
-- [ ] **Note:** Pattern matching for `else` and `=>` in `cond`/`case` works correctly; only export is broken
+- [x] **Resolved:** `CopyLibraryBindingsToEnvAtPhase` now propagates compile-phase bindings (auxiliary syntax) to the compile phase of the target environment for defense-in-depth. Auxiliary syntax (`else`, `=>`, `...`, `_`) is copied to both runtime phase 0 and compile phase (targetPhase+2).
 
 ---
 
@@ -446,7 +442,7 @@ Library Status
 
 | Library               | Status | Notes |
 |-----------------------|--------|-------|
-| scheme/base           | ~95%   | Missing: auxiliary syntax export mechanism |
+| scheme/base           | ~98%   | Auxiliary syntax exports resolved |
 | scheme/char           | 100%   | |
 | scheme/file           | 100%   | |
 | scheme/write          | 100%   | |

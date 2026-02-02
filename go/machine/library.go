@@ -313,29 +313,36 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 //   - targetPhase < 0: For-template import. Bindings shifted to negative phase
 //     (used for generating code that will run at a lower phase).
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
+	// Source environments to search for exported bindings, in priority order.
+	// Phase 0 (runtime) holds variables, phase 1 (expand) holds syntax bindings
+	// from define-syntax, phase 2 (compile) holds auxiliary syntax (else, =>, ..., _).
+	sourceEnvs := []struct {
+		env   *environment.EnvironmentFrame
+		phase int
+	}{
+		{lib.Env, environment.PhaseRuntime},
+		{lib.Env.Expand(), environment.PhaseExpand},
+		{lib.Env.Compile(), environment.PhaseCompile},
+	}
+
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
 		if internalName == "" {
 			internalName = externalName
 		}
 
-		// Get the binding from the library's environment
-		// First check the runtime environment, then the expand environment for syntax bindings,
-		// then the compile environment for auxiliary syntax (else, =>)
+		// Search source environments in phase order for the binding.
 		libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
-		libBinding := lib.Env.GetBinding(libSym)
-		if libBinding == nil {
-			// Syntax bindings (define-syntax) are stored in the expand environment
-			expandEnv := lib.Env.Expand()
-			if expandEnv != nil {
-				libBinding = expandEnv.GetBinding(libSym)
+		var libBinding *environment.Binding
+		sourcePhase := 0
+		for _, src := range sourceEnvs {
+			if src.env == nil {
+				continue
 			}
-		}
-		if libBinding == nil {
-			// Auxiliary syntax (else, =>) are stored in the compile environment
-			compileEnv := lib.Env.Compile()
-			if compileEnv != nil {
-				libBinding = compileEnv.GetBinding(libSym)
+			libBinding = src.env.GetBinding(libSym)
+			if libBinding != nil {
+				sourcePhase = src.phase
+				break
 			}
 		}
 		if libBinding == nil {
@@ -343,11 +350,9 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Get the target environment at the specified phase
+		// Create binding in the target at the base phase.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
 		localSym := phaseEnv.InternSymbol(values.NewSymbol(localName))
-
-		// Create binding in the target phase environment
 		_, _ = phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
 		globalIdx := phaseEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
@@ -357,15 +362,17 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			}
 		}
 
-		// If it's a syntax binding, also copy to the next phase up (for expansion)
-		// This ensures macros are available during expansion at targetPhase+1
-		if libBinding.BindingType() == environment.BindingTypeSyntax {
-			expandPhaseEnv := targetEnv.AtPhase(targetPhase + 1)
-			expandLocalSym := expandPhaseEnv.InternSymbol(values.NewSymbol(localName))
-			_, _ = expandPhaseEnv.MaybeCreateOwnGlobalBinding(expandLocalSym, environment.BindingTypeSyntax)
-			expandIdx := expandPhaseEnv.GetGlobalIndex(expandLocalSym)
-			if expandIdx != nil {
-				_ = expandPhaseEnv.SetOwnGlobalValue(expandIdx, libBinding.Value())
+		// Propagate to the source phase in the target so the binding is available
+		// in the same phase it originated from. Syntax bindings (phase 1) need to
+		// be in the expand phase for macro expansion; compile-phase bindings
+		// (auxiliary syntax, phase 2) need to be in the compile phase.
+		if sourcePhase > 0 {
+			propagateEnv := targetEnv.AtPhase(targetPhase + sourcePhase)
+			propagateSym := propagateEnv.InternSymbol(values.NewSymbol(localName))
+			_, _ = propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
+			if propagateIdx != nil {
+				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
 			}
 		}
 	}
