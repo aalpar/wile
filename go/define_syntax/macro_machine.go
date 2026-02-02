@@ -15,8 +15,8 @@
 package define_syntax
 
 import (
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // LiteralIndex is the index of a literal value in the MacroMachine's literals pool.

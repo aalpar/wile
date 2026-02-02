@@ -17,8 +17,8 @@ package machine
 import (
 	"context"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CompileQuasisyntax compiles the (quasisyntax template) form.

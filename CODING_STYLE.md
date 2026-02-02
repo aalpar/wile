@@ -2,6 +2,10 @@
 
 This document describes the coding conventions used throughout the Wile Scheme interpreter codebase.
 
+## Functions
+
+Never write single-line functions. Always spread function bodies across multiple lines, even for simple implementations.
+
 ## Return Values
 
 | Letter | Usage                                                                                                                                                                                          |
@@ -50,10 +54,12 @@ func NewCons(car, cdr Value) *Pair {
 
 | Name | Usage |
 |------|-------|
-| `i`, `j` | Loop counters |
+| `i`, `j`, `k` | Loop counters |
 | `n` | Count, length, or bytes read |
 | `l` | Length variable |
+| `k` | Length parameter or working value length |
 | `v` | Temporary value in type switches |
+| `pr` | Pair |
 | `ok` | Boolean result from type assertions |
 | `q` | Return value |
 | `err` | Error values |
@@ -219,9 +225,10 @@ Prefer in this order:
 1. Type declaration
 2. Interface assertion checks
 3. Constructor(s)
-4. Accessor methods
-5. Operator methods
-6. Interface implementation methods
+4. Helpers, ordered by least dependant first
+5. Accessor methods
+6. Operator methods
+7. Interface implementation methods
 
 ```go
 // 1. Type declaration
@@ -344,18 +351,20 @@ Each package contains a `CLAUDE.md` file with:
 
 ## Import Organization
 
-Group imports with internal packages first:
+Group imports with standard library first, then internal packages, then third-party:
 
 ```go
 import (
-    "wile/environment"
-    "wile/syntax"
-    "wile/values"
-
     "context"
     "fmt"
     "io"
     "strings"
+
+    "github.com/aalpar/wile/go/environment"
+    "github.com/aalpar/wile/go/syntax"
+    "github.com/aalpar/wile/go/values"
+
+    "github.com/jessevdk/go-flags"
 )
 ```
 
@@ -773,6 +782,18 @@ func NewTemporaryVariableName() string {
     return "__T_" + base32Encode(counter)
 }
 ```
+
+### Builtin Shadowing
+
+Never use Go builtin function names as local variables or parameters. Use these abbreviations:
+
+| Builtin | Use Instead | Example |
+|---------|-------------|---------|
+| `real`  | `rel`       | `rel := real(v.Value)` |
+| `imag`  | `iam`       | `iam := imag(v.Value)` |
+| `copy`  | `cpy`       | `cpy := obj.Copy()` |
+
+This applies to local variables, parameters, and named return values — not struct fields.
 
 ### Avoid
 

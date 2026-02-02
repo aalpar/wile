@@ -22,7 +22,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -2020,7 +2020,7 @@ func TestSimpleToken_IsVoid(t *testing.T) {
 	c.Assert(st.IsVoid(), qt.IsFalse)
 
 	// Nil token
-	var nilTok *SimpleToken = nil
+	var nilTok *SimpleToken
 	c.Assert(nilTok.IsVoid(), qt.IsTrue)
 }
 

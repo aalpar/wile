@@ -19,8 +19,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"wile/registry/testhelpers"
-	"wile/values"
+	"github.com/aalpar/wile/go/registry/testhelpers"
+	"github.com/aalpar/wile/go/values"
 )
 
 // TestCoreArithmetic tests basic arithmetic primitives.

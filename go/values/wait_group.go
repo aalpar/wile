@@ -40,45 +40,45 @@ func NewWaitGroup() *WaitGroup {
 }
 
 // ID returns the WaitGroup's unique identifier
-func (wg *WaitGroup) ID() uint64 {
-	return wg.id
+func (p *WaitGroup) ID() uint64 {
+	return p.id
 }
 
 // Add adds delta to the counter
-func (wg *WaitGroup) Add(delta int) {
-	wg.wg.Add(delta)
+func (p *WaitGroup) Add(delta int) {
+	p.wg.Add(delta)
 }
 
 // Done decrements the counter by one
-func (wg *WaitGroup) Done() {
-	wg.wg.Done()
+func (p *WaitGroup) Done() {
+	p.wg.Done()
 }
 
 // Wait blocks until the counter is zero
-func (wg *WaitGroup) Wait() {
-	wg.wg.Wait()
+func (p *WaitGroup) Wait() {
+	p.wg.Wait()
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the wait group is nil.
-func (wg *WaitGroup) IsVoid() bool {
-	return wg == nil
+func (p *WaitGroup) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the wait groups are the same object.
-func (wg *WaitGroup) EqualTo(v Value) bool {
+func (p *WaitGroup) EqualTo(v Value) bool {
 	other, ok := v.(*WaitGroup)
 	if !ok {
 		return false
 	}
-	return wg == other
+	return p == other
 }
 
 // SchemeString returns the Scheme representation of the wait group.
-func (wg *WaitGroup) SchemeString() string {
-	if wg == nil {
+func (p *WaitGroup) SchemeString() string {
+	if p == nil {
 		return "#<wait-group:void>"
 	}
-	return fmt.Sprintf("#<wait-group id=%d>", wg.id)
+	return fmt.Sprintf("#<wait-group id=%d>", p.id)
 }

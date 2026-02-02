@@ -23,9 +23,9 @@ import (
 	"runtime"
 	"time"
 
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // currentThread stores the thread for the current goroutine

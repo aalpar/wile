@@ -17,7 +17,7 @@ package machine
 import (
 	"context"
 
-	"wile/environment"
+	"github.com/aalpar/wile/go/environment"
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.

@@ -52,8 +52,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Error messages returned by the tokenizer.
@@ -397,13 +397,13 @@ func (p *Tokenizer) Next() (Token, error) {
 		val := p.value
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
 		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
-		return q, nil
+		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
 }
 
 // continueLineComment handles Body and End phases for line comments
-func (p *Tokenizer) continueLineComment() Token {
+func (p *Tokenizer) continueLineComment() Token { //nolint:unused
 	p.state = TokenizerStateLineCommentBody
 	// Read comment content until newline or EOF
 	for p.err == nil && !isLineEnding(p.curr()) {
@@ -461,7 +461,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 }
 
 // isCommentToken returns true if the state represents a comment token
-func isCommentToken(state TokenizerState) bool {
+func isCommentToken(state TokenizerState) bool { //nolint:unused
 	switch state { // nolint:exhaustive
 	case TokenizerStateLineCommentBody, TokenizerStateBlockCommentBody, TokenizerStateDatumCommentBegin:
 		return true
@@ -470,7 +470,7 @@ func isCommentToken(state TokenizerState) bool {
 }
 
 // isSkippableCommentToken returns true if the state represents a comment token
-func isSkippableCommentToken(state TokenizerState) bool {
+func isSkippableCommentToken(state TokenizerState) bool { //nolint:unused
 	switch state { // nolint:exhaustive
 	case TokenizerStateLineCommentBody, TokenizerStateBlockCommentBody:
 		return true
@@ -729,7 +729,7 @@ func (p *Tokenizer) readLineCommentOrPragma() {
 
 // readBlockComment reads a block comment #|...|# with nesting support.
 // Called after the opening #| has been consumed.
-func (p *Tokenizer) readBlockComment() {
+func (p *Tokenizer) readBlockComment() { //nolint:unused
 	depth := 0
 	for p.err == nil {
 		switch {
@@ -1738,7 +1738,8 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	}
 	// Check for decimal part, rational part, or exponent
-	if isDot(p.curr()) {
+	switch {
+	case isDot(p.curr()):
 		// Decimal: +3.5i
 		p.next()
 		if p.err != nil {
@@ -1754,7 +1755,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		if p.err != nil {
 			return
 		}
-	} else if p.curr() == '/' {
+	case p.curr() == '/':
 		// Rational: +3/4i
 		p.next()
 		if p.err != nil {
@@ -1768,7 +1769,8 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		if p.err != nil {
 			return
 		}
-	} else {
+	default:
+		// Exponent: +3e10i or just integer +3i
 		p.mayReadExponent(r) //nolint:errcheck
 		if p.err != nil {
 			return
@@ -1862,7 +1864,7 @@ func (p *Tokenizer) readBaseNInteger(r, maxn int) (int64, int) {
 	return q, n
 }
 
-func (p *Tokenizer) readSignedBaseNInteger(r, maxn int) (int64, int) {
+func (p *Tokenizer) readSignedBaseNInteger(r, maxn int) (int64, int) { //nolint:unused
 	if !isExplicitSign(p.curr()) {
 		return 0, 0
 	}
@@ -1912,7 +1914,7 @@ func (p *Tokenizer) readUnsignedBaseNNumber(r, maxn int) int {
 	return n
 }
 
-func (p *Tokenizer) readSignedBaseNNumber(r, maxn int) int {
+func (p *Tokenizer) readSignedBaseNNumber(r, maxn int) int { //nolint:unused
 	if !isExplicitSign(p.curr()) {
 		return 0
 	}
@@ -2313,7 +2315,7 @@ func isExtendedExponentMarkerForRadix(c rune) bool {
 }
 
 // isExponentMarker returns true if c is 'e' or 'E'.
-func isExponentMarker(c rune) bool {
+func isExponentMarker(c rune) bool { //nolint:unused
 	return c == 'e' || c == 'E'
 }
 

@@ -35,67 +35,67 @@ func NewRecord(rt *RecordType, fields []Value) *Record {
 }
 
 // RecordType returns the record's type descriptor.
-func (r *Record) RecordType() *RecordType {
-	return r.recordType
+func (p *Record) RecordType() *RecordType {
+	return p.recordType
 }
 
 // Field returns the value at the given field index.
-func (r *Record) Field(index int) Value {
-	if index < 0 || index >= len(r.fields) {
+func (p *Record) Field(index int) Value {
+	if index < 0 || index >= len(p.fields) {
 		return nil
 	}
-	return r.fields[index]
+	return p.fields[index]
 }
 
 // SetField sets the value at the given field index.
-func (r *Record) SetField(index int, value Value) {
-	if index >= 0 && index < len(r.fields) {
-		r.fields[index] = value
+func (p *Record) SetField(index int, value Value) {
+	if index >= 0 && index < len(p.fields) {
+		p.fields[index] = value
 	}
 }
 
 // FieldByName returns the value of the field with the given name.
 // Returns nil if the field is not found.
-func (r *Record) FieldByName(name *Symbol) Value {
-	index := r.recordType.FieldIndex(name)
+func (p *Record) FieldByName(name *Symbol) Value {
+	index := p.recordType.FieldIndex(name)
 	if index < 0 {
 		return nil
 	}
-	return r.fields[index]
+	return p.fields[index]
 }
 
 // SetFieldByName sets the value of the field with the given name.
 // Does nothing if the field is not found.
-func (r *Record) SetFieldByName(name *Symbol, value Value) {
-	index := r.recordType.FieldIndex(name)
+func (p *Record) SetFieldByName(name *Symbol, value Value) {
+	index := p.recordType.FieldIndex(name)
 	if index >= 0 {
-		r.fields[index] = value
+		p.fields[index] = value
 	}
 }
 
 // IsVoid returns true if the record is nil.
-func (r *Record) IsVoid() bool {
-	return r == nil
+func (p *Record) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo implements structural equality for records.
 // Two records are equal if they have the same type and all fields are equal.
-func (r *Record) EqualTo(v Value) bool {
+func (p *Record) EqualTo(v Value) bool {
 	other, ok := v.(*Record)
 	if !ok {
 		return false
 	}
-	if r == nil || other == nil {
-		return r == other
+	if p == nil || other == nil {
+		return p == other
 	}
-	if r.recordType != other.recordType {
+	if p.recordType != other.recordType {
 		return false
 	}
-	if len(r.fields) != len(other.fields) {
+	if len(p.fields) != len(other.fields) {
 		return false
 	}
-	for i := range r.fields {
-		if !EqualTo(r.fields[i], other.fields[i]) {
+	for i := range p.fields {
+		if !EqualTo(p.fields[i], other.fields[i]) {
 			return false
 		}
 	}
@@ -103,12 +103,12 @@ func (r *Record) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme external representation of the record.
-func (r *Record) SchemeString() string {
-	if r == nil {
+func (p *Record) SchemeString() string {
+	if p == nil {
 		return "#<record>"
 	}
-	if r.recordType == nil {
+	if p.recordType == nil {
 		return "#<record>"
 	}
-	return fmt.Sprintf("#<record:%s>", r.recordType.Name().SchemeString())
+	return fmt.Sprintf("#<record:%s>", p.recordType.Name().SchemeString())
 }

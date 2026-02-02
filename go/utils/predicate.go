@@ -14,7 +14,7 @@
 
 package utils
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // BoolToBoolean converts a Go bool to a Scheme boolean value.
 func BoolToBoolean(b bool) *values.Boolean {

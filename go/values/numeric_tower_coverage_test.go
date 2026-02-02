@@ -102,11 +102,12 @@ func TestNumericTower_Add(t *testing.T) {
 				})
 
 				// All type combinations should succeed
-				if result.panicked {
+				switch {
+				case result.panicked:
 					t.Errorf("PANIC (BUG - missing type case): %s", result.panicMsg)
-				} else if result.isNil {
+				case result.isNil:
 					t.Errorf("NIL (BUG - should panic or succeed)")
-				} else {
+				default:
 					c.Assert(result.success, qt.IsTrue)
 				}
 			})
@@ -128,11 +129,12 @@ func TestNumericTower_Subtract(t *testing.T) {
 					return receiver.value.Subtract(operand.value)
 				})
 
-				if result.panicked {
+				switch {
+				case result.panicked:
 					t.Errorf("PANIC (BUG - missing type case): %s", result.panicMsg)
-				} else if result.isNil {
+				case result.isNil:
 					t.Errorf("NIL (BUG - should panic or succeed)")
-				} else {
+				default:
 					c.Assert(result.success, qt.IsTrue)
 				}
 			})
@@ -154,11 +156,12 @@ func TestNumericTower_Multiply(t *testing.T) {
 					return receiver.value.Multiply(operand.value)
 				})
 
-				if result.panicked {
+				switch {
+				case result.panicked:
 					t.Errorf("PANIC (BUG - missing type case): %s", result.panicMsg)
-				} else if result.isNil {
+				case result.isNil:
 					t.Errorf("NIL (BUG - should panic or succeed)")
-				} else {
+				default:
 					c.Assert(result.success, qt.IsTrue)
 				}
 			})
@@ -180,11 +183,12 @@ func TestNumericTower_Divide(t *testing.T) {
 					return receiver.value.Divide(operand.value)
 				})
 
-				if result.panicked {
+				switch {
+				case result.panicked:
 					t.Errorf("PANIC (BUG - missing type case): %s", result.panicMsg)
-				} else if result.isNil {
+				case result.isNil:
 					t.Errorf("NIL (BUG - should panic or succeed)")
-				} else {
+				default:
 					c.Assert(result.success, qt.IsTrue)
 				}
 			})
@@ -239,13 +243,14 @@ func TestNumericTower_DivideByZero(t *testing.T) {
 				})
 
 				// Division by zero should always panic, never return nil
-				if result.isNil {
+				switch {
+				case result.isNil:
 					t.Logf("NIL (BUG) - should panic with ErrDivisionByZero")
 					nilCases = append(nilCases, name)
-				} else if result.panicked {
+				case result.panicked:
 					// Expected behavior
 					t.Logf("PANIC (correct): %s", result.panicMsg)
-				} else if result.success {
+				case result.success:
 					// This might happen for Float/BigFloat with IEEE infinity
 					t.Logf("SUCCESS (IEEE infinity?)")
 				}
@@ -290,11 +295,12 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 				result := tryOperation(func() Number {
 					return op.op(receiver.value, operand.value)
 				})
-				if result.success {
+				switch {
+				case result.success:
 					row += "\t✓"
-				} else if result.isNil {
+				case result.isNil:
 					row += "\tNIL"
-				} else {
+				default:
 					row += "\tPAN"
 				}
 			}

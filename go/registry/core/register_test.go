@@ -19,7 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 func TestBuilder_AddToRegistry(t *testing.T) {

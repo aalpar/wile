@@ -15,7 +15,7 @@
 package core
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // compileTimeBindings are names that exist only at compile time.

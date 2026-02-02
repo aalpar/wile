@@ -43,9 +43,9 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
@@ -87,7 +87,7 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 
 	// Check scope compatibility for hygiene
 	bindingScopes := binding.Scopes()
-	if bindingScopes == nil || len(bindingScopes) == 0 {
+	if len(bindingScopes) == 0 {
 		// Binding has no scopes (user code) - matches any use
 		return true
 	}

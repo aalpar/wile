@@ -427,13 +427,13 @@ const (
 )
 
 // ParseReal parses a real number component.
-func (n *NumberSubTokenizer) ParseReal() (*NumberPart, error) {
+func (p *NumberSubTokenizer) ParseReal() (*NumberPart, error) {
     // Unified logic for parsing real numbers
     // Uses the quasi-sub-token helpers
 }
 
 // ParseComplex parses a complex number.
-func (n *NumberSubTokenizer) ParseComplex() (*NumberPart, *NumberPart, error) {
+func (p *NumberSubTokenizer) ParseComplex() (*NumberPart, *NumberPart, error) {
     // Parses real part, then optional imaginary part
 }
 ```

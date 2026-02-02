@@ -19,7 +19,7 @@ import (
 	"os"
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -31,7 +31,7 @@ func TestDeleteFile(t *testing.T) {
 	f.Close()             //nolint:errcheck
 	path := f.Name()
 
-	code := fmt.Sprintf(`(begin (delete-file "%s") #t)`, path)
+	code := fmt.Sprintf(`(begin (delete-file %q) #t)`, path)
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
@@ -60,7 +60,7 @@ func TestLoad(t *testing.T) {
 	f.Close()                 //nolint:errcheck
 	defer os.Remove(f.Name()) //nolint:errcheck
 
-	code := fmt.Sprintf(`(load "%s")`, f.Name())
+	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
@@ -73,7 +73,7 @@ func TestLoadWithMultipleExpressions(t *testing.T) {
 	f.Close()                                              //nolint:errcheck
 	defer os.Remove(f.Name())                              //nolint:errcheck
 
-	code := fmt.Sprintf(`(load "%s")`, f.Name())
+	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// Should return the value of the last expression
@@ -87,7 +87,7 @@ func TestLoadReturnsLastValue(t *testing.T) {
 	f.Close()                 //nolint:errcheck
 	defer os.Remove(f.Name()) //nolint:errcheck
 
-	code := fmt.Sprintf(`(load "%s")`, f.Name())
+	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(3))
@@ -99,7 +99,7 @@ func TestLoadWithEmptyFile(t *testing.T) {
 	f.Close()                 //nolint:errcheck
 	defer os.Remove(f.Name()) //nolint:errcheck
 
-	code := fmt.Sprintf(`(load "%s")`, f.Name())
+	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// Empty file should return void
@@ -125,7 +125,7 @@ func TestLoadDefinesVariableInTopLevel(t *testing.T) {
 	f.Close()                               //nolint:errcheck
 	defer os.Remove(f.Name())               //nolint:errcheck
 
-	code := fmt.Sprintf(`(load "%s")`, f.Name())
+	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// define returns void
@@ -140,7 +140,7 @@ func TestLoadAccessesTopLevelEnvironment(t *testing.T) {
 	f.Close()                          //nolint:errcheck
 	defer os.Remove(f.Name())          //nolint:errcheck
 
-	code := fmt.Sprintf(`(begin (define global-var 32) (load "%s"))`, f.Name())
+	code := fmt.Sprintf(`(begin (define global-var 32) (load %q))`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))

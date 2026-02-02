@@ -101,8 +101,7 @@ func IsSyntaxList(v SyntaxValue) bool {
 	if v == nil {
 		return false
 	}
-	switch pr := v.(type) {
-	case *SyntaxPair:
+	if pr, ok := v.(*SyntaxPair); ok {
 		return pr.IsList()
 	}
 	return false

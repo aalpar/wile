@@ -22,12 +22,12 @@ import (
 	"strings"
 	"testing"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	schemertime "wile/runtime"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	schemertime "github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

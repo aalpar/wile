@@ -18,14 +18,14 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestMachine_Operations(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironmentFrame()
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
@@ -36,7 +36,7 @@ func TestMachine_Operations(t *testing.T) {
 }
 
 func TestMachineContinuation_Parent(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	parent := NewMachineContinuation(nil, nil, env)
 	child := NewMachineContinuation(parent, nil, env)
@@ -46,14 +46,14 @@ func TestMachineContinuation_Parent(t *testing.T) {
 }
 
 func TestMachineContinuation_EnvironmentFrame(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.EnvironmentFrame(), qt.Equals, env)
 }
 
 func TestMachineContinuation_Template(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -61,7 +61,7 @@ func TestMachineContinuation_Template(t *testing.T) {
 }
 
 func TestMachineContinuation_SetPC(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.PC(), qt.Equals, 0)
@@ -71,7 +71,7 @@ func TestMachineContinuation_SetPC(t *testing.T) {
 }
 
 func TestMachineContinuation_PushValues(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, len(cont.value), qt.Equals, 0)
@@ -86,7 +86,7 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 }
 
 func TestMachineContinuation_Copy(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	parent := NewMachineContinuation(nil, nil, env)
@@ -95,24 +95,24 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	cont.evals.Push(values.NewInteger(42))
 	cont.value = NewMultipleValues(values.NewInteger(100))
 
-	copy := cont.Copy()
+	cpy := cont.Copy()
 
 	// Verify copy is a different object
-	qt.Assert(t, copy != cont, qt.IsTrue)
+	qt.Assert(t, cpy != cont, qt.IsTrue)
 	// Verify fields match
-	qt.Assert(t, copy.parent, qt.Equals, cont.parent)
-	qt.Assert(t, copy.env, qt.Equals, cont.env)
-	qt.Assert(t, copy.template, qt.Equals, cont.template)
-	qt.Assert(t, copy.pc, qt.Equals, cont.pc)
+	qt.Assert(t, cpy.parent, qt.Equals, cont.parent)
+	qt.Assert(t, cpy.env, qt.Equals, cont.env)
+	qt.Assert(t, cpy.template, qt.Equals, cont.template)
+	qt.Assert(t, cpy.pc, qt.Equals, cont.pc)
 	// Verify value slice is copied
-	qt.Assert(t, copy.value[0], values.SchemeEquals, cont.value[0])
-	qt.Assert(t, &copy.value[0] != &cont.value[0], qt.IsTrue)
+	qt.Assert(t, cpy.value[0], values.SchemeEquals, cont.value[0])
+	qt.Assert(t, &cpy.value[0] != &cont.value[0], qt.IsTrue)
 	// Verify evals stack is copied
-	qt.Assert(t, copy.evals != cont.evals, qt.IsTrue)
+	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }
 
 func TestMachineContinuation_SchemeString(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.SchemeString(), qt.Equals, "<machine-continuation %0>")
@@ -122,7 +122,7 @@ func TestMachineContinuation_SchemeString(t *testing.T) {
 }
 
 func TestMachineContinuation_IsVoid(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.IsVoid(), qt.IsFalse)
@@ -132,7 +132,7 @@ func TestMachineContinuation_IsVoid(t *testing.T) {
 }
 
 func TestMachineContinuation_EqualTo(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont1 := NewMachineContinuation(nil, tpl, env)
@@ -183,10 +183,11 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestMachineContinuationMethodsAdditional tests MachineContinuation methods
 func TestMachineContinuationMethodsAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
-	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+	tpl.operations = append(tpl.operations,
+		NewOperationLoadVoid(),
+		NewOperationRestoreContinuation())
 
 	cont := NewMachineContinuation(nil, tpl, env)
 
@@ -204,7 +205,7 @@ func TestMachineContinuationMethodsAdditional(t *testing.T) {
 
 // TestMachineContinuationFromMachineContext tests creating continuation from context
 func TestMachineContinuationFromMachineContext(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.operations = append(tpl.operations,
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(42))),
@@ -222,7 +223,7 @@ func TestMachineContinuationFromMachineContext(t *testing.T) {
 
 // TestMachineContinuationMethods tests MachineContinuation methods
 func TestMachineContinuationMethods(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 
@@ -235,7 +236,7 @@ func TestMachineContinuationMethods(t *testing.T) {
 
 // TestMachineContinuationEqualToDifferentTemplates tests continuation equality with different templates
 func TestMachineContinuationEqualToDifferentTemplates(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)

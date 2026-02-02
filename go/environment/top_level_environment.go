@@ -15,11 +15,14 @@
 package environment
 
 import (
+	"fmt"
 	"sync"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
+
+var _ values.Value = (*TopLevelEnvironment)(nil)
 
 // TopLevelEnvironment represents a complete Wile VM instance.
 // It owns per-instance symbol interning, syntax interning, phase registry,
@@ -36,6 +39,9 @@ import (
 //   - R7RS §6.5 symbol identity: "Two symbols are identical (in the sense of eq?)
 //     if and only if their names are spelled the same way."
 type TopLevelEnvironment struct {
+	// Name is an optional descriptive name (e.g., "interaction-environment").
+	Name string
+
 	// symbolInterns is the per-instance symbol interning table.
 	symbolInterns   map[values.Symbol]*values.Symbol
 	symbolInternsMu sync.RWMutex
@@ -230,6 +236,28 @@ func (p *TopLevelEnvironment) SyntaxInternCount() int {
 	p.syntaxInternsMu.RLock()
 	defer p.syntaxInternsMu.RUnlock()
 	return len(p.syntaxInterns)
+}
+
+// IsVoid returns true if the environment is nil.
+func (p *TopLevelEnvironment) IsVoid() bool {
+	return p == nil
+}
+
+// EqualTo returns true if the environments are the same object.
+func (p *TopLevelEnvironment) EqualTo(v values.Value) bool {
+	other, ok := v.(*TopLevelEnvironment)
+	if !ok {
+		return false
+	}
+	return p == other
+}
+
+// SchemeString returns the Scheme representation of the environment.
+func (p *TopLevelEnvironment) SchemeString() string {
+	if p.Name != "" {
+		return fmt.Sprintf("#<environment %s>", p.Name)
+	}
+	return "#<environment>"
 }
 
 // newGlobalEnvironmentFrameWithTopLevel creates a new GlobalEnvironmentFrame

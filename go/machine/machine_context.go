@@ -19,9 +19,9 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (
@@ -39,7 +39,7 @@ type ErrContinuationEscape struct {
 	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
 }
 
-func (e *ErrContinuationEscape) Error() string {
+func (p *ErrContinuationEscape) Error() string {
 	return "continuation escape"
 }
 

@@ -52,11 +52,14 @@ func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
 
 func (p *CharacterOutputPort) Close() error {
 	defer func() { p.closed = true }()
-	p.Flush()
+	flushErr := p.Flush()
 	if p.clsr != nil {
-		return p.clsr.Close()
+		closeErr := p.clsr.Close()
+		if closeErr != nil {
+			return closeErr
+		}
 	}
-	return nil
+	return flushErr
 }
 
 func (p *CharacterOutputPort) IsClosed() bool {

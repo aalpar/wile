@@ -17,7 +17,7 @@ package machine
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ErrPromptAbort signals an abort to the nearest continuation prompt matching
@@ -31,6 +31,6 @@ type ErrPromptAbort struct {
 	Values []values.Value
 }
 
-func (e *ErrPromptAbort) Error() string {
-	return fmt.Sprintf("abort to prompt %s", e.Tag.SchemeString())
+func (p *ErrPromptAbort) Error() string {
+	return fmt.Sprintf("abort to prompt %s", p.Tag.SchemeString())
 }

@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ProgramStartTime is used for current-jiffy to measure elapsed time.

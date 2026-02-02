@@ -16,7 +16,7 @@
 package core
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 func addVectors(r *registry.Registry) error {

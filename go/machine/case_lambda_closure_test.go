@@ -18,14 +18,14 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestCaseLambdaClosure_FindMatchingClause(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create closures with different arities
 	// Closure 1: fixed arity of 1 parameter
@@ -65,7 +65,7 @@ func TestCaseLambdaClosure_FindMatchingClause(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_FindMatchingClause_Variadic(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create variadic closure with 2 required params + rest (a b . rest)
 	tpl := NewNativeTemplate(3, 0, true, NewOperationLoadVoid())
@@ -93,7 +93,7 @@ func TestCaseLambdaClosure_FindMatchingClause_Variadic(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_Clauses(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	tpl1 := NewNativeTemplate(1, 0, false)
 	cls1 := NewClosureWithTemplate(tpl1, env)
@@ -110,7 +110,7 @@ func TestCaseLambdaClosure_Clauses(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_IsVoid(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	tpl := NewNativeTemplate(1, 0, false)
 	cls := NewClosureWithTemplate(tpl, env)
@@ -123,7 +123,7 @@ func TestCaseLambdaClosure_IsVoid(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_SchemeString(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	tpl := NewNativeTemplate(1, 0, false)
 	cls := NewClosureWithTemplate(tpl, env)
@@ -133,7 +133,7 @@ func TestCaseLambdaClosure_SchemeString(t *testing.T) {
 }
 
 func TestCaseLambdaClosure_EqualTo(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	tpl1 := NewNativeTemplate(1, 0, false)
 	cls1 := NewClosureWithTemplate(tpl1, env)
@@ -162,7 +162,7 @@ func TestCaseLambdaClosure_EqualTo(t *testing.T) {
 }
 
 func TestOperationMakeCaseLambdaClosure(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create closures
 	tpl1 := NewNativeTemplate(1, 0, false)
@@ -191,7 +191,7 @@ func TestOperationMakeCaseLambdaClosure(t *testing.T) {
 }
 
 func TestOperationMakeCaseLambdaClosure_Error(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create machine context with non-closure on stack
 	mc := &MachineContext{
@@ -266,7 +266,7 @@ func TestClausesWrapperMethods(t *testing.T) {
 
 // TestCaseLambdaClosureFindMatching tests CaseLambdaClosure.FindMatchingClause
 func TestCaseLambdaClosureFindMatching(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Create clauses with different arities
 	tpl1 := NewNativeTemplate(1, 1, false)

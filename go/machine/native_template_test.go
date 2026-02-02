@@ -17,7 +17,7 @@ package machine
 import (
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -110,22 +110,22 @@ func TestNativeTemplate_Copy(t *testing.T) {
 	tpl.MaybeAppendLiteral(values.NewInteger(42))
 	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
 
-	copy := tpl.Copy()
+	cpy := tpl.Copy()
 
 	// Verify copy is different object
-	qt.Assert(t, copy != tpl, qt.IsTrue)
+	qt.Assert(t, cpy != tpl, qt.IsTrue)
 	// Verify fields match
-	qt.Assert(t, copy.parameterCount, qt.Equals, tpl.parameterCount)
-	qt.Assert(t, copy.valueCount, qt.Equals, tpl.valueCount)
-	qt.Assert(t, copy.isVariadic, qt.Equals, tpl.isVariadic)
-	qt.Assert(t, len(copy.literals), qt.Equals, len(tpl.literals))
-	qt.Assert(t, len(copy.operations), qt.Equals, len(tpl.operations))
+	qt.Assert(t, cpy.parameterCount, qt.Equals, tpl.parameterCount)
+	qt.Assert(t, cpy.valueCount, qt.Equals, tpl.valueCount)
+	qt.Assert(t, cpy.isVariadic, qt.Equals, tpl.isVariadic)
+	qt.Assert(t, len(cpy.literals), qt.Equals, len(tpl.literals))
+	qt.Assert(t, len(cpy.operations), qt.Equals, len(tpl.operations))
 }
 
 func TestNativeTemplate_Copy_Nil(t *testing.T) {
 	var nilTpl *NativeTemplate
-	copy := nilTpl.Copy()
-	qt.Assert(t, copy, qt.IsNil)
+	cpy := nilTpl.Copy()
+	qt.Assert(t, cpy, qt.IsNil)
 }
 
 func TestNativeTemplate_EqualTo(t *testing.T) {
@@ -324,7 +324,7 @@ func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Test with nil Pair
-	var nilPair *values.Pair = nil
+	var nilPair *values.Pair
 	result := tpl.DeduplicateLiteral(nilPair)
 	qt.Assert(t, result, qt.Equals, nilPair)
 
@@ -333,7 +333,7 @@ func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
 	qt.Assert(t, result, qt.Equals, values.EmptyList)
 
 	// Test with nil Vector
-	var nilVec *values.Vector = nil
+	var nilVec *values.Vector
 	result = tpl.DeduplicateLiteral(nilVec)
 	qt.Assert(t, result, qt.Equals, nilVec)
 

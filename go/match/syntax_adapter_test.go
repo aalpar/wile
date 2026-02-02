@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -701,13 +701,13 @@ type mockBindingChecker struct {
 	bindings map[string]any // sym -> binding (nil means no binding)
 }
 
-func (m *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
-	binding, ok := m.bindings[sym]
+func (p *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	binding, ok := p.bindings[sym]
 	return ok && binding != nil
 }
 
-func (m *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
-	return m.bindings[sym]
+func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+	return p.bindings[sym]
 }
 
 // TestLiteralScopesMatchWithChecker_BothHaveSameBinding verifies that when both
@@ -801,18 +801,18 @@ type mockBindingCheckerWithScopes struct {
 	patternBinding any
 }
 
-func (m *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.Scope) bool {
+func (p *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.Scope) bool {
 	// Determine if this is input (has scopes) or pattern (no scopes)
 	if len(scopes) > 0 {
-		return m.inputBinding != nil
+		return p.inputBinding != nil
 	}
-	return m.patternBinding != nil
+	return p.patternBinding != nil
 }
 
-func (m *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) any {
+func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) any {
 	// Determine if this is input (has scopes) or pattern (no scopes)
 	if len(scopes) > 0 {
-		return m.inputBinding
+		return p.inputBinding
 	}
-	return m.patternBinding
+	return p.patternBinding
 }

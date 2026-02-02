@@ -14,7 +14,7 @@
 
 package machine
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 var _ values.Value = (*Parameter)(nil)
 

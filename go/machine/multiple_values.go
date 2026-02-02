@@ -18,7 +18,7 @@ import (
 	"slices"
 	"strings"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // MultipleValues represents multiple return values from a function.

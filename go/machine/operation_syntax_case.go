@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"sort"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.
@@ -76,7 +76,9 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 		// Match failed
 		mctx.SetValue(values.FalseValue)
 		mctx.pc++
-		return mctx, nil
+		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
+		// so we record #f in the value register and return no runtime error.
+		return mctx, nil // nolint:errcheck, nilerr
 	}
 
 	// Match succeeded - store bindings and matcher

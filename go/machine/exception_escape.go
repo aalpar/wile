@@ -17,7 +17,7 @@ package machine
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ErrExceptionEscape signals an exception being raised through the call stack.
@@ -31,9 +31,9 @@ type ErrExceptionEscape struct {
 }
 
 // Error implements the error interface.
-func (e *ErrExceptionEscape) Error() string {
-	if e.Condition == nil {
+func (p *ErrExceptionEscape) Error() string {
+	if p.Condition == nil {
 		return "exception: <nil>"
 	}
-	return fmt.Sprintf("exception: %s", e.Condition.SchemeString())
+	return fmt.Sprintf("exception: %s", p.Condition.SchemeString())
 }

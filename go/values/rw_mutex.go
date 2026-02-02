@@ -47,65 +47,65 @@ func NewRWMutex(name string) *RWMutex {
 }
 
 // ID returns the RWMutex's unique identifier
-func (m *RWMutex) ID() uint64 {
-	return m.id
+func (p *RWMutex) ID() uint64 {
+	return p.id
 }
 
 // Name returns the RWMutex's name
-func (m *RWMutex) Name() string {
-	return m.name
+func (p *RWMutex) Name() string {
+	return p.name
 }
 
 // Lock acquires the write lock
-func (m *RWMutex) Lock() {
-	m.mu.Lock()
+func (p *RWMutex) Lock() {
+	p.mu.Lock()
 }
 
 // Unlock releases the write lock
-func (m *RWMutex) Unlock() {
-	m.mu.Unlock()
+func (p *RWMutex) Unlock() {
+	p.mu.Unlock()
 }
 
 // RLock acquires the read lock
-func (m *RWMutex) RLock() {
-	m.mu.RLock()
+func (p *RWMutex) RLock() {
+	p.mu.RLock()
 }
 
 // RUnlock releases the read lock
-func (m *RWMutex) RUnlock() {
-	m.mu.RUnlock()
+func (p *RWMutex) RUnlock() {
+	p.mu.RUnlock()
 }
 
 // TryLock tries to acquire the write lock without blocking
-func (m *RWMutex) TryLock() bool {
-	return m.mu.TryLock()
+func (p *RWMutex) TryLock() bool {
+	return p.mu.TryLock()
 }
 
 // TryRLock tries to acquire the read lock without blocking
-func (m *RWMutex) TryRLock() bool {
-	return m.mu.TryRLock()
+func (p *RWMutex) TryRLock() bool {
+	return p.mu.TryRLock()
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the RWMutex is nil.
-func (m *RWMutex) IsVoid() bool {
-	return m == nil
+func (p *RWMutex) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the RWMutexes are the same object.
-func (m *RWMutex) EqualTo(v Value) bool {
+func (p *RWMutex) EqualTo(v Value) bool {
 	other, ok := v.(*RWMutex)
 	if !ok {
 		return false
 	}
-	return m == other
+	return p == other
 }
 
 // SchemeString returns the Scheme representation of the RWMutex.
-func (m *RWMutex) SchemeString() string {
-	if m == nil {
+func (p *RWMutex) SchemeString() string {
+	if p == nil {
 		return "#<rw-mutex:void>"
 	}
-	return fmt.Sprintf("#<rw-mutex:%s id=%d>", m.name, m.id)
+	return fmt.Sprintf("#<rw-mutex:%s id=%d>", p.name, p.id)
 }

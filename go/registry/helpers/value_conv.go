@@ -17,7 +17,7 @@ package helpers
 import (
 	"math"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ToComplex128 converts a Scheme number to a Go complex128.

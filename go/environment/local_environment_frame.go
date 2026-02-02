@@ -18,7 +18,7 @@ import (
 	"maps"
 	"slices"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // LocalEnvironmentFrame stores local variable bindings for a single scope.

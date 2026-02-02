@@ -17,7 +17,7 @@ package syntax
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 var _ values.Value = (*SourceContext)(nil)
@@ -36,9 +36,9 @@ type OriginInfo struct {
 }
 
 // Depth returns the length of the origin chain.
-func (o *OriginInfo) Depth() int {
+func (p *OriginInfo) Depth() int {
 	depth := 0
-	for curr := o; curr != nil; curr = curr.Parent {
+	for curr := p; curr != nil; curr = curr.Parent {
 		depth++
 	}
 	return depth

@@ -17,9 +17,9 @@ package machine
 import (
 	"testing"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -60,7 +60,7 @@ func TestSyntaxCompiler_EqualTo(t *testing.T) {
 }
 
 func TestLookupSyntaxCompiler(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -80,7 +80,7 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 }
 
 func TestLookupSyntaxCompiler_PhaseEnvironment(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Register syntax compilers in the compile environment
 	err := RegisterSyntaxCompilers(env) //nolint:errcheck

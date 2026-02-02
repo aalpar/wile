@@ -21,12 +21,12 @@ import (
 	"io"
 	"os"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimEval implements the (eval) primitive.
@@ -35,16 +35,13 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	expr := mc.Arg(0)
 	envSpec := mc.Arg(1)
 
-	// Get the environment frame from the SchemeEnvironment
-	schemeEnv, ok := envSpec.(*values.SchemeEnvironment)
+	// Get the environment frame from the TopLevelEnvironment
+	topLevelEnv, ok := envSpec.(*environment.TopLevelEnvironment)
 	if !ok {
 		return values.NewForeignErrorf("eval: expected an environment specifier but got %T", envSpec)
 	}
 
-	env, ok := schemeEnv.Frame.(*environment.EnvironmentFrame)
-	if !ok {
-		return values.NewForeignError("eval: environment frame is invalid")
-	}
+	env := topLevelEnv.Runtime()
 
 	// Convert datum to syntax value
 	sctx := syntax.NewZeroValueSourceContext()
@@ -156,9 +153,10 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 // PrimInteractionEnvironment implements the (interaction-environment) primitive.
 // Returns the REPL environment (the current top-level environment).
 func PrimInteractionEnvironment(_ context.Context, mc *machine.MachineContext) error {
-	// Return the current top-level environment wrapped as a SchemeEnvironment
-	topLevel := mc.EnvironmentFrame().TopLevel()
-	mc.SetValue(values.NewSchemeEnvironment("interaction-environment", topLevel))
+	// Return the current top-level environment directly
+	topLevel := mc.EnvironmentFrame().TopLevelEnv()
+	topLevel.Name = "interaction-environment"
+	mc.SetValue(topLevel)
 	return nil
 }
 
@@ -176,8 +174,9 @@ func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) 
 	case 5, 7:
 		// Return the current top-level environment
 		// In a full implementation, this would return a restricted environment
-		topLevel := mc.EnvironmentFrame().TopLevel()
-		mc.SetValue(values.NewSchemeEnvironment("scheme-report-environment", topLevel))
+		topLevel := mc.EnvironmentFrame().TopLevelEnv()
+		topLevel.Name = "scheme-report-environment"
+		mc.SetValue(topLevel)
 		return nil
 	default:
 		return values.NewForeignError("scheme-report-environment: unsupported version, expected 5 or 7")
@@ -198,8 +197,9 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	case 5, 7:
 		// Create a new empty top-level environment with only syntax bindings
 		// For now, we return a fresh top-level environment
-		newEnv := environment.NewTopLevelEnvironmentFrame()
-		mc.SetValue(values.NewSchemeEnvironment("null-environment", newEnv))
+		newTopLevel := environment.NewTopLevelEnvironment()
+		newTopLevel.Name = "null-environment"
+		mc.SetValue(newTopLevel)
 		return nil
 	default:
 		return values.NewForeignError("null-environment: unsupported version, expected 5 or 7")
@@ -219,19 +219,22 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	argsVal := mc.Arg(0)
 
 	// Create fresh top-level environment
-	newEnv := environment.NewTopLevelEnvironmentFrame()
+	newTopLevel := environment.NewTopLevelEnvironment()
+	newTopLevel.Name = "environment"
+	newEnv := newTopLevel.Runtime()
 
 	// Share the library registry from caller's environment
+	callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
 	callerEnv := mc.EnvironmentFrame().TopLevel()
-	registry := callerEnv.LibraryRegistry()
+	registry := callerTopLevel.LibraryRegistry()
 	if registry == nil {
 		return values.NewForeignErrorf("environment: no library registry available")
 	}
-	newEnv.SetLibraryRegistry(registry)
+	newTopLevel.SetLibraryRegistry(registry)
 
 	// Handle empty arguments case
 	if values.IsEmptyList(argsVal) {
-		mc.SetValue(values.NewSchemeEnvironment("environment", newEnv))
+		mc.SetValue(newTopLevel)
 		return nil
 	}
 
@@ -278,7 +281,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "environment: improper import spec list")
 	}
 
-	mc.SetValue(values.NewSchemeEnvironment("environment", newEnv))
+	mc.SetValue(newTopLevel)
 	return nil
 }
 

@@ -22,9 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ToComplex128 converts a Scheme number to a Go complex128.
@@ -735,9 +735,9 @@ func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(!math.IsInf(v.Value, 0) && !math.IsNaN(v.Value)))
 	case *values.Complex:
-		real := real(v.Value)
-		imag := imag(v.Value)
-		isFinite := !math.IsInf(real, 0) && !math.IsNaN(real) && !math.IsInf(imag, 0) && !math.IsNaN(imag)
+		rel := real(v.Value)
+		iam := imag(v.Value)
+		isFinite := !math.IsInf(rel, 0) && !math.IsNaN(rel) && !math.IsInf(iam, 0) && !math.IsNaN(iam)
 		mc.SetValue(utils.BoolToBoolean(isFinite))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", o)
@@ -756,9 +756,9 @@ func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsInf(v.Value, 0)))
 	case *values.Complex:
-		real := real(v.Value)
-		imag := imag(v.Value)
-		isInfinite := math.IsInf(real, 0) || math.IsInf(imag, 0)
+		rel := real(v.Value)
+		iam := imag(v.Value)
+		isInfinite := math.IsInf(rel, 0) || math.IsInf(iam, 0)
 		mc.SetValue(utils.BoolToBoolean(isInfinite))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", o)
@@ -777,9 +777,9 @@ func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		mc.SetValue(utils.BoolToBoolean(math.IsNaN(v.Value)))
 	case *values.Complex:
-		real := real(v.Value)
-		imag := imag(v.Value)
-		isNaN := math.IsNaN(real) || math.IsNaN(imag)
+		rel := real(v.Value)
+		iam := imag(v.Value)
+		isNaN := math.IsNaN(rel) || math.IsNaN(iam)
 		mc.SetValue(utils.BoolToBoolean(isNaN))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", o)
@@ -1329,13 +1329,14 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Integer:
 		mc.SetValue(values.NewString(strconv.FormatInt(v.Value, radix)))
 	case *values.Float:
-		if math.IsInf(v.Value, 1) {
+		switch {
+		case math.IsInf(v.Value, 1):
 			mc.SetValue(values.NewString("+inf.0"))
-		} else if math.IsInf(v.Value, -1) {
+		case math.IsInf(v.Value, -1):
 			mc.SetValue(values.NewString("-inf.0"))
-		} else if math.IsNaN(v.Value) {
+		case math.IsNaN(v.Value):
 			mc.SetValue(values.NewString("+nan.0"))
-		} else {
+		default:
 			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
 			s = ensureInexactDecimal(s)
 			mc.SetValue(values.NewString(s))

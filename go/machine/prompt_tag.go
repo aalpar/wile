@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PromptTag is an opaque identity value for delimited continuation prompts.

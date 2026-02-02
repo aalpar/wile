@@ -308,7 +308,7 @@ package machine
 
 import (
     "context"
-    "wile/values"
+    "github.com/aalpar/wile/go/values"
 )
 
 {{range .}}
@@ -581,7 +581,7 @@ var stringRef = DeclarativePrimitive{
 The registry generates wrapper functions:
 
 ```go
-func (r *Registry) AddDeclarativePrimitive(spec DeclarativePrimitive, phases Phase) {
+func (p *Registry) AddDeclarativePrimitive(spec DeclarativePrimitive, phases Phase) {
     wrapper := func(_ context.Context, mc *machine.MachineContext) error {
         // Extract and validate args based on spec.Args
         // Call spec.Impl with extracted args

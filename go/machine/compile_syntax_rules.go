@@ -34,10 +34,10 @@ package machine
 import (
 	"context"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // FreeIdResolution stores the resolution info for a free identifier in a macro template.
@@ -65,31 +65,31 @@ type FreeIdResolution struct {
 
 // GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
 // Implements the localScopesProvider interface for match package hygiene.
-func (f *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
-	if f == nil {
+func (p *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
+	if p == nil {
 		return nil
 	}
-	return f.LocalScopes
+	return p.LocalScopes
 }
 
 // GetGlobal returns the global binding's index, or nil if this is a local binding.
 // Returns any to avoid circular import with environment package in match.
 // Implements the globalBindingProvider interface for match package hygiene.
-func (f *FreeIdResolution) GetGlobal() any {
-	if f == nil {
+func (p *FreeIdResolution) GetGlobal() any {
+	if p == nil {
 		return nil
 	}
-	return f.Global
+	return p.Global
 }
 
 // GetHasLocalBinding returns true if a local binding was found at macro definition time.
 // This is used to distinguish "local binding with empty scopes" from "no binding at all".
 // Implements the hasLocalBindingProvider interface.
-func (f *FreeIdResolution) GetHasLocalBinding() bool {
-	if f == nil {
+func (p *FreeIdResolution) GetHasLocalBinding() bool {
+	if p == nil {
 		return false
 	}
-	return f.HasLocalBinding
+	return p.HasLocalBinding
 }
 
 // SyntaxRulesClause represents a single pattern-template pair in syntax-rules.
@@ -126,7 +126,7 @@ type clausesWrapper struct {
 	clauses []*SyntaxRulesClause
 }
 
-func (c *clausesWrapper) EqualTo(other values.Value) bool {
+func (p *clausesWrapper) EqualTo(other values.Value) bool {
 	_, ok := other.(*clausesWrapper)
 	if !ok {
 		return false
@@ -135,11 +135,11 @@ func (c *clausesWrapper) EqualTo(other values.Value) bool {
 	return false
 }
 
-func (c *clausesWrapper) IsVoid() bool {
+func (p *clausesWrapper) IsVoid() bool {
 	return false
 }
 
-func (c *clausesWrapper) SchemeString() string {
+func (p *clausesWrapper) SchemeString() string {
 	return "#<syntax-rules-clauses>"
 }
 
@@ -309,13 +309,13 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 }
 
 // compileClause compiles a single pattern-template pair using the default ellipsis.
-func compileClause(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) {
+func compileClause(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}) (*SyntaxRulesClause, error) { //nolint:unused
 	return compileClauseWithEllipsis(ctx, env, pattern, template, literals, match.DefaultEllipsis)
 }
 
 // compileClauseWithEllipsis compiles a single pattern-template pair with a custom ellipsis.
 // The env parameter is used to resolve free identifiers to their definition-time bindings.
-func compileClauseWithEllipsis(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) {
+func compileClauseWithEllipsis(ctx context.Context, env *environment.EnvironmentFrame, pattern, template syntax.SyntaxValue, literals map[string]struct{}, ellipsis string) (*SyntaxRulesClause, error) { //nolint:unused
 	return compileClauseWithEllipsisAndLiterals(ctx, env, pattern, template, literals, nil, ellipsis)
 }
 
@@ -388,7 +388,7 @@ func compileClauseWithEllipsisAndLiterals(
 // bindings:
 // - For global bindings: stores GlobalIndex for cross-library hygiene
 // - For local bindings: stores scopes so the identifier resolves to definition-time binding
-func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution) {
+func collectFreeIdentifiers(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution) { //nolint:unused
 	collectFreeIdentifiersWithEllipsis(env, template, patternVars, freeIds, match.DefaultEllipsis)
 }
 
@@ -564,6 +564,8 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 // if an input symbol has the same name but different scopes (shadowed),
 // it won't match the pattern literal.
 // R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
+//
+//nolint:unparam
 func extractLiteralsWithSyntax(
 	literalsList *syntax.SyntaxPair,
 	literals map[string]struct{},
@@ -598,7 +600,7 @@ func extractLiteralsWithSyntax(
 }
 
 // createTransformerClosure creates a closure that implements the transformer
-func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*MachineClosure, error) {
+func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*MachineClosure, error) { //nolint:unparam
 	// Create a native template that implements the transformer logic
 	// This will be called with the input form on the eval stack
 

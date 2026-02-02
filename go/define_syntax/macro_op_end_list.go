@@ -14,7 +14,7 @@
 
 package define_syntax
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // MacroOpEndList returns from a nested list during pattern matching.
 //

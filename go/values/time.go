@@ -44,66 +44,66 @@ func NewTimeFromSeconds(seconds float64) *Time {
 }
 
 // GoTime returns the underlying Go time.Time
-func (t *Time) GoTime() time.Time {
-	return t.t
+func (p *Time) GoTime() time.Time {
+	return p.t
 }
 
 // Seconds returns the time as seconds since the epoch
-func (t *Time) Seconds() float64 {
-	return float64(t.t.UnixNano()) / 1e9
+func (p *Time) Seconds() float64 {
+	return float64(p.t.UnixNano()) / 1e9
 }
 
 // Add returns a new Time that is the given duration after this time
-func (t *Time) Add(d time.Duration) *Time {
-	return &Time{t: t.t.Add(d)}
+func (p *Time) Add(d time.Duration) *Time {
+	return &Time{t: p.t.Add(d)}
 }
 
 // Sub returns the duration between this time and another
-func (t *Time) Sub(other *Time) time.Duration {
-	return t.t.Sub(other.t)
+func (p *Time) Sub(other *Time) time.Duration {
+	return p.t.Sub(other.t)
 }
 
 // Before returns true if this time is before another
-func (t *Time) Before(other *Time) bool {
-	return t.t.Before(other.t)
+func (p *Time) Before(other *Time) bool {
+	return p.t.Before(other.t)
 }
 
 // After returns true if this time is after another
-func (t *Time) After(other *Time) bool {
-	return t.t.After(other.t)
+func (p *Time) After(other *Time) bool {
+	return p.t.After(other.t)
 }
 
 // DurationFromNow returns the duration from now until this time.
-func (t *Time) DurationFromNow() time.Duration {
-	return time.Until(t.t)
+func (p *Time) DurationFromNow() time.Duration {
+	return time.Until(p.t)
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the time is nil.
-func (t *Time) IsVoid() bool {
-	return t == nil
+func (p *Time) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if both times represent the same instant.
-func (t *Time) EqualTo(v Value) bool {
+func (p *Time) EqualTo(v Value) bool {
 	other, ok := v.(*Time)
 	if !ok {
 		return false
 	}
-	if t == nil && other == nil {
+	if p == nil && other == nil {
 		return true
 	}
-	if t == nil || other == nil {
+	if p == nil || other == nil {
 		return false
 	}
-	return t.t.Equal(other.t)
+	return p.t.Equal(other.t)
 }
 
 // SchemeString returns the Scheme representation of the time.
-func (t *Time) SchemeString() string {
-	if t == nil {
+func (p *Time) SchemeString() string {
+	if p == nil {
 		return "#<time:void>"
 	}
-	return fmt.Sprintf("#<time %s>", t.t.Format(time.RFC3339Nano))
+	return fmt.Sprintf("#<time %s>", p.t.Format(time.RFC3339Nano))
 }

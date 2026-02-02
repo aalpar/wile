@@ -15,7 +15,7 @@
 package machine
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CaseLambdaClause represents a single clause in a case-lambda.

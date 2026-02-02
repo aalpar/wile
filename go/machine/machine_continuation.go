@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"slices"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 )
 
 type MachineContinuation struct {
@@ -29,9 +29,9 @@ type MachineContinuation struct {
 	value         MultipleValues
 	evals         *Stack
 	pc            int
-	windingStack  WindingStack     // Captured dynamic extent for R7RS dynamic-wind
-	promptTag     *PromptTag       // Non-nil marks this frame as a continuation prompt
-	promptHandler *MachineClosure  // Handler invoked on abort to this prompt
+	windingStack  WindingStack    // Captured dynamic extent for R7RS dynamic-wind
+	promptTag     *PromptTag      // Non-nil marks this frame as a continuation prompt
+	promptHandler *MachineClosure // Handler invoked on abort to this prompt
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -115,9 +115,9 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	return q
 }
 
-func (p *MachineContinuation) PromptTag() *PromptTag          { return p.promptTag }
-func (p *MachineContinuation) SetPromptTag(t *PromptTag)      { p.promptTag = t }
-func (p *MachineContinuation) PromptHandler() *MachineClosure { return p.promptHandler }
+func (p *MachineContinuation) PromptTag() *PromptTag              { return p.promptTag }
+func (p *MachineContinuation) SetPromptTag(t *PromptTag)          { p.promptTag = t }
+func (p *MachineContinuation) PromptHandler() *MachineClosure     { return p.promptHandler }
 func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) { p.promptHandler = h }
 
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as

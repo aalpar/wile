@@ -19,8 +19,8 @@ import (
 	"math"
 	"math/big"
 
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // FoldOp represents the type of fold operation for integers.

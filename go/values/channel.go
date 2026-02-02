@@ -54,24 +54,24 @@ func NewChannel(bufferSize int) *Channel {
 }
 
 // ID returns the channel's unique identifier
-func (c *Channel) ID() uint64 {
-	return c.id
+func (p *Channel) ID() uint64 {
+	return p.id
 }
 
 // BufferSize returns the channel's buffer size
-func (c *Channel) BufferSize() int {
-	return c.bufferSize
+func (p *Channel) BufferSize() int {
+	return p.bufferSize
 }
 
 // Send sends a value on the channel (blocking)
-func (c *Channel) Send(v Value) error {
-	c.mu.RLock()
-	if c.closed {
-		c.mu.RUnlock()
+func (p *Channel) Send(v Value) error {
+	p.mu.RLock()
+	if p.closed {
+		p.mu.RUnlock()
 		return ErrChannelClosed
 	}
-	ch := c.ch
-	c.mu.RUnlock()
+	ch := p.ch
+	p.mu.RUnlock()
 
 	ch <- v
 	return nil
@@ -79,14 +79,14 @@ func (c *Channel) Send(v Value) error {
 
 // TrySend attempts to send a value without blocking
 // Returns true if sent, false if would block
-func (c *Channel) TrySend(v Value) (bool, error) {
-	c.mu.RLock()
-	if c.closed {
-		c.mu.RUnlock()
+func (p *Channel) TrySend(v Value) (bool, error) {
+	p.mu.RLock()
+	if p.closed {
+		p.mu.RUnlock()
 		return false, ErrChannelClosed
 	}
-	ch := c.ch
-	c.mu.RUnlock()
+	ch := p.ch
+	p.mu.RUnlock()
 
 	select {
 	case ch <- v:
@@ -98,10 +98,10 @@ func (c *Channel) TrySend(v Value) (bool, error) {
 
 // Receive receives a value from the channel (blocking)
 // Returns the value and true, or nil and false if channel is closed
-func (c *Channel) Receive() (Value, bool) {
-	c.mu.RLock()
-	ch := c.ch
-	c.mu.RUnlock()
+func (p *Channel) Receive() (Value, bool) {
+	p.mu.RLock()
+	ch := p.ch
+	p.mu.RUnlock()
 
 	v, ok := <-ch
 	return v, ok
@@ -111,11 +111,11 @@ func (c *Channel) Receive() (Value, bool) {
 // Returns (value, true, true) if received
 // Returns (nil, false, true) if would block
 // Returns (nil, false, false) if channel is closed
-func (c *Channel) TryReceive() (Value, bool, bool) {
-	c.mu.RLock()
-	ch := c.ch
-	closed := c.closed
-	c.mu.RUnlock()
+func (p *Channel) TryReceive() (Value, bool, bool) {
+	p.mu.RLock()
+	ch := p.ch
+	closed := p.closed
+	p.mu.RUnlock()
 
 	select {
 	case v, ok := <-ch:
@@ -132,75 +132,75 @@ func (c *Channel) TryReceive() (Value, bool, bool) {
 }
 
 // Close closes the channel
-func (c *Channel) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (p *Channel) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if c.closed {
+	if p.closed {
 		return ErrChannelClosed
 	}
-	c.closed = true
-	close(c.ch)
+	p.closed = true
+	close(p.ch)
 	return nil
 }
 
 // IsClosed returns true if the channel is closed
-func (c *Channel) IsClosed() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.closed
+func (p *Channel) IsClosed() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.closed
 }
 
 // Len returns the number of elements queued in the channel
-func (c *Channel) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.ch)
+func (p *Channel) Len() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.ch)
 }
 
 // Cap returns the channel's capacity
-func (c *Channel) Cap() int {
-	return c.bufferSize
+func (p *Channel) Cap() int {
+	return p.bufferSize
 }
 
 // Chan returns the underlying Go channel for use in select statements
-func (c *Channel) Chan() chan Value {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.ch
+func (p *Channel) Chan() chan Value {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.ch
 }
 
 // buf interface implementation
 
 // IsVoid returns true if this channel is nil.
-func (c *Channel) IsVoid() bool {
-	return c == nil
+func (p *Channel) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if both channels are the same object.
-func (c *Channel) EqualTo(v Value) bool {
+func (p *Channel) EqualTo(v Value) bool {
 	other, ok := v.(*Channel)
 	if !ok {
 		return false
 	}
-	return c == other // Identity is reference equality
+	return p == other // Identity is reference equality
 }
 
 // SchemeString returns the Scheme representation of this channel.
-func (c *Channel) SchemeString() string {
-	if c == nil {
+func (p *Channel) SchemeString() string {
+	if p == nil {
 		return "#<channel:void>"
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	status := "open"
-	if c.closed {
+	if p.closed {
 		status = "closed"
 	}
-	if c.bufferSize == 0 {
-		return fmt.Sprintf("#<channel:unbuffered id=%d %s>", c.id, status)
+	if p.bufferSize == 0 {
+		return fmt.Sprintf("#<channel:unbuffered id=%d %s>", p.id, status)
 	}
-	return fmt.Sprintf("#<channel:buffered[%d] id=%d %s len=%d>", c.bufferSize, c.id, status, len(c.ch))
+	return fmt.Sprintf("#<channel:buffered[%d] id=%d %s len=%d>", p.bufferSize, p.id, status, len(p.ch))
 }
 
 // SelectCase represents a case in a channel select operation

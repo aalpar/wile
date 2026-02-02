@@ -17,7 +17,7 @@
 package core
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the core extension containing required primitives.

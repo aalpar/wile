@@ -15,9 +15,9 @@
 package machine
 
 import (
-	"wile/forms"
-	"wile/syntax"
-	"wile/validate"
+	"github.com/aalpar/wile/go/forms"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/validate"
 )
 
 func init() {

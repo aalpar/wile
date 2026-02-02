@@ -15,8 +15,8 @@
 package machine
 
 import (
-	"wile/environment"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // ExpanderContext provides access to the macro expander from within

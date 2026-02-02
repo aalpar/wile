@@ -14,7 +14,7 @@
 
 package helpers
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // Eqv is a helper implementing eqv? semantics for memv and assv.
 //

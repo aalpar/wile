@@ -19,11 +19,11 @@ import (
 	"strings"
 	"testing"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -43,7 +43,7 @@ func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) 
 
 // Helper function to create a test environment with basic primitives
 func createHygieneTestEnv() *environment.EnvironmentFrame {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Register primitive expanders (for let-syntax, quote, if, etc.)
 	err := machine.RegisterPrimitiveExpanders(env)

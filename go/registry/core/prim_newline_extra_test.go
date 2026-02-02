@@ -19,7 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Newline Tests (R7RS §6.13.3)

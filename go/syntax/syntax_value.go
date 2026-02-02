@@ -17,7 +17,7 @@ package syntax
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (
@@ -59,16 +59,18 @@ func NewRebindingScope() *Scope {
 
 // ID returns the unique identifier for this scope.
 // This can be used as a macro application ID for tracing.
-func (s *Scope) ID() uint64 {
-	if s == nil {
+func (p *Scope) ID() uint64 {
+	if p == nil {
 		return 0
 	}
-	return s.id
+	return p.id
 }
 
 // NewSyntaxNil creates a syntax empty list.
-// Deprecated: Use NewSyntaxEmptyList instead. This function exists for backward
-// compatibility but delegates to NewSyntaxEmptyList.
+//
+// Deprecated: Use NewSyntaxEmptyList instead.
+//
+// This function exists for backward compatibility but delegates to NewSyntaxEmptyList.
 func NewSyntaxNil(sctx *SourceContext) *SyntaxPair {
 	return NewSyntaxEmptyList(sctx)
 }
@@ -201,11 +203,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = vec
 		// Recursively unwrap elements
 		for i, elem := range v.Values {
-			if syntaxElem, ok := elem.(SyntaxValue); ok {
-				vec.Set(i, UnwrapAllShared(syntaxElem, cache))
-			} else {
-				vec.Set(i, elem)
-			}
+			vec.Set(i, UnwrapAllShared(elem, cache))
 		}
 		return vec
 

@@ -18,10 +18,10 @@ import (
 	"context"
 	"sort"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CompileSyntaxCase compiles the (syntax-case expr (literal ...) clause ...) form.
@@ -332,14 +332,14 @@ type syntaxCaseClause struct {
 	ellipsisVars map[int]map[string]struct{}
 }
 
-func (c *syntaxCaseClause) EqualTo(other values.Value) bool {
+func (p *syntaxCaseClause) EqualTo(other values.Value) bool {
 	return false
 }
 
-func (c *syntaxCaseClause) IsVoid() bool {
+func (p *syntaxCaseClause) IsVoid() bool {
 	return false
 }
 
-func (c *syntaxCaseClause) SchemeString() string {
+func (p *syntaxCaseClause) SchemeString() string {
 	return "#<syntax-case-clause>"
 }

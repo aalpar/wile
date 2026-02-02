@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//     http://wwp.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -73,54 +73,54 @@ func NewSchemeWriter() *SchemeWriter {
 
 // WriteString writes a Scheme value to a string with cycle detection.
 // Circular and shared structures are represented using datum labels.
-func (w *SchemeWriter) WriteString(v Value) string {
+func (p *SchemeWriter) WriteString(v Value) string {
 	// First pass: identify which objects are referenced multiple times
-	w.findShared(v)
+	p.findShared(v)
 
 	// For WriteModeWrite, filter to only circular references
-	if w.writeMode == WriteModeWrite {
-		w.filterToCircular(v)
+	if p.writeMode == WriteModeWrite {
+		p.filterToCircular(v)
 	}
 
 	// Reset seen maps for the output pass
-	w.seenPairs = make(map[*Pair]int)
-	w.seenVectors = make(map[*Vector]int)
+	p.seenPairs = make(map[*Pair]int)
+	p.seenVectors = make(map[*Vector]int)
 
 	// Second pass: generate output with labels
 	q := &strings.Builder{}
-	w.write(q, v)
+	p.write(q, v)
 	return q.String()
 }
 
 // findShared traverses the value to find objects that are referenced multiple times.
-func (w *SchemeWriter) findShared(v Value) {
+func (p *SchemeWriter) findShared(v Value) {
 	switch val := v.(type) {
 	case *Pair:
 		if val == nil || val.IsEmptyList() {
 			return
 		}
-		if _, found := w.seenPairs[val]; found {
+		if _, found := p.seenPairs[val]; found {
 			// Seen before - mark as needing a label
-			w.needsLabelPair[val] = true
+			p.needsLabelPair[val] = true
 			return
 		}
 		// Mark as seen (with placeholder -1)
-		w.seenPairs[val] = -1
+		p.seenPairs[val] = -1
 		// Recurse into car and cdr
-		w.findShared(val.Car())
-		w.findShared(val.Cdr())
+		p.findShared(val.Car())
+		p.findShared(val.Cdr())
 
 	case *Vector:
 		if val == nil || len(*val) == 0 {
 			return
 		}
-		if _, found := w.seenVectors[val]; found {
-			w.needsLabelVector[val] = true
+		if _, found := p.seenVectors[val]; found {
+			p.needsLabelVector[val] = true
 			return
 		}
-		w.seenVectors[val] = -1
+		p.seenVectors[val] = -1
 		for _, elem := range *val {
-			w.findShared(elem)
+			p.findShared(elem)
 		}
 	}
 }
@@ -128,7 +128,7 @@ func (w *SchemeWriter) findShared(v Value) {
 // filterToCircular removes non-circular entries from needsLabelPair/needsLabelVector.
 // An object is circular if it is reachable from itself — i.e., it appears on the
 // DFS recursion stack when revisited. This uses gray/black DFS coloring.
-func (w *SchemeWriter) filterToCircular(v Value) {
+func (p *SchemeWriter) filterToCircular(v Value) {
 	circularPairs := make(map[*Pair]bool)
 	circularVectors := make(map[*Vector]bool)
 	onStackPairs := make(map[*Pair]bool)
@@ -179,27 +179,27 @@ func (w *SchemeWriter) filterToCircular(v Value) {
 
 	walk(v)
 
-	w.needsLabelPair = circularPairs
-	w.needsLabelVector = circularVectors
+	p.needsLabelPair = circularPairs
+	p.needsLabelVector = circularVectors
 }
 
 // write outputs a value, handling cycles with datum labels.
-func (w *SchemeWriter) write(sb *strings.Builder, v Value) {
+func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 	switch val := v.(type) {
 	case *Pair:
-		w.writePair(sb, val)
+		p.writePair(sb, val)
 	case *Vector:
-		w.writeVector(sb, val)
+		p.writeVector(sb, val)
 	case *String:
 		// In display mode, strings are printed without quotes
-		if w.displayMode {
+		if p.displayMode {
 			sb.WriteString(val.Value)
 		} else {
 			sb.WriteString(val.SchemeString())
 		}
 	case *Character:
 		// In display mode, characters are printed as-is without #\
-		if w.displayMode {
+		if p.displayMode {
 			sb.WriteRune(val.Value)
 		} else {
 			sb.WriteString(val.SchemeString())
@@ -215,41 +215,41 @@ func (w *SchemeWriter) write(sb *strings.Builder, v Value) {
 }
 
 // writePair writes a pair with cycle detection.
-func (w *SchemeWriter) writePair(sb *strings.Builder, p *Pair) {
-	if p == nil {
+func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
+	if pr == nil {
 		sb.WriteString("#<void>")
 		return
 	}
-	if p.IsEmptyList() {
+	if pr.IsEmptyList() {
 		sb.WriteString("()")
 		return
 	}
 
 	// Check if this is a back-reference
-	if label, found := w.seenPairs[p]; found && label >= 0 {
+	if label, found := p.seenPairs[pr]; found && label >= 0 {
 		// Already labeled and written - output reference
 		fmt.Fprintf(sb, "#%d#", label)
 		return
 	}
 
 	// Check if this needs a label
-	if w.needsLabelPair[p] {
-		label := w.nextLabel
-		w.nextLabel++
-		w.seenPairs[p] = label
+	if p.needsLabelPair[pr] {
+		label := p.nextLabel
+		p.nextLabel++
+		p.seenPairs[pr] = label
 		fmt.Fprintf(sb, "#%d=", label)
 	}
 
 	// WriteByte the pair content
 	sb.WriteString("(")
-	w.writePairContents(sb, p)
+	p.writePairContents(sb, pr)
 	sb.WriteString(")")
 }
 
 // writePairContents writes the contents of a list (without outer parens).
-func (w *SchemeWriter) writePairContents(sb *strings.Builder, p *Pair) {
+func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 	first := true
-	curr := p
+	curr := pr
 
 	for curr != nil && !curr.IsEmptyList() {
 		if !first {
@@ -258,7 +258,7 @@ func (w *SchemeWriter) writePairContents(sb *strings.Builder, p *Pair) {
 		first = false
 
 		// WriteByte car
-		w.write(sb, curr.Car())
+		p.write(sb, curr.Car())
 
 		// Check cdr
 		cdr := curr.Cdr()
@@ -271,22 +271,22 @@ func (w *SchemeWriter) writePairContents(sb *strings.Builder, p *Pair) {
 		if !ok {
 			// Improper list
 			sb.WriteString(" . ")
-			w.write(sb, cdr)
+			p.write(sb, cdr)
 			break
 		}
 
 		// Check if the cdr pair needs special handling (shared/circular)
-		if label, found := w.seenPairs[nextPair]; found && label >= 0 {
+		if label, found := p.seenPairs[nextPair]; found && label >= 0 {
 			// Back-reference in cdr position
 			sb.WriteString(" . ")
 			fmt.Fprintf(sb, "#%d#", label)
 			break
 		}
 
-		if w.needsLabelPair[nextPair] {
+		if p.needsLabelPair[nextPair] {
 			// The cdr needs its own label - write as dotted pair
 			sb.WriteString(" . ")
-			w.writePair(sb, nextPair)
+			p.writePair(sb, nextPair)
 			break
 		}
 
@@ -295,23 +295,23 @@ func (w *SchemeWriter) writePairContents(sb *strings.Builder, p *Pair) {
 }
 
 // writeVector writes a vector with cycle detection.
-func (w *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
+func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 	if vec == nil {
 		sb.WriteString("#()")
 		return
 	}
 
 	// Check if this is a back-reference
-	if label, found := w.seenVectors[vec]; found && label >= 0 {
+	if label, found := p.seenVectors[vec]; found && label >= 0 {
 		fmt.Fprintf(sb, "#%d#", label)
 		return
 	}
 
 	// Check if this needs a label
-	if w.needsLabelVector[vec] {
-		label := w.nextLabel
-		w.nextLabel++
-		w.seenVectors[vec] = label
+	if p.needsLabelVector[vec] {
+		label := p.nextLabel
+		p.nextLabel++
+		p.seenVectors[vec] = label
 		fmt.Fprintf(sb, "#%d=", label)
 	}
 
@@ -320,7 +320,7 @@ func (w *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 		if i > 0 {
 			sb.WriteString(" ")
 		}
-		w.write(sb, elem)
+		p.write(sb, elem)
 	}
 	sb.WriteString(")")
 }

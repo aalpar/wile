@@ -17,8 +17,8 @@ package machine
 import (
 	"testing"
 
-	"wile/environment"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -42,7 +42,7 @@ func TestCompileDefineForSyntax_Error_NilEnv(t *testing.T) {
 func TestCompileDefineForSyntax_Error_NilTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	ccnt := &CompileTimeContinuation{
 		template: nil,
 		env:      env,
@@ -58,7 +58,7 @@ func TestCompileDefineForSyntax_Error_NilTemplate(t *testing.T) {
 func TestCompileDefineForSyntax_Error_NoArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -73,7 +73,7 @@ func TestCompileDefineForSyntax_Error_NoArgs(t *testing.T) {
 func TestCompileDefineForSyntax_Error_MissingExpression(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

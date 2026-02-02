@@ -15,7 +15,7 @@
 package tokenizer
 
 import (
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // ErrorCode represents a tokenizer error classification.

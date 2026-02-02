@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 type ForeignFunction func(ctx context.Context, mc *MachineContext) error

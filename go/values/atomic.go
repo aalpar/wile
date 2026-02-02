@@ -44,13 +44,13 @@ func NewAtomicBox(initial Value) *AtomicBox {
 }
 
 // ID returns the AtomicBox's unique identifier
-func (a *AtomicBox) ID() uint64 {
-	return a.id
+func (p *AtomicBox) ID() uint64 {
+	return p.id
 }
 
 // Load atomically loads and returns the value
-func (a *AtomicBox) Load() Value {
-	v := a.value.Load()
+func (p *AtomicBox) Load() Value {
+	v := p.value.Load()
 	if v == nil {
 		return nil
 	}
@@ -58,13 +58,13 @@ func (a *AtomicBox) Load() Value {
 }
 
 // Store atomically stores the value
-func (a *AtomicBox) Store(v Value) {
-	a.value.Store(v)
+func (p *AtomicBox) Store(v Value) {
+	p.value.Store(v)
 }
 
 // Swap atomically stores new and returns the old value
-func (a *AtomicBox) Swap(v Value) Value {
-	old := a.value.Swap(v)
+func (p *AtomicBox) Swap(v Value) Value {
+	old := p.value.Swap(v)
 	if old == nil {
 		return nil
 	}
@@ -73,36 +73,36 @@ func (a *AtomicBox) Swap(v Value) Value {
 
 // CompareAndSwap atomically compares and swaps if current equals old
 // Returns true if the swap was performed
-func (a *AtomicBox) CompareAndSwap(ol, nw Value) bool {
-	return a.value.CompareAndSwap(ol, nw)
+func (p *AtomicBox) CompareAndSwap(ol, nw Value) bool {
+	return p.value.CompareAndSwap(ol, nw)
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the atomic is nil.
-func (a *AtomicBox) IsVoid() bool {
-	return a == nil
+func (p *AtomicBox) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the atomics are the same object.
-func (a *AtomicBox) EqualTo(v Value) bool {
+func (p *AtomicBox) EqualTo(v Value) bool {
 	other, ok := v.(*AtomicBox)
 	if !ok {
 		return false
 	}
-	return a == other
+	return p == other
 }
 
 // SchemeString returns the Scheme representation of the atomic.
-func (a *AtomicBox) SchemeString() string {
-	if a == nil {
+func (p *AtomicBox) SchemeString() string {
+	if p == nil {
 		return "#<atomic:void>"
 	}
-	v := a.Load()
+	v := p.Load()
 	if v == nil {
-		return fmt.Sprintf("#<atomic id=%d value=#<void>>", a.id)
+		return fmt.Sprintf("#<atomic id=%d value=#<void>>", p.id)
 	}
-	return fmt.Sprintf("#<atomic id=%d value=%s>", a.id, v.SchemeString())
+	return fmt.Sprintf("#<atomic id=%d value=%s>", p.id, v.SchemeString())
 }
 
 // AtomicInt64 provides atomic operations on int64 values
@@ -124,56 +124,56 @@ func NewAtomicInt64(initial int64) *AtomicInt64 {
 }
 
 // ID returns the AtomicInt64's unique identifier
-func (a *AtomicInt64) ID() uint64 {
-	return a.id
+func (p *AtomicInt64) ID() uint64 {
+	return p.id
 }
 
 // Load atomically loads and returns the value
-func (a *AtomicInt64) Load() int64 {
-	return atomic.LoadInt64(&a.value)
+func (p *AtomicInt64) Load() int64 {
+	return atomic.LoadInt64(&p.value)
 }
 
 // Store atomically stores the value
-func (a *AtomicInt64) Store(v int64) {
-	atomic.StoreInt64(&a.value, v)
+func (p *AtomicInt64) Store(v int64) {
+	atomic.StoreInt64(&p.value, v)
 }
 
 // Add atomically adds delta and returns the new value
-func (a *AtomicInt64) Add(delta int64) int64 {
-	return atomic.AddInt64(&a.value, delta)
+func (p *AtomicInt64) Add(delta int64) int64 {
+	return atomic.AddInt64(&p.value, delta)
 }
 
 // Swap atomically stores new and returns the old value
-func (a *AtomicInt64) Swap(nw int64) int64 {
-	return atomic.SwapInt64(&a.value, nw)
+func (p *AtomicInt64) Swap(nw int64) int64 {
+	return atomic.SwapInt64(&p.value, nw)
 }
 
 // CompareAndSwap atomically compares and swaps
 // Returns true if the swap was performed
-func (a *AtomicInt64) CompareAndSwap(ol, nw int64) bool {
-	return atomic.CompareAndSwapInt64(&a.value, ol, nw)
+func (p *AtomicInt64) CompareAndSwap(ol, nw int64) bool {
+	return atomic.CompareAndSwapInt64(&p.value, ol, nw)
 }
 
 // buf interface implementation
 
 // IsVoid returns true if the atomic int64 is nil.
-func (a *AtomicInt64) IsVoid() bool {
-	return a == nil
+func (p *AtomicInt64) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo returns true if the atomics are the same object.
-func (a *AtomicInt64) EqualTo(v Value) bool {
+func (p *AtomicInt64) EqualTo(v Value) bool {
 	other, ok := v.(*AtomicInt64)
 	if !ok {
 		return false
 	}
-	return a == other
+	return p == other
 }
 
 // SchemeString returns the Scheme representation of the atomic int64.
-func (a *AtomicInt64) SchemeString() string {
-	if a == nil {
+func (p *AtomicInt64) SchemeString() string {
+	if p == nil {
 		return "#<atomic-int64:void>"
 	}
-	return fmt.Sprintf("#<atomic-int64 id=%d value=%d>", a.id, a.Load())
+	return fmt.Sprintf("#<atomic-int64 id=%d value=%d>", p.id, p.Load())
 }

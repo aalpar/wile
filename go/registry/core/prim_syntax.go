@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"wile/machine"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // gensymCounter is used to generate unique symbol names

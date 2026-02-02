@@ -24,11 +24,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"wile/environment"
-	"wile/parser"
-	"wile/syntax"
-	"wile/validate"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/validate"
+	"github.com/aalpar/wile/go/values"
 )
 
 const (
@@ -225,35 +225,43 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a string but got a %T", next)
 		}
 
-		// Find and open the file
-		file, filePath, err := findFile(p, ctctx, fn.Value)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
-		}
-		if file == nil {
-			return values.NewForeignErrorf("include: file not found: %q", fn.Value)
-		}
-		defer file.Close() //nolint:errcheck
-
-		// Create parser for the file
-		reader := bufio.NewReader(file)
-		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
-
-		// Read all forms from the file first, then process them with letrec* semantics
-		var forms []syntax.SyntaxValue
-		for {
-			stx, readErr := fileParser.ReadSyntax(context.TODO())
-			if readErr != nil {
-				if errors.Is(readErr, io.EOF) {
-					break
-				}
-				return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+		// Process file in closure to ensure defer runs after each iteration
+		err := func() error {
+			// Find and open the file
+			file, filePath, err := findFile(p, ctctx, fn.Value)
+			if err != nil {
+				return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
 			}
-			forms = append(forms, stx)
-		}
+			if file == nil {
+				return values.NewForeignErrorf("include: file not found: %q", fn.Value)
+			}
+			defer file.Close() //nolint:errcheck
 
-		// Process forms with letrec* semantics: pre-declare all bindings first
-		err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+			// Create parser for the file
+			reader := bufio.NewReader(file)
+			fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
+
+			// Read all forms from the file first, then process them with letrec* semantics
+			var forms []syntax.SyntaxValue
+			for {
+				stx, readErr := fileParser.ReadSyntax(context.TODO())
+				if readErr != nil {
+					if errors.Is(readErr, io.EOF) {
+						break
+					}
+					return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+				}
+				forms = append(forms, stx)
+			}
+
+			// Process forms with letrec* semantics: pre-declare all bindings first
+			err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}()
 		if err != nil {
 			return err
 		}
@@ -782,12 +790,13 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 		}
 		return nil
 	})
-	if errors.Is(err, values.ErrStopIteration) {
+	if !errors.Is(err, values.ErrStopIteration) {
 		// Normal termination of iteration
-	} else if err != nil {
-		panic(err)
-	} else if !syntax.IsSyntaxEmptyList(v) {
-		panic(values.ErrNotAList)
+		if err != nil {
+			panic(err)
+		} else if !syntax.IsSyntaxEmptyList(v) {
+			panic(values.ErrNotAList)
+		}
 	}
 	if !hasSplice {
 		// Simple case: (list elem1 elem2 ...)
@@ -1167,7 +1176,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
 	} else {
 		// Fallback for tests that don't set up the factory
-		libEnv = environment.NewTopLevelEnvironmentFrame()
+		libEnv = environment.NewTopLevelEnvironment().Runtime()
 	}
 
 	lib := NewCompiledLibrary(libName, libEnv)
@@ -1974,7 +1983,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 //
 // Body expressions are expanded before compilation to resolve macros that
 // may have been bound by the enclosing let-syntax/letrec-syntax.
-func (p *CompileTimeContinuation) compileBeginBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileBeginBody(ctctx CompileTimeCallContext, body *syntax.SyntaxPair) error { //nolint:unused
 	if syntax.IsSyntaxEmptyList(body) {
 		return values.NewForeignError("expected at least one body expression")
 	}

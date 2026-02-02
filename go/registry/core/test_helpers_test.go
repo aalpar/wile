@@ -20,13 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/runtime"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
@@ -165,22 +165,22 @@ func runSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return runSchemeCodeWithContext(t, ctx, code)
+	return runSchemeCodeWithContext(ctx, t, code)
 }
 
 // runSchemeCodeWithContext parses and runs Scheme source code with the given context.
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
-func runSchemeCodeWithContext(t *testing.T, ctx context.Context, code string) (values.Value, error) {
+func runSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
 	env, err := runtime.NewTopLevelEnvironmentFrameTiny(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return runSchemeCodeWithEnvAndContext(t, ctx, env, code)
+	return runSchemeCodeWithEnvAndContext(ctx, t, env, code)
 }
 
 // runSchemeCodeWithEnvAndContext parses and runs Scheme source code with the given context and environment.
-func runSchemeCodeWithEnvAndContext(t *testing.T, ctx context.Context, env *environment.EnvironmentFrame, code string) (values.Value, error) {
+func runSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	t.Helper()
 	p := parser.NewParser(env, true, strings.NewReader(code))
 	stx, err := p.ReadSyntax(ctx)

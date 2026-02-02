@@ -85,7 +85,7 @@ func TestStringInputOutputPort_NewStringOutputPort(t *testing.T) {
 
 func TestStringInputOutputPort_Write(t *testing.T) {
 	port := NewStringOutputPort()
-	n, err := port.Write([]byte("hello"))
+	n, err := port.WriteString("hello")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, n, qt.Equals, 5)
 	port.Flush()
@@ -96,9 +96,9 @@ func TestStringInputOutputPort_Write(t *testing.T) {
 
 func TestStringInputOutputPort_GetString(t *testing.T) {
 	port := NewStringOutputPort()
-	port.Write([]byte("hello")) //nolint:errcheck
-	port.Write([]byte(" "))     //nolint:errcheck
-	port.Write([]byte("world")) //nolint:errcheck
+	port.WriteString("hello") //nolint:errcheck
+	port.WriteString(" ")     //nolint:errcheck
+	port.WriteString("world") //nolint:errcheck
 	port.Flush()
 
 	s := port.Datum().String()

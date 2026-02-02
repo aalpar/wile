@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // SchemeError is a runtime error with Scheme-level stack trace.
@@ -47,48 +47,48 @@ func NewSchemeErrorWithCause(msg string, source *syntax.SourceContext, stackTrac
 	}
 }
 
-func (e *SchemeError) Error() string {
+func (p *SchemeError) Error() string {
 	var b strings.Builder
 
 	// Location prefix
-	if e.Source != nil {
+	if p.Source != nil {
 		fmt.Fprintf(&b, "%s:%d:%d: ",
-			e.Source.File,
-			e.Source.Start.Line(),
-			e.Source.Start.Column())
+			p.Source.File,
+			p.Source.Start.Line(),
+			p.Source.Start.Column())
 	}
 
 	// Message
-	b.WriteString(e.Message)
+	b.WriteString(p.Message)
 
 	// Stack trace
-	if e.StackTrace != "" {
+	if p.StackTrace != "" {
 		b.WriteString("\n")
-		b.WriteString(e.StackTrace)
+		b.WriteString(p.StackTrace)
 	}
 
 	return b.String()
 }
 
-func (e *SchemeError) Unwrap() error {
-	return e.Cause
+func (p *SchemeError) Unwrap() error {
+	return p.Cause
 }
 
 // SchemeString returns the Scheme representation.
-func (e *SchemeError) SchemeString() string {
-	return fmt.Sprintf("#<error: %s>", e.Message)
+func (p *SchemeError) SchemeString() string {
+	return fmt.Sprintf("#<error: %s>", p.Message)
 }
 
 // IsVoid returns false (errors are not void).
-func (e *SchemeError) IsVoid() bool {
+func (p *SchemeError) IsVoid() bool {
 	return false
 }
 
 // EqualTo compares for equality.
-func (e *SchemeError) EqualTo(o values.Value) bool {
+func (p *SchemeError) EqualTo(o values.Value) bool {
 	other, ok := o.(*SchemeError)
 	if !ok {
 		return false
 	}
-	return e.Message == other.Message
+	return p.Message == other.Message
 }

@@ -199,9 +199,9 @@ machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
 ```go
 import (
     "context"
-    "wile/environment"
-    "wile/machine"
-    "wile/runtime"
+    "github.com/aalpar/wile/go/environment"
+    "github.com/aalpar/wile/go/machine"
+    "github.com/aalpar/wile/go/runtime"
 )
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {

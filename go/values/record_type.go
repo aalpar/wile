@@ -34,23 +34,23 @@ func NewRecordType(name *Symbol, fieldNames []*Symbol) *RecordType {
 }
 
 // Name returns the record type's name symbol.
-func (rt *RecordType) Name() *Symbol {
-	return rt.name
+func (p *RecordType) Name() *Symbol {
+	return p.name
 }
 
 // FieldNames returns the ordered list of field name symbols.
-func (rt *RecordType) FieldNames() []*Symbol {
-	return rt.fieldNames
+func (p *RecordType) FieldNames() []*Symbol {
+	return p.fieldNames
 }
 
 // FieldCount returns the number of fields in this record type.
-func (rt *RecordType) FieldCount() int {
-	return len(rt.fieldNames)
+func (p *RecordType) FieldCount() int {
+	return len(p.fieldNames)
 }
 
 // FieldIndex returns the index of the field with the given name, or -1 if not found.
-func (rt *RecordType) FieldIndex(name *Symbol) int {
-	for i, fn := range rt.fieldNames {
+func (p *RecordType) FieldIndex(name *Symbol) int {
+	for i, fn := range p.fieldNames {
 		if fn == name {
 			return i
 		}
@@ -59,24 +59,24 @@ func (rt *RecordType) FieldIndex(name *Symbol) int {
 }
 
 // IsVoid returns true if the record type is nil.
-func (rt *RecordType) IsVoid() bool {
-	return rt == nil
+func (p *RecordType) IsVoid() bool {
+	return p == nil
 }
 
 // EqualTo implements identity-based equality for record types.
 // Two record types are equal only if they are the same object.
-func (rt *RecordType) EqualTo(v Value) bool {
+func (p *RecordType) EqualTo(v Value) bool {
 	other, ok := v.(*RecordType)
 	if !ok {
 		return false
 	}
-	return rt == other
+	return p == other
 }
 
 // SchemeString returns the Scheme external representation of the record type.
-func (rt *RecordType) SchemeString() string {
-	if rt == nil {
+func (p *RecordType) SchemeString() string {
+	if p == nil {
 		return "#<record-type>"
 	}
-	return fmt.Sprintf("#<record-type:%s>", rt.name.SchemeString())
+	return fmt.Sprintf("#<record-type:%s>", p.name.SchemeString())
 }

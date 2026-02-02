@@ -14,7 +14,7 @@
 
 package syntax
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 var _ SyntaxValue = syntaxVoidType{}
 

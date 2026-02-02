@@ -18,9 +18,9 @@ import (
 	"context"
 	"errors"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CompileDefineForSyntax handles (define-for-syntax name expr) or

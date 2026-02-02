@@ -18,7 +18,7 @@
 package math
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the math extension.

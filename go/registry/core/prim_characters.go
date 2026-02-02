@@ -17,9 +17,9 @@ package core
 import (
 	"context"
 
-	"wile/machine"
-	"wile/registry/helpers"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimCharToInteger implements the (char->integer) primitive.

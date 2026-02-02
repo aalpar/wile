@@ -17,9 +17,9 @@ package validate
 import (
 	"context"
 
-	"wile/environment"
-	"wile/forms"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/forms"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 func init() {

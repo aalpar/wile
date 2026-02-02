@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

@@ -15,10 +15,52 @@
 package helpers
 
 import (
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
+
+// variadicCompare is a generic helper for variadic comparison primitives.
+// It extracts values, compares them pairwise, and returns a boolean result.
+func variadicCompare[T any, V values.Value](
+	mc *machine.MachineContext,
+	name string,
+	extract func(values.Value) (V, bool),
+	getValue func(V) T,
+	cmp func(T, T) bool,
+	errType error,
+	typeName string,
+) error {
+	first := mc.Arg(0)
+	val1, ok := extract(first)
+	if !ok {
+		return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, first)
+	}
+
+	rest := mc.Arg(1)
+	prev := getValue(val1)
+
+	for rest != values.EmptyList {
+		pair, ok := rest.(*values.Pair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
+		}
+		val, ok := extract(pair.Car())
+		if !ok {
+			return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, pair.Car())
+		}
+		current := getValue(val)
+		if !cmp(prev, current) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		prev = current
+		rest = pair.Cdr()
+	}
+
+	mc.SetValue(values.TrueValue)
+	return nil
+}
 
 // CharCompare is a helper for character comparison primitives.
 // It extracts two characters from local bindings and applies the comparator.
@@ -40,32 +82,15 @@ func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bo
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
 func CharCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
-	c1 := mc.Arg(0)
-	ch1, ok := c1.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
-	}
-
-	rest := mc.Arg(1)
-	prev := ch1.Value
-
-	for rest != values.EmptyList {
-		pair, ok := rest.(*values.Pair)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
-		}
-		ch, ok := pair.Car().(*values.Character)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, pair.Car())
-		}
-		if !cmp(prev, ch.Value) {
-			mc.SetValue(values.FalseValue)
-			return nil
-		}
-		prev = ch.Value
-		rest = pair.Cdr()
-	}
-
-	mc.SetValue(values.TrueValue)
-	return nil
+	return variadicCompare(mc, name,
+		func(v values.Value) (*values.Character, bool) {
+			c, ok := v.(*values.Character)
+			return c, ok
+		},
+		func(c *values.Character) rune {
+			return c.Value
+		},
+		cmp,
+		values.ErrNotACharacter,
+		"a character")
 }

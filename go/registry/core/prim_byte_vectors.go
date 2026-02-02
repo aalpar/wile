@@ -17,8 +17,8 @@ package core
 import (
 	"context"
 
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimMakeBytevector implements the (make-bytevector) primitive.
@@ -33,7 +33,7 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 	if size.Value < 0 {
 		return values.NewForeignError("make-bytevector: size must be non-negative")
 	}
-	var fill uint8 = 0
+	var fill uint8
 	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if ok && !tuple.IsEmptyList() {

@@ -17,7 +17,7 @@ package syntax
 import (
 	"context"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // SyntaxForEachFunc is the callback type for iterating over syntax tuples.

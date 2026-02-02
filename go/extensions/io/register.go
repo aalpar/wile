@@ -18,9 +18,9 @@
 package io
 
 import (
-	"wile/environment"
-	"wile/registry"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/registry"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Extension is the I/O extension.

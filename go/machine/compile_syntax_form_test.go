@@ -17,8 +17,8 @@ package machine
 import (
 	"testing"
 
-	"wile/environment"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -26,7 +26,7 @@ import (
 func TestCompileSyntax_SingleArg(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -42,7 +42,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -57,7 +57,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -170,7 +170,7 @@ func TestTemplateContainsEllipsis_BareEllipsisNotEscapeForm(t *testing.T) {
 func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -198,7 +198,7 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

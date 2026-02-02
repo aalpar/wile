@@ -17,7 +17,7 @@ package environment
 import (
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -71,7 +71,7 @@ func TestLocalIndex_EqualTo(t *testing.T) {
 	qt.Assert(t, li1.EqualTo(li4), qt.IsFalse)
 
 	// Test nil cases
-	var nilIndex *LocalIndex = nil
+	var nilIndex *LocalIndex
 	qt.Assert(t, nilIndex.EqualTo(nilIndex), qt.IsTrue)
 	qt.Assert(t, li1.EqualTo(nilIndex), qt.IsFalse)
 	qt.Assert(t, nilIndex.EqualTo(li1), qt.IsFalse)

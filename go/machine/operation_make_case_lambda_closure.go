@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationMakeCaseLambdaClosure creates a case-lambda closure from multiple closures.
@@ -40,7 +40,8 @@ func (p *OperationMakeCaseLambdaClosure) Apply(ctx context.Context, mc *MachineC
 		v := mc.evals.Pop()
 		cls, ok := v.(*MachineClosure)
 		if !ok {
-			return mc, mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", v))
+			err := mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", v))
+			return mc, err
 		}
 		closures[i] = cls
 	}

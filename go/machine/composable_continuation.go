@@ -15,7 +15,7 @@
 package machine
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ComposableContinuation is a callable value wrapping a delimited continuation
@@ -43,7 +43,7 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 }
 
 func (p *ComposableContinuation) Cont() *MachineContinuation { return p.cont }
-func (p *ComposableContinuation) WindingStack() WindingStack  { return p.windingStack }
+func (p *ComposableContinuation) WindingStack() WindingStack { return p.windingStack }
 
 func (p *ComposableContinuation) SchemeString() string {
 	return "#<composable-continuation>"

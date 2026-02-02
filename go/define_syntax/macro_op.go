@@ -60,7 +60,7 @@
 //	MacroOpEndList     // Exit outer list
 package define_syntax
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // ErrMacroHalt is returned when the macro machine has no more operations to execute.
 // This is a normal termination condition, not an error.

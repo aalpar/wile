@@ -22,15 +22,15 @@ type Error struct {
 	Cause   error
 }
 
-func (e *Error) Error() string {
-	if e.Cause != nil {
-		return e.Message + ": " + e.Cause.Error()
+func (p *Error) Error() string {
+	if p.Cause != nil {
+		return p.Message + ": " + p.Cause.Error()
 	}
-	return e.Message
+	return p.Message
 }
 
-func (e *Error) Unwrap() error {
-	return e.Cause
+func (p *Error) Unwrap() error {
+	return p.Cause
 }
 
 // isEOF checks if an error represents end of input.

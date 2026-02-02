@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -202,7 +202,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationMakeClosure(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironment().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				tpl := NewNativeTemplate(0, 0, false)
@@ -227,7 +227,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationSaveContinuationOffsetImmediate(1),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironment().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				tpl := NewNativeTemplate(0, 0, false)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
@@ -244,7 +244,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationRestoreContinuation(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironmentFrame()
+				topEnv := environment.NewTopLevelEnvironment().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				mc.template = NewNativeTemplate(0, 0, false)
@@ -264,7 +264,7 @@ func TestOperation(t *testing.T) {
 			if tc.evals == nil {
 				tc.evals = NewStack()
 			}
-			topEnv := environment.NewTopLevelEnvironmentFrame()
+			topEnv := environment.NewTopLevelEnvironment().Runtime()
 			lenv := environment.NewLocalEnvironment(0)
 			env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
@@ -845,9 +845,10 @@ func TestNativeTemplateOperationsArray(t *testing.T) {
 	tpl := NewNativeTemplate(2, 1, false)
 
 	// Add operations
-	tpl.operations = append(tpl.operations, NewOperationLoadVoid())
-	tpl.operations = append(tpl.operations, NewOperationPush())
-	tpl.operations = append(tpl.operations, NewOperationRestoreContinuation())
+	tpl.operations = append(tpl.operations,
+		NewOperationLoadVoid(),
+		NewOperationPush(),
+		NewOperationRestoreContinuation())
 
 	qt.Assert(t, tpl.operations.Len(), qt.Equals, 3)
 }
@@ -916,7 +917,7 @@ func TestOperationsCopy(t *testing.T) {
 
 // TestOperationForeignFunctionCallSimple tests foreign function call
 func TestOperationForeignFunctionCallSimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Create a foreign function
 	called := false
@@ -943,7 +944,7 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 
 // TestOperationMakeClosureError tests MakeClosure with wrong stack
 func TestOperationMakeClosureError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironmentFrame())
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.operations = append(tpl.operations,
 		// Push something that's not an environment frame

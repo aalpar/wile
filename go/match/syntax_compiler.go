@@ -51,8 +51,8 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (
@@ -119,17 +119,17 @@ func NewSyntaxCompilerWithEllipsis(ellipsis string) *SyntaxCompiler {
 // R7RS §4.3.2: The first subform of each syntax-rules pattern is the keyword of the macro
 // being transformed; it is not matched against the macro use.
 // Call this with true when compiling syntax-rules patterns.
-func (q *SyntaxCompiler) SetSkipMacroKeyword(skip bool) {
-	q.skipMacroKeyword = skip
+func (p *SyntaxCompiler) SetSkipMacroKeyword(skip bool) {
+	p.skipMacroKeyword = skip
 }
 
 // Compile compiles a pattern pair into bytecode.
-func (q *SyntaxCompiler) Compile(ctx context.Context, pr *values.Pair) error {
+func (p *SyntaxCompiler) Compile(ctx context.Context, pr *values.Pair) error {
 	// Analyze pattern first to identify which subtrees contain variables
 	// Use the pre-set variables for now (from test setup)
-	q.analysis = AnalyzePattern(pr, q.variables)
+	p.analysis = AnalyzePattern(pr, p.variables)
 
-	compile(ctx, q, pr)
+	compile(ctx, p, pr)
 	return nil
 }
 
@@ -146,7 +146,7 @@ func compile(ctx context.Context, vis *SyntaxCompiler, v0 *values.Pair) bool {
 
 // compileCurrentLevel processes all elements at the current nesting level.
 // Returns the updated stack (with current level popped and Done emitted).
-func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry {
+func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry { //nolint:unparam
 	l := len(stack)
 	for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
 		elementStart := len(vis.codes)

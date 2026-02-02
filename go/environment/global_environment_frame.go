@@ -19,8 +19,8 @@ import (
 	"maps"
 	"slices"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // GlobalIndex identifies a global binding by its symbol key.

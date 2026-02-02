@@ -19,10 +19,10 @@ import (
 	"math"
 	"math/big"
 
-	"wile/machine"
-	"wile/registry/helpers"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Type predicates using the helper factory
@@ -370,41 +370,57 @@ func PrimNegativeQ(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// parityCheck is a helper for implementing parity predicates (odd? and even?).
+// It accepts the predicate name, a test for regular integers, and a test for big integers.
+func parityCheck(
+	mc *machine.MachineContext,
+	name string,
+	regularTest func(int64) bool,
+	bigTest func(*big.Int) bool,
+) error {
+	o := mc.Arg(0)
+	switch v := o.(type) {
+	case *values.Integer:
+		mc.SetValue(utils.BoolToBoolean(regularTest(v.Value)))
+	case *values.BigInteger:
+		mc.SetValue(utils.BoolToBoolean(bigTest(v.BigInt())))
+	case *values.Float:
+		// Must be an integer value (no fractional part)
+		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+		}
+		if math.Floor(v.Value) != v.Value {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+		}
+		// Convert to big.Int for reliable parity check on large floats
+		bf := new(big.Float).SetFloat64(v.Value)
+		bi, _ := bf.Int(nil)
+		mc.SetValue(utils.BoolToBoolean(bigTest(bi)))
+	case *values.BigFloat:
+		// Must be an integer value
+		if !v.BigFloatValue().IsInt() {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.BigFloatValue())
+		}
+		bi, _ := v.BigFloatValue().Int(nil)
+		mc.SetValue(utils.BoolToBoolean(bigTest(bi)))
+	default:
+		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, o)
+	}
+	return nil
+}
+
 // PrimOddQ implements the odd? predicate.
 //
 // R7RS §6.2.6: Returns #t if the integer is odd, #f otherwise.
 // Accepts any integer, including inexact integers (e.g., 3.0).
 func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(utils.BoolToBoolean(v.Value%2 != 0))
-	case *values.BigInteger:
-		// Check if the last bit is set (odd)
-		mc.SetValue(utils.BoolToBoolean(v.BigInt().Bit(0) == 1))
-	case *values.Float:
-		// Must be an integer value (no fractional part)
-		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "odd?: expected an integer but got %v", v.Value)
-		}
-		if math.Floor(v.Value) != v.Value {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "odd?: expected an integer but got %v", v.Value)
-		}
-		// Convert to big.Int for reliable odd check on large floats
-		bf := new(big.Float).SetFloat64(v.Value)
-		bi, _ := bf.Int(nil)
-		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 1))
-	case *values.BigFloat:
-		// Must be an integer value
-		if !v.BigFloatValue().IsInt() {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "odd?: expected an integer but got %v", v.BigFloatValue())
-		}
-		bi, _ := v.BigFloatValue().Int(nil)
-		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 1))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "odd?: expected an integer but got %T", o)
-	}
-	return nil
+	return parityCheck(mc, "odd?",
+		func(n int64) bool {
+			return n%2 != 0
+		},
+		func(n *big.Int) bool {
+			return n.Bit(0) == 1
+		})
 }
 
 // PrimEvenQ implements the even? predicate.
@@ -412,34 +428,11 @@ func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if the integer is even, #f otherwise.
 // Accepts any integer, including inexact integers (e.g., 4.0).
 func PrimEvenQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(utils.BoolToBoolean(v.Value%2 == 0))
-	case *values.BigInteger:
-		// Check if the last bit is unset (even)
-		mc.SetValue(utils.BoolToBoolean(v.BigInt().Bit(0) == 0))
-	case *values.Float:
-		// Must be an integer value (no fractional part)
-		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.Value)
-		}
-		if math.Floor(v.Value) != v.Value {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.Value)
-		}
-		// Convert to big.Int for reliable even check on large floats
-		bf := new(big.Float).SetFloat64(v.Value)
-		bi, _ := bf.Int(nil)
-		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 0))
-	case *values.BigFloat:
-		// Must be an integer value
-		if !v.BigFloatValue().IsInt() {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %v", v.BigFloatValue())
-		}
-		bi, _ := v.BigFloatValue().Int(nil)
-		mc.SetValue(utils.BoolToBoolean(bi.Bit(0) == 0))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "even?: expected an integer but got %T", o)
-	}
-	return nil
+	return parityCheck(mc, "even?",
+		func(n int64) bool {
+			return n%2 == 0
+		},
+		func(n *big.Int) bool {
+			return n.Bit(0) == 0
+		})
 }

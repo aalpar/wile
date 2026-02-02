@@ -15,8 +15,8 @@
 package define_syntax
 
 import (
-	"wile/match"
-	"wile/values"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/values"
 )
 
 // MacroOpMatch matches the current element against a literal value.

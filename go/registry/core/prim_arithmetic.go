@@ -19,9 +19,9 @@ import (
 	"math"
 	"math/big"
 
-	"wile/machine"
-	"wile/registry/helpers"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimAdd implements the + primitive.
@@ -278,19 +278,23 @@ func extractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 	}
 }
 
-// PrimQuotient implements the (quotient) primitive.
-// Returns truncated integer quotient.
-// Accepts exact and inexact integers per R7RS.
-func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
+// integerDivisionOp is a helper for integer division operations (quotient, remainder, modulo).
+// It handles both regular integers and big integers, preserving exactness.
+func integerDivisionOp(
+	mc *machine.MachineContext,
+	name string,
+	regularOp func(int64, int64) int64,
+	bigOp func(*big.Int, *big.Int, *big.Int) *big.Int,
+) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
 	// Extract integer values, tracking inexactness
-	v0, big0, inexact0, err := extractInteger(o0, "quotient")
+	v0, big0, inexact0, err := extractInteger(o0, name)
 	if err != nil {
 		return err
 	}
-	v1, big1, inexact1, err := extractInteger(o1, "quotient")
+	v1, big1, inexact1, err := extractInteger(o1, name)
 	if err != nil {
 		return err
 	}
@@ -308,9 +312,9 @@ func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 			b1 = big.NewInt(v1)
 		}
 		if b1.Sign() == 0 {
-			return values.NewForeignError("quotient: division by zero")
+			return values.NewForeignError(name + ": division by zero")
 		}
-		result := new(big.Int).Quo(b0, b1)
+		result := bigOp(new(big.Int), b0, b1)
 		if inexact {
 			f, _ := new(big.Float).SetInt(result).Float64()
 			mc.SetValue(values.NewFloat(f))
@@ -322,9 +326,9 @@ func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 
 	// Regular integer case
 	if v1 == 0 {
-		return values.NewForeignError("quotient: division by zero")
+		return values.NewForeignError(name + ": division by zero")
 	}
-	result := v0 / v1
+	result := regularOp(v0, v1)
 	if inexact {
 		mc.SetValue(values.NewFloat(float64(result)))
 	} else {
@@ -333,59 +337,26 @@ func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimQuotient implements the (quotient) primitive.
+// Returns truncated integer quotient.
+// Accepts exact and inexact integers per R7RS.
+func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
+	return integerDivisionOp(mc, "quotient",
+		func(a, b int64) int64 {
+			return a / b
+		},
+		(*big.Int).Quo)
+}
+
 // PrimRemainder implements the (remainder) primitive.
 // Returns remainder with sign of dividend.
 // Accepts exact and inexact integers per R7RS.
 func PrimRemainder(_ context.Context, mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	// Extract integer values, tracking inexactness
-	v0, big0, inexact0, err := extractInteger(o0, "remainder")
-	if err != nil {
-		return err
-	}
-	v1, big1, inexact1, err := extractInteger(o1, "remainder")
-	if err != nil {
-		return err
-	}
-
-	inexact := inexact0 || inexact1
-
-	// Handle BigInteger case
-	if big0 != nil || big1 != nil {
-		b0 := big0
-		if b0 == nil {
-			b0 = big.NewInt(v0)
-		}
-		b1 := big1
-		if b1 == nil {
-			b1 = big.NewInt(v1)
-		}
-		if b1.Sign() == 0 {
-			return values.NewForeignError("remainder: division by zero")
-		}
-		result := new(big.Int).Rem(b0, b1)
-		if inexact {
-			f, _ := new(big.Float).SetInt(result).Float64()
-			mc.SetValue(values.NewFloat(f))
-		} else {
-			mc.SetValue(values.NewBigInteger(result))
-		}
-		return nil
-	}
-
-	// Regular integer case
-	if v1 == 0 {
-		return values.NewForeignError("remainder: division by zero")
-	}
-	result := v0 % v1
-	if inexact {
-		mc.SetValue(values.NewFloat(float64(result)))
-	} else {
-		mc.SetValue(values.NewInteger(result))
-	}
-	return nil
+	return integerDivisionOp(mc, "remainder",
+		func(a, b int64) int64 {
+			return a % b
+		},
+		(*big.Int).Rem)
 }
 
 // PrimModulo implements the modulo primitive.

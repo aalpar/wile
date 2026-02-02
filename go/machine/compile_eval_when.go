@@ -18,8 +18,8 @@ import (
 	"context"
 	"errors"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CompileEvalWhen handles (eval-when (phase ...) body ...).

@@ -17,8 +17,8 @@ package machine
 import (
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -71,7 +71,7 @@ func TestErrExceptionEscape_Continuable(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition:   values.NewString("continuable"),
+		Condition:   values.NewString("continuable"), //nolint:govet
 		Continuable: true,
 	}
 
@@ -81,13 +81,13 @@ func TestErrExceptionEscape_Continuable(t *testing.T) {
 func TestErrExceptionEscape_WithContinuation(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 
 	err := &ErrExceptionEscape{
-		Condition:    values.NewString("error"),
-		Continuable:  true,
+		Condition:    values.NewString("error"), //nolint:govet
+		Continuable:  true,                      //nolint:govet
 		Continuation: cont,
 	}
 
@@ -98,7 +98,7 @@ func TestErrExceptionEscape_Handled(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition: values.NewString("handled"),
+		Condition: values.NewString("handled"), //nolint:govet
 		Handled:   true,
 	}
 

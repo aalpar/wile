@@ -15,7 +15,7 @@
 package wile
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Value represents a Scheme value in the public API.
@@ -35,20 +35,20 @@ type wrappedValue struct {
 	v values.Value
 }
 
-func (w *wrappedValue) SchemeString() string {
-	return w.v.SchemeString()
+func (p *wrappedValue) SchemeString() string {
+	return p.v.SchemeString()
 }
 
-func (w *wrappedValue) IsVoid() bool {
-	return w.v == values.Void
+func (p *wrappedValue) IsVoid() bool {
+	return p.v == values.Void
 }
 
-func (w *wrappedValue) Internal() values.Value {
-	return w.v
+func (p *wrappedValue) Internal() values.Value {
+	return p.v
 }
 
-func (w *wrappedValue) internal() values.Value {
-	return w.v
+func (p *wrappedValue) internal() values.Value {
+	return p.v
 }
 
 func wrapValue(v values.Value) Value {

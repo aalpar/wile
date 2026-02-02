@@ -17,7 +17,7 @@ package machine
 import (
 	"context"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationPushWind creates a dynamic-wind frame and pushes it onto the winding stack.
@@ -42,14 +42,16 @@ func (*OperationPushWind) Apply(_ context.Context, mc *MachineContext) (*Machine
 	beforeVal := mc.evals.PeekK(2)
 	before, ok := beforeVal.(*MachineClosure)
 	if !ok {
-		return mc, mc.Error("dynamic-wind: before must be a procedure")
+		err := mc.Error("dynamic-wind: before must be a procedure")
+		return mc, err
 	}
 
 	// Get after closure from stack (at depth 0 = top)
 	afterVal := mc.evals.PeekK(0)
 	after, ok := afterVal.(*MachineClosure)
 	if !ok {
-		return mc, mc.Error("dynamic-wind: after must be a procedure")
+		err := mc.Error("dynamic-wind: after must be a procedure")
+		return mc, err
 	}
 
 	// Create and push the winding frame

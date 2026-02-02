@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // StackFrame represents one frame in a Scheme stack trace.
@@ -29,25 +29,25 @@ type StackFrame struct {
 }
 
 // String formats the frame for display.
-func (f *StackFrame) String() string {
-	name := f.FunctionName
+func (p *StackFrame) String() string {
+	name := p.FunctionName
 	if name == "" {
 		name = "<anonymous>"
 	}
 
-	if f.CurrentLoc != nil {
+	if p.CurrentLoc != nil {
 		return fmt.Sprintf("  at %s (%s:%d:%d)",
 			name,
-			f.CurrentLoc.File,
-			f.CurrentLoc.Start.Line(),
-			f.CurrentLoc.Start.Column())
+			p.CurrentLoc.File,
+			p.CurrentLoc.Start.Line(),
+			p.CurrentLoc.Start.Column())
 	}
-	if f.CallSite != nil {
+	if p.CallSite != nil {
 		return fmt.Sprintf("  at %s (called from %s:%d:%d)",
 			name,
-			f.CallSite.File,
-			f.CallSite.Start.Line(),
-			f.CallSite.Start.Column())
+			p.CallSite.File,
+			p.CallSite.Start.Line(),
+			p.CallSite.Start.Column())
 	}
 	return fmt.Sprintf("  at %s", name)
 }
@@ -56,13 +56,13 @@ func (f *StackFrame) String() string {
 type StackTrace []StackFrame
 
 // String formats the entire stack trace.
-func (st StackTrace) String() string {
-	if len(st) == 0 {
+func (p StackTrace) String() string {
+	if len(p) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("Stack trace:\n")
-	for _, frame := range st {
+	for _, frame := range p {
 		b.WriteString(frame.String())
 		b.WriteString("\n")
 	}

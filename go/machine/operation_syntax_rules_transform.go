@@ -45,10 +45,10 @@ import (
 	"context"
 	"fmt"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // envBindingChecker implements match.BindingChecker for R7RS auxiliary syntax hygiene.
@@ -64,12 +64,12 @@ var _ match.BindingChecker = (*envBindingChecker)(nil)
 // This is used by the pattern matcher to determine if an input identifier
 // should match a pattern literal. Per R7RS §4.3.2, literals match only if
 // both have the same lexical binding, or both have no lexical binding.
-func (e *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
-	if e.env == nil {
+func (p *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+	if p.env == nil {
 		return false
 	}
 	s := values.NewSymbol(sym)
-	binding := e.env.GetBindingWithScopes(s, scopes)
+	binding := p.env.GetBindingWithScopes(s, scopes)
 	return binding != nil
 }
 
@@ -77,12 +77,12 @@ func (e *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool 
 // This is used for R7RS §4.3.2 auxiliary syntax hygiene: we compare the
 // actual bindings (not just whether they exist) to determine if a literal
 // matches. Two identifiers match only if they have the same binding.
-func (e *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
-	if e.env == nil {
+func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+	if p.env == nil {
 		return nil
 	}
 	s := values.NewSymbol(sym)
-	binding := e.env.GetBindingWithScopes(s, scopes)
+	binding := p.env.GetBindingWithScopes(s, scopes)
 	return binding
 }
 

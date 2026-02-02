@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 type OperationApply struct{}
@@ -54,7 +54,8 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 	case *ComposableContinuation:
 		return applyComposableContinuation(mc, cls, vs)
 	default:
-		return mc, mc.Error(fmt.Sprintf("expected a closure, got %s", mc.value[0].SchemeString()))
+		err := mc.Error(fmt.Sprintf("expected a closure, got %s", mc.value[0].SchemeString()))
+		return mc, err
 	}
 }
 
@@ -63,7 +64,7 @@ func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*Machin
 // With 1 arg: sets the value (after applying converter if present).
 // After setting the return value, we restore the saved continuation to return
 // to the caller, just like a closure's RestoreContinuation would do.
-func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, args []values.Value) (*MachineContext, error) {
+func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, args []values.Value) (*MachineContext, error) { //nolint:unparam
 	switch len(args) {
 	case 0:
 		// Get: return current value
@@ -87,12 +88,14 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, a
 			sub := mc.NewSubContext()
 			_, err := sub.Apply(converter, newVal)
 			if err != nil {
-				return mc, mc.WrapError(err, "parameter: failed to apply converter")
+				wrapErr := mc.WrapError(err, "parameter: failed to apply converter")
+				return mc, wrapErr
 			}
 			err = sub.Run()
 			if err != nil {
 				if !errors.Is(err, ErrMachineHalt) {
-					return mc, mc.WrapError(err, "parameter: converter error")
+					wrapErr := mc.WrapError(err, "parameter: converter error")
+					return mc, wrapErr
 				}
 			}
 			newVal = sub.GetValue()
@@ -110,7 +113,8 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, a
 		return mc, nil
 
 	default:
-		return mc, mc.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
+		err := mc.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
+		return mc, err
 	}
 }
 
@@ -122,7 +126,8 @@ func applyParameter(ctx context.Context, mc *MachineContext, param *Parameter, a
 // to a Production Programming Environment" (ICFP 2007).
 func applyComposableContinuation(mc *MachineContext, cc *ComposableContinuation, args []values.Value) (*MachineContext, error) {
 	if len(args) != 1 {
-		return mc, mc.Error(fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
+		err := mc.Error(fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
+		return mc, err
 	}
 
 	// Deep-copy the segment for safe re-invocation

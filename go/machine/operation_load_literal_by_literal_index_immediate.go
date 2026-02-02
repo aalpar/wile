@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationLoadLiteralByLiteralIndexImmediate loads a literal value from the literals pool.

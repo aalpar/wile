@@ -27,12 +27,12 @@ import (
 	"strings"
 	"syscall"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/repl"
-	"wile/runtime"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/repl"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
 
 	"github.com/jessevdk/go-flags"
 )

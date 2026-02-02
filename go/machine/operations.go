@@ -15,7 +15,7 @@
 package machine
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (

@@ -48,12 +48,12 @@ func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
 	return q
 }
 
-// Read reads data from the port into p.
-func (p2 *StringInputPort) Read(p []byte) (n int, err error) {
-	if p2.closed {
+// Read reads data from the port into bs.
+func (p *StringInputPort) Read(bs []byte) (n int, err error) {
+	if p.closed {
 		return 0, ErrPortClosed
 	}
-	return p2.buf.Read(p)
+	return p.buf.Read(bs)
 }
 
 // ReadRune reads a rune from the port.

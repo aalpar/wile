@@ -17,8 +17,8 @@ package environment
 import (
 	"testing"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -94,7 +94,7 @@ func TestBinding_SchemeString(t *testing.T) {
 }
 
 func TestBinding_IsVoid(t *testing.T) {
-	var nilBinding *Binding = nil
+	var nilBinding *Binding
 	qt.Assert(t, nilBinding.IsVoid(), qt.IsTrue)
 
 	b := NewBinding(values.Void, BindingTypeVariable)

@@ -17,8 +17,8 @@ package environment
 import (
 	"testing"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -103,7 +103,7 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 }
 
 func TestGlobalEnvironmentFrame_IsVoid(t *testing.T) {
-	var env *GlobalEnvironmentFrame = nil
+	var env *GlobalEnvironmentFrame
 	qt.Assert(t, env.IsVoid(), qt.IsTrue)
 
 	env2 := newTestGlobalEnvFrame()

@@ -14,6 +14,27 @@ The foundation for Wile's hygienic macro system.
 
 This paper introduces the "sets of scopes" model for macro hygiene, which Wile uses for `syntax-rules` macro expansion. Each identifier carries a set of scopes, and variable resolution checks that the binding's scopes are a subset of the use site's scopes.
 
+### Adding Delimited and Composable Control to a Production Programming Environment (Flatt et al. 2007)
+
+The basis for Wile's delimited continuation implementation: prompt tags, `call-with-continuation-prompt`, `abort-current-continuation`, and `call-with-composable-continuation`.
+
+- **Paper**: Matthew Flatt, Gang Yu, Robert Bruce Findler, Matthias Felleisen, "Adding Delimited and Composable Control to a Production Programming Environment", ICFP 2007
+- **DOI**: https://doi.org/10.1145/1291151.1291178
+
+### The Theory and Practice of First-Class Prompts (Felleisen 1988)
+
+Original formalization of continuation prompts and aborts.
+
+- **Paper**: Matthias Felleisen, "The Theory and Practice of First-Class Prompts", POPL 1988
+- **DOI**: https://doi.org/10.1145/73560.73576
+
+### Abstracting Control (Danvy & Filinski 1990)
+
+Introduces shift/reset as composable delimited control operators, the theoretical foundation for composable continuations.
+
+- **Paper**: Olivier Danvy, Andrzej Filinski, "Abstracting Control", LFP 1990
+- **DOI**: https://doi.org/10.1145/91556.91622
+
 ## Language Specifications
 
 ### R7RS-small (Revised⁷ Report on the Algorithmic Language Scheme)

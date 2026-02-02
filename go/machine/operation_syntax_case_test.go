@@ -18,9 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -190,7 +190,7 @@ func TestOperationSyntaxCaseNoMatch_IsVoid(t *testing.T) {
 func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -291,7 +291,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	// Clear any previous state
 	currentSyntaxCaseInput = nil
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -313,7 +313,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	// Clear any previous state
 	currentSyntaxCaseInput = nil
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -376,7 +376,7 @@ func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	// Set up some input
 	currentSyntaxCaseInput = syntax.NewSyntaxSymbol("test", nil)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 

@@ -41,10 +41,10 @@ func TestSymbol_Datum(t *testing.T) {
 func TestSymbol_Copy(t *testing.T) {
 	s := NewSymbol("original")
 	copyVal := s.Copy()
-	copy, ok := copyVal.(*Symbol)
+	cpy, ok := copyVal.(*Symbol)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, copy.Key, qt.Equals, "original")
-	qt.Assert(t, copy, qt.Not(qt.Equals), s)
+	qt.Assert(t, cpy.Key, qt.Equals, "original")
+	qt.Assert(t, cpy, qt.Not(qt.Equals), s)
 }
 
 func TestSymbol_SchemeString(t *testing.T) {

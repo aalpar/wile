@@ -18,14 +18,14 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestOperationBrk(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	called := false
 	var capturedMc *MachineContext
 
@@ -50,7 +50,7 @@ func TestOperationBrk(t *testing.T) {
 }
 
 func TestOperationBrk_WithError(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	expectedErr := values.NewForeignError("test error")
 
 	fn := func(ctx context.Context, mc *MachineContext) error {
@@ -100,7 +100,7 @@ func TestOperationBrk_EqualTo(t *testing.T) {
 }
 
 func TestOperationLoadLiteralInteger(t *testing.T) {
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 
 	mc := &MachineContext{
 		env:   env,

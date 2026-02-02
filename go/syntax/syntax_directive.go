@@ -15,7 +15,7 @@
 package syntax
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (

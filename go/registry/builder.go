@@ -27,13 +27,13 @@ func NewRegistryBuilder(funcs ...func(*Registry) error) RegistryBuilder {
 }
 
 // Register adds registration functions to the builder.
-func (b *RegistryBuilder) Register(funcs ...func(*Registry) error) {
-	*b = append(*b, funcs...)
+func (p *RegistryBuilder) Register(funcs ...func(*Registry) error) {
+	*p = append(*p, funcs...)
 }
 
 // AddToRegistry applies all registration functions to the registry.
-func (b RegistryBuilder) AddToRegistry(r *Registry) error {
-	for _, f := range b {
+func (p RegistryBuilder) AddToRegistry(r *Registry) error {
+	for _, f := range p {
 		err := f(r)
 		if err != nil {
 			return err
@@ -43,9 +43,9 @@ func (b RegistryBuilder) AddToRegistry(r *Registry) error {
 }
 
 // Build creates a new registry and applies all registration functions.
-func (b RegistryBuilder) Build() (*Registry, error) {
+func (p RegistryBuilder) Build() (*Registry, error) {
 	r := NewRegistry()
-	err := b.AddToRegistry(r)
+	err := p.AddToRegistry(r)
 	if err != nil {
 		return nil, err
 	}

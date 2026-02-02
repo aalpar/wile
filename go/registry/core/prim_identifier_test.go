@@ -18,9 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"wile/runtime"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -158,13 +158,14 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 			binding2 := env.GetBindingWithScopes(sym2, tc.id2.Scopes())
 
 			var result bool
-			if binding1 == nil && binding2 == nil {
+			switch {
+			case binding1 == nil && binding2 == nil:
 				// Both unbound → compare names
 				result = tc.id1.Sym.Key == tc.id2.Sym.Key
-			} else if binding1 == nil || binding2 == nil {
+			case binding1 == nil || binding2 == nil:
 				// One bound, one unbound → not equal
 				result = false
-			} else {
+			default:
 				// Both bound → same binding?
 				result = binding1 == binding2
 			}

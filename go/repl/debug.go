@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wile/machine"
+	"github.com/aalpar/wile/go/machine"
 )
 
 // DebugContext holds the state for debug commands.
@@ -39,18 +39,18 @@ func NewDebugContext() *DebugContext {
 }
 
 // Debugger returns the debugger instance.
-func (dc *DebugContext) Debugger() *machine.Debugger {
-	return dc.debugger
+func (p *DebugContext) Debugger() *machine.Debugger {
+	return p.debugger
 }
 
 // SetCurrentMC sets the current machine context (for inspection commands).
-func (dc *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
-	dc.currentMC = mc
+func (p *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
+	p.currentMC = mc
 }
 
 // HandleDebugCommand processes a debug command starting with ','.
 // Returns true if a command was handled, false otherwise.
-func (dc *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
+func (p *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, ",") {
 		return false
@@ -66,29 +66,29 @@ func (dc *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
 
 	switch cmd {
 	case "break", "b":
-		dc.cmdBreak(args, out)
+		p.cmdBreak(args, out)
 	case "delete", "d":
-		dc.cmdDelete(args, out)
+		p.cmdDelete(args, out)
 	case "list", "l":
-		dc.cmdList(out)
+		p.cmdList(out)
 	case "enable":
-		dc.cmdEnable(args, out)
+		p.cmdEnable(args, out)
 	case "disable":
-		dc.cmdDisable(args, out)
+		p.cmdDisable(args, out)
 	case "step", "s":
-		dc.cmdStep(out)
+		p.cmdStep(out)
 	case "next", "n":
-		dc.cmdNext(out)
+		p.cmdNext(out)
 	case "finish", "f":
-		dc.cmdFinish(out)
+		p.cmdFinish(out)
 	case "continue", "c":
-		dc.cmdContinue(out)
+		p.cmdContinue(out)
 	case "backtrace", "bt":
-		dc.cmdBacktrace(out)
+		p.cmdBacktrace(out)
 	case "where":
-		dc.cmdWhere(out)
+		p.cmdWhere(out)
 	case "help", "h", "?":
-		dc.cmdHelp(out)
+		p.cmdHelp(out)
 	default:
 		fmt.Fprintf(out, "Unknown command: %s (type ,help for commands)\n", cmd)
 	}
@@ -97,7 +97,7 @@ func (dc *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
 }
 
 // cmdBreak sets a breakpoint.
-func (dc *DebugContext) cmdBreak(args []string, out io.Writer) {
+func (p *DebugContext) cmdBreak(args []string, out io.Writer) {
 	if len(args) < 1 {
 		fmt.Fprintln(out, "Usage: ,break FILE:LINE[:COLUMN]")
 		return
@@ -109,7 +109,7 @@ func (dc *DebugContext) cmdBreak(args []string, out io.Writer) {
 		return
 	}
 
-	id := dc.debugger.SetBreakpoint(file, line, col)
+	id := p.debugger.SetBreakpoint(file, line, col)
 	fmt.Fprintf(out, "Breakpoint %d set at %s:%d", id, file, line)
 	if col > 0 {
 		fmt.Fprintf(out, ":%d", col)
@@ -118,7 +118,7 @@ func (dc *DebugContext) cmdBreak(args []string, out io.Writer) {
 }
 
 // cmdDelete removes a breakpoint.
-func (dc *DebugContext) cmdDelete(args []string, out io.Writer) {
+func (p *DebugContext) cmdDelete(args []string, out io.Writer) {
 	if len(args) < 1 {
 		fmt.Fprintln(out, "Usage: ,delete ID")
 		return
@@ -130,7 +130,7 @@ func (dc *DebugContext) cmdDelete(args []string, out io.Writer) {
 		return
 	}
 
-	if dc.debugger.RemoveBreakpoint(machine.BreakpointID(id)) {
+	if p.debugger.RemoveBreakpoint(machine.BreakpointID(id)) {
 		fmt.Fprintf(out, "Breakpoint %d deleted\n", id)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
@@ -138,8 +138,8 @@ func (dc *DebugContext) cmdDelete(args []string, out io.Writer) {
 }
 
 // cmdList lists all breakpoints.
-func (dc *DebugContext) cmdList(out io.Writer) {
-	bps := dc.debugger.Breakpoints()
+func (p *DebugContext) cmdList(out io.Writer) {
+	bps := p.debugger.Breakpoints()
 	if len(bps) == 0 {
 		fmt.Fprintln(out, "No breakpoints set")
 		return
@@ -165,7 +165,7 @@ func (dc *DebugContext) cmdList(out io.Writer) {
 }
 
 // cmdEnable enables a breakpoint.
-func (dc *DebugContext) cmdEnable(args []string, out io.Writer) {
+func (p *DebugContext) cmdEnable(args []string, out io.Writer) {
 	if len(args) < 1 {
 		fmt.Fprintln(out, "Usage: ,enable ID")
 		return
@@ -177,7 +177,7 @@ func (dc *DebugContext) cmdEnable(args []string, out io.Writer) {
 		return
 	}
 
-	if dc.debugger.EnableBreakpoint(machine.BreakpointID(id)) {
+	if p.debugger.EnableBreakpoint(machine.BreakpointID(id)) {
 		fmt.Fprintf(out, "Breakpoint %d enabled\n", id)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
@@ -185,7 +185,7 @@ func (dc *DebugContext) cmdEnable(args []string, out io.Writer) {
 }
 
 // cmdDisable disables a breakpoint.
-func (dc *DebugContext) cmdDisable(args []string, out io.Writer) {
+func (p *DebugContext) cmdDisable(args []string, out io.Writer) {
 	if len(args) < 1 {
 		fmt.Fprintln(out, "Usage: ,disable ID")
 		return
@@ -197,7 +197,7 @@ func (dc *DebugContext) cmdDisable(args []string, out io.Writer) {
 		return
 	}
 
-	if dc.debugger.DisableBreakpoint(machine.BreakpointID(id)) {
+	if p.debugger.DisableBreakpoint(machine.BreakpointID(id)) {
 		fmt.Fprintf(out, "Breakpoint %d disabled\n", id)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
@@ -205,45 +205,45 @@ func (dc *DebugContext) cmdDisable(args []string, out io.Writer) {
 }
 
 // cmdStep steps into the next expression.
-func (dc *DebugContext) cmdStep(out io.Writer) {
-	dc.debugger.StepInto()
+func (p *DebugContext) cmdStep(out io.Writer) {
+	p.debugger.StepInto()
 	fmt.Fprintln(out, "Will step into next expression")
 }
 
 // cmdNext steps over (same frame).
-func (dc *DebugContext) cmdNext(out io.Writer) {
-	if dc.currentMC == nil {
+func (p *DebugContext) cmdNext(out io.Writer) {
+	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
-	dc.debugger.StepOver(dc.currentMC)
+	p.debugger.StepOver(p.currentMC)
 	fmt.Fprintln(out, "Will step over to next expression")
 }
 
 // cmdFinish steps out of current function.
-func (dc *DebugContext) cmdFinish(out io.Writer) {
-	if dc.currentMC == nil {
+func (p *DebugContext) cmdFinish(out io.Writer) {
+	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
-	dc.debugger.StepOut(dc.currentMC)
+	p.debugger.StepOut(p.currentMC)
 	fmt.Fprintln(out, "Will step out of current function")
 }
 
 // cmdContinue resumes execution.
-func (dc *DebugContext) cmdContinue(out io.Writer) {
-	dc.debugger.Continue()
+func (p *DebugContext) cmdContinue(out io.Writer) {
+	p.debugger.Continue()
 	fmt.Fprintln(out, "Continuing execution")
 }
 
 // cmdBacktrace shows the current stack trace.
-func (dc *DebugContext) cmdBacktrace(out io.Writer) {
-	if dc.currentMC == nil {
+func (p *DebugContext) cmdBacktrace(out io.Writer) {
+	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	trace := dc.currentMC.CaptureStackTrace(20)
+	trace := p.currentMC.CaptureStackTrace(20)
 	if len(trace) == 0 {
 		fmt.Fprintln(out, "Empty stack trace")
 		return
@@ -254,13 +254,13 @@ func (dc *DebugContext) cmdBacktrace(out io.Writer) {
 }
 
 // cmdWhere shows the current source location.
-func (dc *DebugContext) cmdWhere(out io.Writer) {
-	if dc.currentMC == nil {
+func (p *DebugContext) cmdWhere(out io.Writer) {
+	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	source := dc.currentMC.CurrentSource()
+	source := p.currentMC.CurrentSource()
 	if source == nil {
 		fmt.Fprintln(out, "No source location available")
 		return
@@ -270,7 +270,7 @@ func (dc *DebugContext) cmdWhere(out io.Writer) {
 }
 
 // cmdHelp shows available commands.
-func (dc *DebugContext) cmdHelp(out io.Writer) {
+func (p *DebugContext) cmdHelp(out io.Writer) {
 	fmt.Fprintln(out, `Debug commands:
   ,break FILE:LINE[:COL]  Set breakpoint (aliases: ,b)
   ,delete ID              Delete breakpoint (aliases: ,d)

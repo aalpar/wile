@@ -19,7 +19,7 @@ import (
 	"os"
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -43,7 +43,7 @@ func TestOpenBinaryInputFile(t *testing.T) {
 	}{
 		{
 			name: "open-binary-input-file returns input port",
-			code: fmt.Sprintf(`(input-port? (open-binary-input-file "%s"))`, f.Name()),
+			code: fmt.Sprintf(`(input-port? (open-binary-input-file %q))`, f.Name()),
 			out:  values.TrueValue,
 		},
 		// Note: port? does not currently recognize BinaryInputPort as a port.
@@ -68,7 +68,7 @@ func TestOpenBinaryInputFileAndClose(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	defer os.Remove(f.Name()) //nolint:errcheck
 
-	code := fmt.Sprintf(`(let ((p (open-binary-input-file "%s")))
+	code := fmt.Sprintf(`(let ((p (open-binary-input-file %q)))
 		(close-port p)
 		#t)`, f.Name())
 

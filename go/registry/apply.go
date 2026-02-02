@@ -17,9 +17,9 @@ package registry
 import (
 	"context"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ApplyContext provides context during registry application.
@@ -33,21 +33,21 @@ type applyContext struct {
 	env *environment.EnvironmentFrame
 }
 
-func (a *applyContext) Context() context.Context {
-	return a.ctx
+func (p *applyContext) Context() context.Context {
+	return p.ctx
 }
 
-func (a *applyContext) Environment() *environment.EnvironmentFrame {
-	return a.env
+func (p *applyContext) Environment() *environment.EnvironmentFrame {
+	return p.env
 }
 
 // Apply registers all primitives and runs init functions on an environment.
-func (r *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
 	// Register compile-time bindings first
-	for _, name := range r.bindings {
+	for _, name := range p.bindings {
 		err := registerCompileTimeBinding(env, name)
 		if err != nil {
 			return err
@@ -55,7 +55,7 @@ func (r *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	}
 
 	// Register compile-time primitives (bindings only, no values)
-	for _, reg := range r.primitives {
+	for _, reg := range p.primitives {
 		if reg.Phases.HasCompile() && !reg.Phases.HasRuntime() {
 			err := registerCompileTimeBinding(env, reg.Spec.Name)
 			if err != nil {
@@ -65,7 +65,7 @@ func (r *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	}
 
 	// Register runtime primitives
-	for _, reg := range r.primitives {
+	for _, reg := range p.primitives {
 		if reg.Phases.HasRuntime() {
 			err := registerRuntimePrimitive(env, reg.Spec)
 			if err != nil {
@@ -75,7 +75,7 @@ func (r *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	}
 
 	// Register expand-time primitives
-	for _, reg := range r.primitives {
+	for _, reg := range p.primitives {
 		if reg.Phases.HasExpand() {
 			err := registerExpandTimePrimitive(env, reg.Spec)
 			if err != nil {
@@ -86,7 +86,7 @@ func (r *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 
 	// Run initialization functions
 	actx := &applyContext{ctx: ctx, env: env}
-	for _, f := range r.initFuncs {
+	for _, f := range p.initFuncs {
 		err := f(actx)
 		if err != nil {
 			return err

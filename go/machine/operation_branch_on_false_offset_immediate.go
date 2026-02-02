@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 type OperationBranchOnFalseOffsetImmediate struct {

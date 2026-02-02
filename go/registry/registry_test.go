@@ -20,7 +20,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"wile/machine"
+	"github.com/aalpar/wile/go/machine"
 )
 
 func TestRegistry_NewRegistry(t *testing.T) {

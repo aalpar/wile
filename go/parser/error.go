@@ -17,8 +17,8 @@ package parser
 import (
 	"fmt"
 
-	"wile/tokenizer"
-	"wile/values"
+	"github.com/aalpar/wile/go/tokenizer"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (

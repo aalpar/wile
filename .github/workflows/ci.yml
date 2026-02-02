@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: go/go.sum
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          working-directory: go
+          args: -v run ./...
+
+      - name: Build
+        working-directory: go
+        run: make build
+
+      - name: Test
+        working-directory: go
+        run: make test

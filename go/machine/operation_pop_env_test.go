@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -65,7 +65,7 @@ func TestOperationPopEnv_EqualTo(t *testing.T) {
 func TestOperationPopEnv_Apply_Success(t *testing.T) {
 	c := qt.New(t)
 
-	parentEnv := environment.NewTopLevelEnvironmentFrame()
+	parentEnv := environment.NewTopLevelEnvironment().Runtime()
 	childEnv := environment.NewEnvironmentFrameWithParent(nil, parentEnv)
 
 	tpl := NewNativeTemplate(0, 0, false)
@@ -83,7 +83,7 @@ func TestOperationPopEnv_Apply_Success(t *testing.T) {
 func TestOperationPopEnv_Apply_Error_NoParent(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironmentFrame()
+	env := environment.NewTopLevelEnvironment().Runtime()
 	// env has no parent (Parent() returns nil)
 
 	tpl := NewNativeTemplate(0, 0, false)

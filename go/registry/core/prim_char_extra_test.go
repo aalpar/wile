@@ -17,7 +17,7 @@ package core_test
 import (
 	"testing"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1068,7 +1068,7 @@ func TestCharCaseConversionTurkish(t *testing.T) {
 		{
 			name: "upcase dotless i to ASCII I",
 			prog: values.List(values.NewSymbol("char-upcase"), values.NewCharacter('ı')), // U+0131
-			out:  values.NewCharacter('I'),                                                // U+0049
+			out:  values.NewCharacter('I'),                                               // U+0049
 		},
 		// char-downcase: U+0130 (dotted capital I) -> U+0069 (ASCII i)
 		// Go's unicode.ToLower maps U+0130 to U+0069, which is correct per
@@ -1076,13 +1076,13 @@ func TestCharCaseConversionTurkish(t *testing.T) {
 		{
 			name: "downcase dotted capital I to ASCII i",
 			prog: values.List(values.NewSymbol("char-downcase"), values.NewCharacter('İ')), // U+0130
-			out:  values.NewCharacter('i'),                                                  // U+0069
+			out:  values.NewCharacter('i'),                                                 // U+0069
 		},
 		// char-foldcase: U+0130 -> U+0069 (simple case fold)
 		{
 			name: "foldcase dotted capital I to ASCII i",
 			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('İ')), // U+0130
-			out:  values.NewCharacter('i'),                                                  // U+0069
+			out:  values.NewCharacter('i'),                                                 // U+0069
 		},
 		// Predicate checks
 		{
@@ -1128,26 +1128,26 @@ func TestCharCaseConversionGermanSS(t *testing.T) {
 		{
 			name: "downcase capital sharp S to lowercase",
 			prog: values.List(values.NewSymbol("char-downcase"), values.NewCharacter('ẞ')), // U+1E9E
-			out:  values.NewCharacter('ß'),                                                  // U+00DF
+			out:  values.NewCharacter('ß'),                                                 // U+00DF
 		},
 		// char-upcase: U+00DF (lowercase sharp s) -> unchanged (no 1:1 uppercase)
 		// Go's unicode.ToUpper('ß') returns 'ß' unchanged.
 		{
 			name: "upcase lowercase sharp s stays unchanged",
 			prog: values.List(values.NewSymbol("char-upcase"), values.NewCharacter('ß')), // U+00DF
-			out:  values.NewCharacter('ß'),                                                // U+00DF
+			out:  values.NewCharacter('ß'),                                               // U+00DF
 		},
 		// char-foldcase: U+1E9E -> U+00DF (simple fold via simpleCaseFold)
 		{
 			name: "foldcase capital sharp S to lowercase",
 			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('ẞ')), // U+1E9E
-			out:  values.NewCharacter('ß'),                                                  // U+00DF
+			out:  values.NewCharacter('ß'),                                                 // U+00DF
 		},
 		// char-foldcase: U+00DF stays unchanged (simple fold)
 		{
 			name: "foldcase lowercase sharp s stays unchanged",
 			prog: values.List(values.NewSymbol("char-foldcase"), values.NewCharacter('ß')), // U+00DF
-			out:  values.NewCharacter('ß'),                                                  // U+00DF
+			out:  values.NewCharacter('ß'),                                                 // U+00DF
 		},
 		// Predicate checks
 		{
