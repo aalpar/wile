@@ -670,6 +670,52 @@ func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
 	qt.Assert(t, notFound, qt.IsNil)
 }
 
+// TestCopyLibraryBindingsToEnv_CompilePhase verifies that compile-phase bindings
+// (auxiliary syntax like else, =>) are propagated to both the runtime phase and
+// the compile phase of the target environment.
+func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
+	c := qt.New(t)
+
+	// Create source library with a compile-phase binding (auxiliary syntax)
+	srcEnv := environment.NewTopLevelEnvironment().Runtime()
+	libName := machine.NewLibraryName("test", "auxlib")
+	lib := machine.NewCompiledLibrary(libName, srcEnv)
+
+	// Register "else" in the compile environment (phase 2), mimicking
+	// how specialforms.go registers auxiliary syntax
+	elseSym := srcEnv.InternSymbol(values.NewSymbol("else"))
+	compileEnv := srcEnv.Compile()
+	_, _ = compileEnv.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypeVariable)
+	elseIdx := compileEnv.GetGlobalIndex(elseSym)
+	mockValue := values.NewSymbol("else-marker")
+	_ = compileEnv.SetOwnGlobalValue(elseIdx, mockValue)
+	lib.AddExport("else", "")
+
+	// Create target environment
+	targetEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	bindings := map[string]string{
+		"else": "else",
+	}
+
+	// Copy bindings
+	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	c.Assert(err, qt.IsNil)
+
+	// Verify binding is present in runtime phase (phase 0)
+	elseTarget := targetEnv.InternSymbol(values.NewSymbol("else"))
+	runtimeBinding := targetEnv.GetBinding(elseTarget)
+	c.Assert(runtimeBinding, qt.IsNotNil, qt.Commentf("else should be in runtime phase"))
+	c.Assert(runtimeBinding.Value(), values.SchemeEquals, mockValue)
+
+	// Verify binding is also present in compile phase (phase 2)
+	targetCompileEnv := targetEnv.AtPhase(2)
+	elseCompileSym := targetCompileEnv.InternSymbol(values.NewSymbol("else"))
+	compileBinding := targetCompileEnv.GetBinding(elseCompileSym)
+	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))
+	c.Assert(compileBinding.Value(), values.SchemeEquals, mockValue)
+}
+
 // TestLibraryForwardReferences tests that library bodies support forward references
 // per R7RS §5.3.2: Internal definitions use letrec* semantics.
 //
