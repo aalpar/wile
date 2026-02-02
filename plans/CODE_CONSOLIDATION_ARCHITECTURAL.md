@@ -308,7 +308,7 @@ package machine
 
 import (
     "context"
-    "wile/values"
+    "github.com/aalpar/wile/go/values"
 )
 
 {{range .}}

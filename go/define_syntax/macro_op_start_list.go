@@ -14,7 +14,7 @@
 
 package define_syntax
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // MacroOpStartList descends into a nested list during pattern matching.
 //

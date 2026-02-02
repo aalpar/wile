@@ -38,8 +38,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 )
 
 // LibraryName represents an R7RS library name like (scheme base) or (my lib).

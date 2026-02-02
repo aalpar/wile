@@ -14,7 +14,7 @@
 
 package machine
 
-import "wile/syntax"
+import "github.com/aalpar/wile/go/syntax"
 
 // SourceMapEntry maps a range of bytecode PCs to a source location.
 // Uses range-based encoding for efficiency (most operations from same source).

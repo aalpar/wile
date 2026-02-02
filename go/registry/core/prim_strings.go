@@ -19,9 +19,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"wile/machine"
-	"wile/registry/helpers"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimString implements the string primitive.

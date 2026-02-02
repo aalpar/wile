@@ -38,8 +38,8 @@ import (
 	"context"
 	"errors"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // localScopesProvider is an interface for getting local scopes from a free ID resolution.

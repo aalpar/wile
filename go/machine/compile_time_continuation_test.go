@@ -21,11 +21,11 @@ import (
 	"strings"
 	"testing"
 
-	"wile/environment"
-	"wile/parser"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

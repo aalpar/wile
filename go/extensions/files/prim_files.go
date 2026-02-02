@@ -19,10 +19,10 @@ import (
 	"errors"
 	"os"
 
-	extio "wile/extensions/io"
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	extio "github.com/aalpar/wile/go/extensions/io"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimOpenInputFile implements the open-input-file primitive.

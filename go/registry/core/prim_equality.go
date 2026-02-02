@@ -17,10 +17,10 @@ package core
 import (
 	"context"
 
-	"wile/machine"
-	"wile/registry/helpers"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimEqQ implements the eq? predicate for object identity.

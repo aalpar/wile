@@ -45,10 +45,10 @@ import (
 	"context"
 	"fmt"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // envBindingChecker implements match.BindingChecker for R7RS auxiliary syntax hygiene.

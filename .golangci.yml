@@ -10,7 +10,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - wile
+        - github.com/aalpar/wile/go
 
 linters:
   enable:

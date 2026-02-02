@@ -17,7 +17,7 @@ package match
 import (
 	"fmt"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // ByteCodeCompareCar compares the current car position with a literal syntax value.

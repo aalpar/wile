@@ -15,7 +15,7 @@
 package core
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // bootstrapMacroSource contains essential derived expression forms.

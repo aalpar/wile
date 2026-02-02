@@ -17,9 +17,9 @@ package helpers
 import (
 	"context"
 
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // MakeTypePredicate creates a type predicate primitive function.

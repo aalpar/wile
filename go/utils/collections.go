@@ -1,6 +1,6 @@
 package utils
 
-import "wile/values" // adjust import path as needed
+import "github.com/aalpar/wile/go/values" // adjust import path as needed
 
 // AsList converts a slice of values into a proper Scheme-style list.
 // The list is a linked list of *Pair nodes where each pair's Car holds

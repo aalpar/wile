@@ -19,10 +19,10 @@ import (
 	"time"
 	"weak"
 
-	"wile/machine"
-	"wile/parser"
-	"wile/tokenizer"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/tokenizer"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Package-level state for I/O ports.

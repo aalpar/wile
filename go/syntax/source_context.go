@@ -17,7 +17,7 @@ package syntax
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 var _ values.Value = (*SourceContext)(nil)

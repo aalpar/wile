@@ -21,12 +21,12 @@ import (
 	"unicode/utf8"
 	"weak"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/syntax"
-	"wile/tokenizer"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/tokenizer"
+	"github.com/aalpar/wile/go/values"
 )
 
 // getOptionalOutputPort extracts an optional output port from a variadic argument list.

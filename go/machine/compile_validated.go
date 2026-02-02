@@ -15,11 +15,11 @@
 package machine
 
 import (
-	"wile/environment"
-	"wile/forms"
-	"wile/syntax"
-	"wile/validate"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/forms"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/validate"
+	"github.com/aalpar/wile/go/values"
 )
 
 // compileValidated dispatches compilation based on the validated expression type.

@@ -20,13 +20,13 @@ import (
 	"strings"
 	"testing"
 
-	ioext "wile/extensions/io"
-	"wile/machine"
-	"wile/parser"
-	"wile/runtime"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	ioext "github.com/aalpar/wile/go/extensions/io"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).

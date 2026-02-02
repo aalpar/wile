@@ -15,7 +15,7 @@
 package wile
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Value represents a Scheme value in the public API.

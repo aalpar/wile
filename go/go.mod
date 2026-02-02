@@ -1,4 +1,4 @@
-module wile
+module github.com/aalpar/wile/go
 
 go 1.25
 

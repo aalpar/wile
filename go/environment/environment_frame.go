@@ -15,8 +15,8 @@
 package environment
 
 import (
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // EnvironmentFrame represents an environment frame in the hierarchy.

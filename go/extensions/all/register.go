@@ -18,15 +18,15 @@
 package all
 
 import (
-	"wile/extensions/eval"
-	"wile/extensions/exceptions"
-	"wile/extensions/files"
-	"wile/extensions/gointerop"
-	"wile/extensions/io"
-	"wile/extensions/math"
-	"wile/extensions/system"
-	"wile/extensions/threads"
-	"wile/registry"
+	"github.com/aalpar/wile/go/extensions/eval"
+	"github.com/aalpar/wile/go/extensions/exceptions"
+	"github.com/aalpar/wile/go/extensions/files"
+	"github.com/aalpar/wile/go/extensions/gointerop"
+	"github.com/aalpar/wile/go/extensions/io"
+	"github.com/aalpar/wile/go/extensions/math"
+	"github.com/aalpar/wile/go/extensions/system"
+	"github.com/aalpar/wile/go/extensions/threads"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension includes all standard extensions.

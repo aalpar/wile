@@ -17,8 +17,8 @@ package machine
 import (
 	"testing"
 
-	"wile/environment"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
 
 	qt "github.com/frankban/quicktest"
 )

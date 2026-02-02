@@ -17,7 +17,7 @@ package match
 import (
 	"fmt"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // ByteCodeCompareCdr compares the cdr of the current pair with a literal syntax value.

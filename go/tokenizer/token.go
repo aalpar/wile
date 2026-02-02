@@ -17,8 +17,8 @@ package tokenizer
 import (
 	"fmt"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Token is the interface for tokenizer output tokens.

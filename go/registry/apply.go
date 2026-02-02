@@ -17,9 +17,9 @@ package registry
 import (
 	"context"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ApplyContext provides context during registry application.

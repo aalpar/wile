@@ -51,8 +51,8 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 var (

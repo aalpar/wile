@@ -15,7 +15,7 @@
 package wile
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 type engineConfig struct {

@@ -17,7 +17,7 @@ package machine
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ErrExceptionEscape signals an exception being raised through the call stack.

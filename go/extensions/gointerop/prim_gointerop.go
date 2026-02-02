@@ -21,8 +21,8 @@ import (
 	"context"
 	"errors"
 
-	"wile/machine"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/values"
 )
 
 // =============================================================================

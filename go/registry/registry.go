@@ -22,7 +22,7 @@ package registry
 import (
 	"sync"
 
-	"wile/machine"
+	"github.com/aalpar/wile/go/machine"
 )
 
 // PrimitiveSpec defines a primitive to be registered.

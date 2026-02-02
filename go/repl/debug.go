@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wile/machine"
+	"github.com/aalpar/wile/go/machine"
 )
 
 // DebugContext holds the state for debug commands.

@@ -18,7 +18,7 @@
 package system
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the system extension.

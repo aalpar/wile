@@ -17,7 +17,7 @@ package machine
 import (
 	"context"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationDrop removes the top value from the eval stack without

@@ -24,11 +24,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"wile/environment"
-	"wile/parser"
-	"wile/syntax"
-	"wile/validate"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/validate"
+	"github.com/aalpar/wile/go/values"
 )
 
 const (

@@ -15,8 +15,8 @@
 package machine
 
 import (
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimitiveExpanderFunc is the type for expand-time special form handlers.

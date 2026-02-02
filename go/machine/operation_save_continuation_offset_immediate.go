@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 type OperationSaveContinuationOffsetImmediate struct {

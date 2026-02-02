@@ -15,8 +15,8 @@
 package machine
 
 import (
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // CompileWithSyntax compiles the (with-syntax ((pattern expr) ...) body ...) form.

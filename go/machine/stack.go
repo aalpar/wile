@@ -18,7 +18,7 @@ import (
 	"slices"
 	"strings"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 type Stack values.Vector

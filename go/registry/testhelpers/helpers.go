@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"wile/values"
-	"wile/wile"
+	"github.com/aalpar/wile/go/values"
+	"github.com/aalpar/wile/go/wile"
 )
 
 // RunSchemeCode parses and runs Scheme source code string using the default Engine.

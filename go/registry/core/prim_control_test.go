@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"wile/machine"
-	"wile/parser"
-	"wile/runtime"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

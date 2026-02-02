@@ -25,10 +25,10 @@ import (
 	"os"
 	"strings"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
 
 	"github.com/ergochat/readline"
 )

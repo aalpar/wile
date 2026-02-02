@@ -16,7 +16,7 @@
 package core
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 func addControl(r *registry.Registry) error {

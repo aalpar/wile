@@ -22,7 +22,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 
 	qt "github.com/frankban/quicktest"
 )

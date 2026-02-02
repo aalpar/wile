@@ -14,7 +14,7 @@
 
 package define_syntax
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // MacroOpNext advances the current position to the next element in the list.
 //

@@ -19,9 +19,9 @@ import (
 	"context"
 	"errors"
 
-	"wile/machine"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PrimPortQ implements the port? primitive.

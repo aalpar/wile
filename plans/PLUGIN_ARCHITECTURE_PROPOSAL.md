@@ -105,7 +105,7 @@ package registry
 import (
     "sync"
 
-    "wile/machine"
+    "github.com/aalpar/wile/go/machine"
 )
 
 // PrimitiveSpec defines a primitive to be registered.
@@ -304,7 +304,7 @@ These are required for bootstrap macros and basic Scheme semantics:
 package core
 
 import (
-    "wile/registry"
+    "github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the core extension containing required primitives.
@@ -339,7 +339,7 @@ var AddToRegistry = Builder.AddToRegistry
 package io
 
 import (
-    "wile/registry"
+    "github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the I/O extension.
@@ -372,13 +372,13 @@ func addInit(r *registry.Registry) error {
 package all
 
 import (
-    "wile/extensions/io"
-    "wile/extensions/files"
-    "wile/extensions/system"
-    "wile/extensions/math"
-    "wile/extensions/threads"
-    "wile/extensions/gointerop"
-    "wile/registry"
+    "github.com/aalpar/wile/go/extensions/io"
+    "github.com/aalpar/wile/go/extensions/files"
+    "github.com/aalpar/wile/go/extensions/system"
+    "github.com/aalpar/wile/go/extensions/math"
+    "github.com/aalpar/wile/go/extensions/threads"
+    "github.com/aalpar/wile/go/extensions/gointerop"
+    "github.com/aalpar/wile/go/registry"
 )
 
 // Extension includes all standard extensions.

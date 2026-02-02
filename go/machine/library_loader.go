@@ -31,10 +31,10 @@ import (
 	"io"
 	"os"
 
-	"wile/environment"
-	"wile/parser"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // LibraryEnvFactory is a function that creates a new environment for a library.

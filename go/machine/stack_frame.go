@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // StackFrame represents one frame in a Scheme stack trace.

@@ -17,8 +17,8 @@ package core_test
 import (
 	"testing"
 
-	"wile/registry/helpers"
-	"wile/values"
+	"github.com/aalpar/wile/go/registry/helpers"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

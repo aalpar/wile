@@ -126,6 +126,7 @@ func (p *Complex) Add(o Number) Number {
 }
 
 // Subtract returns the difference of this complex number and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Complex) Subtract(o Number) Number {
 	if o.IsZero() {
@@ -159,6 +160,7 @@ func (p *Complex) Subtract(o Number) Number {
 }
 
 // Multiply returns the product of this complex number and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Complex) Multiply(o Number) Number {
 	if o.IsZero() {

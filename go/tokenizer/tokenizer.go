@@ -52,8 +52,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Error messages returned by the tokenizer.

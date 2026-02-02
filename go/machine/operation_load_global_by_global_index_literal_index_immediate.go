@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationLoadGlobalByGlobalIndexLiteralIndexImmediate loads a global variable using an index from the literals pool.

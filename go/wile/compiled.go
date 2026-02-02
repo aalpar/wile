@@ -15,8 +15,8 @@
 package wile
 
 import (
-	"wile/environment"
-	"wile/machine"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
 )
 
 // CompiledCode represents compiled Scheme code ready for execution.

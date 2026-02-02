@@ -351,18 +351,20 @@ Each package contains a `CLAUDE.md` file with:
 
 ## Import Organization
 
-Group imports with internal packages first:
+Group imports with standard library first, then internal packages, then third-party:
 
 ```go
 import (
-    "wile/environment"
-    "wile/syntax"
-    "wile/values"
-
     "context"
     "fmt"
     "io"
     "strings"
+
+    "github.com/aalpar/wile/go/environment"
+    "github.com/aalpar/wile/go/syntax"
+    "github.com/aalpar/wile/go/values"
+
+    "github.com/jessevdk/go-flags"
 )
 ```
 

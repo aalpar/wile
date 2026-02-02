@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // DefaultMaxOriginDepth is the default maximum number of macro expansions to show

@@ -15,7 +15,7 @@
 package validate
 
 import (
-	"wile/syntax"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // ValidatedExpr is the interface for all validated expressions

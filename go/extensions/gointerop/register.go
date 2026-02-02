@@ -18,7 +18,7 @@
 package gointerop
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the Go interop extension.

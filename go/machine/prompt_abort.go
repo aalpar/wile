@@ -17,7 +17,7 @@ package machine
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ErrPromptAbort signals an abort to the nearest continuation prompt matching

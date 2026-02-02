@@ -19,7 +19,7 @@ import (
 	"errors"
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 type OperationApply struct{}

@@ -17,8 +17,8 @@ package validate
 import (
 	"context"
 
-	"wile/environment"
-	"wile/syntax"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
 )
 
 // validateIf validates (if test conseq [alt])

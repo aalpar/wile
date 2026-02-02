@@ -14,7 +14,7 @@
 
 package core
 
-import "wile/registry"
+import "github.com/aalpar/wile/go/registry"
 
 //nolint:govet
 func addPrompts(r *registry.Registry) error {

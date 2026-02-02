@@ -17,8 +17,8 @@ package define_syntax
 import (
 	"testing"
 
-	"wile/match"
-	"wile/values"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/values"
 
 	qt "github.com/frankban/quicktest"
 )

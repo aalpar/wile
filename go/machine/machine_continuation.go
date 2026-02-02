@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"slices"
 
-	"wile/environment"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/values"
 )
 
 type MachineContinuation struct {

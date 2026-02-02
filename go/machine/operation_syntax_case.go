@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"sort"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.

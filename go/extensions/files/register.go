@@ -18,7 +18,7 @@
 package files
 
 import (
-	"wile/registry"
+	"github.com/aalpar/wile/go/registry"
 )
 
 // Extension is the file I/O extension.

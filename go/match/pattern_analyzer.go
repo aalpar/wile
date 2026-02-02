@@ -15,7 +15,7 @@
 package match
 
 import (
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // PatternAnalysis holds analysis results for a pattern

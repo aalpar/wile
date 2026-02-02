@@ -40,8 +40,8 @@ import (
 	"fmt"
 	"sort"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // valuePathEntry tracks position in the input tree during values-based matching.

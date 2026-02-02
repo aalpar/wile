@@ -34,10 +34,10 @@ package machine
 import (
 	"context"
 
-	"wile/environment"
-	"wile/match"
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/match"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // FreeIdResolution stores the resolution info for a free identifier in a macro template.

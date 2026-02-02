@@ -17,8 +17,8 @@ package utils
 import (
 	"context"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // SyntaxValueToDatum converts a syntax object back to a raw Scheme datum,

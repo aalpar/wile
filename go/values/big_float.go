@@ -92,6 +92,7 @@ func (p *BigFloat) compareSame(o *BigFloat) int {
 }
 
 // Add returns the sum of this BigFloat and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Add(o Number) Number {
 	if o.IsZero() {
@@ -126,6 +127,7 @@ func (p *BigFloat) Add(o Number) Number {
 }
 
 // Subtract returns the difference of this BigFloat and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Subtract(o Number) Number {
 	if o.IsZero() {
@@ -157,6 +159,7 @@ func (p *BigFloat) Subtract(o Number) Number {
 }
 
 // Multiply returns the product of this BigFloat and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Multiply(o Number) Number {
 	if o.IsZero() {
@@ -191,6 +194,7 @@ func (p *BigFloat) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of this BigFloat and another number.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Divide(o Number) Number {
 	if o.IsZero() {

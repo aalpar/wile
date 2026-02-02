@@ -17,7 +17,7 @@ package environment
 import (
 	"fmt"
 
-	"wile/values"
+	"github.com/aalpar/wile/go/values"
 )
 
 // ExportSpec is the interface for export directives in library definitions.

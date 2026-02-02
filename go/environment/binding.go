@@ -17,8 +17,8 @@ package environment
 import (
 	"slices"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // Binding represents a variable binding in the environment.

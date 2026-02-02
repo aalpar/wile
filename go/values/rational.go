@@ -113,6 +113,7 @@ func (p *Rational) compareSame(o *Rational) int {
 }
 
 // Add returns the sum of two numbers.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Add(o Number) Number {
 	if o.IsZero() {
@@ -149,6 +150,7 @@ func (p *Rational) Add(o Number) Number {
 }
 
 // Subtract returns the difference of two numbers.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Subtract(o Number) Number {
 	if o.IsZero() {
@@ -182,6 +184,7 @@ func (p *Rational) Subtract(o Number) Number {
 }
 
 // Multiply returns the product of two numbers.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Multiply(o Number) Number {
 	if o.IsZero() {
@@ -215,6 +218,7 @@ func (p *Rational) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of two numbers.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Divide(o Number) Number {
 	if o.IsZero() {

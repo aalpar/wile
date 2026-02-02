@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"wile/syntax"
-	"wile/values"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/values"
 )
 
 // SchemeError is a runtime error with Scheme-level stack trace.

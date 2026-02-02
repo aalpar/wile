@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"wile/environment"
+	"github.com/aalpar/wile/go/environment"
 
 	qt "github.com/frankban/quicktest"
 )

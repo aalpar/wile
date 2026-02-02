@@ -14,7 +14,7 @@
 
 package machine
 
-import "wile/values"
+import "github.com/aalpar/wile/go/values"
 
 // ExceptionHandler represents an installed exception handler.
 // Handlers form a linked list (stack) for dynamic exception handling.

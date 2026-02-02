@@ -26,10 +26,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"wile/environment"
-	"wile/syntax"
-	"wile/tokenizer"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/tokenizer"
+	"github.com/aalpar/wile/go/values"
 )
 
 const (

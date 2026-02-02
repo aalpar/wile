@@ -20,13 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"wile/environment"
-	"wile/machine"
-	"wile/parser"
-	"wile/runtime"
-	"wile/syntax"
-	"wile/utils"
-	"wile/values"
+	"github.com/aalpar/wile/go/environment"
+	"github.com/aalpar/wile/go/machine"
+	"github.com/aalpar/wile/go/parser"
+	"github.com/aalpar/wile/go/runtime"
+	"github.com/aalpar/wile/go/syntax"
+	"github.com/aalpar/wile/go/utils"
+	"github.com/aalpar/wile/go/values"
 )
 
 // runProgramAST is a helper to compile and run a Scheme program from a values.Value AST.
