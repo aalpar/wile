@@ -1378,9 +1378,17 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 	signPos := -1
 	for i := 1; i < len(s); i++ {
 		if s[i] == '+' || s[i] == '-' {
-			// Make sure this isn't part of an exponent (e.g., 1e+10)
-			if i > 0 && (s[i-1] == 'e' || s[i-1] == 'E') {
-				continue
+			// Make sure this isn't part of an exponent (e.g., 1e+10, 1s+10)
+			// R7RS §7.1.1: exponent markers are e, s, f, d, l (case-insensitive)
+			if i > 0 {
+				prev := s[i-1]
+				if prev == 'e' || prev == 'E' ||
+					prev == 's' || prev == 'S' ||
+					prev == 'f' || prev == 'F' ||
+					prev == 'd' || prev == 'D' ||
+					prev == 'l' || prev == 'L' {
+					continue
+				}
 			}
 			// Make sure this isn't the sign in inf.0 or nan.0 (after the '0')
 			// Check if this could be the start of the imaginary part
@@ -1476,7 +1484,7 @@ func parseFloatOrInfnan(s string) (float64, error) {
 		return num / den, nil
 	}
 
-	return strconv.ParseFloat(s, 64)
+	return strconv.ParseFloat(normalizeExponentMarker(s), 64)
 }
 
 // parseRealPart parses a real number that may be a float or infnan
