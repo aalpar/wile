@@ -418,6 +418,38 @@ func TestNumericGreaterThanOrEqual(t *testing.T) {
 	}
 }
 
+// TestComparison_NonRealComplex tests that ordering comparisons reject non-real complex numbers.
+// R7RS §6.2.6: <, >, <=, >= require real arguments.
+func TestComparison_NonRealComplex(t *testing.T) {
+	// Non-real complex should error for ordering comparisons
+	t.Run("< with non-real complex", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(< 1+1i 2)`)
+	})
+	t.Run("> with non-real complex", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(> 1+1i 2)`)
+	})
+	t.Run("<= with non-real complex", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(<= 1+1i 2)`)
+	})
+	t.Run(">= with non-real complex", func(t *testing.T) {
+		runSchemeCodeExpectError(t, `(>= 1+1i 2)`)
+	})
+
+	// = allows complex (R7RS §6.2.6: = works on all numbers)
+	t.Run("= with complex", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(= 1+1i 1+1i)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result, qt.Equals, values.TrueValue)
+	})
+
+	// Real complex (zero imaginary) should work with ordering comparisons
+	t.Run("< with real complex", func(t *testing.T) {
+		result, err := runSchemeCode(t, `(< 1+0i 2+0i)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result, qt.Equals, values.TrueValue)
+	})
+}
+
 // TestComparison_TypeErrors tests that numeric comparisons reject non-numeric arguments.
 // R7RS §6.2.6: =, <, >, <=, >= require numeric arguments.
 func TestComparison_TypeErrors(t *testing.T) {

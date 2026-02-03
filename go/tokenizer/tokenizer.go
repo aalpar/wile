@@ -300,6 +300,7 @@ type Tokenizer struct {
 	strength   int
 	blockDepth int  // nesting depth for block comments
 	ci         bool // case insensitive symbol mode
+	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
 }
 
 // integerStateForRadix returns the appropriate integer token state based on the
@@ -398,7 +399,7 @@ func (p *Tokenizer) Next() (Token, error) {
 		src := p.text
 		val := p.value
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
-		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
+		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.signed, p.radix, p.hashDigit)
 		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
@@ -412,7 +413,7 @@ func (p *Tokenizer) continueLineComment() Token { //nolint:unused
 		p.next()
 	}
 	p.term()
-	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
+	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix, false)
 }
 
 // continueBlockComment handles Body and End phases for block comments
@@ -448,7 +449,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 						p.value = p.value[:len(p.value)-1]
 					}
 					p.term()
-					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
+					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix, false)
 				}
 				p.blockDepth--
 			}
@@ -459,7 +460,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 	}
 	// EOF before closing - emit Body token, no End will follow
 	p.term()
-	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix)
+	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix, false)
 }
 
 // isCommentToken returns true if the state represents a comment token
@@ -1202,17 +1203,27 @@ func (p *Tokenizer) readDiv(r int) {
 		return
 	}
 	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	p.readHashDigits()
 }
 
 func (p *Tokenizer) readDecimalFractionWithExponent(r int) {
+	// R7RS §7.1.1 production 4: <digit 10>+ #+ . #* <suffix>
+	// If integer part had hash digits, fraction part can only have hash digits (no real digits).
+	hadHash := p.hashDigit
 	// consume '.'
 	p.next()
 	if p.err != nil {
 		return
 	}
-	// R7RS allows zero or more digits after decimal point: <digit 10>+ . <digit 10>*
-	// So "1." is valid (equivalent to "1.0")
-	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	if hadHash {
+		// Production 4: only hash digits allowed after dot
+		p.readHashDigits()
+	} else {
+		// R7RS allows zero or more digits after decimal point: <digit 10>+ . <digit 10>*
+		// So "1." is valid (equivalent to "1.0")
+		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+		p.readHashDigits()
+	}
 	if p.err != nil {
 		return
 	}
@@ -1304,6 +1315,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 	}
 	// read decimal fractional part
 	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	p.readHashDigits()
 	if p.err != nil {
 		return
 	}
@@ -1329,6 +1341,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 	p.state = p.integerStateForRadix(signed)
 	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	p.readHashDigits()
 	if p.err != nil {
 		return
 	}
@@ -1459,6 +1472,7 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 		return
 	}
 	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	p.readHashDigits()
 	if p.err != nil {
 		return
 	}
@@ -1520,18 +1534,18 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		case p.curr() == 'n' || p.curr() == 'N':
 			p.readSignedNan(r)
 			return
+		case isDigit(r, p.curr()):
+			p.readIntegerAndFraction(true, r)
+			return
+		case isDot(p.curr()):
+			p.readSignedDecimalFractionOrExponentWithImaginary(r)
+			return
 		case isSignSubsequent(p.curr()):
 			p.state = TokenizerStateSymbol
 			for p.err == nil && isSymbolSubsequent(p.curr()) {
 				p.next()
 			}
 			p.value = p.text
-			return
-		case isDot(p.curr()):
-			p.readSignedDecimalFractionOrExponentWithImaginary(r)
-			return
-		case isDigit(r, p.curr()):
-			p.readIntegerAndFraction(true, r)
 			return
 		}
 		// Bare sign (+/-) as symbol
@@ -1581,6 +1595,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 			return
 		}
 		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+		p.readHashDigits()
 		if p.err != nil {
 			return
 		}
@@ -1588,12 +1603,25 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		return
 	case isDigit(r, p.curr()):
 		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+		p.readHashDigits()
 		if p.err != nil {
 			return
 		}
 		switch {
 		case isDot(p.curr()):
-			p.readDiv(r) // nolint:errcheck
+			// R7RS §7.1.1 production 4: if integer part had hash digits,
+			// fraction part can only have hash digits (no real digits).
+			hadHash := p.hashDigit
+			p.next() // consume '.'
+			if p.err != nil {
+				return
+			}
+			if hadHash {
+				p.readHashDigits()
+			} else {
+				p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+				p.readHashDigits()
+			}
 			if p.err != nil {
 				return
 			}
@@ -1742,6 +1770,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	}
 	p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+	p.readHashDigits()
 	if p.err != nil {
 		return
 	}
@@ -1749,15 +1778,20 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 	switch {
 	case isDot(p.curr()):
 		// Decimal: +3.5i
+		hadHash := p.hashDigit
 		p.next()
 		if p.err != nil {
 			return
 		}
-		if isDigit(r, p.curr()) {
+		if hadHash {
+			// Production 4: only hash digits after dot
+			p.readHashDigits()
+		} else if isDigit(r, p.curr()) {
 			p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
-			if p.err != nil {
-				return
-			}
+			p.readHashDigits()
+		}
+		if p.err != nil {
+			return
 		}
 		p.mayReadExponent(r) //nolint:errcheck
 		if p.err != nil {
@@ -1774,6 +1808,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 			return
 		}
 		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+		p.readHashDigits()
 		if p.err != nil {
 			return
 		}
@@ -1822,20 +1857,25 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 		}
 	case isDigit(r, p.curr()):
 		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+		p.readHashDigits()
 		if p.err != nil {
 			return
 		}
 		if !isDot(p.curr()) {
 			break
 		}
+		hadHash := p.hashDigit
 		p.next()
 		if p.err != nil {
 			return
 		}
-		if !isDigit(r, p.curr()) {
-			break
+		if hadHash {
+			// Production 4: only hash digits after dot
+			p.readHashDigits()
+		} else if isDigit(r, p.curr()) {
+			p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
+			p.readHashDigits()
 		}
-		p.readUnsignedBaseNNumber(r, 0) //nolint:errcheck
 		if p.err != nil {
 			return
 		}
@@ -1920,6 +1960,16 @@ func (p *Tokenizer) readUnsignedBaseNNumber(r, maxn int) int {
 		n++
 	}
 	return n
+}
+
+// readHashDigits consumes a run of '#' characters used as R7RS §7.1.1
+// inexact digit placeholders. Each '#' represents an unknown digit (treated
+// as 0 by the parser). Once '#' appears, the number becomes inexact.
+func (p *Tokenizer) readHashDigits() {
+	for p.err == nil && p.curr() == '#' {
+		p.hashDigit = true
+		p.next()
+	}
 }
 
 func (p *Tokenizer) readSignedBaseNNumber(r, maxn int) int { //nolint:unused
@@ -2077,6 +2127,7 @@ func (p *Tokenizer) mark() {
 	p.tokenStart = p.runeStart
 	p.tokenEnd = p.runeStart
 	p.signed = false
+	p.hashDigit = false
 }
 
 // term terminates the current token, setting its end position and text.

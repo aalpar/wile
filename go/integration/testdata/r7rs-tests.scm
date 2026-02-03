@@ -1767,11 +1767,7 @@
 
 (test -1 (call-with-values * -))
 
-;; WILE KNOWN LIMITATION: Commented out due to dynamic-wind + continuation re-entry bug.
-;; See plans/CONTINUATION_ESCAPE_FIX.md and prim_dynamic_wind_test.go for details.
-;; The after thunk does not run on normal completion after continuation re-entry.
-;; This test causes the interpreter to terminate early rather than failing gracefully.
-#;(test '(connect talk1 disconnect
+(test '(connect talk1 disconnect
         connect talk2 disconnect)
     (let ((path '())
           (c #f))
@@ -1972,23 +1968,20 @@
 (test #t (binary-port? (open-input-bytevector #u8(0 1 2))))
 (test #t (binary-port? (open-output-bytevector)))
 
-;; WILE KNOWN LIMITATION: input-port-open? and output-port-open? don't recognize
-;; StringInputPort/StringOutputPort types. These tests crash the interpreter.
-;; See prim_port_extra_test.go for details.
-#;(test #t (input-port-open? (open-input-string "abc")))
-#;(test #t (output-port-open? (open-output-string)))
+(test #t (input-port-open? (open-input-string "abc")))
+(test #t (output-port-open? (open-output-string)))
 
-#;(test #f
+(test #f
     (let ((in (open-input-string "abc")))
       (close-input-port in)
       (input-port-open? in)))
 
-#;(test #f
+(test #f
     (let ((out (open-output-string)))
       (close-output-port out)
       (output-port-open? out)))
 
-#;(test #f
+(test #f
     (let ((out (open-output-string)))
       (close-port out)
       (output-port-open? out)))
@@ -2350,16 +2343,15 @@
 ;; Decimal notation with suffix
 (test-numeric-syntax "1e2" 100.0 "100.0" "100.")
 (test-numeric-syntax "1E2" 100.0 "100.0" "100.")
-;; WILE KNOWN LIMITATION: Short float exponent suffixes (s, S, f, F, d, D, l, L) not supported.
-;; These tests cause parse errors that trigger secondary exception handling bugs.
-#;(test-numeric-syntax "1s2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1S2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1f2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1F2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1d2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1D2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1l2" 100.0 "100.0" "100.")
-#;(test-numeric-syntax "1L2" 100.0 "100.0" "100.")
+;; Decimal notation with short float exponent suffixes (R7RS §7.1.1)
+(test-numeric-syntax "1s2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1S2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1f2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1F2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1d2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1D2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1l2" 100.0 "100.0" "100.")
+(test-numeric-syntax "1L2" 100.0 "100.0" "100.")
 ;; NaN, Inf
 (test-numeric-syntax "+nan.0" +nan.0 "+nan.0" "+NaN.0")
 (test-numeric-syntax "+NAN.0" +nan.0 "+nan.0" "+NaN.0")
@@ -2396,10 +2388,9 @@
 (test-numeric-syntax "1.0+2i" (make-rectangular 1.0 2) "1.0+2.0i" "1.0+2i" "1.+2i" "1.+2.i")
 (test-numeric-syntax "1+2.0i" (make-rectangular 1 2.0) "1.0+2.0i" "1+2.0i" "1.+2.i" "1+2.i")
 (test-numeric-syntax "1e2+1.0i" (make-rectangular 100.0 1.0) "100.0+1.0i" "100.+1.i")
-;; WILE KNOWN LIMITATION: Short float exponent suffixes not supported in complex numbers
-#;(test-numeric-syntax "1s2+1.0i" (make-rectangular 100.0 1.0) "100.0+1.0i" "100.+1.i")
+(test-numeric-syntax "1s2+1.0i" (make-rectangular 100.0 1.0) "100.0+1.0i" "100.+1.i")
 (test-numeric-syntax "1.0+1e2i" (make-rectangular 1.0 100.0) "1.0+100.0i" "1.+100.i")
-#;(test-numeric-syntax "1.0+1s2i" (make-rectangular 1.0 100.0) "1.0+100.0i" "1.+100.i")
+(test-numeric-syntax "1.0+1s2i" (make-rectangular 1.0 100.0) "1.0+100.0i" "1.+100.i")
 ;; Fractional complex numbers (rectangular notation)
 (test-numeric-syntax "1/2+3/4i" (make-rectangular (/ 1 2) (/ 3 4)))
 ;; Mixed fractional/decimal notation complex numbers (rectangular notation)

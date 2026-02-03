@@ -616,6 +616,15 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 4. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
 
+   **R7RS conformance test suite (`TestR7RSConformance`) is skipped due to the following known limitations:**
+
+   - [x] ~~`dynamic-wind` + continuation re-entry (see `plans/CONTINUATION_ESCAPE_FIX.md`)~~ — Resolved.
+   - [x] ~~`input-port-open?`/`output-port-open?` on string ports~~ — Resolved.
+   - [ ] `(read)` returning eof-object on empty port
+   - [ ] Parser panics on certain datum comment edge cases
+   - [x] ~~Short float exponent suffixes (`s`, `f`, `d`, `l`) in numbers~~ — Resolved. `string->number` now normalizes R7RS exponent markers before parsing.
+   - [ ] Non-decimal base fractions (`#x10/2`, `#o11/2`, etc.)
+
 5. ~~**Extended symbol escape verification**~~ — Resolved. All R7RS 7.1.1 escape sequences verified and tested. Minor bug remains: unterminated `|...|` symbols silently succeed instead of erroring.
 
 6. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.

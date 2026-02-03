@@ -160,21 +160,21 @@ func TestRounding(t *testing.T) {
 			code:     "(ceiling -1/2)",
 			expected: values.NewInteger(0),
 		},
-		// Round tests - floats and integers
+		// Round tests - floats and integers (R7RS §6.2.6: round to even)
 		{
-			name:     "round 3.5 up",
+			name:     "round 3.5 half to even",
 			code:     "(round 3.5)",
-			expected: values.NewFloat(4.0),
+			expected: values.NewFloat(4.0), // 4 is even
 		},
 		{
-			name:     "round 2.5 up",
+			name:     "round 2.5 half to even",
 			code:     "(round 2.5)",
-			expected: values.NewFloat(3.0),
+			expected: values.NewFloat(2.0), // 2 is even
 		},
 		{
-			name:     "round negative half",
+			name:     "round -3.5 half to even",
 			code:     "(round -3.5)",
-			expected: values.NewFloat(-4.0),
+			expected: values.NewFloat(-4.0), // -4 is even
 		},
 		{
 			name:     "round integer passthrough",
@@ -182,14 +182,14 @@ func TestRounding(t *testing.T) {
 			expected: values.NewInteger(3),
 		},
 		{
-			name:     "round 4.5 up",
+			name:     "round 4.5 half to even",
 			code:     "(round 4.5)",
-			expected: values.NewFloat(5.0),
+			expected: values.NewFloat(4.0), // 4 is even
 		},
 		{
-			name:     "round 5.5 up",
+			name:     "round 5.5 half to even",
 			code:     "(round 5.5)",
-			expected: values.NewFloat(6.0),
+			expected: values.NewFloat(6.0), // 6 is even
 		},
 		{
 			name:     "round exact zero",
@@ -211,16 +211,47 @@ func TestRounding(t *testing.T) {
 			code:     "(round 3.8)",
 			expected: values.NewFloat(4.0),
 		},
-		// Round tests - rationals (exact inputs → exact outputs per R7RS)
+		// Additional round-to-even half cases
 		{
-			name:     "round 5/2 half away from zero",
-			code:     "(round 5/2)",
-			expected: values.NewInteger(3), // 2.5 rounds to 3 (away from zero)
+			name:     "round 0.5 half to even",
+			code:     "(round 0.5)",
+			expected: values.NewFloat(0.0), // 0 is even
 		},
 		{
-			name:     "round 7/2 half away from zero",
+			name:     "round 1.5 half to even",
+			code:     "(round 1.5)",
+			expected: values.NewFloat(2.0), // 2 is even
+		},
+		{
+			name:     "round -0.5 half to even",
+			code:     "(round -0.5)",
+			expected: values.NewFloat(0.0), // 0 is even
+		},
+		{
+			name:     "round -1.5 half to even",
+			code:     "(round -1.5)",
+			expected: values.NewFloat(-2.0), // -2 is even
+		},
+		{
+			name:     "round 6.5 half to even",
+			code:     "(round 6.5)",
+			expected: values.NewFloat(6.0), // 6 is even
+		},
+		{
+			name:     "round 7.5 half to even",
+			code:     "(round 7.5)",
+			expected: values.NewFloat(8.0), // 8 is even
+		},
+		// Round tests - rationals (exact inputs → exact outputs per R7RS, round to even)
+		{
+			name:     "round 5/2 half to even",
+			code:     "(round 5/2)",
+			expected: values.NewInteger(2), // 2.5 rounds to 2 (even)
+		},
+		{
+			name:     "round 7/2 half to even",
 			code:     "(round 7/2)",
-			expected: values.NewInteger(4), // 3.5 rounds to 4 (away from zero)
+			expected: values.NewInteger(4), // 3.5 rounds to 4 (even)
 		},
 		{
 			name:     "round 7/3",
@@ -228,9 +259,9 @@ func TestRounding(t *testing.T) {
 			expected: values.NewInteger(2), // 2.333... rounds to 2
 		},
 		{
-			name:     "round -5/2 negative half",
+			name:     "round -5/2 half to even",
 			code:     "(round -5/2)",
-			expected: values.NewInteger(-3), // -2.5 rounds to -3 (away from zero)
+			expected: values.NewInteger(-2), // -2.5 rounds to -2 (even)
 		},
 		{
 			name:     "round 8/3",
@@ -241,6 +272,16 @@ func TestRounding(t *testing.T) {
 			name:     "round 1/3",
 			code:     "(round 1/3)",
 			expected: values.NewInteger(0), // 0.333... rounds to 0
+		},
+		{
+			name:     "round 1/2 half to even",
+			code:     "(round 1/2)",
+			expected: values.NewInteger(0), // 0.5 rounds to 0 (even)
+		},
+		{
+			name:     "round 3/2 half to even",
+			code:     "(round 3/2)",
+			expected: values.NewInteger(2), // 1.5 rounds to 2 (even)
 		},
 		// Truncate tests - floats and integers
 		{
@@ -438,39 +479,129 @@ func TestRounding_SpecialValues(t *testing.T) {
 	})
 }
 
-func TestFloorDivQuotientRemainder(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{
-			name: "floor/ basic",
-			code: `(floor/ 10 3)`,
-		},
-		{
-			name: "floor-quotient",
-			code: `(floor-quotient 10 3)`,
-		},
-		{
-			name: "floor-remainder",
-			code: `(floor-remainder 10 3)`,
-		},
-		{
-			name: "truncate/",
-			code: `(truncate/ 10 3)`,
-		},
-		{
-			name: "truncate-quotient",
-			code: `(truncate-quotient 10 3)`,
-		},
-		{
-			name: "truncate-remainder",
-			code: `(truncate-remainder 10 3)`,
-		},
+// TestFloorQuotient_AllSigns tests floor-quotient with all sign combinations.
+// R7RS §6.2.6: floor-quotient returns floor(n1/n2).
+func TestFloorQuotient_AllSigns(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{name: "(10, 3) -> 3", code: `(floor-quotient 10 3)`, expected: values.NewInteger(3)},
+		{name: "(-10, 3) -> -4", code: `(floor-quotient -10 3)`, expected: values.NewInteger(-4)},
+		{name: "(10, -3) -> -4", code: `(floor-quotient 10 -3)`, expected: values.NewInteger(-4)},
+		{name: "(-10, -3) -> 3", code: `(floor-quotient -10 -3)`, expected: values.NewInteger(3)},
+		{name: "float input", code: `(floor-quotient 10.0 3)`, expected: values.NewFloat(3.0)},
+		{name: "rational input", code: `(floor-quotient 7/2 3/2)`, expected: values.NewInteger(2)},
 	}
-
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, qt.IsNotNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestFloorRemainder_AllSigns tests floor-remainder with all sign combinations.
+// R7RS §6.2.6: floor-remainder returns n1 - n2*floor(n1/n2).
+func TestFloorRemainder_AllSigns(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{name: "(10, 3) -> 1", code: `(floor-remainder 10 3)`, expected: values.NewInteger(1)},
+		{name: "(-10, 3) -> 2", code: `(floor-remainder -10 3)`, expected: values.NewInteger(2)},
+		{name: "(10, -3) -> -2", code: `(floor-remainder 10 -3)`, expected: values.NewInteger(-2)},
+		{name: "(-10, -3) -> -1", code: `(floor-remainder -10 -3)`, expected: values.NewInteger(-1)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestTruncateQuotient_AllSigns tests truncate-quotient with all sign combinations.
+// R7RS §6.2.6: truncate-quotient returns truncate(n1/n2).
+func TestTruncateQuotient_AllSigns(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{name: "(10, 3) -> 3", code: `(truncate-quotient 10 3)`, expected: values.NewInteger(3)},
+		{name: "(-10, 3) -> -3", code: `(truncate-quotient -10 3)`, expected: values.NewInteger(-3)},
+		{name: "(10, -3) -> -3", code: `(truncate-quotient 10 -3)`, expected: values.NewInteger(-3)},
+		{name: "(-10, -3) -> 3", code: `(truncate-quotient -10 -3)`, expected: values.NewInteger(3)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestTruncateRemainder_AllSigns tests truncate-remainder with all sign combinations.
+// R7RS §6.2.6: truncate-remainder returns n1 - n2*truncate(n1/n2).
+func TestTruncateRemainder_AllSigns(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{name: "(10, 3) -> 1", code: `(truncate-remainder 10 3)`, expected: values.NewInteger(1)},
+		{name: "(-10, 3) -> -1", code: `(truncate-remainder -10 3)`, expected: values.NewInteger(-1)},
+		{name: "(10, -3) -> 1", code: `(truncate-remainder 10 -3)`, expected: values.NewInteger(1)},
+		{name: "(-10, -3) -> -1", code: `(truncate-remainder -10 -3)`, expected: values.NewInteger(-1)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestFloorTruncateMultiValue tests floor/ and truncate/ multi-value returns.
+// R7RS §6.2.6: These return two values (quotient and remainder).
+func TestFloorTruncateMultiValue(t *testing.T) {
+	// floor/ returns (quotient remainder)
+	t.Run("floor/ 10 3", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(equal? (call-with-values (lambda () (floor/ 10 3)) list) '(3 1))")
+	})
+	t.Run("floor/ -10 3", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(equal? (call-with-values (lambda () (floor/ -10 3)) list) '(-4 2))")
+	})
+	// truncate/ returns (quotient remainder)
+	t.Run("truncate/ 10 3", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(equal? (call-with-values (lambda () (truncate/ 10 3)) list) '(3 1))")
+	})
+	t.Run("truncate/ -10 3", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(equal? (call-with-values (lambda () (truncate/ -10 3)) list) '(-3 -1))")
+	})
+}
+
+// TestFloorTruncateInvariant tests the R7RS invariant: x = q*d + r.
+func TestFloorTruncateInvariant(t *testing.T) {
+	// (= x (+ (* (floor-quotient x d) d) (floor-remainder x d)))
+	t.Run("floor invariant positive", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(= 10 (+ (* (floor-quotient 10 3) 3) (floor-remainder 10 3)))")
+	})
+	t.Run("floor invariant negative dividend", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(= -10 (+ (* (floor-quotient -10 3) 3) (floor-remainder -10 3)))")
+	})
+	// (= x (+ (* (truncate-quotient x d) d) (truncate-remainder x d)))
+	t.Run("truncate invariant positive", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(= 10 (+ (* (truncate-quotient 10 3) 3) (truncate-remainder 10 3)))")
+	})
+	t.Run("truncate invariant negative dividend", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(= -10 (+ (* (truncate-quotient -10 3) 3) (truncate-remainder -10 3)))")
+	})
+}
+
+// TestFloorTruncateDivisionByZero tests division by zero produces an error.
+func TestFloorTruncateDivisionByZero(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "floor-quotient by zero", code: `(floor-quotient 10 0)`},
+		{name: "floor-remainder by zero", code: `(floor-remainder 10 0)`},
+		{name: "truncate-quotient by zero", code: `(truncate-quotient 10 0)`},
+		{name: "truncate-remainder by zero", code: `(truncate-remainder 10 0)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }

@@ -153,18 +153,53 @@ func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
 	})
 }
 
+// isNonRealComplex returns true if n is a complex number with non-zero imaginary part.
+// R7RS §6.2.6: ordering comparisons (<, >, <=, >=) require real arguments.
+func isNonRealComplex(n values.Number) bool {
+	switch v := n.(type) {
+	case *values.Complex:
+		return !v.IsReal()
+	case *values.BigComplex:
+		return !v.IsReal()
+	default:
+		return false
+	}
+}
+
 // PrimNumLt implements the < primitive.
+//
+// R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumLt(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.NumericChainCompare(mc, "<", func(prev, curr values.Number) bool {
+	var complexErr error
+	err := helpers.NumericChainCompare(mc, "<", func(prev, curr values.Number) bool {
+		if isNonRealComplex(prev) || isNonRealComplex(curr) {
+			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, "<: requires real arguments")
+			return true
+		}
 		return !prev.LessThan(curr)
 	})
+	if complexErr != nil {
+		return complexErr
+	}
+	return err
 }
 
 // PrimNumGt implements the > primitive.
+//
+// R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.NumericChainCompare(mc, ">", func(prev, curr values.Number) bool {
+	var complexErr error
+	err := helpers.NumericChainCompare(mc, ">", func(prev, curr values.Number) bool {
+		if isNonRealComplex(prev) || isNonRealComplex(curr) {
+			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, ">: requires real arguments")
+			return true
+		}
 		return !curr.LessThan(prev)
 	})
+	if complexErr != nil {
+		return complexErr
+	}
+	return err
 }
 
 // PrimNumLe implements the <= primitive.
@@ -172,13 +207,22 @@ func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nondecreasing.
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.NumericChainCompare(mc, "<=", func(prev, curr values.Number) bool {
+	var complexErr error
+	err := helpers.NumericChainCompare(mc, "<=", func(prev, curr values.Number) bool {
+		if isNonRealComplex(prev) || isNonRealComplex(curr) {
+			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, "<=: requires real arguments")
+			return true
+		}
 		// NaN fails all comparisons per IEEE 754
 		if helpers.IsNaN(prev) || helpers.IsNaN(curr) {
 			return true // fails the comparison
 		}
 		return curr.LessThan(prev)
 	})
+	if complexErr != nil {
+		return complexErr
+	}
+	return err
 }
 
 // PrimNumGe implements the >= primitive.
@@ -186,13 +230,22 @@ func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nonincreasing.
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.NumericChainCompare(mc, ">=", func(prev, curr values.Number) bool {
+	var complexErr error
+	err := helpers.NumericChainCompare(mc, ">=", func(prev, curr values.Number) bool {
+		if isNonRealComplex(prev) || isNonRealComplex(curr) {
+			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, ">=: requires real arguments")
+			return true
+		}
 		// NaN fails all comparisons per IEEE 754
 		if helpers.IsNaN(prev) || helpers.IsNaN(curr) {
 			return true // fails the comparison
 		}
 		return prev.LessThan(curr)
 	})
+	if complexErr != nil {
+		return complexErr
+	}
+	return err
 }
 
 // PrimAbs implements the abs primitive.
@@ -201,11 +254,7 @@ func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
-		if v.Value < 0 {
-			mc.SetValue(values.NewInteger(-v.Value))
-		} else {
-			mc.SetValue(v)
-		}
+		mc.SetValue(v.Abs())
 	case *values.BigInteger:
 		if v.IsNegative() {
 			mc.SetValue(v.Negate())
@@ -424,18 +473,62 @@ func PrimModulo(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimGcd implements the gcd primitive.
 func PrimGcd(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.IntegerFold(mc, helpers.FoldOpGCD, 0, helpers.GcdInt)
+	return helpers.IntegerFold(mc, helpers.FoldOpGCD, 0, func(a, b int64) (int64, bool) {
+		return helpers.GcdInt(a, b), false
+	})
 }
 
 // PrimLcm implements the lcm primitive.
 func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.IntegerFold(mc, helpers.FoldOpLCM, 1, func(acc, val int64) int64 {
+	return helpers.IntegerFold(mc, helpers.FoldOpLCM, 1, func(acc, val int64) (int64, bool) {
 		g := helpers.GcdInt(acc, val)
 		if g == 0 {
-			return 0 // lcm(0, 0) = 0
+			return 0, false // lcm(0, 0) = 0
 		}
-		return acc / g * val
+		q := acc / g
+		prod := q * val
+		if val != 0 && prod/val != q {
+			return 0, true // overflow
+		}
+		return prod, false
 	})
+}
+
+// floatToExact converts a float64 to its exact representation.
+// Returns BigInteger if the float is integral, Rational otherwise.
+func floatToExact(f float64) values.Number {
+	r := new(big.Rat).SetFloat64(f)
+	if r.IsInt() {
+		num := r.Num()
+		if num.IsInt64() {
+			return values.NewBigIntegerFromInt64(num.Int64())
+		}
+		return values.NewBigInteger(new(big.Int).Set(num))
+	}
+	return values.NewRationalFromRat(r)
+}
+
+// numberToExact converts a Number to its exact representation.
+// Exact numbers pass through; inexact numbers are converted.
+func numberToExact(n values.Number) values.Number {
+	switch v := n.(type) {
+	case *values.Integer:
+		return values.NewBigIntegerFromInt64(v.Value)
+	case *values.BigInteger:
+		return v
+	case *values.Rational:
+		return v
+	case *values.Float:
+		return floatToExact(v.Value)
+	case *values.BigFloat:
+		r, _ := v.BigFloatValue().Rat(nil)
+		if r.IsInt() {
+			return values.NewBigInteger(new(big.Int).Set(r.Num()))
+		}
+		return values.NewRationalFromRat(r)
+	default:
+		return values.NewBigIntegerFromInt64(0)
+	}
 }
 
 // PrimExact implements the (exact) primitive.
@@ -466,7 +559,19 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewRationalFromRat(r))
 		}
 	case *values.Complex:
-		return values.NewForeignError("exact: complex numbers not supported")
+		// R7RS §6.2.6: exact on inexact complex converts both parts
+		realPart := floatToExact(v.Real())
+		imagPart := floatToExact(v.Imag())
+		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+	case *values.BigComplex:
+		// Already exact if parts are exact; otherwise convert
+		if v.IsExact() {
+			mc.SetValue(v)
+		} else {
+			realPart := numberToExact(v.Real())
+			imagPart := numberToExact(v.Imag())
+			mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		}
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "exact: expected a number but got %T", o)
 	}

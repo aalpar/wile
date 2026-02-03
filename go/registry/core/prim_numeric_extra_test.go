@@ -585,3 +585,17 @@ func TestExactInexactExtended(t *testing.T) {
 		})
 	}
 }
+
+// TestRationalize_Exactness tests that rationalize preserves exactness.
+// R7RS §6.2.6: rationalize returns an exact result for exact arguments
+// and an inexact result for inexact arguments.
+func TestRationalize_Exactness(t *testing.T) {
+	// Exact inputs produce exact result
+	t.Run("exact inputs produce exact result", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(exact? (rationalize 3/10 1/10))")
+	})
+	// Inexact inputs produce inexact result
+	t.Run("inexact inputs produce inexact result", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(inexact? (rationalize 0.3 0.1))")
+	})
+}

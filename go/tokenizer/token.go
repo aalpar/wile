@@ -27,7 +27,8 @@ type Token interface {
 	Start() syntax.SourceIndexes
 	End() syntax.SourceIndexes
 	String() string
-	Value() string // Returns processed value (e.g., with escape sequences converted)
+	Value() string      // Returns processed value (e.g., with escape sequences converted)
+	HasHashDigit() bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
 }
 
 // SimpleToken is the concrete implementation of Token used by the tokenizer.
@@ -36,18 +37,20 @@ type SimpleToken struct {
 	iend   syntax.SourceIndexes
 	typ    TokenizerState
 	sign   bool // Whether the token has an explicit sign (+ or -)
+	hash   bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
 	rad    int
 	src    string
 	val    string // Processed value (e.g., escape sequences converted)
 }
 
 // NewSimpleToken creates a new SimpleToken with the given type, source, value, and position.
-func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, signed bool, rad int) *SimpleToken {
+func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, signed bool, rad int, hash bool) *SimpleToken {
 	q := &SimpleToken{
 		istart: *sti,
 		iend:   *eni,
 		typ:    typ,
 		sign:   signed,
+		hash:   hash,
 		rad:    rad,
 		src:    src,
 		val:    val,
@@ -79,6 +82,13 @@ func (p *SimpleToken) Start() syntax.SourceIndexes {
 // End returns the source position where the token ends.
 func (p *SimpleToken) End() syntax.SourceIndexes {
 	return p.iend
+}
+
+// HasHashDigit returns true if the token contained # as an inexact digit placeholder.
+// R7RS §7.1.1: # can appear in place of digits after at least one real digit,
+// representing an unknown digit (treated as 0). Its presence forces the number to be inexact.
+func (p *SimpleToken) HasHashDigit() bool {
+	return p.hash
 }
 
 // SchemeString returns the Scheme representation of the token.

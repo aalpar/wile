@@ -49,6 +49,34 @@ func TestExact(t *testing.T) {
 	}
 }
 
+// TestExact_Complex tests exact on complex numbers.
+// R7RS §6.2.6: exact converts both real and imaginary parts.
+func TestExact_Complex(t *testing.T) {
+	// exact on inexact complex produces exact BigComplex
+	t.Run("exact on 1.5+2.5i", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(exact 1.5+2.5i)")
+		qt.Assert(t, err, qt.IsNil)
+		_, ok := result.(*values.BigComplex)
+		qt.Assert(t, ok, qt.IsTrue)
+	})
+
+	t.Run("exact on 3.0+0.0i", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(exact 3.0+0.0i)")
+		qt.Assert(t, err, qt.IsNil)
+		_, ok := result.(*values.BigComplex)
+		qt.Assert(t, ok, qt.IsTrue)
+	})
+
+	t.Run("exact? of exact complex", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(exact? (exact 1.5+2.5i))")
+	})
+
+	// exact on already-exact complex (BigComplex with integer parts)
+	t.Run("exact on exact complex passthrough", func(t *testing.T) {
+		runSchemeCodeExpectTrue(t, "(exact? (exact 1+2i))")
+	})
+}
+
 func TestExactErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "exact on non-number string", code: `(exact "hello")`},
