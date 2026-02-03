@@ -45,10 +45,15 @@ cd go && make test
 
 ```bash
 # Start REPL
-./go/cmd/scheme
+./dist/scheme
 
 # Run a Scheme file
-./go/cmd/scheme -file example.scm
+./dist/scheme --file example.scm
+./dist/scheme -f example.scm
+./dist/scheme example.scm
+
+# Print version
+./dist/scheme --version
 ```
 
 ## Example

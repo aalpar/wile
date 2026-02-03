@@ -145,24 +145,4 @@ docker-build:
 docker-shell:
 	DOCKER_IMAGE=$(DOCKER_IMAGE) build/docker-shell.sh $(DOCKER_SHELL)
 
-# Create a new reno release note.
-#   make reno-new NAME=my-feature
-.PHONY: reno-new
-reno-new:
-ifndef NAME
-	$(error NAME is required. Usage: make reno-new NAME=my-feature)
-endif
-	reno new $(NAME)
-
-# Print the assembled release notes report.
-#   make reno-report
-.PHONY: reno-report
-reno-report:
-	reno report
-
-# List all release note fragments.
-#   make reno-list
-.PHONY: reno-list
-reno-list:
-	reno list
 
