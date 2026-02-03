@@ -229,6 +229,7 @@ func TestListToVector_Errors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{"non-list arg", `(list->vector 42)`},
 		{"improper list", `(list->vector (cons 1 2))`},
+		{"longer improper list", `(list->vector '(1 2 . 3))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

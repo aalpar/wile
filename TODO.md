@@ -5,23 +5,7 @@ Code Maintenance
 ----------------
 
 ### Partial List Handling Audit
-
-**Goal:** Ensure all functions that accept pairs or lists handle improper lists (lists not ending in `EmptyList`) consistently per R7RS.
-
-**Current State:** Inconsistent handling across ~30 list primitives:
-- `Pair.ForEach()` returns improper tail as second return value (correct)
-- `Pair.Len()` and `Pair.AsVector()` panic with `ErrNotAList` (correct)
-- `PrimAppend()` returns `ErrNotAPair` for non-list (correct)
-- Some primitives don't validate improper list ends explicitly
-
-**Required Action:**
-- [ ] Audit all list primitives in `go/registry/core/prim_lists.go` and `prim_pairs.go`
-- [ ] Each primitive should either:
-  - Accept improper lists and handle them per R7RS semantics, OR
-  - Return `ErrNotAPair` or `ErrNotAList` errors appropriately
-- [ ] Document expected behavior for each primitive
-
-**Files:** `go/registry/core/prim_lists.go`, `go/registry/core/prim_pairs.go`, `go/values/pair.go`
+- [x] **Resolved:** All list-consuming primitives handle improper lists correctly. `ForEach` returns the improper tail, and all primitives that require proper lists check `!values.IsEmptyList(tail)` after iteration. Added missing error tests for `list->string` and `list->vector` with improper lists.
 
 ---
 
@@ -618,3 +602,36 @@ Event Callbacks
   - Runtime debugging (variable set/get for debugging)
 - [ ] **Use case:** IDE integration, debugging, profiling
 - [ ] **Pattern:** Similar to dynamic-wind but for compiler/expander phases
+
+---
+
+1.0 Release Blockers
+--------------------
+
+Items that must be resolved before a 1.0 release. Each references an existing TODO section or adds a new item.
+
+### R7RS Conformance
+
+1. ~~**Partial list handling audit**~~ — Resolved. All list-consuming primitives handle improper lists correctly.
+
+2. **Library-internal binding hygiene** — See [Library-Internal Binding Hygiene](#library-internal-binding-hygiene) under R7RS Missing Features. Macros defined in a library that reference same-library helpers fail at use site. Current workaround: export helpers with `%` prefix.
+
+3. **Eval optional environment** — See [Eval Optional Environment](#eval-optional-environment). `eval` should accept 1 or 2 args per R7RS; currently requires both.
+
+4. **Environment creation** — See [Environment Creation](#environment-creation). `(environment)` primitive needs fixup.
+
+5. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
+
+6. **Extended symbol escape verification** — See [Extended Symbols](#extended-symbols) under R7RS Missing Features / Tokenizer. `|...|` symbols parse but escape sequences haven't been verified against R7RS 7.1.1.
+
+7. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.
+
+### Embedding API
+
+8. **Box primitives** — See [Box primitives](#box-primitives) under R7RS Missing Features / Primitives. Type exists but no Scheme-side registration.
+
+9. **Hashtable primitives** — See [Hashtable primitives](#hashtable-primitives) under R7RS Missing Features / Primitives. Type exists but only supports string keys, not arbitrary Scheme values.
+
+### User-Facing
+
+10. **Scheme header to stderr** — See [Scheme Header Output](#scheme-header-output). REPL startup message goes to stdout, breaking piped usage.
