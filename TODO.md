@@ -370,9 +370,10 @@ R7RS Missing Features
 ### Tokenizer (R7RS 7.1.1 Lexical Structure)
 
 **Extended Symbols (`|...|`):**
-- [x] **Basic parsing:** `readExtendedSymbol()` exists (tokenizer.go:1920-1944)
-- [x] **Escape sequences:** Calls `readIntraExtendedToken()` → `readEscapeSequence('|')`
-- [ ] **Verification needed:** Confirm all R7RS escape sequences supported (`\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, `\x<hex>;`)
+- [x] **Basic parsing:** `readExtendedSymbol()` exists (tokenizer.go:1937-1961)
+- [x] **Escape sequences:** Calls `readIntraExtendedToken()` → `readEscapeSequence()`. All R7RS escapes verified: `\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, `\x<hex>;`, and line continuations.
+- [x] **Verification complete:** All R7RS 7.1.1 escape sequences confirmed with tests in `edge_cases_test.go`.
+- [ ] **Bug:** Unterminated extended symbols (`|foo` at EOF) silently produce a valid symbol token instead of an error. `readExtendedSymbol` exits the loop on `p.err == io.EOF` without distinguishing EOF from a closing `|`.
 
 **Inexact Digit Placeholder:**
 - [ ] R7RS allows `#` in inexact numbers (e.g., `1.2###`)
@@ -616,7 +617,7 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 4. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
 
-5. **Extended symbol escape verification** — See [Extended Symbols](#extended-symbols) under R7RS Missing Features / Tokenizer. `|...|` symbols parse but escape sequences haven't been verified against R7RS 7.1.1.
+5. ~~**Extended symbol escape verification**~~ — Resolved. All R7RS 7.1.1 escape sequences verified and tested. Minor bug remains: unterminated `|...|` symbols silently succeed instead of erroring.
 
 6. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.
 

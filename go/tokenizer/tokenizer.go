@@ -81,6 +81,8 @@ const (
 	MessageInvalidHexEscape                      = "character code point is a surrogate (0xD800-0xDFFF)"
 	MessageInvalidCharacterHexEscape             = "invalid character hex escape"
 	MessageInvalidCharacterMnemonic              = "invalid character mnemonic"
+	MessageUnterminatedExtendedSymbol            = "unterminated extended symbol"
+	MessageUnterminatedString                    = "unterminated string"
 )
 
 // ErrNotAnUnsignedByteMarker is returned when parsing fails on an unsigned byte marker.
@@ -669,6 +671,9 @@ func (p *Tokenizer) readString() {
 		if isBackSlash(p.curr()) {
 			p.next() // skip \
 			if p.err != nil {
+				if errors.Is(p.err, io.EOF) {
+					p.err = NewTokenizerError(MessageUnterminatedString, p.tokenStart, p.tokenEnd)
+				}
 				return
 			}
 			p.readIntraStringEscape() //nolint:errcheck
@@ -681,6 +686,9 @@ func (p *Tokenizer) readString() {
 		p.value += string(p.curr())
 		p.next()
 		if p.err != nil {
+			if errors.Is(p.err, io.EOF) {
+				p.err = NewTokenizerError(MessageUnterminatedString, p.tokenStart, p.tokenEnd)
+			}
 			return
 		}
 	}
@@ -1942,6 +1950,9 @@ func (p *Tokenizer) readExtendedSymbol() {
 			// skip backslash and read next intra-extended token character
 			p.next()
 			if p.err != nil {
+				if errors.Is(p.err, io.EOF) {
+					p.err = NewTokenizerError(MessageUnterminatedExtendedSymbol, p.tokenStart, p.tokenEnd)
+				}
 				return
 			}
 			p.readIntraExtendedToken()
@@ -1954,6 +1965,9 @@ func (p *Tokenizer) readExtendedSymbol() {
 		p.next()
 	}
 	if p.err != nil {
+		if errors.Is(p.err, io.EOF) {
+			p.err = NewTokenizerError(MessageUnterminatedExtendedSymbol, p.tokenStart, p.tokenEnd)
+		}
 		return
 	}
 	// consume closing '|'
