@@ -57,7 +57,6 @@ func getTestDataPath() string {
 //   - The test uses (chibi test) library from lib/chibi/test.sld
 //
 // The test suite uses (test-exit) which calls (exit 0) on success or (exit 1) on failure.
-//
 func TestR7RSConformance(t *testing.T) {
 	// Check that the scheme binary exists
 	schemeBin := getSchemeBinary()
