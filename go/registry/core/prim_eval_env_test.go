@@ -503,3 +503,52 @@ func TestMakeCompileTimeValue(t *testing.T) {
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 }
+
+// =============================================================================
+// environment Symbol Identity Tests (R7RS §6.5, §6.12)
+// =============================================================================
+
+// TestEnvironmentSymbolIdentity tests that environments created by (environment)
+// share symbol interning with the caller, ensuring R7RS §6.5 symbol identity.
+func TestEnvironmentSymbolIdentity(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "empty environment eval quoted symbol",
+			code:     `(let ((e (environment))) (eval ''hello e))`,
+			expected: values.NewSymbol("hello"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestNullEnvironmentSymbolIdentity tests that null-environment shares
+// symbol interning with the caller for R7RS §6.5 symbol identity.
+func TestNullEnvironmentSymbolIdentity(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "null-environment 5 returns environment",
+			code:     `(let ((e (null-environment 5))) (eval ''hello e))`,
+			expected: values.NewSymbol("hello"),
+		},
+		{
+			name:     "null-environment 7 returns environment",
+			code:     `(let ((e (null-environment 7))) (eval ''hello e))`,
+			expected: values.NewSymbol("hello"),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}

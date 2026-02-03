@@ -42,6 +42,11 @@ type TopLevelEnvironment struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
 
+	// parent is the parent TopLevelEnvironment for interning delegation.
+	// When non-nil, InternSymbol and InternSyntax delegate to the parent,
+	// ensuring R7RS §6.5 symbol identity across child environments.
+	parent *TopLevelEnvironment
+
 	// symbolInterns is the per-instance symbol interning table.
 	symbolInterns   map[values.Symbol]*values.Symbol
 	symbolInternsMu sync.RWMutex
@@ -94,10 +99,19 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 // Otherwise, the symbol is added to the intern table and returned.
 // This ensures symbol identity (eq?) works correctly per R7RS §6.5.
 //
+// When a parent TopLevelEnvironment exists (child environments created via
+// NewChildTopLevelEnvironment), interning is delegated to the parent to
+// maintain symbol identity across environments.
+//
 // This function is thread-safe.
 func (p *TopLevelEnvironment) InternSymbol(s *values.Symbol) *values.Symbol {
 	if s == nil {
 		return nil
+	}
+
+	// Delegate to parent if this is a child environment
+	if p.parent != nil {
+		return p.parent.InternSymbol(s)
 	}
 
 	// Fast path: check if already interned with read lock
@@ -125,8 +139,16 @@ func (p *TopLevelEnvironment) InternSymbol(s *values.Symbol) *values.Symbol {
 // If an equivalent syntax value has been seen before, it is returned.
 // Otherwise, the value is added to the intern table and returned.
 //
+// When a parent TopLevelEnvironment exists, interning is delegated to the
+// parent to maintain syntax identity across environments.
+//
 // This function is thread-safe.
 func (p *TopLevelEnvironment) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
+	// Delegate to parent if this is a child environment
+	if p.parent != nil {
+		return p.parent.InternSyntax(k, v)
+	}
+
 	p.syntaxInternsMu.RLock()
 	if val, ok := p.syntaxInterns[k]; ok {
 		p.syntaxInternsMu.RUnlock()
@@ -187,6 +209,87 @@ func (p *TopLevelEnvironment) LibraryRegistry() any {
 // The registry should be a *machine.LibraryRegistry.
 func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 	p.libraryRegistry = registry
+}
+
+// NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose symbol
+// and syntax interning is delegated to the receiver (the parent). This ensures
+// R7RS §6.5 symbol identity across environment boundaries: symbols interned in
+// the child resolve to the same pointer as identically-named symbols in the
+// parent, so eq? comparisons between them return #t.
+//
+// # Ownership structure
+//
+// The child is a fully independent TopLevelEnvironment with its own:
+//
+//   - EnvironmentFrame (runtime, phase 0) — the root lexical scope
+//   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
+//   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
+//
+// The child's GlobalEnvironmentFrame.topLevel points to the child (not the
+// parent), so new global bindings created in the child are keyed against the
+// child's GlobalEnvironmentFrame. This is what provides binding isolation:
+// definitions in the child do not appear in the parent, and vice versa.
+//
+// # Interning delegation
+//
+// The child stores a parent pointer and has nil interning maps. InternSymbol
+// and InternSyntax check for a non-nil parent and delegate recursively,
+// ultimately reaching the root TopLevelEnvironment where the maps and mutexes
+// live. This avoids sharing map pointers across structs with independent
+// mutexes (which would be a data race).
+//
+// # Inherited state
+//
+// The child inherits the parent's libraryRegistry (the *machine.LibraryRegistry)
+// by value copy. This allows the child to load libraries via (import ...) without
+// requiring the caller to set the registry explicitly. The registry itself is a
+// shared pointer; mutations to the registry (e.g., registering a new library)
+// are visible to both parent and child.
+//
+// # Contrast with NewChildRuntime
+//
+// NewChildRuntime returns an *EnvironmentFrame that shares the parent's
+// TopLevelEnvironment directly (same pointer). It is used for library loading,
+// where the library environment should intern symbols through the same
+// TopLevelEnvironment. However, because it shares the TopLevelEnvironment,
+// it cannot be returned as a standalone environment value — calling Runtime()
+// on the shared TopLevelEnvironment returns the parent's runtime frame, not
+// the child's.
+//
+// NewChildTopLevelEnvironment returns a new *TopLevelEnvironment that can be
+// passed as a first-class Scheme value (e.g., returned from the (environment)
+// primitive and accepted by eval). Its Runtime() returns the child's own
+// runtime frame, and its AtPhase/Expand/Compile methods create phase
+// environments scoped to the child.
+//
+// # Usage
+//
+// Used by PrimEnvironment and PrimNullEnvironment (R7RS §6.12) to create
+// environments that are identity-compatible with the caller's symbol table
+// while providing isolated bindings.
+func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment {
+	q := &TopLevelEnvironment{
+		libraryRegistry: p.libraryRegistry,
+		parent:          p,
+	}
+
+	// Create the runtime (phase 0) environment frame
+	global := newGlobalEnvironmentFrameWithTopLevel(q)
+	q.runtime = &EnvironmentFrame{
+		parent:     nil,
+		local:      nil,
+		global:     global,
+		phaseLevel: PhaseRuntime,
+		topLevel:   q,
+	}
+
+	// Create phase registry and register runtime as phase 0
+	q.phases = newPhaseRegistryWithTopLevel(q)
+
+	// Set the phases reference on the runtime frame
+	q.runtime.phases = q.phases
+
+	return q
 }
 
 // NewChildRuntime creates a new runtime environment frame that shares this

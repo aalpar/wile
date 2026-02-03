@@ -262,9 +262,7 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 ---
 
 ### Environment Creation
-- [ ] **Issue:** "( environment )" creation needs fixup
-- [ ] **Context:** R7RS environment primitive
-- [ ] **Location:** `go/registry/core/` or `go/extensions/eval/`
+- [x] **Resolved:** `(environment)` and `(null-environment)` now use `NewChildTopLevelEnvironment()` to share symbol interning with the caller, fixing R7RS §6.5 symbol identity across environment boundaries.
 
 ---
 
@@ -614,22 +612,20 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 2. ~~**Library-internal binding hygiene**~~ — Resolved. `GlobalIndex.Env` now records the definition-site global frame for cross-library macro hygiene.
 
-3. **Eval optional environment** — See [Eval Optional Environment](#eval-optional-environment). `eval` should accept 1 or 2 args per R7RS; currently requires both.
+3. ~~**Environment creation**~~ — Resolved. `(environment)` and `(null-environment)` now use `NewChildTopLevelEnvironment()` to share symbol interning with the caller.
 
-4. **Environment creation** — See [Environment Creation](#environment-creation). `(environment)` primitive needs fixup.
+4. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
 
-5. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
+5. **Extended symbol escape verification** — See [Extended Symbols](#extended-symbols) under R7RS Missing Features / Tokenizer. `|...|` symbols parse but escape sequences haven't been verified against R7RS 7.1.1.
 
-6. **Extended symbol escape verification** — See [Extended Symbols](#extended-symbols) under R7RS Missing Features / Tokenizer. `|...|` symbols parse but escape sequences haven't been verified against R7RS 7.1.1.
-
-7. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.
+6. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.
 
 ### Embedding API
 
-8. **Box primitives** — See [Box primitives](#box-primitives) under R7RS Missing Features / Primitives. Type exists but no Scheme-side registration.
+7. **Box primitives** — See [Box primitives](#box-primitives) under R7RS Missing Features / Primitives. Type exists but no Scheme-side registration.
 
-9. **Hashtable primitives** — See [Hashtable primitives](#hashtable-primitives) under R7RS Missing Features / Primitives. Type exists but only supports string keys, not arbitrary Scheme values.
+8. **Hashtable primitives** — See [Hashtable primitives](#hashtable-primitives) under R7RS Missing Features / Primitives. Type exists but only supports string keys, not arbitrary Scheme values.
 
 ### User-Facing
 
-10. **Scheme header to stderr** — See [Scheme Header Output](#scheme-header-output). REPL startup message goes to stdout, breaking piped usage.
+9. **Scheme header to stderr** — See [Scheme Header Output](#scheme-header-output). REPL startup message goes to stdout, breaking piped usage.
