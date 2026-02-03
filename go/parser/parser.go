@@ -361,22 +361,71 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	return result, p.cur, nil
 }
 
-// parseIntegerWithBase parses the current token as an integer with the given base.
-func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
-	a, err := strconv.ParseInt(p.cur.String(), base, 64)
+// parseDecimalInteger parses an unsigned or signed base-10 integer token.
+// Handles hash digit substitution, overflow promotion to BigInteger,
+// and forces inexact (Float) when hash digits are present.
+//
+// R7RS §7.1.1: When # appears in a number literal, each # represents an
+// unknown digit (treated as 0) and the result is inexact.
+func (p *Parser) parseDecimalInteger() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := replaceHashDigits(p.cur.String())
+	a, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		// If overflow, promote to BigInteger
 		var numErr *strconv.NumError
 		isNumErr := errors.As(err, &numErr)
 		if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
 			bigInt := new(big.Int)
-			_, ok := bigInt.SetString(p.cur.String(), base)
+			_, ok := bigInt.SetString(s, 10)
 			if ok {
+				if p.cur.HasHashDigit() {
+					f, _ := bigInt.Float64()
+					q := p.wrapSyntax(values.NewFloat(f), p.cur)
+					return q, p.cur, nil
+				}
 				q := p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
 				return q, p.cur, nil
 			}
 		}
 		return nil, p.cur, err
+	}
+	if p.cur.HasHashDigit() {
+		q := p.wrapSyntax(values.NewFloat(float64(a)), p.cur)
+		return q, p.cur, nil
+	}
+	q := p.wrapSyntax(values.NewInteger(a), p.cur)
+	return q, p.cur, nil
+}
+
+// parseIntegerWithBase parses the current token as an integer in the given base.
+// Handles hash digit substitution and forces inexact when hash digits are present.
+//
+// R7RS §7.1.1: <uinteger R> -> <digit R>+ #*
+func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := replaceHashDigits(p.cur.String())
+	a, err := strconv.ParseInt(s, base, 64)
+	if err != nil {
+		// If overflow, promote to BigInteger
+		var numErr *strconv.NumError
+		isNumErr := errors.As(err, &numErr)
+		if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
+			bigInt := new(big.Int)
+			_, ok := bigInt.SetString(s, base)
+			if ok {
+				if p.cur.HasHashDigit() {
+					f, _ := bigInt.Float64()
+					q := p.wrapSyntax(values.NewFloat(f), p.cur)
+					return q, p.cur, nil
+				}
+				q := p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
+				return q, p.cur, nil
+			}
+		}
+		return nil, p.cur, err
+	}
+	if p.cur.HasHashDigit() {
+		q := p.wrapSyntax(values.NewFloat(float64(a)), p.cur)
+		return q, p.cur, nil
 	}
 	q := p.wrapSyntax(values.NewInteger(a), p.cur)
 	return q, p.cur, nil
@@ -399,7 +448,7 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 // Per R7RS §7.1.1, the exponent marker indicates inexact notation, so all scientific
 // notation produces Float (inexact). The #e prefix can convert to exact after parsing.
 func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := p.cur.String()
+	s := replaceHashDigits(p.cur.String())
 
 	// Find the exponent marker
 	expIdx := strings.IndexAny(s, "eEsSfFdDlL")
@@ -427,6 +476,13 @@ func normalizeExponentMarker(s string) string {
 	q := []byte(s)
 	q[idx] = 'e'
 	return string(q)
+}
+
+// replaceHashDigits replaces all '#' inexact digit placeholders with '0'.
+// R7RS §7.1.1: '#' represents an unknown digit treated as 0; its presence
+// forces the number to be inexact (handled by the caller checking HasHashDigit).
+func replaceHashDigits(s string) string {
+	return strings.ReplaceAll(s, "#", "0")
 }
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
@@ -721,62 +777,23 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSymbol:
 		q = p.wrapSyntaxSymbol(p.cur.Value(), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateUnsignedInteger:
-		var a int64
-		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
-		if p.err != nil {
-			// If overflow, promote to BigInteger
-			var numErr *strconv.NumError
-			isNumErr := errors.As(p.err, &numErr)
-			if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
-				bigInt := new(big.Int)
-				_, ok := bigInt.SetString(p.cur.String(), 10)
-				if ok {
-					q = p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
-					p.err = nil
-					return q, p.cur, nil
-				}
-			}
-			return nil, p.cur, p.err
-		}
-		q1 := values.NewInteger(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
+		return p.parseDecimalInteger()
 	case tokenizer.TokenizerStateUnsignedDecimalFraction:
+		// R7RS §7.1.1: # digit placeholders replaced with 0
 		var a float64
-		a, p.err = strconv.ParseFloat(normalizeExponentMarker(p.cur.String()), 64)
+		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
 		q1 := values.NewFloat(a)
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedInteger:
-		// Signed integers like "-40", "+40"
-		var a int64
-		a, p.err = strconv.ParseInt(p.cur.String(), 10, 64)
-		if p.err != nil {
-			// If overflow, promote to BigInteger
-			var numErr *strconv.NumError
-			isNumErr := errors.As(p.err, &numErr)
-			if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
-				bigInt := new(big.Int)
-				_, ok := bigInt.SetString(p.cur.String(), 10)
-				if ok {
-					q = p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
-					p.err = nil
-					return q, p.cur, nil
-				}
-			}
-			return nil, p.cur, p.err
-		}
-		q1 := values.NewInteger(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedDecimalFraction:
 		// Signed decimal fractions like "-3.24", "+3.24"
+		// R7RS §7.1.1: # digit placeholders replaced with 0
 		var a float64
-		a, p.err = strconv.ParseFloat(normalizeExponentMarker(p.cur.String()), 64)
+		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
@@ -790,21 +807,31 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.parseScientificNotation()
 	case tokenizer.TokenizerStateUnsignedRationalFraction:
 		// Unsigned rational fractions like "3/4"
+		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
-		q1, p.err = p.parseRational(p.cur.String())
+		q1, p.err = p.parseRational(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		q = p.wrapSyntax(q1, p.cur)
+		if p.cur.HasHashDigit() {
+			q = p.wrapSyntax(p.numberToInexact(q1), p.cur)
+		} else {
+			q = p.wrapSyntax(q1, p.cur)
+		}
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedRationalFraction:
 		// Signed rational fractions like "-1/2", "+3/4"
+		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
-		q1, p.err = p.parseRational(p.cur.String())
+		q1, p.err = p.parseRational(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		q = p.wrapSyntax(q1, p.cur)
+		if p.cur.HasHashDigit() {
+			q = p.wrapSyntax(p.numberToInexact(q1), p.cur)
+		} else {
+			q = p.wrapSyntax(q1, p.cur)
+		}
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBase2:
 		// #b prefix - next token is base 2 integer
@@ -861,10 +888,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginary:
 		// Pure imaginary numbers like +3i, -2i, +i, -i
+		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
-		q1, p.err = p.parseImaginary(p.cur.String())
+		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		if p.cur.HasHashDigit() {
+			q1 = p.numberToInexact(q1)
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -888,17 +919,22 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		// Full complex numbers like 1+2i, 3-4i, 1.5+2.5i, +1+2i, -3-4i
 		// R7RS §6.2.2: Exact if both parts are integer/rational, inexact otherwise
+		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
-		q1, p.err = p.parseComplex(p.cur.String())
+		q1, p.err = p.parseComplex(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		if p.cur.HasHashDigit() {
+			q1 = p.numberToInexact(q1)
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
 		// Polar complex numbers like 1@1.5708, +2@0.5, -3@1.0
+		// R7RS §7.1.1: # placeholders → 0
 		var q1 *values.Complex
-		q1, p.err = p.parsePolarComplex(p.cur.String())
+		q1, p.err = p.parsePolarComplex(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
@@ -906,10 +942,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedImaginary:
 		// Pure imaginary numbers (unsigned, typically after radix prefix)
+		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
-		q1, p.err = p.parseImaginary(p.cur.String())
+		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		if p.cur.HasHashDigit() {
+			q1 = p.numberToInexact(q1)
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -1482,6 +1522,30 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 
 	// Re-wrap with the same syntax context
 	return p.rewrapSyntax(stx, exactNum), nil
+}
+
+// numberToInexact converts a Number to its inexact representation.
+//
+// R7RS §7.1.1: Numbers containing # digit placeholders are inexact.
+// R7RS §6.2.6: Inexact numbers use floating-point representation.
+func (p *Parser) numberToInexact(num values.Number) values.Number {
+	switch v := num.(type) {
+	case *values.Integer:
+		return values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		return values.NewFloat(f)
+	case *values.Rational:
+		f, _ := v.Rat().Float64()
+		return values.NewFloat(f)
+	case *values.BigComplex:
+		reFloat := v.RealAsBigFloat().Float64()
+		imFloat := v.ImagAsBigFloat().Float64()
+		return values.NewComplexFromParts(reFloat, imFloat)
+	default:
+		// Float, BigFloat, Complex are already inexact
+		return num
+	}
 }
 
 // makeInexact converts a syntax-wrapped number to its inexact representation.
