@@ -1418,9 +1418,10 @@ func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Apply exactness conversion if a prefix was specified.
-	if exactness == 1 {
+	switch exactness {
+	case 1:
 		result = stringToNumberMakeExact(result)
-	} else if exactness == -1 {
+	case -1:
 		result = stringToNumberMakeInexact(result)
 	}
 
