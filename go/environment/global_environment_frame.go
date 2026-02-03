@@ -26,8 +26,15 @@ import (
 // GlobalIndex identifies a global binding by its symbol key.
 // Unlike LocalIndex which uses numeric indices, GlobalIndex uses the symbol
 // directly since global bindings are accessed by name at runtime.
+//
+// Env records the definition-site global frame for cross-library macro hygiene.
+// When a macro references a non-exported helper from its defining library,
+// Env ensures the VM resolves the binding in the library's environment rather
+// than the use-site environment. Nil means "use the current environment"
+// (backward compatible default).
 type GlobalIndex struct {
 	Index *values.Symbol
+	Env   *GlobalEnvironmentFrame
 }
 
 // NewGlobalIndex creates a new GlobalIndex for the given symbol.

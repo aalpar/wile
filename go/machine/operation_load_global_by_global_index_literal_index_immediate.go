@@ -58,10 +58,17 @@ func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx contex
 	if !ok {
 		return nil, mc.Error(fmt.Sprintf("literal %v is not a global index", o))
 	}
-	// Use GetGlobalBinding which traverses the parent chain.
-	// This is necessary for cross-phase lookups (e.g., expand-time primitives
-	// accessed from syntax-case fenders running in a child environment).
-	bd := mc.env.GetGlobalBinding(gi)
+	// If the GlobalIndex carries a definition-site environment (cross-library
+	// macro hygiene), look up directly in that frame. Otherwise fall back to
+	// GetGlobalBinding which traverses the parent chain — necessary for
+	// cross-phase lookups (e.g., expand-time primitives accessed from
+	// syntax-case fenders running in a child environment).
+	var bd *environment.Binding
+	if gi.Env != nil {
+		bd = gi.Env.GetOwnGlobalBinding(gi)
+	} else {
+		bd = mc.env.GetGlobalBinding(gi)
+	}
 	if bd == nil {
 		return nil, mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
 	}

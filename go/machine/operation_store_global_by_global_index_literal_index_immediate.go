@@ -56,7 +56,12 @@ func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx conte
 		return nil, mc.Error(fmt.Sprintf("literal %v is not a global index", o))
 	}
 	val := mc.evals.Pop()
-	err := mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
+	var err error
+	if gi.Env != nil {
+		err = gi.Env.SetOwnGlobalValue(gi, val)
+	} else {
+		err = mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
+	}
 	if err != nil {
 		return nil, mc.WrapError(err, fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
 	}

@@ -384,12 +384,10 @@ R7RS Missing Features
 
 ### Macro/Library System
 
-**Library-Internal Binding Hygiene:**
-- [ ] **Issue:** Macros defined in a library that reference helper functions defined in the same library fail at use site with "no such binding"
-- [ ] **Root Cause:** Hygiene model doesn't preserve library bindings for macro-introduced identifiers
-- [ ] **Workaround:** Export helper functions with `%` prefix
-- [ ] **Complexity:** High - requires changes to hygiene model to track library boundaries
-- [ ] **Related:** `FreeIdResolution` struct in `compile_syntax_rules.go` tracks global vs local binding resolution
+**Library-Internal Binding Hygiene:** ~~Resolved.~~
+- [x] **Issue:** Macros defined in a library that reference helper functions defined in the same library fail at use site with "no such binding"
+- [x] **Root Cause:** `GlobalIndex` only stored the symbol name, so at runtime the VM looked up the binding in the use-site environment instead of the definition-site library environment
+- [x] **Fix:** Added `Env *GlobalEnvironmentFrame` field to `GlobalIndex`. `EnvironmentFrame.GetGlobalIndex` records the definition-site global frame, and VM load/store operations use it directly when set.
 
 ---
 
@@ -614,7 +612,7 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 1. ~~**Partial list handling audit**~~ — Resolved. All list-consuming primitives handle improper lists correctly.
 
-2. **Library-internal binding hygiene** — See [Library-Internal Binding Hygiene](#library-internal-binding-hygiene) under R7RS Missing Features. Macros defined in a library that reference same-library helpers fail at use site. Current workaround: export helpers with `%` prefix.
+2. ~~**Library-internal binding hygiene**~~ — Resolved. `GlobalIndex.Env` now records the definition-site global frame for cross-library macro hygiene.
 
 3. **Eval optional environment** — See [Eval Optional Environment](#eval-optional-environment). `eval` should accept 1 or 2 args per R7RS; currently requires both.
 
