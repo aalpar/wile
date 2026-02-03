@@ -1,14 +1,6 @@
 TODO
 ----
 
-Code Maintenance
-----------------
-
-### Partial List Handling Audit
-- [x] **Resolved:** All list-consuming primitives handle improper lists correctly. `ForEach` returns the improper tail, and all primitives that require proper lists check `!values.IsEmptyList(tail)` after iteration. Added missing error tests for `list->string` and `list->vector` with improper lists.
-
----
-
 Code Cleanup
 ------------
 ### Re-Work Numeric Tower
@@ -20,11 +12,9 @@ Code Cleanup
 ### Investigate Symbol Interning Semantic
 - [ ] Symbol interning semantics should be looked up in R7RS.  Look at benefits of environment interning with global interning.
 
-### MakeExact MakeInexact Helpers
-- [ ] Try an improved implementation that reduces code size
-
 ### FreeIdResolution
 - [ ] Try and find a more specific type for the interface, instead of 'any'.
+- [ ] **Location:** `go/match/syntax_adapter.go` and `go/machine/compile_syntax_rules.go`
 
 ### Scope Matching Optimization
 - [ ] **Location:** `go/syntax/` and `go/match/`
@@ -35,15 +25,12 @@ Code Cleanup
 ---
 
 ### Quasiquote Expansion
-**Status:** ✅ CLEAN DESIGN
+**Status:** Only `compile_quasisyntax.go` exists (no separate `compile_quasiquote.go`).
 
-`go/machine/compile_quasisyntax.go` (180 lines) shows well-structured design:
+`go/machine/compile_quasisyntax.go` shows well-structured design:
 - Proper depth tracking for nested quasisyntax
 - Clean separation: entry point → depth management → template transformation
 - Sophisticated list handling with unsyntax-splicing segmentation
-
-**Potential opportunity:**
-- [ ] Consolidate duplicate logic between quasiquote and quasisyntax implementations (different files)
 
 ---
 
@@ -56,14 +43,9 @@ Code Cleanup
 
 ### Numeric Type Unification
 - [ ] **Issue:** Integer, Float, Rational, Complex, BigInteger, BigFloat have some duplicate comparison logic
-- [ ] **Location:** `go/values/numeric_tower.go` provides unified dispatch but per-type methods still exist
-- [ ] **Goal:** Ensure all cross-type operations go through `TowerAdd`, `TowerSubtract`, `TowerCompare`, etc.
+- [ ] **Location:** `go/values/numeric_tower.go` provides unified dispatch (`TowerAdd`, `TowerSubtract`, `TowerCompare`, etc.) but per-type methods still exist
+- [ ] **Goal:** Ensure all cross-type operations go through unified Tower functions
 - [ ] **Files:** All `go/values/*_number.go` files
-
----
-
-### Auxiliary Syntax Exports
-- [x] **Resolved:** `CopyLibraryBindingsToEnvAtPhase` now propagates compile-phase bindings (auxiliary syntax) to the compile phase of the target environment for defense-in-depth. Auxiliary syntax (`else`, `=>`, `...`, `_`) is copied to both runtime phase 0 and compile phase (targetPhase+2).
 
 ---
 
@@ -89,7 +71,7 @@ Code Cleanup
 ---
 
 ### Use BoolToBoolean Helper
-- [ ] **Location:** `go/utils/bool.go` provides `BoolToBoolean(bool) *Boolean`
+- [ ] **Location:** `go/utils/predicate.go` provides `BoolToBoolean(bool) *Boolean`
 - [ ] **Goal:** Replace manual `if b { TrueValue } else { FalseValue }` patterns
 - [ ] **Scope:** Audit all primitive implementations
 
@@ -97,7 +79,7 @@ Code Cleanup
 
 ### Tokenization Error Handling
 - [ ] **Issue:** Error handling in tokenizer is difficult to understand
-- [ ] **Location:** `go/tokenizer/tokenizer.go`, `error.go`
+- [ ] **Location:** `go/tokenizer/tokenizer.go`, `go/tokenizer/error.go`
 - [ ] **Goal:** Improve error propagation and messages
 - [ ] **Note:** Consider structured error types with line/column info
 
@@ -119,9 +101,9 @@ Code Cleanup
 
 ### syntax->datum and datum->syntax Consolidation
 - [ ] **Location:** `go/registry/core/prim_syntax.go`
-- [ ] **Current State:** `datumToSyntax()` helper exists (lines 91-120); `PrimSyntaxToDatum` uses `stx.UnwrapAll()`
+- [ ] **Current State:** `datumToSyntax()` helper exists; `PrimSyntaxToDatum` uses `stx.UnwrapAll()`
 - [ ] **Goal:** Verify no duplicate recursive unwrap/wrap logic elsewhere
-- [ ] **Files to check:** `go/match/syntax_adapter.go`, `go/machine/compile_quasisyntax.go`
+- [ ] **Files to check:** `go/machine/compile_quasisyntax.go`
 
 ---
 
@@ -144,19 +126,14 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 
 ### Validation Code Size
 - [ ] **Location:** `go/validate/` directory
-- [ ] **Current State:** 14 files, already well-decomposed by form type
-- [ ] **Note:** Original item mentioned "compile_validate.go" which doesn't exist; validation is in separate package
+- [ ] **Current State:** 15 files, already well-decomposed by form type
 - [ ] **Goal:** Review if further decomposition or method extraction is beneficial
 
 ---
 
 ### evalWhenCompileForRuntime Simplification
-- [ ] **Location:** `go/machine/compile_eval_when.go` lines 205-263
+- [ ] **Location:** `go/machine/compile_eval_when.go`
 - [ ] **Issue:** Two-pass algorithm (collect all expressions, then iterate)
-- [ ] **Current Flow:**
-  1. Collect ALL expressions via `SyntaxForEach` (lines 221-232)
-  2. Loop through collected slice with index tracking (lines 235-260)
-  3. For each: expand → compile with tail-position context → pop if not last
 - [ ] **Goal:** Consider single-pass algorithm that expands/compiles in the ForEach callback
 - [ ] **Challenge:** Determining "last" expression requires knowing total count
 
@@ -192,7 +169,7 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 
 ### Tokenizer Warnings
 - [ ] **Issue:** Unreachable code and unhandled errors in tokenizer
-- [ ] **Location:** `go/tokenizer/tokenizer.go` (lines mentioned: 1641, 1664)
+- [ ] **Location:** `go/tokenizer/tokenizer.go`
 - [ ] **Goal:** Fix warnings, ensure error handling is complete
 
 ---
@@ -254,29 +231,10 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 
 ---
 
-### Scheme Header Output
-- [ ] **Issue:** "Program running, send SIGQUIT (Ctrl+\\) to dump stacks." outputs to stdout
-- [ ] **Goal:** Output to stderr, add `--quiet` option
-- [ ] **Location:** `go/cmd/main.go` REPL startup
-
----
-
-### Environment Creation
-- [x] **Resolved:** `(environment)` and `(null-environment)` now use `NewChildTopLevelEnvironment()` to share symbol interning with the caller, fixing R7RS §6.5 symbol identity across environment boundaries.
-
----
-
-### Eval Optional Environment
-- [ ] **Issue:** `eval` should accept 1 or 2 arguments (second is optional environment)
-- [ ] **R7RS:** `(eval expression [environment])` where environment defaults to interaction-environment
-- [ ] **Location:** `go/extensions/eval/prim_eval.go`
-
----
-
 Primitive Unit Tests
 --------------------
 
-**Status:** Many primitives have dedicated test files (89 test files exist).
+**Status:** Many primitives have dedicated test files (89+ test files exist). Many items originally listed here are now covered by consolidated test files (e.g., `prim_port_extra_test.go`, `prim_read_extra_test.go`, `prim_write_extra_test.go`, `prim_numeric_extra_test.go`).
 
 Each primitive file (`prim_*.go`) should have a matching `prim_*_test.go` file that:
 1. Executes Scheme code to test the primitive
@@ -305,61 +263,29 @@ func TestPrimName(t *testing.T) {
 }
 ```
 
-### Arithmetic
-- [ ] `prim_exact_integer_sqrt_test.go` - exact-integer-sqrt, test: perfect squares, non-perfect (returns two values)
-- [ ] `prim_rationalize_test.go` - rationalize, test: tolerance parameter
+### Remaining Untested Primitives
 
-### Vector Operations
-- [ ] `prim_vector_set_test.go` - vector-set!, test: mutation (used in other tests but no dedicated tests)
+#### Control Flow
+- [ ] `call/cc` - expand existing tests for edge cases (no dedicated test file)
 
-### Bytevector Operations
-- [ ] `prim_bytevector_copy_bang_test.go` - bytevector-copy!, test: mutation with start/end indices
+#### Expansion/Compilation
+- [ ] `expand` - test expand primitive
+- [ ] `expand-once` - test expand-once primitive
+- [ ] `compile` - test compile primitive
 
-### I/O Ports
-- [ ] `prim_open_input_file_test.go`
-- [ ] `prim_open_output_file_test.go`
-- [ ] `prim_open_input_string_test.go`
-- [ ] `prim_open_output_string_test.go`
-- [ ] `prim_open_input_bytevector_test.go`
-- [ ] `prim_open_output_bytevector_test.go`
-- [ ] `prim_get_output_string_test.go`
-- [ ] `prim_get_output_bytevector_test.go`
-- [ ] `prim_input_port_q_test.go`
-- [ ] `prim_output_port_q_test.go`
-- [ ] `prim_port_q_test.go`
-- [ ] `prim_input_port_open_q_test.go`
-- [ ] `prim_output_port_open_q_test.go`
+#### Process/Environment
+- [ ] `exit` - test exit primitive
+- [ ] `emergency-exit` - test emergency-exit primitive
 
-### Read/Write
-- [ ] `prim_read_test.go`
-- [ ] `prim_read_syntax_test.go`
-- [ ] `prim_read_token_test.go`
-- [ ] `prim_write_test.go`
-- [ ] `prim_display_test.go`
-- [ ] `prim_write_char_test.go`
-- [ ] `prim_newline_test.go`
-
-### Control Flow
-- [ ] `prim_call_cc_test.go` - expand existing tests for edge cases
-
-### Expansion
-- [ ] `prim_expand_test.go`
-- [ ] `prim_expand_once_test.go`
-- [ ] `prim_compile_test.go`
-
-### Process/Environment
-- [ ] `prim_exit_test.go`
-- [ ] `prim_emergency_exit_test.go`
-
-### Miscellaneous
-- [ ] `prim_utils_test.go`
+#### Miscellaneous
+- [ ] `prim_utils_test.go` - test utility primitives
 
 ---
 
-Code Refactoring (see REFACTORING_PROPOSAL.md)
-----------------------------------------------
+Code Refactoring
+----------------
 - [ ] Add `go/registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
-- [ ] Add `go/machine/operation_helpers.go` - EqualTo helper functions (~300 lines saved)
+- [x] ~~Add `go/machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
 - [ ] Migrate ~27 operation files to use EqualTo helpers
 
 ---
@@ -370,9 +296,7 @@ R7RS Missing Features
 ### Tokenizer (R7RS 7.1.1 Lexical Structure)
 
 **Extended Symbols (`|...|`):**
-- [x] **Basic parsing:** `readExtendedSymbol()` exists (tokenizer.go:1937-1961)
-- [x] **Escape sequences:** Calls `readIntraExtendedToken()` → `readEscapeSequence()`. All R7RS escapes verified: `\a`, `\b`, `\t`, `\n`, `\r`, `\|`, `\\`, `\x<hex>;`, and line continuations.
-- [x] **Verification complete:** All R7RS 7.1.1 escape sequences confirmed with tests in `edge_cases_test.go`.
+- [x] Basic parsing, escape sequences, and verification complete
 - [ ] **Bug:** Unterminated extended symbols (`|foo` at EOF) silently produce a valid symbol token instead of an error. `readExtendedSymbol` exits the loop on `p.err == io.EOF` without distinguishing EOF from a closing `|`.
 
 **Inexact Digit Placeholder:**
@@ -381,27 +305,7 @@ R7RS Missing Features
 
 ---
 
-### Macro/Library System
-
-**Library-Internal Binding Hygiene:** ~~Resolved.~~
-- [x] **Issue:** Macros defined in a library that reference helper functions defined in the same library fail at use site with "no such binding"
-- [x] **Root Cause:** `GlobalIndex` only stored the symbol name, so at runtime the VM looked up the binding in the use-site environment instead of the definition-site library environment
-- [x] **Fix:** Added `Env *GlobalEnvironmentFrame` field to `GlobalIndex`. `EnvironmentFrame.GetGlobalIndex` records the definition-site global frame, and VM load/store operations use it directly when set.
-
----
-
 ### Primitives
-
-**Box primitives:**
-- [x] `box`, `box?`, `unbox`, `set-box!`
-- [x] Box type exists in `go/values/box.go` but no Scheme primitives registered
-- [x] **Effort:** Low - just need to register existing type
-
-**Hashtable primitives:**
-- [x] `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`
-- [x] `hashtable-keys`, `hashtable-values`, `hashtable-size`, `hashtable-copy`, `hashtable-clear!`
-- [x] Hashtable type refactored to support arbitrary `Hashable` keys via `HashCode()`/`EqualTo()` contract
-- [x] **Effort:** Medium - need key hashing for Scheme values
 
 **BigInteger:**
 - [ ] No automatic promotion from Integer when overflow
@@ -422,7 +326,7 @@ Library Status
 
 | Library               | Status | Notes |
 |-----------------------|--------|-------|
-| scheme/base           | ~98%   | Auxiliary syntax exports resolved |
+| scheme/base           | ~98%   | |
 | scheme/char           | 100%   | |
 | scheme/file           | 100%   | |
 | scheme/write          | 100%   | |
@@ -485,16 +389,12 @@ Future Extensions
 
 ### Multithreading
 
-See **DESIGN_MULTITHREADING.md** for full implementation plan.
-
-SRFI-18 standard API + Go-native extensions (channels, sync primitives) are complete through Phase 7. Remaining:
-- [ ] Phase 8: call/cc and dynamic-wind integration with threads (call/cc scope limited to single thread, dynamic-wind cleanup on thread termination)
+SRFI-18 standard API + Go-native extensions (channels, sync primitives). Remaining:
+- [ ] call/cc and dynamic-wind integration with threads (call/cc scope limited to single thread, dynamic-wind cleanup on thread termination)
 
 ---
 
 ### Programmatic Tokenization and Parsing
-
-See **DESIGN_PROGRAMMATIC_READER.md** for full implementation plan.
 
 Expose tokenizer and parser to Scheme code for building custom readers, REPLs, and tooling.
 
@@ -508,8 +408,6 @@ Expose tokenizer and parser to Scheme code for building custom readers, REPLs, a
 ---
 
 ### POSIX API (SRFI-170)
-
-See **DESIGN_POSIX.md** for full implementation plan.
 
 Comprehensive POSIX API implementing SRFI-170 with Go-native implementation.
 
@@ -563,7 +461,6 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 
 ### Go FFI
 - [ ] Registry-based (Phase 1) → Reflection-based (Phase 2) → Plugin support (Phase 3).
-See detailed design notes in DESIGN_GO_FFI.md.
 
 ---
 
@@ -571,9 +468,7 @@ See detailed design notes in DESIGN_GO_FFI.md.
 
 Track variable definition sites and enable source-level debugging at runtime.
 
-See **DESIGN_SOURCE_TRACKING.md** for full implementation plan.
-
-Infrastructure is complete (binding source locations, source maps, stack traces, debugger with breakpoints/stepping). Remaining work:
+Infrastructure is partially complete (binding source locations, source maps, stack traces). Remaining work:
 - [ ] Wire up compilation to record source locations in source map
 - [ ] Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
@@ -604,37 +499,14 @@ Event Callbacks
 1.0 Release Blockers
 --------------------
 
-Items that must be resolved before a 1.0 release. Each references an existing TODO section or adds a new item.
+Items that must be resolved before a 1.0 release.
 
 ### R7RS Conformance
 
-1. ~~**Partial list handling audit**~~ — Resolved. All list-consuming primitives handle improper lists correctly.
+1. **Inexact digit placeholder** — R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
 
-2. ~~**Library-internal binding hygiene**~~ — Resolved. `GlobalIndex.Env` now records the definition-site global frame for cross-library macro hygiene.
-
-3. ~~**Environment creation**~~ — Resolved. `(environment)` and `(null-environment)` now use `NewChildTopLevelEnvironment()` to share symbol interning with the caller.
-
-4. **Inexact digit placeholder** — See [Inexact Digit Placeholder](#inexact-digit-placeholder) under R7RS Missing Features / Tokenizer. R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
-
-   **R7RS conformance test suite (`TestR7RSConformance`) is skipped due to the following known limitations:**
-
-   - [x] ~~`dynamic-wind` + continuation re-entry (see `plans/CONTINUATION_ESCAPE_FIX.md`)~~ — Resolved.
-   - [x] ~~`input-port-open?`/`output-port-open?` on string ports~~ — Resolved.
-   - [ ] `(read)` returning eof-object on empty port
-   - [ ] Parser panics on certain datum comment edge cases
-   - [x] ~~Short float exponent suffixes (`s`, `f`, `d`, `l`) in numbers~~ — Resolved. `string->number` now normalizes R7RS exponent markers before parsing.
-   - [ ] Non-decimal base fractions (`#x10/2`, `#o11/2`, etc.)
-
-5. ~~**Extended symbol escape verification**~~ — Resolved. All R7RS 7.1.1 escape sequences verified and tested. Minor bug remains: unterminated `|...|` symbols silently succeed instead of erroring.
-
-6. **BigInteger overflow promotion** — See [BigInteger](#biginteger) under R7RS Missing Features / Primitives. No automatic Integer → BigInteger on overflow. R7RS requires exact integers to have unbounded range.
-
-### Embedding API
-
-7. ~~**Box primitives**~~ — Resolved. Primitives `box`, `box?`, `unbox`, `set-box!` registered at Runtime+Expand phases.
-
-8. ~~**Hashtable primitives**~~ — Resolved. 10 primitives registered at Runtime+Expand phases. Hashtable refactored from `map[string]Value` to custom `Hashable`-keyed bucket-chain map with FNV-1a hashing.
+2. **Non-decimal base fractions** — `#x10/2`, `#o11/2`, etc. Not implemented in tokenizer.
 
 ### User-Facing
 
-9. **Scheme header to stderr** — See [Scheme Header Output](#scheme-header-output). REPL startup message goes to stdout, breaking piped usage.
+(No remaining items — REPL startup message already outputs to stderr.)
