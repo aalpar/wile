@@ -16,7 +16,10 @@ package values
 
 import "fmt"
 
-var _ Value = (*Byte)(nil)
+var (
+	_ Value    = (*Byte)(nil)
+	_ Hashable = (*Byte)(nil)
+)
 
 // Byte represents a Scheme byte value (0-255).
 type Byte struct {
@@ -27,6 +30,11 @@ type Byte struct {
 func NewByte(v uint8) *Byte {
 	q := &Byte{Value: v}
 	return q
+}
+
+// HashCode returns a hash of the byte value.
+func (p *Byte) HashCode() uint64 {
+	return hashUint64(0x8, uint64(p.Value))
 }
 
 // Datum returns the underlying byte value.

@@ -19,7 +19,10 @@ import (
 	"unicode/utf8"
 )
 
-var _ Value = (*Character)(nil)
+var (
+	_ Value    = (*Character)(nil)
+	_ Hashable = (*Character)(nil)
+)
 
 // Character represents a Scheme character value.
 type Character struct {
@@ -30,6 +33,11 @@ type Character struct {
 func NewCharacter(v rune) *Character {
 	q := &Character{Value: v}
 	return q
+}
+
+// HashCode returns a hash of the character value.
+func (p *Character) HashCode() uint64 {
+	return hashUint64(0x4, uint64(p.Value))
 }
 
 // Datum returns the underlying rune value.

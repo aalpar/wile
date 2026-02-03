@@ -94,6 +94,7 @@ var (
 	ErrNotAOnce              = NewStaticError("not a once")
 	ErrNotAnAtomic           = NewStaticError("not an atomic")
 	ErrPortClosed            = NewStaticError("port is closed")
+	ErrNotAHashtable         = NewStaticError("not a hashtable")
 )
 
 // StaticError represents a compile-time or static error.

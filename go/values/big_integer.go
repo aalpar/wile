@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	_ Value  = (*BigInteger)(nil)
-	_ Number = (*BigInteger)(nil)
+	_ Value    = (*BigInteger)(nil)
+	_ Number   = (*BigInteger)(nil)
+	_ Hashable = (*BigInteger)(nil)
 )
 
 // BigInteger represents an arbitrary-precision integer.
@@ -37,6 +38,12 @@ var (
 // BigInteger provides this capability using Go's math/big.Int.
 type BigInteger struct {
 	value *big.Int
+}
+
+// HashCode returns a hash of the big integer value.
+// Uses the canonical string representation.
+func (p *BigInteger) HashCode() uint64 {
+	return hashString(0x7, p.value.String())
 }
 
 // NewBigInteger creates a new BigInteger from a big.Int.

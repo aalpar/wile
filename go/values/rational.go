@@ -19,13 +19,20 @@ import (
 )
 
 var (
-	_ Value  = (*Rational)(nil)
-	_ Number = (*Rational)(nil)
+	_ Value    = (*Rational)(nil)
+	_ Number   = (*Rational)(nil)
+	_ Hashable = (*Rational)(nil)
 )
 
 // Rational represents a Scheme rational number (exact fraction).
 type Rational struct {
 	value *big.Rat
+}
+
+// HashCode returns a hash of the rational value.
+// Uses the canonical string representation of the reduced fraction.
+func (p *Rational) HashCode() uint64 {
+	return hashString(0x6, p.value.RatString())
 }
 
 // NewRational creates a new Rational from numerator and denominator.

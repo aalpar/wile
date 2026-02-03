@@ -15,7 +15,8 @@
 package values
 
 var (
-	_ Value = (*Boolean)(nil)
+	_ Value    = (*Boolean)(nil)
+	_ Hashable = (*Boolean)(nil)
 
 	// FalseValue is the singleton false boolean.
 	FalseValue = NewBoolean(false)
@@ -32,6 +33,14 @@ type Boolean struct {
 func NewBoolean(v bool) *Boolean {
 	q := &Boolean{Value: v}
 	return q
+}
+
+// HashCode returns a hash of the boolean value.
+func (p *Boolean) HashCode() uint64 {
+	if p.Value {
+		return 1
+	}
+	return 0
 }
 
 // Datum returns the underlying boolean value.

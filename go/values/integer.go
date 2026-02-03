@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	_ Value  = (*Integer)(nil)
-	_ Number = (*Integer)(nil)
+	_ Value    = (*Integer)(nil)
+	_ Number   = (*Integer)(nil)
+	_ Hashable = (*Integer)(nil)
 	// _ Comparable = (*Integer)(nil)
 )
 
@@ -60,6 +61,11 @@ func NewInteger(v int64) *Integer {
 		return intCache[v-intCacheMin]
 	}
 	return &Integer{Value: v}
+}
+
+// HashCode returns a hash of the integer value.
+func (p *Integer) HashCode() uint64 {
+	return hashUint64(0x2, uint64(p.Value))
 }
 
 // Datum returns the underlying int64 value.

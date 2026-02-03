@@ -19,7 +19,10 @@ import (
 	"unicode"
 )
 
-var _ Value = (*Symbol)(nil)
+var (
+	_ Value    = (*Symbol)(nil)
+	_ Hashable = (*Symbol)(nil)
+)
 
 // Symbol represents a Scheme symbol.
 type Symbol struct {
@@ -30,6 +33,11 @@ type Symbol struct {
 func NewSymbol(key string) *Symbol {
 	q := &Symbol{Key: key}
 	return q
+}
+
+// HashCode returns a hash of the symbol's key.
+func (p *Symbol) HashCode() uint64 {
+	return hashString(0x1, p.Key)
 }
 
 // Datum returns the symbol's key string.

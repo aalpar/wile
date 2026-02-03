@@ -15,27 +15,34 @@
 package values
 
 import (
-	"fmt"
+	"sort"
+	"strings"
 )
 
 var _ Value = (*Hashtable)(nil)
 
-// Hashtable represents a Scheme hash table mapping strings to values.
-type Hashtable struct {
-	Value map[string]Value
+// hashtableEntry stores a key-value pair in the hash table.
+type hashtableEntry struct {
+	key   Hashable
+	value Value
 }
 
-// NewHashtable creates a new hash table from the given map.
-func NewHashtable(v map[string]Value) *Hashtable {
+// Hashtable represents a Scheme hash table mapping hashable values to values.
+//
+// Keys must implement the Hashable interface (Value + HashCode()).
+// Uses bucket chaining with FNV-1a hashing for O(1) amortized operations
+// and EqualTo() for key comparison within buckets.
+type Hashtable struct {
+	buckets map[uint64][]hashtableEntry
+	size    int
+}
+
+// NewEmptyHashtable creates a new empty hash table.
+func NewEmptyHashtable() *Hashtable {
 	q := &Hashtable{
-		Value: v,
+		buckets: make(map[uint64][]hashtableEntry),
 	}
 	return q
-}
-
-// Datum returns the underlying map.
-func (p *Hashtable) Datum() map[string]Value {
-	return p.Value
 }
 
 // IsVoid returns true if this hash table is nil.
@@ -44,29 +51,24 @@ func (p *Hashtable) IsVoid() bool {
 }
 
 // EqualTo returns true if both hash tables have equal contents.
+// Uses structural equality (EqualTo) for both keys and values.
 func (p *Hashtable) EqualTo(o Value) bool {
 	v, ok := o.(*Hashtable)
 	if !ok {
 		return false
 	}
-	if len(p.Value) != len(v.Value) {
+	if p.size != v.size {
 		return false
 	}
-	for k := range p.Value {
-		_, ok = v.Value[k]
-		if !ok {
-			return false
-		}
-	}
-	for k := range v.Value {
-		_, ok = p.Value[k]
-		if !ok {
-			return false
-		}
-	}
-	for k := range p.Value {
-		if !p.Value[k].EqualTo(v.Value[k]) {
-			return false
+	for _, bucket := range p.buckets {
+		for _, entry := range bucket {
+			vval, found := v.get(entry.key)
+			if !found {
+				return false
+			}
+			if !entry.value.EqualTo(vval) {
+				return false
+			}
 		}
 	}
 	return true
@@ -74,5 +76,156 @@ func (p *Hashtable) EqualTo(o Value) bool {
 
 // SchemeString returns the Scheme representation of this hash table.
 func (p *Hashtable) SchemeString() string {
-	return fmt.Sprintf("%v", p.Value)
+	q := &strings.Builder{}
+	q.WriteString("#hash(")
+	// Collect all entries and sort for deterministic output.
+	entries := make([]hashtableEntry, 0, p.size)
+	for _, bucket := range p.buckets {
+		entries = append(entries, bucket...)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
+	})
+	for i, e := range entries {
+		if i > 0 {
+			q.WriteString(" ")
+		}
+		q.WriteString("(")
+		q.WriteString(e.key.SchemeString())
+		q.WriteString(" . ")
+		q.WriteString(e.value.SchemeString())
+		q.WriteString(")")
+	}
+	q.WriteString(")")
+	return q.String()
+}
+
+// get is the internal lookup used by EqualTo and other methods.
+func (p *Hashtable) get(key Hashable) (Value, bool) {
+	h := key.HashCode()
+	bucket := p.buckets[h]
+	for _, e := range bucket {
+		if e.key.EqualTo(key) {
+			return e.value, true
+		}
+	}
+	return nil, false
+}
+
+// Get retrieves the value associated with key.
+// Returns the value and whether the key was found.
+// Returns ErrInvalidArgument if the key does not implement Hashable.
+func (p *Hashtable) Get(key Value) (Value, bool, error) {
+	hk, ok := key.(Hashable)
+	if !ok {
+		return nil, false, WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+	}
+	val, found := p.get(hk)
+	return val, found, nil
+}
+
+// Set associates key with val in the hash table.
+// Returns ErrInvalidArgument if the key does not implement Hashable.
+func (p *Hashtable) Set(key Value, val Value) error {
+	hk, ok := key.(Hashable)
+	if !ok {
+		return WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+	}
+	h := hk.HashCode()
+	bucket := p.buckets[h]
+	for i, e := range bucket {
+		if e.key.EqualTo(hk) {
+			p.buckets[h][i].value = val
+			return nil
+		}
+	}
+	p.buckets[h] = append(bucket, hashtableEntry{key: hk, value: val})
+	p.size++
+	return nil
+}
+
+// HasKey returns whether the key exists in the hash table.
+// Returns ErrInvalidArgument if the key does not implement Hashable.
+func (p *Hashtable) HasKey(key Value) (bool, error) {
+	hk, ok := key.(Hashable)
+	if !ok {
+		return false, WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+	}
+	_, found := p.get(hk)
+	return found, nil
+}
+
+// Delete removes the entry for key from the hash table.
+// Returns ErrInvalidArgument if the key does not implement Hashable.
+func (p *Hashtable) Delete(key Value) error {
+	hk, ok := key.(Hashable)
+	if !ok {
+		return WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+	}
+	h := hk.HashCode()
+	bucket := p.buckets[h]
+	for i, e := range bucket {
+		if e.key.EqualTo(hk) {
+			p.buckets[h] = append(bucket[:i], bucket[i+1:]...)
+			p.size--
+			if len(p.buckets[h]) == 0 {
+				delete(p.buckets, h)
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// Keys returns a list of all keys in the hash table.
+func (p *Hashtable) Keys() *Pair {
+	if p.size == 0 {
+		return EmptyList
+	}
+	keys := make([]Value, 0, p.size)
+	for _, bucket := range p.buckets {
+		for _, e := range bucket {
+			keys = append(keys, e.key)
+		}
+	}
+	return List(keys...)
+}
+
+// Values returns a list of all values in the hash table.
+func (p *Hashtable) Values() *Pair {
+	if p.size == 0 {
+		return EmptyList
+	}
+	vals := make([]Value, 0, p.size)
+	for _, bucket := range p.buckets {
+		for _, e := range bucket {
+			vals = append(vals, e.value)
+		}
+	}
+	return List(vals...)
+}
+
+// Size returns the number of entries in the hash table.
+func (p *Hashtable) Size() int {
+	return p.size
+}
+
+// Copy returns a shallow copy of the hash table.
+func (p *Hashtable) Copy() *Hashtable {
+	q := &Hashtable{
+		buckets: make(map[uint64][]hashtableEntry, len(p.buckets)),
+		size:    p.size,
+	}
+	for h, bucket := range p.buckets {
+		cp := make([]hashtableEntry, len(bucket))
+		copy(cp, bucket)
+		q.buckets[h] = cp
+	}
+	return q
+}
+
+// Clear removes all entries from the hash table.
+func (p *Hashtable) Clear() {
+	p.buckets = make(map[uint64][]hashtableEntry)
+	p.size = 0
 }
