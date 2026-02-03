@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	_ Value  = (*Float)(nil)
-	_ Number = (*Float)(nil)
+	_ Value    = (*Float)(nil)
+	_ Number   = (*Float)(nil)
+	_ Hashable = (*Float)(nil)
 	// _ Comparable = (*Float)(nil)
 )
 
@@ -35,6 +36,13 @@ type Float struct {
 func NewFloat(v float64) *Float {
 	q := &Float{Value: v}
 	return q
+}
+
+// HashCode returns a hash of the float value.
+// Uses the IEEE 754 bit representation to ensure +0.0 and -0.0
+// hash differently (they are not EqualTo each other in Scheme).
+func (p *Float) HashCode() uint64 {
+	return hashUint64(0x5, math.Float64bits(p.Value))
 }
 
 // Datum returns the underlying float64 value.

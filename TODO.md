@@ -398,11 +398,10 @@ R7RS Missing Features
 - [x] **Effort:** Low - just need to register existing type
 
 **Hashtable primitives:**
-- [ ] `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`
-- [ ] `hashtable-keys`, `hashtable-values`, `hashtable-size`, `hashtable-copy`, `hashtable-clear!`
-- [ ] Hashtable type exists in `go/values/hashtable.go`
-- [ ] **Issue:** Current implementation only supports string keys, not arbitrary Scheme values
-- [ ] **Effort:** Medium - need key hashing for Scheme values
+- [x] `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`
+- [x] `hashtable-keys`, `hashtable-values`, `hashtable-size`, `hashtable-copy`, `hashtable-clear!`
+- [x] Hashtable type refactored to support arbitrary `Hashable` keys via `HashCode()`/`EqualTo()` contract
+- [x] **Effort:** Medium - need key hashing for Scheme values
 
 **BigInteger:**
 - [ ] No automatic promotion from Integer when overflow
@@ -625,7 +624,7 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 7. ~~**Box primitives**~~ — Resolved. Primitives `box`, `box?`, `unbox`, `set-box!` registered at Runtime+Expand phases.
 
-8. **Hashtable primitives** — See [Hashtable primitives](#hashtable-primitives) under R7RS Missing Features / Primitives. Type exists but only supports string keys, not arbitrary Scheme values.
+8. ~~**Hashtable primitives**~~ — Resolved. 10 primitives registered at Runtime+Expand phases. Hashtable refactored from `map[string]Value` to custom `Hashable`-keyed bucket-chain map with FNV-1a hashing.
 
 ### User-Facing
 

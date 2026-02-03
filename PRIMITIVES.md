@@ -17,6 +17,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | String | Mutable UTF-8 text |
 | Bytevector | Fixed-size byte array, e.g., `#u8(0 1 2)` |
 | Box | Mutable single-value container, e.g., `#&42` |
+| Hashtable | Hash table mapping hashable values to values |
 | Procedure | Lambda or primitive function |
 
 ### Numeric Types
@@ -613,6 +614,21 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `box?` | Test for box |
 | `unbox` | Extract the value from a box |
 | `set-box!` | Set the value in a box |
+
+## Hashtables
+
+| Primitive | Description |
+|-----------|-------------|
+| `make-hashtable` | Create a new empty hash table |
+| `hashtable?` | Test for hash table |
+| `hashtable-ref` | Look up key; `(hashtable-ref ht key)` errors if missing, `(hashtable-ref ht key default)` returns default |
+| `hashtable-set!` | Associate key with value |
+| `hashtable-delete!` | Remove key from hash table |
+| `hashtable-keys` | Return list of all keys |
+| `hashtable-values` | Return list of all values |
+| `hashtable-size` | Return number of entries |
+| `hashtable-copy` | Return shallow copy |
+| `hashtable-clear!` | Remove all entries |
 
 ## Evaluation
 

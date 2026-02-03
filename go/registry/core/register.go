@@ -41,6 +41,7 @@ var Builder = registry.NewRegistryBuilder(
 	addParameters,
 	addPrompts,
 	addBoxes,
+	addHashtables,
 	addBootstrapMacros,
 )
 

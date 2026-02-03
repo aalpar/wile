@@ -21,6 +21,7 @@ import (
 
 var (
 	_ Value        = (*String)(nil)
+	_ Hashable     = (*String)(nil)
 	_ fmt.Stringer = (*String)(nil)
 )
 
@@ -60,6 +61,11 @@ func InternString(str string) *String {
 	newStr := &String{Value: str}
 	actual, _ := stringInterns.LoadOrStore(str, newStr)
 	return actual.(*String)
+}
+
+// HashCode returns a hash of the string value.
+func (p *String) HashCode() uint64 {
+	return hashString(0x3, p.Value)
 }
 
 // Datum returns the underlying string value.

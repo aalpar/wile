@@ -54,13 +54,12 @@ func (eofType) EqualTo(v Value) bool {
 // EOFObject is the singleton EOF value.
 var EOFObject Value = eofType{}
 
-// Table represents a key-value mapping interface.
-type Table interface {
-	HasKey(Value) bool
-	Get(Value) (Value, bool)
-	Set(Value, Value)
-	Keys() Tuple
-	Values() Tuple
+// Hashable represents a Value that can be used as a hashtable key.
+// Types implementing Hashable must satisfy the contract:
+// if a.EqualTo(b) then a.HashCode() == b.HashCode().
+type Hashable interface {
+	Value
+	HashCode() uint64
 }
 
 // Wrapped represents a value that wraps another value.
