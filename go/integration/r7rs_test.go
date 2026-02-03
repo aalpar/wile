@@ -58,12 +58,7 @@ func getTestDataPath() string {
 //
 // The test suite uses (test-exit) which calls (exit 0) on success or (exit 1) on failure.
 //
-// KNOWN LIMITATIONS: Several tests are commented out due to known issues:
-//   - (read) returning eof-object on empty port
-//   - Parser panics on certain datum comment edge cases
 func TestR7RSConformance(t *testing.T) {
-	t.Skip("KNOWN LIMITATIONS: Several R7RS features not yet fully implemented. See test file comments and plans/ for details.")
-
 	// Check that the scheme binary exists
 	schemeBin := getSchemeBinary()
 	if _, err := os.Stat(schemeBin); os.IsNotExist(err) {
