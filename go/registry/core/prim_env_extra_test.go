@@ -72,12 +72,10 @@ func TestSchemeReportEnvironment(t *testing.T) {
 }
 
 func TestEnvironmentPrimitiveError(t *testing.T) {
-	// Test that environment returns an error without library registry
-	// This covers the error path in the function
-	result, err := runSchemeCode(t, `(environment)`)
-	// We expect an error since our test env doesn't have a library registry
+	// Test that (environment) with a library import fails when no library
+	// registry is configured (test env doesn't have one).
+	_, err := runSchemeCode(t, `(environment '(scheme base))`)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, result, qt.IsNil)
 }
 
 func TestEvalWithEnvironments(t *testing.T) {

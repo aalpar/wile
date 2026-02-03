@@ -195,9 +195,10 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	// R7RS specifies version 5 (for R5RS)
 	switch versionInt.Value {
 	case 5, 7:
-		// Create a new empty top-level environment with only syntax bindings
-		// For now, we return a fresh top-level environment
-		newTopLevel := environment.NewTopLevelEnvironment()
+		// Create a new empty top-level environment with only syntax bindings.
+		// Shares the caller's symbol interning for R7RS §6.5 symbol identity.
+		callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
+		newTopLevel := callerTopLevel.NewChildTopLevelEnvironment()
 		newTopLevel.Name = "null-environment"
 		mc.SetValue(newTopLevel)
 		return nil
@@ -218,19 +219,13 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
 
-	// Create fresh top-level environment
-	newTopLevel := environment.NewTopLevelEnvironment()
-	newTopLevel.Name = "environment"
-	newEnv := newTopLevel.Runtime()
-
-	// Share the library registry from caller's environment
+	// Create child top-level environment sharing the caller's symbol interning
+	// and library registry for R7RS §6.5 symbol identity.
 	callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
 	callerEnv := mc.EnvironmentFrame().TopLevel()
-	registry := callerTopLevel.LibraryRegistry()
-	if registry == nil {
-		return values.NewForeignErrorf("environment: no library registry available")
-	}
-	newTopLevel.SetLibraryRegistry(registry)
+	newTopLevel := callerTopLevel.NewChildTopLevelEnvironment()
+	newTopLevel.Name = "environment"
+	newEnv := newTopLevel.Runtime()
 
 	// Handle empty arguments case
 	if values.IsEmptyList(argsVal) {
