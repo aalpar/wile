@@ -162,9 +162,9 @@ Register a Go function as a Scheme primitive:
 engine.RegisterPrimitive(wile.PrimitiveSpec{
     Name:       "go-add",
     ParamCount: 2,
-    Impl: func(ctx context.Context, mc *machine.MachineContext, args ...values.Value) error {
-        a := args[0].(*values.Integer).Value
-        b := args[1].(*values.Integer).Value
+    Impl: func(ctx context.Context, mc *wile.MachineContext) error {
+        a := mc.Arg(0).(*values.Integer).Value
+        b := mc.Arg(1).(*values.Integer).Value
         mc.SetValue(values.NewInteger(a + b))
         return nil
     },
