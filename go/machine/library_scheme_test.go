@@ -228,6 +228,79 @@ func TestSchemeLibraryImportsWithUsage(t *testing.T) {
 	c.Assert(result, values.SchemeEquals, values.NewFloat(1.0))
 }
 
+// TestLibraryInternalMacroHygiene tests that macros defined in a library can
+// reference non-exported helper functions. The macro's free identifier references
+// should resolve in the library's definition-site environment, not the use-site
+// environment where the helper doesn't exist.
+//
+// This is the core cross-library hygiene scenario: GlobalIndex.Env records
+// the definition-site global frame so the VM can look up the helper binding
+// directly in the library environment.
+func TestLibraryInternalMacroHygiene(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+	defer func() { machine.LibraryEnvFactory = nil }()
+
+	// Step 1: Compile and execute a library with a non-exported helper
+	// and a macro that references it. We replicate what loadLibraryFromFile
+	// does: compile with a library callback, execute the template, register.
+	libCode := `(define-library (test hygiene-lib)
+	  (export my-macro)
+	  (import (scheme base))
+	  (begin
+	    (define (helper x) (+ x 1))
+	    (define-syntax my-macro
+	      (syntax-rules ()
+	        ((my-macro x) (helper x))))))`
+
+	sv := parseSchemeExpr(t, env, libCode)
+
+	// Expand
+	ectx := machine.NewExpandTimeCallContext()
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("library expansion should succeed"))
+
+	// Compile with library callback to capture the CompiledLibrary
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	var compiledLib *machine.CompiledLibrary
+	compiler.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+		compiledLib = lib
+	})
+	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	err = compiler.CompileExpression(ctctx, expanded)
+	c.Assert(err, qt.IsNil, qt.Commentf("library compilation should succeed"))
+	c.Assert(compiledLib, qt.IsNotNil, qt.Commentf("library callback should have been called"))
+
+	// Execute the library template to populate bindings
+	if compiledLib.Template != nil {
+		cont := machine.NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
+		mc := machine.NewMachineContext(context.Background(), cont)
+		err = mc.Run()
+		c.Assert(err, qt.IsNil, qt.Commentf("library execution should succeed"))
+	}
+
+	// Register the library so import can find it
+	registryAny := env.LibraryRegistry()
+	registry := registryAny.(*machine.LibraryRegistry)
+	err = registry.Register(compiledLib)
+	c.Assert(err, qt.IsNil)
+
+	// Step 2: Import the library into the caller environment
+	importCode := `(import (test hygiene-lib))`
+	sv = parseSchemeExpr(t, env, importCode)
+	_, err = compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("import should succeed"))
+
+	// Step 3: Use the macro — helper is not exported, but the macro's
+	// GlobalIndex.Env should point to the library's global frame
+	useCode := `(my-macro 5)`
+	sv = parseSchemeExpr(t, env, useCode)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("macro using non-exported helper should work"))
+	c.Assert(result, values.SchemeEquals, values.NewInteger(6))
+}
+
 // TestIndividualSchemeLibraries tests each scheme library can be imported individually
 func TestIndividualSchemeLibraries(t *testing.T) {
 	libraries := []struct {

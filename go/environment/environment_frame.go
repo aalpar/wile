@@ -586,6 +586,8 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol, searching global bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
+// The returned GlobalIndex records the specific global frame where the binding
+// was found, enabling cross-library macro hygiene (see GlobalIndex.Env).
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	ge := p
 	_, ok := ge.global.keys[*key]
@@ -596,7 +598,9 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	if !ok {
 		return nil
 	}
-	return NewGlobalIndex(key)
+	gi := NewGlobalIndex(key)
+	gi.Env = ge.global
+	return gi
 }
 
 // GetGlobalBinding returns the binding for the given GlobalIndex, searching global bindings in the current and parent environments.
