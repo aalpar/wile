@@ -1087,6 +1087,10 @@ func TestStringErrors(t *testing.T) {
 			name: "list->string with non-char element",
 			code: `(list->string '(#\a "b" #\c))`,
 		},
+		{
+			name: "list->string with improper list",
+			code: `(list->string '(#\a #\b . #\c))`,
+		},
 		// string-upcase errors
 		{
 			name: "string-upcase with non-string",
