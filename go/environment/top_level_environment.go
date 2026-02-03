@@ -230,6 +230,55 @@ func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 // child's GlobalEnvironmentFrame. This is what provides binding isolation:
 // definitions in the child do not appear in the parent, and vice versa.
 //
+//	Parent TopLevelEnvironment (root)
+//	+-----------------------------------------------+
+//	| symbolInterns: map[Symbol]*Symbol  ◄──────────────── all interning
+//	| syntaxInterns: map[Value]SyntaxValue ◄────────────── goes here
+//	| symbolInternsMu / syntaxInternsMu  (mutexes)  |
+//	| parent: nil                                   |
+//	| phases: *PhaseRegistry ──► {0: envP}          |
+//	| runtime: envP ─────────────────────────────┐  |
+//	| libraryRegistry: *machine.LibraryRegistry  |  |
+//	+--------------------------------------------│--+
+//	                                             │
+//	                                             ▼
+//	                         EnvironmentFrame (envP, phase 0)
+//	                         +-------------------------------+
+//	                         | global: *GlobalEnvFrame ───┐  |
+//	                         | topLevel: ──► parent TLE   |  |
+//	                         +---------------------------│---+
+//	                                                     ▼
+//	                                  GlobalEnvironmentFrame
+//	                                  +-------------------------+
+//	                                  | keys: {x:0, y:1, ...}   |
+//	                                  | bindings: [...]         |
+//	                                  | topLevel: ──► parent TLE|
+//	                                  +-------------------------+
+//
+//	Child TopLevelEnvironment (returned by this method)
+//	+-----------------------------------------------+
+//	| symbolInterns: nil  (never accessed)          |
+//	| syntaxInterns: nil  (never accessed)          |
+//	| parent: ──► parent TLE  (interning delegate)  |
+//	| phases: *PhaseRegistry ──► {0: envC}          |
+//	| runtime: envC ─────────────────────────────┐  |
+//	| libraryRegistry: ──► same pointer as parent|  |
+//	+--------------------------------------------│--+
+//	                                             │
+//	                                             ▼
+//	                         EnvironmentFrame (envC, phase 0)
+//	                         +-------------------------------+
+//	                         | global: *GlobalEnvFrame ───┐  |
+//	                         | topLevel: ──► child TLE    |  |
+//	                         +---------------------------│---+
+//	                                                     ▼
+//	                                  GlobalEnvironmentFrame
+//	                                  +-------------------------+
+//	                                  | keys: {}  (empty)       |
+//	                                  | bindings: []            |
+//	                                  | topLevel: ──► child TLE |
+//	                                  +-------------------------+
+//
 // # Interning delegation
 //
 // The child stores a parent pointer and has nil interning maps. InternSymbol
@@ -237,6 +286,23 @@ func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 // ultimately reaching the root TopLevelEnvironment where the maps and mutexes
 // live. This avoids sharing map pointers across structs with independent
 // mutexes (which would be a data race).
+//
+//	child.InternSymbol(s)
+//	    │
+//	    │  p.parent != nil
+//	    ▼
+//	parent.InternSymbol(s)
+//	    │
+//	    │  p.parent == nil (root)
+//	    ▼
+//	p.symbolInternsMu.RLock()   ◄── mutex lives on root only
+//	check p.symbolInterns[*s]   ◄── map lives on root only
+//	    │
+//	    ├── found: return canonical *Symbol
+//	    │
+//	    └── not found:
+//	        p.symbolInternsMu.Lock()
+//	        double-check, insert, return
 //
 // # Inherited state
 //
@@ -256,6 +322,25 @@ func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 // on the shared TopLevelEnvironment returns the parent's runtime frame, not
 // the child's.
 //
+//	NewChildRuntime:                NewChildTopLevelEnvironment:
+//
+//	  TopLevelEnvironment (shared)    Parent TLE        Child TLE
+//	  +------------------+            +----------+      +----------+
+//	  | runtime: envP    |            | runtime: |      | runtime: |
+//	  +------------------+            | envP     |      | envC     |
+//	          │                       +----------+      +----------+
+//	          │                                            │
+//	     ┌────┴────┐                                       ▼
+//	     ▼         ▼                           EnvironmentFrame (envC)
+//	   envP      envC ◄── new child            +---------------------+
+//	   (parent   (has own Global-              | topLevel: child TLE |
+//	    frame)    EnvFrame, but                +---------------------+
+//	              topLevel points
+//	              to shared TLE)
+//
+//	envC.TopLevelEnv() == parent    envC.TopLevelEnv() == child
+//	TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
+//
 // NewChildTopLevelEnvironment returns a new *TopLevelEnvironment that can be
 // passed as a first-class Scheme value (e.g., returned from the (environment)
 // primitive and accepted by eval). Its Runtime() returns the child's own
@@ -267,6 +352,8 @@ func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 // Used by PrimEnvironment and PrimNullEnvironment (R7RS §6.12) to create
 // environments that are identity-compatible with the caller's symbol table
 // while providing isolated bindings.
+// TODO: review whether libraryRegistry should be copied here
+// TODO: review for optimization/refactoring opportunities
 func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment {
 	q := &TopLevelEnvironment{
 		libraryRegistry: p.libraryRegistry,
