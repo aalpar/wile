@@ -22,28 +22,55 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// EOF Object Tests (R7RS §6.13.1)
+// EOF Object Tests (R7RS §6.13.2)
 
 func TestEofObjectFromRead(t *testing.T) {
-	// Note: In this implementation, read from an empty port returns an error
-	// rather than eof-object. This is an implementation difference from R7RS.
-	// This test verifies the actual behavior.
-	_, err := runSchemeCode(t, `
+	// R7RS §6.13.2: "If an end of file is encountered in the input before any
+	// characters are found that can begin an object, then an end-of-file object
+	// is returned."
+	result, err := runSchemeCode(t, `
 		(let ((p (open-input-string "")))
-			(read p))
+			(eof-object? (read p)))
 	`)
-	qt.Assert(t, err, qt.IsNotNil) // Expect error on EOF
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectFromReadAfterData(t *testing.T) {
-	// Note: In this implementation, reading past the end returns an error
-	// rather than eof-object. This is an implementation difference from R7RS.
-	_, err := runSchemeCode(t, `
+	// Reading past the end of data returns eof-object
+	result, err := runSchemeCode(t, `
 		(let ((p (open-input-string "42")))
-			(read p)  ; consume the 42
-			(read p))  ; will error on EOF
+			(read p)
+			(eof-object? (read p)))
 	`)
-	qt.Assert(t, err, qt.IsNotNil) // Expect error on EOF
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+}
+
+func TestEofObjectFromReadCharAfterRead(t *testing.T) {
+	// After read consumes data, read-char also returns eof-object
+	result, err := runSchemeCode(t, `
+		(let ((p (open-input-string "42")))
+			(read p)
+			(eof-object? (read-char p)))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+}
+
+func TestEofObjectFromReadMultipleEof(t *testing.T) {
+	// Multiple reads past EOF all return eof-object
+	result, err := runSchemeCode(t, `
+		(let ((p (open-input-string "")))
+			(let ((a (read p))
+			      (b (read p))
+			      (c (read p)))
+				(and (eof-object? a)
+				     (eof-object? b)
+				     (eof-object? c))))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectUniqueness(t *testing.T) {

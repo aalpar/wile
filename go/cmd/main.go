@@ -100,15 +100,15 @@ func setupSignals() {
 				stacktrace = make([]byte, len(stacktrace)*2)
 				length = gruntime.Stack(stacktrace, true)
 			}
-			fmt.Println("=== GOROUTINE STACK DUMP ===")
-			fmt.Println(string(stacktrace[:length]))
-			fmt.Println("=== END OF DUMP ===")
+			fmt.Fprintln(os.Stderr, "=== GOROUTINE STACK DUMP ===")
+			fmt.Fprintln(os.Stderr, string(stacktrace[:length]))
+			fmt.Fprintln(os.Stderr, "=== END OF DUMP ===")
 			// The program continues running after this point
 		}
 	}()
 
 	// ... rest of your program ...
-	fmt.Println("Program running, send SIGQUIT (Ctrl+\\) to dump stacks.")
+	fmt.Fprintln(os.Stderr, "Program running, send SIGQUIT (Ctrl+\\) to dump stacks.")
 }
 
 func main() {
