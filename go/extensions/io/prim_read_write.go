@@ -122,6 +122,10 @@ func PrimRead(_ context.Context, mc *machine.MachineContext) error {
 	}
 	syn, err := prss.Value().ReadSyntax(context.TODO())
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			mc.SetValue(values.EOFObject)
+			return nil
+		}
 		return values.WrapForeignReadErrorf(err, "error reading from input port")
 	}
 	// Use UnwrapAllShared to preserve object identity for datum labels (R7RS §2.4)
@@ -165,7 +169,8 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 	}
 	q, err := tknz.Value().Next()
 	if errors.Is(err, io.EOF) {
-		return values.WrapForeignReadErrorf(err, "end of file")
+		mc.SetValue(values.EOFObject)
+		return nil
 	}
 	if err != nil {
 		return values.WrapForeignReadErrorf(err, "error reading token")
@@ -207,6 +212,10 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 	}
 	q, err := prss.Value().ReadSyntax(context.TODO())
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			mc.SetValue(values.EOFObject)
+			return nil
+		}
 		return values.WrapForeignReadErrorf(err, "error reading syntax from input port")
 	}
 	mc.SetValue(q)
