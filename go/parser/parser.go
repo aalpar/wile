@@ -431,6 +431,91 @@ func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.T
 	return q, p.cur, nil
 }
 
+// parseRationalWithBase parses the current token as a rational number in the given base.
+// Handles hash digit substitution and forces inexact when hash digits are present.
+//
+// R7RS §7.1.1: <urational R> -> <uinteger R> / <uinteger R>
+func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := replaceHashDigits(p.cur.String())
+
+	// Strip leading sign for parsing, track it separately
+	sign := int64(1)
+	raw := s
+	if len(raw) > 0 && (raw[0] == '+' || raw[0] == '-') {
+		if raw[0] == '-' {
+			sign = -1
+		}
+		raw = raw[1:]
+	}
+
+	parts := strings.SplitN(raw, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid rational number: %s", p.cur.String())
+	}
+
+	num, err := strconv.ParseInt(parts[0], base, 64)
+	if err != nil {
+		// Try big.Int on overflow
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+			bigNum := new(big.Int)
+			_, ok := bigNum.SetString(parts[0], base)
+			if !ok {
+				return nil, p.cur, NewParserErrorf(p.cur, "invalid rational numerator: %s", parts[0])
+			}
+			bigDen := new(big.Int)
+			_, ok = bigDen.SetString(parts[1], base)
+			if !ok {
+				return nil, p.cur, NewParserErrorf(p.cur, "invalid rational denominator: %s", parts[1])
+			}
+			if sign == -1 {
+				bigNum.Neg(bigNum)
+			}
+			r := new(big.Rat).SetFrac(bigNum, bigDen)
+			q1 := values.Simplify(values.NewRationalFromRat(r))
+			if p.cur.HasHashDigit() {
+				q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+				return q, p.cur, nil
+			}
+			q := p.wrapSyntax(q1, p.cur)
+			return q, p.cur, nil
+		}
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid rational numerator: %s", parts[0])
+	}
+
+	den, err := strconv.ParseInt(parts[1], base, 64)
+	if err != nil {
+		var numErr *strconv.NumError
+		if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+			bigNum := big.NewInt(num * sign)
+			bigDen := new(big.Int)
+			_, ok := bigDen.SetString(parts[1], base)
+			if !ok {
+				return nil, p.cur, NewParserErrorf(p.cur, "invalid rational denominator: %s", parts[1])
+			}
+			r := new(big.Rat).SetFrac(bigNum, bigDen)
+			q1 := values.Simplify(values.NewRationalFromRat(r))
+			if p.cur.HasHashDigit() {
+				q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+				return q, p.cur, nil
+			}
+			q := p.wrapSyntax(q1, p.cur)
+			return q, p.cur, nil
+		}
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid rational denominator: %s", parts[1])
+	}
+
+	num *= sign
+	r := new(big.Rat).SetFrac64(num, den)
+	q1 := values.Simplify(values.NewRationalFromRat(r))
+	if p.cur.HasHashDigit() {
+		q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+		return q, p.cur, nil
+	}
+	q := p.wrapSyntax(q1, p.cur)
+	return q, p.cur, nil
+}
+
 // parseBigIntegerWithBase parses the current token as a big integer with the given base.
 // It strips the #z or #Z prefix before parsing.
 func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
@@ -834,17 +919,25 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBase2:
-		// #b prefix - next token is base 2 integer
+		// #b prefix - next token is base 2 integer or rational
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
+		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
+			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
+			return p.parseRationalWithBase(2)
+		}
 		return p.parseIntegerWithBase(2)
 	case tokenizer.TokenizerStateMarkerBase8:
-		// #o prefix - next token is base 8 integer
+		// #o prefix - next token is base 8 integer or rational
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
+			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
+			return p.parseRationalWithBase(8)
 		}
 		return p.parseIntegerWithBase(8)
 	case tokenizer.TokenizerStateMarkerBase10:
@@ -855,10 +948,14 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		return p.readSyntax()
 	case tokenizer.TokenizerStateMarkerBase16:
-		// #x prefix - next token is base 16 integer
+		// #x prefix - next token is base 16 integer or rational
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
+			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
+			return p.parseRationalWithBase(16)
 		}
 		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedIntegerBase2, tokenizer.TokenizerStateUnsignedIntegerBase2:

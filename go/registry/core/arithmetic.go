@@ -53,6 +53,8 @@ func addArithmetic(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"exact", 1, false, PrimExact},
 		{"inexact", 1, false, PrimInexact},
+		{"exact->inexact", 1, false, PrimInexact},
+		{"inexact->exact", 1, false, PrimExact},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

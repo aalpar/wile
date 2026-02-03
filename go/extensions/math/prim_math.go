@@ -534,8 +534,8 @@ var PrimTruncate = makeRealNumberPrimitive(realNumberOp{
 var PrimRound = makeRealNumberPrimitive(realNumberOp{
 	name:       "round",
 	integerOp:  integerPassthrough,
-	floatOp:    math.Round,
-	rationalOp: rationalToInteger(math.Round),
+	floatOp:    math.RoundToEven,
+	rationalOp: rationalToInteger(math.RoundToEven),
 })
 
 // PrimFloorDiv implements the (floor/) primitive.
@@ -801,16 +801,14 @@ func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewRationalFromBigInt(num, big.NewInt(1)))
 		}
 	case *values.Float:
+		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
 			return values.NewForeignError("numerator: cannot get numerator of infinity or NaN")
 		}
 		num := r.Num()
-		if num.IsInt64() {
-			mc.SetValue(values.NewInteger(num.Int64()))
-		} else {
-			mc.SetValue(values.NewRationalFromBigInt(num, big.NewInt(1)))
-		}
+		f, _ := new(big.Float).SetInt(num).Float64()
+		mc.SetValue(values.NewFloat(f))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "numerator: expected a rational number but got %T", o)
 	}
@@ -831,16 +829,14 @@ func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewRationalFromBigInt(denom, big.NewInt(1)))
 		}
 	case *values.Float:
+		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
 			return values.NewForeignError("denominator: cannot get denominator of infinity or NaN")
 		}
 		denom := r.Denom()
-		if denom.IsInt64() {
-			mc.SetValue(values.NewInteger(denom.Int64()))
-		} else {
-			mc.SetValue(values.NewRationalFromBigInt(denom, big.NewInt(1)))
-		}
+		f, _ := new(big.Float).SetInt(denom).Float64()
+		mc.SetValue(values.NewFloat(f))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "denominator: expected a rational number but got %T", o)
 	}
@@ -1354,6 +1350,14 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimStringToNumber implements the string->number primitive.
+//
+// R7RS §6.2.7: string->number returns a number of the maximally precise
+// representation expressed by the given string. It is an error if radix
+// is not 2, 8, 10, or 16.
+//
+// R7RS §7.1.1: The string may contain prefix directives #b, #o, #d, #x
+// (radix) and #e, #i (exactness), in either order, up to one of each.
+// A radix prefix in the string overrides the radix argument.
 func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	rest := mc.Arg(1)
@@ -1372,18 +1376,143 @@ func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
 			radix = int(r.Value)
 		}
 	}
-	if i, err := strconv.ParseInt(str.Value, radix, 64); err == nil {
-		mc.SetValue(values.NewInteger(i))
-		return nil
-	}
-	if radix == 10 {
-		if f, err := strconv.ParseFloat(normalizeExponentMarker(str.Value), 64); err == nil {
-			mc.SetValue(values.NewFloat(f))
+
+	input := str.Value
+	exactness := 0 // 0 = unspecified, 1 = exact (#e), -1 = inexact (#i)
+
+	// Parse up to two R7RS prefix directives.
+	for range 2 {
+		if len(input) < 2 || input[0] != '#' {
+			break
+		}
+		switch input[1] {
+		case 'b', 'B':
+			radix = 2
+			input = input[2:]
+		case 'o', 'O':
+			radix = 8
+			input = input[2:]
+		case 'd', 'D':
+			radix = 10
+			input = input[2:]
+		case 'x', 'X':
+			radix = 16
+			input = input[2:]
+		case 'e', 'E':
+			exactness = 1
+			input = input[2:]
+		case 'i', 'I':
+			exactness = -1
+			input = input[2:]
+		default:
+			// Unknown prefix — not a valid number.
+			mc.SetValue(values.FalseValue)
 			return nil
 		}
 	}
-	mc.SetValue(values.FalseValue)
+
+	result := parseStringToNumber(input, radix)
+	if result == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	// Apply exactness conversion if a prefix was specified.
+	if exactness == 1 {
+		result = stringToNumberMakeExact(result)
+	} else if exactness == -1 {
+		result = stringToNumberMakeInexact(result)
+	}
+
+	mc.SetValue(result)
 	return nil
+}
+
+// parseStringToNumber parses a numeric string in the given radix.
+// Returns nil if the string is not a valid number.
+func parseStringToNumber(input string, radix int) values.Value {
+	if len(input) == 0 {
+		return nil
+	}
+
+	// Try integer first.
+	if i, err := strconv.ParseInt(input, radix, 64); err == nil {
+		return values.NewInteger(i)
+	}
+
+	// Try big integer for overflow.
+	bi := new(big.Int)
+	if _, ok := bi.SetString(input, radix); ok {
+		return values.NewBigInteger(bi)
+	}
+
+	// Try rational (only if radix applies to both parts).
+	if idx := strings.Index(input, "/"); idx > 0 && idx < len(input)-1 {
+		numStr := input[:idx]
+		denStr := input[idx+1:]
+		num := new(big.Int)
+		den := new(big.Int)
+		if _, ok := num.SetString(numStr, radix); ok {
+			if _, ok := den.SetString(denStr, radix); ok {
+				if den.Sign() == 0 {
+					return nil
+				}
+				r := new(big.Rat).SetFrac(num, den)
+				return values.Simplify(values.NewRationalFromRat(r))
+			}
+		}
+	}
+
+	// Float and scientific notation only for radix 10.
+	if radix == 10 {
+		if f, err := strconv.ParseFloat(normalizeExponentMarker(input), 64); err == nil {
+			return values.NewFloat(f)
+		}
+	}
+
+	return nil
+}
+
+// stringToNumberMakeExact converts a number to its exact representation.
+//
+// R7RS §6.2.6: exact returns an exact representation of z.
+func stringToNumberMakeExact(n values.Value) values.Value {
+	switch v := n.(type) {
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		return v
+	case *values.Float:
+		f := v.Value
+		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			return values.NewInteger(int64(f))
+		}
+		r := new(big.Rat).SetFloat64(f)
+		if r == nil {
+			return n // inf/nan — cannot convert
+		}
+		return values.Simplify(values.NewRationalFromRat(r))
+	default:
+		return n
+	}
+}
+
+// stringToNumberMakeInexact converts a number to its inexact representation.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of z.
+func stringToNumberMakeInexact(n values.Value) values.Value {
+	switch v := n.(type) {
+	case *values.Float:
+		return v
+	case *values.Integer:
+		return values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		return values.NewFloat(f)
+	case *values.Rational:
+		f, _ := v.Rat().Float64()
+		return values.NewFloat(f)
+	default:
+		return n
+	}
 }
 
 // normalizeExponentMarker replaces R7RS short float exponent suffixes

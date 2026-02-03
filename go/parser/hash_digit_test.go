@@ -123,6 +123,52 @@ func TestHashDigit_Parser(t *testing.T) {
 			in:     "-.5##",
 			expect: values.NewFloat(-0.5),
 		},
+		// Non-decimal base rationals (R7RS §7.1.1)
+		{
+			name:   "#x10/2 -> 8",
+			in:     "#x10/2",
+			expect: values.NewInteger(8),
+		},
+		{
+			name:   "#o11/2 -> 9/2",
+			in:     "#o11/2",
+			expect: values.NewRational(9, 2),
+		},
+		{
+			name:   "#b101/10 -> 5/2",
+			in:     "#b101/10",
+			expect: values.NewRational(5, 2),
+		},
+		{
+			name:   "#x1#/2 -> 8.0 (hash digit forces inexact)",
+			in:     "#x1#/2",
+			expect: values.NewFloat(8.0),
+		},
+		{
+			name:   "#x-a/5 -> -2",
+			in:     "#x-a/5",
+			expect: values.NewInteger(-2),
+		},
+		{
+			name:   "#xa/b -> 10/11",
+			in:     "#xa/b",
+			expect: values.NewRational(10, 11),
+		},
+		{
+			name:   "#x+ff/10 -> 255/16",
+			in:     "#x+ff/10",
+			expect: values.NewRational(255, 16),
+		},
+		{
+			name:   "#o+7/2 -> 7/2",
+			in:     "#o+7/2",
+			expect: values.NewRational(7, 2),
+		},
+		{
+			name:   "#b-110/11 -> -2",
+			in:     "#b-110/11",
+			expect: values.NewInteger(-2),
+		},
 		// Without hash: verify normal numbers still work
 		{
 			name:   "123 -> integer 123",

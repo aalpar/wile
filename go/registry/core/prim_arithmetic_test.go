@@ -1252,3 +1252,62 @@ func TestOverflowPromotion(t *testing.T) {
 	runSchemeCodeExpectTrue(t, `(= (* 9223372036854775807 2) 18446744073709551614)`)
 	runSchemeCodeExpectTrue(t, `(= (abs -9223372036854775808) 9223372036854775808)`)
 }
+
+// TestSpecialValueArithmetic tests arithmetic with +inf.0, -inf.0, and +nan.0.
+// R7RS §6.2.6: These follow IEEE 754 rules.
+func TestSpecialValueArithmetic(t *testing.T) {
+	// inf + -inf = nan
+	t.Run("+inf.0 + -inf.0 is nan", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(+ +inf.0 -inf.0)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
+	})
+
+	// 0 * inf = nan (IEEE 754)
+	t.Run("0 * +inf.0 is nan", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(* 0 +inf.0)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
+	})
+
+	// Division by exact zero is an error.
+	t.Run("(/ 0 0) is error", func(t *testing.T) {
+		_, err := runSchemeCode(t, "(/ 0 0)")
+		qt.Assert(t, err, qt.IsNotNil)
+	})
+
+	t.Run("(/ 1.0 0.0) is error", func(t *testing.T) {
+		_, err := runSchemeCode(t, "(/ 1.0 0.0)")
+		qt.Assert(t, err, qt.IsNotNil)
+	})
+
+	// inf arithmetic
+	t.Run("+inf.0 + 1 is +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(+ +inf.0 1)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
+	})
+
+	t.Run("-inf.0 - 1 is -inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(- -inf.0 1)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
+	})
+
+	// nan propagation
+	t.Run("nan + 1 is nan", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(+ +nan.0 1)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
+	})
+}

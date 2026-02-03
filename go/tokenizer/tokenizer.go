@@ -1534,18 +1534,18 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		case p.curr() == 'n' || p.curr() == 'N':
 			p.readSignedNan(r)
 			return
+		case isDigit(r, p.curr()):
+			p.readIntegerAndFraction(true, r)
+			return
+		case isDot(p.curr()):
+			p.readSignedDecimalFractionOrExponentWithImaginary(r)
+			return
 		case isSignSubsequent(p.curr()):
 			p.state = TokenizerStateSymbol
 			for p.err == nil && isSymbolSubsequent(p.curr()) {
 				p.next()
 			}
 			p.value = p.text
-			return
-		case isDot(p.curr()):
-			p.readSignedDecimalFractionOrExponentWithImaginary(r)
-			return
-		case isDigit(r, p.curr()):
-			p.readIntegerAndFraction(true, r)
 			return
 		}
 		// Bare sign (+/-) as symbol

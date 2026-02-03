@@ -61,7 +61,6 @@ func getTestDataPath() string {
 // KNOWN LIMITATIONS: Several tests are commented out due to known issues:
 //   - (read) returning eof-object on empty port
 //   - Parser panics on certain datum comment edge cases
-//   - Non-decimal base fractions (#x10/2, #o11/2, etc.)
 func TestR7RSConformance(t *testing.T) {
 	t.Skip("KNOWN LIMITATIONS: Several R7RS features not yet fully implemented. See test file comments and plans/ for details.")
 
