@@ -114,6 +114,13 @@ Standard for floating-point representation used by `Float` type.
 
 - **Standard**: IEEE 754-2019 (ISO/IEC/IEEE 60559:2020)
 
+### Hacker's Delight (Warren 2012)
+
+Reference for integer overflow detection techniques used in `values/integer.go`. The overflow-detecting helpers (`addInt64`, `subInt64`, `mulInt64`, `negateInt64`) use idioms from this book: XOR sign-bit tests for addition/subtraction overflow (§2-12, §2-13) and division-based verification for multiplication overflow (§2-12).
+
+- **Book**: Henry S. Warren Jr., *Hacker's Delight*, 2nd edition, Addison-Wesley, 2012
+- **ISBN**: 978-0-321-84268-8
+
 ## Tutorials and Learning Resources
 
 ### An Introduction to Scheme and its Implementation

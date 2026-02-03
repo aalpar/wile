@@ -211,6 +211,24 @@ All errors use the `values` package error types:
    return values.NewError( "something went wrong" )
    ```
 
+### Error Comparison
+
+**Always** use `errors.Is` for sentinel error checks, never `==`:
+
+```go
+// Correct
+if errors.Is(err, errNeedsBigInt) {
+    return fallback()
+}
+
+// Avoid
+if err == errNeedsBigInt {  // DON'T
+    return fallback()
+}
+```
+
+**Rationale**: `errors.Is` traverses the error wrapping chain, so it works correctly even when errors are wrapped with `fmt.Errorf("%w", ...)` or `WrapForeignErrorf`. Direct `==` comparison breaks silently if the error is ever wrapped.
+
 ### Error Pattern Preference
 
 Prefer in this order:

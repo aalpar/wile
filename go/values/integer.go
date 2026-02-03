@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 	"strconv"
 )
@@ -73,19 +74,80 @@ func (p *Integer) Datum() int64 {
 	return p.Value
 }
 
+// Overflow-detecting arithmetic helpers for int64.
+//
+// R7RS §6.2.3 allows implementations to support arbitrarily large exact
+// integers. These helpers ensure that int64 arithmetic silently promotes
+// to BigInteger instead of wrapping on overflow. Each uses a standard
+// overflow-detection idiom for its operation, falling back to math/big
+// when the result would exceed int64 range. The existing Simplify()
+// function handles demotion back to Integer when BigInteger results
+// fit in int64.
+//
+// Overflow detection techniques (Warren, Hacker's Delight §2-12, §2-13):
+//   - Addition: XOR sign-bit test — same-sign operands overflow when
+//     the result sign differs from the operands.
+//   - Subtraction: different-sign operands overflow when the result
+//     sign differs from the first operand.
+//   - Multiplication: after computing prod = a * b, verify prod/a == b.
+//   - Negation: only math.MinInt64 overflows (its absolute value is
+//     2^63, which exceeds math.MaxInt64 by 1).
+
+// addInt64 adds two int64 values, promoting to BigInteger on overflow.
+func addInt64(a, b int64) Number {
+	sum := a + b
+	if (a^b) >= 0 && (a^sum) < 0 {
+		result := new(big.Int).Add(big.NewInt(a), big.NewInt(b))
+		return &BigInteger{value: result}
+	}
+	return NewInteger(sum)
+}
+
+// subInt64 subtracts two int64 values, promoting to BigInteger on overflow.
+func subInt64(a, b int64) Number {
+	diff := a - b
+	if (a^b) < 0 && (a^diff) < 0 {
+		result := new(big.Int).Sub(big.NewInt(a), big.NewInt(b))
+		return &BigInteger{value: result}
+	}
+	return NewInteger(diff)
+}
+
+// mulInt64 multiplies two int64 values, promoting to BigInteger on overflow.
+func mulInt64(a, b int64) Number {
+	if a == 0 || b == 0 {
+		return NewInteger(0)
+	}
+	prod := a * b
+	if prod/a != b {
+		result := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
+		return &BigInteger{value: result}
+	}
+	return NewInteger(prod)
+}
+
+// negateInt64 negates an int64 value, promoting to BigInteger for MinInt64.
+func negateInt64(v int64) Number {
+	if v == math.MinInt64 {
+		result := new(big.Int).Neg(big.NewInt(v))
+		return &BigInteger{value: result}
+	}
+	return NewInteger(-v)
+}
+
 // addSame adds two integers of the same type.
 func (p *Integer) addSame(o *Integer) Number {
-	return NewInteger(p.Value + o.Value)
+	return addInt64(p.Value, o.Value)
 }
 
 // subtractSame subtracts two integers of the same type.
 func (p *Integer) subtractSame(o *Integer) Number {
-	return NewInteger(p.Value - o.Value)
+	return subInt64(p.Value, o.Value)
 }
 
 // multiplySame multiplies two integers of the same type.
 func (p *Integer) multiplySame(o *Integer) Number {
-	return NewInteger(p.Value * o.Value)
+	return mulInt64(p.Value, o.Value)
 }
 
 // divideSame divides two integers of the same type.
@@ -128,7 +190,7 @@ func (p *Integer) Add(o Number) Number {
 	}
 	switch v := o.(type) {
 	case *Integer:
-		return NewInteger(p.Value + v.Value)
+		return addInt64(p.Value, v.Value)
 	case *BigInteger:
 		result := newBigIntFromOp((*big.Int).Add, big.NewInt(p.Value), v.value)
 		return &BigInteger{value: result}
@@ -162,7 +224,7 @@ func (p *Integer) Subtract(o Number) Number {
 	}
 	switch v := o.(type) {
 	case *Integer:
-		return NewInteger(p.Value - v.Value)
+		return subInt64(p.Value, v.Value)
 	case *BigInteger:
 		result := newBigIntFromOp((*big.Int).Sub, big.NewInt(p.Value), v.value)
 		return &BigInteger{value: result}
@@ -199,7 +261,7 @@ func (p *Integer) Multiply(o Number) Number {
 	}
 	switch v := o.(type) {
 	case *Integer:
-		return NewInteger(p.Value * v.Value)
+		return mulInt64(p.Value, v.Value)
 	case *BigInteger:
 		result := newBigIntFromOp((*big.Int).Mul, big.NewInt(p.Value), v.value)
 		return &BigInteger{value: result}
@@ -294,9 +356,9 @@ func (p *Integer) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
-func (p *Integer) Abs() *Integer {
+func (p *Integer) Abs() Number {
 	if p.Value < 0 {
-		return NewInteger(-p.Value)
+		return negateInt64(p.Value)
 	}
 	return NewInteger(p.Value)
 }
@@ -305,7 +367,7 @@ func (p *Integer) Abs() *Integer {
 //
 // R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
 func (p *Integer) Negate() Number {
-	return NewInteger(-p.Value)
+	return negateInt64(p.Value)
 }
 
 // Compare compares this integer with another number.

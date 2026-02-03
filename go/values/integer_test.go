@@ -15,6 +15,8 @@
 package values
 
 import (
+	"math"
+	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -212,4 +214,61 @@ func TestInteger_Caching(t *testing.T) {
 	// Cached integers should still have correct values
 	qt.Assert(t, i1.Value, qt.Equals, int64(42))
 	qt.Assert(t, iBig1.Value, qt.Equals, int64(100000))
+}
+
+func TestInteger_OverflowPromotion(t *testing.T) {
+	c := qt.New(t)
+
+	maxInt := NewInteger(math.MaxInt64)
+	minInt := NewInteger(math.MinInt64)
+
+	// MaxInt64 + 1 -> BigInteger
+	result := maxInt.Add(NewInteger(1))
+	bi, ok := result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MaxInt64 + 1 should produce BigInteger, got %T", result))
+	expected := new(big.Int).Add(big.NewInt(math.MaxInt64), big.NewInt(1))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// MinInt64 - 1 -> BigInteger
+	result = minInt.Subtract(NewInteger(1))
+	bi, ok = result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 - 1 should produce BigInteger, got %T", result))
+	expected = new(big.Int).Sub(big.NewInt(math.MinInt64), big.NewInt(1))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// MaxInt64 * 2 -> BigInteger
+	result = maxInt.Multiply(NewInteger(2))
+	bi, ok = result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MaxInt64 * 2 should produce BigInteger, got %T", result))
+	expected = new(big.Int).Mul(big.NewInt(math.MaxInt64), big.NewInt(2))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// MinInt64 * 2 -> BigInteger
+	result = minInt.Multiply(NewInteger(2))
+	bi, ok = result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 * 2 should produce BigInteger, got %T", result))
+	expected = new(big.Int).Mul(big.NewInt(math.MinInt64), big.NewInt(2))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// Negate MinInt64 -> BigInteger equal to 2^63
+	result = minInt.Negate()
+	bi, ok = result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Negate MinInt64 should produce BigInteger, got %T", result))
+	expected = new(big.Int).Neg(big.NewInt(math.MinInt64))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// Abs MinInt64 -> BigInteger equal to 2^63
+	result = minInt.Abs()
+	bi, ok = result.(*BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Abs MinInt64 should produce BigInteger, got %T", result))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// Small values still produce *Integer
+	result = NewInteger(5).Add(NewInteger(3))
+	_, ok = result.(*Integer)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("5 + 3 should produce Integer, got %T", result))
+
+	result = NewInteger(5).Multiply(NewInteger(3))
+	_, ok = result.(*Integer)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("5 * 3 should produce Integer, got %T", result))
 }

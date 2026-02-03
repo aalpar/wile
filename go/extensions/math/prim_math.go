@@ -1233,11 +1233,7 @@ func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
 		imagF := v.ImagAsBigFloat().Float64()
 		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
 	case *values.Integer:
-		val := v.Value
-		if val < 0 {
-			val = -val
-		}
-		mc.SetValue(values.NewFloat(float64(val)))
+		mc.SetValue(values.NewFloat(math.Abs(float64(v.Value))))
 	case *values.BigInteger:
 		bi := v.BigInt()
 		if bi.Sign() < 0 {
@@ -1381,11 +1377,24 @@ func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 	if radix == 10 {
-		if f, err := strconv.ParseFloat(str.Value, 64); err == nil {
+		if f, err := strconv.ParseFloat(normalizeExponentMarker(str.Value), 64); err == nil {
 			mc.SetValue(values.NewFloat(f))
 			return nil
 		}
 	}
 	mc.SetValue(values.FalseValue)
 	return nil
+}
+
+// normalizeExponentMarker replaces R7RS short float exponent suffixes
+// (s, S, f, F, d, D, l, L) with 'e' so strconv.ParseFloat can parse them.
+// R7RS §7.1.1: All exponent markers have the same meaning in Wile.
+func normalizeExponentMarker(s string) string {
+	idx := strings.IndexAny(s, "sSfFdDlL")
+	if idx == -1 {
+		return s
+	}
+	q := []byte(s)
+	q[idx] = 'e'
+	return string(q)
 }

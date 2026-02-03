@@ -59,11 +59,8 @@ func getTestDataPath() string {
 // The test suite uses (test-exit) which calls (exit 0) on success or (exit 1) on failure.
 //
 // KNOWN LIMITATIONS: Several tests are commented out due to known issues:
-//   - dynamic-wind + continuation re-entry (plans/CONTINUATION_ESCAPE_FIX.md)
-//   - input-port-open?/output-port-open? on string ports
 //   - (read) returning eof-object on empty port
 //   - Parser panics on certain datum comment edge cases
-//   - Short float exponent suffixes (s, f, d, l) in numbers
 //   - Non-decimal base fractions (#x10/2, #o11/2, etc.)
 func TestR7RSConformance(t *testing.T) {
 	t.Skip("KNOWN LIMITATIONS: Several R7RS features not yet fully implemented. See test file comments and plans/ for details.")

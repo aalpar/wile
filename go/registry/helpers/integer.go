@@ -16,6 +16,7 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/big"
 
@@ -94,7 +95,7 @@ func IntegerFold(
 	mc *machine.MachineContext,
 	op FoldOp,
 	identity int64,
-	combiner func(acc, val int64) int64,
+	combiner func(acc, val int64) (int64, bool),
 ) error {
 	name := opName(op)
 	o := mc.Arg(0)
@@ -122,7 +123,9 @@ func IntegerFold(
 				hasBigInt = true
 			}
 		case *values.Integer:
-			// ok
+			if v.Value == math.MinInt64 {
+				hasBigInt = true
+			}
 		case *values.Float:
 			// Check if it represents an integer
 			if math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
@@ -174,10 +177,17 @@ func IntegerFold(
 		if val < 0 {
 			val = -val
 		}
-		result = combiner(result, val)
+		combined, overflow := combiner(result, val)
+		if overflow {
+			return errNeedsBigInt
+		}
+		result = combined
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errNeedsBigInt) {
+			return integerFoldBig(mc, op, identity, pr, hasInexact)
+		}
 		return err
 	}
 	if !values.IsEmptyList(v) {

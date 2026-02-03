@@ -201,11 +201,7 @@ func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
-		if v.Value < 0 {
-			mc.SetValue(values.NewInteger(-v.Value))
-		} else {
-			mc.SetValue(v)
-		}
+		mc.SetValue(v.Abs())
 	case *values.BigInteger:
 		if v.IsNegative() {
 			mc.SetValue(v.Negate())
@@ -424,17 +420,24 @@ func PrimModulo(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimGcd implements the gcd primitive.
 func PrimGcd(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.IntegerFold(mc, helpers.FoldOpGCD, 0, helpers.GcdInt)
+	return helpers.IntegerFold(mc, helpers.FoldOpGCD, 0, func(a, b int64) (int64, bool) {
+		return helpers.GcdInt(a, b), false
+	})
 }
 
 // PrimLcm implements the lcm primitive.
 func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.IntegerFold(mc, helpers.FoldOpLCM, 1, func(acc, val int64) int64 {
+	return helpers.IntegerFold(mc, helpers.FoldOpLCM, 1, func(acc, val int64) (int64, bool) {
 		g := helpers.GcdInt(acc, val)
 		if g == 0 {
-			return 0 // lcm(0, 0) = 0
+			return 0, false // lcm(0, 0) = 0
 		}
-		return acc / g * val
+		q := acc / g
+		prod := q * val
+		if val != 0 && prod/val != q {
+			return 0, true // overflow
+		}
+		return prod, false
 	})
 }
 

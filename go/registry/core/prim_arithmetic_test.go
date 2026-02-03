@@ -1226,3 +1226,29 @@ func TestDivisionByZero_ReturnsError(t *testing.T) {
 		})
 	}
 }
+
+func TestOverflowPromotion(t *testing.T) {
+	// R7RS §6.2.3: Integer overflow should promote to BigInteger
+	tcs := []schemeCodeTestCase{
+		{"add overflow", `(+ 9223372036854775807 1)`, values.NewBigIntegerFromString("9223372036854775808", 10)},
+		{"subtract underflow", `(- -9223372036854775808 1)`, values.NewBigIntegerFromString("-9223372036854775809", 10)},
+		{"multiply overflow", `(* 9223372036854775807 2)`, values.NewBigIntegerFromString("18446744073709551614", 10)},
+		{"abs MinInt64", `(abs -9223372036854775808)`, values.NewBigIntegerFromString("9223372036854775808", 10)},
+		{"lcm overflow", `(lcm 9223372036854775807 2)`, values.NewBigIntegerFromString("18446744073709551614", 10)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+
+	// Exactness and type preservation
+	runSchemeCodeExpectTrue(t, `(exact? (+ 9223372036854775807 1))`)
+	runSchemeCodeExpectTrue(t, `(integer? (+ 9223372036854775807 1))`)
+	runSchemeCodeExpectTrue(t, `(= (+ 9223372036854775807 1) 9223372036854775808)`)
+	runSchemeCodeExpectTrue(t, `(= (- -9223372036854775808 1) -9223372036854775809)`)
+	runSchemeCodeExpectTrue(t, `(= (* 9223372036854775807 2) 18446744073709551614)`)
+	runSchemeCodeExpectTrue(t, `(= (abs -9223372036854775808) 9223372036854775808)`)
+}
