@@ -393,9 +393,9 @@ R7RS Missing Features
 ### Primitives
 
 **Box primitives:**
-- [ ] `box`, `box?`, `unbox`, `set-box!`
-- [ ] Box type exists in `go/values/box.go` but no Scheme primitives registered
-- [ ] **Effort:** Low - just need to register existing type
+- [x] `box`, `box?`, `unbox`, `set-box!`
+- [x] Box type exists in `go/values/box.go` but no Scheme primitives registered
+- [x] **Effort:** Low - just need to register existing type
 
 **Hashtable primitives:**
 - [ ] `make-hashtable`, `hashtable?`, `hashtable-ref`, `hashtable-set!`, `hashtable-delete!`
@@ -623,7 +623,7 @@ Items that must be resolved before a 1.0 release. Each references an existing TO
 
 ### Embedding API
 
-7. **Box primitives** — See [Box primitives](#box-primitives) under R7RS Missing Features / Primitives. Type exists but no Scheme-side registration.
+7. ~~**Box primitives**~~ — Resolved. Primitives `box`, `box?`, `unbox`, `set-box!` registered at Runtime+Expand phases.
 
 8. **Hashtable primitives** — See [Hashtable primitives](#hashtable-primitives) under R7RS Missing Features / Primitives. Type exists but only supports string keys, not arbitrary Scheme values.
 

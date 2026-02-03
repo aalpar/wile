@@ -24,6 +24,7 @@ var (
 	ErrNotABoolean                 = NewStaticError("not a boolean")
 	ErrNotAnInputPort              = NewStaticError("not an input port")
 	ErrNotAnOutputPort             = NewStaticError("not an output port")
+	ErrNotABox                     = NewStaticError("not a box")
 	ErrNotAByte                    = NewStaticError("not a byte")
 	ErrNotAByteInputPort           = NewStaticError("not a byte input port")
 	ErrNotAByteOutputPort          = NewStaticError("not a byte output port")
