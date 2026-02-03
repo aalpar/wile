@@ -40,6 +40,7 @@ var Builder = registry.NewRegistryBuilder(
 	addSyntax,
 	addParameters,
 	addPrompts,
+	addBoxes,
 	addBootstrapMacros,
 )
 

@@ -16,6 +16,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Vector | Fixed-size mutable array, e.g., `#(1 2 3)` |
 | String | Mutable UTF-8 text |
 | Bytevector | Fixed-size byte array, e.g., `#u8(0 1 2)` |
+| Box | Mutable single-value container, e.g., `#&42` |
 | Procedure | Lambda or primitive function |
 
 ### Numeric Types
@@ -603,6 +604,15 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `make-parameter` | Create a parameter object |
 | `parameter?` | Test for parameter |
+
+## Boxes
+
+| Primitive | Description |
+|-----------|-------------|
+| `box` | Create a box containing a value |
+| `box?` | Test for box |
+| `unbox` | Extract the value from a box |
+| `set-box!` | Set the value in a box |
 
 ## Evaluation
 
