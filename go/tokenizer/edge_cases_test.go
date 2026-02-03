@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -141,6 +142,43 @@ func TestExtendedSymbols(t *testing.T) {
 			val:   "λ",
 			err:   io.EOF,
 		},
+		// Line continuation within extended symbol (R7RS 7.1.1)
+		{
+			input: "|hello\\\nworld|",
+			state: TokenizerStateSymbol,
+			span:  "|hello\\\nworld|",
+			val:   "helloworld",
+			err:   io.EOF,
+		},
+		{
+			input: "|hello\\  \n  world|",
+			state: TokenizerStateSymbol,
+			span:  "|hello\\  \n  world|",
+			val:   "helloworld",
+			err:   io.EOF,
+		},
+		{
+			input: "|hello\\\r\nworld|",
+			state: TokenizerStateSymbol,
+			span:  "|hello\\\r\nworld|",
+			val:   "helloworld",
+			err:   io.EOF,
+		},
+		// Multiple escapes combined in one symbol
+		{
+			input: `|tab\there\nnewline|`,
+			state: TokenizerStateSymbol,
+			span:  `|tab\there\nnewline|`,
+			val:   "tab\there\nnewline",
+			err:   io.EOF,
+		},
+		{
+			input: `|\x48;\x65;\x6C;\x6C;\x6F;|`, // "Hello" via hex escapes
+			state: TokenizerStateSymbol,
+			span:  `|\x48;\x65;\x6C;\x6C;\x6F;|`,
+			val:   "Hello",
+			err:   io.EOF,
+		},
 		// Extended symbol followed by other tokens
 		{
 			input: "|foo| bar",
@@ -167,6 +205,74 @@ func TestExtendedSymbols(t *testing.T) {
 			c.Check(tok.Type(), qt.Equals, tc.state)
 			c.Check(tok.String(), qt.Equals, tc.span)
 			c.Check(tok.Value(), qt.Equals, tc.val)
+		})
+	}
+}
+
+// TestUnterminatedExtendedSymbol tests that unterminated extended symbols
+// produce a TokenizerError (not a bare io.EOF) per R7RS §7.1.1.
+func TestUnterminatedExtendedSymbol(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "no closing pipe",
+			input: "|foo",
+		},
+		{
+			name:  "trailing backslash",
+			input: `|foo\`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			p := NewTokenizer(strings.NewReader(tc.input), false)
+			_, err1 := p.Next()
+			_, err2 := p.Next()
+			// Combine: error may surface on either call
+			combined := err1
+			if combined == nil {
+				combined = err2
+			}
+			c.Assert(combined, qt.IsNotNil)
+			var te *TokenizerError
+			c.Check(errors.As(combined, &te), qt.IsTrue,
+				qt.Commentf("expected TokenizerError, got %T: %v", combined, combined))
+		})
+	}
+}
+
+// TestExtendedSymbolEscapeErrors tests that invalid escape sequences within
+// extended symbols produce errors per R7RS 7.1.1.
+func TestExtendedSymbolEscapeErrors(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "invalid escape character",
+			input: `|foo\qbar|`,
+		},
+		{
+			name:  "hex escape missing semicolon",
+			input: `|\x41|`,
+		},
+		{
+			name:  "hex escape with no digits",
+			input: `|\x;|`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			p := NewTokenizer(strings.NewReader(tc.input), false)
+			_, err1 := p.Next()
+			_, err2 := p.Next()
+			// Error may surface on either the first or second Next() call
+			hasError := err1 != nil || (err2 != nil && err2 != io.EOF)
+			c.Check(hasError, qt.IsTrue, qt.Commentf("err1=%v err2=%v", err1, err2))
 		})
 	}
 }
@@ -514,8 +620,10 @@ func TestInvalidStrings(t *testing.T) {
 			p := NewTokenizer(strings.NewReader(tc.input), false)
 			p.mark()
 			p.read()
-			// Should either error or reach EOF without completing string
-			c.Check(p.err, qt.IsNotNil)
+			c.Assert(p.err, qt.IsNotNil)
+			var te *TokenizerError
+			c.Check(errors.As(p.err, &te), qt.IsTrue,
+				qt.Commentf("expected TokenizerError, got %T: %v", p.err, p.err))
 		})
 	}
 }
