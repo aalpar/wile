@@ -162,6 +162,8 @@ val, ok := engine.Get("my-var")
 Register a Go function as a Scheme primitive:
 
 ```go
+import "github.com/aalpar/wile/values"
+
 engine.RegisterPrimitive(wile.PrimitiveSpec{
     Name:       "go-add",
     ParamCount: 2,
