@@ -254,7 +254,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 	// Check if any element is unsyntax-splicing at depth 1
 	hasSplice := false
 	current := pair
-	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, carSyntax syntax.SyntaxValue) error {
+	_, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, carSyntax syntax.SyntaxValue) error {
 		carPair, ok := carSyntax.(*syntax.SyntaxPair)
 		if !ok {
 			return nil
@@ -271,9 +271,8 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 	if err != nil {
 		panic(err)
 	}
-	if !syntax.IsSyntaxEmptyList(v) {
-		panic("expandQuasisyntaxList: unexpected improper list during splice check")
-	}
+	// Note: For improper lists, the tail won't be an empty list.
+	// That's fine - improper lists can't have splices in their tail anyway.
 
 	if !hasSplice {
 		// Simple case: (list elem1 elem2 ...)
@@ -339,7 +338,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(pair *syntax.SyntaxPair,
 				),
 			)
 		}
-		cdr := current.SyntaxCar()
+		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
