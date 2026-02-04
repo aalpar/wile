@@ -3,49 +3,23 @@ TODO
 
 Code Cleanup
 ------------
-### Re-Work Numeric Tower
-- [ ] Refactor Numeric Tower
-
-### Include Examples
-- [ ] Include examples
-
-### Investigate Symbol Interning Semantic
-- [ ] Symbol interning semantics should be looked up in R7RS.  Look at benefits of environment interning with global interning.
-
 ### FreeIdResolution
 - [ ] Try and find a more specific type for the interface, instead of 'any'.
-- [ ] **Location:** `go/match/syntax_adapter.go` and `go/machine/compile_syntax_rules.go`
+- [ ] **Location:** `internal/match/syntax_adapter.go` and `machine/compile_syntax_rules.go`
 
 ### Scope Matching Optimization
-- [ ] **Location:** `go/syntax/` and `go/match/`
+- [ ] **Location:** `internal/syntax/` and `internal/match/`
 - [ ] **Issue:** Scope set matching is mostly brute force O(n×m) comparison
 - [ ] **Goal:** Investigate optimization opportunities (hash-based set comparison, scope indexing)
 - [ ] **Impact:** Performance improvement for complex macro expansions
 
 ---
 
-### Quasiquote Expansion
-**Status:** Only `compile_quasisyntax.go` exists (no separate `compile_quasiquote.go`).
-
-`go/machine/compile_quasisyntax.go` shows well-structured design:
-- Proper depth tracking for nested quasisyntax
-- Clean separation: entry point → depth management → template transformation
-- Sophisticated list handling with unsyntax-splicing segmentation
-
----
-
-### Remove Extraneous Number Methods
-- [ ] **Location:** `go/values/integer.go`, `float.go`, `rational.go`, `complex.go`, `big_*.go`
-- [ ] **Goal:** Audit number types for unused or redundant methods
-- [ ] **Note:** All number types already share common `Number` interface; may be minimal redundancy
-
----
-
 ### Numeric Type Unification
 - [ ] **Issue:** Integer, Float, Rational, Complex, BigInteger, BigFloat have some duplicate comparison logic
-- [ ] **Location:** `go/values/numeric_tower.go` provides unified dispatch (`TowerAdd`, `TowerSubtract`, `TowerCompare`, etc.) but per-type methods still exist
+- [ ] **Location:** `values/numeric_tower.go` provides unified dispatch (`TowerAdd`, `TowerSubtract`, `TowerCompare`, etc.) but per-type methods still exist
 - [ ] **Goal:** Ensure all cross-type operations go through unified Tower functions
-- [ ] **Files:** All `go/values/*_number.go` files
+- [ ] **Files:** All `values/*_number.go` files
 
 ---
 
@@ -71,106 +45,24 @@ Code Cleanup
 ---
 
 ### Use BoolToBoolean Helper
-- [ ] **Location:** `go/utils/predicate.go` provides `BoolToBoolean(bool) *Boolean`
+- [ ] **Location:** `internal/schemeutil/predicate.go` provides `BoolToBoolean(bool) *Boolean`
 - [ ] **Goal:** Replace manual `if b { TrueValue } else { FalseValue }` patterns
-- [ ] **Scope:** Audit all primitive implementations
-
----
-
-### Tokenization Error Handling
-- [ ] **Issue:** Error handling in tokenizer is difficult to understand
-- [ ] **Location:** `go/tokenizer/tokenizer.go`, `go/tokenizer/error.go`
-- [ ] **Goal:** Improve error propagation and messages
-- [ ] **Note:** Consider structured error types with line/column info
-
----
-
-### Inf/NaN Handling Consistency
-- [ ] **Issue:** Some places use `math.Inf(1)/math.Inf(-1)`, others use predefined constants
-- [ ] **Location:** `go/tokenizer/tokenizer.go` number parsing
-- [ ] **Goal:** Standardize on single approach (prefer constants for clarity)
-
----
-
-### Error Handling Consolidation
-- [ ] **Issue:** Unimplemented features have scattered error handling
-- [ ] **Location:** `go/machine/` compiler code
-- [ ] **Goal:** Consolidate into common error types or helper functions
-
----
-
-### syntax->datum and datum->syntax Consolidation
-- [ ] **Location:** `go/registry/core/prim_syntax.go`
-- [ ] **Current State:** `datumToSyntax()` helper exists; `PrimSyntaxToDatum` uses `stx.UnwrapAll()`
-- [ ] **Goal:** Verify no duplicate recursive unwrap/wrap logic elsewhere
-- [ ] **Files to check:** `go/machine/compile_quasisyntax.go`
-
----
-
-### Compiler Registry Refactoring
-
-These items propose extracting compiler dispatch into registry patterns (like `PrimitiveCompiler`):
-
-- [ ] Refactor compiler primitive handling to use PrimitiveCompiler registry (~300 lines saved)
-- [ ] Refactor compiler literal handling to use LiteralCompiler registry
-- [ ] Refactor compiler special form handling to use SpecialFormCompiler registry
-- [ ] Refactor compiler expansion handling to use Expander registry
-- [ ] Refactor compiler optimization handling to use Optimizer registry
-- [ ] Refactor compiler evaluation handling to use Evaluator registry
-- [ ] Refactor ExpandPrimitiveForm into PrimitiveExpander registry
-
-**Location:** `go/machine/compile_*.go`
-**Pattern:** See existing `go/registry/` for registry architecture
-
----
-
-### Validation Code Size
-- [ ] **Location:** `go/validate/` directory
-- [ ] **Current State:** 15 files, already well-decomposed by form type
-- [ ] **Goal:** Review if further decomposition or method extraction is beneficial
-
----
-
-### evalWhenCompileForRuntime Simplification
-- [ ] **Location:** `go/machine/compile_eval_when.go`
-- [ ] **Issue:** Two-pass algorithm (collect all expressions, then iterate)
-- [ ] **Goal:** Consider single-pass algorithm that expands/compiles in the ForEach callback
-- [ ] **Challenge:** Determining "last" expression requires knowing total count
+- [ ] **Status:** 56 uses adopted across 15 files; ~35 manual patterns remain in 7 files
+- [ ] **Remaining files:** `prim_gointerop.go` (12), `prim_predicates.go` (10), `prim_threads.go` (6), `prim_exceptions.go` (3), `prim_all.go` (3), `prim_syntax.go` (1)
 
 ---
 
 ### ForEach "Must" Wrapper
 - [ ] **Goal:** Create wrapper that panics on improper list instead of returning error
 - [ ] **Benefit:** Simplify code where proper list is guaranteed (e.g., after validation)
-- [ ] **Location:** `go/values/pair.go`
+- [ ] **Location:** `values/pair.go`
 
 ---
 
 ### compile_eval_when.go Phase Table
-- [ ] **Location:** `go/machine/compile_eval_when.go`
+- [ ] **Location:** `machine/compile_eval_when.go`
 - [ ] **Issue:** Hardcoded list of phases
-- [ ] **Goal:** Move to table-driven approach or use phase constants from `go/environment/`
-
----
-
-### Table-Driven Tests
-- [ ] **Goal:** Convert remaining test functions to table-driven format
-- [ ] **Pattern:** Use `runSchemeCode(t, code)` helper with `[]struct{name, code, expected}`
-- [ ] **Scope:** Audit `go/registry/core/*_test.go` files
-
----
-
-### Datum Wrapping/Unwrapping
-- [ ] **Issue:** Some code wraps/unwraps `Datum` types laboriously
-- [ ] **Goal:** Keep datum wrapping/unwrapping at function edges; work with values internally
-- [ ] **Location:** Review `go/machine/` compiler code
-
----
-
-### Tokenizer Warnings
-- [ ] **Issue:** Unreachable code and unhandled errors in tokenizer
-- [ ] **Location:** `go/tokenizer/tokenizer.go`
-- [ ] **Goal:** Fix warnings, ensure error handling is complete
+- [ ] **Goal:** Move to table-driven approach or use phase constants from `environment/`
 
 ---
 
@@ -186,48 +78,6 @@ These items propose extracting compiler dispatch into registry patterns (like `P
 - [ ] `readInfNan` — consolidate `inf.0/nan.0` parsing
 
 **Estimated reduction:** ~200-300 lines
-
----
-
-### formName Processing
-- [ ] **Issue:** Form name should come from car of original form, but is being set on an object
-- [ ] **Location:** `go/machine/` compiler code
-- [ ] **Goal:** Allow dynamic setting of form-name for abstract forms (parameter lists, literals)
-
----
-
-### Environment Function Refactoring
-- [ ] **Location:** `go/environment/`
-- [ ] **Goal:** Reduce code redundancy in environment manipulation functions
-
----
-
-### Token Type Renaming
-- [ ] **Issue:** Comment token types may have unclear names
-- [ ] **Location:** `go/tokenizer/token.go`
-- [ ] **Goal:** Use clearer names that distinguish line/block/datum comments
-
----
-
-### Number Parsing Cleanup
-- [ ] **Location:** `go/tokenizer/tokenizer.go`
-- [ ] **Issue:** Number parsing is messy with many code paths
-- [ ] **Goal:** Reduce redundancy, improve clarity
-- [ ] **Consider:** Evaluate removing "signed" token types (represent sign separately)
-
----
-
-### parseComplex Refactoring
-- [ ] **Location:** `go/tokenizer/tokenizer.go` or `go/parser/`
-- [ ] **Issue:** Complex number parsing is messy
-- [ ] **Goal:** Reduce redundancy, clearer error handling
-
----
-
-### Test Consolidation
-- [ ] **Issue:** Many test files have identical test runner code
-- [ ] **Goal:** Combine into single table-driven tests where possible
-- [ ] **Pattern:** Share `runSchemeCode` helper, consolidate similar test categories
 
 ---
 
@@ -284,69 +134,11 @@ func TestPrimName(t *testing.T) {
 
 Code Refactoring
 ----------------
-- [ ] Add `go/registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
-- [x] ~~Add `go/machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
-- [ ] Migrate ~27 operation files to use EqualTo helpers
+- [ ] Add `registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
+- [x] ~~Add `machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
+- [ ] Migrate ~7 remaining operation files to use EqualTo helpers (23/30 already migrated)
 
 ---
-
-R7RS Missing Features
----------------------
-
-### Tokenizer (R7RS 7.1.1 Lexical Structure)
-
-**Extended Symbols (`|...|`):**
-- [x] Basic parsing, escape sequences, and verification complete
-
----
-
-### Primitives
-
-**BigInteger:**
-- [x] Automatic promotion from Integer on overflow (resolved in `312cf48`)
-- [x] Unterminated extended symbol error handling (resolved in `829ef8d`)
-- [ ] No `#bigint` reader syntax
-
-**BigFloat:**
-- [ ] No automatic promotion from Float
-- [ ] No `#bigfloat` reader syntax
-- [ ] BigFloat type exists in `go/values/big_float.go`
-- [ ] **Effort:** Medium - similar to BigInteger
-
----
-
-Library Status
---------------
-
-| Library               | Status | Notes |
-|-----------------------|--------|-------|
-| scheme/base           | ~98%   | |
-| scheme/char           | 100%   | |
-| scheme/file           | 100%   | |
-| scheme/write          | 100%   | |
-| scheme/r5rs           | 100%   | |
-| scheme/complex        | 100%   | |
-| scheme/cxr            | 100%   | |
-| scheme/read           | 100%   | |
-| scheme/inexact        | 100%   | |
-| scheme/process-context| 100%   | |
-| scheme/time           | 100%   | |
-| scheme/lazy           | 100%   | |
-| scheme/load           | 100%   | |
-| scheme/repl           | 100%   | |
-| scheme/case-lambda    | 100%   | |
-| scheme/eval           | 100%   | |
-| chibi/test            | 100%   | Minimal stub implementation (not full chibi library) |
-
----
-
-Dead Code Removal
------------------
-
-### Phase 5 (Optional): Test-Only Functions
-- [ ] Consider deleting `AddScopeToSet()` and `RemoveScopeFromSet()` in `go/syntax/scope_utils.go`
-- [ ] These are only used in `go/syntax/coverage_test.go`
-- [ ] Main code uses different scope manipulation methods
 
 Future Extensions
 -----------------
@@ -448,11 +240,6 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 
 ---
 
-### Arbitrary Precision Numbers
-- [ ] Tagged literals: `#bigint`, `#bigfloat` using Go's `big.Int` and `big.Float`.
-
----
-
 ### Go FFI
 - [ ] Registry-based (Phase 1) → Reflection-based (Phase 2) → Plugin support (Phase 3).
 
@@ -475,7 +262,7 @@ Reflection
   - List of bound symbol names
   - Parameters for procedures (arity, names if available)
   - Types and predicates for types
-- [ ] **Location:** Would require new primitives in `go/registry/core/`
+- [ ] **Location:** Would require new primitives in `registry/core/`
 
 ---
 
@@ -487,18 +274,3 @@ Event Callbacks
   - Runtime debugging (variable set/get for debugging)
 - [ ] **Use case:** IDE integration, debugging, profiling
 - [ ] **Pattern:** Similar to dynamic-wind but for compiler/expander phases
-
----
-
-1.0 Release Blockers
---------------------
-
-Items that must be resolved before a 1.0 release.
-
-### R7RS Conformance
-
-- [x] All R7RS conformance issues resolved (see `plans/R7RS_CONFORMANCE_PLAN.md`)
-
-### User-Facing
-
-- [x] REPL banner moved to REPL-only path; `--quiet` flag added

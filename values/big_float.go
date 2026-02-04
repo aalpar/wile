@@ -27,7 +27,7 @@ var (
 const DefaultBigFloatPrecision = 256
 
 // BigFloat represents an arbitrary-precision floating-point number.
-// Created with the #z prefix in Scheme (e.g., #z3.14159265358979323846).
+// Created with the #m prefix in Scheme (e.g., #m3.14159265358979323846).
 type BigFloat struct {
 	value *big.Float
 }
