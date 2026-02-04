@@ -101,7 +101,11 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 				}
 				return false
 			case "quasisyntax":
-				// Nested quasisyntax - check body at depth+1
+				// Nested quasisyntax at depth 1 always needs runtime construction
+				if depth == 1 {
+					return true
+				}
+				// At depth > 1, check body at depth+1
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
