@@ -326,6 +326,145 @@ func TestExpandQuasisyntax_NestedQuasisyntax(t *testing.T) {
 	c.Assert(carSym.Sym.Key, qt.Equals, "list")
 }
 
+func TestExpandQuasisyntax_NestedList(t *testing.T) {
+	c := qt.New(t)
+	ccnt, _ := newTestCompiler()
+
+	// (a (b c)) -> (list (syntax a) (list (syntax b) (syntax c)))
+	inner := makeTestSyntaxList(
+		makeTestSyntaxSymbol("b"),
+		makeTestSyntaxSymbol("c"),
+	)
+	stx := makeTestSyntaxList(
+		makeTestSyntaxSymbol("a"),
+		inner,
+	)
+	expanded := ccnt.expandQuasisyntax(stx, 1)
+
+	// Should be (list ...)
+	pair, ok := expanded.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	car := pair.SyntaxCar()
+	carSym, ok := car.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+
+	// Check second element is also a list form (the nested (b c))
+	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair) // skip (syntax a)
+	secondElem := cdr.SyntaxCar()
+	secondPair, ok := secondElem.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	secondCar := secondPair.SyntaxCar()
+	secondCarSym, ok := secondCar.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(secondCarSym.Sym.Key, qt.Equals, "list")
+}
+
+func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
+	c := qt.New(t)
+	ccnt, _ := newTestCompiler()
+
+	// (a #,@xs b) -> delegates to expandQuasisyntaxList which produces append form
+	stx := makeTestSyntaxList(
+		makeTestSyntaxSymbol("a"),
+		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
+		makeTestSyntaxSymbol("b"),
+	)
+	expanded := ccnt.expandQuasisyntax(stx, 1)
+
+	// Should produce append form (handled by expandQuasisyntaxList)
+	pair, ok := expanded.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	car := pair.SyntaxCar()
+	carSym, ok := car.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+}
+
+func TestExpandQuasisyntax_MultipleSplice(t *testing.T) {
+	c := qt.New(t)
+	ccnt, _ := newTestCompiler()
+
+	// (#,@a #,@b) -> (append a b)
+	stx := makeTestSyntaxList(
+		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("a")),
+		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("b")),
+	)
+	expanded := ccnt.expandQuasisyntax(stx, 1)
+
+	// Should be (append a b)
+	pair, ok := expanded.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	car := pair.SyntaxCar()
+	carSym, ok := car.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+
+	// Check we have two args: a and b
+	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	firstArg := cdr.SyntaxCar()
+	firstArgSym, ok := firstArg.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(firstArgSym.Sym.Key, qt.Equals, "a")
+
+	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
+	secondArg := cdr.SyntaxCar()
+	secondArgSym, ok := secondArg.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(secondArgSym.Sym.Key, qt.Equals, "b")
+}
+
+func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
+	c := qt.New(t)
+	ccnt, _ := newTestCompiler()
+
+	// (x #,@ys z) -> (append (list (syntax x)) ys (list (syntax z)))
+	stx := makeTestSyntaxList(
+		makeTestSyntaxSymbol("x"),
+		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("ys")),
+		makeTestSyntaxSymbol("z"),
+	)
+	expanded := ccnt.expandQuasisyntax(stx, 1)
+
+	// Should be (append ...)
+	pair, ok := expanded.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	car := pair.SyntaxCar()
+	carSym, ok := car.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+
+	// Check structure: (append (list ...) ys (list ...))
+	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
+
+	// First arg should be (list (syntax x))
+	firstArg := cdr.SyntaxCar()
+	firstArgPair, ok := firstArg.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	firstArgCar := firstArgPair.SyntaxCar()
+	firstArgCarSym, ok := firstArgCar.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(firstArgCarSym.Sym.Key, qt.Equals, "list")
+
+	// Second arg should be ys (the splice expr)
+	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
+	secondArg := cdr.SyntaxCar()
+	secondArgSym, ok := secondArg.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(secondArgSym.Sym.Key, qt.Equals, "ys")
+
+	// Third arg should be (list (syntax z))
+	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
+	thirdArg := cdr.SyntaxCar()
+	thirdArgPair, ok := thirdArg.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	thirdArgCar := thirdArgPair.SyntaxCar()
+	thirdArgCarSym, ok := thirdArgCar.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(thirdArgCarSym.Sym.Key, qt.Equals, "list")
+}
+
 // Section 3: expandQuasisyntaxList tests
 
 func TestExpandQuasisyntaxList_SimpleList(t *testing.T) {
@@ -404,6 +543,47 @@ func TestExpandQuasisyntaxList_MultipleSplices(t *testing.T) {
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+}
+
+func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
+	c := qt.New(t)
+	ccnt, _ := newTestCompiler()
+
+	// (a . b) -> (list* (syntax a) (syntax b))
+	// Create improper list manually: (a . b)
+	stx := syntax.NewSyntaxCons(
+		makeTestSyntaxSymbol("a"),
+		makeTestSyntaxSymbol("b"), // cdr is not a list - makes it improper
+		nil,
+	)
+	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+
+	// Should be (list* ...)
+	pair, ok := expanded.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	car := pair.SyntaxCar()
+	carSym, ok := car.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(carSym.Sym.Key, qt.Equals, "list*")
+
+	// Verify we have two elements: (syntax a) and (syntax b)
+	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	firstArg := cdr.SyntaxCar()
+	firstArgPair, ok := firstArg.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	firstArgCar := firstArgPair.SyntaxCar()
+	firstArgCarSym, ok := firstArgCar.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(firstArgCarSym.Sym.Key, qt.Equals, "syntax")
+
+	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
+	secondArg := cdr.SyntaxCar()
+	secondArgPair, ok := secondArg.(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	secondArgCar := secondArgPair.SyntaxCar()
+	secondArgCarSym, ok := secondArgCar.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(secondArgCarSym.Sym.Key, qt.Equals, "syntax")
 }
 
 // Section 4: compileQuasisyntaxTemplate tests
