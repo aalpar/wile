@@ -36,7 +36,7 @@ shell: build
 
 .PHONY: repl
 repl: build
-	$(DOCKER) run --rm -it $(PLATFORM_FLAG) $(IMAGE_NAME)$(TAG_SUFFIX) ../dist/scheme
+	$(DOCKER) run --rm -it $(PLATFORM_FLAG) $(IMAGE_NAME)$(TAG_SUFFIX) bash -c './dist/$$TARGETOS/$$TARGETARCH/scheme'
 
 .PHONY: dev
 dev: build

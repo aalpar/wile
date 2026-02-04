@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Interactive REPL with readline support and debug commands
 - File execution mode with positional argument and `--file` flag
 - SIGQUIT handler for goroutine stack dumps
-- Docker build support with cross-platform compilation
+- Multi-platform builds: `dist/{os}/{arch}/scheme` layout with targets for darwin/linux on arm64/amd64
+- Docker build support with `TARGETOS`/`TARGETARCH` platform awareness
+- CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
