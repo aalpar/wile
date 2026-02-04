@@ -807,6 +807,31 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 		for !values.IsEmptyList(current) {
 			car := current.SyntaxCar()
 			carSyntax := car
+
+			// Detect dotted-pair unquote: `(a . ,x)` parses as `(a unquote x)`.
+			// When we see the symbol `unquote` as a bare element followed by
+			// exactly one more element, treat the remaining `(unquote expr)` as
+			// the tail expression per R7RS §4.2.8.
+			if carSymName, ok := p.getSymbolName(carSyntax); ok && carSymName == "unquote" && depth == 1 {
+				cdr := current.SyntaxCdr()
+				cdrPair, ok := cdr.(*syntax.SyntaxPair)
+				if ok && cdrPair.Length() == 1 {
+					// This is `(... unquote expr)` — a dotted-pair unquote.
+					// Build (cons prev-elems... expr) using the collected elements so far.
+					tailExpr := cdrPair.SyntaxCar()
+					var result syntax.SyntaxValue
+					result = tailExpr
+					for i := len(elems) - 1; i >= 1; i-- {
+						result = p.buildQuasiquoteSyntaxList(srcCtx,
+							syntax.NewSyntaxSymbol("cons", srcCtx),
+							elems[i],
+							result,
+						)
+					}
+					return result
+				}
+			}
+
 			elems = append(elems, p.expandQuasiquote(carSyntax, depth))
 			cdr := current.SyntaxCdr()
 			if syntax.IsSyntaxEmptyList(cdr) {
@@ -838,7 +863,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 
 	current := pair
 	for {
-		car := current.SyntaxCdr()
+		car := current.SyntaxCar()
 		carSyntax := car
 		elements = append(elements, p.expandQuasiquote(carSyntax, depth))
 		cdr := current.SyntaxCdr()
@@ -1015,6 +1040,18 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 	for !syntax.IsSyntaxEmptyList(current) {
 		car := current.SyntaxCar()
 		carSyntax := car
+
+		// Detect dotted-pair unquote: `(a . ,x)` parses as `(a unquote x)`.
+		// The bare symbol `unquote` followed by exactly one element signals
+		// a runtime-evaluated tail per R7RS §4.2.8.
+		if carSymName, ok := p.getSymbolName(carSyntax); ok && carSymName == "unquote" && depth == 1 {
+			cdr := current.SyntaxCdr()
+			cdrPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok && cdrPair.Length() == 1 {
+				return true
+			}
+		}
+
 		if p.quasiquoteNeedsRuntime(carSyntax, depth) {
 			return true
 		}

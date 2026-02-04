@@ -1,4 +1,6 @@
-COVER_DIR=cover
+GO_BUILD_DIR=./build
+SH_TOOLS_DIR=./tools/sh
+
 DIST_DIR=dist
 TEST_DIR=test
 DOCKER_IMAGE ?= wile
@@ -45,7 +47,12 @@ test: go
 #   make cover
 .PHONY: cover
 cover: go
-	mkdir -p $(COVER_DIR)
+	$(MAKE) -C $< $@
+
+# Run tests with coverage and enforce per-package threshold (80%) (delegates to go/Makefile).
+#   make covercheck
+.PHONY: covercheck
+covercheck: go
 	$(MAKE) -C $< $@
 
 # Run golangci-lint with --fix to auto-correct fixable issues (delegates to go/Makefile).
@@ -70,7 +77,7 @@ format:
 #   make clean
 .PHONY: clean
 clean: buildclean testclean modclean
-	for dir in "$(COVER_DIR)" "$(DIST_DIR)" "$(TEST_DIR)"; do \
+	for dir in "$(DIST_DIR)" "$(TEST_DIR)"; do \
 	    if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
 	done
 
@@ -109,24 +116,24 @@ tag:
 #   v0.8.5-alpha → v1.0.0-alpha
 .PHONY: bump-major
 bump-major:
-	tools/sh/bump-version.sh major
+	$(SH_TOOLS_DIR)/bump-version.sh major
 
 # Bump the minor version in VERSION (resets patch to 0, preserves pre-release suffix).
 #   make bump-minor
 #   v0.8.5-alpha → v0.9.0-alpha
 .PHONY: bump-minor
 bump-minor:
-	tools/sh/bump-version.sh minor
+	$(SH_TOOLS_DIR)/bump-version.sh minor
 
 # Bump the patch version in VERSION (preserves pre-release suffix).
 #   make bump-patch
 #   v0.8.5-alpha → v0.8.6-alpha
 .PHONY: bump-patch
 bump-patch:
-	tools/sh/bump-version.sh patch
+	$(SH_TOOLS_DIR)/bump-version.sh patch
 
 # Build the Docker image containing the Go toolchain and compiled binary.
-# Delegates to build/docker-build.sh.
+# Delegates to tools/sh/docker-build.sh.
 #   make docker-build
 #
 # Cross-platform Docker build:
@@ -134,15 +141,15 @@ bump-patch:
 #   make docker-build DOCKER_PLATFORM=linux/arm64
 .PHONY: docker-build
 docker-build:
-	DOCKER_IMAGE=$(DOCKER_IMAGE) DOCKER_PLATFORM=$(DOCKER_PLATFORM) build/docker-build.sh
+	DOCKER_IMAGE=$(DOCKER_IMAGE) DOCKER_PLATFORM=$(DOCKER_PLATFORM) $(SH_TOOLS_DIR)/docker-build.sh
 
 # Open an interactive shell inside the Docker container.
 # The first line of stdout is always the container ID.
-# Delegates to build/docker-shell.sh.
+# Delegates to tools/sh/docker-shell.sh.
 #   make docker-shell
 #   make docker-shell DOCKER_SHELL=/bin/sh
 .PHONY: docker-shell
 docker-shell:
-	DOCKER_IMAGE=$(DOCKER_IMAGE) build/docker-shell.sh $(DOCKER_SHELL)
+	DOCKER_IMAGE=$(DOCKER_IMAGE) $(SH_TOOLS_DIR)/docker-shell.sh $(DOCKER_SHELL)
 
 

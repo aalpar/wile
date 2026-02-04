@@ -18,7 +18,7 @@ All method receivers use single-letter names:
 
 | Letter | Usage                                                     |
 |--------|-----------------------------------------------------------|
-| `p`    | Standard receiver                                         |
+| `p`    | All receivers that are not compile related                |
 | `c`    | Compiler-related types (e.g., `*CompileTimeContinuation`) |
 
 ```go
