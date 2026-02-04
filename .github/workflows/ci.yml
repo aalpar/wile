@@ -22,7 +22,7 @@ jobs:
           args: -v ./...
 
       - name: Build
-        run: make build
+        run: make build-all
 
       - name: Test
         run: make test

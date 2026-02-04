@@ -11,6 +11,12 @@
 
 FROM golang:1.25-bookworm
 
+# TARGETOS and TARGETARCH are set automatically by Docker from --platform (e.g., linux/amd64)
+ARG TARGETOS=linux
+ARG TARGETARCH
+ENV TARGETOS=${TARGETOS}
+ENV TARGETARCH=${TARGETARCH}
+
 # Install GNU development tools and build essentials
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core Tools
@@ -69,11 +75,11 @@ RUN go mod download
 # Copy the rest of the source
 COPY . .
 
-# Build the project
-RUN make build
+# Build the project for the target OS/architecture
+RUN make build-${TARGETOS}-${TARGETARCH}
 
 # Verify build
-RUN ./dist/scheme --version || true
+RUN ./dist/${TARGETOS}/${TARGETARCH}/scheme --version || true
 
 # Default command: run tests
 CMD ["make", "test"]

@@ -22,30 +22,61 @@ DOCKER_PLATFORM ?=
 DOCKER_SHELL ?=
 
 
-# Build the scheme binary to ./dist/scheme with embedded git SHA and version.
+# Build the scheme binary for the current platform to ./dist/{os}/{arch}/scheme.
 # Rebuilds only when Go source files change.
 #   make build
 #
-# Cross-compile for a specific OS/architecture:
-#   GOOS=linux GOARCH=amd64 make build    # Linux x86-64
-#   GOOS=linux GOARCH=arm64 make build    # Linux ARM64
-#   GOOS=darwin GOARCH=arm64 make build   # macOS Apple Silicon
-#   GOOS=darwin GOARCH=amd64 make build   # macOS Intel
-#   GOOS=windows GOARCH=amd64 make build  # Windows x86-64
+# Build for a specific OS/architecture:
+#   make build-darwin-arm64     # macOS Apple Silicon
+#   make build-darwin-amd64     # macOS Intel
+#   make build-linux-arm64      # Linux ARM64
+#   make build-linux-amd64      # Linux x86-64
+#   make build-all              # All OS/arch combinations
 #
 # Docker build:
 #   docker build -f docker/Dockerfile -t wile .
-#   docker run wile                                  # run tests
-#   docker run wile ./dist/scheme --file example.scm # run a file
+#   docker run wile ./dist/${TARGETOS}/${TARGETARCH}/scheme --file example.scm
 #
 # Cross-platform Docker build:
 #   docker build --platform linux/amd64 -f docker/Dockerfile -t wile .
 #   docker build --platform linux/arm64 -f docker/Dockerfile -t wile .
-.PHONY: build
-build: $(DIST_DIR)/$(MY_BIN)
 
-$(DIST_DIR)/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
-	$(GO_BUILD) -o $(DIST_DIR)/$(MY_BIN) -ldflags "-X main.BuildSHA=$(BUILD_SHA) -X main.BuildVersion=$(BUILD_VERSION)" ./cmd
+LDFLAGS=-ldflags "-X main.BuildSHA=$(BUILD_SHA) -X main.BuildVersion=$(BUILD_VERSION)"
+
+# Detect host OS and architecture using Go conventions
+HOST_OS := $(shell $(GO) env GOOS)
+RAW_ARCH := $(shell uname -m)
+ifeq ($(RAW_ARCH),x86_64)
+HOST_ARCH := amd64
+else
+HOST_ARCH := $(RAW_ARCH)
+endif
+
+.PHONY: build
+build: $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
+
+# Generic build rule for any OS/arch combination
+$(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
+	$(eval OS_ARCH := $(subst /, ,$*))
+	$(eval TARGET_OS := $(word 1,$(OS_ARCH)))
+	$(eval TARGET_ARCH := $(word 2,$(OS_ARCH)))
+	@mkdir -p $(DIST_DIR)/$*
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd
+
+.PHONY: build-darwin-arm64
+build-darwin-arm64: $(DIST_DIR)/darwin/arm64/$(MY_BIN)
+
+.PHONY: build-darwin-amd64
+build-darwin-amd64: $(DIST_DIR)/darwin/amd64/$(MY_BIN)
+
+.PHONY: build-linux-arm64
+build-linux-arm64: $(DIST_DIR)/linux/arm64/$(MY_BIN)
+
+.PHONY: build-linux-amd64
+build-linux-amd64: $(DIST_DIR)/linux/amd64/$(MY_BIN)
+
+.PHONY: build-all
+build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-amd64
 
 # Compile tests for all packages without running them.
 # Useful for verifying that tests compile after refactoring.
