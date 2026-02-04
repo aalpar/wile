@@ -88,11 +88,11 @@ func PrimOutputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.1: Closes the resource associated with port.
 func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	p, ok := o.(values.Port)
+	_, ok := o.(values.Port)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "close-port: expected a port but got %T", o)
 	}
-	err := p.Close()
+	err := closePort(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "close-port: %v", err)
 	}
@@ -234,7 +234,7 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 	runErr := sub.Run()
 
 	// Close the port after proc returns (even if there was an error)
-	closePort(portArg)
+	_ = closePort(portArg)
 
 	// Handle any errors from running the procedure
 	if runErr != nil {
@@ -252,10 +252,15 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// closePort closes a port regardless of its type.
-func closePort(o values.Value) {
+// closePort closes a port regardless of its type and evicts
+// any cached tokenizer/parser for the port.
+func closePort(o values.Value) error {
+	var err error
 	p, ok := o.(values.Port)
 	if ok {
-		p.Close() //nolint:errcheck
+		err = p.Close()
 	}
+	delete(Tokenizers, o)
+	delete(Parsers, o)
+	return err
 }

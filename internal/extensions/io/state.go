@@ -17,7 +17,6 @@ package io
 import (
 	"os"
 	"time"
-	"weak"
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/tokenizer"
@@ -34,10 +33,22 @@ var (
 	currentOutputPortParam *machine.Parameter
 	// currentErrorPortParam is the parameter holding the current error port.
 	currentErrorPortParam *machine.Parameter
-	// Tokenizers caches tokenizers per input port using weak references.
-	Tokenizers map[values.Value]weak.Pointer[tokenizer.Tokenizer]
-	// Parsers caches parsers per input port using weak references.
-	Parsers map[values.Value]weak.Pointer[parser.Parser]
+	// Tokenizers caches tokenizers per input port.
+	//
+	// These are strong references: closing a port does not evict its cache
+	// entry, so the tokenizer (and its internal buffers) remain reachable
+	// as long as the port value itself is reachable as a map key. In
+	// long-running programs that open many transient ports, this can leak
+	// memory. If that becomes a problem, switch to weak.Pointer[T] (Go 1.24+)
+	// or add explicit eviction on port close.
+	//
+	// To diagnose: run with GODEBUG=gctrace=1 or use runtime/pprof to
+	// inspect heap; look for tokenizer.Tokenizer / parser.Parser objects
+	// retained via this map.
+	Tokenizers map[values.Value]*tokenizer.Tokenizer
+	// Parsers caches parsers per input port.
+	// Same retention caveat as Tokenizers above.
+	Parsers map[values.Value]*parser.Parser
 	// ProgramStartTime is used for current-jiffy to measure elapsed time.
 	ProgramStartTime = time.Now()
 )
@@ -53,8 +64,8 @@ func InitState() {
 	}
 	stateInitialized = true
 
-	Tokenizers = map[values.Value]weak.Pointer[tokenizer.Tokenizer]{}
-	Parsers = map[values.Value]weak.Pointer[parser.Parser]{}
+	Tokenizers = map[values.Value]*tokenizer.Tokenizer{}
+	Parsers = map[values.Value]*parser.Parser{}
 
 	// Initialize port parameters with default values
 	currentInputPortParam = machine.NewParameter(
