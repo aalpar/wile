@@ -34,11 +34,8 @@ Anthropic's Claude Code was used to help document, fill out the primitive librar
 # Build everything
 make
 
-# Build from go directory
-cd go && make build
-
 # Run tests
-cd go && make test
+make test
 ```
 
 ## Usage
@@ -89,11 +86,12 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 |---------|---------|
 | `machine/` | Virtual machine, compiler, macro expander |
 | `environment/` | Variable binding and scope management |
-| `syntax/` | First-class syntax objects with hygiene |
 | `values/` | Scheme value types (numbers, pairs, etc.) |
-| `match/` | Pattern matching engine for macros |
-| `parser/` | Scheme parser |
-| `tokenizer/` | Lexer |
+| `registry/` | Extension registration and primitives |
+| `internal/syntax/` | First-class syntax objects with hygiene |
+| `internal/match/` | Pattern matching engine for macros |
+| `internal/parser/` | Scheme parser |
+| `internal/tokenizer/` | Lexer |
 
 ## Hygiene Model
 
@@ -125,7 +123,7 @@ Wile provides a public API for embedding Scheme in Go programs via the `wile` pa
 ### Basic Usage
 
 ```go
-import "github.com/aalpar/wile/go/wile"
+import "github.com/aalpar/wile"
 
 // Create an engine
 engine, err := wile.NewEngine()

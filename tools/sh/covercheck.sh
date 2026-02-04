@@ -18,26 +18,26 @@ if [ ! -f "$COVERAGE_FILE" ]; then
 	exit 2
 fi
 
-MODULE="github.com/aalpar/wile/go"
+MODULE="github.com/aalpar/wile"
 
 # Packages excluded from coverage enforcement.
 # Entry points, registration/wiring, helpers, and test infrastructure.
 EXCLUDED_PKGS=(
 	"cmd"
-	"repl"
-	"forms"
-	"extensions/all"
-	"extensions/channels"
-	"extensions/concurrency"
-	"extensions/eval"
-	"extensions/exceptions"
-	"extensions/files"
-	"extensions/gointerop"
-	"extensions/io"
-	"extensions/math"
-	"extensions/system"
-	"extensions/threads"
-	"extensions/time"
+	"internal/repl"
+	"internal/forms"
+	"internal/extensions/all"
+	"internal/extensions/channels"
+	"internal/extensions/concurrency"
+	"internal/extensions/eval"
+	"internal/extensions/exceptions"
+	"internal/extensions/files"
+	"internal/extensions/gointerop"
+	"internal/extensions/io"
+	"internal/extensions/math"
+	"internal/extensions/system"
+	"internal/extensions/threads"
+	"internal/extensions/time"
 	"registry/helpers"
 	"registry/testhelpers"
 	"examples/embedding"
@@ -56,7 +56,7 @@ is_excluded() {
 
 # Compute per-package coverage from the raw coverage profile.
 # Each line (after the mode: header) looks like:
-#   github.com/aalpar/wile/go/values/integer.go:42.15,44.2 3 1
+#   github.com/aalpar/wile/values/integer.go:42.15,44.2 3 1
 # Fields: file:startLine.startCol,endLine.endCol numStatements count
 # We aggregate numStatements and covered (count>0) per package directory.
 

@@ -1,14 +1,29 @@
+GO=go
+GOLANGCI_LINT=golangci-lint
+GO_TEST=$(GO) test
+GO_BUILD=$(GO) build
+GO_CLEAN=$(GO) clean
+GO_MOD=$(GO) mod
+
 GO_BUILD_DIR=./build
 SH_TOOLS_DIR=./tools/sh
 
-DIST_DIR=dist
-TEST_DIR=test
+SOURCES=$(shell find . -type f -name "*.go" -print)
+EMBED_SOURCES=$(shell find . -type f -name "*.scm" -print)
+SOURCE_DIRS=$(shell go list -f "{{.Dir}}" ./...)
+BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
+BUILD_VERSION:=$(shell cat ./VERSION 2>/dev/null || echo "0.0.0")
+DIST_DIR=./dist
+TEST_DIR=./test
+MY_BIN=scheme
+
 DOCKER_IMAGE ?= wile
 DOCKER_PLATFORM ?=
 DOCKER_SHELL ?=
-SUBDIRS=$(shell cd go && go list -f '{{.Dir}}' ./...)
 
-# Build the scheme binary (delegates to go/Makefile).
+
+# Build the scheme binary to ./dist/scheme with embedded git SHA and version.
+# Rebuilds only when Go source files change.
 #   make build
 #
 # Cross-compile for a specific OS/architecture:
@@ -18,60 +33,96 @@ SUBDIRS=$(shell cd go && go list -f '{{.Dir}}' ./...)
 #   GOOS=darwin GOARCH=amd64 make build   # macOS Intel
 #   GOOS=windows GOARCH=amd64 make build  # Windows x86-64
 #
-# Docker build (builds and runs tests inside a container):
+# Docker build:
 #   docker build -f docker/Dockerfile -t wile .
-#   docker run wile                                    # run tests
-#   docker run wile ../dist/scheme --file example.scm  # run a file
+#   docker run wile                                  # run tests
+#   docker run wile ./dist/scheme --file example.scm # run a file
 #
 # Cross-platform Docker build:
 #   docker build --platform linux/amd64 -f docker/Dockerfile -t wile .
 #   docker build --platform linux/arm64 -f docker/Dockerfile -t wile .
 .PHONY: build
-build:
-	$(MAKE) -C go
+build: $(DIST_DIR)/$(MY_BIN)
 
-# Compile tests for all packages without running them (delegates to go/Makefile).
+$(DIST_DIR)/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
+	$(GO_BUILD) -o $(DIST_DIR)/$(MY_BIN) -ldflags "-X main.BuildSHA=$(BUILD_SHA) -X main.BuildVersion=$(BUILD_VERSION)" ./cmd
+
+# Compile tests for all packages without running them.
+# Useful for verifying that tests compile after refactoring.
 #   make buildtest
 .PHONY: buildtest
-buildtest: go
-	$(MAKE) -C $< $@
+buildtest:
+	for dir in $(SOURCE_DIRS); do \
+	    if [ -d "$$dir" ]; then \
+	        $(GO_TEST) -c -o /dev/null $$dir/...; \
+	    fi \
+	done
 
-# Run all tests with verbose output (delegates to go/Makefile).
+# Run all tests with verbose output.
 #   make test
 .PHONY: test
-test: go
-	mkdir -p $(TEST_DIR)
-	$(MAKE) -C $< $@
+test:
+	$(GO_TEST) -v ./...
 
-# Run tests with coverage reporting (delegates to go/Makefile).
+# Run all benchmarks with memory allocation statistics.
+#   make bench
+.PHONY: bench
+bench:
+	$(GO_TEST) -bench=. -benchmem ./...
+
+# Run tests with coverage and print per-function coverage summary.
+# Writes coverage profile to ./build/coverage.out.
 #   make cover
 .PHONY: cover
-cover: go
-	$(MAKE) -C $< $@
+cover:
+	@mkdir -p ./build
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+	$(GO) tool cover -func=$(GO_BUILD_DIR)/coverage.out
 
-# Run tests with coverage and enforce per-package threshold (80%) (delegates to go/Makefile).
+# Run tests with coverage and open an HTML report in the browser.
+# Writes coverage profile to ./build/coverage.out and HTML to ./build/coverage.html.
+#   make coverhtml
+.PHONY: coverhtml
+coverhtml:
+	@mkdir -p ./build
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+	$(GO) tool cover -html=$(GO_BUILD_DIR)/coverage.out -o $(GO_BUILD_DIR)/coverage.html
+	@echo "Coverage report: $(GO_BUILD_DIR)/coverage.html"
+	open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || xdg-open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || echo "Open $(GO_BUILD_DIR)/coverage.html in your browser"
+
+# Run tests with coverage and enforce per-package threshold (80%).
+# Excluded packages: cmd, repl, forms, extensions/*, registry/helpers,
+# registry/testhelpers, examples/embedding, integration.
 #   make covercheck
 .PHONY: covercheck
-covercheck: go
-	$(MAKE) -C $< $@
+covercheck:
+	@mkdir -p ./build
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./... || true
+	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 
-# Run golangci-lint with --fix to auto-correct fixable issues (delegates to go/Makefile).
-#   make fix
-.PHONY: fix
-fix:
-	$(MAKE) -C go $@
-
-# Run golangci-lint on all packages (delegates to go/Makefile).
+# Run golangci-lint on all packages.
 #   make lint
 .PHONY: lint
 lint:
-	$(MAKE) -C go $@
+	$(GOLANGCI_LINT) -v run ./...
 
-# Format all Go source files (delegates to go/Makefile).
+# Run golangci-lint with --fix to auto-correct fixable issues.
+#   make fix
+.PHONY: fix
+fix:
+	$(GOLANGCI_LINT) -v run --fix ./...
+
+# Format all Go source files via golangci-lint.
 #   make format
 .PHONY: format
 format:
-	$(MAKE) -C go $@
+	$(GOLANGCI_LINT) -v fmt -v ./...
+
+# Tidy go.mod: add missing and remove unused dependencies.
+#   make tidy
+.PHONY: tidy
+tidy:
+	$(GO_MOD) tidy -e -x
 
 # Remove all generated artifacts: build, test, module caches and output directories.
 #   make clean
@@ -81,35 +132,30 @@ clean: buildclean testclean modclean
 	    if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
 	done
 
-# Clear the Go build cache (delegates to go/Makefile).
+# Clear the Go build cache.
 #   make buildclean
 .PHONY: buildclean
 buildclean:
-	$(MAKE) -C go $@
+	$(GO_CLEAN) -cache
 
-# Clear the Go test and fuzz caches (delegates to go/Makefile).
+# Clear the Go test and fuzz caches.
 #   make testclean
 .PHONY: testclean
 testclean:
-	$(MAKE) -C go $@
+	$(GO_CLEAN) -testcache -fuzzcache
 
-# Clear the Go module download cache (delegates to go/Makefile).
+# Clear the Go module download cache.
 #   make modclean
 .PHONY: modclean
 modclean:
-	$(MAKE) -C go $@
+	$(GO_CLEAN) -modcache
 
-# Tidy go.mod: add missing and remove unused dependencies (delegates to go/Makefile).
-#   make tidy
-.PHONY: tidy
-tidy:
-	$(MAKE) -C go $@
-
-# Create an annotated git tag from VERSION (delegates to go/Makefile).
+# Create an annotated git tag from the version in ./VERSION.
 #   make tag
 .PHONY: tag
 tag:
-	$(MAKE) -C go $@
+	git tag -a $(BUILD_VERSION) -m "Release $(BUILD_VERSION)"
+	@echo "Created tag $(BUILD_VERSION)"
 
 # Bump the major version in VERSION (resets minor and patch to 0, preserves pre-release suffix).
 #   make bump-major
@@ -151,5 +197,3 @@ docker-build:
 .PHONY: docker-shell
 docker-shell:
 	DOCKER_IMAGE=$(DOCKER_IMAGE) $(SH_TOOLS_DIR)/docker-shell.sh $(DOCKER_SHELL)
-
-

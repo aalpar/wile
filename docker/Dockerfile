@@ -61,23 +61,19 @@ RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/i
 WORKDIR /wile
 
 # Copy go module files first for better layer caching
-COPY go/go.mod go/go.sum ./go/
+COPY go.mod go.sum ./
 
 # Download dependencies
-WORKDIR /wile/go
 RUN go mod download
 
 # Copy the rest of the source
-WORKDIR /wile
 COPY . .
 
 # Build the project
-WORKDIR /wile/go
 RUN make build
 
 # Verify build
-RUN ../dist/scheme --version || true
+RUN ./dist/scheme --version || true
 
 # Default command: run tests
 CMD ["make", "test"]
-
