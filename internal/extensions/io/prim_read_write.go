@@ -19,7 +19,6 @@ import (
 	"errors"
 	"io"
 	"unicode/utf8"
-	"weak"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -116,13 +115,15 @@ func PrimRead(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	prss, ok := Parsers[port]
-	if !ok || prss.Value() == nil {
-		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), true, port))
+	if !ok || prss == nil {
+		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
-	syn, err := prss.Value().ReadSyntax(context.TODO())
+	syn, err := prss.ReadSyntax(context.TODO())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
+			// Port is exhausted; evict the cached parser.
+			delete(Parsers, port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -163,12 +164,14 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 
 	tknz, ok := Tokenizers[port]
 	// Create a new tokenizer if none exists for the port
-	if !ok || tknz.Value() == nil {
-		tknz = weak.Make(tokenizer.NewTokenizer(port, false))
+	if !ok || tknz == nil {
+		tknz = tokenizer.NewTokenizer(port, false)
 		Tokenizers[port] = tknz
 	}
-	q, err := tknz.Value().Next()
+	q, err := tknz.Next()
 	if errors.Is(err, io.EOF) {
+		// Port is exhausted; evict the cached tokenizer.
+		delete(Tokenizers, port)
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -206,13 +209,15 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 
 	// Get or create a parser if one does not exist
 	prss, ok := Parsers[port]
-	if !ok || prss.Value() == nil {
-		prss = weak.Make(parser.NewParser(mc.EnvironmentFrame(), true, port))
+	if !ok || prss == nil {
+		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
-	q, err := prss.Value().ReadSyntax(context.TODO())
+	q, err := prss.ReadSyntax(context.TODO())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
+			// Port is exhausted; evict the cached parser.
+			delete(Parsers, port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}

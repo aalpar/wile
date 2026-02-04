@@ -1,6 +1,6 @@
 module github.com/aalpar/wile
 
-go 1.25
+go 1.23
 
 require (
 	github.com/ergochat/readline v0.1.3
