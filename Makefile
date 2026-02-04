@@ -17,6 +17,8 @@ DIST_DIR=./dist
 TEST_DIR=./test
 MY_BIN=scheme
 
+GORELEASER=goreleaser
+
 DOCKER_IMAGE ?= wile
 DOCKER_PLATFORM ?=
 DOCKER_SHELL ?=
@@ -92,7 +94,7 @@ buildtest:
 # Run all tests with verbose output.
 #   make test
 .PHONY: test
-test:
+test: build
 	$(GO_TEST) -v ./...
 
 # Run all benchmarks with memory allocation statistics.
@@ -208,6 +210,26 @@ bump-minor:
 .PHONY: bump-patch
 bump-patch:
 	$(SH_TOOLS_DIR)/bump-version.sh patch
+
+# Validate the .goreleaser.yml configuration.
+#   make release-check
+.PHONY: release-check
+release-check:
+	$(GORELEASER) check
+
+# Build a local snapshot release without publishing.
+# Produces archives and checksums in ./dist/.
+#   make release-snapshot
+.PHONY: release-snapshot
+release-snapshot:
+	$(GORELEASER) release --snapshot --clean
+
+# Build and publish a release to GitHub.
+# Requires a clean git tag (v*) on HEAD and GITHUB_TOKEN set.
+#   make release
+.PHONY: release
+release:
+	$(GORELEASER) release --clean
 
 # Build the Docker image containing the Go toolchain and compiled binary.
 # Delegates to tools/sh/docker-build.sh.
