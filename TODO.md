@@ -297,21 +297,14 @@ R7RS Missing Features
 
 **Extended Symbols (`|...|`):**
 - [x] Basic parsing, escape sequences, and verification complete
-- [ ] **Bug:** Unterminated extended symbols (`|foo` at EOF) silently produce a valid symbol token instead of an error. `readExtendedSymbol` exits the loop on `p.err == io.EOF` without distinguishing EOF from a closing `|`.
-
-**Inexact Digit Placeholder:**
-- [ ] R7RS allows `#` in inexact numbers (e.g., `1.2###`)
-- [ ] Not implemented
 
 ---
 
 ### Primitives
 
 **BigInteger:**
-- [ ] No automatic promotion from Integer when overflow
+- [x] Automatic promotion from Integer on overflow (resolved in `312cf48`)
 - [ ] No `#bigint` reader syntax
-- [ ] BigInteger type exists in `go/values/big_integer.go`
-- [ ] **Effort:** Medium - need overflow detection and promotion logic
 
 **BigFloat:**
 - [ ] No automatic promotion from Float
@@ -502,10 +495,6 @@ Event Callbacks
 Items that must be resolved before a 1.0 release.
 
 ### R7RS Conformance
-
-1. **Inexact digit placeholder** — R7RS allows `#` in inexact numbers (e.g., `1.2###`). Not implemented.
-
-2. **Non-decimal base fractions** — `#x10/2`, `#o11/2`, etc. Not implemented in tokenizer.
 
 ### User-Facing
 

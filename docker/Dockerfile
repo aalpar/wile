@@ -5,6 +5,9 @@
 #   ./build.sh
 # Or manually:
 #   docker build -f Dockerfile -t wile ..
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 -t your-username/multiarch-image:latest . --push
+#
 
 FROM golang:1.25-bookworm
 
@@ -29,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Compilers and linkers
     gcc \
     g++ \
+    gccgo \
     binutils \
     # Debugging and profiling
     gdb \

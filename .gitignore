@@ -3,7 +3,7 @@ private/
 
 # Build outputs
 dist/
-go/build/
+build/
 
 # IDE and editor directories
 .idea/

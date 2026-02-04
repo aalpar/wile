@@ -5,6 +5,9 @@ GO_BUILD=$(GO) build
 GO_CLEAN=$(GO) clean
 GO_MOD=$(GO) mod
 
+GO_BUILD_DIR=../build
+SH_TOOLS_DIR=../tools/sh
+
 SOURCES=$(shell find . -type f -name "*.go" -print)
 EMBED_SOURCES=$(shell find . -type f -name "*.scm" -print)
 SOURCE_DIRS=$(shell go list -f "{{.Dir}}" ./...)
@@ -55,13 +58,23 @@ test:
 	$(GO_TEST) -v ./...
 
 # Run tests with coverage and print per-function coverage summary.
-# Writes coverage profile to build/coverage.out.
+# Writes coverage profile to ../build/coverage.out.
 #   make cover
 .PHONY: cover
 cover:
-	@mkdir -p build
-	$(GO_TEST) -coverprofile=build/coverage.out ./...
-	$(GO) tool cover -func=build/coverage.out
+	@mkdir -p ../build
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+	$(GO) tool cover -func=$(GO_BUILD_DIR)/coverage.out
+
+# Run tests with coverage and enforce per-package threshold (80%).
+# Excluded packages: cmd, repl, forms, extensions/*, registry/helpers,
+# registry/testhelpers, examples/embedding, integration.
+#   make covercheck
+.PHONY: covercheck
+covercheck:
+	@mkdir -p ../build
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./... || true
+	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 
 # Run golangci-lint on all packages.
 #   make lint
@@ -117,18 +130,19 @@ tag:
 #   v0.8.5-alpha → v1.0.0-alpha
 .PHONY: bump-major
 bump-major:
-	../tools/sh/bump-version.sh major
+	$(SH_TOOLS_DIR)/bump-version.sh major
 
 # Bump the minor version in ../VERSION (resets patch to 0, preserves pre-release suffix).
 #   make bump-minor
 #   v0.8.5-alpha → v0.9.0-alpha
 .PHONY: bump-minor
 bump-minor:
-	../tools/sh/bump-version.sh minor
+	 $(SH_TOOLS_DIR)/bump-version.sh minor
 
 # Bump the patch version in ../VERSION (preserves pre-release suffix).
 #   make bump-patch
 #   v0.8.5-alpha → v0.8.6-alpha
 .PHONY: bump-patch
 bump-patch:
-	../tools/sh/bump-version.sh patch
+	 $(SH_TOOLS_DIR)/bump-version.sh patch
+
