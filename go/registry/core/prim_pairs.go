@@ -36,7 +36,7 @@ func PrimCons(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.4: It is an error to take the car of the empty list.
 func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	v, ok := o.(*values.Pair)
+	v, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "car: expected a pair but got %T", o)
 	}
@@ -53,7 +53,7 @@ func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.4: It is an error to take the cdr of the empty list.
 func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	v, ok := o.(*values.Pair)
+	v, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "cdr: expected a pair but got %T", o)
 	}
@@ -105,7 +105,7 @@ func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 	v := o
 	// Apply operations right-to-left (innermost first)
 	for i := len(ops) - 1; i >= 0; i-- {
-		p, ok := v.(*values.Pair)
+		p, ok := v.(values.Tuple)
 		if !ok {
 			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, v)
 		}

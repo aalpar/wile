@@ -131,7 +131,6 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		// Advance to the next token for the next ReadSyntax() call
 		p.cur, p.err = p.toks.Next()
 		// EOF is fine - it means there's nothing more to read
-		// FIXME: rework error return.
 		if p.err != nil && p.err != io.EOF {
 			p.toks = nil
 			return nil, p.err
