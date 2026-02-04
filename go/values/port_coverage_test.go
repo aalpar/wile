@@ -194,8 +194,8 @@ func TestStringOutputPort_Basic(t *testing.T) {
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
 
-	// Write
-	n, err := port.Write([]byte("hi"))
+	// WriteString
+	n, err := port.WriteString("hi")
 	c.Assert(err, qt.IsNil)
 	c.Assert(n, qt.Equals, 2)
 
@@ -274,8 +274,8 @@ func TestCharacterOutputPort_Basic(t *testing.T) {
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
 
-	// Write
-	n, err := port.Write([]byte("hi"))
+	// WriteString
+	n, err := port.WriteString("hi")
 	c.Assert(err, qt.IsNil)
 	c.Assert(n, qt.Equals, 2)
 

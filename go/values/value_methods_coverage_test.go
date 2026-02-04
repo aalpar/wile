@@ -76,8 +76,8 @@ func TestNativeError_EqualTo_Coverage(t *testing.T) {
 
 	c.Assert(err1.EqualTo(err1), qt.IsTrue)
 	c.Assert(err1.EqualTo(err2), qt.IsTrue)
-	c.Assert(err1.EqualTo(err3), qt.IsFalse)  // different message
-	c.Assert(err1.EqualTo(err4), qt.IsFalse)  // different kind
+	c.Assert(err1.EqualTo(err3), qt.IsFalse) // different message
+	c.Assert(err1.EqualTo(err4), qt.IsFalse) // different kind
 	c.Assert(err1.EqualTo(NewInteger(1)), qt.IsFalse)
 
 	var nilErr *NativeError

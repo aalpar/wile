@@ -41,6 +41,7 @@ type Options struct {
 	File        string `short:"f" long:"file" description:"Scheme file to run"`
 	LibraryPath string `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
 	Version     bool   `short:"V" long:"version" description:"Print version information and exit"`
+	Quiet       bool   `short:"q" long:"quiet" description:"Suppress informational messages"`
 }
 
 var (
@@ -86,7 +87,7 @@ func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	return registry
 }
 
-func setupSignals() {
+func setupSignals(quiet bool) {
 	sigChan := make(chan os.Signal, 1)
 	// Notify the channel about SIGQUIT signals
 	signal.Notify(sigChan, syscall.SIGQUIT)
@@ -107,12 +108,12 @@ func setupSignals() {
 		}
 	}()
 
-	// ... rest of your program ...
-	fmt.Fprintln(os.Stderr, "Program running, send SIGQUIT (Ctrl+\\) to dump stacks.")
+	if !quiet {
+		fmt.Fprintln(os.Stderr, "Program running, send SIGQUIT (Ctrl+\\) to dump stacks.")
+	}
 }
 
 func main() {
-	setupSignals()
 	var fin io.RuneReader
 	var fd *os.File
 
@@ -156,7 +157,9 @@ func main() {
 	// include file if any
 	if opts.File != "" {
 		var err1 error
-		log.Printf("reading file %q", opts.File)
+		if !opts.Quiet {
+			log.Printf("reading file %q", opts.File)
+		}
 		fd, err1 = os.Open(opts.File)
 		if err1 != nil {
 			Failf(err1, "Cannot open file %s", opts.File)
@@ -166,6 +169,7 @@ func main() {
 		return
 	}
 	// interactive REPL using the repl package
+	setupSignals(opts.Quiet)
 	runREPL(ctx, env)
 }
 

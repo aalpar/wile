@@ -658,7 +658,7 @@ func TestCoverage_ComplexInfNan(t *testing.T) {
 			name:      "1.0+nan.0i",
 			input:     "1.0+nan.0i",
 			checkReal: func(f float64) bool { return f == 1.0 },
-			checkImag: func(f float64) bool { return math.IsNaN(f) },
+			checkImag: math.IsNaN,
 		},
 		{
 			name:      "+inf.0+inf.0i",
