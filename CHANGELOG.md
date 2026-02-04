@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Automated release builds with prebuilt binaries for darwin/linux on arm64/amd64
+
 ## [1.0.0] - 2026-02-04
 
 ### Added

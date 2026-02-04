@@ -33,9 +33,9 @@ func getProjectRoot() string {
 	return filepath.Join(filepath.Dir(filename), "..")
 }
 
-// getSchemeBinary returns the path to the scheme binary.
+// getSchemeBinary returns the path to the scheme binary for the current platform.
 func getSchemeBinary() string {
-	return filepath.Join(getProjectRoot(), "dist", "scheme")
+	return filepath.Join(getProjectRoot(), "dist", runtime.GOOS, runtime.GOARCH, "scheme")
 }
 
 // getLibPath returns the path to the lib/ directory.

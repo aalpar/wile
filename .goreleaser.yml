@@ -1,0 +1,39 @@
+version: 2
+
+builds:
+  - id: scheme
+    binary: scheme
+    dir: ./cmd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -X main.BuildSHA={{ .ShortCommit }} -X main.BuildVersion={{ .Tag }}
+
+archives:
+  - id: scheme
+    ids:
+      - scheme
+    name_template: "wile-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+release:
+  header: |
+    ## Wile Scheme {{ .Tag }}
+  footer: |
+    **Full Changelog**: https://github.com/aalpar/wile/compare/{{ .PreviousTag }}...{{ .Tag }}
