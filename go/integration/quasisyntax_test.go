@@ -268,15 +268,15 @@ func TestQuasisyntaxRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Define a recursive macro using quasisyntax
+	// Demonstrates transparent syntax operations: car, cdr, cadr, cddr work directly on stx
 	_, err = engine.Eval(context.Background(), `
 		(define-syntax my-list
 		  (lambda (stx)
-		    (let ((datum (syntax->datum stx)))
-		      (if (null? (cdr datum))
-		          (quasisyntax '())
-		          (let ((first (cadr datum))
-		                (rest (cons 'my-list (cddr datum))))
-		            (quasisyntax (cons #,first #,rest)))))))
+		    (if (null? (cdr stx))
+		        (quasisyntax '())
+		        (let ((first (cadr stx))
+		              (rest (cons 'my-list (cddr stx))))
+		          (quasisyntax (cons #,first #,rest))))))
 	`)
 	c.Assert(err, qt.IsNil)
 
