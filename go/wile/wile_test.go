@@ -16,6 +16,7 @@ package wile
 
 import (
 	"errors"
+	"math/big"
 	"testing"
 
 	"github.com/aalpar/wile/go/registry"
@@ -62,6 +63,76 @@ func TestNewList(t *testing.T) {
 	t.Run("non-empty list", func(t *testing.T) {
 		v := NewList(NewInteger(1), NewInteger(2), NewInteger(3))
 		c.Assert(v.SchemeString(), qt.Equals, "(1 2 3)")
+	})
+}
+
+func TestNewBigInteger(t *testing.T) {
+	c := qt.New(t)
+	bigInt := big.NewInt(123456789)
+	v := NewBigInteger(bigInt)
+	c.Assert(v.SchemeString(), qt.Equals, "123456789")
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewBigIntegerFromInt64(t *testing.T) {
+	c := qt.New(t)
+	v := NewBigIntegerFromInt64(9223372036854775807)
+	c.Assert(v.SchemeString(), qt.Equals, "9223372036854775807")
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewBigIntegerFromString(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("valid base 10", func(t *testing.T) {
+		v := NewBigIntegerFromString("123456789012345678901234567890", 10)
+		c.Assert(v, qt.IsNotNil)
+		c.Assert(v.SchemeString(), qt.Equals, "123456789012345678901234567890")
+	})
+
+	t.Run("valid base 16", func(t *testing.T) {
+		v := NewBigIntegerFromString("DEADBEEF", 16)
+		c.Assert(v, qt.IsNotNil)
+		c.Assert(v.SchemeString(), qt.Equals, "3735928559")
+	})
+
+	t.Run("invalid string", func(t *testing.T) {
+		v := NewBigIntegerFromString("not a number", 10)
+		c.Assert(v, qt.IsNil)
+	})
+}
+
+func TestNewBigFloat(t *testing.T) {
+	c := qt.New(t)
+	bigFloat := big.NewFloat(3.141592653589793)
+	v := NewBigFloat(bigFloat)
+	c.Assert(v, qt.IsNotNil)
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewBigFloatFromFloat64(t *testing.T) {
+	c := qt.New(t)
+	v := NewBigFloatFromFloat64(2.718281828459045)
+	c.Assert(v, qt.IsNotNil)
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewBigFloatFromString(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("valid float string", func(t *testing.T) {
+		v := NewBigFloatFromString("1.23456789012345678901234567890")
+		c.Assert(v, qt.IsNotNil)
+	})
+
+	t.Run("scientific notation", func(t *testing.T) {
+		v := NewBigFloatFromString("1.23e10")
+		c.Assert(v, qt.IsNotNil)
+	})
+
+	t.Run("invalid string", func(t *testing.T) {
+		v := NewBigFloatFromString("not a float")
+		c.Assert(v, qt.IsNil)
 	})
 }
 

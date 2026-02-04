@@ -15,6 +15,8 @@
 package wile
 
 import (
+	"math/big"
+
 	"github.com/aalpar/wile/go/values"
 )
 
@@ -93,6 +95,46 @@ func NewBoolean(b bool) Value {
 		return wrapValue(values.TrueValue)
 	}
 	return wrapValue(values.FalseValue)
+}
+
+// NewBigInteger creates a big integer value from a big.Int.
+func NewBigInteger(n *big.Int) Value {
+	return wrapValue(values.NewBigInteger(n))
+}
+
+// NewBigIntegerFromInt64 creates a big integer value from an int64.
+func NewBigIntegerFromInt64(n int64) Value {
+	return wrapValue(values.NewBigIntegerFromInt64(n))
+}
+
+// NewBigIntegerFromString creates a big integer from a string in the given base.
+// Returns nil if the string is not a valid integer.
+func NewBigIntegerFromString(s string, base int) Value {
+	v := values.NewBigIntegerFromString(s, base)
+	if v == nil {
+		return nil
+	}
+	return wrapValue(v)
+}
+
+// NewBigFloat creates a big float value from a big.Float.
+func NewBigFloat(f *big.Float) Value {
+	return wrapValue(values.NewBigFloat(f))
+}
+
+// NewBigFloatFromFloat64 creates a big float value from a float64.
+func NewBigFloatFromFloat64(f float64) Value {
+	return wrapValue(values.NewBigFloatFromFloat64(f))
+}
+
+// NewBigFloatFromString creates a big float from a string.
+// Returns nil if the string is not a valid float.
+func NewBigFloatFromString(s string) Value {
+	v := values.NewBigFloatFromString(s)
+	if v == nil {
+		return nil
+	}
+	return wrapValue(v)
 }
 
 // NewList creates a Scheme list from values.
