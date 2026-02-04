@@ -50,7 +50,7 @@ Delete duplicate functions from `go/extensions/math/prim_math.go` and import fro
 
 | File | Action |
 |------|--------|
-| `go/extensions/math/prim_math.go` | Delete lines 29-91, add import `"github.com/aalpar/wile/go/registry/helpers"` |
+| `go/extensions/math/prim_math.go` | Delete lines 29-91, add import `"github.com/aalpar/wile/registry/helpers"` |
 
 ### Verification
 
@@ -91,8 +91,8 @@ Create `go/registry/helpers/extract.go` with typed extraction helpers:
 package helpers
 
 import (
-    "github.com/aalpar/wile/go/machine"
-    "github.com/aalpar/wile/go/values"
+    "github.com/aalpar/wile/machine"
+    "github.com/aalpar/wile/values"
 )
 
 // ExtractString extracts a *String from the argument at idx.
@@ -485,8 +485,8 @@ import (
     "context"
     "errors"
 
-    "github.com/aalpar/wile/go/syntax"
-    "github.com/aalpar/wile/go/values"
+    "github.com/aalpar/wile/syntax"
+    "github.com/aalpar/wile/values"
 )
 
 // CompileTimeExecuteResult holds the result of compile-time execution.

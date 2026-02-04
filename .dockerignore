@@ -4,7 +4,7 @@
 
 # Build artifacts
 dist/
-go/build/
+build/
 
 # IDE and editor files
 .idea/
@@ -21,7 +21,7 @@ Thumbs.db
 plans/
 docs/
 *.md
-!go/**/CLAUDE.md
+!**/CLAUDE.md
 
 # Test artifacts
 *.test

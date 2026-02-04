@@ -378,9 +378,9 @@ import (
     "io"
     "strings"
 
-    "github.com/aalpar/wile/go/environment"
-    "github.com/aalpar/wile/go/syntax"
-    "github.com/aalpar/wile/go/values"
+    "github.com/aalpar/wile/environment"
+    "github.com/aalpar/wile/internal/syntax"
+    "github.com/aalpar/wile/values"
 
     "github.com/jessevdk/go-flags"
 )
