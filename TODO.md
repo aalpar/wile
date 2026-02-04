@@ -304,6 +304,7 @@ R7RS Missing Features
 
 **BigInteger:**
 - [x] Automatic promotion from Integer on overflow (resolved in `312cf48`)
+- [x] Unterminated extended symbol error handling (resolved in `829ef8d`)
 - [ ] No `#bigint` reader syntax
 
 **BigFloat:**
@@ -496,6 +497,8 @@ Items that must be resolved before a 1.0 release.
 
 ### R7RS Conformance
 
+- [x] All R7RS conformance issues resolved (see `plans/R7RS_CONFORMANCE_PLAN.md`)
+
 ### User-Facing
 
-(No remaining items — REPL startup message already outputs to stderr.)
+- [x] REPL banner moved to REPL-only path; `--quiet` flag added
