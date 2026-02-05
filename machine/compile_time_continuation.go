@@ -1917,84 +1917,22 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	if transformerExpr == nil {
 		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing transformer expression")
 	}
-	// Check if transformer is a syntax-rules form
-	transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
-	if !ok {
-		// For non-syntax-rules transformers, we would need to compile and evaluate
-		// the transformer expression at compile time. For now, just support syntax-rules
-		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
-	}
-	car := transformerPairExpr.SyntaxCar()
-	if car == nil {
-		// For non-syntax-rules transformers, we would need to compile and evaluate
-		// the transformer expression at compile time. For now, just support syntax-rules
-		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
-	}
-	sym, ok := car.(*syntax.SyntaxSymbol)
-	if !ok {
-		// For non-syntax-rules transformers, we would need to compile and evaluate
-		// the transformer expression at compile time. For now, just support syntax-rules
-		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
-	}
-	symVal := sym.Unwrap()
-	if symVal == nil {
-		// For non-syntax-rules transformers, we would need to compile and evaluate
-		// the transformer expression at compile time. For now, just support syntax-rules
-		return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
-	}
-	symbol, ok := symVal.(*values.Symbol)
-	if ok && symbol.Key == "syntax-rules" {
-		// Compile syntax-rules directly
-		closure, err := CompileSyntaxRules(ctctx.ctx, p.env, transformerPairExpr)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "could not compile syntax-rules transformer")
-		}
 
-		// Store the transformer in the expand phase environment with BindingTypeSyntax
-		// R7RS requires syntax bindings to live in the expand phase, separate from runtime bindings
-		expandEnv := p.env.Expand()
-		globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
-		if !created {
-			// Update existing binding
-			globalIndex = expandEnv.GetGlobalIndex(keyword)
-		}
-		if globalIndex != nil {
-			// Set scopes from the keyword symbol for hygiene
-			// This ensures local define-syntax bindings have correct scopes for lookup
-			symbolScopes := keywordSym.Scopes()
-			binding := expandEnv.GetGlobalBinding(globalIndex)
-			if binding != nil && symbolScopes != nil {
-				binding.SetScopes(symbolScopes)
-			}
-
-			err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
-			if err != nil {
-				return err
-			}
-		}
-
-		// define-syntax is compile-time only, emit no runtime operations
-		return nil
+	// Compile the transformer (supports syntax-rules and lambda)
+	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "could not compile transformer")
 	}
-	// Check if transformer is a lambda (procedural macro)
-	symbol, ok = symVal.(*values.Symbol)
-	if ok && symbol.Key == "lambda" {
-		// Compile and evaluate the lambda at compile time to get a transformer closure
-		closure, err := p.compileAndEvalTransformer(transformerPairExpr)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "could not compile lambda transformer")
-		}
 
-		// Store the transformer in the expand phase environment with BindingTypeSyntax
-		expandEnv := p.env.Expand()
-		globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
-		if !created {
-			globalIndex = expandEnv.GetGlobalIndex(keyword)
-		}
-		if globalIndex == nil {
-			return nil
-		}
-
+	// Store the transformer in the expand phase environment with BindingTypeSyntax
+	// R7RS requires syntax bindings to live in the expand phase, separate from runtime bindings
+	expandEnv := p.env.Expand()
+	globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+	if !created {
+		// Update existing binding
+		globalIndex = expandEnv.GetGlobalIndex(keyword)
+	}
+	if globalIndex != nil {
 		// Set scopes from the keyword symbol for hygiene
 		// This ensures local define-syntax bindings have correct scopes for lookup
 		symbolScopes := keywordSym.Scopes()
@@ -2007,56 +1945,10 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		if err != nil {
 			return err
 		}
-
-		return nil
-	}
-	// For non-syntax-rules transformers, we would need to compile and evaluate
-	// the transformer expression at compile time. For now, just support syntax-rules
-	return values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: only syntax-rules transformers are currently supported")
-}
-
-// compileAndEvalTransformer compiles a lambda expression and evaluates it at
-// compile time to produce a closure that can be used as a syntax transformer.
-func (p *CompileTimeContinuation) compileAndEvalTransformer(transformerExpr syntax.SyntaxValue) (*MachineClosure, error) {
-	// Create a fresh template for the transformer
-	tpl := NewNativeTemplate(0, 0, false)
-
-	// Use the expand phase environment for compiling the transformer
-	// since transformers operate at the expand phase
-	expandEnv := p.env.Expand()
-
-	// Expand the transformer expression first
-	ectx := NewExpandTimeCallContext()
-	expandedExpr, err := NewExpanderTimeContinuation(expandEnv).ExpandExpression(ectx, transformerExpr)
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error expanding transformer")
 	}
 
-	// Compile the transformer lambda to bytecode
-	// Use inTail=false and inExpression=true for compile-time evaluation
-	cctx := NewCompileTimeCallContext(false, true, expandEnv)
-	compiler := NewCompiletimeContinuation(tpl, expandEnv)
-	err = compiler.CompileExpression(cctx, expandedExpr)
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error compiling transformer")
-	}
-
-	// Execute the compiled template at compile time to get the closure
-	cont := NewMachineContinuation(nil, tpl, expandEnv)
-	mc := NewMachineContext(context.Background(), cont)
-	err = mc.Run()
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error evaluating transformer")
-	}
-
-	// The result should be a closure
-	result := mc.GetValue()
-	closure, ok := result.(*MachineClosure)
-	if !ok {
-		return nil, values.NewForeignErrorf("define-syntax: transformer must be a procedure, got %T", result)
-	}
-
-	return closure, nil
+	// define-syntax is compile-time only, emit no runtime operations
+	return nil
 }
 
 // CompileCondExpand compiles a cond-expand expression.
