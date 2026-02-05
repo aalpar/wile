@@ -161,22 +161,28 @@ func main() {
 			if !opts.Quiet {
 				log.Printf("reading file %q", filename)
 			}
-			fd, err := os.Open(filename)
+			descriptor, err := os.Open(filename)
 			if err != nil {
 				Failf(err, "Cannot open file %s", filename)
 			}
-			isLastFile := i == len(opts.File)-1
-			if opts.Interactive || !isLastFile {
-				// Load file silently (all files in interactive mode, or non-last files in batch mode)
-				if err := runtime.Load(ctx, env, fd, filename); err != nil {
-					Failf(err)
+			func(fn string, fd *os.File) {
+				defer func() {
+					_ = fd.Close()
+				}()
+				isLastFile := i == len(opts.File)-1
+				if opts.Interactive || !isLastFile {
+					// Load file silently (all files in interactive mode, or non-last files in batch mode)
+					err = runtime.Load(ctx, env, fd, fn)
+					if err != nil {
+						Failf(err)
+					}
+				} else {
+					// Run last file (print results) and exit in non-interactive mode
+					fin = bufio.NewReader(fd)
+					runFile(ctx, env, fin, fn)
+					return
 				}
-			} else {
-				// Run last file (print results) and exit in non-interactive mode
-				fin = bufio.NewReader(fd)
-				runFile(ctx, env, fin, filename)
-				return
-			}
+			}(filename, descriptor)
 		}
 	}
 	// interactive REPL using the repl package
