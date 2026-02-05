@@ -824,7 +824,7 @@ func TestCoverage_UnexpectedCloseParen(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader(")"))
 	_, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(strings.Contains(err.Error(), "unexpected close parenthesis"), qt.IsTrue)
+	c.Assert(strings.Contains(err.Error(), "unexpected close )"), qt.IsTrue)
 }
 
 // ---------------------------------------------------------------------------

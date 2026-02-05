@@ -96,6 +96,42 @@ func (p *Parser) curr() tokenizer.Token {
 	return p.cur
 }
 
+// isListOpener returns true if the token type is ( or [.
+// Provided for symmetry with isListCloser; may be useful for future code.
+func (p *Parser) isListOpener(t tokenizer.TokenizerState) bool { //nolint:unused
+	return t == tokenizer.TokenizerStateOpenParen || t == tokenizer.TokenizerStateOpenBracket
+}
+
+// isListCloser returns true if the token type is ) or ].
+func (p *Parser) isListCloser(t tokenizer.TokenizerState) bool {
+	return t == tokenizer.TokenizerStateCloseParen || t == tokenizer.TokenizerStateCloseBracket
+}
+
+// matchingClose returns the expected close delimiter for the given opener.
+// R7RS §2.1: ( must match ), and [ must match ].
+func (p *Parser) matchingClose(opener tokenizer.TokenizerState) tokenizer.TokenizerState {
+	if opener == tokenizer.TokenizerStateOpenBracket {
+		return tokenizer.TokenizerStateCloseBracket
+	}
+	return tokenizer.TokenizerStateCloseParen
+}
+
+// delimiterString returns a human-readable string for a delimiter token type.
+func (p *Parser) delimiterString(t tokenizer.TokenizerState) string {
+	switch t {
+	case tokenizer.TokenizerStateOpenParen:
+		return "("
+	case tokenizer.TokenizerStateCloseParen:
+		return ")"
+	case tokenizer.TokenizerStateOpenBracket:
+		return "["
+	case tokenizer.TokenizerStateCloseBracket:
+		return "]"
+	default:
+		return "unknown"
+	}
+}
+
 // Text returns the current text being parsed.
 func (p *Parser) Text() string {
 	return p.toks.Text()
@@ -122,10 +158,10 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 			p.err = err
 			return nil, p.err
 		}
-		// R7RS: unexpected close parenthesis at top level is a read error
-		if q == nil && p.cur != nil && p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+		// R7RS: unexpected close delimiter at top level is a read error
+		if q == nil && p.cur != nil && p.isListCloser(p.cur.Type()) {
 			p.toks = nil
-			p.err = NewParserErrorf(p.cur, "unexpected close parenthesis")
+			p.err = NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type()))
 			return nil, p.err
 		}
 		// Advance to the next token for the next ReadSyntax() call
@@ -227,23 +263,31 @@ func (p *Parser) processFoldCaseDirective(d *syntax.SyntaxDirective) {
 // readLabeledList reads a list into a pre-created placeholder pair.
 // This enables circular references where the list refers to itself via datum labels.
 // The placeholder must already be registered in datumLabels before calling this.
+// The opener parameter indicates whether ( or [ was used, for bracket matching.
 //
 // R7RS §2.4: Datum labels enable representing shared/circular structures.
 // For #0=(1 . #0#), we:
 //  1. Pre-create a pair and register it as label 0
 //  2. Read the list contents, which may include #0# references
 //  3. Populate the pair with the read values
-func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
-	// Skip the opening paren
+func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenizer.TokenizerState) (syntax.SyntaxValue, error) {
+	expectedClose := p.matchingClose(opener)
+
+	// Skip the opening paren/bracket
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
 		return nil, p.err
 	}
 
-	// Handle empty list: ()
-	if p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+	// Handle empty list: () or []
+	if p.cur.Type() == expectedClose {
 		// Empty list - return the placeholder unchanged (nil . nil)
 		return placeholder, nil
+	}
+	// Check for bracket mismatch on close
+	if p.isListCloser(p.cur.Type()) && p.cur.Type() != expectedClose {
+		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
 	}
 
 	// Read the first element
@@ -259,7 +303,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxV
 		return nil, p.err
 	}
 
-	// Check for improper list: (a . b)
+	// Check for improper list: (a . b) or [a . b]
 	if p.cur.Type() == tokenizer.TokenizerStateCons {
 		// Skip the dot
 		p.cur, p.err = p.toks.Next()
@@ -272,27 +316,37 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxV
 			return nil, err
 		}
 		placeholder.SetCdr(cdr)
-		// Advance past the cdr and expect close paren
+		// Advance past the cdr and expect matching close delimiter
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.err
 		}
-		if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
-			return nil, NewParserErrorf(p.cur, "expected ')' after improper list cdr")
+		if p.cur.Type() != expectedClose {
+			if p.isListCloser(p.cur.Type()) {
+				return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			}
+			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
+				p.delimiterString(expectedClose))
 		}
 		return placeholder, nil
 	}
 
 	// Check for end of list
-	if p.cur.Type() == tokenizer.TokenizerStateCloseParen {
+	if p.cur.Type() == expectedClose {
 		// Single element list - set cdr to empty list
 		placeholder.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
 		return placeholder, nil
 	}
+	// Check for bracket mismatch
+	if p.isListCloser(p.cur.Type()) && p.cur.Type() != expectedClose {
+		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+	}
 
 	// Continue reading remaining elements
 	current := placeholder
-	for p.cur.Type() != tokenizer.TokenizerStateCloseParen && p.cur.Type() != tokenizer.TokenizerStateCons {
+	for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
 		// Create a new pair for this element
 		nextPair := p.wrapSyntaxPair(nil, nil, p.cur)
 
@@ -314,8 +368,9 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxV
 		}
 	}
 
-	// Handle improper list ending: (a b . c)
-	if p.cur.Type() == tokenizer.TokenizerStateCons {
+	// Handle improper list ending: (a b . c) or [a b . c]
+	switch {
+	case p.cur.Type() == tokenizer.TokenizerStateCons:
 		// Skip the dot
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
@@ -327,17 +382,26 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair) (syntax.SyntaxV
 			return nil, err
 		}
 		current.SetCdr(cdr)
-		// Advance past the cdr and expect close paren
+		// Advance past the cdr and expect matching close delimiter
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.err
 		}
-		if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
-			return nil, NewParserErrorf(p.cur, "expected ')' after improper list cdr")
+		if p.cur.Type() != expectedClose {
+			if p.isListCloser(p.cur.Type()) {
+				return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			}
+			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
+				p.delimiterString(expectedClose))
 		}
-	} else {
+	case p.cur.Type() == expectedClose:
 		// Proper list - terminate with empty list
 		current.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
+	case p.isListCloser(p.cur.Type()):
+		// Bracket mismatch
+		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
 	}
 
 	return placeholder, nil
@@ -641,12 +705,13 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		// For these, we pre-register a placeholder to support circular references
 		var v syntax.SyntaxValue
 		switch p.cur.Type() {
-		case tokenizer.TokenizerStateOpenParen:
+		case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
 			// Pre-register an empty pair for potential circular references
+			opener := p.cur.Type()
 			placeholder := p.wrapSyntaxPair(nil, nil, p.cur)
 			p.datumLabels[labelNum] = placeholder
 			// Now read the list contents, which can reference this label
-			v, p.err = p.readLabeledList(placeholder)
+			v, p.err = p.readLabeledList(placeholder, opener)
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
@@ -710,7 +775,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
 		q = p.wrapSyntaxDatumComment(beginTok.String(), v, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateOpenParen:
+	case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
+		// R7RS §2.1: ( and [ are equivalent for opening lists, but must match
+		opener := p.cur.Type()
+		expectedClose := p.matchingClose(opener)
 		var pr syntax.SyntaxValue
 		pr = p.wrapSyntaxPair(nil, nil, p.cur)
 		p.cur, p.err = p.toks.Next()
@@ -719,13 +787,13 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		q0 := pr
 		pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
-		for p.cur.Type() != tokenizer.TokenizerStateCloseParen && p.cur.Type() != tokenizer.TokenizerStateCons {
+		for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
 			var v syntax.SyntaxValue
 			v, _, p.err = p.readSyntax()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			// After skipping comments, we may have landed on a delimiter (close paren or cons)
+			// After skipping comments, we may have landed on a delimiter (close paren/bracket or cons)
 			// In that case, readSyntax returns nil and we should exit the loop
 			if v == nil {
 				break
@@ -739,32 +807,42 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 				return nil, p.cur, p.err
 			}
 		}
-		if p.cur.Type() == tokenizer.TokenizerStateCons {
+		switch {
+		case p.cur.Type() == tokenizer.TokenizerStateCons:
 			// skip the '.' token
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			// read first value in list
+			// read cdr value in improper list
 			var v syntax.SyntaxValue
 			v, _, p.err = p.readSyntax()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
 			pr = v
-			// ??
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
-				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotACloseParen, p.cur, "expected close parenthesis after dotted pair, got %s", p.cur.String())
+			// Check for bracket mismatch
+			if p.cur.Type() != expectedClose {
+				if p.isListCloser(p.cur.Type()) {
+					return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+						p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+				}
+				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
+					p.delimiterString(expectedClose), p.cur.String())
 			}
 			pr0.SetCdr(pr)
-		} else {
-			// CloseParen was not found, so we assume the list is empty.
+		case p.cur.Type() == expectedClose:
+			// Proper list terminated with matching delimiter
 			pr = p.wrapSyntaxEmptyList(p.cur)
 			pr0.SetCdr(pr)
+		case p.isListCloser(p.cur.Type()):
+			// Bracket mismatch
+			return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+				p.delimiterString(opener), p.delimiterString(p.cur.Type()))
 		}
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVector:
@@ -1181,7 +1259,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q1 := values.NewString(p.cur.Value())
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateCloseParen:
+	case tokenizer.TokenizerStateCloseParen, tokenizer.TokenizerStateCloseBracket:
+		// Close delimiters return nil to signal end of compound form
 		return q, p.cur, nil
 	}
 	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
