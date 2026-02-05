@@ -34,21 +34,21 @@ import (
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	primitives := []PhaseEntry[PrimitiveExpanderFunc]{
-		// Forms that return unchanged (no expansion)
-		{"quote", (*ExpanderTimeContinuation).expandQuote},
-		{"define-syntax", (*ExpanderTimeContinuation).expandDefineSyntax},
-		{"quasiquote", (*ExpanderTimeContinuation).expandQuasiquote},
-		{"unquote", (*ExpanderTimeContinuation).expandUnquote},
-		{"unquote-splicing", (*ExpanderTimeContinuation).expandUnquoteSplicing},
-		{"include", (*ExpanderTimeContinuation).expandInclude},
-		{"include-ci", (*ExpanderTimeContinuation).expandIncludeCi},
-		{"cond-expand", (*ExpanderTimeContinuation).expandCondExpand},
-		{"syntax", (*ExpanderTimeContinuation).expandSyntaxForm},
-		{"syntax-case", (*ExpanderTimeContinuation).expandSyntaxCase},
-		{"quasisyntax", (*ExpanderTimeContinuation).expandQuasisyntax},
-		{"unsyntax", (*ExpanderTimeContinuation).expandUnsyntax},
-		{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnsyntaxSplicing},
-		{"with-syntax", (*ExpanderTimeContinuation).expandWithSyntax},
+		// Forms that return unchanged (no expansion needed at expand time)
+		{"quote", (*ExpanderTimeContinuation).expandUnchanged},
+		{"define-syntax", (*ExpanderTimeContinuation).expandUnchanged},
+		{"quasiquote", (*ExpanderTimeContinuation).expandUnchanged},
+		{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
+		{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
+		{"include", (*ExpanderTimeContinuation).expandUnchanged},
+		{"include-ci", (*ExpanderTimeContinuation).expandUnchanged},
+		{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
+		{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
+		{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
+		{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
+		{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
+		{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnchanged},
+		{"with-syntax", (*ExpanderTimeContinuation).expandUnchanged},
 		{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 		{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 

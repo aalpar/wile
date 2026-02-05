@@ -31,77 +31,30 @@ func newExpanderEnv() (*environment.EnvironmentFrame, *ExpanderTimeContinuation)
 	return env, expander
 }
 
-// --- Primitive expander stubs ---
+// --- Primitive expander: expandUnchanged ---
 
-// TestExpandQuasisyntax_ReturnsUnchanged verifies that the quasisyntax
-// primitive expander returns the form unchanged (it's handled at compile time).
-func TestExpandQuasisyntax_ReturnsUnchanged(t *testing.T) {
+// TestExpandUnchanged_ReturnsFormUnchanged verifies that expandUnchanged
+// returns the form as (sym . expr) without any transformation.
+func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
 	ectx := NewExpandTimeCallContext()
 	sctx := syntax.NewZeroValueSourceContext()
 
-	sym := syntax.NewSyntaxSymbol("quasisyntax", sctx)
-	body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(1), sctx))
+	// Test with various form names that use expandUnchanged
+	testCases := []string{"quote", "quasiquote", "unsyntax", "unsyntax-splicing", "with-syntax"}
+	for _, formName := range testCases {
+		sym := syntax.NewSyntaxSymbol(formName, sctx)
+		body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(1), sctx))
 
-	result, err := expander.expandQuasisyntax(ectx, sym, body)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.IsNotNil)
-	// Result is (quasisyntax . body) — returned unchanged
-	pair, ok := result.(*syntax.SyntaxPair)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, "quasisyntax")
-}
-
-// TestExpandUnsyntax_ReturnsUnchanged verifies that unsyntax returns unchanged.
-func TestExpandUnsyntax_ReturnsUnchanged(t *testing.T) {
-	c := qt.New(t)
-	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext()
-	sctx := syntax.NewZeroValueSourceContext()
-
-	sym := syntax.NewSyntaxSymbol("unsyntax", sctx)
-	body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(1), sctx))
-
-	result, err := expander.expandUnsyntax(ectx, sym, body)
-	c.Assert(err, qt.IsNil)
-	pair, ok := result.(*syntax.SyntaxPair)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, "unsyntax")
-}
-
-// TestExpandUnsyntaxSplicing_ReturnsUnchanged verifies unsyntax-splicing returns unchanged.
-func TestExpandUnsyntaxSplicing_ReturnsUnchanged(t *testing.T) {
-	c := qt.New(t)
-	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext()
-	sctx := syntax.NewZeroValueSourceContext()
-
-	sym := syntax.NewSyntaxSymbol("unsyntax-splicing", sctx)
-	body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(1), sctx))
-
-	result, err := expander.expandUnsyntaxSplicing(ectx, sym, body)
-	c.Assert(err, qt.IsNil)
-	pair, ok := result.(*syntax.SyntaxPair)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, "unsyntax-splicing")
-}
-
-// TestExpandWithSyntax_ReturnsUnchanged verifies with-syntax returns unchanged.
-func TestExpandWithSyntax_ReturnsUnchanged(t *testing.T) {
-	c := qt.New(t)
-	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext()
-	sctx := syntax.NewZeroValueSourceContext()
-
-	sym := syntax.NewSyntaxSymbol("with-syntax", sctx)
-	body := syntax.SyntaxList(sctx)
-
-	result, err := expander.expandWithSyntax(ectx, sym, body)
-	c.Assert(err, qt.IsNil)
-	pair, ok := result.(*syntax.SyntaxPair)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, "with-syntax")
+		result, err := expander.expandUnchanged(ectx, sym, body)
+		c.Assert(err, qt.IsNil, qt.Commentf("form: %s", formName))
+		c.Assert(result, qt.IsNotNil, qt.Commentf("form: %s", formName))
+		// Result is (formName . body) — returned unchanged
+		pair, ok := result.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("form: %s", formName))
+		c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, formName)
+	}
 }
 
 // --- ExpandPrimitiveForm ---
