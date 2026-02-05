@@ -29,6 +29,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	wileruntime "github.com/aalpar/wile/runtime"
 
 	"github.com/ergochat/readline"
 )
@@ -354,33 +355,25 @@ func (p *lineReader) ReadLine() (string, error) {
 }
 
 // Compile expands and compiles a syntax expression into a native template.
-// This is a standalone function that can be used outside of a REPL context.
+//
+// Deprecated: Use [github.com/aalpar/wile/runtime.Compile] instead.
+// This function delegates to the runtime package.
 func Compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
-
-	ectx := machine.NewExpandTimeCallContext()
-	stx1, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
-	if err != nil {
-		return nil, fmt.Errorf("expansion error: %w", err)
-	}
-
-	// Use inTail=false for top-level expressions
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, stx1)
-	if err != nil {
-		return nil, fmt.Errorf("compilation error: %w", err)
-	}
-	return tpl, nil
+	return wileruntime.Compile(env, expr)
 }
 
 // Run executes a compiled template and returns the result values.
-// This is a standalone function that can be used outside of a REPL context.
+//
+// Deprecated: Use [github.com/aalpar/wile/runtime.Run] instead.
+// This function delegates to the runtime package.
 func Run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(ctx, cont)
-	err := mc.RunWithEscapeHandling()
-	if err != nil {
-		return nil, err
-	}
-	return mc.GetValues(), nil
+	return wileruntime.Run(ctx, tpl, env)
+}
+
+// Load reads and evaluates Scheme expressions from a reader into the environment.
+//
+// Deprecated: Use [github.com/aalpar/wile/runtime.Load] instead.
+// This function delegates to the runtime package.
+func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, filename string) error {
+	return wileruntime.Load(ctx, env, r, filename)
 }

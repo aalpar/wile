@@ -23,7 +23,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	gruntime "runtime"
+	goruntime "runtime"
 	"strings"
 	"syscall"
 
@@ -33,15 +33,17 @@ import (
 	"github.com/aalpar/wile/internal/repl"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/runtime"
 
 	"github.com/jessevdk/go-flags"
 )
 
 type Options struct {
-	File        string `short:"f" long:"file" description:"Scheme file to run"`
-	LibraryPath string `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
-	Version     bool   `short:"V" long:"version" description:"Print version information and exit"`
-	Quiet       bool   `short:"q" long:"quiet" description:"Suppress informational messages"`
+	File        []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)"`
+	Interactive bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
+	LibraryPath string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
+	Version     bool     `short:"V" long:"version" description:"Print version information and exit"`
+	Quiet       bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
 }
 
 var (
@@ -96,10 +98,10 @@ func setupSignals(quiet bool) {
 		for range sigChan {
 			// Allocate a buffer and write all goroutine stacks to it
 			stacktrace := make([]byte, 1<<20)
-			length := gruntime.Stack(stacktrace, true) // `true` means dump all goroutines
+			length := goruntime.Stack(stacktrace, true) // `true` means dump all goroutines
 			for length >= len(stacktrace) {
 				stacktrace = make([]byte, len(stacktrace)*2)
-				length = gruntime.Stack(stacktrace, true)
+				length = goruntime.Stack(stacktrace, true)
 			}
 			fmt.Fprintln(os.Stderr, "=== GOROUTINE STACK DUMP ===")
 			fmt.Fprintln(os.Stderr, string(stacktrace[:length]))
@@ -115,7 +117,6 @@ func setupSignals(quiet bool) {
 
 func main() {
 	var fin io.RuneReader
-	var fd *os.File
 
 	parser := flags.NewParser(&opts, flags.Default)
 	parser.Name = "scheme"
@@ -136,8 +137,8 @@ func main() {
 	}
 
 	// Handle positional argument as file if --file not specified
-	if opts.File == "" && len(args) > 0 {
-		opts.File = args[0]
+	if len(opts.File) == 0 && len(args) > 0 {
+		opts.File = append(opts.File, args[0])
 	}
 
 	env, err0 := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
@@ -154,19 +155,29 @@ func main() {
 	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
 	// read evaluate loop
 	ctx := context.Background()
-	// include file if any
-	if opts.File != "" {
-		var err1 error
-		if !opts.Quiet {
-			log.Printf("reading file %q", opts.File)
+	// Load files if any
+	if len(opts.File) > 0 {
+		for i, filename := range opts.File {
+			if !opts.Quiet {
+				log.Printf("reading file %q", filename)
+			}
+			fd, err := os.Open(filename)
+			if err != nil {
+				Failf(err, "Cannot open file %s", filename)
+			}
+			isLastFile := i == len(opts.File)-1
+			if opts.Interactive || !isLastFile {
+				// Load file silently (all files in interactive mode, or non-last files in batch mode)
+				if err := runtime.Load(ctx, env, fd, filename); err != nil {
+					Failf(err)
+				}
+			} else {
+				// Run last file (print results) and exit in non-interactive mode
+				fin = bufio.NewReader(fd)
+				runFile(ctx, env, fin, filename)
+				return
+			}
 		}
-		fd, err1 = os.Open(opts.File)
-		if err1 != nil {
-			Failf(err1, "Cannot open file %s", opts.File)
-		}
-		fin = bufio.NewReader(fd)
-		runFile(ctx, env, fin, opts.File)
-		return
 	}
 	// interactive REPL using the repl package
 	setupSignals(opts.Quiet)
@@ -212,11 +223,11 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 	}
 
 	// Compile and run the single wrapped expression
-	tpl, err2 := repl.Compile(env, programStx)
+	tpl, err2 := runtime.Compile(env, programStx)
 	if err2 != nil {
 		Failf(err2, "Cannot compile expression")
 	}
-	mv, err2 := repl.Run(ctx, tpl, env)
+	mv, err2 := runtime.Run(ctx, tpl, env)
 	// Print result for:
 	// - Normal completion (err2 == nil) - when inTail=false at top-level
 	// - ErrMachineHalt - when inTail=true at top-level (RestoreContinuation returns ErrMachineHalt)
