@@ -232,6 +232,12 @@ const (
 	TokenizerStateOpenParen
 	// TokenizerStateCloseParen represents ) (close parenthesis).
 	TokenizerStateCloseParen
+	// TokenizerStateOpenBracket represents [ (open square bracket).
+	// R7RS §2.1: Square brackets are equivalent to parentheses but must match.
+	TokenizerStateOpenBracket
+	// TokenizerStateCloseBracket represents ] (close square bracket).
+	// R7RS §2.1: Square brackets are equivalent to parentheses but must match.
+	TokenizerStateCloseBracket
 	// TokenizerStateCons represents . (dot for improper lists).
 	TokenizerStateCons
 
@@ -472,6 +478,21 @@ func (p *Tokenizer) read() {
 		return
 	case p.curr() == ')':
 		p.state = TokenizerStateCloseParen
+		p.next()
+		p.term()
+		return
+	case p.curr() == '[':
+		// R7RS §2.1: [ and ] are equivalent to ( and ) but must match
+		p.state = TokenizerStateOpenBracket
+		p.next()
+		if p.curr() == ']' {
+			p.state = TokenizerStateEmptyList
+			p.next()
+		}
+		p.term()
+		return
+	case p.curr() == ']':
+		p.state = TokenizerStateCloseBracket
 		p.next()
 		p.term()
 		return
