@@ -1139,14 +1139,12 @@ func compileDefineSyntaxFromSyntax(env *environment.EnvironmentFrame, dsPair *sy
 	if !ok {
 		return fmt.Errorf("define-syntax: missing transformer")
 	}
-	transformer, ok := transformerCdr.SyntaxCar().(*syntax.SyntaxPair)
-	if !ok {
-		return fmt.Errorf("define-syntax: transformer must be a list")
-	}
+	transformer := transformerCdr.SyntaxCar()
 
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
-	closure, err := CompileSyntaxRules(context.TODO(), env, transformer)
+	// Supports both syntax-rules and lambda (procedural) transformers
+	closure, err := compileTransformerToMachineClosure(context.TODO(), env, transformer)
 	if err != nil {
 		return err
 	}
