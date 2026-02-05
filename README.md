@@ -63,19 +63,21 @@ The binary is built to `./dist/{os}/{arch}/scheme`.
 
 ```bash
 # Start REPL
-./dist/scheme
+./dist/darwin/arm64/scheme
 
 # Run a Scheme file
-./dist/scheme --file example.scm
-./dist/scheme -f example.scm
-./dist/scheme example.scm
+./dist/darwin/arm64/scheme --file example.scm
+./dist/darwin/arm64/scheme -f example.scm
+./dist/darwin/arm64/scheme example.scm
 
 # With library search path
-./dist/scheme -L /path/to/libs example.scm
+./dist/darwin/arm64/scheme -L /path/to/libs example.scm
 
 # Print version
-./dist/scheme --version
+./dist/darwin/arm64/scheme --version
 ```
+
+Replace `darwin/arm64` with your platform (e.g., `linux/amd64`).
 
 The `SCHEME_LIBRARY_PATH` environment variable provides additional library search paths (colon-separated).
 
