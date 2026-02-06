@@ -16,6 +16,8 @@ package wile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -120,7 +122,7 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 			if isEOF(err) {
 				break
 			}
-			return nil, err
+			return nil, &CompilationError{Message: "parse error", Cause: err}
 		}
 
 		compiled, err := p.compileExpr(stx)
@@ -145,7 +147,7 @@ func (p *Engine) Compile(code string) (*CompiledCode, error) {
 
 	stx, err := pr.ReadSyntax(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, &CompilationError{Message: "parse error", Cause: err}
 	}
 
 	return p.compileExpr(stx)
@@ -190,37 +192,93 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 }
 
 // Call invokes a Scheme procedure with arguments.
+// Supports all callable types: lambdas, case-lambdas, and parameters.
+// Composable continuations cannot be called from Go (they require the VM
+// winding stack) and return an error.
 func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
-	closure, ok := unwrapValue(proc).(*machine.MachineClosure)
-	if !ok {
-		return nil, &Error{Message: "not a procedure"}
-	}
-
 	unwrappedArgs := make([]values.Value, len(args))
 	for i, arg := range args {
 		unwrappedArgs[i] = unwrapValue(arg)
 	}
 
-	// Create a template and continuation to start the machine
+	callee := unwrapValue(proc)
+	switch cls := callee.(type) {
+	case *machine.MachineClosure:
+		return p.callClosure(ctx, cls, unwrappedArgs)
+
+	case *machine.CaseLambdaClosure:
+		return p.callCaseLambda(ctx, cls, unwrappedArgs)
+
+	case *machine.Parameter:
+		return p.callParameter(ctx, cls, unwrappedArgs)
+
+	case *machine.ComposableContinuation:
+		return nil, &RuntimeError{Message: "cannot call composable continuation from Go"}
+
+	default:
+		return nil, &RuntimeError{Message: "not a procedure"}
+	}
+}
+
+func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, args []values.Value) (Value, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
 
-	// Create sub-context and apply the closure
 	sub := mc.NewSubContext()
-	_, err := sub.Apply(closure, unwrappedArgs...)
+	_, err := sub.Apply(cls, args...)
 	if err != nil {
-		return nil, err
+		return nil, p.wrapRuntimeError(err)
 	}
 
 	err = sub.Run()
+	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+		return nil, p.wrapRuntimeError(err)
+	}
+	return wrapValue(sub.GetValue()), nil
+}
+
+func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClosure, args []values.Value) (Value, error) {
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, p.env)
+	mc := machine.NewMachineContext(ctx, cont)
+
+	sub := mc.NewSubContext()
+	_, err := sub.ApplyCaseLambda(cls, args...)
 	if err != nil {
-		if err != machine.ErrMachineHalt {
-			return nil, err
-		}
+		return nil, p.wrapRuntimeError(err)
 	}
 
+	err = sub.Run()
+	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+		return nil, p.wrapRuntimeError(err)
+	}
 	return wrapValue(sub.GetValue()), nil
+}
+
+func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, args []values.Value) (Value, error) {
+	switch len(args) {
+	case 0:
+		return wrapValue(param.Value()), nil
+
+	case 1:
+		newVal := args[0]
+		if param.HasConverter() {
+			converter := param.Converter()
+			converted, err := p.callClosure(ctx, converter, []values.Value{newVal})
+			if err != nil {
+				return nil, err
+			}
+			newVal = unwrapValue(converted)
+		}
+		param.SetValue(newVal)
+		return Void, nil
+
+	default:
+		return nil, &RuntimeError{
+			Message: fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)),
+		}
+	}
 }
 
 // Environment returns the underlying environment for advanced use.
@@ -242,13 +300,13 @@ func (p *Engine) compileExpr(stx syntax.SyntaxValue) (*CompiledCode, error) {
 	ectx := machine.NewExpandTimeCallContext()
 	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
 	if err != nil {
-		return nil, err
+		return nil, &CompilationError{Message: "expansion error", Cause: err}
 	}
 
 	cctx := machine.NewCompileTimeCallContext(false, true, p.env)
 	err = machine.NewCompiletimeContinuation(tpl, p.env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, err
+		return nil, &CompilationError{Message: "compilation error", Cause: err}
 	}
 
 	return &CompiledCode{template: tpl, env: p.env}, nil
@@ -258,10 +316,22 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
 	mc := machine.NewMachineContext(ctx, cont)
 	err := mc.Run()
-	if err != nil {
-		return nil, err
+	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(mc.GetValue()), nil
+}
+
+func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
+	var ee *machine.ErrExceptionEscape
+	if errors.As(err, &ee) {
+		return &RuntimeError{
+			Message:   "runtime error",
+			Cause:     err,
+			Condition: wrapValue(ee.Condition),
+		}
+	}
+	return &RuntimeError{Message: "runtime error", Cause: err}
 }
 
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string) error {

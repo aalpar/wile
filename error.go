@@ -16,7 +16,7 @@ package wile
 
 import "io"
 
-// Error represents a Wile engine error.
+// Error represents a Wile engine initialization error.
 type Error struct {
 	Message string
 	Cause   error
@@ -30,6 +30,43 @@ func (p *Error) Error() string {
 }
 
 func (p *Error) Unwrap() error {
+	return p.Cause
+}
+
+// CompilationError wraps errors from parsing, expanding, or compiling Scheme code.
+type CompilationError struct {
+	Message string
+	Cause   error
+}
+
+func (p *CompilationError) Error() string {
+	if p.Cause != nil {
+		return p.Message + ": " + p.Cause.Error()
+	}
+	return p.Message
+}
+
+func (p *CompilationError) Unwrap() error {
+	return p.Cause
+}
+
+// RuntimeError wraps errors from executing Scheme code.
+// If the error originated from a Scheme raise/raise-continuable,
+// Condition holds the raised value.
+type RuntimeError struct {
+	Message   string
+	Cause     error
+	Condition Value // non-nil when Scheme raise produced the error
+}
+
+func (p *RuntimeError) Error() string {
+	if p.Cause != nil {
+		return p.Message + ": " + p.Cause.Error()
+	}
+	return p.Message
+}
+
+func (p *RuntimeError) Unwrap() error {
 	return p.Cause
 }
 
