@@ -3323,3 +3323,14 @@ func TestCoverageSyntaxRulesCustomEllipsis(t *testing.T) {
 			values.NewCons(values.NewInteger(3), values.EmptyList)))
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
 }
+
+// TestEmptyListExpression verifies that a bare () in expression position
+// compiles and evaluates to the empty list. R7RS §4.1.2 specifies that the
+// empty list is a self-evaluating literal.
+func TestEmptyListExpression(t *testing.T) {
+	env := newFullRuntimeEnv(t)
+
+	mc, err := runSchemeExpr(t, env, "()")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.EmptyList)
+}

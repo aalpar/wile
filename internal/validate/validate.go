@@ -37,6 +37,11 @@ func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, 
 func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	switch e := expr.(type) {
 	case *syntax.SyntaxPair:
+		// Empty list '() is a self-evaluating literal, not a form.
+		// R7RS §4.1.2: The empty list is a literal expression.
+		if e.IsEmptyList() {
+			return &ValidatedLiteral{source: e.SourceContext(), formName: "@literal", Value: e}
+		}
 		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
 		return &ValidatedSymbol{source: e.SourceContext(), formName: "@symbol", Symbol: e}

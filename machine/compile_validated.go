@@ -781,7 +781,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallContext, v *validate.ValidatedLiteral) error {
 	// Check if this is actually a special form that passed through validation
 	// (like define-syntax, define-library, etc.)
-	if pair, ok := v.Value.(*syntax.SyntaxPair); ok {
+	if pair, ok := v.Value.(*syntax.SyntaxPair); ok && !pair.IsEmptyList() {
 		// This is a form that wasn't validated deeply - use the old path
 		return p.CompilePrimitiveOrProcedureCall(ctctx, pair)
 	}

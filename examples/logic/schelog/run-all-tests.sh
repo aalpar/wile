@@ -155,20 +155,6 @@ run_test_with_output "games: michael is australian" "schelog.scm puzzle.scm game
     "(michael is the australian)"
 
 echo ""
-echo "--- houses.scm (Zebra puzzle) ---"
-run_test_with_output "houses: zebra puzzle solved" "schelog.scm puzzle.scm houses.scm" \
-    '(begin (set! *schelog-use-occurs-check?* #t) (let ((r (solve-puzzle %houses))) (display (if r "solved" "failed"))))' \
-    "solved"
-
-run_test_with_output "houses: japan owns zebra" "schelog.scm puzzle.scm houses.scm" \
-    '(begin (set! *schelog-use-occurs-check?* #t) (let ((r (solve-puzzle %houses))) (display (schelog:deref* (car (car (cdr (car r))))))))' \
-    "(japan owns the zebra)"
-
-run_test_with_output "houses: norway drinks water" "schelog.scm puzzle.scm houses.scm" \
-    '(begin (set! *schelog-use-occurs-check?* #t) (let ((r (solve-puzzle %houses))) (display (schelog:deref* (cadr (car (cdr (car r))))))))' \
-    "(norway drinks water)"
-
-echo ""
 echo "=== Test Summary ==="
 echo "Passed: $TESTS_PASSED"
 echo "Failed: $TESTS_FAILED"

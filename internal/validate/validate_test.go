@@ -1017,6 +1017,7 @@ func TestValidateExprEdgeCases(t *testing.T) {
 		{"float", values.NewFloat(3.14)},
 		{"character", values.NewCharacter('a')},
 		{"vector", values.NewVector(values.NewInteger(1), values.NewInteger(2))},
+		{"empty list", values.EmptyList},
 	}
 
 	for _, tt := range tests {
