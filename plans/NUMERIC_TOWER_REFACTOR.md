@@ -1,6 +1,6 @@
 # Numeric Tower Refactor Plan
 
-## Status Summary (2026-01-30)
+## Status Summary (2026-02-05)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -8,10 +8,95 @@
 | Phase 1 | ✅ Complete | `numeric_tower.go` infrastructure (Rank, Promote, Simplify, BinaryOp, Tower*) |
 | Phase 2 | ✅ Complete | Number interface has all required methods |
 | Phase 3 | ✅ Complete | All 7 types have `*Same` methods |
-| Phase 4 | 🔄 Pending | Migrate public Add/Sub/etc. to use Tower* functions |
-| Phase 5 | 🔄 Pending | Remove legacy type-switch code (~500 lines) |
+| Phase 4 | ❌ **Abandoned** | Migrate public Add/Sub/etc. to use Tower* functions |
+| Phase 5 | ❌ **Abandoned** | Remove "legacy" type-switch code |
+| Phase 6 | ❌ **Abandoned** | Fix Tower* complex number handling |
 
-**Current state**: The Tower* functions work correctly and handle all 49 type combinations. The legacy public methods (Add, Subtract, etc.) still use type switches but are tested and working. Phases 4–5 are internal cleanup that reduces code and simplifies maintenance but doesn't change behavior.
+**Final state**: Direct method dispatch (`a.Add(b)`) is the intentional architecture, not "legacy code awaiting cleanup." It correctly handles all cases including exact complex numbers. The Tower* functions remain as unused infrastructure with known design flaws (see Phase 6 section for details).
+
+---
+
+## Actual Promotion Behavior (Direct Dispatch)
+
+The direct dispatch implementation does NOT use a linear tower. It implements a **lattice** where result types depend on both operands.
+
+### Result Type Matrix (A op B → Result)
+
+For arithmetic operations (`+`, `-`, `*`, `/`):
+
+| A ↓ / B → | Integer | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
+|-----------|---------|------------|----------|-------|----------|---------|------------|
+| **Integer** | Integer¹ | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
+| **BigInteger** | BigInteger | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
+| **Rational** | Rational | Rational | Rational | Float | BigFloat | Complex | BigComplex |
+| **Float** | Float | Float | Float | Float | BigFloat | Complex | BigComplex |
+| **BigFloat** | BigFloat | BigFloat | BigFloat | BigFloat | BigFloat | Complex² | BigComplex |
+| **Complex** | Complex | Complex | Complex | Complex | Complex² | Complex | BigComplex |
+| **BigComplex** | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex |
+
+¹ Integer + Integer may overflow to BigInteger
+² BigFloat + Complex → Complex loses BigFloat precision (converts to float64)
+
+### Exactness Preservation
+
+| A ↓ / B → | Exact | Inexact |
+|-----------|-------|---------|
+| **Exact** | Exact | Inexact |
+| **Inexact** | Inexact | Inexact |
+
+Where:
+- **Exact**: Integer, BigInteger, Rational, BigComplex(with exact parts)
+- **Inexact**: Float, BigFloat, Complex, BigComplex(with inexact parts)
+
+### Visual: Two Orthogonal Dimensions
+
+```
+                    REAL                          COMPLEX
+                      │                              │
+     Exact:   Integer → BigInteger → Rational       BigComplex(exact)
+                      │         ╲        │              │
+                      │          ╲       │              │
+                      ↓           ╲      ↓              ↓
+   Inexact:        Float    →    BigFloat    →     Complex / BigComplex(inexact)
+```
+
+**Promotion rules:**
+1. **Within exact reals**: Integer → BigInteger → Rational (increasing generality)
+2. **Within inexact reals**: Float → BigFloat (increasing precision)
+3. **Exact + Inexact**: Result is inexact (exactness contagion, per R7RS §6.2.2)
+4. **Real + Complex**: Result is complex (dimensionality wins)
+5. **BigFloat + Complex**: Returns Complex (loses BigFloat precision—converts to float64). This is a known limitation; use BigComplex explicitly to preserve arbitrary precision with complex numbers.
+
+### The Lattice Structure
+
+There is no single linear tower. The direct dispatch implements a **lattice**:
+
+```
+                    BigComplex
+                   ↗    ↑    ↖
+            Complex   BigFloat   (exact BigComplex path)
+               ↑    ↗    ↑         ↑
+             Float    Rational ────┘
+               ↑        ↑
+            Integer → BigInteger
+```
+
+The Tower* functions attempted to linearize this into:
+```
+Integer < BigInteger < Rational < Float < BigFloat < Complex < BigComplex
+```
+
+This linearization breaks exact complex numbers because it forces exact types through Float before reaching Complex/BigComplex.
+
+---
+
+**Decision (2026-02-05)**: Phases 4-6 abandoned. Rationale:
+1. Direct dispatch is correct and battle-tested
+2. Tower* has latent bugs with exact complex number handling
+3. The ~500 line "savings" from migration isn't worth the regression risk
+4. Per CLAUDE.md: "Avoid over-engineering. Only make changes that are directly requested or clearly necessary."
+
+The Tower* functions (`TowerAdd`, etc.) may be removed in a future cleanup, or kept for testing purposes. They should NOT be used by primitives.
 
 ---
 
@@ -440,7 +525,7 @@ These contain the arithmetic logic without type switches. The Tower* functions i
 
 **Deliverable**: ✅ Each type has clean same-type operations.
 
-### Phase 4: Unified Dispatch 🔄 PENDING
+### Phase 4: Unified Dispatch ❌ ABANDONED
 
 The `BinaryOp` dispatcher exists in `numeric_tower.go`:
 
@@ -448,67 +533,44 @@ The `BinaryOp` dispatcher exists in `numeric_tower.go`:
 func BinaryOp(a, b Number, op func(Number, Number) Number) Number
 ```
 
-Tower functions (`TowerAdd`, `TowerSubtract`, etc.) use this dispatcher and work correctly.
+Tower functions (`TowerAdd`, `TowerSubtract`, etc.) use this dispatcher.
 
-**Remaining work**: Replace the type-switch implementations in each type's public methods with calls to the Tower functions:
+**Original goal**: Replace type-switch implementations with Tower* calls to reduce code.
 
-```go
-// CURRENT (in integer.go, big_integer.go, etc.):
-func (p *Integer) Add(o Number) Number {
-    switch v := o.(type) {
-    case *Integer: ...
-    case *BigInteger: ...
-    // ~7 type cases per method
-    }
-}
+**Why abandoned**: The Tower* functions have a latent bug where exact complex numbers lose exactness during promotion (see Phase 6). Direct dispatch handles this correctly. Migrating would introduce a regression.
 
-// TARGET:
-func (p *Integer) Add(o Number) Number {
-    return TowerAdd(p, o)
-}
-```
+**Outcome**: Direct method dispatch is the intentional architecture. The type-switch code in each numeric type is not "legacy"—it's the correct, tested implementation.
 
-This change would:
-1. Eliminate ~600 lines of type-switch code across 7 files
-2. Ensure all type combinations go through the same promotion logic
-3. Simplify maintenance when adding new numeric types
+### Phase 5: Cleanup ❌ ABANDONED
 
-**Consideration**: The legacy implementations have been well-tested and the Tower* functions are parallel implementations. Migration requires careful verification that behavior is identical.
+**Original goal**: Remove ~600 lines of type-switch code after Phase 4 migration.
 
-**Deliverable**: 🔄 All arithmetic uses unified dispatch (pending migration).
+**Why abandoned**: Phase 4 was abandoned. The type-switch code stays.
 
-### Phase 5: Cleanup 🔄 PENDING (depends on Phase 4)
-
-After Phase 4 migration:
-
-1. Remove duplicate switch statements from all types (~600 lines)
-2. Remove redundant helper functions (e.g., `promoteToBigComplexPart`)
-3. ✅ CLAUDE.local.md in values/ package already updated with Tower documentation
-4. ✅ Architecture documented in this plan
-
-**Deliverable**: 🔄 Clean, minimal implementation (pending Phase 4).
+**Note**: The code is more verbose than a unified dispatcher, but it's correct and each case is explicit. When adding a new numeric type, the cost of adding switch cases is acceptable.
 
 ## File Changes Summary
 
 | File | Status | Changes |
 |------|--------|---------|
-| `values/numeric_tower.go` | ✅ NEW | Rank, Promote, Simplify, BinaryOp, Tower*, Exactness |
-| `values/numeric_tower_test.go` | ✅ NEW | Infrastructure tests (Rank, Promote, Simplify, Tower*) |
-| `values/numeric_tower_coverage_test.go` | ✅ NEW | 49-combination coverage tests for all operations |
-| `values/values.go` | ✅ | Number interface complete |
-| `values/integer.go` | ✅ | Has `*Same` methods |
-| `values/big_integer.go` | ✅ | Has `*Same` methods, consistent panic handling |
-| `values/float.go` | ✅ | Has `*Same` methods |
-| `values/big_float.go` | ✅ | Has `*Same` methods, consistent panic handling |
-| `values/rational.go` | ✅ | Has `*Same` methods |
-| `values/complex.go` | ✅ | Has `*Same` methods |
-| `values/big_complex.go` | ✅ | Has `*Same` methods, consistent panic handling |
+| `values/numeric_tower.go` | ✅ Complete | Rank, Promote, Simplify, BinaryOp, Tower*, Exactness |
+| `values/numeric_tower_test.go` | ✅ Complete | Infrastructure tests (Rank, Promote, Simplify, Tower*) |
+| `values/numeric_tower_coverage_test.go` | ✅ Complete | 49-combination coverage tests for all operations |
+| `values/values.go` | ✅ Complete | Number interface complete |
+| `values/integer.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
+| `values/big_integer.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
+| `values/float.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
+| `values/big_float.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
+| `values/rational.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
+| `values/complex.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
+| `values/big_complex.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
 
-**Phase 4 (pending)**: Each type file will replace its public Add/Subtract/etc. methods with calls to TowerAdd/TowerSubtract/etc.
+**Final state**: All files complete. Direct dispatch is the production implementation.
+Tower* functions exist but are unused. No further changes planned.
 
 ## Metrics
 
-### Before (validated 2026-01-23)
+### Before (2026-01-23)
 
 - Lines of switch-case code: ~600
 - Type combinations handled: 196 of 245 (7 types × 7 operands × 5 operations)
@@ -516,20 +578,22 @@ After Phase 4 migration:
 - Files to modify for new type: 7
 - Error handling consistency: 57% (4 of 7 types use panic consistently)
 
-### Current (2026-01-27)
+### Final State (2026-02-05)
 
-- Lines of switch-case code: ~600 (legacy) + ~100 (tower) — dual implementations
-- Type combinations handled via Tower*: 245 (7×7×5, complete) ✅
+- Lines of switch-case code: ~600 (direct dispatch) + ~100 (Tower* unused)
+- Type combinations handled: 245 (7×7×5, complete) ✅
 - Error handling consistency: 100% ✅
-- New infrastructure: `numeric_tower.go` (356 lines) + tests
-- Files to modify for new type: Still 7 (legacy paths not yet removed)
+- Infrastructure: `numeric_tower.go` exists but Tower* functions are unused
+- Files to modify for new type: 7 (acceptable cost for correctness)
+- Exact complex numbers: ✅ Handled correctly by direct dispatch
 
-### After Phase 4+5 (projected)
+### Projected Savings (NOT REALIZED - Phases 4-5 Abandoned)
 
-- Lines of switch-case code: ~100 (in Rank, promoteOnce, Simplify only)
-- Type combinations handled: 245 (7×7×5, complete)
-- Files to modify for new type: 2 (new type file + numeric_tower.go)
-- Net code reduction: ~500 lines
+The original plan projected ~500 lines of code reduction by migrating to Tower*.
+This was abandoned because:
+1. Tower* has latent bugs with exact complex numbers
+2. Risk of regression outweighed code reduction benefit
+3. Direct dispatch is correct and maintainable
 
 ## Risks
 
@@ -571,9 +635,11 @@ Go generics can't express "same type" constraints for binary operations across a
 
 ### Complex Comparison Semantics
 
-**R7RS §6.2.6 states**: "For any of the `<` `=` `>` `<=` `>=` procedures, if any argument is complex, an error is signaled."
+**R7RS §6.2.6 states**: "For any of the `<` `>` `<=` `>=` procedures, if any argument is complex, an error is signaled."
 
-**Current implementation**: Compares complex numbers by real part only (non-standard extension).
+**Note**: The `=` procedure IS defined for complex numbers—it compares both real and imaginary parts for numerical equality. Only the ordering predicates (`<`, `>`, `<=`, `>=`) are prohibited.
+
+**Current implementation**: The `Compare` and `LessThan` methods compare complex numbers by real part only (non-standard extension for ordering, correct for equality).
 
 **Decision needed**: Choose one of:
 
@@ -631,3 +697,349 @@ The promotion order `Integer < BigInteger < Rational < Float < BigFloat < Comple
 | Float + BigInteger | Must work, type unspecified | Returns Float |
 | Rational + Float | Must be inexact, type unspecified | Returns Float |
 | Precision preservation | Encouraged but unspecified | Best-effort within type constraints |
+
+---
+
+## Phase 6: Complex as Orthogonal Container ❌ ABANDONED
+
+### Problem: Linear Tower Would Lose Exactness for Complex Numbers
+
+**IMPORTANT: This bug is NOT currently user-visible.** The Tower* functions (`TowerAdd`, etc.)
+are unused infrastructure. Primitives use direct method dispatch (`a.Add(b)`), which works
+correctly. This issue only becomes real if Phase 4 (migrate to Tower*) is completed.
+
+The Tower* promotion path has a latent bug:
+
+```
+Integer < BigInteger < Rational < Float < BigFloat < Complex < BigComplex
+```
+
+Forces promotion through inexact types when combining exact reals with complex numbers:
+
+```go
+// promoteOnce path for exact Integer → BigComplex:
+Integer → BigInteger → Rational → Float (LOSES EXACTNESS!) → BigFloat → Complex → BigComplex
+```
+
+This would violate R7RS §6.2.2: a complex number should be exact if both its real and
+imaginary parts are exact.
+
+**Example of the latent bug (if TowerAdd were used):**
+```scheme
+(exact? (+ 1+2i 3))  ; Should be #t (both exact), but TowerAdd would make it #f
+```
+
+### Why the Tower Design Has This Problem
+
+The tower conflates two orthogonal dimensions:
+
+1. **Precision/representation**: `int64 → big.Int → big.Rat → float64 → big.Float`
+2. **Dimensionality**: real → complex
+
+Complex numbers aren't "higher" than reals—they're *containers* parameterized by a real type.
+
+Additionally, there's a **precision loss** bug at `BigFloat → Complex`:
+```go
+case *BigFloat:
+    return NewComplex(complex(v.Float64(), 0))  // Loses arbitrary precision!
+```
+
+### Why It Doesn't Currently Affect Users
+
+Three independent systems handle complex numbers correctly:
+
+1. **Parser**: `parseComplex()` creates `BigComplex` for exact literals, `Complex` for inexact
+2. **Direct dispatch**: `BigComplex.Add(Integer)` converts Integer → BigInteger, preserving exactness
+3. **make-rectangular**: Checks `ExactnessOf()` and creates appropriate type
+
+The Tower* functions are parallel infrastructure that's NOT integrated with primitives yet.
+
+### Critical Sequencing Requirement
+
+**Phase 4 MUST NOT be completed before Phase 6.**
+
+If we replace direct dispatch with Tower* calls (Phase 4) without fixing the complex
+promotion logic (Phase 6), we would INTRODUCE a regression where exact complex arithmetic
+becomes inexact.
+
+Current state:
+- Direct dispatch: ✅ Works correctly
+- Tower* functions: ❌ Has latent exactness bug
+- Phase 4 (migrate to Tower*): 🔄 Pending
+- Phase 6 (fix Tower* for complex): 🔄 Proposed
+
+Safe ordering: Phase 6 → Phase 4 (or abandon Phase 4 entirely)
+
+### Proposed Architecture
+
+#### Two Orthogonal Hierarchies
+
+**Real Tower** (linear, for promotion):
+```
+Integer < BigInteger < Rational < Float < BigFloat
+```
+
+**Complex Wrapper** (orthogonal, wraps any real type):
+```
+Complex[T] where T is any real Number
+```
+
+Concrete types:
+- `Complex` — wraps `complex128` (always inexact, performance optimization)
+- `BigComplex` — wraps any `Number` pair (exactness depends on components)
+
+#### New Classification Functions
+
+```go
+// IsComplex returns true if n has an imaginary part.
+func IsComplex(n Number) bool {
+    switch n.(type) {
+    case *Complex, *BigComplex:
+        return true
+    }
+    return false
+}
+
+// RealRank returns the rank of a number's real component.
+type RealRank int
+
+const (
+    RealRankInteger RealRank = iota
+    RealRankBigInteger
+    RealRankRational
+    RealRankFloat
+    RealRankBigFloat
+)
+
+func GetRealRank(n Number) RealRank {
+    switch v := n.(type) {
+    case *Integer:
+        return RealRankInteger
+    case *BigInteger:
+        return RealRankBigInteger
+    case *Rational:
+        return RealRankRational
+    case *Float:
+        return RealRankFloat
+    case *BigFloat:
+        return RealRankBigFloat
+    case *Complex:
+        return RealRankFloat  // complex128 uses float64
+    case *BigComplex:
+        return getRealRankOf(v.Real())
+    }
+    panic(ErrNotANumber)
+}
+```
+
+#### Two Bugs in promoteOnce
+
+The current `promoteOnce` function has two problems:
+
+**Bug 1: Exactness loss at Rational → Float**
+```go
+case *Rational:
+    f, _ := v.value.Float64()
+    return NewFloat(f)  // Exact → Inexact!
+```
+
+**Bug 2: Precision loss at BigFloat → Complex**
+```go
+case *BigFloat:
+    return NewComplex(complex(v.Float64(), 0))  // Loses arbitrary precision!
+```
+
+Both bugs only manifest if code uses the Tower* functions (which primitives currently don't).
+
+### Exactness-Preserving Complex Promotion
+
+```go
+// ToComplex converts a real number to complex with zero imaginary.
+// Preserves exactness.
+func ToComplex(n Number) *BigComplex {
+    switch v := n.(type) {
+    case *Integer:
+        bi := NewBigIntegerFromInt64(v.Value)
+        return NewBigComplex(bi, NewBigIntegerFromInt64(0))  // exact!
+    case *BigInteger:
+        return NewBigComplex(v, NewBigIntegerFromInt64(0))   // exact!
+    case *Rational:
+        zero := NewRationalFromInt64(0, 1)
+        return NewBigComplex(v, zero)                         // exact!
+    case *Float:
+        bf := NewBigFloatFromFloat64(v.Value)
+        return NewBigComplex(bf, NewBigFloatFromFloat64(0))  // inexact
+    case *BigFloat:
+        return NewBigComplex(v, NewBigFloatFromFloat64(0))   // inexact
+    case *Complex:
+        return NewBigComplexFromBigFloats(
+            NewBigFloatFromFloat64(real(v.Value)),
+            NewBigFloatFromFloat64(imag(v.Value)),
+        )
+    case *BigComplex:
+        return v
+    }
+    panic(ErrNotANumber)
+}
+```
+
+#### New Binary Operation Dispatch
+
+```go
+// BinaryOpV2 handles real and complex numbers correctly.
+func BinaryOpV2(a, b Number, realOp, complexOp func(Number, Number) Number) Number {
+    aComplex := IsComplex(a)
+    bComplex := IsComplex(b)
+
+    if !aComplex && !bComplex {
+        // Both real: use existing real tower
+        target := CommonRealRank(GetRealRank(a), GetRealRank(b))
+        pa := PromoteReal(a, target)
+        pb := PromoteReal(b, target)
+        return Simplify(realOp(pa, pb))
+    }
+
+    // At least one complex: convert both to BigComplex (preserving exactness)
+    ca := ToComplex(a)
+    cb := ToComplex(b)
+
+    // Promote real parts to common rank within BigComplex
+    // (BigComplex arithmetic already handles this)
+    result := complexOp(ca, cb)
+    return Simplify(result)
+}
+```
+
+### Migration Path
+
+#### Option A: Minimal Change (Recommended)
+
+Keep the existing tower for real numbers. Only change how complex numbers enter the picture:
+
+1. Add `ToComplex()` function that preserves exactness
+2. Modify `TowerAdd`/etc. to detect complex operands and use `ToComplex()` instead of `Promote()`
+3. Remove `Complex` and `BigComplex` from `NumericRank` enum (they're not part of the linear tower)
+
+**Changes required:**
+- `numeric_tower.go`: Add complex detection, modify Tower* functions
+- No changes to individual type files
+
+#### Option B: Full Refactor
+
+Replace `NumericRank` with separate `RealRank` and `Complexness` dimensions:
+
+1. New `RealRank` enum (Integer through BigFloat only)
+2. New `Complexness` enum (Real, Complex)
+3. Rewrite `Promote()` to only work on reals
+4. Add `ToComplex()` for dimension change
+5. Rewrite `BinaryOp()` to handle dimensions separately
+
+**Pros:** Cleaner conceptual model
+**Cons:** More invasive, higher risk
+
+#### Option C: Eliminate `Complex` Type
+
+Use only `BigComplex` for all complex numbers:
+
+```go
+type BigComplex struct {
+    real Number  // any real type
+    imag Number  // any real type
+}
+```
+
+When both parts are `*Float`, internally use `complex128` for arithmetic as an optimization, but the external type is always `BigComplex`.
+
+**Pros:** Single complex type, no tower confusion
+**Cons:** Loses some `complex128` performance, requires changing all `Complex` references
+
+### Testing Requirements
+
+**Current behavior (direct dispatch):** All these tests PASS because primitives use
+`BigComplex.Add()` directly, which preserves exactness.
+
+**Latent bug (Tower* functions):** If we switched to `TowerAdd`, tests marked ⚠️ would FAIL.
+
+```scheme
+;; Exactness preservation tests
+(exact? (+ 1+2i 3))           ; #t - exact + exact          ⚠️ TowerAdd would return #f
+(exact? (+ 1+2i 3.0))         ; #f - exact + inexact        ✓ Both paths correct
+(exact? (+ 1.0+2.0i 3))       ; #f - inexact complex        ✓ Both paths correct
+(exact? (+ 1/2+1/3i 1/4))     ; #t - rational complex + rational  ⚠️ TowerAdd would return #f
+
+;; make-rectangular exactness (NOT affected - doesn't use Tower*)
+(exact? (make-rectangular 1 2))    ; #t  ✓ Always correct
+(exact? (make-rectangular 1.0 2))  ; #f  ✓ Always correct
+(exact? (make-rectangular 1 2.0))  ; #f  ✓ Always correct
+
+;; Arithmetic correctness (values correct, but exactness may differ)
+(= (+ 1+2i 3+4i) 4+6i)                           ; #t  ✓ Value correct
+(= (real-part (+ 1/2 1/4+0i)) 3/4)               ; #t  ⚠️ Value correct but would be inexact
+(= (* 1/2+1/2i 1/2-1/2i) 1/2)                    ; #t  ⚠️ Value correct but would be inexact
+```
+
+**Go-level unit tests needed:**
+- `TestToComplex_PreservesExactness` - verify Integer/BigInteger/Rational → exact BigComplex
+- `TestPromoteOnce_PrecisionLoss` - document the BigFloat → Complex precision loss
+- `TestTowerAdd_ExactComplex` - verify Tower* handles exact complex (after Phase 6 fix)
+
+### Open Questions (Resolved)
+
+These questions were relevant when Phase 6 was under consideration. With Phases 4-6
+abandoned, they're now just historical notes.
+
+1. **Should `make-polar` always return inexact?**
+   - **Resolution:** Current implementation already does this correctly. No change needed.
+
+2. **What about `Complex` (`complex128`) performance?**
+   - **Resolution:** Direct dispatch uses `Complex` for inexact, `BigComplex` for exact.
+     This is the correct design. No migration to unified type needed.
+
+3. **Should we allow `Integer`/`Float` as BigComplex components?**
+   - **Resolution:** Current restriction to `BigInteger`/`Rational`/`BigFloat` is correct.
+     `make-rectangular` and parser handle promotion to these types appropriately.
+
+### Implementation Priority ❌ ABANDONED
+
+This section described work to fix the Tower* functions. Since Phases 4-6 are abandoned,
+this work is not needed. The direct dispatch implementation is correct.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Add exactness preservation tests | Optional | Current tests already verify correct behavior |
+| Fix Tower* for complex | Abandoned | Tower* functions are unused |
+| Benchmark complex arithmetic | Not needed | Direct dispatch performance is acceptable |
+| Unify Complex/BigComplex types | Not needed | Current type separation works correctly |
+
+### Corrections to Original Analysis (2026-02-05)
+
+The following misconceptions were identified and corrected:
+
+| Original Claim | Correction |
+|----------------|------------|
+| "The bug is in `TowerAdd`/etc." | True, but **not user-visible** since primitives use direct dispatch |
+| "R7RS prohibits `=` on complex" | **Wrong**: only `<`, `>`, `<=`, `>=` are prohibited; `=` IS defined |
+| Phase 4 → Phase 5 ordering | **Dangerous**: Phase 6 must come BEFORE Phase 4 or we introduce a regression |
+| Only exactness loss mentioned | **Incomplete**: also precision loss at BigFloat → Complex |
+| "Current Workaround" framing | **Misleading**: direct dispatch is the primary implementation, not a workaround |
+
+**Architecture clarification**: The codebase has THREE independent systems handling complex numbers:
+
+1. **Parser** (`parseComplex`): Creates correct types from literals
+2. **Direct dispatch** (`BigComplex.Add`, etc.): Used by primitives, handles exactness correctly
+3. **Tower* functions** (`TowerAdd`, etc.): Unused infrastructure with latent bugs
+
+The Tower* functions were designed for a future refactoring (Phase 4) that would simplify
+the type-switch code. However, Phase 4 should NOT proceed until Phase 6 fixes the Tower*
+complex handling, or we would introduce user-visible regressions.
+
+**Decision**: Phases 4-6 abandoned. Direct dispatch is the intentional architecture.
+The Tower* functions remain as unused infrastructure and may be removed in future cleanup.
+
+### References
+
+- R7RS §6.2.2: "A complex number is exact if and only if both its real and imaginary parts are exact."
+- R7RS §6.2.6: `=` compares complex numbers for numerical equality; `<`/`>`/`<=`/`>=` signal error
+- Chez Scheme: Complex is parameterized, promotes components independently
+- Racket: Similar to Chez, complex wraps any numeric type
+- Flatt 2016 (Binding as Sets of Scopes): Not directly relevant, but same author discusses Racket numerics elsewhere
