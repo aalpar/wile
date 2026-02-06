@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `Engine.Call` and `runCompiled` leaking internal `ErrMachineHalt` sentinel to callers
 - Fix parameter converter errors returned without context (now wrapped with "parameter: converter error")
 - Use `errors.Is` for all sentinel error comparisons (`io.EOF`, `ErrMachineHalt`) to handle wrapped errors correctly
+- Fix empty list `()` in expression position causing "empty application in call form" compiler error (R7RS §4.1.2)
 
 ## [1.0.3] - 2026-02-05
 
