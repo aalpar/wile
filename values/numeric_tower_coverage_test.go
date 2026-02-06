@@ -264,6 +264,430 @@ func TestNumericTower_DivideByZero(t *testing.T) {
 	}
 }
 
+// TestNumericTower_ResultTypes verifies that each type combination produces the expected result type.
+// This tests the promotion matrix documented in plans/NUMERIC_TOWER_REFACTOR.md.
+func TestNumericTower_ResultTypes(t *testing.T) {
+	c := qt.New(t)
+
+	// Create test values for receivers (a)
+	// Using different values for receiver and operand to avoid simplification
+	integerA := NewInteger(2)
+	bigIntegerA := NewBigIntegerFromInt64(3)
+	rationalA := NewRational(5, 2)
+	floatA := NewFloat(2.5)
+	bigFloatA := NewBigFloatFromFloat64(3.5)
+	complexA := NewComplexFromParts(2.0, 1.0)
+	bigComplexA := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(2), NewBigFloatFromFloat64(1))
+
+	// Create test values for operands (b) - different values to avoid simplification
+	integerB := NewInteger(7)
+	bigIntegerB := NewBigIntegerFromInt64(11)
+	rationalB := NewRational(3, 4)
+	floatB := NewFloat(1.5)
+	bigFloatB := NewBigFloatFromFloat64(2.5)
+	complexB := NewComplexFromParts(3.0, 2.0)
+	bigComplexB := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(5), NewBigFloatFromFloat64(3))
+
+	// Expected result types for addition (same pattern for subtraction and multiplication)
+	// Format: "ReceiverType+OperandType" -> "ExpectedResultType"
+	expectedAdd := map[string]string{
+		// Integer row
+		"Integer+Integer":    "*values.Integer",
+		"Integer+BigInteger": "*values.BigInteger",
+		"Integer+Rational":   "*values.Rational",
+		"Integer+Float":      "*values.Float",
+		"Integer+BigFloat":   "*values.BigFloat",
+		"Integer+Complex":    "*values.Complex",
+		"Integer+BigComplex": "*values.BigComplex",
+		// BigInteger row
+		"BigInteger+Integer":    "*values.BigInteger",
+		"BigInteger+BigInteger": "*values.BigInteger",
+		"BigInteger+Rational":   "*values.Rational",
+		"BigInteger+Float":      "*values.Float",
+		"BigInteger+BigFloat":   "*values.BigFloat",
+		"BigInteger+Complex":    "*values.Complex",
+		"BigInteger+BigComplex": "*values.BigComplex",
+		// Rational row
+		"Rational+Integer":    "*values.Rational",
+		"Rational+BigInteger": "*values.Rational",
+		"Rational+Rational":   "*values.Rational",
+		"Rational+Float":      "*values.Float",
+		"Rational+BigFloat":   "*values.BigFloat",
+		"Rational+Complex":    "*values.Complex",
+		"Rational+BigComplex": "*values.BigComplex",
+		// Float row
+		"Float+Integer":    "*values.Float",
+		"Float+BigInteger": "*values.Float",
+		"Float+Rational":   "*values.Float",
+		"Float+Float":      "*values.Float",
+		"Float+BigFloat":   "*values.BigFloat",
+		"Float+Complex":    "*values.Complex",
+		"Float+BigComplex": "*values.BigComplex",
+		// BigFloat row
+		// Note: BigFloat+Complex returns Complex (loses precision) - see big_float.go
+		"BigFloat+Integer":    "*values.BigFloat",
+		"BigFloat+BigInteger": "*values.BigFloat",
+		"BigFloat+Rational":   "*values.BigFloat",
+		"BigFloat+Float":      "*values.BigFloat",
+		"BigFloat+BigFloat":   "*values.BigFloat",
+		"BigFloat+Complex":    "*values.Complex", // Loses BigFloat precision!
+		"BigFloat+BigComplex": "*values.BigComplex",
+		// Complex row
+		"Complex+Integer":    "*values.Complex",
+		"Complex+BigInteger": "*values.Complex",
+		"Complex+Rational":   "*values.Complex",
+		"Complex+Float":      "*values.Complex",
+		"Complex+BigFloat":   "*values.BigComplex",
+		"Complex+Complex":    "*values.Complex",
+		"Complex+BigComplex": "*values.BigComplex",
+		// BigComplex row
+		"BigComplex+Integer":    "*values.BigComplex",
+		"BigComplex+BigInteger": "*values.BigComplex",
+		"BigComplex+Rational":   "*values.BigComplex",
+		"BigComplex+Float":      "*values.BigComplex",
+		"BigComplex+BigFloat":   "*values.BigComplex",
+		"BigComplex+Complex":    "*values.BigComplex",
+		"BigComplex+BigComplex": "*values.BigComplex",
+	}
+
+	receivers := []struct {
+		name  string
+		value Number
+	}{
+		{"Integer", integerA},
+		{"BigInteger", bigIntegerA},
+		{"Rational", rationalA},
+		{"Float", floatA},
+		{"BigFloat", bigFloatA},
+		{"Complex", complexA},
+		{"BigComplex", bigComplexA},
+	}
+
+	operands := []struct {
+		name  string
+		value Number
+	}{
+		{"Integer", integerB},
+		{"BigInteger", bigIntegerB},
+		{"Rational", rationalB},
+		{"Float", floatB},
+		{"BigFloat", bigFloatB},
+		{"Complex", complexB},
+		{"BigComplex", bigComplexB},
+	}
+
+	// Test Add
+	for _, a := range receivers {
+		for _, b := range operands {
+			key := a.name + "+" + b.name
+			t.Run("Add/"+key, func(t *testing.T) {
+				result := a.value.Add(b.value)
+				actualType := fmt.Sprintf("%T", result)
+				expectedType := expectedAdd[key]
+				c.Assert(actualType, qt.Equals, expectedType,
+					qt.Commentf("Add: %s + %s", a.name, b.name))
+			})
+		}
+	}
+
+	// Test Subtract (same expected types as Add)
+	for _, a := range receivers {
+		for _, b := range operands {
+			key := a.name + "+" + b.name // reuse the same key pattern
+			t.Run("Subtract/"+a.name+"-"+b.name, func(t *testing.T) {
+				result := a.value.Subtract(b.value)
+				actualType := fmt.Sprintf("%T", result)
+				expectedType := expectedAdd[key]
+				c.Assert(actualType, qt.Equals, expectedType,
+					qt.Commentf("Subtract: %s - %s", a.name, b.name))
+			})
+		}
+	}
+
+	// Test Multiply (same expected types as Add)
+	for _, a := range receivers {
+		for _, b := range operands {
+			key := a.name + "+" + b.name
+			t.Run("Multiply/"+a.name+"*"+b.name, func(t *testing.T) {
+				result := a.value.Multiply(b.value)
+				actualType := fmt.Sprintf("%T", result)
+				expectedType := expectedAdd[key]
+				c.Assert(actualType, qt.Equals, expectedType,
+					qt.Commentf("Multiply: %s * %s", a.name, b.name))
+			})
+		}
+	}
+}
+
+// TestNumericTower_DivisionResultTypes verifies division result types.
+// Division has special rules:
+// - Integer/Integer -> Rational if not exact, Integer if exact (e.g., 6/2=3)
+// - We use values that don't divide evenly to test Rational result
+func TestNumericTower_DivisionResultTypes(t *testing.T) {
+	c := qt.New(t)
+
+	// Receivers (a) - numerators
+	integerA := NewInteger(5)
+	bigIntegerA := NewBigIntegerFromInt64(7)
+	rationalA := NewRational(5, 2)
+	floatA := NewFloat(2.5)
+	bigFloatA := NewBigFloatFromFloat64(3.5)
+	complexA := NewComplexFromParts(2.0, 1.0)
+	bigComplexA := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(2), NewBigFloatFromFloat64(1))
+
+	// Operands (b) - denominators that won't divide evenly into receivers
+	integerB := NewInteger(3)
+	bigIntegerB := NewBigIntegerFromInt64(11)
+	rationalB := NewRational(3, 4)
+	floatB := NewFloat(1.5)
+	bigFloatB := NewBigFloatFromFloat64(2.5)
+	complexB := NewComplexFromParts(3.0, 2.0)
+	bigComplexB := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(5), NewBigFloatFromFloat64(3))
+
+	// Division result types
+	// Note: Integer/Integer returns Rational when not exact (5/3), Integer when exact (6/2)
+	expectedDiv := map[string]string{
+		// Integer row - division by non-divisor produces Rational
+		"Integer/Integer":    "*values.Rational", // 5/3 = 5/3
+		"Integer/BigInteger": "*values.Rational", // 5/11 = 5/11
+		"Integer/Rational":   "*values.Rational",
+		"Integer/Float":      "*values.Float",
+		"Integer/BigFloat":   "*values.BigFloat",
+		"Integer/Complex":    "*values.Complex",
+		"Integer/BigComplex": "*values.BigComplex",
+		// BigInteger row
+		"BigInteger/Integer":    "*values.Rational",
+		"BigInteger/BigInteger": "*values.Rational",
+		"BigInteger/Rational":   "*values.Rational",
+		"BigInteger/Float":      "*values.Float",
+		"BigInteger/BigFloat":   "*values.BigFloat",
+		"BigInteger/Complex":    "*values.Complex",
+		"BigInteger/BigComplex": "*values.BigComplex",
+		// Rational row
+		"Rational/Integer":    "*values.Rational",
+		"Rational/BigInteger": "*values.Rational",
+		"Rational/Rational":   "*values.Rational",
+		"Rational/Float":      "*values.Float",
+		"Rational/BigFloat":   "*values.BigFloat",
+		"Rational/Complex":    "*values.Complex",
+		"Rational/BigComplex": "*values.BigComplex",
+		// Float row
+		"Float/Integer":    "*values.Float",
+		"Float/BigInteger": "*values.Float",
+		"Float/Rational":   "*values.Float",
+		"Float/Float":      "*values.Float",
+		"Float/BigFloat":   "*values.BigFloat",
+		"Float/Complex":    "*values.Complex",
+		"Float/BigComplex": "*values.BigComplex",
+		// BigFloat row
+		// Note: BigFloat/Complex returns Complex (loses precision) - see big_float.go
+		"BigFloat/Integer":    "*values.BigFloat",
+		"BigFloat/BigInteger": "*values.BigFloat",
+		"BigFloat/Rational":   "*values.BigFloat",
+		"BigFloat/Float":      "*values.BigFloat",
+		"BigFloat/BigFloat":   "*values.BigFloat",
+		"BigFloat/Complex":    "*values.Complex", // Loses BigFloat precision!
+		"BigFloat/BigComplex": "*values.BigComplex",
+		// Complex row
+		"Complex/Integer":    "*values.Complex",
+		"Complex/BigInteger": "*values.Complex",
+		"Complex/Rational":   "*values.Complex",
+		"Complex/Float":      "*values.Complex",
+		"Complex/BigFloat":   "*values.BigComplex",
+		"Complex/Complex":    "*values.Complex",
+		"Complex/BigComplex": "*values.BigComplex",
+		// BigComplex row
+		"BigComplex/Integer":    "*values.BigComplex",
+		"BigComplex/BigInteger": "*values.BigComplex",
+		"BigComplex/Rational":   "*values.BigComplex",
+		"BigComplex/Float":      "*values.BigComplex",
+		"BigComplex/BigFloat":   "*values.BigComplex",
+		"BigComplex/Complex":    "*values.BigComplex",
+		"BigComplex/BigComplex": "*values.BigComplex",
+	}
+
+	receivers := []struct {
+		name  string
+		value Number
+	}{
+		{"Integer", integerA},
+		{"BigInteger", bigIntegerA},
+		{"Rational", rationalA},
+		{"Float", floatA},
+		{"BigFloat", bigFloatA},
+		{"Complex", complexA},
+		{"BigComplex", bigComplexA},
+	}
+
+	operands := []struct {
+		name  string
+		value Number
+	}{
+		{"Integer", integerB},
+		{"BigInteger", bigIntegerB},
+		{"Rational", rationalB},
+		{"Float", floatB},
+		{"BigFloat", bigFloatB},
+		{"Complex", complexB},
+		{"BigComplex", bigComplexB},
+	}
+
+	for _, a := range receivers {
+		for _, b := range operands {
+			key := a.name + "/" + b.name
+			t.Run(key, func(t *testing.T) {
+				result := a.value.Divide(b.value)
+				actualType := fmt.Sprintf("%T", result)
+				expectedType := expectedDiv[key]
+				c.Assert(actualType, qt.Equals, expectedType,
+					qt.Commentf("Divide: %s / %s", a.name, b.name))
+			})
+		}
+	}
+}
+
+// TestNumericTower_ExactnessPreservation verifies that exact + exact = exact
+// and exact + inexact = inexact (R7RS §6.2.2 exactness contagion).
+func TestNumericTower_ExactnessPreservation(t *testing.T) {
+	c := qt.New(t)
+
+	// Exact types
+	exactInt := NewInteger(3)
+	exactBigInt := NewBigIntegerFromInt64(5)
+	exactRational := NewRational(1, 2)
+	exactBigComplex := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))
+
+	// Inexact types
+	inexactFloat := NewFloat(3.0)
+	inexactBigFloat := NewBigFloatFromFloat64(5.0)
+	inexactComplex := NewComplexFromParts(1.0, 2.0)
+	inexactBigComplex := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(1), NewBigFloatFromFloat64(2))
+
+	// Test exact + exact = exact
+	t.Run("exact+exact=exact", func(t *testing.T) {
+		// Integer + Integer
+		result := exactInt.Add(exactInt)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("Integer + Integer"))
+
+		// Integer + BigInteger
+		result = exactInt.Add(exactBigInt)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("Integer + BigInteger"))
+
+		// Integer + Rational
+		result = exactInt.Add(exactRational)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("Integer + Rational"))
+
+		// Rational + Rational
+		result = exactRational.Add(exactRational)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("Rational + Rational"))
+
+		// BigComplex(exact) + Integer
+		result = exactBigComplex.Add(exactInt)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("BigComplex(exact) + Integer"))
+
+		// BigComplex(exact) + Rational
+		result = exactBigComplex.Add(exactRational)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("BigComplex(exact) + Rational"))
+
+		// BigComplex(exact) + BigComplex(exact)
+		result = exactBigComplex.Add(exactBigComplex)
+		c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("BigComplex(exact) + BigComplex(exact)"))
+	})
+
+	// Test exact + inexact = inexact
+	t.Run("exact+inexact=inexact", func(t *testing.T) {
+		// Integer + Float
+		result := exactInt.Add(inexactFloat)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Integer + Float"))
+
+		// Integer + BigFloat
+		result = exactInt.Add(inexactBigFloat)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Integer + BigFloat"))
+
+		// Integer + Complex
+		result = exactInt.Add(inexactComplex)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Integer + Complex"))
+
+		// Rational + Float
+		result = exactRational.Add(inexactFloat)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Rational + Float"))
+
+		// BigComplex(exact) + Float
+		result = exactBigComplex.Add(inexactFloat)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("BigComplex(exact) + Float"))
+
+		// BigComplex(exact) + Complex
+		result = exactBigComplex.Add(inexactComplex)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("BigComplex(exact) + Complex"))
+
+		// BigComplex(exact) + BigComplex(inexact)
+		result = exactBigComplex.Add(inexactBigComplex)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("BigComplex(exact) + BigComplex(inexact)"))
+	})
+
+	// Test inexact + inexact = inexact
+	t.Run("inexact+inexact=inexact", func(t *testing.T) {
+		result := inexactFloat.Add(inexactFloat)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Float + Float"))
+
+		result = inexactComplex.Add(inexactComplex)
+		c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("Complex + Complex"))
+	})
+}
+
+// TestNumericTower_ExactComplexArithmetic verifies that arithmetic with exact complex
+// numbers preserves exactness (the key behavior that direct dispatch handles correctly).
+func TestNumericTower_ExactComplexArithmetic(t *testing.T) {
+	c := qt.New(t)
+
+	// Create exact complex: 3+4i using BigComplex with BigInteger parts
+	exactComplex := NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4))
+	c.Assert(exactComplex.IsExact(), qt.IsTrue, qt.Commentf("3+4i should be exact"))
+
+	// exact complex + exact integer = exact complex
+	t.Run("exact_complex+integer", func(t *testing.T) {
+		result := exactComplex.Add(NewInteger(5))
+		c.Assert(result.IsExact(), qt.IsTrue)
+		// Result should be 8+4i
+		bc, ok := result.(*BigComplex)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(8))
+		c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(4))
+	})
+
+	// exact complex + exact rational = exact complex
+	t.Run("exact_complex+rational", func(t *testing.T) {
+		result := exactComplex.Add(NewRational(1, 2))
+		c.Assert(result.IsExact(), qt.IsTrue)
+		// Result should be 7/2+4i (3.5+4i as exact)
+		bc, ok := result.(*BigComplex)
+		c.Assert(ok, qt.IsTrue)
+		// Real part should be Rational 7/2
+		rat, ok := bc.Real().(*Rational)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(rat.Num().Int64(), qt.Equals, int64(7))
+		c.Assert(rat.Denom().Int64(), qt.Equals, int64(2))
+	})
+
+	// exact complex * exact complex = exact complex
+	t.Run("exact_complex*exact_complex", func(t *testing.T) {
+		// (3+4i) * (1+2i) = 3 + 6i + 4i + 8i² = 3 + 10i - 8 = -5 + 10i
+		other := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))
+		result := exactComplex.Multiply(other)
+		c.Assert(result.IsExact(), qt.IsTrue)
+		bc, ok := result.(*BigComplex)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(-5))
+		c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(10))
+	})
+
+	// exact complex + inexact float = inexact
+	t.Run("exact_complex+float=inexact", func(t *testing.T) {
+		result := exactComplex.Add(NewFloat(1.5))
+		c.Assert(result.IsExact(), qt.IsFalse)
+	})
+}
+
 // TestNumericTower_CoverageMatrix prints a coverage matrix for documentation
 func TestNumericTower_CoverageMatrix(t *testing.T) {
 	if testing.Short() {
