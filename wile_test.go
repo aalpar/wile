@@ -364,6 +364,35 @@ func TestCall_ParameterTooManyArgs(t *testing.T) {
 	c.Assert(rtErr.Message, qt.Contains, "expected 0 or 1 arguments")
 }
 
+func TestCall_ComposableContinuation(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	// Capture a composable continuation into a variable
+	_, err = engine.EvalMultiple(ctx, `
+		(define saved-k #f)
+		(define tag (make-continuation-prompt-tag 'test))
+		(call-with-continuation-prompt
+			(lambda ()
+				(call-with-composable-continuation
+					(lambda (k) (set! saved-k k) 0)
+					tag))
+			tag
+			(lambda (v) v))
+	`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("saved-k")
+	c.Assert(ok, qt.IsTrue)
+
+	_, err = engine.Call(ctx, proc, NewInteger(1))
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Message, qt.Equals, "cannot call composable continuation from Go")
+}
+
 // Structured error types
 
 func TestCompilationError(t *testing.T) {

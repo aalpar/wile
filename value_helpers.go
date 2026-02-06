@@ -73,8 +73,8 @@ func IsProcedure(v Value) bool {
 	}
 }
 
-// Car returns the car of a pair. Returns (value, true) on success,
-// or (nil, false) if v is not a pair.
+// Car returns the car of a pair or other Tuple type. Returns (value, true)
+// on success, or (nil, false) if v is not a non-empty Tuple.
 func Car(v Value) (Value, bool) {
 	t, ok := unwrapValue(v).(values.Tuple)
 	if !ok || t.IsEmptyList() {
@@ -83,8 +83,8 @@ func Car(v Value) (Value, bool) {
 	return wrapValue(t.Car()), true
 }
 
-// Cdr returns the cdr of a pair. Returns (value, true) on success,
-// or (nil, false) if v is not a pair.
+// Cdr returns the cdr of a pair or other Tuple type. Returns (value, true)
+// on success, or (nil, false) if v is not a non-empty Tuple.
 func Cdr(v Value) (Value, bool) {
 	t, ok := unwrapValue(v).(values.Tuple)
 	if !ok || t.IsEmptyList() {
