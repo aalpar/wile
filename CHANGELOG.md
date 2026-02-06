@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add `CompilationError` and `RuntimeError` structured error types with `Unwrap()` support for programmatic error handling via `errors.As`
+- Add `RuntimeError.Condition` field carrying the Scheme raised value when errors originate from `raise`/`raise-continuable`
+- Add 16 value-inspection helpers for embedding: `IsList`, `IsPair`, `IsVector`, `IsSymbol`, `Car`, `Cdr`, `ToSlice`, `ToGoInt`, `ToGoFloat`, `ToGoString`, `ToGoBool`, `ToGoBytes`, `ListLength`, `VectorRef`, `VectorLength`, `VectorToSlice`
+
+### Changed
+
+- `Engine.Call` now dispatches case-lambda, parameter objects, and composable continuations in addition to plain closures
+
+### Fixed
+
+- Fix `Engine.Call` and `runCompiled` leaking internal `ErrMachineHalt` sentinel to callers
+- Fix parameter converter errors returned without context (now wrapped with "parameter: converter error")
+- Use `errors.Is` for all sentinel error comparisons (`io.EOF`, `ErrMachineHalt`) to handle wrapped errors correctly
+
 ## [1.0.3] - 2026-02-05
 
 ### Fixed
