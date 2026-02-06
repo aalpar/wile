@@ -63,34 +63,6 @@ func (p *BigFloat) Float64() float64 {
 	return f
 }
 
-// addSame adds two BigFloats of the same type.
-func (p *BigFloat) addSame(o *BigFloat) Number {
-	return &BigFloat{value: new(big.Float).Add(p.value, o.value)}
-}
-
-// subtractSame subtracts two BigFloats of the same type.
-func (p *BigFloat) subtractSame(o *BigFloat) Number {
-	return &BigFloat{value: new(big.Float).Sub(p.value, o.value)}
-}
-
-// multiplySame multiplies two BigFloats of the same type.
-func (p *BigFloat) multiplySame(o *BigFloat) Number {
-	return &BigFloat{value: new(big.Float).Mul(p.value, o.value)}
-}
-
-// divideSame divides two BigFloats of the same type.
-func (p *BigFloat) divideSame(o *BigFloat) Number {
-	if o.value.Sign() == 0 {
-		panic(ErrDivisionByZero)
-	}
-	return &BigFloat{value: new(big.Float).Quo(p.value, o.value)}
-}
-
-// compareSame compares two BigFloats of the same type.
-func (p *BigFloat) compareSame(o *BigFloat) int {
-	return p.value.Cmp(o.value)
-}
-
 // Add returns the sum of this BigFloat and another number.
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower

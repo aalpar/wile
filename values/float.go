@@ -50,39 +50,6 @@ func (p *Float) Datum() float64 {
 	return p.Value
 }
 
-// addSame adds two Floats of the same type.
-func (p *Float) addSame(o *Float) Number {
-	return NewFloat(p.Value + o.Value)
-}
-
-// subtractSame subtracts two Floats of the same type.
-func (p *Float) subtractSame(o *Float) Number {
-	return NewFloat(p.Value - o.Value)
-}
-
-// multiplySame multiplies two Floats of the same type.
-func (p *Float) multiplySame(o *Float) Number {
-	return NewFloat(p.Value * o.Value)
-}
-
-// divideSame divides two Floats of the same type.
-func (p *Float) divideSame(o *Float) Number {
-	if o.Value == 0 {
-		panic(ErrDivisionByZero)
-	}
-	return NewFloat(p.Value / o.Value)
-}
-
-// compareSame compares two Floats of the same type.
-func (p *Float) compareSame(o *Float) int {
-	if p.Value < o.Value {
-		return -1
-	} else if p.Value > o.Value {
-		return 1
-	}
-	return 0
-}
-
 // Add returns the sum of two numbers.
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
