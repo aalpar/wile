@@ -1,5 +1,7 @@
 # Higher-Risk Architectural Consolidation Plan
 
+**Status:** PLANNED — Analysis complete, implementation not started
+
 ## Executive Summary
 
 This document explores higher-risk architectural changes that could save significantly more code than the low-risk helpers approach. These changes involve introducing new abstractions, interfaces, or code generation that would require more extensive testing and carry higher implementation risk.

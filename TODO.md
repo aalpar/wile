@@ -16,10 +16,12 @@ Code Cleanup
 ---
 
 ### Numeric Type Unification
-- [ ] **Issue:** Integer, Float, Rational, Complex, BigInteger, BigFloat have some duplicate comparison logic
-- [ ] **Location:** `values/numeric_tower.go` provides unified dispatch (`TowerAdd`, `TowerSubtract`, `TowerCompare`, etc.) but per-type methods still exist
-- [ ] **Goal:** Ensure all cross-type operations go through unified Tower functions
-- [ ] **Files:** All `values/*_number.go` files
+- [x] **Status:** CLOSED (2026-02-05) — Direct dispatch is the intentional architecture
+- [x] **Resolution:** Tower* functions were deleted. Each type's direct dispatch methods handle all 49 type combinations correctly. The duplicate logic is acceptable because:
+  1. Direct dispatch correctly handles exact complex numbers (Tower* had a bug)
+  2. Each case is explicit and testable
+  3. The ~600 lines of switch-case code is the correct, battle-tested implementation
+- [x] **See:** `plans/NUMERIC_TOWER_REFACTOR_COMPLETE.md` for full rationale
 
 ---
 

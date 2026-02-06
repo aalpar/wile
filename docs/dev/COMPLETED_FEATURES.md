@@ -4,39 +4,28 @@ This document summarizes features and APIs that have been implemented, organized
 
 ---
 
-## Numeric Tower (NEW)
+## Numeric Tower
 
-**Location:** `go/values/numeric_tower.go`
-**Plan:** `plans/NUMERIC_TOWER_REFACTOR.md`
-**Status:** Complete
+**Location:** `values/numeric_tower.go`
+**Plan:** `plans/NUMERIC_TOWER_REFACTOR_COMPLETE.md`
+**Status:** Stable (direct dispatch architecture finalized 2026-02-05)
 
 ### Summary
 
-Unified dispatch system for cross-type numeric operations.
+Direct dispatch architecture for cross-type numeric operations. Each type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods handle all 49 type combinations via type switches.
 
-### API
+### Current API
 
 ```go
-// Type ranking
-func Rank(n Number) NumericRank
-func Promote(n Number, target NumericRank) Number
-func PromoteBoth(a, b Number) (Number, Number)
+// Simplification
 func Simplify(n Number) Number
 
 // Exactness
 func ExactnessOf(n Number) Exactness
 func ResultExactness(a, b Number) Exactness
-
-// High-level operations
-func TowerAdd(a, b Number) Number
-func TowerSubtract(a, b Number) Number
-func TowerMultiply(a, b Number) Number
-func TowerDivide(a, b Number) Number
-func TowerCompare(a, b Number) int
-
-// Custom dispatch
-func BinaryOp(a, b Number, op func(Number, Number) Number) Number
 ```
+
+**Deleted (2026-02-05):** `NumericRank`, `Rank`, `Promote`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. These were unused infrastructure with a latent exactness bug for complex numbers.
 
 ### Details
 

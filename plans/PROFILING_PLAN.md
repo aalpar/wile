@@ -1,5 +1,7 @@
 # Wile Profiling Tools Implementation Plan
 
+**Status:** PLANNED — Design complete, implementation not started
+
 ## Overview
 
 Add pprof profiling support to Wile via CLI flags. Profile data outputs to stdout/stderr for logging integration, or to files for analysis with `go tool pprof`.

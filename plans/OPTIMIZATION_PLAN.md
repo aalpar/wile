@@ -1,5 +1,7 @@
 # Wile Optimization Plan
 
+**Status:** PLANNED — Not yet started (performance is explicitly deprioritized per project vision)
+
 ## Overview
 
 Optimize the Wile Scheme interpreter for reduced CPU time, improved memory utilization, and better memory locality.

@@ -1,5 +1,7 @@
 # Macro Expansion Tracing Plan
 
+**Status:** PLANNED — Design in progress, implementation not started
+
 ## Goal
 
 Enable tracing of macro-generated code back to:

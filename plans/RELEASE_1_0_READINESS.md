@@ -1,13 +1,15 @@
 # Wile 1.0 Release Readiness Assessment
 
-**Current version:** v0.8.6-alpha
-**Date:** 2026-02-03
+**Status:** ✅ COMPLETE — v1.0.0 released 2026-02-04
+**Original assessment date:** 2026-02-03
 
 ---
 
 ## Executive Summary
 
-Wile is a well-architected Scheme implementation with a clean embedding API, comprehensive standard library coverage, and solid testing infrastructure. The project is substantially complete but has specific gaps that prevent a credible 1.0 release. The gaps fall into three categories: **correctness issues** (things that silently produce wrong results), **completeness issues** (things that are missing), and **release hygiene** (things expected of a 1.0 project).
+Wile v1.0.0 was released on 2026-02-04. All "Must-Do" blocking items were resolved. This document is retained as historical reference for the release assessment process.
+
+Wile is a well-architected Scheme implementation with a clean embedding API, comprehensive standard library coverage, and solid testing infrastructure.
 
 ---
 

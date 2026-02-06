@@ -1,5 +1,7 @@
 # Systematic Debug Logging Methodology
 
+**Type:** REFERENCE — Methodology document (not an implementation plan)
+
 A disciplined approach to debugging complex issues using targeted debug logging, hypothesis testing, and iterative refinement.
 
 ## Overview

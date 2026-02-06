@@ -1,5 +1,7 @@
 # Tokenizer Number Parsing Consolidation Plan
 
+**Status:** PLANNED — Analysis complete, implementation not started
+
 ## Executive Summary
 
 The tokenizer's number parsing (~700 lines, lines 1080-1800) contains significant repetition due to Scheme's complex numeric literal grammar. This plan identifies "quasi-sub-tokens" - reusable number components - and proposes consolidation through a sub-tokenizer architecture.

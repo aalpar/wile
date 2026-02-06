@@ -1,5 +1,7 @@
 # Wile Plugin Architecture Proposal
 
+**Status:** PROPOSED — Design document for future consideration
+
 ## Overview
 
 This proposal outlines a plugin architecture for Wile that enables embedding the Scheme interpreter in Go applications with customizable functionality. The design separates a minimal core from optional extensions, allowing users to compose exactly the capabilities they need.
