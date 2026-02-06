@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-02-05
+
+### Fixed
+
+- Use SPDX canonical Apache-2.0 license text for pkg.go.dev license detection
+
 ## [1.0.2] - 2026-02-05
 
 ### Fixed
