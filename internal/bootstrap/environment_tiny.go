@@ -29,6 +29,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
@@ -200,7 +201,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 
 		for {
 			stx, err := p.ReadSyntax(ctx)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
