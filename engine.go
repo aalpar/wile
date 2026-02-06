@@ -365,7 +365,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			mc := machine.NewMachineContext(ctx, cont)
 			err = mc.Run()
 			if err != nil {
-				if err != machine.ErrMachineHalt {
+				if !errors.Is(err, machine.ErrMachineHalt) {
 					return err
 				}
 			}

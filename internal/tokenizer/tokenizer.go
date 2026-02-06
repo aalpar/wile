@@ -860,11 +860,11 @@ func (p *Tokenizer) readExactness(state TokenizerState) {
 
 func (p *Tokenizer) readBoolean(key string, state TokenizerState) {
 	k := p.scanCaseInsensitive([]byte(key))
-	if p.err != nil && p.err != io.EOF {
+	if p.err != nil && !errors.Is(p.err, io.EOF) {
 		// #t is a valid boolean
 		return
 	}
-	if (k == 0 || k == len(key)-1) && (isDelimiter(p.curr()) || p.err == io.EOF) {
+	if (k == 0 || k == len(key)-1) && (isDelimiter(p.curr()) || errors.Is(p.err, io.EOF)) {
 		p.state = state
 		return
 	}
@@ -2059,7 +2059,7 @@ func (p *Tokenizer) term() {
 
 // isEOF returns true if the tokenizer has reached end of input.
 func (p *Tokenizer) isEOF() bool {
-	return p.err == io.EOF
+	return errors.Is(p.err, io.EOF)
 }
 
 // span returns the accumulated source text for the current token.

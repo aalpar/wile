@@ -926,11 +926,11 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	buf := make([]byte, end-start)
 	n, err := p.Read(buf)
 
-	if err == io.EOF && n == 0 {
+	if errors.Is(err, io.EOF) && n == 0 {
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return values.WrapForeignReadErrorf(err, "read-bytevector!: error reading from port")
 	}
 
