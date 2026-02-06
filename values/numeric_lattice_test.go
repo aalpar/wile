@@ -32,11 +32,11 @@ import (
 type PrecisionRank int
 
 const (
-	PrecisionInteger PrecisionRank = iota // int64
-	PrecisionBigInteger                   // arbitrary-precision integer
-	PrecisionRational                     // exact rational
-	PrecisionFloat                        // float64 (inexact)
-	PrecisionBigFloat                     // arbitrary-precision float (inexact)
+	PrecisionInteger    PrecisionRank = iota // int64
+	PrecisionBigInteger                      // arbitrary-precision integer
+	PrecisionRational                        // exact rational
+	PrecisionFloat                           // float64 (inexact)
+	PrecisionBigFloat                        // arbitrary-precision float (inexact)
 )
 
 func (p PrecisionRank) String() string {
@@ -510,10 +510,10 @@ func TestLattice_ExactnessPreservation(t *testing.T) {
 	c := qt.New(t)
 
 	tests := []struct {
-		name         string
-		a, b         Number
-		expectExact  bool
-		description  string
+		name        string
+		a, b        Number
+		expectExact bool
+		description string
 	}{
 		// Exact + Exact = Exact
 		{"Int+Int", NewInteger(1), NewInteger(2), true, "exact integer + exact integer"},
