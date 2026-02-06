@@ -1,6 +1,7 @@
 # Wile
 
 [![CI](https://github.com/aalpar/wile/actions/workflows/ci.yml/badge.svg)](https://github.com/aalpar/wile/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/aalpar/wile.svg)](https://pkg.go.dev/github.com/aalpar/wile)
 
 A R7RS Scheme interpreter/compiler in Go with hygienic macros.
 
@@ -8,9 +9,9 @@ The name is a play on "scheme" (as in "wiles" - cunning stratagems) and a nod to
 
 ## Overview
 
-Wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` macros with a "sets of scopes" hygiene model (Flatt 2016).
+Wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` and `syntax-case` macros with a "sets of scopes" hygiene model (Flatt 2016).
 
-Wile is designed as a Scheme scripting layer that feels native to Go. It provides what Go intentionally lacks -- hygienic macros, first-class continuations, symbolic computation -- without requiring CGo, a C toolchain, or cross-compilation headaches. Add it with `go get` and it just works.
+Wile is designed as a Scheme scripting layer that feels native to Go. It provides what Go intentionally lacks — hygienic macros, first-class continuations, symbolic computation — without requiring CGo, a C toolchain, or cross-compilation headaches. Add it with `go get` and it just works.
 
 ## Background
 
@@ -26,16 +27,32 @@ Anthropic's Claude Code was used to help document, fill out the primitive librar
 
 ## Features
 
-- **R7RS-small compliance** - Standard libraries, numeric tower, continuations, tail calls
-- **Bytecode compilation** - Scheme code compiles to an efficient bytecode representation
-- **Stack-based VM** - Execution uses a stack machine with proper tail-call optimization
-- **Hygienic macros** - `syntax-rules` with the "sets of scopes" model (Flatt 2016)
-- **First-class continuations** - `call/cc` and `dynamic-wind` with delimited continuation support
-- **Full numeric tower** - Integers, rationals, floats, complex numbers with exact/inexact distinction
-- **Arbitrary precision** - `BigInteger` with automatic overflow promotion
-- **Library system** - `define-library`, `import`, `export` with configurable search paths
-- **Pure Go** - No CGo, no C dependencies, works with `go get`
-- **Go embedding API** - Clean API for evaluating Scheme from Go and registering Go functions as primitives
+### Core Language
+
+- **R7RS-small compliance** — Full conformance with all standard libraries
+- **Hygienic macros** — `syntax-rules` and `syntax-case` with the "sets of scopes" model (Flatt 2016)
+- **First-class continuations** — `call/cc` and `dynamic-wind` with proper semantics
+- **Delimited continuations** — `call-with-continuation-prompt`, `abort-current-continuation`, and composable continuations
+- **Full numeric tower** — Integers, rationals, floats, complex numbers with exact/inexact distinction
+- **Arbitrary precision** — `BigInteger` and `BigFloat` with automatic overflow promotion
+- **Library system** — `define-library`, `import`, `export` with configurable search paths
+- **Records** — `define-record-type` (SRFI-9 style)
+- **Promises** — `delay`, `force`, and lazy evaluation
+
+### Runtime
+
+- **Bytecode compilation** — Scheme code compiles to an efficient bytecode representation
+- **Stack-based VM** — Proper tail-call optimization
+- **SRFI-18 threading** — Threads, mutexes, and condition variables
+- **Go concurrency interop** — Channels, WaitGroups, RWMutex, Once, Atomic values
+- **Exception handling** — `guard`, `with-exception-handler`, `raise`
+
+### Tooling
+
+- **Interactive REPL** — Readline support with history and multi-line input
+- **Source-level debugger** — Breakpoints, stepping, stack traces
+- **Pure Go** — No CGo, no C dependencies, works with `go get`
+- **Go embedding API** — Clean API for evaluating Scheme from Go and registering Go functions as primitives
 
 ## Installation
 
@@ -63,28 +80,46 @@ The binary is built to `./dist/{os}/{arch}/scheme`.
 
 ```bash
 # Start REPL
-./dist/darwin/arm64/scheme
+scheme
 
 # Run a Scheme file
-./dist/darwin/arm64/scheme --file example.scm
-./dist/darwin/arm64/scheme -f example.scm
-./dist/darwin/arm64/scheme example.scm
+scheme example.scm
+scheme --file example.scm
+scheme -f example.scm
 
 # With library search path
-./dist/darwin/arm64/scheme -L /path/to/libs example.scm
+scheme -L /path/to/libs example.scm
+
+# Enter REPL after loading file
+scheme -f example.scm -i
 
 # Print version
-./dist/darwin/arm64/scheme --version
+scheme --version
 ```
-
-Replace `darwin/arm64` with your platform (e.g., `linux/amd64`).
 
 The `SCHEME_LIBRARY_PATH` environment variable provides additional library search paths (colon-separated).
 
-## Example
+### REPL Debugger
+
+The REPL includes an integrated debugger. Commands start with `,`:
+
+| Command | Description |
+|---------|-------------|
+| `,break FILE:LINE` | Set breakpoint |
+| `,delete ID` | Delete breakpoint |
+| `,list` | List breakpoints |
+| `,step` | Step into next expression |
+| `,next` | Step over (same frame) |
+| `,finish` | Step out (return from function) |
+| `,continue` | Continue execution |
+| `,backtrace` | Show stack trace |
+| `,where` | Show current source location |
+
+## Examples
+
+### Hygienic Macros
 
 ```scheme
-;; Hygienic macros
 (define-syntax swap!
   (syntax-rules ()
     ((swap! x y)
@@ -96,8 +131,11 @@ The `SCHEME_LIBRARY_PATH` environment variable provides additional library searc
   (swap! a b)
   (list a b))
 ;; => (2 1)
+```
 
-;; First-class continuations
+### First-Class Continuations
+
+```scheme
 (call-with-current-continuation
   (lambda (exit)
     (for-each (lambda (x)
@@ -105,6 +143,53 @@ The `SCHEME_LIBRARY_PATH` environment variable provides additional library searc
               '(54 0 37 -3 245 19))
     #t))
 ;; => -3
+```
+
+### Delimited Continuations
+
+```scheme
+(define tag (make-continuation-prompt-tag 'example))
+
+(call-with-continuation-prompt
+  (lambda ()
+    (+ 1 (abort-current-continuation tag 42)))
+  tag
+  (lambda (v) (* v 2)))
+;; => 84
+```
+
+### Threads (SRFI-18)
+
+```scheme
+(import (srfi 18))
+
+(define counter 0)
+(define mtx (make-mutex))
+
+(define (increment!)
+  (mutex-lock! mtx)
+  (set! counter (+ counter 1))
+  (mutex-unlock! mtx))
+
+(define threads
+  (map (lambda (_)
+         (make-thread increment!))
+       (iota 10)))
+
+(for-each thread-start! threads)
+(for-each thread-join! threads)
+counter
+;; => 10
+```
+
+### Go Channels
+
+```scheme
+(define ch (make-channel 10))  ; buffered channel
+
+(channel-send! ch 42)
+(channel-receive ch)
+;; => 42
 ```
 
 ## Embedding in Go
@@ -181,10 +266,13 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 |---|---|
 | `wile.NewInteger(n)` | Exact integer |
 | `wile.NewFloat(f)` | Inexact real |
+| `wile.NewRational(num, den)` | Exact rational |
+| `wile.NewComplex(re, im)` | Complex number |
 | `wile.NewString(s)` | String |
 | `wile.NewSymbol(s)` | Symbol |
 | `wile.NewBoolean(b)` | `#t` / `#f` |
 | `wile.NewList(vals...)` | Proper list |
+| `wile.NewVector(vals...)` | Vector |
 | `wile.Null` | Empty list `'()` |
 | `wile.Void` | Void value |
 
@@ -198,8 +286,6 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 
 ## R7RS Standard Libraries
 
-The following R7RS libraries are available via `(import ...)`:
-
 | Library | Description |
 |---|---|
 | `(scheme base)` | Core language: arithmetic, pairs, lists, strings, vectors, control |
@@ -208,8 +294,8 @@ The following R7RS libraries are available via `(import ...)`:
 | `(scheme complex)` | Complex number operations |
 | `(scheme cxr)` | Compositions of `car` and `cdr` |
 | `(scheme eval)` | `eval` and `environment` |
-| `(scheme file)` | File I/O (`open-input-file`, `file-exists?`, etc.) |
-| `(scheme inexact)` | Inexact math (`sin`, `cos`, `exp`, `log`, `sqrt`, etc.) |
+| `(scheme file)` | File I/O |
+| `(scheme inexact)` | Transcendental functions (`sin`, `cos`, `exp`, `log`, `sqrt`, etc.) |
 | `(scheme lazy)` | Promises (`delay`, `force`, `make-promise`) |
 | `(scheme load)` | `load` |
 | `(scheme read)` | `read` |
@@ -219,31 +305,45 @@ The following R7RS libraries are available via `(import ...)`:
 | `(scheme time)` | `current-second`, `current-jiffy`, `jiffies-per-second` |
 | `(scheme r5rs)` | R5RS compatibility |
 
+## Additional Libraries
+
+| Library | Description |
+|---|---|
+| `(srfi 18)` | Multithreading (threads, mutexes, condition variables) |
+| `(chibi test)` | Minimal test framework (for R7RS test compatibility) |
+
 ## Architecture
 
 ```
 Source → Tokenizer → Parser → Expander → Compiler → VM
 ```
 
-1. **Tokenizer** - Lexical analysis with comprehensive R7RS token support
-2. **Parser** - Builds syntax tree with source location tracking
-3. **Expander** - Macro expansion using `syntax-rules` transformers with scope sets
-4. **Compiler** - Generates bytecode operations
-5. **VM** - Executes bytecode with stack-based evaluation
+1. **Tokenizer** — Lexical analysis with comprehensive R7RS token support
+2. **Parser** — Builds syntax tree with source location tracking
+3. **Expander** — Macro expansion using `syntax-rules`/`syntax-case` with scope sets
+4. **Compiler** — Generates bytecode operations
+5. **VM** — Executes bytecode with stack-based evaluation
 
-### Key Components
+### Package Structure
 
 | Package | Purpose |
 |---------|---------|
-| `.` (root) | Public embedding API (`wile` package) |
+| `wile` (root) | Public embedding API |
 | `machine/` | Virtual machine, compiler, macro expander |
-| `values/` | Scheme value types (numbers, pairs, ports, etc.) |
+| `values/` | Scheme value types (numbers, pairs, ports, threads, etc.) |
 | `environment/` | Variable binding, scope chains, phase hierarchy |
 | `registry/` | Extension registration and primitives |
-| `internal/syntax/` | First-class syntax objects with scope sets for hygiene |
-| `internal/match/` | Pattern matching engine for `syntax-rules` macros |
-| `internal/parser/` | Scheme parser with source location tracking |
+| `registry/core/` | Essential primitives and bootstrap macros |
+| `registry/helpers/` | Shared utilities for primitive implementations |
+| `runtime/` | Compile/Run API for embedding |
+| `internal/syntax/` | First-class syntax objects with scope sets |
+| `internal/match/` | Pattern matching engine for macros |
+| `internal/parser/` | Scheme parser |
 | `internal/tokenizer/` | Lexer |
+| `internal/validate/` | Syntax validation |
+| `internal/repl/` | Interactive REPL with debugger |
+| `internal/bootstrap/` | Environment initialization |
+| `internal/extensions/` | Extension packages (io, files, math, threads, etc.) |
 
 ## Hygiene Model
 
@@ -268,19 +368,51 @@ This prevents unintended variable capture in macros:
   tmp)  ; => 5, not captured by macro's tmp
 ```
 
+## Types
+
+### Numeric Tower
+
+| Type | Description | Example |
+|------|-------------|---------|
+| Integer | Exact 64-bit signed | `42`, `-17` |
+| BigInteger | Exact arbitrary precision | `#z12345678901234567890` |
+| Rational | Exact fraction | `3/4`, `-1/2` |
+| Float | Inexact IEEE 754 double | `3.14`, `1e10` |
+| BigFloat | Inexact arbitrary precision | `#m3.14159265358979323846` |
+| Complex | Complex number | `1+2i`, `3@1.57` (polar) |
+
+### Concurrency Types
+
+| Type | Description |
+|------|-------------|
+| Thread | SRFI-18 thread |
+| Mutex | SRFI-18 mutex |
+| Condition Variable | SRFI-18 condition variable |
+| Channel | Go channel wrapper |
+| WaitGroup | Go sync.WaitGroup wrapper |
+| RWMutex | Go sync.RWMutex wrapper |
+| Atomic | Thread-safe mutable value |
+
 ## Documentation
 
-- `PRIMITIVES.md` - Complete reference of supported types and primitives
-- `docs/design/DESIGN.md` - Detailed macro system design
-- `docs/design/EMBEDDING.md` - Embedding API design
-- `BIBLIOGRAPHY.md` - Academic references
-- `TODO.md` - Implementation status and pending tasks
+| Document | Description |
+|----------|-------------|
+| `PRIMITIVES.md` | Complete reference of types and primitives |
+| `docs/design/DESIGN.md` | Macro system design |
+| `docs/design/EMBEDDING.md` | Embedding API design |
+| `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuation implementation |
+| `docs/dev/NUMERIC_TOWER.md` | Numeric tower architecture |
+| `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
+| `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented differences from R7RS |
+| `BIBLIOGRAPHY.md` | Academic references |
+| `CHANGELOG.md` | Release history |
 
 ## References
 
-- [Binding as Sets of Scopes](https://www.cs.utah.edu/plt/scope-sets/) - Flatt (2016)
-- [R7RS Scheme](https://small.r7rs.org/) - Language specification
+- [Binding as Sets of Scopes](https://www.cs.utah.edu/plt/scope-sets/) — Flatt (2016)
+- [R7RS Scheme](https://small.r7rs.org/) — Language specification
+- [SRFI-18](https://srfi.schemers.org/srfi-18/) — Multithreading
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.

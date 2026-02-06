@@ -103,6 +103,26 @@ test: build
 bench:
 	$(GO_TEST) -bench=. -benchmem ./...
 
+# Run the Schelog integration benchmark (logic programming stress test).
+# Runs the Zebra puzzle and basic schelog operations in a single process.
+# Measures time and memory usage. Useful for detecting performance regressions.
+#   make bench-schelog
+SCHELOG_DIR=examples/logic/schelog
+SCHELOG_LIBS=-i -f $(SCHELOG_DIR)/schelog.scm \
+             -i -f $(SCHELOG_DIR)/toys.scm \
+             -i -f $(SCHELOG_DIR)/puzzle.scm \
+             -i -f $(SCHELOG_DIR)/houses.scm
+
+.PHONY: bench-schelog
+bench-schelog: build
+	@if command -v gtime >/dev/null 2>&1; then \
+		gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+	elif [ -x /usr/bin/time ]; then \
+		/usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+	else \
+		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
+	fi
+
 # Run tests with coverage and print per-function coverage summary.
 # Writes coverage profile to ./build/coverage.out.
 #   make cover
