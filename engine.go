@@ -267,7 +267,7 @@ func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, ar
 			converter := param.Converter()
 			converted, err := p.callClosure(ctx, converter, []values.Value{newVal})
 			if err != nil {
-				return nil, err
+				return nil, &RuntimeError{Message: "parameter: converter error", Cause: err}
 			}
 			newVal = unwrapValue(converted)
 		}
