@@ -15,10 +15,12 @@
 package wile
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"testing"
 
+	"github.com/aalpar/wile/internal/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
 
 	qt "github.com/frankban/quicktest"
@@ -225,4 +227,423 @@ func TestWithExtensions(t *testing.T) {
 	engine, err := NewEngine(WithExtensions())
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine, qt.IsNotNil)
+}
+
+// Call with different callable types
+
+func TestCall_Lambda(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.EvalMultiple(ctx, `(define (add a b) (+ a b))`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("add")
+	c.Assert(ok, qt.IsTrue)
+
+	result, err := engine.Call(ctx, proc, NewInteger(3), NewInteger(4))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "7")
+}
+
+func TestCall_CaseLambda(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.EvalMultiple(ctx, `
+		(define f
+			(case-lambda
+				((x) (* x x))
+				((x y) (+ x y))))
+	`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("f")
+	c.Assert(ok, qt.IsTrue)
+
+	// 1-arg clause
+	result, err := engine.Call(ctx, proc, NewInteger(5))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "25")
+
+	// 2-arg clause
+	result, err = engine.Call(ctx, proc, NewInteger(3), NewInteger(7))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "10")
+}
+
+func TestCall_Parameter(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.EvalMultiple(ctx, `(define p (make-parameter 42))`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("p")
+	c.Assert(ok, qt.IsTrue)
+
+	// 0-arg: get current value
+	result, err := engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+
+	// 1-arg: set new value
+	result, err = engine.Call(ctx, proc, NewInteger(99))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.IsVoid(), qt.IsTrue)
+
+	// verify the set took effect
+	result, err = engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "99")
+}
+
+func TestCall_ParameterWithConverter(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	// Parameter with converter that doubles the input
+	_, err = engine.EvalMultiple(ctx, `
+		(define p (make-parameter 0 (lambda (x) (* x 2))))
+	`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("p")
+	c.Assert(ok, qt.IsTrue)
+
+	// Initial value was passed through converter: 0 * 2 = 0
+	result, err := engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "0")
+
+	// Set with converter: 5 * 2 = 10
+	_, err = engine.Call(ctx, proc, NewInteger(5))
+	c.Assert(err, qt.IsNil)
+
+	result, err = engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "10")
+}
+
+func TestCall_NotAProcedure(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.Call(ctx, NewInteger(42))
+
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Message, qt.Equals, "not a procedure")
+}
+
+func TestCall_ParameterTooManyArgs(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.EvalMultiple(ctx, `(define p (make-parameter 0))`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("p")
+	c.Assert(ok, qt.IsTrue)
+
+	_, err = engine.Call(ctx, proc, NewInteger(1), NewInteger(2))
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Message, qt.Contains, "expected 0 or 1 arguments")
+}
+
+func TestCall_ComposableContinuation(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	// Capture a composable continuation into a variable
+	_, err = engine.EvalMultiple(ctx, `
+		(define saved-k #f)
+		(define tag (make-continuation-prompt-tag 'test))
+		(call-with-continuation-prompt
+			(lambda ()
+				(call-with-composable-continuation
+					(lambda (k) (set! saved-k k) 0)
+					tag))
+			tag
+			(lambda (v) v))
+	`)
+	c.Assert(err, qt.IsNil)
+
+	proc, ok := engine.Get("saved-k")
+	c.Assert(ok, qt.IsTrue)
+
+	_, err = engine.Call(ctx, proc, NewInteger(1))
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Message, qt.Equals, "cannot call composable continuation from Go")
+}
+
+// Structured error types
+
+func TestCompilationError(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.Eval(ctx, "(")
+
+	var compErr *CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue)
+	c.Assert(compErr.Cause, qt.IsNotNil)
+}
+
+func TestCompilationError_Format(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("with cause", func(t *testing.T) {
+		e := &CompilationError{Message: "parse error", Cause: errors.New("unexpected EOF")}
+		c.Assert(e.Error(), qt.Equals, "parse error: unexpected EOF")
+	})
+
+	t.Run("without cause", func(t *testing.T) {
+		e := &CompilationError{Message: "parse error"}
+		c.Assert(e.Error(), qt.Equals, "parse error")
+	})
+}
+
+func TestCompilationError_Unwrap(t *testing.T) {
+	c := qt.New(t)
+	cause := errors.New("root")
+	e := &CompilationError{Message: "msg", Cause: cause}
+	c.Assert(e.Unwrap(), qt.Equals, cause)
+}
+
+func TestRuntimeError_DivisionByZero(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.Eval(ctx, "(/ 1 0)")
+
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Cause, qt.IsNotNil)
+}
+
+func TestRuntimeError_SchemeRaise(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(WithExtension(exceptions.Extension))
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.Eval(ctx, `(raise "boom")`)
+
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+	c.Assert(rtErr.Condition, qt.IsNotNil)
+	c.Assert(rtErr.Condition.SchemeString(), qt.Equals, `"boom"`)
+}
+
+func TestRuntimeError_Format(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("with cause", func(t *testing.T) {
+		e := &RuntimeError{Message: "runtime error", Cause: errors.New("division by zero")}
+		c.Assert(e.Error(), qt.Equals, "runtime error: division by zero")
+	})
+
+	t.Run("without cause", func(t *testing.T) {
+		e := &RuntimeError{Message: "runtime error"}
+		c.Assert(e.Error(), qt.Equals, "runtime error")
+	})
+}
+
+func TestRuntimeError_Unwrap(t *testing.T) {
+	c := qt.New(t)
+	cause := errors.New("root")
+	e := &RuntimeError{Message: "msg", Cause: cause}
+	c.Assert(e.Unwrap(), qt.Equals, cause)
+}
+
+// Value helpers
+
+func TestIsList(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsList(NewList(NewInteger(1), NewInteger(2))), qt.IsTrue)
+	c.Assert(IsList(Null), qt.IsTrue)
+	c.Assert(IsList(NewInteger(5)), qt.IsFalse)
+}
+
+func TestIsPair(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsPair(NewList(NewInteger(1))), qt.IsTrue)
+	c.Assert(IsPair(Null), qt.IsFalse)
+	c.Assert(IsPair(NewInteger(5)), qt.IsFalse)
+}
+
+func TestIsNull(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsNull(Null), qt.IsTrue)
+	c.Assert(IsNull(NewList(NewInteger(1))), qt.IsFalse)
+	c.Assert(IsNull(NewInteger(5)), qt.IsFalse)
+}
+
+func TestIsSymbol(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsSymbol(NewSymbol("foo")), qt.IsTrue)
+	c.Assert(IsSymbol(NewString("foo")), qt.IsFalse)
+}
+
+func TestIsString(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsString(NewString("hello")), qt.IsTrue)
+	c.Assert(IsString(NewInteger(42)), qt.IsFalse)
+}
+
+func TestIsNumber(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsNumber(NewInteger(1)), qt.IsTrue)
+	c.Assert(IsNumber(NewFloat(1.5)), qt.IsTrue)
+	c.Assert(IsNumber(NewString("1")), qt.IsFalse)
+}
+
+func TestIsBoolean(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(IsBoolean(True), qt.IsTrue)
+	c.Assert(IsBoolean(False), qt.IsTrue)
+	c.Assert(IsBoolean(NewInteger(0)), qt.IsFalse)
+}
+
+func TestIsProcedure(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.EvalMultiple(ctx, `
+		(define (f x) x)
+		(define g (case-lambda ((x) x) ((x y) (+ x y))))
+		(define p (make-parameter 0))
+	`)
+	c.Assert(err, qt.IsNil)
+
+	f, _ := engine.Get("f")
+	g, _ := engine.Get("g")
+	p, _ := engine.Get("p")
+
+	c.Assert(IsProcedure(f), qt.IsTrue)
+	c.Assert(IsProcedure(g), qt.IsTrue)
+	c.Assert(IsProcedure(p), qt.IsTrue)
+	c.Assert(IsProcedure(NewInteger(42)), qt.IsFalse)
+}
+
+func TestCar(t *testing.T) {
+	c := qt.New(t)
+
+	v, ok := Car(NewList(NewInteger(1), NewInteger(2)))
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(v.SchemeString(), qt.Equals, "1")
+
+	_, ok = Car(Null)
+	c.Assert(ok, qt.IsFalse)
+
+	_, ok = Car(NewInteger(5))
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestCdr(t *testing.T) {
+	c := qt.New(t)
+
+	v, ok := Cdr(NewList(NewInteger(1), NewInteger(2)))
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(v.SchemeString(), qt.Equals, "(2)")
+
+	_, ok = Cdr(Null)
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestToSlice(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("proper list", func(t *testing.T) {
+		sl, ok := ToSlice(NewList(NewInteger(1), NewInteger(2), NewInteger(3)))
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(len(sl), qt.Equals, 3)
+		c.Assert(sl[0].SchemeString(), qt.Equals, "1")
+		c.Assert(sl[2].SchemeString(), qt.Equals, "3")
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		sl, ok := ToSlice(Null)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(len(sl), qt.Equals, 0)
+	})
+
+	t.Run("not a list", func(t *testing.T) {
+		_, ok := ToSlice(NewInteger(5))
+		c.Assert(ok, qt.IsFalse)
+	})
+}
+
+func TestToGoString(t *testing.T) {
+	c := qt.New(t)
+
+	s, ok := ToGoString(NewString("hello"))
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(s, qt.Equals, "hello")
+
+	_, ok = ToGoString(NewInteger(42))
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestToGoInt(t *testing.T) {
+	c := qt.New(t)
+
+	n, ok := ToGoInt(NewInteger(42))
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(n, qt.Equals, int64(42))
+
+	_, ok = ToGoInt(NewFloat(3.14))
+	c.Assert(ok, qt.IsFalse)
+
+	_, ok = ToGoInt(NewString("42"))
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestToGoFloat(t *testing.T) {
+	c := qt.New(t)
+
+	f, ok := ToGoFloat(NewFloat(3.14))
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(f, qt.Equals, 3.14)
+
+	_, ok = ToGoFloat(NewInteger(42))
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestToGoBool(t *testing.T) {
+	c := qt.New(t)
+
+	b, ok := ToGoBool(True)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(b, qt.IsTrue)
+
+	b, ok = ToGoBool(False)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(b, qt.IsFalse)
+
+	_, ok = ToGoBool(NewInteger(1))
+	c.Assert(ok, qt.IsFalse)
 }

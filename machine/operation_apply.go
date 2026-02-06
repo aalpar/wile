@@ -22,26 +22,65 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// OperationApply is the bytecode operation that dispatches procedure calls.
+// It is the single point where all Scheme procedure application converges at
+// runtime. The compiler emits OperationApply after pushing arguments onto the
+// eval stack and placing the callee in the value register.
+//
+// The type switch inside Apply is exhaustive over the four callable value types
+// in the VM. Each type reaches this point through different Scheme-level syntax
+// but all share the same calling convention: callee in value[0], arguments
+// popped from the eval stack.
 type OperationApply struct{}
 
+// NewOperationApply returns a new apply operation.
 func NewOperationApply() *OperationApply {
 	return &OperationApply{}
 }
 
+// SchemeString returns the external representation for debugging.
 func (p *OperationApply) SchemeString() string {
 	return "#<operation-apply>"
 }
 
+// IsVoid returns true if the receiver is nil (satisfies values.Value).
 func (p *OperationApply) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if o is also an OperationApply (identity by type).
 func (p *OperationApply) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationApply)
 	return sameType(p, v, ok)
 }
 
-// FIXME: needs unit tests
+// Apply dispatches a procedure call to the appropriate handler based on the
+// callee's concrete type. The eval stack holds the arguments (pushed by the
+// compiler-generated Push/Pull sequence); PopAll retrieves them.
+//
+// The type switch covers every callable type in the VM:
+//
+//   - MachineClosure: standard Scheme lambda. Created by OperationMakeClosure
+//     from compiled NativeTemplates. This is the common case — nearly all
+//     user-defined and built-in procedures are MachineClosure values.
+//
+//   - CaseLambdaClosure: R7RS case-lambda (§4.2.9). Wraps multiple
+//     MachineClosure clauses, each with a different arity. ApplyCaseLambda
+//     selects the clause whose parameter count matches the argument count.
+//
+//   - Parameter: R7RS make-parameter (§4.2.6). A callable object that acts as
+//     a mutable cell: zero arguments returns the current value, one argument
+//     sets it (after an optional converter). Parameters must manage their own
+//     continuation restore because they don't use NativeTemplate bytecode —
+//     they execute Go code directly and must explicitly return control.
+//
+//   - ComposableContinuation: delimited continuation captured by
+//     call-with-composable-continuation. Invoking it splices the captured
+//     continuation frames onto the current chain, rewinding/unwinding
+//     dynamic-wind extents as needed. See Flatt et al. ICFP 2007.
+//
+// Any other value in the callee position is a type error — Scheme attempted
+// to call a non-procedure.
 func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	vs := mc.evals.PopAll()
 	switch cls := mc.value[0].(type) {
