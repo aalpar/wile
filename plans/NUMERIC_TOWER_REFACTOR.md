@@ -5,14 +5,15 @@
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 0 | ✅ Complete | Error handling standardized, all 49 combinations tested |
-| Phase 1 | ✅ Complete | `numeric_tower.go` infrastructure (Rank, Promote, Simplify, BinaryOp, Tower*) |
+| Phase 1 | ✅ Complete | `numeric_tower.go` infrastructure (Simplify, Exactness functions) |
 | Phase 2 | ✅ Complete | Number interface has all required methods |
 | Phase 3 | ✅ Complete | All 7 types have `*Same` methods |
 | Phase 4 | ❌ **Abandoned** | Migrate public Add/Sub/etc. to use Tower* functions |
 | Phase 5 | ❌ **Abandoned** | Remove "legacy" type-switch code |
 | Phase 6 | ❌ **Abandoned** | Fix Tower* complex number handling |
+| Cleanup | ✅ Complete | Tower* functions and related infrastructure deleted |
 
-**Final state**: Direct method dispatch (`a.Add(b)`) is the intentional architecture, not "legacy code awaiting cleanup." It correctly handles all cases including exact complex numbers. The Tower* functions remain as unused infrastructure with known design flaws (see Phase 6 section for details).
+**Final state**: Direct method dispatch (`a.Add(b)`) is the intentional architecture, not "legacy code awaiting cleanup." It correctly handles all cases including exact complex numbers. The Tower* functions were deleted as unused code (2026-02-05).
 
 ---
 
@@ -367,7 +368,7 @@ The `BigFloat+Complex → Complex` precision loss is a bug where the implementat
 3. The ~500 line "savings" from migration isn't worth the regression risk
 4. Per CLAUDE.md: "Avoid over-engineering. Only make changes that are directly requested or clearly necessary."
 
-The Tower* functions (`TowerAdd`, etc.) may be removed in a future cleanup, or kept for testing purposes. They should NOT be used by primitives.
+**Cleanup (2026-02-05)**: The Tower* functions (`TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`) and all supporting infrastructure (`NumericRank`, `Rank`, `Promote`, `promoteOnce`, `CommonRank`, `PromoteBoth`, `BinaryOp`, `*Op` dispatchers) were deleted. Only `Simplify`, `Exactness`, `ExactnessOf`, and `ResultExactness` remain in `numeric_tower.go`. The test file `numeric_tower_test.go` was also deleted since it only tested the deleted Tower* functions.
 
 ---
 
@@ -380,18 +381,18 @@ The current numeric tower implementation violates the elegance principles define
 3. **Transparency violation**: The R7RS tower hierarchy is declared but not operational—promotion rules are implicit in scattered switch statements
 4. **Abstraction fight**: Adding a new numeric type requires touching all 7 existing files
 
-### Bugs Found (now fixed via Tower*)
+### Bugs Found (now fixed in direct dispatch)
 
-These issues in the legacy implementation are now bypassed via the Tower* functions:
+These issues were fixed directly in each type's implementation (not via Tower* functions):
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Missing arithmetic cases (Add/Sub/Mul/Div) | 40 | ✅ Fixed: Tower* handles all 49 combinations |
-| Missing comparison cases (LessThan/Compare) | 10 | ✅ Fixed: TowerCompare handles all combinations |
+| Missing arithmetic cases (Add/Sub/Mul/Div) | 40 | ✅ Fixed: Direct dispatch handles all 49 combinations |
+| Missing comparison cases (LessThan/Compare) | 10 | ✅ Fixed: Direct dispatch handles all combinations |
 | Inconsistent division-by-zero handling | 3 types | ✅ Fixed: All use panic(ErrDivisionByZero) |
 | Inconsistent default handling | 3 types | ✅ Fixed: All use panic(ErrNotANumber) |
 
-Initial estimate of "4 bugs" was a 10× underestimate. The Tower* infrastructure resolves all these issues.
+Initial estimate of "4 bugs" was a 10× underestimate. All issues were resolved in the direct dispatch implementation.
 
 ## Design Goals
 
@@ -667,19 +668,19 @@ Audited all 7 numeric type files to build accurate coverage matrices.
 
 *Note: Earlier analysis overestimated. Rational handles BigInteger/BigFloat via conversion. Verified by `TestNumericTower_LessThan` in `numeric_tower_coverage_test.go`*
 
-#### Error Handling Inconsistency
+#### Error Handling ✅ Fixed
 
 | Type | Division by Zero | Missing Type Case |
 |------|------------------|-------------------|
 | Integer | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
 | Float | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
-| BigInteger | `return nil` ⚠️ | `return nil` ⚠️ |
-| BigFloat | `return nil` ⚠️ | `return nil` ⚠️ |
+| BigInteger | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
+| BigFloat | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
 | Rational | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
 | Complex | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
-| BigComplex | `return nil` ⚠️ | `return nil` ⚠️ |
+| BigComplex | `panic(ErrDivisionByZero)` | `panic(ErrNotANumber)` |
 
-The Big* types silently return nil while others panic—this inconsistency is a bug waiting to cause silent failures.
+All types now use consistent panic-based error handling.
 
 ### Test Coverage Gaps
 
@@ -733,27 +734,14 @@ Before adding any missing cases, standardize error handling to prevent silent fa
 
 Created `values/numeric_tower.go`:
 
-1. ✅ `NumericRank` enum (RankInteger through RankBigComplex)
-2. ✅ `Rank(Number) NumericRank`
-3. ✅ `Promote(Number, NumericRank) Number`
-4. ✅ `promoteOnce(Number) Number`
-5. ✅ `Simplify(Number) Number` (simplifies results where possible)
-6. ✅ `CommonRank(a, b Number) NumericRank`
-7. ✅ `PromoteBoth(a, b Number) (Number, Number)`
-8. ✅ `BinaryOp(a, b Number, op func) Number` - unified dispatch
-9. ✅ `Exactness` type with `ExactnessOf` and `ResultExactness`
-10. ✅ Tower operations: `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`
-11. ✅ Same-type dispatchers: `addOp`, `subtractOp`, `multiplyOp`, `divideOp`, `compareOp`
+1. ✅ `Simplify(Number) Number` (simplifies results where possible)
+2. ✅ `Exactness` type with `ExactnessOf` and `ResultExactness`
 
-Tests in `numeric_tower_test.go`:
-- TestRank, TestRank_Order
-- TestPromoteOnce (all 7 types)
-- TestPromote, TestPromote_PreservesValue
-- TestCommonRank, TestPromoteBoth
-- TestSimplify
-- TestTowerAdd/Subtract/Multiply/Divide/Compare
+~~Deleted (2026-02-05):~~ `NumericRank`, `Rank`, `Promote`, `promoteOnce`, `CommonRank`, `PromoteBoth`, `BinaryOp`, Tower operations, same-type dispatchers. These were unused infrastructure with latent bugs.
 
-**Deliverable**: ✅ Promotion infrastructure complete with comprehensive tests.
+~~Tests in `numeric_tower_test.go`:~~ Deleted (2026-02-05) — only tested the deleted Tower* functions.
+
+**Deliverable**: ✅ Utility functions (`Simplify`, `ExactnessOf`, `ResultExactness`) retained. Unused infrastructure deleted.
 
 ### Phase 2: Extend Number Interface ✅ COMPLETE
 
@@ -824,20 +812,21 @@ Tower functions (`TowerAdd`, `TowerSubtract`, etc.) use this dispatcher.
 
 | File | Status | Changes |
 |------|--------|---------|
-| `values/numeric_tower.go` | ✅ Complete | Rank, Promote, Simplify, BinaryOp, Tower*, Exactness |
-| `values/numeric_tower_test.go` | ✅ Complete | Infrastructure tests (Rank, Promote, Simplify, Tower*) |
+| `values/numeric_tower.go` | ✅ Complete | Simplify, Exactness utilities only (Tower* deleted 2026-02-05) |
+| `values/numeric_tower_test.go` | 🗑️ Deleted | Deleted 2026-02-05 — only tested Tower* functions |
 | `values/numeric_tower_coverage_test.go` | ✅ Complete | 49-combination coverage tests for all operations |
+| `values/numeric_lattice_test.go` | ✅ Complete | Lattice-based promotion model tests and validation |
 | `values/values.go` | ✅ Complete | Number interface complete |
 | `values/integer.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
 | `values/big_integer.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
 | `values/float.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
-| `values/big_float.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
+| `values/big_float.go` | ✅ Complete | Has `*Same` methods, consistent panic handling, BigFloat+Complex fix |
 | `values/rational.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
 | `values/complex.go` | ✅ Complete | Has `*Same` methods, direct dispatch |
 | `values/big_complex.go` | ✅ Complete | Has `*Same` methods, consistent panic handling |
 
 **Final state**: All files complete. Direct dispatch is the production implementation.
-Tower* functions exist but are unused. No further changes planned.
+Tower* functions deleted. `numeric_tower.go` now contains only utility functions.
 
 ## Metrics
 
@@ -851,12 +840,13 @@ Tower* functions exist but are unused. No further changes planned.
 
 ### Final State (2026-02-05)
 
-- Lines of switch-case code: ~600 (direct dispatch) + ~100 (Tower* unused)
+- Lines of switch-case code: ~600 (direct dispatch)
 - Type combinations handled: 245 (7×7×5, complete) ✅
 - Error handling consistency: 100% ✅
-- Infrastructure: `numeric_tower.go` exists but Tower* functions are unused
+- Infrastructure: `numeric_tower.go` contains only `Simplify`, `ExactnessOf`, `ResultExactness`
 - Files to modify for new type: 7 (acceptable cost for correctness)
 - Exact complex numbers: ✅ Handled correctly by direct dispatch
+- Tower* functions: 🗑️ Deleted (unused infrastructure with latent bugs)
 
 ### Projected Savings (NOT REALIZED - Phases 4-5 Abandoned)
 
@@ -943,12 +933,12 @@ The promotion order `Integer < BigInteger < Rational < Float < BigFloat < Comple
 
 ## Success Criteria
 
-1. All existing tests pass
-2. No panics on any valid type combination
-3. Total switch-case code reduced by >70%
-4. Adding a test new type (e.g., `Decimal`) requires <100 lines
-5. Promotion rules are readable in one place
-6. **NEW**: Consistent error handling (all types panic, none return nil)
+1. ✅ All existing tests pass
+2. ✅ No panics on any valid type combination
+3. ❌ ~~Total switch-case code reduced by >70%~~ — Not achieved (Phases 4-5 abandoned)
+4. — Adding a new type (e.g., `Decimal`) requires ~7 file changes (acceptable)
+5. ✅ Promotion rules documented in lattice model (see "Actual Promotion Behavior" section)
+6. ✅ Consistent error handling (all types panic, none return nil)
 
 ## References
 
