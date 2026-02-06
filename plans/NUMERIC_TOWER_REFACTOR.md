@@ -30,12 +30,11 @@ For arithmetic operations (`+`, `-`, `*`, `/`):
 | **BigInteger** | BigInteger | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
 | **Rational** | Rational | Rational | Rational | Float | BigFloat | Complex | BigComplex |
 | **Float** | Float | Float | Float | Float | BigFloat | Complex | BigComplex |
-| **BigFloat** | BigFloat | BigFloat | BigFloat | BigFloat | BigFloat | Complex² | BigComplex |
-| **Complex** | Complex | Complex | Complex | Complex | Complex² | Complex | BigComplex |
+| **BigFloat** | BigFloat | BigFloat | BigFloat | BigFloat | BigFloat | BigComplex | BigComplex |
+| **Complex** | Complex | Complex | Complex | Complex | BigComplex | Complex | BigComplex |
 | **BigComplex** | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex |
 
 ¹ Integer + Integer may overflow to BigInteger
-² BigFloat + Complex → Complex loses BigFloat precision (converts to float64)
 
 ### Exactness Preservation
 
@@ -87,6 +86,278 @@ Integer < BigInteger < Rational < Float < BigFloat < Complex < BigComplex
 ```
 
 This linearization breaks exact complex numbers because it forces exact types through Float before reaching Complex/BigComplex.
+
+### Lattice-Based Promotion Code
+
+The correct promotion behavior is a **semi-lattice** with two orthogonal dimensions. Here's how to implement it:
+
+#### Type Classification
+
+```go
+// TypeClass represents a position in the numeric lattice.
+// The lattice has two dimensions: precision and complexity.
+type TypeClass struct {
+    Precision  PrecisionRank  // exact integer → exact rational → inexact
+    Complexity ComplexityRank // real → complex
+}
+
+type PrecisionRank int
+
+const (
+    PrecisionInteger PrecisionRank = iota  // int64
+    PrecisionBigInteger                     // arbitrary-precision integer
+    PrecisionRational                       // exact rational
+    PrecisionFloat                          // float64 (inexact)
+    PrecisionBigFloat                       // arbitrary-precision float (inexact)
+)
+
+type ComplexityRank int
+
+const (
+    ComplexityReal ComplexityRank = iota
+    ComplexityComplex
+)
+
+// Classify returns the lattice position of a number.
+func Classify(n Number) TypeClass {
+    switch v := n.(type) {
+    case *Integer:
+        return TypeClass{PrecisionInteger, ComplexityReal}
+    case *BigInteger:
+        return TypeClass{PrecisionBigInteger, ComplexityReal}
+    case *Rational:
+        return TypeClass{PrecisionRational, ComplexityReal}
+    case *Float:
+        return TypeClass{PrecisionFloat, ComplexityReal}
+    case *BigFloat:
+        return TypeClass{PrecisionBigFloat, ComplexityReal}
+    case *Complex:
+        return TypeClass{PrecisionFloat, ComplexityComplex}  // complex128 uses float64
+    case *BigComplex:
+        // BigComplex precision depends on its components
+        return TypeClass{classifyBigComplexPrecision(v), ComplexityComplex}
+    }
+    panic(ErrNotANumber)
+}
+
+func classifyBigComplexPrecision(bc *BigComplex) PrecisionRank {
+    // BigComplex precision is the max of its real and imaginary parts
+    realPrec := Classify(bc.Real()).Precision
+    imagPrec := Classify(bc.Imag()).Precision
+    if realPrec > imagPrec {
+        return realPrec
+    }
+    return imagPrec
+}
+```
+
+#### Lattice Join (Least Upper Bound)
+
+```go
+// Join computes the least upper bound of two type classes.
+// This determines the result type of a binary operation.
+func Join(a, b TypeClass) TypeClass {
+    return TypeClass{
+        Precision:  maxPrecision(a.Precision, b.Precision),
+        Complexity: maxComplexity(a.Complexity, b.Complexity),
+    }
+}
+
+func maxPrecision(a, b PrecisionRank) PrecisionRank {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+func maxComplexity(a, b ComplexityRank) ComplexityRank {
+    if a > b {
+        return a
+    }
+    return b
+}
+```
+
+#### Result Type Determination
+
+```go
+// ResultType returns the Go type that should hold the result
+// of an operation between two numbers.
+func ResultType(a, b Number) reflect.Type {
+    joined := Join(Classify(a), Classify(b))
+    return typeFromClass(joined)
+}
+
+func typeFromClass(tc TypeClass) reflect.Type {
+    if tc.Complexity == ComplexityComplex {
+        // Complex results
+        switch tc.Precision {
+        case PrecisionInteger, PrecisionBigInteger, PrecisionRational:
+            // Exact complex → BigComplex with exact parts
+            return reflect.TypeOf((*BigComplex)(nil))
+        case PrecisionFloat:
+            // Inexact complex with float64 precision → Complex
+            return reflect.TypeOf((*Complex)(nil))
+        case PrecisionBigFloat:
+            // Inexact complex with arbitrary precision → BigComplex
+            return reflect.TypeOf((*BigComplex)(nil))
+        }
+    }
+
+    // Real results
+    switch tc.Precision {
+    case PrecisionInteger:
+        return reflect.TypeOf((*Integer)(nil))
+    case PrecisionBigInteger:
+        return reflect.TypeOf((*BigInteger)(nil))
+    case PrecisionRational:
+        return reflect.TypeOf((*Rational)(nil))
+    case PrecisionFloat:
+        return reflect.TypeOf((*Float)(nil))
+    case PrecisionBigFloat:
+        return reflect.TypeOf((*BigFloat)(nil))
+    }
+    panic("unreachable")
+}
+```
+
+#### Binary Operation with Lattice Dispatch
+
+```go
+// LatticeBinaryOp performs a binary operation using lattice-based promotion.
+// Unlike the linear tower, this preserves exactness for complex numbers.
+func LatticeBinaryOp(a, b Number, op func(Number, Number) Number) Number {
+    classA := Classify(a)
+    classB := Classify(b)
+    joined := Join(classA, classB)
+
+    // Promote each operand to the joined class
+    promotedA := promoteToClass(a, joined)
+    promotedB := promoteToClass(b, joined)
+
+    result := op(promotedA, promotedB)
+    return Simplify(result)
+}
+
+// promoteToClass promotes a number to the target type class.
+// Unlike linear promotion, this handles exact→complex correctly.
+func promoteToClass(n Number, target TypeClass) Number {
+    current := Classify(n)
+
+    // Handle complexity dimension first (real → complex)
+    if target.Complexity == ComplexityComplex && current.Complexity == ComplexityReal {
+        n = realToComplex(n, target.Precision)
+        current = Classify(n)
+    }
+
+    // Handle precision dimension
+    if current.Precision < target.Precision {
+        n = promotePrecision(n, target.Precision)
+    }
+
+    return n
+}
+
+// realToComplex converts a real number to complex, preserving exactness.
+func realToComplex(n Number, targetPrecision PrecisionRank) Number {
+    switch v := n.(type) {
+    case *Integer:
+        if targetPrecision <= PrecisionRational {
+            // Keep exact: Integer → BigComplex(BigInteger, BigInteger(0))
+            return NewBigComplex(
+                NewBigIntegerFromInt64(v.Value),
+                NewBigIntegerFromInt64(0),
+            )
+        }
+        // Inexact target: Integer → Complex
+        return NewComplex(complex(float64(v.Value), 0))
+
+    case *BigInteger:
+        if targetPrecision <= PrecisionRational {
+            return NewBigComplex(v, NewBigIntegerFromInt64(0))
+        }
+        f, _ := v.value.Float64()
+        return NewComplex(complex(f, 0))
+
+    case *Rational:
+        if targetPrecision <= PrecisionRational {
+            zero := NewRationalFromInt64(0, 1)
+            return NewBigComplex(v, zero)
+        }
+        f, _ := v.value.Float64()
+        return NewComplex(complex(f, 0))
+
+    case *Float:
+        if targetPrecision >= PrecisionBigFloat {
+            return NewBigComplex(
+                NewBigFloatFromFloat64(v.Value),
+                NewBigFloatFromFloat64(0),
+            )
+        }
+        return NewComplex(complex(v.Value, 0))
+
+    case *BigFloat:
+        return NewBigComplex(v, NewBigFloatFromFloat64(0))
+    }
+
+    // Already complex
+    return n
+}
+
+// promotePrecision promotes within the precision dimension only.
+func promotePrecision(n Number, target PrecisionRank) Number {
+    // This is the linear part: Integer → BigInteger → Rational → Float → BigFloat
+    // Applied to real numbers or to components of complex numbers
+    for Classify(n).Precision < target {
+        n = promoteOnePrecisionLevel(n)
+    }
+    return n
+}
+```
+
+#### Key Difference from Linear Tower
+
+The linear tower (`promoteOnce`) forces this path:
+```
+Integer → BigInteger → Rational → Float → BigFloat → Complex → BigComplex
+                                    ↑
+                         exactness lost here!
+```
+
+The lattice approach separates the two dimensions:
+```
+Precision:   Integer → BigInteger → Rational → Float → BigFloat
+Complexity:  Real → Complex
+
+To get: Integer + Complex(exact)
+Linear:  Integer → ... → Float (loses exactness!) → Complex
+Lattice: Integer → BigComplex(Integer, 0) (preserves exactness!)
+```
+
+#### Result Type Matrix Encoded as Lattice Join
+
+The Result Type Matrix can be derived from lattice joins:
+
+```go
+// This table is DERIVED from the lattice, not hand-coded
+var resultTypeMatrix = map[string]string{
+    // Integer row: Join(Integer, X) = X
+    "Integer+Integer":    "Integer",     // Join({Int,Real}, {Int,Real}) = {Int,Real}
+    "Integer+BigInteger": "BigInteger",  // Join({Int,Real}, {BigInt,Real}) = {BigInt,Real}
+    "Integer+Rational":   "Rational",    // etc.
+    "Integer+Float":      "Float",
+    "Integer+BigFloat":   "BigFloat",
+    "Integer+Complex":    "Complex",     // Join({Int,Real}, {Float,Complex}) = {Float,Complex}
+    "Integer+BigComplex": "BigComplex",  // Join({Int,Real}, {?,Complex}) = {?,Complex}
+
+    // BigFloat row shows the precision loss bug
+    "BigFloat+Complex":   "Complex",     // ACTUAL: Join({BigFloat,Real}, {Float,Complex}) = {BigFloat,Complex}
+                                         // but implementation returns {Float,Complex} - LOSES PRECISION
+    // ... etc
+}
+```
+
+The `BigFloat+Complex → Complex` precision loss is a bug where the implementation doesn't fully implement the lattice join—it should return `BigComplex` to preserve BigFloat precision.
 
 ---
 

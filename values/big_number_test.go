@@ -292,11 +292,13 @@ func TestBigFloat_MixedArithmetic(t *testing.T) {
 	sumBI := bf.Add(NewBigIntegerFromInt64(25))
 	c.Assert(sumBI.(*BigFloat).Float64(), qt.Equals, float64(125.0))
 
-	// Add with Complex
+	// Add with Complex (returns BigComplex to preserve BigFloat precision)
 	sumC := bf.Add(NewComplex(complex(1, 2)))
-	comp, ok := sumC.(*Complex)
+	bc, ok := sumC.(*BigComplex)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(real(comp.Datum()), qt.Equals, float64(101))
+	// Real part should be 100 + 1 = 101
+	realPart := bc.Real()
+	c.Assert(realPart.(*BigFloat).Float64(), qt.Equals, float64(101))
 }
 
 func TestBigInteger_DivisionByZero(t *testing.T) {

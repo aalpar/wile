@@ -117,8 +117,13 @@ func (p *BigFloat) Add(o Number) Number {
 		vf := new(big.Float).SetRat(v.Rat())
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
 	case *Complex:
-		f, _ := p.value.Float64()
-		return NewComplex(complex(f, 0) + v.Datum())
+		// Convert both to BigComplex to preserve BigFloat precision
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Add(vc)
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Add(v)
@@ -149,8 +154,13 @@ func (p *BigFloat) Subtract(o Number) Number {
 		vf := new(big.Float).SetRat(v.Rat())
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
 	case *Complex:
-		f, _ := p.value.Float64()
-		return NewComplex(complex(f, 0) - v.Datum())
+		// Convert both to BigComplex to preserve BigFloat precision
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Subtract(vc)
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Subtract(v)
@@ -184,8 +194,13 @@ func (p *BigFloat) Multiply(o Number) Number {
 		vf := new(big.Float).SetRat(v.Rat())
 		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
 	case *Complex:
-		f, _ := p.value.Float64()
-		return NewComplex(complex(f, 0) * v.Datum())
+		// Convert both to BigComplex to preserve BigFloat precision
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Multiply(vc)
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Multiply(v)
@@ -216,8 +231,13 @@ func (p *BigFloat) Divide(o Number) Number {
 		vf := new(big.Float).SetRat(v.Rat())
 		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
 	case *Complex:
-		f, _ := p.value.Float64()
-		return NewComplex(complex(f, 0) / v.Datum())
+		// Convert both to BigComplex to preserve BigFloat precision
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Divide(vc)
 	case *BigComplex:
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		return bc.Divide(v)

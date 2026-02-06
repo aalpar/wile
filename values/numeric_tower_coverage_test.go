@@ -324,13 +324,12 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"Float+Complex":    "*values.Complex",
 		"Float+BigComplex": "*values.BigComplex",
 		// BigFloat row
-		// Note: BigFloat+Complex returns Complex (loses precision) - see big_float.go
 		"BigFloat+Integer":    "*values.BigFloat",
 		"BigFloat+BigInteger": "*values.BigFloat",
 		"BigFloat+Rational":   "*values.BigFloat",
 		"BigFloat+Float":      "*values.BigFloat",
 		"BigFloat+BigFloat":   "*values.BigFloat",
-		"BigFloat+Complex":    "*values.Complex", // Loses BigFloat precision!
+		"BigFloat+Complex":    "*values.BigComplex", // Preserves BigFloat precision
 		"BigFloat+BigComplex": "*values.BigComplex",
 		// Complex row
 		"Complex+Integer":    "*values.Complex",
@@ -480,13 +479,12 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"Float/Complex":    "*values.Complex",
 		"Float/BigComplex": "*values.BigComplex",
 		// BigFloat row
-		// Note: BigFloat/Complex returns Complex (loses precision) - see big_float.go
 		"BigFloat/Integer":    "*values.BigFloat",
 		"BigFloat/BigInteger": "*values.BigFloat",
 		"BigFloat/Rational":   "*values.BigFloat",
 		"BigFloat/Float":      "*values.BigFloat",
 		"BigFloat/BigFloat":   "*values.BigFloat",
-		"BigFloat/Complex":    "*values.Complex", // Loses BigFloat precision!
+		"BigFloat/Complex":    "*values.BigComplex", // Preserves BigFloat precision
 		"BigFloat/BigComplex": "*values.BigComplex",
 		// Complex row
 		"Complex/Integer":    "*values.Complex",
