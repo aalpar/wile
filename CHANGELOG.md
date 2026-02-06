@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- Automated release builds with prebuilt binaries for darwin/linux on arm64/amd64
+## [1.0.2] - 2026-02-05
 
 ### Fixed
 
 - Fix asymmetric precision loss in mixed BigFloat/Complex arithmetic (`BigFloat + Complex` now returns `BigComplex` to preserve arbitrary precision, matching `Complex + BigFloat` behavior)
+
+## [1.0.1] - 2026-02-04
+
+### Added
+
+- Automated release builds with prebuilt binaries for darwin/linux on arm64/amd64
 
 ## [1.0.0] - 2026-02-04
 
