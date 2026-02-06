@@ -14,7 +14,10 @@
 
 package wile
 
-import "io"
+import (
+	"errors"
+	"io"
+)
 
 // Error represents a Wile engine error.
 type Error struct {
@@ -35,5 +38,5 @@ func (p *Error) Unwrap() error {
 
 // isEOF checks if an error represents end of input.
 func isEOF(err error) bool {
-	return err == io.EOF
+	return errors.Is(err, io.EOF)
 }

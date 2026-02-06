@@ -16,6 +16,7 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -215,7 +216,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 
 	err = sub.Run()
 	if err != nil {
-		if err != machine.ErrMachineHalt {
+		if !errors.Is(err, machine.ErrMachineHalt) {
 			return nil, err
 		}
 	}
@@ -295,7 +296,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			mc := machine.NewMachineContext(ctx, cont)
 			err = mc.Run()
 			if err != nil {
-				if err != machine.ErrMachineHalt {
+				if !errors.Is(err, machine.ErrMachineHalt) {
 					return err
 				}
 			}

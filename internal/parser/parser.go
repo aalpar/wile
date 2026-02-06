@@ -167,7 +167,7 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		// Advance to the next token for the next ReadSyntax() call
 		p.cur, p.err = p.toks.Next()
 		// EOF is fine - it means there's nothing more to read
-		if p.err != nil && p.err != io.EOF {
+		if p.err != nil && !errors.Is(p.err, io.EOF) {
 			p.toks = nil
 			return nil, p.err
 		}
@@ -176,14 +176,14 @@ func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
 		}
 		switch d := q.(type) {
 		case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
-			if p.err == io.EOF {
+			if errors.Is(p.err, io.EOF) {
 				return nil, p.err
 			}
 			continue
 		case *syntax.SyntaxDirective:
 			// R7RS §2.1: Process fold-case directives
 			p.processFoldCaseDirective(d)
-			if p.err == io.EOF {
+			if errors.Is(p.err, io.EOF) {
 				return nil, p.err
 			}
 			continue

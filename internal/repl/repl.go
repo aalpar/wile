@@ -152,7 +152,7 @@ func (p *REPL) Run(ctx context.Context) error {
 				rl.SetPrompt(p.prompt)
 				continue
 			}
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				// Ctrl-D: exit
 				fmt.Fprintln(p.out)
 				return nil
@@ -234,7 +234,7 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		line, err := reader.ReadLine()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				fmt.Fprintln(p.out)
 				return nil
 			}
