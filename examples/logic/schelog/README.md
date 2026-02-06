@@ -1,34 +1,14 @@
 # Schelog: Prolog in Scheme
 
 Schelog is an embedding of Prolog-style logic programming in Scheme, created by
-Dorai Sitaram. This directory contains the **unmodified** schelog.scm library
-and all example files from the upstream repository, demonstrating Wile's full
-compatibility with Schelog.
+Dorai Sitaram. Wile runs the **unmodified** upstream schelog.scm — no patches, no
+compatibility shims. This works because Schelog exercises exactly the features
+Wile implements: first-class continuations (`call/cc`) for backtracking,
+hygienic macros (`syntax-rules`) for the query DSL, and mutable state for the
+trail. Having all three work correctly together, on unmodified third-party code,
+is a concrete demonstration of Wile's R7RS language completeness.
 
-## Compatibility
-
-Wile runs Schelog without any modifications to the original source code. All
-upstream examples pass, including the famous Zebra puzzle. Run the validation
-suite to verify:
-
-```bash
-./examples/logic/schelog/run-all-tests.sh
-```
-
-Expected output:
-```
-=== Schelog Validation Suite for Wile ===
-...
-=== Test Summary ===
-Passed: 16
-Failed: 0
-
-All tests passed! Wile is fully compatible with Schelog.
-```
-
-## Usage
-
-### Interactive Exploration
+## Quick Start
 
 Start a REPL with schelog loaded:
 
@@ -36,7 +16,7 @@ Start a REPL with schelog loaded:
 ./dist/scheme -i -f examples/logic/schelog/schelog.scm
 ```
 
-Then try:
+Try some queries:
 
 ```scheme
 > (%which (x) (%member x '(a b c)))
@@ -49,32 +29,36 @@ Then try:
 #f
 ```
 
-### Running the Demo
+Or load the demo for family relationships, append, and more:
 
 ```bash
 ./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/demo.scm
 ```
 
-### Running Examples
+## Running Examples
 
-Load schelog first, then any example file:
+Load schelog first, then any example file. All of these complete in seconds:
 
 ```bash
-# Map coloring
+# Basic predicates: append, reverse, factorial, length
+./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/toys.scm
+
+# Map coloring (4-color theorem)
 ./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/mapcol.scm
 
-# Zebra puzzle (requires puzzle.scm helper)
+# Logic puzzle from Sterling & Shapiro
 ./dist/scheme -i -f examples/logic/schelog/schelog.scm \
               -f examples/logic/schelog/puzzle.scm \
-              -f examples/logic/schelog/houses.scm
-```
+              -f examples/logic/schelog/games.scm
 
-Then query interactively:
+# Royal family relationships
+./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/england.scm
 
-```scheme
-> (set! *schelog-use-occurs-check?* #t)  ; Required for Zebra puzzle
-> (solve-puzzle %houses)
-((solution= ((japan owns the zebra) (norway drinks water))))
+# Biblical genealogy with set predicates
+./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/bible.scm
+
+# Simple facts database
+./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/holland.scm
 ```
 
 ### Multiple Files
@@ -87,6 +71,21 @@ The `-f` flag can be repeated to load multiple files in order:
 
 All files except the last are loaded silently. In interactive mode (`-i`), the
 REPL starts after all files are loaded.
+
+## Running Tests
+
+The validation suite covers all fast examples (toys, holland, england, bible,
+mapcol, games) and completes in seconds:
+
+```bash
+./examples/logic/schelog/run-all-tests.sh
+```
+
+Or via the single-process Scheme test runner:
+
+```bash
+./dist/scheme -f examples/logic/schelog/run-all-tests.scm
+```
 
 ## Key Concepts
 
@@ -112,12 +111,43 @@ REPL starts after all files are loaded.
 - `mapcol.scm` - Map coloring (4-color theorem)
 - `games.scm` - Logic puzzle from Sterling & Shapiro
 - `puzzle.scm` - Generic puzzle solver
-- `houses.scm` - Zebra puzzle (Einstein's riddle)
+- `houses.scm` - Zebra puzzle / Einstein's riddle (stress test)
 
 ### Wile-specific
 - `demo.scm` - Interactive demonstration
-- `run-all-tests.sh` - Validation suite
+- `benchmark.scm` - Fast benchmark (toys, mapcol, games)
+- `stress-test.scm` - Zebra puzzle stress test
+- `run-all-tests.scm` - Scheme-based validation suite
+- `run-all-tests.sh` - Shell-based validation suite
 - `README.md` - This file
+
+## Stress Tests
+
+The zebra puzzle (`houses.scm`) is a brute-force constraint satisfaction problem
+that exercises heavy backtracking with occurs-check enabled. It takes significant
+time in an interpreted Scheme — this is expected. Dedicated Prolog
+implementations use constraint propagation and indexing to prune the search
+space; Schelog's pure backtracking approach does not.
+
+To run:
+
+```bash
+./dist/scheme -f examples/logic/schelog/stress-test.scm
+```
+
+Or interactively:
+
+```bash
+./dist/scheme -i -f examples/logic/schelog/schelog.scm \
+              -f examples/logic/schelog/puzzle.scm \
+              -f examples/logic/schelog/houses.scm
+```
+
+```scheme
+> (set! *schelog-use-occurs-check?* #t)  ; Required for Zebra puzzle
+> (solve-puzzle %houses)
+((solution= ((japan owns the zebra) (norway drinks water))))
+```
 
 ## Resources
 

@@ -18,7 +18,6 @@
 (include "examples/logic/schelog/bible.scm")
 (include "examples/logic/schelog/games.scm")
 (include "examples/logic/schelog/holland.scm")
-(include "examples/logic/schelog/houses.scm")
 
 (define tests-passed 0)
 (define tests-failed 0)
@@ -145,25 +144,6 @@
             (schelog:deref* (car solution)))
       (test "games puzzle answer 2"
             '(richard plays tennis)
-            (schelog:deref* (cadr solution))))))
-
-;; ---------------------------------------------------------------------------
-;; houses.scm tests (Zebra puzzle)
-;; ---------------------------------------------------------------------------
-(display "\n--- houses.scm (Zebra puzzle) ---\n")
-
-;; Enable occurs check for this puzzle
-(set! *schelog-use-occurs-check?* #t)
-
-(let ((result (solve-puzzle %houses)))
-  (test-not-false "zebra puzzle has solution" result)
-  (when result
-    (let ((solution (schelog:deref* (cdr (car result)))))
-      (test "zebra puzzle: japan owns zebra"
-            '(japan owns the zebra)
-            (schelog:deref* (car solution)))
-      (test "zebra puzzle: norway drinks water"
-            '(norway drinks water)
             (schelog:deref* (cadr solution))))))
 
 ;; ---------------------------------------------------------------------------

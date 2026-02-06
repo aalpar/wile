@@ -1,14 +1,15 @@
 ;;; benchmark.scm - Schelog integration benchmark for Wile
 ;;;
-;;; Runs the Zebra puzzle (a classic logic programming benchmark) and
-;;; basic schelog operations. Designed for single-process execution to
-;;; enable accurate time and memory measurement.
+;;; Runs fast schelog operations: basic predicates, map coloring, and the
+;;; games puzzle. All tests complete in seconds. For the zebra puzzle
+;;; stress test, see stress-test.scm.
 ;;;
 ;;; Usage (from project root):
 ;;;   ./dist/scheme -q -i -f examples/logic/schelog/schelog.scm \
 ;;;                    -i -f examples/logic/schelog/toys.scm \
 ;;;                    -i -f examples/logic/schelog/puzzle.scm \
-;;;                    -i -f examples/logic/schelog/houses.scm \
+;;;                    -i -f examples/logic/schelog/mapcol.scm \
+;;;                    -i -f examples/logic/schelog/games.scm \
 ;;;                    -f examples/logic/schelog/benchmark.scm
 
 (define tests-passed 0)
@@ -73,24 +74,27 @@
       (%which (n) (%fact 10 n)))
 
 ;; ---------------------------------------------------------------------------
-;; houses.scm - Zebra puzzle (main benchmark)
+;; mapcol.scm - Map coloring
 ;; ---------------------------------------------------------------------------
-(display "\n--- Zebra Puzzle (houses.scm) ---\n")
-(display "Solving the Einstein/Zebra puzzle...\n")
+(display "\n--- Map Coloring (mapcol.scm) ---\n")
 
-;; Enable occurs check for this puzzle (required for correct unification)
-(set! *schelog-use-occurs-check?* #t)
+(test-not-false "test map coloring" (%which (M) (%test-color 'test M)))
+(test-not-false "western-europe map coloring" (%which (M) (%test-color 'western-europe M)))
 
-(let ((result (solve-puzzle %houses)))
-  (test-not-false "zebra puzzle has solution" result)
+;; ---------------------------------------------------------------------------
+;; games.scm - Logic puzzle
+;; ---------------------------------------------------------------------------
+(display "\n--- Logic Puzzle (games.scm) ---\n")
+
+(let ((result (solve-puzzle %games)))
+  (test-not-false "games puzzle has solution" result)
   (when result
-    ;; Solution structure: ((solution= ((japan owns the zebra) (norway drinks water))))
-    (let ((solution (car (cdr (car result)))))
-      (test "zebra puzzle: japan owns zebra"
-            '(japan owns the zebra)
+    (let ((solution (cadr (car result))))
+      (test "games puzzle: michael is australian"
+            '(michael is the australian)
             (car solution))
-      (test "zebra puzzle: norway drinks water"
-            '(norway drinks water)
+      (test "games puzzle: richard plays tennis"
+            '(richard plays tennis)
             (cadr solution)))))
 
 ;; ---------------------------------------------------------------------------
