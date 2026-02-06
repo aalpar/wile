@@ -65,7 +65,7 @@ Where:
 2. **Within inexact reals**: Float → BigFloat (increasing precision)
 3. **Exact + Inexact**: Result is inexact (exactness contagion, per R7RS §6.2.2)
 4. **Real + Complex**: Result is complex (dimensionality wins)
-5. **BigFloat + Complex**: Returns Complex (loses BigFloat precision—converts to float64). This is a known limitation; use BigComplex explicitly to preserve arbitrary precision with complex numbers.
+5. **BigFloat + Complex**: Returns BigComplex (preserves arbitrary precision). Fixed 2026-02-05 — previously returned Complex which lost precision.
 
 ### The Lattice Structure
 
@@ -351,14 +351,13 @@ var resultTypeMatrix = map[string]string{
     "Integer+Complex":    "Complex",     // Join({Int,Real}, {Float,Complex}) = {Float,Complex}
     "Integer+BigComplex": "BigComplex",  // Join({Int,Real}, {?,Complex}) = {?,Complex}
 
-    // BigFloat row shows the precision loss bug
-    "BigFloat+Complex":   "Complex",     // ACTUAL: Join({BigFloat,Real}, {Float,Complex}) = {BigFloat,Complex}
-                                         // but implementation returns {Float,Complex} - LOSES PRECISION
+    // BigFloat row - now correct after 2026-02-05 fix
+    "BigFloat+Complex":   "BigComplex",  // Join({BigFloat,Real}, {Float,Complex}) = {BigFloat,Complex}
     // ... etc
 }
 ```
 
-The `BigFloat+Complex → Complex` precision loss is a bug where the implementation doesn't fully implement the lattice join—it should return `BigComplex` to preserve BigFloat precision.
+The `BigFloat+Complex → BigComplex` behavior is now correct (fixed 2026-02-05). Previously it returned `Complex` which lost precision.
 
 ---
 
@@ -723,10 +722,10 @@ Before adding any missing cases, standardize error handling to prevent silent fa
 - Error handling is consistent across all 7 numeric types
 
 **Step 0.3**: Add missing arithmetic cases ✅
-- All 49 type combinations now work via the Tower* functions
+- All 49 type combinations now work via direct dispatch
 
 **Step 0.4**: Add missing comparison cases ✅
-- TowerCompare handles all 49 combinations
+- All 49 combinations handled by direct dispatch
 
 **Deliverable**: ✅ All 49 type combinations work. Tests pass.
 
@@ -780,25 +779,25 @@ All 7 numeric types have private same-type methods:
 | Complex | `addSame`, `subtractSame`, `multiplySame`, `divideSame`, `compareSame` |
 | BigComplex | `addSame`, `subtractSame`, `multiplySame`, `divideSame`, `compareSame` |
 
-These contain the arithmetic logic without type switches. The Tower* functions in `numeric_tower.go` dispatch to these after promotion.
+These contain the arithmetic logic without type switches. ~~The Tower* functions in `numeric_tower.go` dispatched to these after promotion.~~ (Tower* deleted 2026-02-05; `*Same` methods are now only used internally by direct dispatch.)
 
 **Deliverable**: ✅ Each type has clean same-type operations.
 
 ### Phase 4: Unified Dispatch ❌ ABANDONED
 
-The `BinaryOp` dispatcher exists in `numeric_tower.go`:
+~~The `BinaryOp` dispatcher existed in `numeric_tower.go`~~ (deleted 2026-02-05):
 
 ```go
 func BinaryOp(a, b Number, op func(Number, Number) Number) Number
 ```
 
-Tower functions (`TowerAdd`, `TowerSubtract`, etc.) use this dispatcher.
+~~Tower functions (`TowerAdd`, `TowerSubtract`, etc.) used this dispatcher.~~ (deleted 2026-02-05)
 
 **Original goal**: Replace type-switch implementations with Tower* calls to reduce code.
 
-**Why abandoned**: The Tower* functions have a latent bug where exact complex numbers lose exactness during promotion (see Phase 6). Direct dispatch handles this correctly. Migrating would introduce a regression.
+**Why abandoned**: The Tower* functions had a latent bug where exact complex numbers lose exactness during promotion (see Phase 6). Direct dispatch handles this correctly. Migrating would have introduced a regression.
 
-**Outcome**: Direct method dispatch is the intentional architecture. The type-switch code in each numeric type is not "legacy"—it's the correct, tested implementation.
+**Outcome**: Direct method dispatch is the intentional architecture. The type-switch code in each numeric type is not "legacy"—it's the correct, tested implementation. Tower* functions were deleted as unused code.
 
 ### Phase 5: Cleanup ❌ ABANDONED
 
@@ -965,11 +964,13 @@ The promotion order `Integer < BigInteger < Rational < Float < BigFloat < Comple
 
 ### Problem: Linear Tower Would Lose Exactness for Complex Numbers
 
-**IMPORTANT: This bug is NOT currently user-visible.** The Tower* functions (`TowerAdd`, etc.)
-are unused infrastructure. Primitives use direct method dispatch (`a.Add(b)`), which works
-correctly. This issue only becomes real if Phase 4 (migrate to Tower*) is completed.
+**HISTORICAL NOTE (2026-02-05):** The Tower* functions were deleted. This section documents
+the design flaw that led to abandoning Phases 4-6 and ultimately deleting the Tower* code.
 
-The Tower* promotion path has a latent bug:
+~~The Tower* functions (`TowerAdd`, etc.) were unused infrastructure.~~ Primitives use direct
+method dispatch (`a.Add(b)`), which works correctly.
+
+The Tower* promotion path had a latent bug:
 
 ```
 Integer < BigInteger < Rational < Float < BigFloat < Complex < BigComplex
@@ -1023,13 +1024,11 @@ If we replace direct dispatch with Tower* calls (Phase 4) without fixing the com
 promotion logic (Phase 6), we would INTRODUCE a regression where exact complex arithmetic
 becomes inexact.
 
-Current state:
-- Direct dispatch: ✅ Works correctly
-- Tower* functions: ❌ Has latent exactness bug
-- Phase 4 (migrate to Tower*): 🔄 Pending
-- Phase 6 (fix Tower* for complex): 🔄 Proposed
-
-Safe ordering: Phase 6 → Phase 4 (or abandon Phase 4 entirely)
+Final state (2026-02-05):
+- Direct dispatch: ✅ Works correctly (production implementation)
+- Tower* functions: 🗑️ Deleted (had latent exactness bug)
+- Phase 4 (migrate to Tower*): ❌ Abandoned
+- Phase 6 (fix Tower* for complex): ❌ Abandoned (not needed after Tower* deletion)
 
 ### Proposed Architecture
 
@@ -1093,9 +1092,9 @@ func GetRealRank(n Number) RealRank {
 }
 ```
 
-#### Two Bugs in promoteOnce
+#### Two Bugs in promoteOnce (HISTORICAL - code deleted)
 
-The current `promoteOnce` function has two problems:
+The deleted `promoteOnce` function had two problems:
 
 **Bug 1: Exactness loss at Rational → Float**
 ```go
@@ -1110,7 +1109,7 @@ case *BigFloat:
     return NewComplex(complex(v.Float64(), 0))  // Loses arbitrary precision!
 ```
 
-Both bugs only manifest if code uses the Tower* functions (which primitives currently don't).
+These bugs only manifested if code used the Tower* functions. The Tower* functions were deleted (2026-02-05), so these bugs no longer exist in the codebase.
 
 ### Exactness-Preserving Complex Promotion
 
@@ -1262,13 +1261,13 @@ abandoned, they're now just historical notes.
 
 ### Implementation Priority ❌ ABANDONED
 
-This section described work to fix the Tower* functions. Since Phases 4-6 are abandoned,
-this work is not needed. The direct dispatch implementation is correct.
+This section described work to fix the Tower* functions. Since Phases 4-6 were abandoned
+and Tower* functions were deleted (2026-02-05), this work is not needed.
 
 | Task | Status | Notes |
 |------|--------|-------|
 | Add exactness preservation tests | Optional | Current tests already verify correct behavior |
-| Fix Tower* for complex | Abandoned | Tower* functions are unused |
+| Fix Tower* for complex | 🗑️ N/A | Tower* functions deleted |
 | Benchmark complex arithmetic | Not needed | Direct dispatch performance is acceptable |
 | Unify Complex/BigComplex types | Not needed | Current type separation works correctly |
 
@@ -1284,18 +1283,15 @@ The following misconceptions were identified and corrected:
 | Only exactness loss mentioned | **Incomplete**: also precision loss at BigFloat → Complex |
 | "Current Workaround" framing | **Misleading**: direct dispatch is the primary implementation, not a workaround |
 
-**Architecture clarification**: The codebase has THREE independent systems handling complex numbers:
+**Architecture clarification**: The codebase has TWO systems handling complex numbers:
 
 1. **Parser** (`parseComplex`): Creates correct types from literals
 2. **Direct dispatch** (`BigComplex.Add`, etc.): Used by primitives, handles exactness correctly
-3. **Tower* functions** (`TowerAdd`, etc.): Unused infrastructure with latent bugs
 
-The Tower* functions were designed for a future refactoring (Phase 4) that would simplify
-the type-switch code. However, Phase 4 should NOT proceed until Phase 6 fixes the Tower*
-complex handling, or we would introduce user-visible regressions.
+~~3. **Tower* functions** (`TowerAdd`, etc.): Unused infrastructure with latent bugs~~ — **Deleted 2026-02-05**
 
 **Decision**: Phases 4-6 abandoned. Direct dispatch is the intentional architecture.
-The Tower* functions remain as unused infrastructure and may be removed in future cleanup.
+Tower* functions were deleted as unused code with known design flaws.
 
 ### References
 
