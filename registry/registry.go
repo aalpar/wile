@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package registry provides a plugin architecture for registering Scheme primitives.
-//
-// The registry allows extensions to register primitives that are applied to
-// environments at initialization time. Primitives can be registered for different
-// phases: runtime, expand-time, and compile-time.
 package registry
 
 import (
