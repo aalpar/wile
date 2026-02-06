@@ -91,34 +91,6 @@ func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
 }
 
-// addSame adds two Rationals of the same type.
-func (p *Rational) addSame(o *Rational) Number {
-	return &Rational{value: new(big.Rat).Add(p.value, o.value)}
-}
-
-// subtractSame subtracts two Rationals of the same type.
-func (p *Rational) subtractSame(o *Rational) Number {
-	return &Rational{value: new(big.Rat).Sub(p.value, o.value)}
-}
-
-// multiplySame multiplies two Rationals of the same type.
-func (p *Rational) multiplySame(o *Rational) Number {
-	return &Rational{value: new(big.Rat).Mul(p.value, o.value)}
-}
-
-// divideSame divides two Rationals of the same type.
-func (p *Rational) divideSame(o *Rational) Number {
-	if o.value.Sign() == 0 {
-		panic(ErrDivisionByZero)
-	}
-	return &Rational{value: new(big.Rat).Quo(p.value, o.value)}
-}
-
-// compareSame compares two Rationals of the same type.
-func (p *Rational) compareSame(o *Rational) int {
-	return p.value.Cmp(o.value)
-}
-
 // Add returns the sum of two numbers.
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower

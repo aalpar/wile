@@ -135,44 +135,6 @@ func negateInt64(v int64) Number {
 	return NewInteger(-v)
 }
 
-// addSame adds two integers of the same type.
-func (p *Integer) addSame(o *Integer) Number {
-	return addInt64(p.Value, o.Value)
-}
-
-// subtractSame subtracts two integers of the same type.
-func (p *Integer) subtractSame(o *Integer) Number {
-	return subInt64(p.Value, o.Value)
-}
-
-// multiplySame multiplies two integers of the same type.
-func (p *Integer) multiplySame(o *Integer) Number {
-	return mulInt64(p.Value, o.Value)
-}
-
-// divideSame divides two integers of the same type.
-// Returns Rational if not evenly divisible.
-func (p *Integer) divideSame(o *Integer) Number {
-	if o.Value == 0 {
-		panic(ErrDivisionByZero)
-	}
-	result := NewRational(p.Value, o.Value)
-	if result.IsInteger() {
-		return NewInteger(result.NumInt64())
-	}
-	return result
-}
-
-// compareSame compares two integers of the same type.
-func (p *Integer) compareSame(o *Integer) int {
-	if p.Value < o.Value {
-		return -1
-	} else if p.Value > o.Value {
-		return 1
-	}
-	return 0
-}
-
 // Add returns the sum of this integer and another number.
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.

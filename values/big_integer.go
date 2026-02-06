@@ -86,39 +86,6 @@ func (p *BigInteger) Int64() int64 {
 	return p.value.Int64()
 }
 
-// addSame adds two BigIntegers of the same type.
-func (p *BigInteger) addSame(o *BigInteger) Number {
-	return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, o.value)}
-}
-
-// subtractSame subtracts two BigIntegers of the same type.
-func (p *BigInteger) subtractSame(o *BigInteger) Number {
-	return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, o.value)}
-}
-
-// multiplySame multiplies two BigIntegers of the same type.
-func (p *BigInteger) multiplySame(o *BigInteger) Number {
-	return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, o.value)}
-}
-
-// divideSame divides two BigIntegers of the same type.
-// Returns Rational if not evenly divisible.
-func (p *BigInteger) divideSame(o *BigInteger) Number {
-	if o.value.Sign() == 0 {
-		panic(ErrDivisionByZero)
-	}
-	quo, rem := new(big.Int).QuoRem(p.value, o.value, new(big.Int))
-	if rem.Sign() == 0 {
-		return &BigInteger{value: quo}
-	}
-	return NewRationalFromBigInt(p.value, o.value)
-}
-
-// compareSame compares two BigIntegers of the same type.
-func (p *BigInteger) compareSame(o *BigInteger) int {
-	return p.value.Cmp(o.value)
-}
-
 // Add returns the sum of this BigInteger and another number.
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
