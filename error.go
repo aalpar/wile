@@ -16,7 +16,7 @@ package wile
 
 import "io"
 
-// Error represents a Wile engine initialization error.
+// Error represents a Wile engine error, including initialization failures.
 type Error struct {
 	Message string
 	Cause   error
