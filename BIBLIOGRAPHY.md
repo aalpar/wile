@@ -56,7 +56,7 @@ Earlier Scheme standard, referenced for `scheme-report-environment` and `null-en
 
 ### SRFI-1: List Library
 
-Canonical definitions for list processing procedures including `fold`.
+Canonical definitions for list processing procedures including `fold`. Wile's implementation in `lib/srfi/1/` is from Chibi-Scheme.
 
 - **URL**: https://srfi.schemers.org/srfi-1/srfi-1.html
 
@@ -71,6 +71,12 @@ Record type definitions, integrated into R7RS as `define-record-type`.
 Threading primitives implemented in Wile: threads, mutexes, condition variables, and time objects.
 
 - **URL**: https://srfi.schemers.org/srfi-18/srfi-18.html
+
+### SRFI-64: A Scheme API for Test Suites
+
+Test framework specification. Wile's `(chibi test)` library is a portable subset of SRFI-64, providing `test-begin`, `test-end`, and `test`.
+
+- **URL**: https://srfi.schemers.org/srfi-64/srfi-64.html
 
 ### SRFI-141: Integer Division
 
@@ -90,6 +96,19 @@ Comprehensive POSIX API for file system operations.
 Error handling for foreign function interfaces.
 
 - **URL**: https://srfi.schemers.org/srfi-198/srfi-198.html
+
+## Algorithms
+
+### Floyd's Cycle Detection (Tortoise-and-Hare)
+
+Used in `values/pair.go` for `IsList()` to detect circular lists per R7RS §6.4. The algorithm uses two pointers advancing at different speeds through the list; if they meet, the structure is circular.
+
+- **Origin**: Robert W. Floyd, "Nondeterministic Algorithms", Journal of the ACM, Vol. 14, No. 4, 1967
+- **DOI**: https://doi.org/10.1145/321420.321422
+
+### Optimistic Bisimilarity for Structural Equality
+
+Used in `values/utils.go` for `EqualTo()` on compound types (Pair, Vector, ArrayList). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1.
 
 ## Unicode Standards
 
@@ -131,12 +150,43 @@ Comprehensive Scheme tutorial covering implementation concepts.
 
 ## Related Systems
 
+### Chez Scheme
+
+Implementation behavior reference for zero-dominance in multiplication (`values/float.go`, `values/integer.go`, `values/big_integer.go`), optimistic bisimilarity for `equal?` (`values/utils.go`), and pointer-based equality for syntax objects (`internal/syntax/`).
+
+- **URL**: https://cisco.github.io/ChezScheme/
+- **Source**: https://github.com/cisco/ChezScheme
+
 ### Racket
 
-Racket documentation referenced for `@`-expression reader syntax (planned feature).
+Implementation model for delimited continuations (prompt tags, composable continuations), phase numbering conventions, and phased imports. Also referenced for `@`-expression reader syntax (planned feature) and syntax object equality semantics.
 
+- **Homepage**: https://racket-lang.org/
 - **Scribble Reader**: https://docs.racket-lang.org/scribble/reader.html
 - **At-expressions**: https://docs.racket-lang.org/at-exp/index.html
+
+### Chibi-Scheme (Alex Shinn)
+
+Source of portable Scheme library code used in Wile. The `lib/chibi/` directory contains Chibi-Scheme's test framework, diff library, optional argument macros, and ANSI terminal library. The `lib/srfi/1/` directory contains Chibi-Scheme's SRFI-1 list library implementation split into functional modules.
+
+- **Homepage**: https://synthcode.com/wiki/chibi-scheme
+- **Source**: https://github.com/ashinn/chibi-scheme
+- **License**: BSD
+
+### Schelog (Dorai Sitaram)
+
+Prolog-in-Scheme embedding. Wile runs the unmodified upstream `schelog.scm` as an integration test for `call/cc`, `syntax-rules`, and mutable state working together on third-party code. Located in `examples/logic/schelog/`.
+
+- **Documentation**: https://ds26gte.github.io/schelog/
+- **Source**: https://github.com/ds26gte/schelog
+- **Book**: Dorai Sitaram, *Teach Yourself Scheme in Fixnum Days*, 1998-2024
+
+### Sterling & Shapiro, "The Art of Prolog"
+
+Source of logic programming examples used in the schelog test suite: map coloring (p. 212), puzzle solver and games (p. 214), and the Zebra puzzle (Exercise 14.1, p. 217-8).
+
+- **Book**: Leon Sterling, Ehud Shapiro, *The Art of Prolog*, 2nd edition, MIT Press, 1994
+- **ISBN**: 978-0-262-19338-2
 
 ### Go x/text Package
 
