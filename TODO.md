@@ -32,6 +32,12 @@ Code Cleanup
 - [x] **Scope:** Audit compiler and primitive implementations
 - [x] **Status:** Replaced `*values.Pair` with `values.Tuple` in list-processing primitives (prim_lists.go, helpers/list.go, helpers/numeric.go, helpers/char.go, machine/operations.go). Deleted dead code in internal/schemeutil/collections.go.
 
+### Replace Direct Pair Index Access with Accessor Methods
+- [x] **Goal:** Convert all direct `[0]`/`[1]` index access on `*Pair` to `Car()`/`Cdr()`/`SetCar()`/`SetCdr()`, and `&Pair{x, y}` literals to `NewCons(x, y)`
+- [x] **Benefit:** Encapsulates Pair representation; only `pair.go` methods use raw indexing
+- [x] **Scope:** values/, machine/, internal/match/ (pair.go's own method implementations excluded)
+- [x] **Status:** All production code outside pair.go now uses accessor methods and NewCons
+
 ---
 
 ### Use values.Number Interface
