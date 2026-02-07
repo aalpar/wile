@@ -58,7 +58,7 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	// Parse variadic arguments: at from [start [end]]
 	var args []values.Value
 	current := rest
-	for current != values.EmptyList {
+	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
@@ -137,7 +137,7 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 	// Parse variadic arguments: fill [start [end]]
 	var args []values.Value
 	current := rest
-	for current != values.EmptyList {
+	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-fill!: improper argument list")

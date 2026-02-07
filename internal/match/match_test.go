@@ -27,6 +27,10 @@ import (
 	"github.com/frankban/quicktest/qtsuite"
 )
 
+// testList constructs a proper list from values, returning *values.Pair.
+// Used across match test files since values.List() now returns values.Tuple.
+func testList(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
+
 // testSyntaxInt creates a syntax-wrapped integer for test bytecode.
 func testSyntaxInt(v int64) syntax.SyntaxValue {
 	return syntax.NewSyntaxObject(values.NewInteger(v), nil)
@@ -45,6 +49,7 @@ func TestUtilsMatchSuites(t *testing.T) {
 type UtilsMatchSuite struct{}
 
 func (UtilsMatchSuite) TestMatch(c *qt.C) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	tcs := []struct {
 		variables map[string]struct{}
 		in        []SyntaxCommand
@@ -53,7 +58,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 	}{
 		{
 			variables: map[string]struct{}{},
-			target:    values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			target:    list(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
 			in: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
@@ -66,7 +71,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			target:    values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			target:    list(values.List(values.NewInteger(10)), values.NewInteger(20)),
 			in: []SyntaxCommand{
 				ByteCodeVisitCar{},
 				ByteCodeCompareCar{Value: testSyntaxInt(10)},
@@ -78,7 +83,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{"a": {}},
-			target:    values.List(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
+			target:    list(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
 			in: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
@@ -94,7 +99,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			target: values.List(
+			target: list(
 				values.NewInteger(10), values.NewInteger(20),
 				values.List(values.NewSymbol("a"), values.NewSymbol("b")),
 				values.List(values.NewSymbol("a"), values.NewSymbol("b")),
@@ -119,7 +124,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{"a": {}},
-			target: values.List(
+			target: list(
 				values.NewInteger(10), values.NewInteger(20),
 				values.List(values.NewSymbol("x"), values.NewSymbol("b")),
 				values.List(values.NewSymbol("y"), values.NewSymbol("b")),
@@ -158,7 +163,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 
 func TestExpand(t *testing.T) {
 	tcs := []struct {
-		in *values.Pair
+		in values.Value
 	}{
 		{in: values.List()},
 		{in: values.List(values.NewInteger(10))},
@@ -174,6 +179,7 @@ func TestExpand(t *testing.T) {
 }
 
 func TestMatchEdgeCases(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	t.Run("Match with unknown opcode", func(t *testing.T) {
 		// Create a custom opcode that's not recognized
 		type UnknownOpCode struct{} //nolint:unused
@@ -181,7 +187,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		// We can't actually test this without modifying the code to expose unknown opcodes
 		// So we'll skip this test
 		matcher := NewMatcher(variables, []SyntaxCommand{ByteCodeDone{}})
-		target := values.List(values.NewInteger(10))
+		target := list(values.NewInteger(10))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil) // Empty list matches with just Done
@@ -197,7 +203,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.NewInteger(10), values.NewInteger(20))
+		target := list(values.NewInteger(10), values.NewInteger(20))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
@@ -211,7 +217,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.NewInteger(10))
+		target := list(values.NewInteger(10))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
@@ -241,7 +247,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.EmptyList)
+		target := list(values.EmptyList)
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil)
@@ -255,7 +261,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.NewInteger(10))
+		target := list(values.NewInteger(10))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
@@ -269,7 +275,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.NewInteger(20))
+		target := list(values.NewInteger(20))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
@@ -286,7 +292,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		}
 
 		matcher := NewMatcher(variables, codes)
-		target := values.List(values.NewInteger(10))
+		target := list(values.NewInteger(10))
 
 		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil)

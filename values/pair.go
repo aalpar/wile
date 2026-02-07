@@ -22,10 +22,11 @@ import (
 
 var (
 	_ Value = (*Pair)(nil)
-	_ Tuple = (*Pair)(nil)
 
-	// EmptyList is the singleton empty list (nil, nil).
-	EmptyList = NewCons(nil, nil)
+	// EmptyList is the singleton empty list ().
+	// It implements Tuple but is not *Pair, enforcing (pair? '()) -> #f
+	// at the type level per R7RS 6.4.
+	EmptyList Tuple = emptyListType{}
 )
 
 // Pair represents a Scheme cons cell.
@@ -66,11 +67,8 @@ func (p *Pair) SetCdr(v Value) {
 // Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
 // Returns false for circular lists per R7RS §6.4.
 func (p *Pair) IsList() bool {
-	if p == nil || IsVoid(p) {
+	if IsVoid(p) {
 		return false
-	}
-	if p.IsEmptyList() {
-		return true
 	}
 	slow := p
 	fast := p
@@ -110,7 +108,7 @@ func (p *Pair) Append(vs Value) Value {
 	if IsEmptyList(vs) {
 		return p
 	}
-	if IsEmptyList(p) || IsVoid(p) {
+	if IsVoid(p) {
 		return vs
 	}
 	q := p
@@ -136,21 +134,16 @@ func (p *Pair) Length() int {
 		q = i + 1
 		return nil
 	})
-	if r != EmptyList {
+	if !IsEmptyList(r) {
 		panic(ErrNotAList)
 	}
 	return q
 }
 
-// IsEmptyList checks if the Pair represents an empty list.
+// IsEmptyList returns false. A *Pair is never the empty list;
+// EmptyList is a separate emptyListType value.
 func (p *Pair) IsEmptyList() bool {
-	if p == nil {
-		return false
-	}
-	if p == EmptyList {
-		return true
-	}
-	return p[0] == nil && p[1] == nil
+	return false
 }
 
 // ForEach iterates over each element in the list represented by the Pair.
@@ -164,7 +157,7 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	}
 	pr := p
 	i := 0
-	for pr != nil && !pr.IsEmptyList() {
+	for pr != nil {
 		hasNext := !IsEmptyList(pr[1])
 		err := fn(ctx, i, hasNext, pr[0])
 		if err != nil {
@@ -191,11 +184,13 @@ func (p *Pair) EqualTo(o Value) bool {
 	}
 	p0 := p
 	v0 := v
-	for !p0.IsEmptyList() && !v0.IsEmptyList() {
+	for {
 		if !EqualTo(p0[0], v0[0]) {
 			return false
 		}
-		// FIXME: consider using types for EmptyList and Void.  ugly void logic everywhere
+		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
+		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
+		// and a non-nil cdr are not.
 		if IsVoid(p0[1]) || IsVoid(v0[1]) {
 			if IsVoid(p0[1]) && IsVoid(v0[1]) {
 				return true
@@ -203,7 +198,7 @@ func (p *Pair) EqualTo(o Value) bool {
 			return p0[1] == v0[1]
 		}
 		if p0[1] == v0[1] {
-			break
+			return true
 		}
 		pv0, _ := p0[1].(*Pair)
 		vv0, _ := v0[1].(*Pair)
@@ -213,7 +208,6 @@ func (p *Pair) EqualTo(o Value) bool {
 		p0 = pv0
 		v0 = vv0
 	}
-	return p0.IsEmptyList() == v0.IsEmptyList()
 }
 
 // IsVoid checks if the Pair is void (nil).
@@ -226,21 +220,26 @@ func (p *Pair) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
-	if p.IsEmptyList() {
-		return "()"
-	}
 	q := &strings.Builder{}
 	q.WriteString("(")
 	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
 		if i > 0 {
 			q.WriteString(" ")
 		}
-		q.WriteString(v.SchemeString())
+		if IsVoid(v) {
+			q.WriteString("#<void>")
+		} else {
+			q.WriteString(v.SchemeString())
+		}
 		return nil
 	})
 	if !IsEmptyList(cdr) {
 		q.WriteString(" . ")
-		q.WriteString(cdr.SchemeString())
+		if IsVoid(cdr) {
+			q.WriteString("#<void>")
+		} else {
+			q.WriteString(cdr.SchemeString())
+		}
 	}
 	q.WriteString(")")
 	return q.String()
@@ -265,9 +264,6 @@ func (p *Pair) String() string {
 	if p.IsVoid() {
 		return ""
 	}
-	if p.IsEmptyList() {
-		return "()"
-	}
 	q := &strings.Builder{}
 	q.WriteString("(")
 	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
@@ -290,9 +286,6 @@ func (p *Pair) String() string {
 func (p *Pair) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
-	}
-	if p.IsEmptyList() {
-		return NewVector()
 	}
 	vs := []Value{}
 	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {

@@ -51,7 +51,7 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 	fill := values.Value(values.FalseValue)
 
 	// Check for optional fill argument
-	if rest, ok := restVal.(*values.Pair); ok && !rest.IsEmptyList() {
+	if rest, ok := restVal.(*values.Pair); ok {
 		fill = rest.Car()
 	}
 
@@ -268,19 +268,12 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 
 	current := p
 	for i := 0; i < k; i++ {
-		if current.IsEmptyList() {
-			return values.NewForeignError("list-set!: index out of range")
-		}
 		cdr := current.Cdr()
 		next, ok := cdr.(*values.Pair)
 		if !ok {
 			return values.NewForeignError("list-set!: index out of range")
 		}
 		current = next
-	}
-
-	if current.IsEmptyList() {
-		return values.NewForeignError("list-set!: index out of range")
 	}
 
 	current.SetCar(val)
@@ -381,7 +374,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional compare procedure
 	var compareCls *machine.MachineClosure
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "member: improper argument list")
@@ -466,7 +459,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional compare procedure
 	var compareCls *machine.MachineClosure
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "assoc: improper argument list")

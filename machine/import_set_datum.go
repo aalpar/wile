@@ -24,6 +24,9 @@ import (
 // ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).
 // This is for runtime use by the 'environment' procedure.
 func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryName, error) {
+	if values.IsEmptyList(expr) {
+		return LibraryName{}, values.NewForeignErrorf("library name cannot be empty")
+	}
 	pair, ok := expr.(*values.Pair)
 	if !ok {
 		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAPair, "library name must be a list")
@@ -62,6 +65,9 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 //   - (for-template <import-set>)   : import at phase -1
 //   - (for-meta <n> <import-set>)   : import at phase +n
 func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet, error) {
+	if values.IsEmptyList(expr) {
+		return nil, values.NewForeignErrorf("import set cannot be empty")
+	}
 	pair, ok := expr.(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "import set must be a list")

@@ -33,13 +33,13 @@ func NumericFoldVariadic(
 	binOp func(acc, val values.Number) values.Number,
 ) error {
 	o := mc.Arg(0)
+	if values.IsEmptyList(o) {
+		mc.SetValue(identity)
+		return nil
+	}
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, o)
-	}
-	if values.IsEmptyList(pr) {
-		mc.SetValue(identity)
-		return nil
 	}
 	o = pr.Car()
 	nbr, ok := o.(values.Number)
@@ -83,13 +83,13 @@ func NumericFoldWithFirst(
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o0)
 	}
 	o1 := mc.Arg(1)
+	if values.IsEmptyList(o1) {
+		mc.SetValue(unaryOp(nbr0))
+		return nil
+	}
 	pr, ok := o1.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, o1)
-	}
-	if values.IsEmptyList(pr) {
-		mc.SetValue(unaryOp(nbr0))
-		return nil
 	}
 	o2 := pr.Car()
 	nbr2, ok := o2.(values.Number)
@@ -140,6 +140,10 @@ func NumericChainCompare(
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o0)
 	}
 	rest := mc.Arg(1)
+	if values.IsEmptyList(rest) {
+		mc.SetValue(values.TrueValue)
+		return nil
+	}
 	pr, ok := rest.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, rest)

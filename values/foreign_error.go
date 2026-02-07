@@ -82,6 +82,11 @@ var (
 	ErrNotANativeError             = NewStaticError("not an error object")
 	ErrNotARecord                  = NewStaticError("not a record")
 	ErrNotARecordType              = NewStaticError("not a record type")
+	ErrLibraryNotFound             = NewStaticError("library not found")
+	ErrCircularDependency          = NewStaticError("circular library dependency")
+	ErrDuplicateExport             = NewStaticError("duplicate export")
+	ErrDuplicateImport             = NewStaticError("duplicate import")
+	ErrUnexportedIdentifier        = NewStaticError("identifier not exported")
 
 	// Threading errors
 	ErrNotAThread            = NewStaticError("not a thread")
@@ -95,6 +100,11 @@ var (
 	ErrNotAnAtomic           = NewStaticError("not an atomic")
 	ErrPortClosed            = NewStaticError("port is closed")
 	ErrNotAHashtable         = NewStaticError("not a hashtable")
+	ErrNoCaptureContext      = NewStaticError("no capture context for expansion")
+	ErrExactnessConversion   = NewStaticError("exactness conversion failed")
+	ErrInvalidFormat         = NewStaticError("invalid number format")
+	ErrUnknownOpCode         = NewStaticError("unknown op code")
+	ErrNotAMatch             = NewStaticError("not a match")
 )
 
 // StaticError represents a compile-time or static error.

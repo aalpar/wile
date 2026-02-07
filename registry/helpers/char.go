@@ -40,7 +40,7 @@ func variadicCompare[T any, V values.Value](
 	rest := mc.Arg(1)
 	prev := getValue(val1)
 
-	for rest != values.EmptyList {
+	for !values.IsEmptyList(rest) {
 		pair, ok := rest.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)

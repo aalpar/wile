@@ -56,7 +56,7 @@ func goErrorToSchemeException(err error) error {
 
 func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineContext) (rmc *MachineContext, rerr error) {
 	if p.Function == nil {
-		return nil, fmt.Errorf("foreign function is nil")
+		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "foreign function is nil")
 	}
 	// Recover panics from the values package (e.g., ErrDivisionByZero, ErrNotANumber,
 	// ErrNotAList) and convert them to Scheme exceptions. The Number interface methods

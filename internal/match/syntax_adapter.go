@@ -36,7 +36,6 @@ package match
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -174,7 +173,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	// Ensure input is a pair
 	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
-		return errors.New("pattern matching requires a pair")
+		return values.WrapForeignErrorf(values.ErrNotAPair, "MatchWithBindingChecker: pattern matching requires a pair")
 	}
 
 	// Create literal matcher function that uses the binding checker
@@ -256,7 +255,7 @@ func (p *SyntaxMatcher) ExpandWithPatternVarSyntax(
 	patternVarSyntax map[string]*syntax.SyntaxSymbol,
 ) (syntax.SyntaxValue, error) {
 	if len(p.matcher.captureStack) == 0 {
-		return nil, errors.New("no capture context for expansion")
+		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "ExpandWithPatternVarSyntax: no captures available for template expansion")
 	}
 
 	// Perform syntax-preserving expansion with scope comparison
@@ -512,9 +511,6 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 
 	switch v := val.(type) {
 	case *values.Pair:
-		if values.IsEmptyList(v) {
-			return syntax.NewSyntaxEmptyList(srcCtx), nil
-		}
 		car, err := p.capturedValueToSyntax(v[0], introScope, useSiteCtx, origin)
 		if err != nil {
 			return nil, err
@@ -524,6 +520,12 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 			return nil, err
 		}
 		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
+
+	case values.Tuple:
+		if v.IsEmptyList() {
+			return syntax.NewSyntaxEmptyList(srcCtx), nil
+		}
+		return syntax.NewSyntaxObject(val, srcCtx), nil
 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, srcCtx), nil
@@ -732,7 +734,7 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 			//}
 		}
 
-		// Handle proper lists and improper lists
+		// nil: syntax node had no cdr; EmptyList: proper list terminator
 		if cdr == nil || values.IsEmptyList(cdr) {
 			return values.NewCons(car, values.EmptyList)
 		}
@@ -787,15 +789,10 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 
 	switch v := val.(type) {
 	case *values.Pair:
-		if values.IsEmptyList(v) {
-			// Return syntax empty list for empty list
-			return syntax.NewSyntaxEmptyList(srcCtx)
-		}
-
 		// Recursively wrap car and cdr
 		car := valueToSyntax(v[0], templateStx)
 
-		// Handle cdr - could be another pair or an atom (improper list)
+		// nil cdr: improper construction; EmptyList: proper list terminator
 		var cdr syntax.SyntaxValue
 		if v[1] == nil || values.IsEmptyList(v[1]) {
 			cdr = syntax.NewSyntaxEmptyList(srcCtx)
@@ -804,6 +801,15 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 		}
 
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
+
+	case syntax.SyntaxValue:
+		return v
+
+	case values.Tuple:
+		if v.IsEmptyList() {
+			return syntax.NewSyntaxEmptyList(srcCtx)
+		}
+		return syntax.NewSyntaxObject(val, srcCtx)
 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, srcCtx)
@@ -862,7 +868,7 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	// Ensure it's a pair
 	pair, ok := rawPattern.(*values.Pair)
 	if !ok {
-		return nil, errors.New("pattern must be a list")
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
 	}
 
 	// Compile using compiler with custom ellipsis and literals

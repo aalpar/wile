@@ -80,7 +80,7 @@ func TestSourceRecording_Define(t *testing.T) {
 }
 
 func TestSourceRecording_DefineFunction(t *testing.T) {
-	tpl := compileScheme(t, "(define (foo x) x)")
+	tpl := compileScheme(t, "(define (bindSymbolWithScopes x) x)")
 
 	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
 	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
@@ -95,7 +95,7 @@ func TestSourceRecording_DefineFunction(t *testing.T) {
 		}
 	}
 	qt.Assert(t, childTpl, qt.IsNotNil)
-	qt.Assert(t, childTpl.Name(), qt.Equals, "foo")
+	qt.Assert(t, childTpl.Name(), qt.Equals, "bindSymbolWithScopes")
 }
 
 func TestSourceRecording_Lambda(t *testing.T) {

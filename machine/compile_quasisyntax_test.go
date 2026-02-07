@@ -122,7 +122,7 @@ func TestQuasisyntaxNeedsRuntime_PureLiteral(t *testing.T) {
 	ccnt, _ := newTestCompiler()
 
 	// Pure symbol - no unsyntax
-	stx := makeTestSyntaxSymbol("foo")
+	stx := makeTestSyntaxSymbol("bindSymbolWithScopes")
 	needs := ccnt.quasisyntaxNeedsRuntime(stx, 1)
 	c.Assert(needs, qt.IsFalse)
 }
@@ -220,8 +220,8 @@ func TestExpandQuasisyntax_SimpleSymbol(t *testing.T) {
 	c := qt.New(t)
 	ccnt, _ := newTestCompiler()
 
-	// foo -> (syntax foo)
-	stx := makeTestSyntaxSymbol("foo")
+	// bindSymbolWithScopes -> (syntax bindSymbolWithScopes)
+	stx := makeTestSyntaxSymbol("bindSymbolWithScopes")
 	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be a list starting with 'syntax'
@@ -729,7 +729,7 @@ func TestCompileQuasisyntaxTemplate_PureLiteral(t *testing.T) {
 	ccnt, env := newTestCompiler()
 
 	// Pure literal should emit only LoadLiteral
-	stx := makeTestSyntaxSymbol("foo")
+	stx := makeTestSyntaxSymbol("bindSymbolWithScopes")
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
@@ -818,7 +818,7 @@ func TestCompileQuasisyntax_Error_NonPairArg(t *testing.T) {
 	c := qt.New(t)
 	ccnt, env := newTestCompiler()
 
-	expr := makeTestSyntaxSymbol("foo")
+	expr := makeTestSyntaxSymbol("bindSymbolWithScopes")
 	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")

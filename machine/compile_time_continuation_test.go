@@ -465,7 +465,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	prog := values.List(values.NewSymbol("begin"),
 		values.List(values.NewSymbol("define"), symX,
 			values.List(values.NewSymbol("lambda"), values.NewSymbol("y"), values.NewBoolean(true))),
-		values.List(symX, values.NewString("foo")))
+		values.List(symX, values.NewString("bindSymbolWithScopes")))
 	sctx := syntax.NewZeroValueSourceContext()
 
 	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
@@ -478,7 +478,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 			cont.template.literals[0],
 			cont.template.literals[1],
 			environment.NewGlobalIndex(symX),
-			values.NewString("foo"),
+			values.NewString("bindSymbolWithScopes"),
 		),
 	)
 	qt.Assert(t, cont.template.operations, qt.HasLen, 15)
@@ -1402,7 +1402,7 @@ func TestCompileSyntaxPrimitiveBranches(t *testing.T) {
 		name string
 		prog string
 	}{
-		{"quote", "'foo"},
+		{"quote", "'bindSymbolWithScopes"},
 		{"if-true", "(if #t 1 2)"},
 		{"if-false", "(if #f 1 2)"},
 		{"lambda", "(lambda (x) x)"},
@@ -1929,7 +1929,7 @@ func TestCompiledLibraryMethods(t *testing.T) {
 		Exports: make(map[string]string),
 	}
 
-	lib.Exports["foo"] = "foo"
+	lib.Exports["bindSymbolWithScopes"] = "bindSymbolWithScopes"
 	qt.Assert(t, len(lib.Exports), qt.Equals, 1)
 }
 
@@ -1989,7 +1989,7 @@ func TestCompileDefineSyntaxErrors(t *testing.T) {
 		name string
 		prog string
 	}{
-		{"missing transformer", "(define-syntax foo)"},
+		{"missing transformer", "(define-syntax bindSymbolWithScopes)"},
 	}
 
 	for _, tc := range testCases {

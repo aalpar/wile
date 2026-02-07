@@ -72,9 +72,6 @@ func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "set-car!: expected a pair but got %T", pair)
 	}
-	if p.IsEmptyList() {
-		return values.NewForeignError("set-car!: cannot modify empty list")
-	}
 	p.SetCar(val)
 	mc.SetValue(values.Void)
 	return nil
@@ -87,9 +84,6 @@ func PrimSetCdr(_ context.Context, mc *machine.MachineContext) error {
 	p, ok := pair.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAPair, "set-cdr!: expected a pair but got %T", pair)
-	}
-	if p.IsEmptyList() {
-		return values.NewForeignError("set-cdr!: cannot modify empty list")
 	}
 	p.SetCdr(val)
 	mc.SetValue(values.Void)

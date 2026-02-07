@@ -32,8 +32,6 @@ package machine
 //       (define (public-fn x) (private-fn x))))
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +152,7 @@ func (p *LibraryRegistry) AddSearchPath(path string) {
 func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
 	key := lib.Name.Key()
 	if _, exists := p.libraries[key]; exists {
-		return fmt.Errorf("library %s already registered", lib.Name.SchemeString())
+		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "register: library %s already registered", lib.Name.SchemeString())
 	}
 	p.libraries[key] = lib
 	return nil
@@ -202,7 +200,7 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("library %s not found in search paths: %v",
+	return "", values.WrapForeignErrorf(values.ErrLibraryNotFound, "findLibraryFile: library %s not found in search paths: %v",
 		name.SchemeString(), p.searchPaths)
 }
 
@@ -249,7 +247,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 		filtered := make(map[string]string)
 		for _, name := range p.Only {
 			if _, ok := result[name]; !ok {
-				return nil, fmt.Errorf("identifier %q not exported by %s",
+				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
 			filtered[name] = name
@@ -261,7 +259,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	if p.Except != nil {
 		for _, name := range p.Except {
 			if _, ok := result[name]; !ok {
-				return nil, fmt.Errorf("identifier %q not exported by %s",
+				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
 			delete(result, name)
@@ -378,12 +376,3 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 	}
 	return nil
 }
-
-// Error types for library operations
-var (
-	ErrLibraryNotFound      = errors.New("library not found")
-	ErrCircularDependency   = errors.New("circular library dependency")
-	ErrDuplicateExport      = errors.New("duplicate export")
-	ErrDuplicateImport      = errors.New("duplicate import")
-	ErrUnexportedIdentifier = errors.New("identifier not exported")
-)

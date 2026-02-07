@@ -99,24 +99,20 @@ func IntegerFold(
 ) error {
 	name := opName(op)
 	o := mc.Arg(0)
-	pr, ok := o.(*values.Pair)
-	if !ok {
-		if values.IsEmptyList(o) {
-			mc.SetValue(values.NewInteger(identity))
-			return nil
-		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a list but got %T", name, o)
-	}
-	if values.IsEmptyList(pr) {
+	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewInteger(identity))
 		return nil
+	}
+	pr, ok := o.(*values.Pair)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a list but got %T", name, o)
 	}
 
 	// First pass: check types and detect if we need big.Int path
 	hasBigInt := false
 	hasInexact := false
 	current := pr
-	for !values.IsEmptyList(current) {
+	for {
 		switch v := current.Car().(type) {
 		case *values.BigInteger:
 			if !v.BigInt().IsInt64() {

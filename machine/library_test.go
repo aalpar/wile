@@ -93,12 +93,12 @@ func TestCompiledLibrary(t *testing.T) {
 	lib := machine.NewCompiledLibrary(name, env)
 
 	// Test empty exports initially
-	c.Assert(lib.IsExported("foo"), qt.IsFalse)
+	c.Assert(lib.IsExported("bindSymbolWithScopes"), qt.IsFalse)
 
 	// Test AddExport with same internal/external name
-	lib.AddExport("foo", "")
-	c.Assert(lib.IsExported("foo"), qt.IsTrue)
-	c.Assert(lib.GetInternalName("foo"), qt.Equals, "foo")
+	lib.AddExport("bindSymbolWithScopes", "")
+	c.Assert(lib.IsExported("bindSymbolWithScopes"), qt.IsTrue)
+	c.Assert(lib.GetInternalName("bindSymbolWithScopes"), qt.Equals, "bindSymbolWithScopes")
 
 	// Test AddExport with rename
 	lib.AddExport("bar", "internal-bar")
@@ -113,7 +113,7 @@ func TestImportSet(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
-	lib.AddExport("foo", "")
+	lib.AddExport("bindSymbolWithScopes", "")
 	lib.AddExport("bar", "")
 	lib.AddExport("baz", "")
 
@@ -122,17 +122,17 @@ func TestImportSet(t *testing.T) {
 	bindings, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings), qt.Equals, 3)
-	c.Assert(bindings["foo"], qt.Equals, "foo")
+	c.Assert(bindings["bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
 	c.Assert(bindings["bar"], qt.Equals, "bar")
 	c.Assert(bindings["baz"], qt.Equals, "baz")
 
 	// Test 'only' filter
 	importSet2 := machine.NewImportSet(name)
-	importSet2.Only = []string{"foo", "bar"}
+	importSet2.Only = []string{"bindSymbolWithScopes", "bar"}
 	bindings2, err := importSet2.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings2), qt.Equals, 2)
-	c.Assert(bindings2["foo"], qt.Equals, "foo")
+	c.Assert(bindings2["bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
 	c.Assert(bindings2["bar"], qt.Equals, "bar")
 
 	// Test 'except' filter
@@ -147,15 +147,15 @@ func TestImportSet(t *testing.T) {
 	importSet4.Prefix = "my:"
 	bindings4, err := importSet4.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
-	c.Assert(bindings4["my:foo"], qt.Equals, "foo")
+	c.Assert(bindings4["my:bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
 	c.Assert(bindings4["my:bar"], qt.Equals, "bar")
 
 	// Test 'rename' modifier
 	importSet5 := machine.NewImportSet(name)
-	importSet5.Renames = map[string]string{"foo": "renamed-foo"}
+	importSet5.Renames = map[string]string{"bindSymbolWithScopes": "renamed-bindSymbolWithScopes"}
 	bindings5, err := importSet5.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
-	c.Assert(bindings5["renamed-foo"], qt.Equals, "foo")
+	c.Assert(bindings5["renamed-bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
 	c.Assert(bindings5["bar"], qt.Equals, "bar")
 }
 
@@ -166,7 +166,7 @@ func TestImportSetErrors(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
-	lib.AddExport("foo", "")
+	lib.AddExport("bindSymbolWithScopes", "")
 
 	// Test 'only' with non-existent identifier
 	importSet := machine.NewImportSet(name)
@@ -188,9 +188,9 @@ func TestCompileDefineLibrary_Basic(t *testing.T) {
 	// Parse a simple library definition
 	libDef := parseLibrarySyntax(t, env, `
 		(define-library (my test lib)
-		  (export foo)
+		  (export bindSymbolWithScopes)
 		  (begin
-		    (define foo 42)))
+		    (define bindSymbolWithScopes 42)))
 	`)
 
 	// Extract args after 'define-library' keyword
@@ -274,7 +274,7 @@ func TestCompileExport_TopLevelError(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Parse an export declaration
-	exportDef := parseLibrarySyntax(t, env, `(export foo bar)`)
+	exportDef := parseLibrarySyntax(t, env, `(export bindSymbolWithScopes bar)`)
 
 	// Extract args
 	exportPair := exportDef.(*syntax.SyntaxPair)
@@ -482,11 +482,11 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
 	// Add runtime binding (variable)
-	foSym := srcEnv.InternSymbol(values.NewSymbol("foo"))
+	foSym := srcEnv.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable)
 	fooIdx := srcEnv.GetGlobalIndex(foSym)
 	_ = srcEnv.SetOwnGlobalValue(fooIdx, values.NewInteger(42))
-	lib.AddExport("foo", "")
+	lib.AddExport("bindSymbolWithScopes", "")
 
 	// Add syntax binding (macro)
 	barSym := srcEnv.InternSymbol(values.NewSymbol("bar"))
@@ -502,8 +502,8 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 
 	// Create bindings map (localName -> externalName)
 	bindings := map[string]string{
-		"foo": "foo",
-		"bar": "bar",
+		"bindSymbolWithScopes": "bindSymbolWithScopes",
+		"bar":                  "bar",
 	}
 
 	// Copy bindings
@@ -511,7 +511,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify runtime binding was copied
-	fooTarget := targetEnv.InternSymbol(values.NewSymbol("foo"))
+	fooTarget := targetEnv.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 	fooBinding := targetEnv.GetBinding(fooTarget)
 	c.Assert(fooBinding, qt.IsNotNil)
 	c.Assert(fooBinding.Value(), values.SchemeEquals, values.NewInteger(42))
@@ -533,25 +533,25 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
 	// Add binding with internal name different from external
-	internalSym := srcEnv.InternSymbol(values.NewSymbol("internal-foo"))
+	internalSym := srcEnv.InternSymbol(values.NewSymbol("internal-bindSymbolWithScopes"))
 	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable)
 	idx := srcEnv.GetGlobalIndex(internalSym)
 	_ = srcEnv.SetOwnGlobalValue(idx, values.NewInteger(99))
-	lib.AddExport("foo", "internal-foo")
+	lib.AddExport("bindSymbolWithScopes", "internal-bindSymbolWithScopes")
 
 	// Create target environment
 	targetEnv := environment.NewTopLevelEnvironment().Runtime()
 
-	// Rename on import: "my-foo" -> "foo"
+	// Rename on import: "my-bindSymbolWithScopes" -> "bindSymbolWithScopes"
 	bindings := map[string]string{
-		"my-foo": "foo",
+		"my-bindSymbolWithScopes": "bindSymbolWithScopes",
 	}
 
 	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
 	c.Assert(err, qt.IsNil)
 
 	// Verify binding is accessible with local name
-	myFooSym := targetEnv.InternSymbol(values.NewSymbol("my-foo"))
+	myFooSym := targetEnv.InternSymbol(values.NewSymbol("my-bindSymbolWithScopes"))
 	binding := targetEnv.GetBinding(myFooSym)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), values.SchemeEquals, values.NewInteger(99))

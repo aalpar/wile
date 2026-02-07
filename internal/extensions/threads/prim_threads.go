@@ -28,6 +28,49 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// parseTimeout extracts a timeout duration from a Scheme value.
+// Accepts *values.Time (absolute), *values.Integer (seconds), *values.Float (seconds),
+// or *values.Boolean (#f = no timeout). Returns nil for no timeout.
+func parseTimeout(v values.Value, name string) (*time.Duration, error) {
+	switch t := v.(type) {
+	case *values.Time:
+		d := time.Until(t.GoTime())
+		return &d, nil
+	case *values.Integer:
+		d := time.Duration(t.Value) * time.Second
+		return &d, nil
+	case *values.Float:
+		d := time.Duration(t.Value * float64(time.Second))
+		return &d, nil
+	case *values.Boolean:
+		if !t.Value {
+			return nil, nil
+		}
+		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected time or number for timeout, got #t", name)
+	default:
+		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected time or number for timeout, got %T", name, v)
+	}
+}
+
+// parseOptionalName extracts an optional string or symbol name from a rest parameter list.
+// Returns empty string if no name provided.
+func parseOptionalName(rest values.Value) string {
+	if values.IsEmptyList(rest) {
+		return ""
+	}
+	restList, ok := rest.(*values.Pair)
+	if !ok {
+		return ""
+	}
+	switch v := restList.Car().(type) {
+	case *values.String:
+		return v.Value
+	case *values.Symbol:
+		return v.Key
+	}
+	return ""
+}
+
 // currentThread stores the thread for the current goroutine
 // This is set when a thread starts execution
 var currentThread *values.Thread
@@ -77,18 +120,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 	thunk := mc.Arg(0)
 	restVal := mc.Arg(1)
 
-	name := ""
-	// Parse optional name from rest list
-	if !values.IsEmptyList(restVal) {
-		if restList, ok := restVal.(*values.Pair); ok {
-			nameVal := restList.Car()
-			if s, ok := nameVal.(*values.String); ok {
-				name = s.Value
-			} else if sym, ok := nameVal.(*values.Symbol); ok {
-				name = sym.Key
-			}
-		}
-	}
+	name := parseOptionalName(restVal)
 
 	thread := values.NewThread(thunk, name)
 
@@ -258,24 +290,10 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Parse timeout (first optional arg)
-		timeoutArg := restList.Car()
-		switch v := timeoutArg.(type) {
-		case *values.Time:
-			d := time.Until(v.GoTime())
-			timeout = &d
-		case *values.Integer:
-			d := time.Duration(v.Value) * time.Second
-			timeout = &d
-		case *values.Float:
-			d := time.Duration(v.Value * float64(time.Second))
-			timeout = &d
-		case *values.Boolean:
-			if !v.Value {
-				// #f means no timeout
-				timeout = nil
-			}
-		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "thread-join!: expected time or number for timeout, got %T", timeoutArg)
+		var err error
+		timeout, err = parseTimeout(restList.Car(), "thread-join!")
+		if err != nil {
+			return err
 		}
 
 		// Parse timeout-val (second optional arg)
@@ -330,18 +348,7 @@ func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
 	restVal := mc.Arg(0)
 
-	name := ""
-	// Parse optional name from rest list
-	if !values.IsEmptyList(restVal) {
-		if restList, ok := restVal.(*values.Pair); ok {
-			nameVal := restList.Car()
-			if s, ok := nameVal.(*values.String); ok {
-				name = s.Value
-			} else if sym, ok := nameVal.(*values.Symbol); ok {
-				name = sym.Key
-			}
-		}
-	}
+	name := parseOptionalName(restVal)
 
 	mutex := values.NewMutex(name)
 	mc.SetValue(mutex)
@@ -429,23 +436,10 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Parse timeout (first optional arg)
-		timeoutArg := restList.Car()
-		switch v := timeoutArg.(type) {
-		case *values.Time:
-			d := time.Until(v.GoTime())
-			timeout = &d
-		case *values.Integer:
-			d := time.Duration(v.Value) * time.Second
-			timeout = &d
-		case *values.Float:
-			d := time.Duration(v.Value * float64(time.Second))
-			timeout = &d
-		case *values.Boolean:
-			if !v.Value {
-				timeout = nil
-			}
-		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "mutex-lock!: expected time or number for timeout, got %T", timeoutArg)
+		var err error
+		timeout, err = parseTimeout(restList.Car(), "mutex-lock!")
+		if err != nil {
+			return err
 		}
 
 		// Parse thread (second optional arg)
@@ -516,23 +510,10 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
 			if rest2List, ok := rest2.(*values.Pair); ok {
-				timeoutArg := rest2List.Car()
-				switch v := timeoutArg.(type) {
-				case *values.Time:
-					d := time.Until(v.GoTime())
-					timeout = &d
-				case *values.Integer:
-					d := time.Duration(v.Value) * time.Second
-					timeout = &d
-				case *values.Float:
-					d := time.Duration(v.Value * float64(time.Second))
-					timeout = &d
-				case *values.Boolean:
-					if !v.Value {
-						timeout = nil
-					}
-				default:
-					return values.WrapForeignErrorf(values.ErrNotANumber, "mutex-unlock!: expected time or number for timeout, got %T", timeoutArg)
+				var err error
+				timeout, err = parseTimeout(rest2List.Car(), "mutex-unlock!")
+				if err != nil {
+					return err
 				}
 			}
 		}
@@ -569,18 +550,7 @@ func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error
 func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) error {
 	restVal := mc.Arg(0)
 
-	name := ""
-	// Parse optional name from rest list
-	if !values.IsEmptyList(restVal) {
-		if restList, ok := restVal.(*values.Pair); ok {
-			nameVal := restList.Car()
-			if s, ok := nameVal.(*values.String); ok {
-				name = s.Value
-			} else if sym, ok := nameVal.(*values.Symbol); ok {
-				name = sym.Key
-			}
-		}
-	}
+	name := parseOptionalName(restVal)
 
 	cv := values.NewConditionVariable(name)
 	mc.SetValue(cv)

@@ -57,7 +57,7 @@ func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64
 	start := defaultStart
 	end := defaultEnd
 
-	if tuple.Cdr() != values.EmptyList {
+	if !values.IsEmptyList(tuple.Cdr()) {
 		tuple2, ok := tuple.Cdr().(values.Tuple)
 		if !ok {
 			return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
@@ -69,7 +69,7 @@ func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64
 			}
 			start = startVal.Value
 
-			if tuple2.Cdr() != values.EmptyList {
+			if !values.IsEmptyList(tuple2.Cdr()) {
 				tuple3, ok := tuple2.Cdr().(values.Tuple)
 				if !ok {
 					return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
@@ -641,7 +641,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 		writer = p
 
 		// Check for start/end arguments
-		if tuple.Cdr() != values.EmptyList {
+		if !values.IsEmptyList(tuple.Cdr()) {
 			tuple2, ok := tuple.Cdr().(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "write-string: improper argument list")
@@ -652,7 +652,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 			}
 			start = int(startVal.Value)
 
-			if tuple2.Cdr() != values.EmptyList {
+			if !values.IsEmptyList(tuple2.Cdr()) {
 				tuple3, ok := tuple2.Cdr().(values.Tuple)
 				if !ok {
 					return values.WrapForeignErrorf(values.ErrNotAList, "write-string: improper argument list")

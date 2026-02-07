@@ -175,11 +175,11 @@ func TestParseExportSpec(t *testing.T) {
 	}{
 		{
 			name:        "simple symbol export",
-			input:       "foo",
+			input:       "bindSymbolWithScopes",
 			expectError: false,
 			checkExport: func(t *testing.T, lib *CompiledLibrary) {
 				qt.Assert(t, lib.Exports, qt.HasLen, 1)
-				qt.Assert(t, lib.Exports["foo"], qt.Equals, "foo")
+				qt.Assert(t, lib.Exports["bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
 			},
 		},
 		{

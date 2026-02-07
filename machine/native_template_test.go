@@ -31,10 +31,10 @@ func TestNativeTemplate_DeduplicateLiteral(t *testing.T) {
 
 	tmpl := NewNativeTemplate(0, 0, false)
 
-	sym1 := values.NewSymbol("foo")
+	sym1 := values.NewSymbol("bindSymbolWithScopes")
 	tmpl.MaybeAppendLiteral(sym1)
 
-	sym2 := values.NewSymbol("foo")
+	sym2 := values.NewSymbol("bindSymbolWithScopes")
 	dedupedSym := tmpl.DeduplicateLiteral(sym2)
 	c.Assert(dedupedSym == sym1, qt.IsTrue, qt.Commentf("symbol should be deduplicated to same instance"))
 	c.Assert(dedupedSym == sym2, qt.IsFalse, qt.Commentf("symbol should not be the new instance"))
@@ -108,7 +108,7 @@ func TestNativeTemplate_IsVoid(t *testing.T) {
 func TestNativeTemplate_Copy(t *testing.T) {
 	tpl := NewNativeTemplate(2, 3, true, NewOperationPush())
 	tpl.MaybeAppendLiteral(values.NewInteger(42))
-	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+	tpl.MaybeAppendLiteral(values.NewSymbol("bindSymbolWithScopes"))
 
 	cpy := tpl.Copy()
 

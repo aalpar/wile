@@ -24,8 +24,8 @@ import (
 
 func Test_List(t *testing.T) {
 	tcs := []struct {
-		in     *Pair
-		out    *Pair
+		in     Tuple
+		out    Tuple
 		expect bool
 	}{
 		{
@@ -62,7 +62,7 @@ func Test_FlipVectorToList(t *testing.T) {
 	tcs := []struct {
 		name string
 		in   *Vector
-		out  *Pair
+		out  Tuple
 	}{
 		{
 			name: "nil vector returns empty list",

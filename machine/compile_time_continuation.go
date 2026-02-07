@@ -356,14 +356,21 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
 	symbolScopes := nameSym.Scopes()
 
+	p.bindSymbolWithScopes(name, symbolScopes)
+}
+
+// bindSymbolWithScopes creates a binding for the given symbol with the specified scopes.
+// If a binding already exists, it updates the scopes if possible. This is used for pre-declaring
+// define bindings with the correct scopes for hygiene.
+func (p *CompileTimeContinuation) bindSymbolWithScopes(name *values.Symbol, scopes []*syntax.Scope) {
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, symbolScopes)
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
 	} else {
 		gi, created := p.env.CreateGlobalBinding(name, environment.BindingTypeVariable)
 		if !created {
 			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil && symbolScopes != nil {
-				binding.SetScopes(symbolScopes)
+			if binding != nil && scopes != nil {
+				binding.SetScopes(scopes)
 			}
 		}
 	}
@@ -1107,8 +1114,8 @@ func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) values.Va
 	case *values.Symbol:
 		return p.env.InternSymbol(val)
 	case *values.Pair:
-		if val == nil || val == values.EmptyList {
-			return val
+		if val == nil {
+			return nil
 		}
 		car := p.internSymbolsInValue(val.Car())
 		cdr := p.internSymbolsInValue(val.Cdr())

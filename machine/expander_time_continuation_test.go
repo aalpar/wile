@@ -33,7 +33,7 @@ type dummyExpandTimeCallContext struct{} //nolint:unused
 func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
-	sym := syntax.NewSyntaxSymbol("foo", nil)
+	sym := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	result, err := cont.ExpandSymbol(NewExpandTimeCallContext(context.Background()), sym)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -216,7 +216,7 @@ func TestAddScopeToSyntax(t *testing.T) {
 	qt.Assert(t, result, qt.IsNil)
 
 	// Test with SyntaxSymbol
-	sym := syntax.NewSyntaxSymbol("foo", srcCtx)
+	sym := syntax.NewSyntaxSymbol("bindSymbolWithScopes", srcCtx)
 	result = addScopeToSyntax(sym, scope)
 	qt.Assert(t, result, qt.IsNotNil)
 
@@ -259,7 +259,7 @@ func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
 	qt.Assert(t, result, qt.Equals, sym)
 
 	// Test with a non-free identifier - should get the scope
-	sym2 := syntax.NewSyntaxSymbol("foo", srcCtx)
+	sym2 := syntax.NewSyntaxSymbol("bindSymbolWithScopes", srcCtx)
 	result = addScopeToSyntaxSkipFreeIds(sym2, scope, freeIds)
 	qt.Assert(t, result, qt.IsNotNil)
 	// Should be a different object with added scope

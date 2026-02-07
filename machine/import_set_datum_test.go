@@ -264,7 +264,7 @@ func TestParseImportSetFromDatum_Only_InvalidFormat(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "import set must be a list")
+	qt.Assert(t, err.Error(), qt.Contains, "expected import-set and identifiers")
 }
 
 func TestParseImportSetFromDatum_Prefix_InvalidFormat(t *testing.T) {
@@ -569,7 +569,7 @@ func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to get the phase level from empty list
-	qt.Assert(t, err.Error(), qt.Contains, "not an integer")
+	qt.Assert(t, err.Error(), qt.Contains, "expected phase level and import-set")
 }
 
 func TestParseImportSetFromDatum_ForMeta_NotInteger(t *testing.T) {

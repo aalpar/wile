@@ -37,8 +37,6 @@ package match
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -186,9 +184,6 @@ func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
 // This is the syntax-native entry point that operates directly on SyntaxPair.
 // Captured values are stored as syntax.SyntaxValue to preserve source context.
 func (p *Matcher) MatchSyntax(ctx context.Context, target *syntax.SyntaxPair) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -347,9 +342,6 @@ type LiteralMatcher func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string
 // The literalMatcher function is called for each literal comparison to check if the
 // input symbol should match (returns true) or is shadowed (returns false).
 func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.SyntaxPair, literalSyntax map[string]*syntax.SyntaxSymbol, literalMatcher LiteralMatcher) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -527,9 +519,6 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 // Match runs the pattern matcher against the target using values-based matching.
 // Captured values are wrapped in syntax objects for uniform bindings storage.
 func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	p.valueStack = []valuePathEntry{
 		{
 			pr: target,
@@ -597,65 +586,70 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			if len(p.valueStack) == 0 {
 				return nil
 			}
-			if !values.IsEmptyList(p.valueStack[lvs-1].pr) && !values.IsVoid(p.valueStack[lvs-1].pr) {
+			if p.valueStack[lvs-1].pr != nil && !values.IsVoid(p.valueStack[lvs-1].pr) {
 				i += cd.Offset - 1
 			}
 		case ByteCodeDone:
 			// Before popping, check that the cdr of current pair is empty
 			// This ensures the pattern consumed all elements at this level
-			cdr := p.valueStack[lvs-1].pr[1]
-			if !values.IsEmptyList(cdr) && cdr != nil {
-				// There are more elements in the input than in the pattern
-				// Check if we're in a loop context (ellipsis) - in that case
-				// cdr being non-empty is expected
-				cdrPair, ok := cdr.(*values.Pair)
-				if ok && !values.IsVoid(cdrPair) {
-					// More elements exist - this is only OK in a loop context
-					if i+1 >= len(p.codes) {
+			if p.valueStack[lvs-1].pr != nil {
+				cdr := p.valueStack[lvs-1].pr[1]
+				if !values.IsEmptyList(cdr) && cdr != nil {
+					// There are more elements in the input than in the pattern
+					// Check if we're in a loop context (ellipsis) - in that case
+					// cdr being non-empty is expected
+					cdrPair, ok := cdr.(*values.Pair)
+					if ok && !values.IsVoid(cdrPair) {
+						// More elements exist - this is only OK in a loop context
+						if i+1 >= len(p.codes) {
+							return ErrNotAMatch
+						}
+						// Check if the next instruction continues processing
+						switch p.codes[i+1].(type) {
+						case ByteCodeJump, ByteCodePopContext:
+							// Loop context - cdr being non-empty is expected
+						default:
+							// Not in loop context, extra elements means no match
+							return ErrNotAMatch
+						}
+					} else if !values.IsEmptyList(cdr) {
+						// Improper list or other non-pair cdr when we expected end
 						return ErrNotAMatch
 					}
-					// Check if the next instruction continues processing
-					switch p.codes[i+1].(type) {
-					case ByteCodeJump, ByteCodePopContext:
-						// Loop context - cdr being non-empty is expected
-					default:
-						// Not in loop context, extra elements means no match
-						return ErrNotAMatch
-					}
-				} else if !values.IsEmptyList(cdr) {
-					// Improper list or other non-pair cdr when we expected end
-					return ErrNotAMatch
 				}
 			}
 
+			// Pop current level
 			lvs = len(p.valueStack) - 1
 			p.valueStack = p.valueStack[:lvs]
 			if len(p.valueStack) == 0 {
 				return nil
 			}
-			cdr = p.valueStack[lvs-1].pr[1]
+
+			// Advance parent level past the element we just finished processing
+			if p.valueStack[lvs-1].pr == nil {
+				break
+			}
+			cdr := p.valueStack[lvs-1].pr[1]
 
 			// Check if there are more elements at the parent level
 			// After popping, if cdr is not empty, there are more siblings to match
 			// If the next instruction is ByteCodeDone (no more pattern elements),
 			// then extra siblings means the pattern doesn't match
-			cdrPair, ok := cdr.(*values.Pair)
-			if ok && !values.IsEmptyList(cdrPair) {
+			pr, ok := cdr.(*values.Pair)
+			if ok {
 				if i+1 < len(p.codes) {
-					_, ok = p.codes[i+1].(ByteCodeDone)
-					if ok {
+					if _, isDone := p.codes[i+1].(ByteCodeDone); isDone {
 						// Pattern expects no more elements but input has more
 						return ErrNotAMatch
 					}
 				}
 			}
-
-			pr, ok := cdr.(*values.Pair)
 			if !ok {
-				// cdr is not a pair, check if it's empty
+				// nil cdr: malformed pair; EmptyList: proper list terminator
+				// Store nil to signal end-of-list (pr field is *Pair)
 				if values.IsEmptyList(cdr) || cdr == nil {
-					// No more siblings - set position to empty list
-					p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
+					p.valueStack[lvs-1] = valuePathEntry{pr: nil}
 				} else {
 					return ErrNotAMatch
 				}
@@ -691,14 +685,20 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			cdr := p.valueStack[lvs-1].pr[1]
 			pr, ok := cdr.(*values.Pair)
 			if !ok {
-				return ErrNotAMatch
+				if values.IsEmptyList(cdr) || cdr == nil {
+					p.valueStack[lvs-1] = valuePathEntry{pr: nil}
+				} else {
+					return ErrNotAMatch
+				}
+			} else {
+				p.valueStack[lvs-1] = valuePathEntry{pr: pr}
 			}
-			p.valueStack[lvs-1] = valuePathEntry{pr: pr}
 			lvs = len(p.valueStack)
 		case ByteCodeSkipIfEmpty:
 			// Skip forward if the current position is empty or void
 			// This enables while-loop semantics for ellipsis patterns
-			if len(p.valueStack) == 0 || values.IsEmptyList(p.valueStack[lvs-1].pr) || values.IsVoid(p.valueStack[lvs-1].pr) {
+			// pr is nil when at the end of a list (EmptyList cdr was encountered)
+			if len(p.valueStack) == 0 || p.valueStack[lvs-1].pr == nil || values.IsVoid(p.valueStack[lvs-1].pr) {
 				i += cd.Offset - 1 // -1 because i++ at end of loop
 			}
 		case ByteCodeSkipIfTailCount:
@@ -717,8 +717,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			// Verify that the car at the current position is an empty list
 			// This is generated for patterns like () that must match empty input
 			car := p.valueStack[lvs-1].pr[0]
-			carPair, ok := car.(*values.Pair)
-			if !ok || !values.IsEmptyList(carPair) {
+			if !values.IsEmptyList(car) {
 				// Car is not an empty list - pattern doesn't match
 				return ErrNotAMatch
 			}
@@ -728,8 +727,9 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			switch {
 			case ok:
 				p.valueStack[lvs-1] = valuePathEntry{pr: cdrPair}
-			case values.IsEmptyList(cdr) || cdr == nil:
-				p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
+			case values.IsEmptyList(cdr) || cdr == nil: // nil cdr: malformed pair; EmptyList: proper list terminator
+				// Store nil to signal end-of-list (pr field is *Pair)
+				p.valueStack[lvs-1] = valuePathEntry{pr: nil}
 			default:
 				return ErrNotAMatch
 			}
@@ -755,7 +755,7 @@ func (p *Matcher) GetBindings() map[string]syntax.SyntaxValue {
 // This is the legacy API that returns unwrapped values.Value.
 func (p *Matcher) Expand(template values.Value) (values.Value, error) {
 	if len(p.captureStack) == 0 {
-		return nil, errors.New("no capture context for expansion")
+		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "Expand: no captures available for template expansion")
 	}
 	result, err := p.expandValue(template, p.captureStack[0], nil)
 	if err != nil {
@@ -770,7 +770,7 @@ func (p *Matcher) Expand(template values.Value) (values.Value, error) {
 // for captured pattern variables.
 func (p *Matcher) ExpandPreservingSyntax(template values.Value) (values.Value, error) {
 	if len(p.captureStack) == 0 {
-		return nil, errors.New("no capture context for expansion")
+		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "ExpandPreservingSyntax: no captures available for template expansion")
 	}
 	return p.expandValue(template, p.captureStack[0], nil)
 }
@@ -789,9 +789,6 @@ func unwrapSyntaxValues(v values.Value) values.Value {
 
 	// Recursively unwrap pairs
 	if pr, ok := v.(*values.Pair); ok {
-		if values.IsEmptyList(pr) {
-			return pr
-		}
 		car := unwrapSyntaxValues(pr[0])
 		cdr := unwrapSyntaxValues(pr[1])
 		return values.NewCons(car, cdr)
@@ -814,32 +811,32 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 			_, ok := ellipsisVars[t.Key]
 			if ok {
 				// This variable should be expanded in the context of ellipsis
-				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
 		}
 		// Not a pattern variable, return as-is
 		return t, nil
 
 	case *values.Pair:
-		if !values.IsEmptyList(t) {
-			// Check for ellipsis escape form: (<ellipsis> <template>)
-			// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical
-			// to <template>, except that ellipses within the template have no special meaning.
-			sym, ok := t[0].(*values.Symbol)
-			if ok && sym.Key == p.ellipsisID {
-				cdr := t[1]
-				cdrPair, ok := cdr.(*values.Pair)
-				if ok && !values.IsEmptyList(cdrPair) {
-					// This is an escape form - return the inner template literally
-					// by expanding it with a matcher that uses "" as ellipsis (no ellipsis matching)
-					return p.expandEscapedTemplate(cdrPair[0], ctx, ellipsisVars)
-				}
-			}
-
-			// Check for ellipsis pattern (something <ellipsis>)
+		// Check for ellipsis escape form: (<ellipsis> <template>)
+		// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical
+		// to <template>, except that ellipses within the template have no special meaning.
+		sym, ok := t[0].(*values.Symbol)
+		if ok && sym.Key == p.ellipsisID {
 			cdr := t[1]
 			cdrPair, ok := cdr.(*values.Pair)
-			if ok && !values.IsEmptyList(cdrPair) {
+			if ok {
+				// This is an escape form - return the inner template literally
+				// by expanding it with a matcher that uses "" as ellipsis (no ellipsis matching)
+				return p.expandEscapedTemplate(cdrPair[0], ctx, ellipsisVars)
+			}
+		}
+
+		// Check for ellipsis pattern (something <ellipsis>)
+		{
+			cdr := t[1]
+			cdrPair, ok := cdr.(*values.Pair)
+			if ok {
 				sym, ok := cdrPair[0].(*values.Symbol)
 				if ok && sym.Key == p.ellipsisID {
 					// Found ellipsis - need to repeat the car for each capture
@@ -981,10 +978,8 @@ func (p *Matcher) findVarsRecursive(template values.Value, vars map[string]struc
 			vars[t.Key] = struct{}{}
 		}
 	case *values.Pair:
-		if !values.IsEmptyList(t) {
-			p.findVarsRecursive(t[0], vars)
-			p.findVarsRecursive(t[1], vars)
-		}
+		p.findVarsRecursive(t[0], vars)
+		p.findVarsRecursive(t[1], vars)
 	}
 }
 
@@ -1012,16 +1007,13 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 		// Check if it's an ellipsis variable (from outer repetition)
 		if ellipsisVars != nil {
 			if _, ok := ellipsisVars[t.Key]; ok {
-				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
 		}
 		// Not a pattern variable, return as-is (including ellipsis symbols)
 		return t, nil
 
 	case *values.Pair:
-		if values.IsEmptyList(t) {
-			return t, nil
-		}
 		// In escaped context, don't check for ellipsis patterns - just expand car and cdr
 		car, err := p.expandEscapedTemplate(t[0], ctx, ellipsisVars)
 		if err != nil {
@@ -1044,7 +1036,7 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 func countRemainingElements(pr *values.Pair) int {
 	count := 0
 	current := pr
-	for current != nil && !values.IsEmptyList(current) && !values.IsVoid(current) {
+	for current != nil && !values.IsVoid(current) {
 		count++
 		cdr := current[1]
 		next, ok := cdr.(*values.Pair)
@@ -1114,9 +1106,6 @@ func syntaxValuesEqualForMatch(a, b syntax.SyntaxValue) bool {
 func valuePairToSyntaxPair(pr *values.Pair) *syntax.SyntaxPair {
 	if pr == nil {
 		return nil
-	}
-	if values.IsEmptyList(pr) {
-		return syntax.SyntaxEmptyList
 	}
 	if values.IsVoid(pr) {
 		return nil

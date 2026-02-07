@@ -30,7 +30,7 @@ const (
 // List constructs a proper list from the given values.
 // Returns EmptyList if no arguments are provided.
 // The resulting list has the values in the same order as the arguments.
-func List(os ...Value) *Pair {
+func List(os ...Value) Tuple {
 	l := len(os)
 	switch l {
 	case 0:
@@ -119,7 +119,7 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 	}
 	p0 := p
 	v0 := v
-	for !p0.IsEmptyList() && !v0.IsEmptyList() {
+	for {
 		key := equalPairKey{p0, v0}
 		if visited[key] {
 			return true
@@ -129,6 +129,9 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		if !equalToDeep(p0[0], v0[0], visited) {
 			return false
 		}
+		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
+		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
+		// and a non-nil cdr are not.
 		if IsVoid(p0[1]) || IsVoid(v0[1]) {
 			if IsVoid(p0[1]) && IsVoid(v0[1]) {
 				return true
@@ -136,7 +139,7 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 			return p0[1] == v0[1]
 		}
 		if p0[1] == v0[1] {
-			break
+			return true
 		}
 		pv0, _ := p0[1].(*Pair)
 		vv0, _ := v0[1].(*Pair)
@@ -146,7 +149,6 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		p0 = pv0
 		v0 = vv0
 	}
-	return p0.IsEmptyList() == v0.IsEmptyList()
 }
 
 // vectorEqualToDeep compares two Vectors with cycle detection.
@@ -223,6 +225,7 @@ func IsList(v Value) bool {
 	if v == nil {
 		return false
 	}
+	// Interface equality on zero-size struct: works for emptyListType{}.
 	if v == EmptyList {
 		return true
 	}
@@ -235,8 +238,27 @@ func IsList(v Value) bool {
 	return false
 }
 
-// IsVoid returns true if the value represents the absence of a value.
-// A value is void if it is nil or its IsVoid() method returns true.
+// IsVoid returns true if the value represents the absence of a meaningful result.
+//
+// # Void, EmptyList, and nil Semantics
+//
+// The value system distinguishes three "absence/empty" concepts:
+//
+//   - Void (voidType{} singleton): no meaningful result (e.g., set!, display).
+//     Canonical check: values.IsVoid(v) — handles both nil and the Void singleton.
+//
+//   - EmptyList (emptyListType{} singleton): the empty list () — a valid first-class
+//     Scheme value. Implements Tuple but not *Pair. Canonical check: values.IsEmptyList(v) — handles nil safely (returns false).
+//
+//   - Go nil (nil interface): uninitialized / absent in Go — not a Scheme value.
+//     IsVoid(nil) returns true; IsEmptyList(nil) returns false.
+//
+// Anti-patterns to avoid:
+//
+//   - v == values.EmptyList or v != values.EmptyList → use values.IsEmptyList(v)
+//   - v == values.Void → use values.IsVoid(v)
+//   - v == nil || values.IsVoid(v) → redundant; values.IsVoid(v) handles nil
+//
 // Note: typed nil pointers (e.g., var p *Pair = nil) are handled by the
 // type's IsVoid() method, which checks for nil receiver.
 func IsVoid(v Value) bool {
@@ -259,15 +281,15 @@ func IsEmptyList(v Value) bool {
 // VectorToList converts a Vector to a proper list preserving element order.
 // Iterates backward through the vector, prepending each element to build the list.
 // Returns EmptyList for nil or void vectors.
-func VectorToList(vs *Vector) *Pair {
+func VectorToList(vs *Vector) Tuple {
 	if IsVoid(vs) {
 		return EmptyList
 	}
-	q := EmptyList
+	var q Value = EmptyList
 	for j := len(*vs) - 1; j >= 0; j-- {
 		q = NewCons((*vs)[j], q)
 	}
-	return q
+	return q.(Tuple)
 }
 
 // ExactInteger extracts an exact integer from a Scheme value.

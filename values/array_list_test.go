@@ -28,7 +28,7 @@ func TestArrayList_SchemeString(t *testing.T) {
 	}{
 		{nil, "#<void>"},
 		{NewArrayList(EmptyList), "()"},
-		{NewArrayList(NewCons(nil, nil)), "()"},
+		{NewArrayList(NewCons(nil, nil)), "(#<void> . #<void>)"},
 		{NewArrayList(NewArrayList(nil, nil)), "()"},
 		{NewArrayList(EmptyList), "()"},
 		{NewArrayList(NewInteger(1), NewInteger(2), EmptyList), "(1 2)"},

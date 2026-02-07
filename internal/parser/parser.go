@@ -1428,7 +1428,7 @@ func parseExactPart(s string) (values.Number, error) {
 		r := new(big.Rat)
 		_, ok := r.SetString(s)
 		if !ok {
-			return nil, errors.New("invalid rational: " + s)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidFormat, "parseDecimalInteger: invalid rational: %s", s)
 		}
 		return values.NewRationalFromRat(r), nil
 	}
@@ -1437,7 +1437,7 @@ func parseExactPart(s string) (values.Number, error) {
 	i := new(big.Int)
 	_, ok := i.SetString(s, 10)
 	if !ok {
-		return nil, errors.New("invalid integer: " + s)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidFormat, "parseDecimalInteger: invalid integer: %s", s)
 	}
 	return values.NewBigInteger(i), nil
 }
@@ -1557,7 +1557,7 @@ func parseFloatOrInfnan(s string) (float64, error) {
 			return 0, err
 		}
 		if den == 0 {
-			return 0, errors.New("division by zero in rational")
+			return 0, values.WrapForeignErrorf(values.ErrDivisionByZero, "parseFloatOrInfnan: division by zero in rational")
 		}
 		return num / den, nil
 	}
@@ -1643,7 +1643,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	val := stx.Unwrap()
 	num, ok := val.(values.Number)
 	if !ok {
-		return nil, errors.New("not a number")
+		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "makeExact: value is not numeric")
 	}
 
 	var exactNum values.Value
@@ -1655,7 +1655,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		// Convert float to exact
 		f := v.Value
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, errors.New("cannot convert inf or nan to exact")
+			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
 		}
 		// Check if it's a whole number
 		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
@@ -1669,7 +1669,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		// Convert BigFloat to exact
 		bf := v.BigFloatValue()
 		if bf.IsInf() {
-			return nil, errors.New("cannot convert inf to exact")
+			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
 		}
 		// Try to convert to integer first
 		if bf.IsInt() {
@@ -1685,7 +1685,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		re := v.Real()
 		im := v.Imag()
 		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
-			return nil, errors.New("cannot convert complex with inf or nan to exact")
+			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
 		}
 		reRat := new(big.Rat).SetFloat64(re)
 		imRat := new(big.Rat).SetFloat64(im)
@@ -1697,10 +1697,10 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		if v.IsExact() {
 			exactNum = v
 		} else {
-			return nil, errors.New("cannot convert inexact BigComplex to exact")
+			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inexact BigComplex to exact")
 		}
 	default:
-		return nil, errors.New("unsupported number type for exact conversion")
+		return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: unsupported number type")
 	}
 
 	// Re-wrap with the same syntax context
@@ -1737,7 +1737,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 	val := stx.Unwrap()
 	num, ok := val.(values.Number)
 	if !ok {
-		return nil, errors.New("not a number")
+		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "makeInexact: value is not numeric")
 	}
 
 	var inexactNum values.Value
@@ -1762,7 +1762,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 		imFloat := v.ImagAsBigFloat().Float64()
 		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
 	default:
-		return nil, errors.New("unsupported number type for inexact conversion")
+		return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeInexact: unsupported number type")
 	}
 
 	return p.rewrapSyntax(stx, inexactNum), nil

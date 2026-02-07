@@ -53,7 +53,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 
 	// Strategy 2: Type-based dispatch for non-form expressions.
 	// These are expressions that don't have a special form name:
-	// - ValidatedCall: procedure application like (foo x y)
+	// - ValidatedCall: procedure application like (bindSymbolWithScopes x y)
 	// - ValidatedSymbol: variable reference like x
 	// - ValidatedLiteral: self-evaluating values like 42, "hello", #t
 	switch v := expr.(type) {
@@ -472,19 +472,7 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 	sym := p.env.InternSymbol(def.Name().Sym)
 	symbolScopes := def.Name().Scopes()
 
-	if p.env.LocalEnvironment() != nil {
-		// Local scope: create local binding
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
-	} else {
-		// Global scope: create global binding
-		gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
-		if !created {
-			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil && symbolScopes != nil {
-				binding.SetScopes(symbolScopes)
-			}
-		}
-	}
+	p.bindSymbolWithScopes(sym, symbolScopes)
 }
 
 // bindRestParameter binds the rest parameter (if any) to the local environment.

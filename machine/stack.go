@@ -61,7 +61,7 @@ func (p Stack) AsList() values.Tuple {
 		return values.EmptyList
 	}
 	// Build list from end to start to avoid mutating EmptyList
-	var result values.Tuple = values.EmptyList
+	result := values.EmptyList
 	for i := len(p) - 1; i >= 0; i-- {
 		result = &values.Pair{p[i], result}
 	}

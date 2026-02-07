@@ -107,10 +107,12 @@ func PrimNullQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimPairQ implements the pair? predicate.
 // Returns #t if the argument is a pair (cons cell).
+// EmptyList is not a *Pair (it's a separate type), so the type assertion
+// handles (pair? '()) -> #f at the type level per R7RS §6.4.
 func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	pr, ok := o.(*values.Pair)
-	mc.SetValue(schemeutil.BoolToBoolean(ok && !values.IsEmptyList(pr)))
+	_, ok := o.(*values.Pair)
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 

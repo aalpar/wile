@@ -117,10 +117,10 @@ func (p *DebugContext) cmdBreak(args []string, out io.Writer) {
 	fmt.Fprintln(out)
 }
 
-// cmdDelete removes a breakpoint.
-func (p *DebugContext) cmdDelete(args []string, out io.Writer) {
+// breakpointAction parses a breakpoint ID from args and applies the given action.
+func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb string, action func(machine.BreakpointID) bool) {
 	if len(args) < 1 {
-		fmt.Fprintln(out, "Usage: ,delete ID")
+		fmt.Fprintf(out, "Usage: ,%s ID\n", verb)
 		return
 	}
 
@@ -130,11 +130,16 @@ func (p *DebugContext) cmdDelete(args []string, out io.Writer) {
 		return
 	}
 
-	if p.debugger.RemoveBreakpoint(machine.BreakpointID(id)) {
-		fmt.Fprintf(out, "Breakpoint %d deleted\n", id)
+	if action(machine.BreakpointID(id)) {
+		fmt.Fprintf(out, "Breakpoint %d %sd\n", id, verb)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
 	}
+}
+
+// cmdDelete removes a breakpoint.
+func (p *DebugContext) cmdDelete(args []string, out io.Writer) {
+	p.breakpointAction(args, out, "delete", p.debugger.RemoveBreakpoint)
 }
 
 // cmdList lists all breakpoints.
@@ -166,42 +171,12 @@ func (p *DebugContext) cmdList(out io.Writer) {
 
 // cmdEnable enables a breakpoint.
 func (p *DebugContext) cmdEnable(args []string, out io.Writer) {
-	if len(args) < 1 {
-		fmt.Fprintln(out, "Usage: ,enable ID")
-		return
-	}
-
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
-		return
-	}
-
-	if p.debugger.EnableBreakpoint(machine.BreakpointID(id)) {
-		fmt.Fprintf(out, "Breakpoint %d enabled\n", id)
-	} else {
-		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
-	}
+	p.breakpointAction(args, out, "enable", p.debugger.EnableBreakpoint)
 }
 
 // cmdDisable disables a breakpoint.
 func (p *DebugContext) cmdDisable(args []string, out io.Writer) {
-	if len(args) < 1 {
-		fmt.Fprintln(out, "Usage: ,disable ID")
-		return
-	}
-
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
-		return
-	}
-
-	if p.debugger.DisableBreakpoint(machine.BreakpointID(id)) {
-		fmt.Fprintf(out, "Breakpoint %d disabled\n", id)
-	} else {
-		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
-	}
+	p.breakpointAction(args, out, "disable", p.debugger.DisableBreakpoint)
 }
 
 // cmdStep steps into the next expression.

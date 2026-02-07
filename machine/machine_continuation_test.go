@@ -29,7 +29,7 @@ func TestMachine_Operations(t *testing.T) {
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
-	tpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+	tpl.MaybeAppendLiteral(values.NewSymbol("bindSymbolWithScopes"))
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	err := mc.Run()
 	qt.Assert(t, err, qt.IsNil)
