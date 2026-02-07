@@ -115,16 +115,16 @@ func (p *Vector) AsList() Tuple {
 	case 0:
 		return EmptyList
 	case 1:
-		return &Pair{(*p)[0], EmptyList}
+		return NewCons((*p)[0], EmptyList)
 	}
-	q := &Pair{(*p)[0], &Pair{}}
+	q := NewCons((*p)[0], NewCons(nil, nil))
 	curr := q
 	for _, v := range (*p)[1:] {
-		curr = curr[1].(*Pair)
-		curr[0] = v
-		curr[1] = &Pair{}
+		curr = curr.Cdr().(*Pair)
+		curr.SetCar(v)
+		curr.SetCdr(NewCons(nil, nil))
 	}
-	curr[1] = EmptyList
+	curr.SetCdr(EmptyList)
 	return q
 }
 

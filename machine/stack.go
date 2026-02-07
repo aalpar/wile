@@ -63,7 +63,7 @@ func (p Stack) AsList() values.Tuple {
 	// Build list from end to start to avoid mutating EmptyList
 	result := values.EmptyList
 	for i := len(p) - 1; i >= 0; i-- {
-		result = &values.Pair{p[i], result}
+		result = values.NewCons(p[i], result)
 	}
 	return result
 }

@@ -548,7 +548,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			vsv := p.valueStack[lvs-1].pr
 			// Compare using underlying values - extract from syntax wrapper if needed
 			patternVal := cd.Value.UnwrapAll()
-			inputVal := vsv[0]
+			inputVal := vsv.Car()
 			if !values.EqualTo(patternVal, inputVal) {
 				return ErrNotAMatch
 			}
@@ -556,14 +556,14 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			// Compare the CDR with a literal value (for improper list patterns with literal tail)
 			vsv := p.valueStack[lvs-1].pr
 			patternVal := cd.Value.UnwrapAll()
-			inputVal := vsv[1]
+			inputVal := vsv.Cdr()
 			if !values.EqualTo(patternVal, inputVal) {
 				return ErrNotAMatch
 			}
 		case ByteCodeCaptureCar:
 			lcs := len(p.captureStack)
 			vsv := p.valueStack[lvs-1].pr
-			capturedSyntax := valueToSyntaxValue(vsv[0])
+			capturedSyntax := valueToSyntaxValue(vsv.Car())
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
 			if ok && !syntaxValuesEqualForMatch(capturedSyntax, bv) {
 				return ErrNotAMatch
@@ -573,7 +573,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			// Capture the CDR of the current pair (for improper list patterns like (_ a . rest))
 			lcs := len(p.captureStack)
 			vsv := p.valueStack[lvs-1].pr
-			capturedSyntax := valueToSyntaxValue(vsv[1])
+			capturedSyntax := valueToSyntaxValue(vsv.Cdr())
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
 			if ok && !syntaxValuesEqualForMatch(capturedSyntax, bv) {
 				return ErrNotAMatch
@@ -581,7 +581,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			p.captureStack[lcs-1].bindings[cd.Binding] = capturedSyntax
 			// After capturing CDR, update position to indicate the entire rest is consumed.
 			// Set the current pair's cdr to empty so Done doesn't see "extra" elements.
-			p.valueStack[lvs-1].pr = values.NewCons(vsv[0], values.EmptyList)
+			p.valueStack[lvs-1].pr = values.NewCons(vsv.Car(), values.EmptyList)
 		case ByteCodeJump:
 			if len(p.valueStack) == 0 {
 				return nil
@@ -593,7 +593,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			// Before popping, check that the cdr of current pair is empty
 			// This ensures the pattern consumed all elements at this level
 			if p.valueStack[lvs-1].pr != nil {
-				cdr := p.valueStack[lvs-1].pr[1]
+				cdr := p.valueStack[lvs-1].pr.Cdr()
 				if !values.IsEmptyList(cdr) && cdr != nil {
 					// There are more elements in the input than in the pattern
 					// Check if we're in a loop context (ellipsis) - in that case
@@ -630,7 +630,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			if p.valueStack[lvs-1].pr == nil {
 				break
 			}
-			cdr := p.valueStack[lvs-1].pr[1]
+			cdr := p.valueStack[lvs-1].pr.Cdr()
 
 			// Check if there are more elements at the parent level
 			// After popping, if cdr is not empty, there are more siblings to match
@@ -674,7 +674,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			lcs := len(p.captureStack)
 			p.captureStack = p.captureStack[:lcs-1]
 		case ByteCodeVisitCar:
-			car := p.valueStack[lvs-1].pr[0]
+			car := p.valueStack[lvs-1].pr.Car()
 			pr, ok := car.(*values.Pair)
 			if !ok {
 				return ErrNotAMatch
@@ -682,7 +682,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			p.valueStack = append(p.valueStack, valuePathEntry{pr: pr})
 			lvs = len(p.valueStack)
 		case ByteCodeVisitCdr:
-			cdr := p.valueStack[lvs-1].pr[1]
+			cdr := p.valueStack[lvs-1].pr.Cdr()
 			pr, ok := cdr.(*values.Pair)
 			if !ok {
 				if values.IsEmptyList(cdr) || cdr == nil {
@@ -716,13 +716,13 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 		case ByteCodeRequireCarEmpty:
 			// Verify that the car at the current position is an empty list
 			// This is generated for patterns like () that must match empty input
-			car := p.valueStack[lvs-1].pr[0]
+			car := p.valueStack[lvs-1].pr.Car()
 			if !values.IsEmptyList(car) {
 				// Car is not an empty list - pattern doesn't match
 				return ErrNotAMatch
 			}
 			// Move to next element in the list
-			cdr := p.valueStack[lvs-1].pr[1]
+			cdr := p.valueStack[lvs-1].pr.Cdr()
 			cdrPair, ok := cdr.(*values.Pair)
 			switch {
 			case ok:
@@ -789,8 +789,8 @@ func unwrapSyntaxValues(v values.Value) values.Value {
 
 	// Recursively unwrap pairs
 	if pr, ok := v.(*values.Pair); ok {
-		car := unwrapSyntaxValues(pr[0])
-		cdr := unwrapSyntaxValues(pr[1])
+		car := unwrapSyntaxValues(pr.Car())
+		cdr := unwrapSyntaxValues(pr.Cdr())
 		return values.NewCons(car, cdr)
 	}
 
@@ -821,36 +821,36 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 		// Check for ellipsis escape form: (<ellipsis> <template>)
 		// R7RS §4.3.2: A template of the form (<ellipsis> <template>) is identical
 		// to <template>, except that ellipses within the template have no special meaning.
-		sym, ok := t[0].(*values.Symbol)
+		sym, ok := t.Car().(*values.Symbol)
 		if ok && sym.Key == p.ellipsisID {
-			cdr := t[1]
+			cdr := t.Cdr()
 			cdrPair, ok := cdr.(*values.Pair)
 			if ok {
 				// This is an escape form - return the inner template literally
 				// by expanding it with a matcher that uses "" as ellipsis (no ellipsis matching)
-				return p.expandEscapedTemplate(cdrPair[0], ctx, ellipsisVars)
+				return p.expandEscapedTemplate(cdrPair.Car(), ctx, ellipsisVars)
 			}
 		}
 
 		// Check for ellipsis pattern (something <ellipsis>)
 		{
-			cdr := t[1]
+			cdr := t.Cdr()
 			cdrPair, ok := cdr.(*values.Pair)
 			if ok {
-				sym, ok := cdrPair[0].(*values.Symbol)
+				sym, ok := cdrPair.Car().(*values.Symbol)
 				if ok && sym.Key == p.ellipsisID {
 					// Found ellipsis - need to repeat the car for each capture
-					return p.expandEllipsis(t[0], cdrPair[1], ctx, ellipsisVars)
+					return p.expandEllipsis(t.Car(), cdrPair.Cdr(), ctx, ellipsisVars)
 				}
 			}
 		}
 
 		// Regular pair - expand car and cdr
-		car, err := p.expandValue(t[0], ctx, ellipsisVars)
+		car, err := p.expandValue(t.Car(), ctx, ellipsisVars)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.expandValue(t[1], ctx, ellipsisVars)
+		cdr, err := p.expandValue(t.Cdr(), ctx, ellipsisVars)
 		if err != nil {
 			return nil, err
 		}
@@ -978,8 +978,8 @@ func (p *Matcher) findVarsRecursive(template values.Value, vars map[string]struc
 			vars[t.Key] = struct{}{}
 		}
 	case *values.Pair:
-		p.findVarsRecursive(t[0], vars)
-		p.findVarsRecursive(t[1], vars)
+		p.findVarsRecursive(t.Car(), vars)
+		p.findVarsRecursive(t.Cdr(), vars)
 	}
 }
 
@@ -989,7 +989,7 @@ func (p *Matcher) appendToList(list values.Value, rest values.Value) values.Valu
 		return rest
 	}
 	pair := list.(*values.Pair)
-	return values.NewCons(pair[0], p.appendToList(pair[1], rest))
+	return values.NewCons(pair.Car(), p.appendToList(pair.Cdr(), rest))
 }
 
 // expandEscapedTemplate expands a template inside an ellipsis escape form.
@@ -1015,11 +1015,11 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 
 	case *values.Pair:
 		// In escaped context, don't check for ellipsis patterns - just expand car and cdr
-		car, err := p.expandEscapedTemplate(t[0], ctx, ellipsisVars)
+		car, err := p.expandEscapedTemplate(t.Car(), ctx, ellipsisVars)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.expandEscapedTemplate(t[1], ctx, ellipsisVars)
+		cdr, err := p.expandEscapedTemplate(t.Cdr(), ctx, ellipsisVars)
 		if err != nil {
 			return nil, err
 		}
@@ -1038,7 +1038,7 @@ func countRemainingElements(pr *values.Pair) int {
 	current := pr
 	for current != nil && !values.IsVoid(current) {
 		count++
-		cdr := current[1]
+		cdr := current.Cdr()
 		next, ok := cdr.(*values.Pair)
 		if !ok {
 			// Improper list or end
@@ -1111,8 +1111,8 @@ func valuePairToSyntaxPair(pr *values.Pair) *syntax.SyntaxPair {
 		return nil
 	}
 
-	car := valueToSyntaxValue(pr[0])
-	cdr := valueToSyntaxValue(pr[1])
+	car := valueToSyntaxValue(pr.Car())
+	cdr := valueToSyntaxValue(pr.Cdr())
 	return syntax.NewSyntaxCons(car, cdr, nil)
 }
 

@@ -149,7 +149,7 @@ func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []synta
 	l := len(stack)
 	for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
 		elementStart := len(vis.codes)
-		element := stack[l-1].pr[0]
+		element := stack[l-1].pr.Car()
 
 		// Process the current element and get updated stack
 		var shouldContinue bool
@@ -209,7 +209,7 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 	if values.IsEmptyList(pr) {
 		// Empty pair pattern () - verify input car is also empty
 		vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
-		stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
+		stack[l-1].pr, _ = stack[l-1].pr.Cdr().(*values.Pair)
 		stack[l-1].lastElement = element
 		stack[l-1].lastElementStart = elementStart
 		return stack, true
@@ -217,7 +217,7 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 
 	// Non-empty nested pair - descend into it
 	vis.codes = append(vis.codes, ByteCodeVisitCar{})
-	stack[l-1].pr, _ = stack[l-1].pr[1].(*values.Pair)
+	stack[l-1].pr, _ = stack[l-1].pr.Cdr().(*values.Pair)
 	stack[l-1].lastElement = element
 	stack[l-1].lastElementStart = elementStart
 
@@ -288,7 +288,7 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 	vis.ellipsisVars[ellipsisID] = collectCapturedVariables(vis, entry)
 
 	// Count trailing elements after the ellipsis (for ellipsis-in-middle support)
-	// entry.pr[0] is "...", entry.pr[1] is what comes after
+	// entry.pr car is "...", entry.pr cdr is what comes after
 	tailCount := countPatternTailElements(entry.pr)
 
 	// Extract and relocate pattern bytecode into loop structure
@@ -301,7 +301,7 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 	// 3. We just need to update entry.pr to point to the tail pattern elements
 	if tailCount > 0 {
 		// Advance entry.pr past the ellipsis to the tail elements
-		entry.pr, _ = entry.pr[1].(*values.Pair)
+		entry.pr, _ = entry.pr.Cdr().(*values.Pair)
 		return true
 	}
 	return false
@@ -310,8 +310,8 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 // countPatternTailElements counts the number of pattern elements that follow
 // the ellipsis. This is used for ellipsis-in-middle patterns like (a ... b c).
 func countPatternTailElements(ellipsisPair *values.Pair) int {
-	// ellipsisPair[0] is "...", ellipsisPair[1] is the rest
-	cdr := ellipsisPair[1]
+	// ellipsisPair car is "...", ellipsisPair cdr is the rest
+	cdr := ellipsisPair.Cdr()
 	count := 0
 	for {
 		pr, ok := cdr.(*values.Pair)
@@ -319,7 +319,7 @@ func countPatternTailElements(ellipsisPair *values.Pair) int {
 			break
 		}
 		count++
-		cdr = pr[1]
+		cdr = pr.Cdr()
 	}
 	return count
 }
@@ -446,7 +446,7 @@ func isPairPattern(codes []SyntaxCommand) bool {
 // advanceToNextElement handles CDR advancement after processing an element.
 // Returns false if at end of list (should break from loop).
 func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, element values.Value, elementStart int) bool {
-	cdr := entry.pr[1]
+	cdr := entry.pr.Cdr()
 	cdrPair, ok := cdr.(*values.Pair)
 	if ok && !values.IsEmptyList(cdrPair) {
 		// Normal case: more elements in proper list

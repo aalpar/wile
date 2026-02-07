@@ -77,9 +77,9 @@ func collectPatternVariablesWithEllipsis(v values.Value, literals map[string]str
 	case *values.Pair:
 		if !values.IsEmptyList(t) {
 			// First element in a pattern is the keyword
-			collectPatternVariablesWithEllipsis(t[0], literals, isFirst, variables, ellipsis)
+			collectPatternVariablesWithEllipsis(t.Car(), literals, isFirst, variables, ellipsis)
 			// Rest of the pattern
-			collectPatternVariablesWithEllipsis(t[1], literals, false, variables, ellipsis)
+			collectPatternVariablesWithEllipsis(t.Cdr(), literals, false, variables, ellipsis)
 		}
 	}
 }
@@ -99,17 +99,17 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		varsInSubtree := make(map[string]struct{})
 
 		// Check car (first element)
-		carHasVars := analyzeRecursive(t[0], variables, analysis)
+		carHasVars := analyzeRecursive(t.Car(), variables, analysis)
 		if carHasVars {
 			// If car is a symbol variable, add it
-			sym, ok := t[0].(*values.Symbol)
+			sym, ok := t.Car().(*values.Symbol)
 			if ok {
 				if _, isVar := variables[sym.Key]; isVar {
 					varsInSubtree[sym.Key] = struct{}{}
 				}
 			}
 			// If car is a pair, merge its variables
-			carPair, ok := t[0].(*values.Pair)
+			carPair, ok := t.Car().(*values.Pair)
 			if ok {
 				carVars, exists := analysis.variablesInSubtree[carPair]
 				if exists {
@@ -121,10 +121,10 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		}
 
 		// Check cdr (rest)
-		cdrHasVars := analyzeRecursive(t[1], variables, analysis)
+		cdrHasVars := analyzeRecursive(t.Cdr(), variables, analysis)
 		if cdrHasVars {
 			// If cdr is a pair, merge its variables
-			cdrPair, ok := t[1].(*values.Pair)
+			cdrPair, ok := t.Cdr().(*values.Pair)
 			if ok {
 				cdrVars, exists := analysis.variablesInSubtree[cdrPair]
 				if exists {

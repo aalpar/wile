@@ -214,16 +214,16 @@ func (p *ArrayList) AsList() Value {
 	current := q
 	l := len(*p)
 	for i := 0; i < l-2; i++ {
-		current[0] = (*p)[i]
-		current[1] = NewCons(nil, EmptyList)
-		current = current[1].(*Pair)
+		current.SetCar((*p)[i])
+		current.SetCdr(NewCons(nil, EmptyList))
+		current = current.Cdr().(*Pair)
 	}
-	current[0] = (*p)[l-2]
+	current.SetCar((*p)[l-2])
 	end := (*p)[l-1]
 	if IsEmptyList(end) {
 		return q
 	}
-	current[1] = end
+	current.SetCdr(end)
 	return q
 }
 

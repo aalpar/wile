@@ -35,10 +35,10 @@ func (p Operations) AsList() values.Tuple {
 	var result values.Value = values.EmptyList
 
 	for i := len(p) - 1; i >= 0; i-- {
-		result = &values.Pair{p[i], result}
+		result = values.NewCons(p[i], result)
 	}
 
-	return result.(*values.Pair)
+	return result.(values.Tuple)
 }
 
 func NewOperations(ops ...Operation) Operations {

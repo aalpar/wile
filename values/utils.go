@@ -36,16 +36,16 @@ func List(os ...Value) Tuple {
 	case 0:
 		return EmptyList
 	case 1:
-		return &Pair{os[0], EmptyList}
+		return NewCons(os[0], EmptyList)
 	}
-	q := &Pair{os[0], &Pair{}}
+	q := NewCons(os[0], NewCons(nil, nil))
 	curr := q
 	for _, v := range os[1:] {
-		curr = curr[1].(*Pair)
-		curr[0] = v
-		curr[1] = &Pair{}
+		curr = curr.Cdr().(*Pair)
+		curr.SetCar(v)
+		curr.SetCdr(NewCons(nil, nil))
 	}
-	curr[1] = EmptyList
+	curr.SetCdr(EmptyList)
 	return q
 }
 
@@ -126,25 +126,25 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		}
 		visited[key] = true
 
-		if !equalToDeep(p0[0], v0[0], visited) {
+		if !equalToDeep(p0.Car(), v0.Car(), visited) {
 			return false
 		}
 		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
 		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
 		// and a non-nil cdr are not.
-		if IsVoid(p0[1]) || IsVoid(v0[1]) {
-			if IsVoid(p0[1]) && IsVoid(v0[1]) {
+		if IsVoid(p0.Cdr()) || IsVoid(v0.Cdr()) {
+			if IsVoid(p0.Cdr()) && IsVoid(v0.Cdr()) {
 				return true
 			}
-			return p0[1] == v0[1]
+			return p0.Cdr() == v0.Cdr()
 		}
-		if p0[1] == v0[1] {
+		if p0.Cdr() == v0.Cdr() {
 			return true
 		}
-		pv0, _ := p0[1].(*Pair)
-		vv0, _ := v0[1].(*Pair)
+		pv0, _ := p0.Cdr().(*Pair)
+		vv0, _ := v0.Cdr().(*Pair)
 		if pv0 == nil || vv0 == nil {
-			return equalToDeep(p0[1], v0[1], visited)
+			return equalToDeep(p0.Cdr(), v0.Cdr(), visited)
 		}
 		p0 = pv0
 		v0 = vv0
