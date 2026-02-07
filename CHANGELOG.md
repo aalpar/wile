@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix `(pair? '())` returning `#t` instead of `#f` (R7RS §6.4: the empty list is not a pair)
 - Fix `Engine.Call` and `runCompiled` leaking internal `ErrMachineHalt` sentinel to callers
 - Fix parameter converter errors returned without context (now wrapped with "parameter: converter error")
 - Use `errors.Is` for all sentinel error comparisons (`io.EOF`, `ErrMachineHalt`) to handle wrapped errors correctly
