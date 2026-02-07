@@ -214,7 +214,7 @@ func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
 			return true
 		}
 		// NaN fails all comparisons per IEEE 754
-		if helpers.IsNaN(prev) || helpers.IsNaN(curr) {
+		if prev.IsNaN() || curr.IsNaN() {
 			return true // fails the comparison
 		}
 		return curr.LessThan(prev)
@@ -237,7 +237,7 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 			return true
 		}
 		// NaN fails all comparisons per IEEE 754
-		if helpers.IsNaN(prev) || helpers.IsNaN(curr) {
+		if prev.IsNaN() || curr.IsNaN() {
 			return true // fails the comparison
 		}
 		return prev.LessThan(curr)

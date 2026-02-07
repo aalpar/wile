@@ -224,6 +224,10 @@ type Number interface {
 	ToInexact() Number
 	IsZero() bool
 	IsExact() bool
+	IsInteger() bool  // R7RS §6.2.6: is this an integer value?
+	IsRational() bool // R7RS §6.2.6: is this a rational value?
+	IsFinite() bool   // R7RS §6.2.6: is this a finite number?
+	IsNaN() bool      // R7RS §6.2.6: is this NaN?
 	LessThan(Number) bool
 	Compare(Number) int
 }

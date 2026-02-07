@@ -726,64 +726,31 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 
 // PrimFiniteQ implements the (finite?) primitive.
 func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
-		// BigInteger, Rational, BigComplex (exact) are always finite
-		// BigFloat uses math/big which doesn't support infinity/NaN
-		mc.SetValue(values.TrueValue)
-	case *values.Float:
-		mc.SetValue(schemeutil.BoolToBoolean(!math.IsInf(v.Value, 0) && !math.IsNaN(v.Value)))
-	case *values.Complex:
-		rel := real(v.Value)
-		iam := imag(v.Value)
-		isFinite := !math.IsInf(rel, 0) && !math.IsNaN(rel) && !math.IsInf(iam, 0) && !math.IsNaN(iam)
-		mc.SetValue(schemeutil.BoolToBoolean(isFinite))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(n.IsFinite()))
 	return nil
 }
 
 // PrimInfiniteQ implements the (infinite?) primitive.
 func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
-		// BigInteger, Rational, BigComplex (exact) are never infinite
-		// BigFloat uses math/big which doesn't support infinity
-		mc.SetValue(values.FalseValue)
-	case *values.Float:
-		mc.SetValue(schemeutil.BoolToBoolean(math.IsInf(v.Value, 0)))
-	case *values.Complex:
-		rel := real(v.Value)
-		iam := imag(v.Value)
-		isInfinite := math.IsInf(rel, 0) || math.IsInf(iam, 0)
-		mc.SetValue(schemeutil.BoolToBoolean(isInfinite))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(!n.IsFinite() && !n.IsNaN()))
 	return nil
 }
 
 // PrimNanQ implements the nan? primitive.
 func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational, *values.BigComplex:
-		// BigInteger, Rational, BigComplex (exact) are never NaN
-		// BigFloat uses math/big which doesn't support NaN
-		mc.SetValue(values.FalseValue)
-	case *values.Float:
-		mc.SetValue(schemeutil.BoolToBoolean(math.IsNaN(v.Value)))
-	case *values.Complex:
-		rel := real(v.Value)
-		iam := imag(v.Value)
-		isNaN := math.IsNaN(rel) || math.IsNaN(iam)
-		mc.SetValue(schemeutil.BoolToBoolean(isNaN))
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(n.IsNaN()))
 	return nil
 }
 

@@ -423,6 +423,34 @@ func (p *Integer) IsExact() bool {
 	return true
 }
 
+// IsInteger returns true since Integer is always an integer.
+//
+// R7RS §6.2.6: integer? returns #t for exact integers.
+func (p *Integer) IsInteger() bool {
+	return true
+}
+
+// IsRational returns true since integers are a subset of rationals.
+//
+// R7RS §6.2.6: rational? returns #t for all real finite numbers.
+func (p *Integer) IsRational() bool {
+	return true
+}
+
+// IsFinite returns true since integers are always finite.
+//
+// R7RS §6.2.6: finite? returns #t for all exact numbers.
+func (p *Integer) IsFinite() bool {
+	return true
+}
+
+// IsNaN returns false since integers are never NaN.
+//
+// R7RS §6.2.6: nan? returns #f for exact numbers.
+func (p *Integer) IsNaN() bool {
+	return false
+}
+
 // IsVoid returns true if this integer is nil.
 func (p *Integer) IsVoid() bool {
 	return p == nil

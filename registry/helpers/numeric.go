@@ -17,7 +17,6 @@ package helpers
 import (
 	"context"
 	"errors"
-	"math"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -120,12 +119,6 @@ func NumericFoldWithFirst(
 	return nil
 }
 
-// IsNaN returns true if the number is a NaN float.
-func IsNaN(n values.Number) bool {
-	f, ok := n.(*values.Float)
-	return ok && math.IsNaN(f.Value)
-}
-
 // NumericChainCompare is a helper for numeric chain comparison primitives.
 // First arg at index 0, rest at index 1. Returns true if all consecutive
 // pairs satisfy the comparator, false otherwise.
@@ -189,10 +182,10 @@ func NumericExtremum(
 	}
 
 	// Track if any argument is inexact
-	hasInexact := IsInexact(best)
+	hasInexact := !best.IsExact()
 
 	// Check if first is NaN
-	if f, ok := best.(*values.Float); ok && math.IsNaN(f.Value) {
+	if best.IsNaN() {
 		mc.SetValue(best)
 		return nil
 	}
@@ -214,12 +207,12 @@ func NumericExtremum(
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)
 		}
 
-		if IsInexact(curr) {
+		if !curr.IsExact() {
 			hasInexact = true
 		}
 
 		// Check for NaN - if any argument is NaN, result is NaN
-		if f, ok := curr.(*values.Float); ok && math.IsNaN(f.Value) {
+		if curr.IsNaN() {
 			foundNaN = true
 			best = curr
 			return nil
@@ -247,16 +240,6 @@ func NumericExtremum(
 	return nil
 }
 
-// IsInexact returns true if the number is inexact (Float, BigFloat, or Complex)
-func IsInexact(n values.Number) bool {
-	switch n.(type) {
-	case *values.Float, *values.BigFloat, *values.Complex:
-		return true
-	default:
-		return false
-	}
-}
-
 // MaybeToInexact converts an exact number to inexact (Float) if needed.
 // If the number is already inexact or hasInexact is false, returns it unchanged.
 func MaybeToInexact(n values.Number, hasInexact bool) values.Value {
@@ -264,7 +247,7 @@ func MaybeToInexact(n values.Number, hasInexact bool) values.Value {
 		return n
 	}
 	// If already inexact, return as-is
-	if IsInexact(n) {
+	if !n.IsExact() {
 		return n
 	}
 	// Convert exact to inexact

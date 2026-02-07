@@ -286,6 +286,34 @@ func (p *BigInteger) IsExact() bool {
 	return true
 }
 
+// IsInteger returns true since BigInteger is always an integer.
+//
+// R7RS §6.2.6: integer? returns #t for exact integers.
+func (p *BigInteger) IsInteger() bool {
+	return true
+}
+
+// IsRational returns true since integers are a subset of rationals.
+//
+// R7RS §6.2.6: rational? returns #t for all real finite numbers.
+func (p *BigInteger) IsRational() bool {
+	return true
+}
+
+// IsFinite returns true since integers are always finite.
+//
+// R7RS §6.2.6: finite? returns #t for all exact numbers.
+func (p *BigInteger) IsFinite() bool {
+	return true
+}
+
+// IsNaN returns false since integers are never NaN.
+//
+// R7RS §6.2.6: nan? returns #f for exact numbers.
+func (p *BigInteger) IsNaN() bool {
+	return false
+}
+
 // ToExact returns this BigInteger as an exact number.
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
