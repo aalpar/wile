@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 
@@ -698,7 +699,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 
 // mockBindingChecker implements BindingChecker for testing.
 type mockBindingChecker struct {
-	bindings map[string]any // sym -> binding (nil means no binding)
+	bindings map[string]*environment.Binding // sym -> binding (nil means no binding)
 }
 
 func (p *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
@@ -706,7 +707,7 @@ func (p *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool
 	return ok && binding != nil
 }
 
-func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
 	return p.bindings[sym]
 }
 
@@ -721,14 +722,14 @@ func TestLiteralScopesMatchWithChecker_BothHaveSameBinding(t *testing.T) {
 	patternSym := syntax.NewSyntaxSymbol("=>", srcCtx)
 
 	// Both symbols resolve to the same binding (simulating imported auxiliary syntax)
-	sharedBinding := &struct{ name string }{name: "arrow-binding"}
+	sharedBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
 
 	literalSyntax := map[string]*syntax.SyntaxSymbol{
 		"=>": patternSym,
 	}
 	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
 	matcher.bindingChecker = &mockBindingChecker{
-		bindings: map[string]any{
+		bindings: map[string]*environment.Binding{
 			"=>": sharedBinding, // Same binding for both
 		},
 	}
@@ -753,8 +754,8 @@ func TestLiteralScopesMatchWithChecker_DifferentBindings(t *testing.T) {
 	patternSym := syntax.NewSyntaxSymbol("=>", patternSrcCtx)
 
 	// Input has a different binding (let-bound) than pattern (global)
-	inputBinding := &struct{ name string }{name: "let-binding"}
-	patternBinding := &struct{ name string }{name: "global-binding"}
+	inputBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
+	patternBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypePrimitive)
 
 	literalSyntax := map[string]*syntax.SyntaxSymbol{
 		"=>": patternSym,
@@ -787,7 +788,7 @@ func TestLiteralScopesMatchWithChecker_BothUnbound(t *testing.T) {
 	}
 	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
 	matcher.bindingChecker = &mockBindingChecker{
-		bindings: map[string]any{}, // No bindings
+		bindings: map[string]*environment.Binding{}, // No bindings
 	}
 
 	// Should match because both are unbound (nil == nil)
@@ -797,8 +798,8 @@ func TestLiteralScopesMatchWithChecker_BothUnbound(t *testing.T) {
 
 // mockBindingCheckerWithScopes returns different bindings for input vs pattern.
 type mockBindingCheckerWithScopes struct {
-	inputBinding   any
-	patternBinding any
+	inputBinding   *environment.Binding
+	patternBinding *environment.Binding
 }
 
 func (p *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.Scope) bool {
@@ -809,7 +810,7 @@ func (p *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.S
 	return p.patternBinding != nil
 }
 
-func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) any {
+func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
 	// Determine if this is input (has scopes) or pattern (no scopes)
 	if len(scopes) > 0 {
 		return p.inputBinding

@@ -50,7 +50,7 @@ import (
 type FreeIdResolution struct {
 	// Global is set if the free identifier refers to a global binding.
 	// This enables cross-library macro hygiene by pre-resolving the binding.
-	Global any
+	Global *environment.GlobalIndex
 	// LocalScopes is set if the free identifier refers to a local binding.
 	// These are the scopes of the binding at macro definition time.
 	// During expansion, the free identifier gets these scopes, ensuring
@@ -73,9 +73,8 @@ func (p *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
 }
 
 // GetGlobal returns the global binding's index, or nil if this is a local binding.
-// Returns any to avoid circular import with environment package in match.
 // Implements the globalBindingProvider interface for match package hygiene.
-func (p *FreeIdResolution) GetGlobal() any {
+func (p *FreeIdResolution) GetGlobal() *environment.GlobalIndex {
 	if p == nil {
 		return nil
 	}
