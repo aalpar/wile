@@ -22,8 +22,9 @@ import (
 )
 
 var (
-	_ Value  = (*Complex)(nil)
-	_ Number = (*Complex)(nil)
+	_ Value         = (*Complex)(nil)
+	_ Number        = (*Complex)(nil)
+	_ ComplexNumber = (*Complex)(nil)
 )
 
 // Complex represents a Scheme complex number.
@@ -223,6 +224,44 @@ func (p *Complex) LessThan(o Number) bool {
 // R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
 func (p *Complex) Negate() Number {
 	return NewComplex(-p.Value)
+}
+
+// Abs returns the magnitude of this complex number.
+//
+// R7RS §6.2.6: For complex numbers, abs returns the magnitude.
+func (p *Complex) Abs() Number {
+	return NewFloat(cmplx.Abs(p.Value))
+}
+
+// ToExact converts this Complex to an exact representation.
+//
+// R7RS §6.2.6: exact returns an exact representation of its argument.
+// Both real and imaginary parts are converted to exact numbers.
+func (p *Complex) ToExact() Number {
+	realPart := floatToExact(real(p.Value))
+	imagPart := floatToExact(imag(p.Value))
+	return NewBigComplex(realPart, imagPart)
+}
+
+// ToInexact returns this Complex unchanged since it is already inexact.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+func (p *Complex) ToInexact() Number {
+	return p
+}
+
+// RealPart returns the real part of this complex number as a Number.
+//
+// R7RS §6.2.6: real-part returns the real part of a complex number.
+func (p *Complex) RealPart() Number {
+	return NewFloat(real(p.Value))
+}
+
+// ImagPart returns the imaginary part of this complex number as a Number.
+//
+// R7RS §6.2.6: imag-part returns the imaginary part of a complex number.
+func (p *Complex) ImagPart() Number {
+	return NewFloat(imag(p.Value))
 }
 
 // Compare compares this complex number with another number by real parts.

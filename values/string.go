@@ -22,6 +22,7 @@ import (
 var (
 	_ Value        = (*String)(nil)
 	_ Hashable     = (*String)(nil)
+	_ Indexable    = (*String)(nil)
 	_ fmt.Stringer = (*String)(nil)
 )
 
@@ -117,6 +118,27 @@ func (p *String) Fill(char rune, start, end int) {
 // Len returns the length of the string in characters (runes).
 func (p *String) Len() int {
 	return len([]rune(p.Value))
+}
+
+// Length returns the length of the string in characters (runes).
+//
+// R7RS §6.7: (string-length string) returns the number of characters.
+func (p *String) Length() int {
+	return len([]rune(p.Value))
+}
+
+// Get returns the character at the given rune index as a Character value.
+//
+// R7RS §6.7: (string-ref string k) returns character k of string.
+func (p *String) Get(i int) Value {
+	return NewCharacter([]rune(p.Value)[i])
+}
+
+// Set sets the character at the given rune index from a Character value.
+//
+// R7RS §6.7: (string-set! string k char) stores char in element k.
+func (p *String) Set(i int, v Value) {
+	p.SetChar(i, v.(*Character).Value)
 }
 
 // Runes returns the string as a slice of runes.

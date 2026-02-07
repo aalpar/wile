@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	_ Value  = (*BigFloat)(nil)
-	_ Number = (*BigFloat)(nil)
+	_ Value      = (*BigFloat)(nil)
+	_ Number     = (*BigFloat)(nil)
+	_ RealNumber = (*BigFloat)(nil)
 )
 
 // DefaultBigFloatPrecision is the default precision for BigFloat values.
@@ -263,8 +264,13 @@ func (p *BigFloat) ToInexact() Number {
 }
 
 // Abs returns the absolute value of this BigFloat.
-func (p *BigFloat) Abs() *BigFloat {
+func (p *BigFloat) Abs() Number {
 	return NewBigFloat(new(big.Float).Abs(p.value))
+}
+
+// Sign returns -1 if negative, 0 if zero, or 1 if positive.
+func (p *BigFloat) Sign() int {
+	return p.value.Sign()
 }
 
 // Compare compares this BigFloat with another number.

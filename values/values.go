@@ -219,8 +219,33 @@ type Number interface {
 	Multiply(Number) Number
 	Divide(Number) Number
 	Negate() Number
+	Abs() Number
+	ToExact() Number
+	ToInexact() Number
 	IsZero() bool
 	IsExact() bool
 	LessThan(Number) bool
 	Compare(Number) int
+}
+
+// ComplexNumber represents a complex-valued number with accessible parts.
+//
+// R7RS §6.2.6: Complex numbers have real and imaginary parts
+// accessible via real-part and imag-part.
+type ComplexNumber interface {
+	Number
+	RealPart() Number
+	ImagPart() Number
+	IsReal() bool
+}
+
+// RealNumber represents a real-valued number with sign operations.
+//
+// R7RS §6.2.6: The positive? and negative? predicates apply only to
+// real numbers. Sign returns -1, 0, or 1.
+type RealNumber interface {
+	Number
+	IsPositive() bool
+	IsNegative() bool
+	Sign() int
 }

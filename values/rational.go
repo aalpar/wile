@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	_ Value    = (*Rational)(nil)
-	_ Number   = (*Rational)(nil)
-	_ Hashable = (*Rational)(nil)
+	_ Value      = (*Rational)(nil)
+	_ Number     = (*Rational)(nil)
+	_ RealNumber = (*Rational)(nil)
+	_ Hashable   = (*Rational)(nil)
 )
 
 // Rational represents a Scheme rational number (exact fraction).
@@ -265,6 +266,40 @@ func (p *Rational) LessThan(o Number) bool {
 // R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
 func (p *Rational) Negate() Number {
 	return &Rational{value: new(big.Rat).Neg(p.value)}
+}
+
+// Abs returns the absolute value of this rational.
+func (p *Rational) Abs() Number {
+	return NewRationalFromRat(new(big.Rat).Abs(p.value))
+}
+
+// ToExact returns this Rational unchanged since it is already exact.
+//
+// R7RS §6.2.6: exact returns an exact representation of its argument.
+func (p *Rational) ToExact() Number {
+	return p
+}
+
+// ToInexact converts this Rational to an inexact Float.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+func (p *Rational) ToInexact() Number {
+	return NewFloat(p.Float64())
+}
+
+// IsPositive returns true if this rational is positive.
+func (p *Rational) IsPositive() bool {
+	return p.value.Sign() > 0
+}
+
+// IsNegative returns true if this rational is negative.
+func (p *Rational) IsNegative() bool {
+	return p.value.Sign() < 0
+}
+
+// Sign returns -1 if negative, 0 if zero, or 1 if positive.
+func (p *Rational) Sign() int {
+	return p.value.Sign()
 }
 
 // Compare compares this rational with another number.
