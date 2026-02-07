@@ -106,11 +106,7 @@ func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
 func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Thread)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -335,11 +331,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Mutex)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -537,11 +529,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.ConditionVariable)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -644,11 +632,7 @@ func PrimCurrentTime(_ context.Context, mc *machine.MachineContext) error {
 func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Time)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 

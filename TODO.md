@@ -49,8 +49,8 @@ Code Cleanup
 ### Use BoolToBoolean Helper
 - [ ] **Location:** `internal/schemeutil/predicate.go` provides `BoolToBoolean(bool) *Boolean`
 - [ ] **Goal:** Replace manual `if b { TrueValue } else { FalseValue }` patterns
-- [ ] **Status:** 56 uses adopted across 15 files; ~35 manual patterns remain in 7 files
-- [ ] **Remaining files:** `prim_gointerop.go` (12), `prim_predicates.go` (10), `prim_threads.go` (6), `prim_exceptions.go` (3), `prim_all.go` (3), `prim_syntax.go` (1)
+- [ ] **Status:** 72 uses adopted across 20 files; ~22 manual patterns remain (compound conditionals and non-predicate sites)
+- [ ] **Remaining files:** `prim_gointerop.go` (7), `prim_threads.go` (2), `prim_exceptions.go` (2), `prim_all.go` (1)
 
 ---
 
