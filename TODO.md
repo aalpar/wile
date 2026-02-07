@@ -178,7 +178,9 @@ Future Extensions
 ### Multithreading
 
 SRFI-18 standard API + Go-native extensions (channels, sync primitives). Remaining:
-- [ ] call/cc and dynamic-wind integration with threads (call/cc scope limited to single thread, dynamic-wind cleanup on thread termination)
+- [ ] call/cc and dynamic-wind integration with threads
+  - Add thread identity to `MachineContext`; reject cross-thread continuation invocation in `Restore`/`ErrContinuationEscape` handling
+  - Run `UnwindTo(0)` on thread termination (normal exit and `thread-terminate!`) to fire dynamic-wind after thunks
 
 ---
 
