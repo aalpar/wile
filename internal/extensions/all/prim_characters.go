@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -78,10 +79,9 @@ func PrimCharCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharAlphabeticQ tests if a character is alphabetic.
 func PrimCharAlphabeticQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-alphabetic?: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-alphabetic?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsLetter(ch.Value)))
 	return nil
@@ -89,10 +89,9 @@ func PrimCharAlphabeticQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharNumericQ tests if a character is numeric.
 func PrimCharNumericQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-numeric?: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-numeric?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsDigit(ch.Value)))
 	return nil
@@ -100,10 +99,9 @@ func PrimCharNumericQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharWhitespaceQ tests if a character is whitespace.
 func PrimCharWhitespaceQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-whitespace?: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-whitespace?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsSpace(ch.Value)))
 	return nil
@@ -111,10 +109,9 @@ func PrimCharWhitespaceQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharUpperCaseQ tests if a character is uppercase.
 func PrimCharUpperCaseQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-upper-case?: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upper-case?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsUpper(ch.Value)))
 	return nil
@@ -122,10 +119,9 @@ func PrimCharUpperCaseQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharLowerCaseQ tests if a character is lowercase.
 func PrimCharLowerCaseQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-lower-case?: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-lower-case?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsLower(ch.Value)))
 	return nil
@@ -133,10 +129,9 @@ func PrimCharLowerCaseQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharUpcase returns the uppercase version of a character.
 func PrimCharUpcase(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-upcase: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upcase")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewCharacter(unicode.ToUpper(ch.Value)))
 	return nil
@@ -144,10 +139,9 @@ func PrimCharUpcase(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCharDowncase returns the lowercase version of a character.
 func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-downcase: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-downcase")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewCharacter(unicode.ToLower(ch.Value)))
 	return nil
@@ -157,10 +151,9 @@ func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.6: Returns the simple Unicode case-folded version of the character.
 // Simple case folding maps each character to exactly one character.
 func PrimCharFoldcase(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char-foldcase: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-foldcase")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewCharacter(simpleCaseFold(ch.Value)))
 	return nil
@@ -190,10 +183,9 @@ func simpleCaseFold(r rune) rune {
 // R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
 // according to Unicode, or #f if it is not a decimal digit.
 func PrimDigitValue(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "digit-value: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "digit-value")
+	if err != nil {
+		return err
 	}
 	// Check if it's a Unicode decimal digit (Nd category)
 	// Unicode decimal digits have values 0-9 within their respective scripts

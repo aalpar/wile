@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -41,10 +42,9 @@ func PrimHashtableQ(_ context.Context, mc *machine.MachineContext) error {
 // (hashtable-ref ht key) — errors if key is missing.
 // (hashtable-ref ht key default) — returns default if key is missing.
 func PrimHashtableRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-ref: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-ref")
+	if err != nil {
+		return err
 	}
 	key := mc.Arg(1)
 	rest := mc.Arg(2)
@@ -74,12 +74,11 @@ func PrimHashtableRef(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableSet implements the hashtable-set! primitive.
 // (hashtable-set! ht key value)
 func PrimHashtableSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-set!: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-set!")
+	if err != nil {
+		return err
 	}
-	err := ht.Set(mc.Arg(1), mc.Arg(2))
+	err = ht.Set(mc.Arg(1), mc.Arg(2))
 	if err != nil {
 		return err
 	}
@@ -90,12 +89,11 @@ func PrimHashtableSet(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableDelete implements the hashtable-delete! primitive.
 // (hashtable-delete! ht key)
 func PrimHashtableDelete(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-delete!: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-delete!")
+	if err != nil {
+		return err
 	}
-	err := ht.Delete(mc.Arg(1))
+	err = ht.Delete(mc.Arg(1))
 	if err != nil {
 		return err
 	}
@@ -106,10 +104,9 @@ func PrimHashtableDelete(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableKeys implements the hashtable-keys primitive.
 // Returns a list of all keys in the hash table.
 func PrimHashtableKeys(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-keys: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-keys")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(ht.Keys())
 	return nil
@@ -118,10 +115,9 @@ func PrimHashtableKeys(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableValues implements the hashtable-values primitive.
 // Returns a list of all values in the hash table.
 func PrimHashtableValues(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-values: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-values")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(ht.Values())
 	return nil
@@ -130,10 +126,9 @@ func PrimHashtableValues(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableSize implements the hashtable-size primitive.
 // Returns the number of entries in the hash table.
 func PrimHashtableSize(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-size: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-size")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(ht.Size())))
 	return nil
@@ -142,10 +137,9 @@ func PrimHashtableSize(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableCopy implements the hashtable-copy primitive.
 // Returns a shallow copy of the hash table.
 func PrimHashtableCopy(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-copy: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-copy")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(ht.Copy())
 	return nil
@@ -154,10 +148,9 @@ func PrimHashtableCopy(_ context.Context, mc *machine.MachineContext) error {
 // PrimHashtableClear implements the hashtable-clear! primitive.
 // Removes all entries from the hash table.
 func PrimHashtableClear(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ht, ok := o.(*values.Hashtable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAHashtable, "hashtable-clear!: expected a hashtable but got %s", o.SchemeString())
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, values.ErrNotAHashtable, "hashtable-clear!")
+	if err != nil {
+		return err
 	}
 	ht.Clear()
 	mc.SetValue(values.Void)

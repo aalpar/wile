@@ -105,14 +105,11 @@ func PrimBooleanEq(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.5: (symbol=? symbol1 symbol2 symbol3 ...)
 // Returns #t if all arguments are symbols and all are the same symbol.
 func PrimSymbolEq(_ context.Context, mc *machine.MachineContext) error {
-	first := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	// Check that first is a symbol
-	firstSym, ok := first.(*values.Symbol)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASymbol, "symbol=?: expected a symbol but got %T", first)
+	firstSym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol=?")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	// Process remaining arguments
 	current := rest

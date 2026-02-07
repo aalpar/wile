@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -40,10 +41,9 @@ func PrimBoxQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.
 func PrimUnbox(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	b, ok := o.(*values.Box)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotABox, "unbox: expected a box but got %T", o)
+	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "unbox")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(b.Unbox())
 	return nil
@@ -52,10 +52,9 @@ func PrimUnbox(_ context.Context, mc *machine.MachineContext) error {
 // PrimSetBox implements the set-box! primitive.
 // Sets the value contained in a box.
 func PrimSetBox(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	b, ok := o.(*values.Box)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotABox, "set-box!: expected a box but got %T", o)
+	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "set-box!")
+	if err != nil {
+		return err
 	}
 	b.Value = mc.Arg(1)
 	mc.SetValue(values.Void)

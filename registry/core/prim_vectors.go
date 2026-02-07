@@ -26,12 +26,11 @@ import (
 // PrimMakeVector implements the (make-vector) primitive.
 // Creates a vector of the given size, optionally filled with a specified value.
 func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
-	k := mc.Arg(0)
-	rest := mc.Arg(1)
-	size, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-vector: expected an integer but got %T", k)
+	size, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "make-vector")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 	if size.Value < 0 {
 		return values.NewForeignError("make-vector: size must be non-negative")
 	}
@@ -58,10 +57,9 @@ func PrimVector(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorLength implements the vector-length primitive.
 // Returns the number of elements in a vector as an integer.
 func PrimVectorLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-length: expected a vector but got %T", o)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-length")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(len(*v))))
 	return nil
@@ -71,12 +69,11 @@ func PrimVectorLength(_ context.Context, mc *machine.MachineContext) error {
 // Returns the element of a vector at the given index.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-ref: expected a vector but got %T", o)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-ref")
+	if err != nil {
+		return err
 	}
+	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-ref: expected an exact integer but got %T", k)
@@ -92,13 +89,12 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 // Sets the element of a vector at the given index to a new value.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-set!")
+	if err != nil {
+		return err
+	}
 	k := mc.Arg(1)
 	obj := mc.Arg(2)
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-set!: expected a vector but got %T", o)
-	}
 	idx, ok := values.ExactInteger(k)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-set!: expected an exact integer but got %T", k)
@@ -115,13 +111,11 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector->list vector [start [end]])
 // Converts a vector (or subvector) to a list with the same elements in the same order.
 func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector->list: expected a vector but got %T", o)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector->list")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	length := len(*v)
 
@@ -153,13 +147,11 @@ func PrimListToVector(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector-copy vector [start [end]])
 // Returns a newly allocated copy of the elements of vector between start and end.
 func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-copy: expected a vector but got %T", o)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-copy")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	length := len(*v)
 
@@ -186,19 +178,15 @@ func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector-copy! to at from [start [end]])
 // Copies elements from vector from to vector to, starting at index at in to.
 func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
-	toArg := mc.Arg(0)
-	atArg := mc.Arg(1)
+	to, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-copy!")
+	if err != nil {
+		return err
+	}
+	at, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "vector-copy!")
+	if err != nil {
+		return err
+	}
 	rest := mc.Arg(2)
-
-	to, ok := toArg.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-copy!: expected a vector for to but got %T", toArg)
-	}
-
-	at, ok := atArg.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-copy!: expected an integer for at but got %T", atArg)
-	}
 	atIdx := int(at.Value)
 
 	// Parse from vector and optional start/end from rest list
@@ -210,9 +198,9 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "vector-copy!: improper argument list")
 	}
 
-	from, ok := tuple.Car().(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-copy!: expected a vector for from but got %T", tuple.Car())
+	from, err := helpers.RequireType[*values.Vector](tuple.Car(), values.ErrNotAVector, "vector-copy!")
+	if err != nil {
+		return err
 	}
 
 	fromLen := len(*from)
@@ -241,14 +229,12 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector-fill! vector fill [start [end]])
 // Sets the elements of vector between start and end to fill.
 func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
-	vecArg := mc.Arg(0)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-fill!")
+	if err != nil {
+		return err
+	}
 	fillArg := mc.Arg(1)
 	rest := mc.Arg(2)
-
-	v, ok := vecArg.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector-fill!: expected a vector but got %T", vecArg)
-	}
 
 	length := len(*v)
 
@@ -315,9 +301,9 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "vector-map: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "vector-map")
+	if err != nil {
+		return err
 	}
 
 	if values.IsEmptyList(rest) {
@@ -332,9 +318,9 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "vector-map: improper argument list")
 		}
-		v, ok := tuple.Car().(*values.Vector)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAVector, "vector-map: expected a vector but got %T", tuple.Car())
+		v, err := helpers.RequireType[*values.Vector](tuple.Car(), values.ErrNotAVector, "vector-map")
+		if err != nil {
+			return err
 		}
 		vectors = append(vectors, v)
 		current = tuple.Cdr()
@@ -385,9 +371,9 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "vector-for-each: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "vector-for-each")
+	if err != nil {
+		return err
 	}
 
 	if values.IsEmptyList(rest) {
@@ -402,9 +388,9 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "vector-for-each: improper argument list")
 		}
-		v, ok := tuple.Car().(*values.Vector)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAVector, "vector-for-each: expected a vector but got %T", tuple.Car())
+		v, err := helpers.RequireType[*values.Vector](tuple.Car(), values.ErrNotAVector, "vector-for-each")
+		if err != nil {
+			return err
 		}
 		vectors = append(vectors, v)
 		current = tuple.Cdr()
@@ -450,13 +436,11 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector->string vector [start [end]])
 // Returns a string constructed from the characters in vector between start and end.
 func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	v, ok := o.(*values.Vector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAVector, "vector->string: expected a vector but got %T", o)
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector->string")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	length := len(*v)
 
@@ -474,9 +458,9 @@ func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
 	// Convert characters to string
 	runes := make([]rune, end-start)
 	for i := start; i < end; i++ {
-		ch, ok := (*v)[i].(*values.Character)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "vector->string: expected a character but got %T", (*v)[i])
+		ch, err := helpers.RequireType[*values.Character]((*v)[i], values.ErrNotACharacter, "vector->string")
+		if err != nil {
+			return err
 		}
 		runes[i-start] = ch.Value
 	}
@@ -489,13 +473,11 @@ func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (string->vector string [start [end]])
 // Returns a vector containing the characters of string between start and end.
 func PrimStringToVector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	str, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string->vector: expected a string but got %T", o)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->vector")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	runes := str.Runes()
 	length := len(runes)

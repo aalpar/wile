@@ -22,16 +22,16 @@ import (
 	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
 func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "open-input-file: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-input-file")
+	if err != nil {
+		return err
 	}
 	file, err := os.Open(filename.Value)
 	if err != nil {
@@ -44,10 +44,9 @@ func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
 func PrimOpenOutputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "open-output-file: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-output-file")
+	if err != nil {
+		return err
 	}
 	file, err := os.Create(filename.Value)
 	if err != nil {
@@ -60,10 +59,9 @@ func PrimOpenOutputFile(_ context.Context, mc *machine.MachineContext) error {
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
 func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "open-binary-input-file: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-binary-input-file")
+	if err != nil {
+		return err
 	}
 	file, err := os.Open(filename.Value)
 	if err != nil {
@@ -76,10 +74,9 @@ func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) erro
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
 func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "open-binary-output-file: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-binary-output-file")
+	if err != nil {
+		return err
 	}
 	file, err := os.Create(filename.Value)
 	if err != nil {
@@ -92,12 +89,11 @@ func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) err
 // PrimFileExistsQ implements the (file-exists?) primitive.
 // Returns #t if file exists.
 func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "file-exists?: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "file-exists?")
+	if err != nil {
+		return err
 	}
-	_, err := os.Stat(filename.Value)
+	_, err = os.Stat(filename.Value)
 	mc.SetValue(schemeutil.BoolToBoolean(err == nil))
 	return nil
 }
@@ -105,12 +101,11 @@ func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimDeleteFile implements the (delete-file) primitive.
 // Deletes a file from the filesystem.
 func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	filename, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "delete-file: expected a string but got %T", o)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "delete-file")
+	if err != nil {
+		return err
 	}
-	err := os.Remove(filename.Value)
+	err = os.Remove(filename.Value)
 	if err != nil {
 		return values.WrapForeignFileError(err, "delete-file", filename.Value)
 	}
@@ -129,17 +124,14 @@ func callWithFile(
 	opener func(string) (*os.File, error),
 	portCreator func(*os.File) values.Value,
 ) error {
-	filenameVal := mc.Arg(0)
-	procVal := mc.Arg(1)
-
-	filename, ok := filenameVal.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, filenameVal)
+	filename, err := helpers.RequireType[*values.String](mc.Arg(0), values.ErrNotAString, name)
+	if err != nil {
+		return err
 	}
 
-	proc, ok := procVal.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "%s: expected a procedure but got %T", name, procVal)
+	proc, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, name)
+	if err != nil {
+		return err
 	}
 
 	file, err := opener(filename.Value)
@@ -209,17 +201,14 @@ func runThunk(ctx context.Context, mc *machine.MachineContext, thunk *machine.Ma
 // calls the thunk, then restores the previous port and closes the file.
 // (with-input-from-file string thunk)
 func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) error {
-	filenameVal := mc.Arg(0)
-	thunkVal := mc.Arg(1)
-
-	filename, ok := filenameVal.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "with-input-from-file: expected a string but got %T", filenameVal)
+	filename, err := helpers.RequireType[*values.String](mc.Arg(0), values.ErrNotAString, "with-input-from-file")
+	if err != nil {
+		return err
 	}
 
-	thunk, ok := thunkVal.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "with-input-from-file: expected a procedure but got %T", thunkVal)
+	thunk, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, "with-input-from-file")
+	if err != nil {
+		return err
 	}
 
 	// Open the file
@@ -243,17 +232,14 @@ func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) erro
 // calls the thunk, then restores the previous port and closes the file.
 // (with-output-to-file string thunk)
 func PrimWithOutputToFile(ctx context.Context, mc *machine.MachineContext) error {
-	filenameVal := mc.Arg(0)
-	thunkVal := mc.Arg(1)
-
-	filename, ok := filenameVal.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "with-output-to-file: expected a string but got %T", filenameVal)
+	filename, err := helpers.RequireType[*values.String](mc.Arg(0), values.ErrNotAString, "with-output-to-file")
+	if err != nil {
+		return err
 	}
 
-	thunk, ok := thunkVal.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "with-output-to-file: expected a procedure but got %T", thunkVal)
+	thunk, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, "with-output-to-file")
+	if err != nil {
+		return err
 	}
 
 	// Open the file for writing (create or truncate)

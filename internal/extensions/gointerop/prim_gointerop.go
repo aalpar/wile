@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -65,15 +66,13 @@ func PrimChannelQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelSend sends a value on the channel (blocking)
 // (channel-send! ch value) -> void
 func PrimChannelSend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-send!")
+	if err != nil {
+		return err
+	}
 	val := mc.Arg(1)
 
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-send!: expected channel, got %T", o)
-	}
-
-	err := ch.Send(val)
+	err = ch.Send(val)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "channel-send!")
 	}
@@ -85,10 +84,9 @@ func PrimChannelSend(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelReceive receives a value from the channel (blocking)
 // (channel-receive ch) -> value
 func PrimChannelReceive(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-receive: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-receive")
+	if err != nil {
+		return err
 	}
 
 	v, ok := ch.Receive()
@@ -107,13 +105,11 @@ func PrimChannelReceive(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelTrySend attempts to send without blocking
 // (channel-try-send! ch value) -> boolean
 func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	val := mc.Arg(1)
-
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-try-send!: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-try-send!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 
 	sent, err := ch.TrySend(val)
 	if err != nil {
@@ -127,10 +123,9 @@ func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelTryReceive attempts to receive without blocking
 // (channel-try-receive ch) -> (values value received? open?)
 func PrimChannelTryReceive(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-try-receive: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-try-receive")
+	if err != nil {
+		return err
 	}
 
 	v, received, open := ch.TryReceive()
@@ -164,13 +159,12 @@ func PrimChannelTryReceive(_ context.Context, mc *machine.MachineContext) error 
 // PrimChannelClose closes the channel
 // (channel-close! ch) -> void
 func PrimChannelClose(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-close!: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-close!")
+	if err != nil {
+		return err
 	}
 
-	err := ch.Close()
+	err = ch.Close()
 	if err != nil {
 		return values.WrapForeignErrorf(err, "channel-close!")
 	}
@@ -182,10 +176,9 @@ func PrimChannelClose(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelClosedQ tests if a channel is closed
 // (channel-closed? ch) -> boolean
 func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-closed?: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-closed?")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(ch.IsClosed()))
@@ -195,10 +188,9 @@ func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelLength returns the number of elements in the channel buffer
 // (channel-length ch) -> integer
 func PrimChannelLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-length: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-length")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(values.NewInteger(int64(ch.Len())))
@@ -208,10 +200,9 @@ func PrimChannelLength(_ context.Context, mc *machine.MachineContext) error {
 // PrimChannelCapacity returns the channel's buffer capacity
 // (channel-capacity ch) -> integer
 func PrimChannelCapacity(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Channel)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-capacity: expected channel, got %T", o)
+	ch, err := helpers.RequireArg[*values.Channel](mc, 0, values.ErrNotAChannel, "channel-capacity")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(values.NewInteger(int64(ch.Cap())))
@@ -242,17 +233,14 @@ func PrimWaitGroupQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupAdd adds to the WaitGroup counter
 // (wait-group-add! wg n) -> void
 func PrimWaitGroupAdd(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	nVal := mc.Arg(1)
-
-	wg, ok := o.(*values.WaitGroup)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAWaitGroup, "wait-group-add!: expected wait-group, got %T", o)
+	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, values.ErrNotAWaitGroup, "wait-group-add!")
+	if err != nil {
+		return err
 	}
 
-	n, ok := nVal.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "wait-group-add!: expected integer, got %T", nVal)
+	n, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "wait-group-add!")
+	if err != nil {
+		return err
 	}
 
 	wg.Add(int(n.Value))
@@ -263,10 +251,9 @@ func PrimWaitGroupAdd(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupDone decrements the WaitGroup counter
 // (wait-group-done! wg) -> void
 func PrimWaitGroupDone(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	wg, ok := o.(*values.WaitGroup)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAWaitGroup, "wait-group-done!: expected wait-group, got %T", o)
+	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, values.ErrNotAWaitGroup, "wait-group-done!")
+	if err != nil {
+		return err
 	}
 
 	wg.Done()
@@ -277,10 +264,9 @@ func PrimWaitGroupDone(_ context.Context, mc *machine.MachineContext) error {
 // PrimWaitGroupWait waits for the WaitGroup counter to reach zero
 // (wait-group-wait! wg) -> void
 func PrimWaitGroupWait(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	wg, ok := o.(*values.WaitGroup)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAWaitGroup, "wait-group-wait!: expected wait-group, got %T", o)
+	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, values.ErrNotAWaitGroup, "wait-group-wait!")
+	if err != nil {
+		return err
 	}
 
 	wg.Wait()
@@ -327,10 +313,9 @@ func PrimRWMutexQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexReadLock acquires the read lock
 // (rw-mutex-read-lock! rwm) -> void
 func PrimRWMutexReadLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-read-lock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-read-lock!")
+	if err != nil {
+		return err
 	}
 
 	rwm.RLock()
@@ -341,10 +326,9 @@ func PrimRWMutexReadLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexReadUnlock releases the read lock
 // (rw-mutex-read-unlock! rwm) -> void
 func PrimRWMutexReadUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-read-unlock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-read-unlock!")
+	if err != nil {
+		return err
 	}
 
 	rwm.RUnlock()
@@ -355,10 +339,9 @@ func PrimRWMutexReadUnlock(_ context.Context, mc *machine.MachineContext) error 
 // PrimRWMutexWriteLock acquires the write lock
 // (rw-mutex-write-lock! rwm) -> void
 func PrimRWMutexWriteLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-write-lock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-write-lock!")
+	if err != nil {
+		return err
 	}
 
 	rwm.Lock()
@@ -369,10 +352,9 @@ func PrimRWMutexWriteLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimRWMutexWriteUnlock releases the write lock
 // (rw-mutex-write-unlock! rwm) -> void
 func PrimRWMutexWriteUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-write-unlock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-write-unlock!")
+	if err != nil {
+		return err
 	}
 
 	rwm.Unlock()
@@ -383,10 +365,9 @@ func PrimRWMutexWriteUnlock(_ context.Context, mc *machine.MachineContext) error
 // PrimRWMutexTryReadLock tries to acquire the read lock
 // (rw-mutex-try-read-lock! rwm) -> boolean
 func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-read-lock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-try-read-lock!")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryRLock()))
@@ -396,10 +377,9 @@ func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error
 // PrimRWMutexTryWriteLock tries to acquire the write lock
 // (rw-mutex-try-write-lock! rwm) -> boolean
 func PrimRWMutexTryWriteLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rwm, ok := o.(*values.RWMutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-write-lock!: expected rw-mutex, got %T", o)
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, values.ErrNotARWMutex, "rw-mutex-try-write-lock!")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryLock()))
@@ -430,13 +410,11 @@ func PrimOnceQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimOnceDo executes the thunk only once
 // (once-do! once thunk) -> boolean (true if executed, false if already done)
 func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	thunk := mc.Arg(1)
-
-	once, ok := o.(*values.Once)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAOnce, "once-do!: expected once, got %T", o)
+	once, err := helpers.RequireArg[*values.Once](mc, 0, values.ErrNotAOnce, "once-do!")
+	if err != nil {
+		return err
 	}
+	thunk := mc.Arg(1)
 
 	executed := once.Do(func() {
 		// Execute the thunk in a sub-context
@@ -462,10 +440,9 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 // PrimOnceDoneQ tests if the Once has been executed
 // (once-done? once) -> boolean
 func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	once, ok := o.(*values.Once)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAOnce, "once-done?: expected once, got %T", o)
+	once, err := helpers.RequireArg[*values.Once](mc, 0, values.ErrNotAOnce, "once-done?")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(once.Done()))
@@ -498,10 +475,9 @@ func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicLoad atomically loads the value
 // (atomic-load a) -> value
 func PrimAtomicLoad(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	a, ok := o.(*values.AtomicBox)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-load: expected atomic, got %T", o)
+	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, values.ErrNotAnAtomic, "atomic-load")
+	if err != nil {
+		return err
 	}
 
 	v := a.Load()
@@ -516,13 +492,11 @@ func PrimAtomicLoad(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicStore atomically stores a value
 // (atomic-store! a value) -> void
 func PrimAtomicStore(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	val := mc.Arg(1)
-
-	a, ok := o.(*values.AtomicBox)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-store!: expected atomic, got %T", o)
+	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, values.ErrNotAnAtomic, "atomic-store!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 
 	a.Store(val)
 	mc.SetValue(values.Void)
@@ -532,13 +506,11 @@ func PrimAtomicStore(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicSwap atomically swaps and returns the old value
 // (atomic-swap! a new) -> old
 func PrimAtomicSwap(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	newVal := mc.Arg(1)
-
-	a, ok := o.(*values.AtomicBox)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-swap!: expected atomic, got %T", o)
+	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, values.ErrNotAnAtomic, "atomic-swap!")
+	if err != nil {
+		return err
 	}
+	newVal := mc.Arg(1)
 
 	old := a.Swap(newVal)
 	if old == nil {
@@ -552,14 +524,12 @@ func PrimAtomicSwap(_ context.Context, mc *machine.MachineContext) error {
 // PrimAtomicCompareAndSwap atomically compares and swaps
 // (atomic-compare-and-swap! a old new) -> boolean
 func PrimAtomicCompareAndSwap(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, values.ErrNotAnAtomic, "atomic-compare-and-swap!")
+	if err != nil {
+		return err
+	}
 	oldVal := mc.Arg(1)
 	newVal := mc.Arg(2)
-
-	a, ok := o.(*values.AtomicBox)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-compare-and-swap!: expected atomic, got %T", o)
-	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(a.CompareAndSwap(oldVal, newVal)))
 	return nil

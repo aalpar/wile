@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -306,11 +307,9 @@ func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
 func PrimErrorObjectMessage(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	errObj, ok := obj.(*values.NativeError)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANativeError,
-			"error-object-message: expected error object but got %T", obj)
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, values.ErrNotANativeError, "error-object-message")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(errObj.Message())
 	return nil
@@ -319,11 +318,9 @@ func PrimErrorObjectMessage(_ context.Context, mc *machine.MachineContext) error
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
 func PrimErrorObjectIrritants(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	errObj, ok := obj.(*values.NativeError)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANativeError,
-			"error-object-irritants: expected error object but got %T", obj)
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, values.ErrNotANativeError, "error-object-irritants")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(errObj.Irritants())
 	return nil

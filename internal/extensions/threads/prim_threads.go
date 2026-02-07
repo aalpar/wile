@@ -25,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -154,10 +155,9 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadName returns the thread's name
 // (thread-name thread) -> string or symbol
 func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-name: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-name")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewString(thread.Name()))
 	return nil
@@ -166,10 +166,9 @@ func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSpecific returns the thread's specific field
 // (thread-specific thread) -> value
 func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-specific: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-specific")
+	if err != nil {
+		return err
 	}
 	v := thread.Specific()
 	if v == nil {
@@ -183,13 +182,11 @@ func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSpecificSet sets the thread's specific field
 // (thread-specific-set! thread obj) -> void
 func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	val := mc.Arg(1)
-
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-specific-set!: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-specific-set!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 
 	thread.SetSpecific(val)
 	mc.SetValue(values.Void)
@@ -199,13 +196,12 @@ func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
 func PrimThreadStart(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-start!: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-start!")
+	if err != nil {
+		return err
 	}
 
-	err := thread.Start()
+	err = thread.Start()
 	if err != nil {
 		return values.WrapForeignErrorf(err, "thread-start!")
 	}
@@ -253,10 +249,9 @@ func PrimThreadSleep(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadTerminate forcefully terminates a thread
 // (thread-terminate! thread) -> void
 func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-terminate!: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-terminate!")
+	if err != nil {
+		return err
 	}
 
 	thread.Terminate()
@@ -267,13 +262,11 @@ func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadJoin waits for a thread to terminate
 // (thread-join! thread [timeout [timeout-val]]) -> value
 func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	restVal := mc.Arg(1)
-
-	thread, ok := o.(*values.Thread)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAThread, "thread-join!: expected thread, got %T", o)
+	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-join!")
+	if err != nil {
+		return err
 	}
+	restVal := mc.Arg(1)
 
 	var timeout *time.Duration
 	var timeoutVal values.Value
@@ -350,10 +343,9 @@ func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexName returns the mutex's name
 // (mutex-name mutex) -> string or symbol
 func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-name: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-name")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewString(mutex.Name()))
 	return nil
@@ -362,10 +354,9 @@ func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexSpecific returns the mutex's specific field
 // (mutex-specific mutex) -> value
 func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-specific: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-specific")
+	if err != nil {
+		return err
 	}
 	v := mutex.Specific()
 	if v == nil {
@@ -379,13 +370,11 @@ func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexSpecificSet sets the mutex's specific field
 // (mutex-specific-set! mutex obj) -> void
 func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	val := mc.Arg(1)
-
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-specific-set!: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-specific-set!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 
 	mutex.SetSpecific(val)
 	mc.SetValue(values.Void)
@@ -396,10 +385,9 @@ func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
 // (mutex-state mutex) -> symbol or thread
 // Returns: 'not-owned, 'abandoned, 'not-abandoned, or the owner thread
 func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-state: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-state")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(mutex.StateValue())
 	return nil
@@ -409,13 +397,11 @@ func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
 // Returns #t if acquired, #f if timeout
 func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	restVal := mc.Arg(1)
-
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-lock!: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-lock!")
+	if err != nil {
+		return err
 	}
+	restVal := mc.Arg(1)
 
 	var timeout *time.Duration
 	owner := currentThread
@@ -468,13 +454,11 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexUnlock releases the mutex
 // (mutex-unlock! mutex [condition-variable [timeout]]) -> boolean
 func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	restVal := mc.Arg(1)
-
-	mutex, ok := o.(*values.Mutex)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAMutex, "mutex-unlock!: expected mutex, got %T", o)
+	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-unlock!")
+	if err != nil {
+		return err
 	}
+	restVal := mc.Arg(1)
 
 	var cv *values.ConditionVariable
 	var timeout *time.Duration
@@ -540,10 +524,9 @@ func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) er
 // PrimConditionVariableName returns the condition variable's name
 // (condition-variable-name cv) -> string or symbol
 func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	cv, ok := o.(*values.ConditionVariable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-name: expected condition-variable, got %T", o)
+	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-name")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewString(cv.Name()))
 	return nil
@@ -552,10 +535,9 @@ func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) er
 // PrimConditionVariableSpecific returns the condition variable's specific field
 // (condition-variable-specific cv) -> value
 func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	cv, ok := o.(*values.ConditionVariable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-specific: expected condition-variable, got %T", o)
+	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-specific")
+	if err != nil {
+		return err
 	}
 	v := cv.Specific()
 	if v == nil {
@@ -569,13 +551,11 @@ func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext
 // PrimConditionVariableSpecificSet sets the condition variable's specific field
 // (condition-variable-specific-set! cv obj) -> void
 func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	val := mc.Arg(1)
-
-	cv, ok := o.(*values.ConditionVariable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-specific-set!: expected condition-variable, got %T", o)
+	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-specific-set!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 
 	cv.SetSpecific(val)
 	mc.SetValue(values.Void)
@@ -585,10 +565,9 @@ func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineCont
 // PrimConditionVariableSignal signals one waiting thread
 // (condition-variable-signal! cv) -> void
 func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	cv, ok := o.(*values.ConditionVariable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-signal!: expected condition-variable, got %T", o)
+	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-signal!")
+	if err != nil {
+		return err
 	}
 	cv.Signal()
 	mc.SetValue(values.Void)
@@ -598,10 +577,9 @@ func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) 
 // PrimConditionVariableBroadcast signals all waiting threads
 // (condition-variable-broadcast! cv) -> void
 func PrimConditionVariableBroadcast(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	cv, ok := o.(*values.ConditionVariable)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "condition-variable-broadcast!: expected condition-variable, got %T", o)
+	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-broadcast!")
+	if err != nil {
+		return err
 	}
 	cv.Broadcast()
 	mc.SetValue(values.Void)
@@ -631,10 +609,9 @@ func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimTimeToSeconds converts a time to seconds
 // (time->seconds time) -> number
 func PrimTimeToSeconds(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	t, ok := o.(*values.Time)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotATime, "time->seconds: expected time, got %T", o)
+	t, err := helpers.RequireArg[*values.Time](mc, 0, values.ErrNotATime, "time->seconds")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewFloat(t.Seconds()))
 	return nil

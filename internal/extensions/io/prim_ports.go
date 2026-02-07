@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -59,10 +60,9 @@ func PrimOutputPortQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing input.
 func PrimInputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	p, ok := o.(values.InputPort)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "input-port-open?: expected an input port but got %T", o)
+	p, err := helpers.RequireArg[values.InputPort](mc, 0, values.ErrNotAnInputPort, "input-port-open?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(!p.IsClosed()))
 	return nil
@@ -73,10 +73,9 @@ func PrimInputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing output.
 func PrimOutputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	p, ok := o.(values.OutputPort)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "output-port-open?: expected an output port but got %T", o)
+	p, err := helpers.RequireArg[values.OutputPort](mc, 0, values.ErrNotAnOutputPort, "output-port-open?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(!p.IsClosed()))
 	return nil
@@ -117,10 +116,9 @@ func PrimEofObjectQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimOpenInputString implements the Scheme open-input-string primitive.
 func PrimOpenInputString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "open-input-string: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-input-string")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)))
 	return nil
@@ -134,10 +132,9 @@ func PrimOpenOutputString(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimGetOutputString implements the Scheme get-output-string primitive.
 func PrimGetOutputString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	p, ok := o.(*values.StringOutputPort)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAStringOutputPort, "get-output-string: expected a string output port but got %T", o)
+	p, err := helpers.RequireArg[*values.StringOutputPort](mc, 0, values.ErrNotAStringOutputPort, "get-output-string")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(&values.String{Value: p.String()})
 	return nil
@@ -145,10 +142,9 @@ func PrimGetOutputString(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimOpenInputBytevector implements the Scheme open-input-bytevector primitive.
 func PrimOpenInputBytevector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "open-input-bytevector: expected a bytevector but got %T", o)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "open-input-bytevector")
+	if err != nil {
+		return err
 	}
 	// Convert []Byte to []byte
 	data := make([]byte, len(*bv))
@@ -179,10 +175,9 @@ func PrimOpenOutputBytevector(_ context.Context, mc *machine.MachineContext) err
 
 // PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
 func PrimGetOutputBytevector(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	e, ok := o.(values.ByteVectorExtractor)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotABytevectorOutputPort, "get-output-bytevector: expected a bytevector output port but got %T", o)
+	e, err := helpers.RequireArg[values.ByteVectorExtractor](mc, 0, values.ErrNotABytevectorOutputPort, "get-output-bytevector")
+	if err != nil {
+		return err
 	}
 	q, err := e.ReadByteVector()
 	if err != nil {
@@ -220,14 +215,14 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(1)
 
 	// Validate that proc is a procedure
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-port: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call-with-port")
+	if err != nil {
+		return err
 	}
 
 	// Call the procedure with the port
 	sub := mc.NewSubContext()
-	_, err := sub.Apply(mcls, portArg)
+	_, err = sub.Apply(mcls, portArg)
 	if err != nil {
 		return err
 	}
