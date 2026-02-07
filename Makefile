@@ -115,12 +115,76 @@ SCHELOG_LIBS=-i -f $(SCHELOG_DIR)/schelog.scm \
 
 .PHONY: bench-schelog
 bench-schelog: build
-	@if command -v gtime >/dev/null 2>&1; then \
-		gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+	@if command -v time >/dev/null 2>&1; then \
+		time -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
 		/usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
 	else \
 		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
+	fi
+
+PROFILE_DIR=$(GO_BUILD_DIR)/profiles
+
+# Run CPU and memory profiling on the zebra puzzle benchmark.
+# The zebra puzzle is a brute-force constraint satisfaction problem that
+# exercises heavy backtracking with occurs-check — a good stress test for
+# the Schelog logic programming subsystem.
+# View with: go tool pprof -http=:8080 ./build/profiles/zebra-cpu.prof
+#   make profile-zebra
+.PHONY: profile-zebra
+profile-zebra:
+	@mkdir -p $(PROFILE_DIR)
+	$(GO_TEST) -run='^$$' -bench=BenchmarkZebraPuzzle \
+		-cpuprofile=$(PROFILE_DIR)/zebra-cpu.prof \
+		-memprofile=$(PROFILE_DIR)/zebra-mem.prof \
+		-benchmem -timeout 30m .
+	@echo "CPU profile: $(PROFILE_DIR)/zebra-cpu.prof"
+	@echo "Mem profile: $(PROFILE_DIR)/zebra-mem.prof"
+	@echo "View with: go tool pprof -http=:8080 $(PROFILE_DIR)/zebra-cpu.prof"
+
+# Run CPU profiling on all benchmarks.
+# Writes per-package profiles to ./build/profiles/cpu/ then merges into cpu.prof.
+# View with: go tool pprof -http=:8080 ./build/profiles/cpu.prof
+#   make profile-cpu
+#   make profile-cpu PKG=./values/...    # Profile a single package
+
+.PHONY: profile-cpu
+profile-cpu:
+	@mkdir -p $(PROFILE_DIR)/cpu
+	@rm -f $(PROFILE_DIR)/cpu/*.prof
+	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
+		name=$$(echo "$$pkg" | tr '/' '_'); \
+		$(GO_TEST) -run='^$$' -bench=. -cpuprofile=$(PROFILE_DIR)/cpu/$$name.prof -benchmem "$$pkg" 2>/dev/null || true; \
+	done
+	@profs=$$(find $(PROFILE_DIR)/cpu -name '*.prof' -size +0c 2>/dev/null); \
+	if [ -n "$$profs" ]; then \
+		$(GO) tool pprof -proto $$profs > $(PROFILE_DIR)/cpu.prof; \
+		echo "CPU profile: $(PROFILE_DIR)/cpu.prof"; \
+		echo "View with: go tool pprof -http=:8080 $(PROFILE_DIR)/cpu.prof"; \
+	else \
+		echo "No benchmarks found"; \
+	fi
+
+# Run memory profiling on all benchmarks.
+# Writes per-package profiles to ./build/profiles/mem/ then merges into mem.prof.
+# View with: go tool pprof -http=:8080 ./build/profiles/mem.prof
+#   make profile-mem
+#   make profile-mem PKG=./values/...    # Profile a single package
+.PHONY: profile-mem
+profile-mem:
+	@mkdir -p $(PROFILE_DIR)/mem
+	@rm -f $(PROFILE_DIR)/mem/*.prof
+	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
+		name=$$(echo "$$pkg" | tr '/' '_'); \
+		$(GO_TEST) -run='^$$' -bench=. -memprofile=$(PROFILE_DIR)/mem/$$name.prof -benchmem "$$pkg" 2>/dev/null || true; \
+	done
+	@profs=$$(find $(PROFILE_DIR)/mem -name '*.prof' -size +0c 2>/dev/null); \
+	if [ -n "$$profs" ]; then \
+		$(GO) tool pprof -proto $$profs > $(PROFILE_DIR)/mem.prof; \
+		echo "Memory profile: $(PROFILE_DIR)/mem.prof"; \
+		echo "View with: go tool pprof -http=:8080 $(PROFILE_DIR)/mem.prof"; \
+	else \
+		echo "No benchmarks found"; \
 	fi
 
 # Run tests with coverage and print per-function coverage summary.
