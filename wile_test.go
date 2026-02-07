@@ -656,7 +656,7 @@ func TestEval_ContextCancellation(t *testing.T) {
 	engine, err := NewEngine()
 	c.Assert(err, qt.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	_, err = engine.Eval(ctx, "(let loop () (loop))")
@@ -684,7 +684,7 @@ func TestEval_CancelDuringComputation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 		cancel()
 	}()
 
@@ -698,7 +698,7 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 	engine, err := NewEngine()
 	c.Assert(err, qt.IsNil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	_, err = engine.EvalMultiple(ctx, `

@@ -186,6 +186,9 @@ func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
 // This is the syntax-native entry point that operates directly on SyntaxPair.
 // Captured values are stored as syntax.SyntaxValue to preserve source context.
 func (p *Matcher) MatchSyntax(ctx context.Context, target *syntax.SyntaxPair) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -344,6 +347,9 @@ type LiteralMatcher func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string
 // The literalMatcher function is called for each literal comparison to check if the
 // input symbol should match (returns true) or is shadowed (returns false).
 func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.SyntaxPair, literalSyntax map[string]*syntax.SyntaxSymbol, literalMatcher LiteralMatcher) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -521,6 +527,9 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 // Match runs the pattern matcher against the target using values-based matching.
 // Captured values are wrapped in syntax objects for uniform bindings storage.
 func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.valueStack = []valuePathEntry{
 		{
 			pr: target,
