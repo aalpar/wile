@@ -78,6 +78,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 		rmc = nil
 		rerr = goErrorToSchemeException(err)
 	}()
+	mc.counters.ForeignCalls++
 	err := p.Function(ctx, mc)
 	if err != nil {
 		// Check if this is a continuation escape.

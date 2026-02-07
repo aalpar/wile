@@ -62,6 +62,7 @@ type MachineContext struct {
 	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 	promptTag        *PromptTag           // prompt tag for this context (set by call-with-continuation-prompt)
+	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -146,6 +147,7 @@ func (p *MachineContext) Arg(index int) values.Value {
 }
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {
+	p.counters.ContinuationsRestored++
 	p.env = cont.env
 	p.template = cont.template
 	// Must copy evals to avoid corrupting the continuation's saved stack.
@@ -176,6 +178,7 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 
 // SaveContinuation pushes a new continuation onto the machine context with the given offset to the current program counter.
 func (p *MachineContext) SaveContinuation(off int) {
+	p.counters.ContinuationsSaved++
 	p.cont = NewMachineContinuationFromMachineContext(p, off)
 	p.evals = NewStack()
 }
@@ -205,6 +208,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	localEnv := mcls.env.LocalEnvironment().Copy().(*environment.LocalEnvironmentFrame)
 	env := environment.NewEnvironmentFrameWithParent(localEnv, mcls.env.Parent())
 	bnds := localEnv.Bindings()
+	p.counters.ClosuresApplied++
+	p.counters.EnvsCopied++
+	p.counters.BindingsCopied += uint64(len(bnds))
 	l := tpl.ParameterCount()
 	if !tpl.IsVariadic() {
 		if len(vs) != l {
@@ -285,6 +291,7 @@ func (p *MachineContext) Run() error {
 			}
 		}
 
+		mc.counters.OpsExecuted++
 		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
 		if err != nil {
 			return err
@@ -308,6 +315,7 @@ func (p *MachineContext) Run() error {
 // The escapeCont field is inherited, allowing nested sub-contexts to know where execution
 // should continue after their completion (set by dynamic-wind and similar constructs).
 func (p *MachineContext) NewSubContext() *MachineContext {
+	p.counters.SubContextsCreated++
 	return &MachineContext{
 		ctx:         p.ctx,
 		template:    nil,
@@ -644,6 +652,11 @@ func (p *MachineContext) SetPromptTag(tag *PromptTag) {
 // PromptTag returns the prompt tag for this context, or nil.
 func (p *MachineContext) PromptTag() *PromptTag {
 	return p.promptTag
+}
+
+// Counters returns a snapshot of the performance counters for this context.
+func (p *MachineContext) Counters() VMCounters {
+	return p.counters
 }
 
 // RunWithEscapeHandling runs the VM loop, handling continuation escapes

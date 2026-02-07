@@ -123,3 +123,43 @@ func BenchmarkEvalCond(b *testing.B) {
 		_, _ = engine.Eval(context.TODO(), code)
 	}
 }
+
+// BenchmarkZebraPuzzle benchmarks the zebra/Einstein puzzle via Schelog.
+// This is a brute-force constraint satisfaction problem that exercises heavy
+// backtracking with occurs-check enabled. Setup (engine creation, library
+// loading) happens before ResetTimer so only the solve is measured.
+//
+// Libraries are loaded via Scheme's (include ...) which uses letrec*
+// semantics for forward references within included files.
+func BenchmarkZebraPuzzle(b *testing.B) {
+	// include resolves paths via SCHEME_INCLUDE_PATH.
+	b.Setenv("SCHEME_INCLUDE_PATH", ".")
+
+	engine, err := NewEngine()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	setup := `
+		(include "examples/logic/schelog/schelog.scm")
+		(include "examples/logic/schelog/puzzle.scm")
+		(include "examples/logic/schelog/houses.scm")
+		(set! *schelog-use-occurs-check?* #t)
+	`
+	_, err = engine.EvalMultiple(ctx, setup)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = engine.Eval(ctx, "(solve-puzzle %houses)")
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.Logf("VM counters (last iteration):\n%s", engine.LastCounters())
+}
