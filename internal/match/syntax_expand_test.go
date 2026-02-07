@@ -273,7 +273,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 			)
 
 			sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-			err = sm.Match(input)
+			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
 			result, err := sm.Expand(tc.template)
@@ -343,7 +343,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 			)
 
 			sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-			err = sm.Match(input)
+			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
 			introScope := syntax.NewScope()
@@ -378,7 +378,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template: (a x) where x is a variable bound to 42
@@ -494,7 +494,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 			input := testSyntaxList(inputElems...)
 
 			sm := NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
-			err = sm.Match(input)
+			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
 			// Template: (x ...)
@@ -549,7 +549,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	introScope := syntax.NewScope()
@@ -591,7 +591,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// When template and pattern have the same scopes, substitution occurs
@@ -630,7 +630,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Pattern var "x" has no scopes, but template "x" has an extra scope.
@@ -673,7 +673,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	tcs := []struct {
@@ -758,7 +758,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template: #(x a) where x is a variable
@@ -806,7 +806,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 	)
 
 	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = sm.Match(input)
+	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	result, err := sm.ExpandWithPatternVarSyntax(nil, nil, nil, nil, nil, nil)

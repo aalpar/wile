@@ -60,7 +60,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
-		v, err := finalTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		v, err := finalTuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
 			return nil
 		})

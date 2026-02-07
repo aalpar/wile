@@ -55,12 +55,12 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Process each expression
 	current := exprPair
-	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, stxVal syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, stxVal syntax.SyntaxValue) error {
 		// Expand the expression (it may contain macros)
 		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
 		if err != nil {
@@ -78,7 +78,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 
 		// Execute the compiled code at compile time
 		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-		mc := NewMachineContext(context.Background(), cont)
+		mc := NewMachineContext(ctctx.ctx, cont)
 		err = mc.Run()
 		if err != nil {
 			if !errors.Is(err, ErrMachineHalt) {

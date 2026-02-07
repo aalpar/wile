@@ -24,17 +24,11 @@ import (
 
 // ApplyContext provides context during registry application.
 type ApplyContext interface {
-	Context() context.Context
 	Environment() *environment.EnvironmentFrame
 }
 
 type applyContext struct {
-	ctx context.Context
 	env *environment.EnvironmentFrame
-}
-
-func (p *applyContext) Context() context.Context {
-	return p.ctx
 }
 
 func (p *applyContext) Environment() *environment.EnvironmentFrame {
@@ -85,7 +79,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	}
 
 	// Run initialization functions
-	actx := &applyContext{ctx: ctx, env: env}
+	actx := &applyContext{env: env}
 	for _, f := range p.initFuncs {
 		err := f(actx)
 		if err != nil {

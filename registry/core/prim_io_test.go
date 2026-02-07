@@ -65,7 +65,7 @@ func TestDisplayWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -92,7 +92,7 @@ func TestWriteWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -119,7 +119,7 @@ func TestWriteCharWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -146,7 +146,7 @@ func TestNewlineWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -173,7 +173,7 @@ func TestReadToken(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -202,7 +202,7 @@ func TestReadSyntax(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -232,7 +232,7 @@ func TestRead(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -261,7 +261,7 @@ func TestReadWithPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// We need to test read with an explicit port - use lambda to capture port
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -294,7 +294,7 @@ func TestDisplayWithSymbol(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -322,7 +322,7 @@ func TestWriteWithString(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -349,7 +349,7 @@ func TestWriteCharWithUnicode(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -378,7 +378,7 @@ func TestReadMultipleTokens(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Read first token
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -405,7 +405,7 @@ func TestDisplayWithInteger(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -432,7 +432,7 @@ func TestDisplayWithBoolean(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -459,7 +459,7 @@ func TestWriteWithSymbol(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -507,7 +507,7 @@ func TestDisplayWithList(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -536,7 +536,7 @@ func TestWriteWithList(t *testing.T) {
 
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -572,12 +572,12 @@ func TestStringPorts(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -602,12 +602,12 @@ func TestStringInputPort(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -636,12 +636,12 @@ func TestBytevectorPorts(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -666,12 +666,12 @@ func TestBytevectorInputPort(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -748,12 +748,12 @@ func TestPortPredicates(t *testing.T) {
 			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
-			ectx := machine.NewExpandTimeCallContext()
+			ectx := machine.NewExpandTimeCallContext(context.Background())
 			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 			qt.Assert(t, err, qt.IsNil)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			cctx := machine.NewCompileTimeCallContext(false, true, env)
+			cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			qt.Assert(t, err, qt.IsNil)
 

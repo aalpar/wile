@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -28,7 +29,7 @@ func TestNewExpanderContext(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 
 	ctx := NewExpanderContext(env, expander, ectx)
 
@@ -41,7 +42,7 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 
 	ctx := NewExpanderContext(env, expander, ectx)
 
@@ -59,7 +60,7 @@ func TestExpanderContext_UseSiteScope(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 
 	ctx := NewExpanderContext(env, expander, ectx)
 

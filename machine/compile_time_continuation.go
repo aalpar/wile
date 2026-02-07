@@ -244,7 +244,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Read all forms from the file first, then process them with letrec* semantics
 			var forms []syntax.SyntaxValue
 			for {
-				stx, readErr := fileParser.ReadSyntax(context.TODO())
+				stx, readErr := fileParser.ReadSyntax(ctctx.ctx)
 				if readErr != nil {
 					if errors.Is(readErr, io.EOF) {
 						break
@@ -284,7 +284,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // subsequent body expressions.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
 	if err != nil {
@@ -451,7 +451,7 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 	}
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
 	if err != nil {
@@ -567,7 +567,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	}
 
 	// Transform to equivalent Scheme code and compile
-	expanded := p.expandQuasiquote(datum, depth)
+	expanded := p.expandQuasiquote(ctctx.ctx, datum, depth)
 	return p.CompileExpression(ctctx, expanded)
 }
 
@@ -591,7 +591,7 @@ func (p *CompileTimeContinuation) buildQuasiquoteSyntaxList(srcCtx *syntax.Sourc
 //   - quasiquote: process body at d+1, wrap in (list 'quasiquote <result>)
 //   - lists: generate (list ...) or (append ...) for runtime construction
 //   - atoms: quote them
-func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth int) syntax.SyntaxValue {
+func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx syntax.SyntaxValue, depth int) syntax.SyntaxValue {
 	srcCtx := stx.SourceContext()
 
 	switch v := stx.(type) {
@@ -613,7 +613,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					processedArg := p.expandQuasiquote(arg, depth-1)
+					processedArg := p.expandQuasiquote(ctx, arg, depth-1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiquoteSyntaxList(srcCtx,
@@ -630,7 +630,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				if depth > 1 && v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					processedArg := p.expandQuasiquote(arg, depth-1)
+					processedArg := p.expandQuasiquote(ctx, arg, depth-1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiquoteSyntaxList(srcCtx,
@@ -647,7 +647,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
-					processedBody := p.expandQuasiquote(body, depth+1)
+					processedBody := p.expandQuasiquote(ctx, body, depth+1)
 					return p.buildQuasiquoteSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiquoteSyntaxList(srcCtx,
@@ -663,7 +663,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 		}
 
 		// Regular list - check for unquote-splicing at depth 1
-		return p.expandQuasiquoteList(v, depth)
+		return p.expandQuasiquoteList(ctx, v, depth)
 
 	case *syntax.SyntaxSymbol:
 		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
@@ -689,7 +689,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 			var elems []syntax.SyntaxValue
 			elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
 			for _, elem := range v.Values {
-				elems = append(elems, p.expandQuasiquote(elem, depth))
+				elems = append(elems, p.expandQuasiquote(ctx, elem, depth))
 			}
 			listExpr := p.buildQuasiquoteSyntaxList(srcCtx, elems...)
 			return p.buildQuasiquoteSyntaxList(srcCtx,
@@ -732,13 +732,13 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 							segments = append(segments, segment{typ: segSplice, expr: expr})
 						} else {
 							// Malformed - treat as normal
-							currentElems = append(currentElems, p.expandQuasiquote(elem, depth))
+							currentElems = append(currentElems, p.expandQuasiquote(ctx, elem, depth))
 						}
 						continue
 					}
 				}
 			}
-			currentElems = append(currentElems, p.expandQuasiquote(elem, depth))
+			currentElems = append(currentElems, p.expandQuasiquote(ctx, elem, depth))
 		}
 		flushNormal()
 
@@ -771,13 +771,13 @@ func (p *CompileTimeContinuation) expandQuasiquote(stx syntax.SyntaxValue, depth
 }
 
 // expandQuasiquoteList handles list expansion, detecting unquote-splicing.
-func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
+func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	srcCtx := pair.SourceContext()
 
 	// Check if any element is ,@ at depth 1
 	hasSplice := false
 	current := pair
-	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, carSyntax syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, carSyntax syntax.SyntaxValue) error {
 		carPair, ok := carSyntax.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
@@ -832,7 +832,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 				}
 			}
 
-			elems = append(elems, p.expandQuasiquote(carSyntax, depth))
+			elems = append(elems, p.expandQuasiquote(ctx, carSyntax, depth))
 			cdr := current.SyntaxCdr()
 			if syntax.IsSyntaxEmptyList(cdr) {
 				break
@@ -843,18 +843,18 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(pair *syntax.SyntaxPair, 
 			} else {
 				// Improper list - handle dotted tail
 				// Generate (cons elem1 (cons elem2 ... tail))
-				return p.expandQuasiquoteImproperList(pair, depth)
+				return p.expandQuasiquoteImproperList(ctx, pair, depth)
 			}
 		}
 		return p.buildQuasiquoteSyntaxList(srcCtx, elems...)
 	}
 
 	// Has splicing: use (append seg1 seg2 ...)
-	return p.expandQuasiquoteListWithSplice(pair, depth)
+	return p.expandQuasiquoteListWithSplice(ctx, pair, depth)
 }
 
 // expandQuasiquoteImproperList handles improper (dotted) lists.
-func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
+func (p *CompileTimeContinuation) expandQuasiquoteImproperList(ctx context.Context, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	srcCtx := pair.SourceContext()
 
 	// Collect all elements and the tail
@@ -865,7 +865,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 	for {
 		car := current.SyntaxCar()
 		carSyntax := car
-		elements = append(elements, p.expandQuasiquote(carSyntax, depth))
+		elements = append(elements, p.expandQuasiquote(ctx, carSyntax, depth))
 		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			tail = syntax.SyntaxEmptyList
@@ -885,7 +885,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 	// Build nested cons: (cons elem1 (cons elem2 ... tail))
 	var result syntax.SyntaxValue
 	tailSyntax := tail
-	result = p.expandQuasiquote(tailSyntax, depth)
+	result = p.expandQuasiquote(ctx, tailSyntax, depth)
 
 	for i := len(elements) - 1; i >= 0; i-- {
 		result = p.buildQuasiquoteSyntaxList(srcCtx,
@@ -898,7 +898,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(pair *syntax.Synt
 }
 
 // expandQuasiquoteListWithSplice handles lists containing unquote-splicing.
-func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
+func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(ctx context.Context, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	srcCtx := pair.SourceContext()
 
 	// Segment types
@@ -936,7 +936,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 					flushNormal()
 					if carPair.Length() != 2 {
 						// Malformed - treat as normal
-						currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
+						currentElems = append(currentElems, p.expandQuasiquote(ctx, carSyntax, depth))
 					} else {
 						cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 						expr := cdrPair.SyntaxCar()
@@ -947,7 +947,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(pair *syntax.Sy
 			}
 		}
 
-		currentElems = append(currentElems, p.expandQuasiquote(carSyntax, depth))
+		currentElems = append(currentElems, p.expandQuasiquote(ctx, carSyntax, depth))
 
 	next:
 		cdr := current.SyntaxCdr()
@@ -1091,7 +1091,7 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// Validate the expression first
 	// Pass the environment so validation can check for local variable shadowing
 	// of special forms (R7RS §4.2.2)
-	result := validate.ValidateExpression(context.TODO(), p.env, expr)
+	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
 		return values.NewForeignError(result.Error())
 	}
@@ -1196,7 +1196,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	// Parse library name: (lib-name) is a list of identifiers
 	libNameExpr := rest.SyntaxCar()
-	libName, err := parseLibraryName(libNameExpr)
+	libName, err := parseLibraryName(ctctx.ctx, libNameExpr)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "define-library: invalid library name")
 	}
@@ -1279,7 +1279,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 	argsExpr := declPair.SyntaxCdr()
 	switch keyword {
 	case "export":
-		return p.processLibraryExport(lib, argsExpr)
+		return p.processLibraryExport(ctctx.ctx, lib, argsExpr)
 	case "import":
 		return p.processLibraryImport(ctctx, lib, argsExpr)
 	case "begin":
@@ -1307,7 +1307,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 }
 
 // processLibraryExport handles (export <export-spec> ...) within a library.
-func (p *CompileTimeContinuation) processLibraryExport(lib *CompiledLibrary, args syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil // empty export is valid
 	}
@@ -1317,7 +1317,7 @@ func (p *CompileTimeContinuation) processLibraryExport(lib *CompiledLibrary, arg
 		return values.WrapForeignErrorf(values.ErrNotAPair, "export: expected list of export specs")
 	}
 
-	_, err := syntax.SyntaxForEach(context.TODO(), argsPair, func(_ context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
 		return parseExportSpec(lib, spec)
 	})
 	return err
@@ -1397,7 +1397,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 	// Process each import set
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, err := parseImportSet(importSetExpr)
+		importSet, err := parseImportSet(ctx, importSetExpr)
 		if err != nil {
 			return err
 		}
@@ -1485,7 +1485,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 //   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
 //   - (for-template <import-set>)   : import at phase -1
 //   - (for-meta <n> <import-set>)   : import at phase +n
-func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
+func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "import set must be a list")
@@ -1498,24 +1498,24 @@ func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 
 		switch keyword {
 		case "only":
-			return parseImportSetOnly(pair)
+			return parseImportSetOnly(ctx, pair)
 		case "except":
-			return parseImportSetExcept(pair)
+			return parseImportSetExcept(ctx, pair)
 		case "prefix":
-			return parseImportSetPrefix(pair)
+			return parseImportSetPrefix(ctx, pair)
 		case "rename":
-			return parseImportSetRename(pair)
+			return parseImportSetRename(ctx, pair)
 		case "for-syntax":
-			return parseImportSetForSyntax(pair)
+			return parseImportSetForSyntax(ctx, pair)
 		case "for-template":
-			return parseImportSetForTemplate(pair)
+			return parseImportSetForTemplate(ctx, pair)
 		case "for-meta":
-			return parseImportSetForMeta(pair)
+			return parseImportSetForMeta(ctx, pair)
 		}
 	}
 
 	// Not a modifier, must be a library name
-	libName, err := parseLibraryName(expr)
+	libName, err := parseLibraryName(ctx, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -1523,7 +1523,7 @@ func parseImportSet(expr syntax.SyntaxValue) (*ImportSet, error) {
 }
 
 // parseImportSetOnly parses (only <import-set> <id> ...)
-func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetOnly(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected import-set and identifiers")
@@ -1531,7 +1531,7 @@ func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1542,7 +1542,7 @@ func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected identifiers")
 	}
 
-	ids, err := parseIdentifierList(idsExpr)
+	ids, err := parseIdentifierList(ctx, idsExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1552,7 +1552,7 @@ func parseImportSetOnly(pair *syntax.SyntaxPair) (*ImportSet, error) {
 }
 
 // parseImportSetExcept parses (except <import-set> <id> ...)
-func parseImportSetExcept(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetExcept(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "except: expected import-set and identifiers")
@@ -1560,14 +1560,14 @@ func parseImportSetExcept(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get identifiers
 	idsExpr := cdrExpr.SyntaxCdr()
-	ids, err := parseIdentifierList(idsExpr)
+	ids, err := parseIdentifierList(ctx, idsExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1577,7 +1577,7 @@ func parseImportSetExcept(pair *syntax.SyntaxPair) (*ImportSet, error) {
 }
 
 // parseImportSetPrefix parses (prefix <import-set> <prefix>)
-func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.Cdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected import-set and prefix")
@@ -1585,7 +1585,7 @@ func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1607,7 +1607,7 @@ func parseImportSetPrefix(pair *syntax.SyntaxPair) (*ImportSet, error) {
 }
 
 // parseImportSetRename parses (rename <import-set> (<old> <new>) ...)
-func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetRename(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected import-set and rename pairs")
@@ -1615,7 +1615,7 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1631,7 +1631,7 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
-	_, err = syntax.SyntaxForEach(context.TODO(), renamesPair, func(_ context.Context, _ int, _ bool, renamePairExpr syntax.SyntaxValue) error {
+	_, err = syntax.SyntaxForEach(ctx, renamesPair, func(_ context.Context, _ int, _ bool, renamePairExpr syntax.SyntaxValue) error {
 		renamePair, ok := renamePairExpr.(*syntax.SyntaxPair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
@@ -1665,7 +1665,7 @@ func parseImportSetRename(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 // parseImportSetForSyntax parses (for-syntax <import-set>)
 // Adds +1 to the phase shift of the nested import set.
-func parseImportSetForSyntax(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetForSyntax(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-syntax: expected import-set")
@@ -1673,7 +1673,7 @@ func parseImportSetForSyntax(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1685,7 +1685,7 @@ func parseImportSetForSyntax(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 // parseImportSetForTemplate parses (for-template <import-set>)
 // Adds -1 to the phase shift of the nested import set.
-func parseImportSetForTemplate(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetForTemplate(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-template: expected import-set")
@@ -1693,7 +1693,7 @@ func parseImportSetForTemplate(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1705,7 +1705,7 @@ func parseImportSetForTemplate(pair *syntax.SyntaxPair) (*ImportSet, error) {
 
 // parseImportSetForMeta parses (for-meta <n> <import-set>)
 // Adds n to the phase shift of the nested import set.
-func parseImportSetForMeta(pair *syntax.SyntaxPair) (*ImportSet, error) {
+func parseImportSetForMeta(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected phase level and import-set")
@@ -1725,7 +1725,7 @@ func parseImportSetForMeta(pair *syntax.SyntaxPair) (*ImportSet, error) {
 	}
 
 	nestedExpr := importSetPair.SyntaxCar()
-	importSet, err := parseImportSet(nestedExpr)
+	importSet, err := parseImportSet(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1736,7 +1736,7 @@ func parseImportSetForMeta(pair *syntax.SyntaxPair) (*ImportSet, error) {
 }
 
 // parseIdentifierList parses a list of identifiers into a string slice.
-func parseIdentifierList(expr syntax.SyntaxValue) ([]string, error) {
+func parseIdentifierList(ctx context.Context, expr syntax.SyntaxValue) ([]string, error) {
 	if syntax.IsSyntaxEmptyList(expr) {
 		return nil, nil
 	}
@@ -1747,7 +1747,7 @@ func parseIdentifierList(expr syntax.SyntaxValue) ([]string, error) {
 	}
 
 	var ids []string
-	_, err := syntax.SyntaxForEach(context.TODO(), pair, func(_ context.Context, _ int, _ bool, idExpr syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, idExpr syntax.SyntaxValue) error {
 		idSym, ok := idExpr.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "expected identifier symbol")
@@ -1762,14 +1762,14 @@ func parseIdentifierList(expr syntax.SyntaxValue) ([]string, error) {
 }
 
 // parseLibraryName extracts a LibraryName from a syntax expression like (scheme base).
-func parseLibraryName(expr syntax.SyntaxValue) (LibraryName, error) {
+func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAPair, "library name must be a list")
 	}
 
 	var parts []string
-	_, err := syntax.SyntaxForEach(context.TODO(), pair, func(_ context.Context, _ int, _ bool, partExpr syntax.SyntaxValue) error {
+	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, partExpr syntax.SyntaxValue) error {
 		sym, ok := partExpr.(*syntax.SyntaxSymbol)
 		if ok {
 			parts = append(parts, sym.Unwrap().(*values.Symbol).Key)
@@ -1815,7 +1815,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, err := parseImportSet(importSetExpr)
+		importSet, err := parseImportSet(ctx, importSetExpr)
 		if err != nil {
 			return err
 		}
@@ -1995,7 +1995,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 		// Get the feature requirement (car of clause)
 		reqExpr := clausePair.SyntaxCar()
 		// Parse and evaluate the feature requirement
-		req, err := parseFeatureRequirement(reqExpr)
+		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
@@ -2035,7 +2035,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	// (since cond-expand is not expanded, we must expand the body here)
 	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(_ context.Context, _ int, hasNext bool, expr syntax.SyntaxValue) error {
 		// Expand the expression
-		ectx := NewExpandTimeCallContext()
+		ectx := NewExpandTimeCallContext(ctctx.ctx)
 		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, expr)
 		if expandErr != nil {
 			return values.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
@@ -2087,7 +2087,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 		// Get the feature requirement (car of clause)
 		reqExpr := clausePair.SyntaxCar()
 		// Parse and evaluate the feature requirement
-		req, err := parseFeatureRequirement(reqExpr)
+		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
@@ -2133,7 +2133,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 //   - (or <req> ...) - at least one must be satisfied
 //   - (not <req>) - must NOT be satisfied
 //   - else - always satisfied (only valid as the last clause)
-func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error) {
+func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (FeatureRequirement, error) {
 	switch v := expr.(type) {
 	case *syntax.SyntaxSymbol:
 		name := v.Unwrap().(*values.Symbol).Key
@@ -2163,7 +2163,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 				return nil, values.NewForeignErrorf("library: expected library name")
 			}
 			libNameExpr := argsPair.SyntaxCar()
-			libName, err := parseLibraryName(libNameExpr)
+			libName, err := parseLibraryName(ctx, libNameExpr)
 			if err != nil {
 				return nil, values.WrapForeignErrorf(err, "library: invalid library name")
 			}
@@ -2171,7 +2171,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 
 		case "and":
 			// (and <req> ...)
-			reqs, err := parseFeatureRequirementList(argsExpr)
+			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
 				return nil, values.WrapForeignErrorf(err, "and: invalid requirements")
 			}
@@ -2179,7 +2179,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 
 		case "or":
 			// (or <req> ...)
-			reqs, err := parseFeatureRequirementList(argsExpr)
+			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
 				return nil, values.WrapForeignErrorf(err, "or: invalid requirements")
 			}
@@ -2192,7 +2192,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 				return nil, values.NewForeignErrorf("not: expected one requirement")
 			}
 			reqExpr := argsPair.SyntaxCar()
-			req, err := parseFeatureRequirement(reqExpr)
+			req, err := parseFeatureRequirement(ctx, reqExpr)
 			if err != nil {
 				return nil, values.WrapForeignErrorf(err, "not: invalid requirement")
 			}
@@ -2208,7 +2208,7 @@ func parseFeatureRequirement(expr syntax.SyntaxValue) (FeatureRequirement, error
 }
 
 // parseFeatureRequirementList parses a list of feature requirements.
-func parseFeatureRequirementList(expr syntax.SyntaxValue) ([]FeatureRequirement, error) {
+func parseFeatureRequirementList(ctx context.Context, expr syntax.SyntaxValue) ([]FeatureRequirement, error) {
 	if syntax.IsSyntaxEmptyList(expr) {
 		return nil, nil
 	}
@@ -2219,8 +2219,8 @@ func parseFeatureRequirementList(expr syntax.SyntaxValue) ([]FeatureRequirement,
 	}
 
 	var reqs []FeatureRequirement
-	_, err := syntax.SyntaxForEach(context.TODO(), pair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		req, err := parseFeatureRequirement(v)
+	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+		req, err := parseFeatureRequirement(ctx, v)
 		if err != nil {
 			return err
 		}

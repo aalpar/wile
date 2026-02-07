@@ -71,7 +71,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, letMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -91,7 +91,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the define-syntax for swap!
 	ctc = machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx = machine.NewCompileTimeCallContext(false, false, env)
+	ctctx = machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args = extractDefineSyntaxArgs(t, defineSyntaxForm)
 	err = ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Expand the macro
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
@@ -118,7 +118,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the expanded form
 	ctc2 := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx2 := machine.NewCompileTimeCallContext(false, true, env)
+	ctctx2 := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = ctc2.CompileExpression(ctctx2, expanded)
 	if err != nil {
 		t.Fatalf("failed to compile: %v", err)
@@ -140,7 +140,7 @@ func TestLetMacroExpansion(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestLetMacroExpansion(t *testing.T) {
 	testForm := parseString(t, env, `(my-list 1 2 3)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand my-list: %v", err)
@@ -180,7 +180,7 @@ func TestLetMacroSimple(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -191,7 +191,7 @@ func TestLetMacroSimple(t *testing.T) {
 	testForm := parseString(t, env, `(let1 ((x 1)) x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let1: %v", err)
@@ -217,7 +217,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -228,7 +228,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	testForm := parseString(t, env, `(begin-with-first x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
@@ -271,7 +271,7 @@ func TestLetMacroFull(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, letMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -282,7 +282,7 @@ func TestLetMacroFull(t *testing.T) {
 	testForm := parseString(t, env, `(let ((x 1)) x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let: %v", err)
@@ -308,7 +308,7 @@ func TestScopeCreation(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	qt.Assert(t, err, qt.IsNil)
@@ -336,7 +336,7 @@ func TestScopeCreation(t *testing.T) {
 
 	// Test that we can expand using the ExpanderTimeContinuation
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 
 	// Debug: Check what the binding actually contains
 	qt.Assert(t, binding.Value(), qt.Not(qt.IsNil))
@@ -512,7 +512,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 					// Expand and compile each setup form
 					etc := machine.NewExpanderTimeContinuation(env)
-					ectx := machine.ExpandTimeCallContext{}
+					ectx := machine.NewExpandTimeCallContext(context.Background())
 					expanded, err := etc.ExpandExpression(ectx, form)
 					if err != nil {
 						t.Fatalf("failed to expand setup: %v", err)
@@ -524,7 +524,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 						if car != nil {
 							if sym, ok := car.(*syntax.SyntaxSymbol); ok && sym.Sym.Key == "define-syntax" {
 								ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-								ctctx := machine.NewCompileTimeCallContext(false, false, env)
+								ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 								args := extractDefineSyntaxArgs(t, expanded)
 								err := ctc.CompileDefineSyntax(ctctx, args)
 								if err != nil {
@@ -541,7 +541,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 			// Expand the test form
 			etc := machine.NewExpanderTimeContinuation(env)
-			ectx := machine.ExpandTimeCallContext{}
+			ectx := machine.NewExpandTimeCallContext(context.Background())
 			expanded, err := etc.ExpandExpression(ectx, testForm)
 			if err != nil {
 				t.Fatalf("failed to expand: %v", err)
@@ -606,7 +606,7 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	args := extractDefineSyntaxArgs(t, outerMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to compile outer macro"))
@@ -615,7 +615,7 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	testForm := parseString(t, env, `(m k)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.ExpandTimeCallContext{}
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to expand (m k)"))
 

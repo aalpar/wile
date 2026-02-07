@@ -98,6 +98,11 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 
 // ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	select {
+	case <-ectx.ctx.Done():
+		return nil, ectx.ctx.Err()
+	default:
+	}
 	var result syntax.SyntaxValue
 	var err error
 	switch stx := expr.(type) {
@@ -352,7 +357,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ectx ExpandTimeCallContex
 		}
 
 		// Compile the syntax-rules transformer
-		closure, err := CompileSyntaxRules(context.TODO(), p.env, transformerPairExpr)
+		closure, err := CompileSyntaxRules(ectx.ctx, p.env, transformerPairExpr)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}
@@ -740,9 +745,9 @@ func (p *ExpanderTimeContinuation) expandImportForm(ectx ExpandTimeCallContext, 
 	}
 
 	// Process each import set to load libraries and copy bindings
-	ctx := context.TODO()
+	ctx := ectx.ctx
 	_, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, parseErr := parseImportSet(importSetExpr)
+		importSet, parseErr := parseImportSet(ctx, importSetExpr)
 		if parseErr != nil {
 			return parseErr
 		}
@@ -1008,7 +1013,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isDefineSyntaxSyntax(expanded) {
 			pair := expanded.(*syntax.SyntaxPair)
-			err = compileDefineSyntaxFromSyntax(p.env, pair)
+			err = compileDefineSyntaxFromSyntax(ectx.ctx, p.env, pair)
 			if err != nil {
 				return nil, err
 			}
@@ -1039,7 +1044,7 @@ func isDefineSyntaxSyntax(expr syntax.SyntaxValue) bool {
 // The env parameter is used for free identifier resolution during compilation (so macros
 // can see local bindings like lambda parameters), while the actual macro binding is stored
 // in env.Expand() for lookup during expansion.
-func compileDefineSyntaxFromSyntax(env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
 	expandEnv := env.Expand()
 
 	// Extract: (define-syntax keyword transformer)
@@ -1063,7 +1068,7 @@ func compileDefineSyntaxFromSyntax(env *environment.EnvironmentFrame, dsPair *sy
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
 	// Supports both syntax-rules and lambda (procedural) transformers
-	closure, err := compileTransformerToMachineClosure(context.TODO(), env, transformer)
+	closure, err := compileTransformerToMachineClosure(ctx, env, transformer)
 	if err != nil {
 		return err
 	}
@@ -1280,7 +1285,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ectx ExpandTimeCallCont
 		return nil, fmt.Errorf("not a machine closure: %T", bnd.Value())
 	}
 	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(context.TODO(), mcls)
+	mc := NewMachineContextFromMachineClosure(ectx.ctx, mcls)
 	if mc == nil {
 		return nil, fmt.Errorf("failed to create machine context from closure")
 	}
@@ -1336,7 +1341,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ectx ExpandTimeCallCont
 // If the input is a macro call, it expands it once and returns (result, true, nil).
 // If the input is not a macro call, it returns (input, false, nil).
 // Unlike ExpandExpression, this does NOT recursively expand the result.
-func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+func (p *ExpanderTimeContinuation) ExpandOnce(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	// Only pairs can be macro calls
 	stxPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -1384,7 +1389,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(_ ExpandTimeCallContext, expr synt
 	}
 
 	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(context.TODO(), mcls)
+	mc := NewMachineContextFromMachineClosure(ectx.ctx, mcls)
 	if mc == nil {
 		return nil, false, fmt.Errorf("failed to create machine context from closure")
 	}
@@ -1436,7 +1441,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ccnt ExpandTimeCallC
 	// if any error, return error
 	// if not a proper list, return error
 	// finally return the new list
-	tail, err := syntax.SyntaxForEach(context.TODO(), args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ccnt.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		v0, err := p.ExpandExpression(ccnt, v)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to expand argument list")

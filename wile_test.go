@@ -19,6 +19,7 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile/internal/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
@@ -203,7 +204,7 @@ func TestCompiledCode_String(t *testing.T) {
 	engine, err := NewEngine()
 	c.Assert(err, qt.IsNil)
 
-	compiled, err := engine.Compile("(+ 1 2)")
+	compiled, err := engine.Compile(context.Background(), "(+ 1 2)")
 	c.Assert(err, qt.IsNil)
 	c.Assert(compiled.String(), qt.Equals, "#<compiled-code>")
 }
@@ -646,4 +647,64 @@ func TestToGoBool(t *testing.T) {
 
 	_, ok = ToGoBool(NewInteger(1))
 	c.Assert(ok, qt.IsFalse)
+}
+
+// Context cancellation
+
+func TestEval_ContextCancellation(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err = engine.Eval(ctx, "(let loop () (loop))")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
+}
+
+func TestEval_AlreadyCancelledContext(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = engine.Eval(ctx, "(+ 1 2)")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+func TestEval_CancelDuringComputation(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err = engine.Eval(ctx, "(let loop () (loop))")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+func TestEval_CancelNestedCalls(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err = engine.EvalMultiple(ctx, `
+		(define (spin n) (spin (+ n 1)))
+		(spin 0)
+	`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
 }

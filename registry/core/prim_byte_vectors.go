@@ -58,7 +58,7 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevector implements the bytevector primitive.
 // Creates bytevector from byte arguments.
-func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -70,7 +70,7 @@ func PrimBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []*values.Byte
-	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
+	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
@@ -274,7 +274,7 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 
 // PrimBytevectorAppend implements the bytevector-append primitive.
 // Concatenates bytevectors.
-func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -286,7 +286,7 @@ func PrimBytevectorAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
 	result := values.NewByteVector()
-	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)

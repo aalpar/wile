@@ -253,7 +253,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			err := vst.Compile(context.TODO(), tc.in)
 			c.Assert(err, qt.IsNil)
 			mtc := NewMatcher(vst.variables, vst.codes)
-			err = mtc.Match(tc.target)
+			err = mtc.Match(context.Background(), tc.target)
 			if tc.matches {
 				c.Assert(err, qt.IsNil, qt.Commentf("expected match for %s", tc.in.SchemeString()))
 			} else {

@@ -76,7 +76,7 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 	// Compile the expanded expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
-	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = ctc.CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func TestSchemeLibraryImports(t *testing.T) {
 	// Compile the import
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("import of all scheme libraries failed"))
@@ -205,7 +205,7 @@ func TestSchemeLibraryImportsWithUsage(t *testing.T) {
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
-	ctctx := machine.NewCompileTimeCallContext(false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
 
@@ -256,7 +256,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	sv := parseSchemeExpr(t, env, libCode)
 
 	// Expand
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, sv)
 	c.Assert(err, qt.IsNil, qt.Commentf("library expansion should succeed"))
 
@@ -267,7 +267,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	compiler.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
 		compiledLib = lib
 	})
-	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("library compilation should succeed"))
 	c.Assert(compiledLib, qt.IsNotNil, qt.Commentf("library callback should have been called"))
@@ -334,7 +334,7 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			ctc := machine.NewCompiletimeContinuation(tpl, env)
-			ctctx := machine.NewCompileTimeCallContext(false, false, env)
+			ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 			err := ctc.CompileImport(ctctx, args)
 			c.Assert(err, qt.IsNil, qt.Commentf("failed to import (scheme %s)", lib.name))
 

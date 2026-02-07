@@ -153,8 +153,8 @@ func NewSyntaxMatcherWithLiterals(
 // Match performs pattern matching on syntax objects.
 // This is the basic method without binding checking. For full R7RS compliance
 // with auxiliary syntax hygiene, use MatchWithBindingChecker instead.
-func (p *SyntaxMatcher) Match(input syntax.SyntaxValue) error {
-	return p.MatchWithBindingChecker(input, nil)
+func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) error {
+	return p.MatchWithBindingChecker(ctx, input, nil)
 }
 
 // MatchWithBindingChecker performs pattern matching on syntax objects with
@@ -166,7 +166,7 @@ func (p *SyntaxMatcher) Match(input syntax.SyntaxValue) error {
 // lambda, etc.) but the pattern literal doesn't, they won't match.
 //
 // Pass nil for checker to use scope-based matching only (less strict).
-func (p *SyntaxMatcher) MatchWithBindingChecker(input syntax.SyntaxValue, checker BindingChecker) error {
+func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input syntax.SyntaxValue, checker BindingChecker) error {
 	// Store binding checker for use in literal matching
 	p.bindingChecker = checker
 	defer func() { p.bindingChecker = nil }()
@@ -187,7 +187,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(input syntax.SyntaxValue, checke
 	}
 
 	// Use syntax-native matching to preserve source context
-	return p.matcher.MatchSyntaxWithLiterals(inputPair, p.literalSyntax, literalMatcher)
+	return p.matcher.MatchSyntaxWithLiterals(ctx, inputPair, p.literalSyntax, literalMatcher)
 }
 
 // Expand performs template expansion, preserving syntax wrappers

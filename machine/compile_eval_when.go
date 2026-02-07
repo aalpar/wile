@@ -59,7 +59,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	// Get the phase list
 	phasesExpr := argsPair.SyntaxCar()
 	phasesStx := phasesExpr
-	phases, err := p.parseEvalWhenPhases(context.TODO(), phasesStx)
+	phases, err := p.parseEvalWhenPhases(ctctx.ctx, phasesStx)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 // Returns a map of phase names to booleans.
 // Accepts both (expand run) and (expand compile run) forms.
 // Also accepts R6RS-style phase names: load, eval, visit.
-func (p *CompileTimeContinuation) parseEvalWhenPhases(_ context.Context, phasesExpr syntax.SyntaxValue) (map[string]bool, error) {
+func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phasesExpr syntax.SyntaxValue) (map[string]bool, error) {
 	phases := make(map[string]bool)
 
 	phasesPair, ok := phasesExpr.(*syntax.SyntaxPair)
@@ -119,7 +119,7 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(_ context.Context, phasesE
 
 	// Iterate through phase symbols
 	current := phasesPair
-	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, phaseVal syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, phaseVal syntax.SyntaxValue) error {
 		phaseSym, ok := phaseVal.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "eval-when: phase must be a symbol")
@@ -155,12 +155,12 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Process each expression
 	current := bodyPair
-	v, err := current.SyntaxForEach(context.TODO(), func(ctx context.Context, _ int, _ bool, exprVal syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(ctctx.ctx, func(ctx context.Context, _ int, _ bool, exprVal syntax.SyntaxValue) error {
 		if exprVal == nil {
 			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil expression")
 		}
@@ -214,13 +214,13 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 	}
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Collect all expressions
 	var exprs []syntax.SyntaxValue
 	current := bodyPair
-	v, err := current.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
+	v, err := current.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
 		exprs = append(exprs, stxVal)
 		return nil
 	})

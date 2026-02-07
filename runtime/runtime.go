@@ -51,17 +51,17 @@ import (
 //
 // The returned [machine.NativeTemplate] can be executed multiple times with [Run].
 // This is useful when the same code needs to be evaluated repeatedly.
-func Compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
 	if err != nil {
 		return nil, fmt.Errorf("expansion error: %w", err)
 	}
 
 	// Use inTail=false for top-level expressions
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, fmt.Errorf("compilation error: %w", err)
@@ -126,7 +126,7 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	}
 
 	// Compile and run
-	tpl, err := Compile(env, programStx)
+	tpl, err := Compile(ctx, env, programStx)
 	if err != nil {
 		return fmt.Errorf("compile error in %s: %w", filename, err)
 	}

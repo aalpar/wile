@@ -227,7 +227,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// Process literals list
 	literalsList, ok := literalsStx.(*syntax.SyntaxPair)
 	if ok && !syntax.IsSyntaxEmptyList(literalsList) {
-		err := extractLiteralsWithSyntax(literalsList, literals, literalSyntax, ellipsis)
+		err := extractLiteralsWithSyntax(ctx, literalsList, literals, literalSyntax, ellipsis)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "syntax-rules: invalid literals list")
 		}
@@ -549,13 +549,13 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 // R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
 //
 //nolint:unparam
-func extractLiteralsWithSyntax(
+func extractLiteralsWithSyntax(ctx context.Context,
 	literalsList *syntax.SyntaxPair,
 	literals map[string]struct{},
 	literalSyntax map[string]*syntax.SyntaxSymbol,
 	ellipsis string,
 ) error {
-	v, err := literalsList.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {
+	v, err := literalsList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {
 		sym, ok := literal.(*syntax.SyntaxSymbol)
 		if !ok {
 			return values.NewForeignErrorf("extractLiterals: literal must be a symbol")

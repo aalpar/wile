@@ -85,7 +85,7 @@ func BenchmarkCompile(b *testing.B) {
 	code := "(lambda (x y) (+ x y))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Compile(code)
+		_, _ = engine.Compile(context.Background(), code)
 	}
 }
 

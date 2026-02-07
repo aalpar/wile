@@ -15,6 +15,7 @@
 package match
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -48,7 +49,7 @@ func TestMatchSyntax(t *testing.T) {
 		target := testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30))
 		matcher := NewMatcher(map[string]struct{}{}, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 	})
 
@@ -66,7 +67,7 @@ func TestMatchSyntax(t *testing.T) {
 		target := testSyntaxList(inner, testSyntaxInt(20))
 		matcher := NewMatcher(map[string]struct{}{}, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 	})
 
@@ -93,7 +94,7 @@ func TestMatchSyntax(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		bindings := matcher.GetBindings()
@@ -118,7 +119,7 @@ func TestMatchSyntax(t *testing.T) {
 		target := testSyntaxList(testSyntaxInt(10), testSyntaxInt(30))
 		matcher := NewMatcher(map[string]struct{}{}, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -135,7 +136,7 @@ func TestMatchSyntax(t *testing.T) {
 		variables := map[string]struct{}{"a": {}, "rest": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		bindings := matcher.GetBindings()
@@ -167,7 +168,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntaxWithLiterals(target, literalSyntax, literalMatcher)
+		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.IsNil)
 
 		bindings := matcher.GetBindings()
@@ -193,7 +194,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntaxWithLiterals(target, literalSyntax, literalMatcher)
+		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -213,7 +214,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 		target := testSyntaxList(testSyntaxInt(42))
 		matcher := NewMatcher(map[string]struct{}{}, codes)
 
-		err := matcher.MatchSyntaxWithLiterals(target, literalSyntax, literalMatcher)
+		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -234,7 +235,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 		target := testSyntaxList(syntax.NewSyntaxSymbol("foo", nil), testSyntaxInt(10))
 		matcher := NewMatcher(map[string]struct{}{}, codes)
 
-		err := matcher.MatchSyntaxWithLiterals(target, literalSyntax, literalMatcher)
+		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.IsNil)
 	})
 }
@@ -272,7 +273,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		// x should have zero captures (no children for ellipsis 0)
@@ -301,7 +302,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		children := matcher.captureStack[0].children[0]
@@ -327,7 +328,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 		variables := map[string]struct{}{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
-		err := matcher.MatchSyntax(target)
+		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		children := matcher.captureStack[0].children[0]

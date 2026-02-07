@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -29,7 +30,7 @@ func TestParseLibraryNameFromDatum(t *testing.T) {
 		values.NewCons(values.NewSymbol("base"), values.EmptyList),
 	)
 
-	result, err := ParseLibraryNameFromDatum(libName)
+	result, err := ParseLibraryNameFromDatum(context.Background(), libName)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.Key(), qt.Equals, "scheme/base")
 }
@@ -41,19 +42,19 @@ func TestParseLibraryNameFromDatum_WithNumbers(t *testing.T) {
 		values.NewCons(values.NewInteger(1), values.EmptyList),
 	)
 
-	result, err := ParseLibraryNameFromDatum(libName)
+	result, err := ParseLibraryNameFromDatum(context.Background(), libName)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.Key(), qt.Equals, "srfi/1")
 }
 
 func TestParseLibraryNameFromDatum_NotAPair(t *testing.T) {
-	_, err := ParseLibraryNameFromDatum(values.NewInteger(42))
+	_, err := ParseLibraryNameFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "library name must be a list")
 }
 
 func TestParseLibraryNameFromDatum_Empty(t *testing.T) {
-	_, err := ParseLibraryNameFromDatum(values.EmptyList)
+	_, err := ParseLibraryNameFromDatum(context.Background(), values.EmptyList)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "library name cannot be empty")
 }
@@ -65,7 +66,7 @@ func TestParseLibraryNameFromDatum_InvalidPart(t *testing.T) {
 		values.NewCons(values.NewString("invalid"), values.EmptyList),
 	)
 
-	_, err := ParseLibraryNameFromDatum(libName)
+	_, err := ParseLibraryNameFromDatum(context.Background(), libName)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "library name part must be identifier or integer")
 }
@@ -77,7 +78,7 @@ func TestParseImportSetFromDatum_Simple(t *testing.T) {
 		values.NewCons(values.NewSymbol("base"), values.EmptyList),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Only, qt.IsNil)
@@ -102,7 +103,7 @@ func TestParseImportSetFromDatum_Only(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
@@ -124,7 +125,7 @@ func TestParseImportSetFromDatum_Except(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Except, qt.DeepEquals, []string{"car", "cdr"})
@@ -143,7 +144,7 @@ func TestParseImportSetFromDatum_Prefix(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Prefix, qt.Equals, "scheme:")
@@ -174,7 +175,7 @@ func TestParseImportSetFromDatum_Rename(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Renames["car"], qt.Equals, "first")
@@ -203,7 +204,7 @@ func TestParseImportSetFromDatum_Nested(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
@@ -223,7 +224,7 @@ func TestParseImportSetFromDatum_OnlyEmpty(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Only, qt.IsNil)
@@ -242,14 +243,14 @@ func TestParseImportSetFromDatum_RenameEmpty(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.Renames, qt.HasLen, 0)
 }
 
 func TestParseImportSetFromDatum_NotAPair(t *testing.T) {
-	_, err := ParseImportSetFromDatum(values.NewInteger(42))
+	_, err := ParseImportSetFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "import set must be a list")
 }
@@ -261,7 +262,7 @@ func TestParseImportSetFromDatum_Only_InvalidFormat(t *testing.T) {
 		values.EmptyList,
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "import set must be a list")
 }
@@ -279,7 +280,7 @@ func TestParseImportSetFromDatum_Prefix_InvalidFormat(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "prefix")
 }
@@ -297,7 +298,7 @@ func TestParseImportSetFromDatum_Prefix_NotASymbol(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "prefix must be a symbol")
 }
@@ -315,7 +316,7 @@ func TestParseImportSetFromDatum_Rename_InvalidPair(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "expected (old new) pair")
 }
@@ -339,7 +340,7 @@ func TestParseImportSetFromDatum_Rename_OldNotSymbol(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "old name must be symbol")
 }
@@ -363,7 +364,7 @@ func TestParseImportSetFromDatum_Rename_NewNotSymbol(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "new name must be symbol")
 }
@@ -378,19 +379,19 @@ func TestParseIdentifierListFromDatum(t *testing.T) {
 		),
 	)
 
-	result, err := parseIdentifierListFromDatum(list)
+	result, err := parseIdentifierListFromDatum(context.Background(), list)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, qt.DeepEquals, []string{"car", "cdr", "cons"})
 }
 
 func TestParseIdentifierListFromDatum_Empty(t *testing.T) {
-	result, err := parseIdentifierListFromDatum(values.EmptyList)
+	result, err := parseIdentifierListFromDatum(context.Background(), values.EmptyList)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, qt.IsNil)
 }
 
 func TestParseIdentifierListFromDatum_NotAPair(t *testing.T) {
-	_, err := parseIdentifierListFromDatum(values.NewInteger(42))
+	_, err := parseIdentifierListFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "expected list of identifiers")
 }
@@ -402,7 +403,7 @@ func TestParseIdentifierListFromDatum_NotASymbol(t *testing.T) {
 		values.NewCons(values.NewInteger(42), values.EmptyList),
 	)
 
-	_, err := parseIdentifierListFromDatum(list)
+	_, err := parseIdentifierListFromDatum(context.Background(), list)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "expected identifier symbol")
 }
@@ -422,7 +423,7 @@ func TestParseImportSetFromDatum_ForSyntax(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
@@ -441,7 +442,7 @@ func TestParseImportSetFromDatum_ForTemplate(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
@@ -463,7 +464,7 @@ func TestParseImportSetFromDatum_ForMeta(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
@@ -485,7 +486,7 @@ func TestParseImportSetFromDatum_ForMetaNegative(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
@@ -510,7 +511,7 @@ func TestParseImportSetFromDatum_NestedForSyntax(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
@@ -538,7 +539,7 @@ func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
 		),
 	)
 
-	result, err := ParseImportSetFromDatum(importSet)
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
@@ -552,7 +553,7 @@ func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {
 		values.EmptyList,
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to parse empty list as import set
 	qt.Assert(t, err.Error(), qt.Contains, "not a pair")
@@ -565,7 +566,7 @@ func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
 		values.EmptyList,
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to get the phase level from empty list
 	qt.Assert(t, err.Error(), qt.Contains, "not an integer")
@@ -587,7 +588,7 @@ func TestParseImportSetFromDatum_ForMeta_NotInteger(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "for-meta: expected integer phase level")
 }
@@ -602,7 +603,7 @@ func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
 		),
 	)
 
-	_, err := ParseImportSetFromDatum(importSet)
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to parse empty list as import set
 	qt.Assert(t, err.Error(), qt.Contains, "not a pair")

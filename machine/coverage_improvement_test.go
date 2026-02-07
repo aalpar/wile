@@ -37,7 +37,7 @@ func TestCompileTimeCallContext_NotInExpression(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create a context that is in expression mode
-	ctx := NewCompileTimeCallContext(true, true, env)
+	ctx := NewCompileTimeCallContext(context.Background(), true, true, env)
 	qt.Assert(t, ctx.inExpression, qt.IsTrue)
 	qt.Assert(t, ctx.inTail, qt.IsTrue)
 
@@ -140,7 +140,7 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := schemeutil.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
@@ -155,7 +155,7 @@ func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := schemeutil.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
@@ -234,7 +234,7 @@ func TestParseImportSetExcept(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 
 	// Call parseImportSetExcept
-	importSet, err := parseImportSetExcept(pair)
+	importSet, err := parseImportSetExcept(context.Background(), pair)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
@@ -257,7 +257,7 @@ func TestParseImportSetRename(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 
 	// Call parseImportSetRename
-	importSet, err := parseImportSetRename(pair)
+	importSet, err := parseImportSetRename(context.Background(), pair)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
@@ -341,7 +341,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
-			req, err := parseFeatureRequirement(stx)
+			req, err := parseFeatureRequirement(context.Background(), stx)
 
 			if tc.expectError {
 				qt.Assert(t, err, qt.IsNotNil)
@@ -445,7 +445,7 @@ func TestParseFeatureRequirementList(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	reqs, err := parseFeatureRequirementList(stx)
+	reqs, err := parseFeatureRequirementList(context.Background(), stx)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, reqs, qt.HasLen, 3)
 }

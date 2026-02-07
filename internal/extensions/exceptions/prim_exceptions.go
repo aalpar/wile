@@ -262,7 +262,7 @@ func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
 // PrimError implements the error primitive.
 // (error message irritant ...)
 // Creates an error object with the given message and irritants, then raises it.
-func PrimError(_ context.Context, mc *machine.MachineContext) error {
+func PrimError(ctx context.Context, mc *machine.MachineContext) error {
 	message := mc.Arg(0)
 	irritantsList := mc.Arg(1)
 
@@ -274,7 +274,7 @@ func PrimError(_ context.Context, mc *machine.MachineContext) error {
 
 	// Convert irritants list to slice
 	var irritants []values.Value
-	if _, err := values.ForEach(context.TODO(), irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	if _, err := values.ForEach(ctx, irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		irritants = append(irritants, v)
 		return nil
 	}); err != nil {

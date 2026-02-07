@@ -36,6 +36,7 @@ package match
 // Reference: R7RS Section 4.3.2 (syntax-rules)
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -184,7 +185,10 @@ func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
 // MatchSyntax runs the pattern matcher against the syntax target.
 // This is the syntax-native entry point that operates directly on SyntaxPair.
 // Captured values are stored as syntax.SyntaxValue to preserve source context.
-func (p *Matcher) MatchSyntax(target *syntax.SyntaxPair) error {
+func (p *Matcher) MatchSyntax(ctx context.Context, target *syntax.SyntaxPair) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -198,7 +202,16 @@ func (p *Matcher) MatchSyntax(target *syntax.SyntaxPair) error {
 	}
 	lvs := len(p.syntaxStack)
 	i := 0
+	iterations := 0
 	for len(p.syntaxStack) > 0 {
+		iterations++
+		if iterations&0x3FF == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
 		code := p.codes[i]
 		switch cd := code.(type) {
 		case ByteCodeCompareCar:
@@ -333,7 +346,10 @@ type LiteralMatcher func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string
 // The literalSyntax map contains pattern literals that need scope/binding checking.
 // The literalMatcher function is called for each literal comparison to check if the
 // input symbol should match (returns true) or is shadowed (returns false).
-func (p *Matcher) MatchSyntaxWithLiterals(target *syntax.SyntaxPair, literalSyntax map[string]*syntax.SyntaxSymbol, literalMatcher LiteralMatcher) error {
+func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.SyntaxPair, literalSyntax map[string]*syntax.SyntaxSymbol, literalMatcher LiteralMatcher) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,
@@ -347,7 +363,16 @@ func (p *Matcher) MatchSyntaxWithLiterals(target *syntax.SyntaxPair, literalSynt
 	}
 	lvs := len(p.syntaxStack)
 	i := 0
+	iterations := 0
 	for len(p.syntaxStack) > 0 {
+		iterations++
+		if iterations&0x3FF == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
 		code := p.codes[i]
 		switch cd := code.(type) {
 		case ByteCodeCompareCar:
@@ -501,7 +526,10 @@ func (p *Matcher) MatchSyntaxWithLiterals(target *syntax.SyntaxPair, literalSynt
 
 // Match runs the pattern matcher against the target using values-based matching.
 // Captured values are wrapped in syntax objects for uniform bindings storage.
-func (p *Matcher) Match(target *values.Pair) error {
+func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.valueStack = []valuePathEntry{
 		{
 			pr: target,
@@ -515,7 +543,16 @@ func (p *Matcher) Match(target *values.Pair) error {
 	}
 	lvs := len(p.valueStack)
 	i := 0
+	iterations := 0
 	for len(p.valueStack) > 0 {
+		iterations++
+		if iterations&0x3FF == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
 		code := p.codes[i]
 		switch cd := code.(type) {
 		case ByteCodeCompareCar:

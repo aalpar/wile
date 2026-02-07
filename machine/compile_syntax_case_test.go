@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -33,7 +34,7 @@ func TestCompileSyntaxCase_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case")
 }
@@ -49,7 +50,7 @@ func TestCompileSyntaxCase_Error_NoLiterals(t *testing.T) {
 	input := syntax.NewSyntaxSymbol("x", nil)
 	expr := syntax.NewSyntaxCons(input, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case")
 }
@@ -67,7 +68,7 @@ func TestCompileSyntaxCase_Error_NoClauses(t *testing.T) {
 	expr := syntax.NewSyntaxCons(input,
 		syntax.NewSyntaxCons(literals, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case")
 }
