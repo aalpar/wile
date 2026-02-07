@@ -132,7 +132,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)
 
 	// Read the first form - should be define-library
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, values.NewForeignErrorf("library file is empty")
@@ -172,7 +172,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Expand the form
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctx)
 	expanded, err := NewExpanderTimeContinuation(libEnv).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error expanding library")
@@ -180,7 +180,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 
 	// Compile the form
 	// Use inTail=false for top-level expressions
-	cctx := NewCompileTimeCallContext(false, true, libEnv)
+	cctx := NewCompileTimeCallContext(ctx, false, true, libEnv)
 	compiler := NewCompiletimeContinuation(tpl, libEnv)
 
 	// Set up to capture the compiled library

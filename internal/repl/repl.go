@@ -199,7 +199,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		rl.SetPrompt(p.prompt)
 
 		// Compile
-		tpl, compileErr := Compile(p.env, stx)
+		tpl, compileErr := Compile(ctx, p.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			continue
@@ -262,7 +262,7 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.Reset()
 
-		tpl, compileErr := Compile(p.env, stx)
+		tpl, compileErr := Compile(ctx, p.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			fmt.Fprint(p.out, p.prompt)
@@ -358,8 +358,8 @@ func (p *lineReader) ReadLine() (string, error) {
 //
 // Deprecated: Use [github.com/aalpar/wile/runtime.Compile] instead.
 // This function delegates to the runtime package.
-func Compile(env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
-	return wileruntime.Compile(env, expr)
+func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+	return wileruntime.Compile(ctx, env, expr)
 }
 
 // Run executes a compiled template and returns the result values.

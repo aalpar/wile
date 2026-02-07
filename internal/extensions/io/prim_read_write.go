@@ -92,7 +92,7 @@ func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
 // R7RS §6.13.2: read uses datum labels to handle circular and shared structures.
-func PrimRead(_ context.Context, mc *machine.MachineContext) error {
+func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
@@ -119,7 +119,7 @@ func PrimRead(_ context.Context, mc *machine.MachineContext) error {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
-	syn, err := prss.ReadSyntax(context.TODO())
+	syn, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
@@ -185,7 +185,7 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 // PrimReadSyntax implements the (read-syntax) primitive.
 // Reads datum with source information.
 // Reads from the current input port if no port is specified.
-func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
@@ -213,7 +213,7 @@ func PrimReadSyntax(_ context.Context, mc *machine.MachineContext) error {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
-	q, err := prss.ReadSyntax(context.TODO())
+	q, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.

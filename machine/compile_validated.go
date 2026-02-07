@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
@@ -436,7 +438,7 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 // throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-	lambdaBodyContext := NewCompileTimeCallContext(true, ctctx.inExpression, childEnv)
+	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true, ctctx.inExpression, childEnv)
 
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
@@ -833,7 +835,7 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(_ CompileTimeCallC
 
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
-	exprCtx := NewCompileTimeCallContext(false, true, p.env)
+	exprCtx := NewCompileTimeCallContext(context.Background(), false, true, p.env)
 
 	err := p.compileValidated(exprCtx, v.Before)
 	if err != nil {

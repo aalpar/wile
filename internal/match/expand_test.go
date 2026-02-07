@@ -134,7 +134,7 @@ func TestMatchAndExpand(t *testing.T) {
 
 			// Match against input
 			matcher := NewMatcher(compiler.variables, compiler.codes)
-			err = matcher.Match(tc.input)
+			err = matcher.Match(context.Background(), tc.input)
 			qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 			// Expand template
@@ -222,7 +222,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 
 		// Match against input with ellipsis variable mapping
 		matcher := NewMatcherWithEllipsisVars(compiler.variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		// Expand template
@@ -290,7 +290,7 @@ func TestEllipsisEscape(t *testing.T) {
 
 		matcher := NewMatcher(variables, compiler.codes)
 		matcher.ellipsisID = DefaultEllipsis
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Template: (... ...) - escape form containing ellipsis
@@ -319,7 +319,7 @@ func TestEllipsisEscape(t *testing.T) {
 
 		matcher := NewMatcher(variables, compiler.codes)
 		matcher.ellipsisID = DefaultEllipsis
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Template: (... (x ...)) - escape form containing pattern var and ellipsis
@@ -387,7 +387,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		qt.Assert(t, hasSkipIfTailCount, qt.IsTrue, qt.Commentf("expected SkipIfTailCount in bytecode"))
 
 		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
@@ -426,7 +426,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
@@ -476,7 +476,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		result, err := matcher.Expand(template)
@@ -523,7 +523,7 @@ func TestImproperListPattern(t *testing.T) {
 		qt.Assert(t, hasCaptureCdr, qt.IsTrue, qt.Commentf("expected CaptureCdr in bytecode, got: %v", compiler.codes))
 
 		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()
@@ -555,7 +555,7 @@ func TestImproperListPattern(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("pattern matching failed"))
 
 		bindings := matcher.GetBindings()

@@ -86,7 +86,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		// Match
 		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Expand template: x
@@ -106,7 +106,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		input := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
 
-		err := matcher.Match(input)
+		err := matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err.Error(), qt.Contains, "requires a pair")
 	})
@@ -138,7 +138,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		)
 
 		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-		err = matcher.Match(input)
+		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create intro scope
@@ -392,7 +392,7 @@ func TestExpandWithUseSite(t *testing.T) {
 
 	// Match the input
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Create a template with templateSc context
@@ -481,7 +481,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 	)
 
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template: just returns x (the pattern variable)
@@ -525,7 +525,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 	)
 
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template with specific context
@@ -565,7 +565,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	)
 
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template
@@ -612,7 +612,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	)
 
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template
@@ -672,7 +672,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	)
 
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
-	err = matcher.Match(input)
+	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
 	// Template: just x (the pattern variable)

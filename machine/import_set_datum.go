@@ -23,14 +23,14 @@ import (
 
 // ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).
 // This is for runtime use by the 'environment' procedure.
-func ParseLibraryNameFromDatum(expr values.Value) (LibraryName, error) {
+func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryName, error) {
 	pair, ok := expr.(*values.Pair)
 	if !ok {
 		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAPair, "library name must be a list")
 	}
 
 	var parts []string
-	_, err := pair.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
+	_, err := pair.ForEach(ctx, func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
 		if sym, ok := partExpr.(*values.Symbol); ok {
 			parts = append(parts, sym.Key)
 			return nil
@@ -61,7 +61,7 @@ func ParseLibraryNameFromDatum(expr values.Value) (LibraryName, error) {
 //   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
 //   - (for-template <import-set>)   : import at phase -1
 //   - (for-meta <n> <import-set>)   : import at phase +n
-func ParseImportSetFromDatum(expr values.Value) (*ImportSet, error) {
+func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet, error) {
 	pair, ok := expr.(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "import set must be a list")
@@ -72,24 +72,24 @@ func ParseImportSetFromDatum(expr values.Value) (*ImportSet, error) {
 	if carSym, ok := car.(*values.Symbol); ok {
 		switch carSym.Key {
 		case "only":
-			return parseImportSetOnlyFromDatum(pair)
+			return parseImportSetOnlyFromDatum(ctx, pair)
 		case "except":
-			return parseImportSetExceptFromDatum(pair)
+			return parseImportSetExceptFromDatum(ctx, pair)
 		case "prefix":
-			return parseImportSetPrefixFromDatum(pair)
+			return parseImportSetPrefixFromDatum(ctx, pair)
 		case "rename":
-			return parseImportSetRenameFromDatum(pair)
+			return parseImportSetRenameFromDatum(ctx, pair)
 		case "for-syntax":
-			return parseImportSetForSyntaxFromDatum(pair)
+			return parseImportSetForSyntaxFromDatum(ctx, pair)
 		case "for-template":
-			return parseImportSetForTemplateFromDatum(pair)
+			return parseImportSetForTemplateFromDatum(ctx, pair)
 		case "for-meta":
-			return parseImportSetForMetaFromDatum(pair)
+			return parseImportSetForMetaFromDatum(ctx, pair)
 		}
 	}
 
 	// Not a modifier, must be a library name
-	libName, err := ParseLibraryNameFromDatum(expr)
+	libName, err := ParseLibraryNameFromDatum(ctx, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func ParseImportSetFromDatum(expr values.Value) (*ImportSet, error) {
 }
 
 // parseImportSetOnlyFromDatum parses (only <import-set> <id> ...)
-func parseImportSetOnlyFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetOnlyFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected import-set and identifiers")
@@ -105,14 +105,14 @@ func parseImportSetOnlyFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get identifiers
 	idsExpr := cdr.Cdr()
-	ids, err := parseIdentifierListFromDatum(idsExpr)
+	ids, err := parseIdentifierListFromDatum(ctx, idsExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func parseImportSetOnlyFromDatum(pair *values.Pair) (*ImportSet, error) {
 }
 
 // parseImportSetExceptFromDatum parses (except <import-set> <id> ...)
-func parseImportSetExceptFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetExceptFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "except: expected import-set and identifiers")
@@ -130,14 +130,14 @@ func parseImportSetExceptFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get identifiers
 	idsExpr := cdr.Cdr()
-	ids, err := parseIdentifierListFromDatum(idsExpr)
+	ids, err := parseIdentifierListFromDatum(ctx, idsExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func parseImportSetExceptFromDatum(pair *values.Pair) (*ImportSet, error) {
 }
 
 // parseImportSetPrefixFromDatum parses (prefix <import-set> <prefix>)
-func parseImportSetPrefixFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetPrefixFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected import-set and prefix")
@@ -155,7 +155,7 @@ func parseImportSetPrefixFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func parseImportSetPrefixFromDatum(pair *values.Pair) (*ImportSet, error) {
 }
 
 // parseImportSetRenameFromDatum parses (rename <import-set> (<old> <new>) ...)
-func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetRenameFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected import-set and rename pairs")
@@ -184,7 +184,7 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
-	_, err = renamesPair.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
+	_, err = renamesPair.ForEach(ctx, func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
 		renamePair, ok := renamePairVal.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
@@ -230,7 +230,7 @@ func parseImportSetRenameFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 // parseImportSetForSyntaxFromDatum parses (for-syntax <import-set>)
 // Adds +1 to the phase shift of the nested import set.
-func parseImportSetForSyntaxFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetForSyntaxFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-syntax: expected import-set")
@@ -238,7 +238,7 @@ func parseImportSetForSyntaxFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func parseImportSetForSyntaxFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 // parseImportSetForTemplateFromDatum parses (for-template <import-set>)
 // Adds -1 to the phase shift of the nested import set.
-func parseImportSetForTemplateFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetForTemplateFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-template: expected import-set")
@@ -258,7 +258,7 @@ func parseImportSetForTemplateFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 	// Get nested import set
 	nestedExpr := cdr.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func parseImportSetForTemplateFromDatum(pair *values.Pair) (*ImportSet, error) {
 
 // parseImportSetForMetaFromDatum parses (for-meta <n> <import-set>)
 // Adds n to the phase shift of the nested import set.
-func parseImportSetForMetaFromDatum(pair *values.Pair) (*ImportSet, error) {
+func parseImportSetForMetaFromDatum(ctx context.Context, pair *values.Pair) (*ImportSet, error) {
 	cdr, ok := pair.Cdr().(*values.Pair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected phase level and import-set")
@@ -290,7 +290,7 @@ func parseImportSetForMetaFromDatum(pair *values.Pair) (*ImportSet, error) {
 	}
 
 	nestedExpr := importSetPair.Car()
-	importSet, err := ParseImportSetFromDatum(nestedExpr)
+	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func parseImportSetForMetaFromDatum(pair *values.Pair) (*ImportSet, error) {
 }
 
 // parseIdentifierListFromDatum parses a list of identifiers into a string slice.
-func parseIdentifierListFromDatum(expr values.Value) ([]string, error) {
+func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) ([]string, error) {
 	if values.IsEmptyList(expr) {
 		return nil, nil
 	}
@@ -312,7 +312,7 @@ func parseIdentifierListFromDatum(expr values.Value) ([]string, error) {
 	}
 
 	var ids []string
-	_, err := pair.ForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, idExpr values.Value) error {
+	_, err := pair.ForEach(ctx, func(_ context.Context, i int, hasNext bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected identifier symbol")

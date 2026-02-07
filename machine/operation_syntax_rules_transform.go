@@ -180,7 +180,7 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	// Try each clause in order
 	for i, clause := range clauses {
 		// Try to match the pattern with R7RS binding checking
-		err := clause.matcher.MatchWithBindingChecker(input, bindingChecker)
+		err := clause.matcher.MatchWithBindingChecker(ctx, input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site

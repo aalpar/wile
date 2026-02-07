@@ -66,9 +66,9 @@ type CompileTimeCallContext struct {
 //   - inTail: true if compiling an expression in tail position
 //   - inExpression: true if compiling an expression (vs. a definition)
 //   - env: the environment frame for variable resolution during compilation
-func NewCompileTimeCallContext(inTail, inExpression bool, env *environment.EnvironmentFrame) CompileTimeCallContext {
+func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool, env *environment.EnvironmentFrame) CompileTimeCallContext {
 	return CompileTimeCallContext{
-		ctx:          context.Background(),
+		ctx:          ctx,
 		env:          env,
 		inTail:       inTail,
 		inExpression: inExpression,

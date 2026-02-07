@@ -14,8 +14,12 @@
 
 package machine
 
-type ExpandTimeCallContext struct{}
+import "context"
 
-func NewExpandTimeCallContext() ExpandTimeCallContext {
-	return ExpandTimeCallContext{}
+type ExpandTimeCallContext struct {
+	ctx context.Context
+}
+
+func NewExpandTimeCallContext(ctx context.Context) ExpandTimeCallContext {
+	return ExpandTimeCallContext{ctx: ctx}
 }

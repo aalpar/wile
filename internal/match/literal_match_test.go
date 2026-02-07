@@ -15,6 +15,7 @@
 package match
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -151,7 +152,7 @@ func TestExpandPreservingSyntax(t *testing.T) {
 		vars := map[string]struct{}{"a": {}}
 		m := NewMatcher(vars, codes)
 		target := testSyntaxList(testSyntaxInt(42))
-		err := m.MatchSyntax(target)
+		err := m.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
 		template := values.NewCons(values.NewSymbol("a"), values.EmptyList)
@@ -192,7 +193,7 @@ func TestSyntaxMatcher_GetBindings(t *testing.T) {
 	m := NewSyntaxMatcher(vars, codes)
 
 	target := testSyntaxList(testSyntaxInt(99))
-	err := m.Match(target)
+	err := m.Match(context.Background(), target)
 	c.Assert(err, qt.IsNil)
 
 	bindings := m.GetBindings()
@@ -504,7 +505,7 @@ func TestMatchSyntax_RequireCarEmpty(t *testing.T) {
 			syntax.NewSyntaxEmptyList(nil),
 			testSyntaxInt(42),
 		)
-		err := m.MatchSyntax(target)
+		err := m.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 		bindings := m.GetBindings()
 		c.Assert(bindings["x"], qt.IsNotNil)
@@ -516,7 +517,7 @@ func TestMatchSyntax_RequireCarEmpty(t *testing.T) {
 			testSyntaxList(testSyntaxInt(1)),
 			testSyntaxInt(42),
 		)
-		err := m.MatchSyntax(target)
+		err := m.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNotNil)
 	})
 }
@@ -546,7 +547,7 @@ func TestMatchSyntax_CaptureCdr(t *testing.T) {
 			nil,
 		)
 		target := testSyntaxList(inner)
-		err := m.MatchSyntax(target)
+		err := m.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 		bindings := m.GetBindings()
 		c.Assert(bindings["a"], qt.IsNotNil)

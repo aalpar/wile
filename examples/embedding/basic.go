@@ -112,7 +112,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	compiled, err := engine.Compile("(* x x)")
+	compiled, err := engine.Compile(context.Background(), "(* x x)")
 	if err != nil {
 		log.Fatal(err)
 	}

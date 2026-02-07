@@ -32,7 +32,7 @@ import (
 
 // PrimMakeRecordType implements the (make-record-type name field-names) primitive.
 // Creates a new record type descriptor.
-func PrimMakeRecordType(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
@@ -41,7 +41,7 @@ func PrimMakeRecordType(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotASymbol, "make-record-type: expected a symbol for name but got %T", nameArg)
 	}
 
-	fieldNames, err := listToSymbols(fieldNamesArg)
+	fieldNames, err := listToSymbols(ctx, fieldNamesArg)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "make-record-type: field-names")
 	}
@@ -89,7 +89,7 @@ func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimRecordConstructor implements the (record-constructor rt field-tags) primitive.
 // Returns a constructor procedure for the record type.
-func PrimRecordConstructor(_ context.Context, mc *machine.MachineContext) error {
+func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) error {
 	rtArg := mc.Arg(0)
 	fieldTagsArg := mc.Arg(1)
 
@@ -98,7 +98,7 @@ func PrimRecordConstructor(_ context.Context, mc *machine.MachineContext) error 
 		return values.WrapForeignErrorf(values.ErrNotARecordType, "record-constructor: expected a record type but got %T", rtArg)
 	}
 
-	constructorFields, err := listToSymbols(fieldTagsArg)
+	constructorFields, err := listToSymbols(ctx, fieldTagsArg)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "record-constructor: field-tags")
 	}
@@ -187,9 +187,9 @@ func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // Helper: convert a Scheme list to a slice of symbols
-func listToSymbols(v values.Value) ([]*values.Symbol, error) {
+func listToSymbols(ctx context.Context, v values.Value) ([]*values.Symbol, error) {
 	var result []*values.Symbol
-	_, err := values.ForEach(context.TODO(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	_, err := values.ForEach(ctx, v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		sym, ok := elem.(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected a symbol but got %T", elem)

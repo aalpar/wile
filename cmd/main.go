@@ -229,7 +229,7 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 	}
 
 	// Compile and run the single wrapped expression
-	tpl, err2 := runtime.Compile(env, programStx)
+	tpl, err2 := runtime.Compile(ctx, env, programStx)
 	if err2 != nil {
 		Failf(err2, "Cannot compile expression")
 	}

@@ -15,6 +15,7 @@
 package match
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"testing"
@@ -145,7 +146,7 @@ func (UtilsMatchSuite) TestMatch(c *qt.C) {
 	for i, tc := range tcs {
 		c.Run(fmt.Sprintf("%d: %s", i, tc.in), func(c *qt.C) {
 			vst := NewMatcher(tc.variables, tc.in)
-			err := vst.Match(tc.target)
+			err := vst.Match(context.Background(), tc.target)
 			if tc.matches {
 				c.Assert(err, qt.IsNil)
 			} else {
@@ -182,7 +183,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, []SyntaxCommand{ByteCodeDone{}})
 		target := values.List(values.NewInteger(10))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil) // Empty list matches with just Done
 	})
 
@@ -198,7 +199,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.NewInteger(10), values.NewInteger(20))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -212,7 +213,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.NewInteger(10))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -228,7 +229,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		// Create improper list: (10 . 20)
 		target := values.NewCons(values.NewInteger(10), values.NewInteger(20))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -242,7 +243,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.EmptyList)
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil)
 	})
 
@@ -256,7 +257,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.NewInteger(10))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -270,7 +271,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.NewInteger(20))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.Equals, ErrNotAMatch)
 	})
 
@@ -287,7 +288,7 @@ func TestMatchEdgeCases(t *testing.T) {
 		matcher := NewMatcher(variables, codes)
 		target := values.List(values.NewInteger(10))
 
-		err := matcher.Match(target)
+		err := matcher.Match(context.Background(), target)
 		qt.Assert(t, err, qt.IsNil)
 	})
 }

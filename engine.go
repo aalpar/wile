@@ -104,7 +104,7 @@ func NewEngine(opts ...EngineOption) (*Engine, error) {
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
 func (p *Engine) Eval(ctx context.Context, code string) (Value, error) {
-	compiled, err := p.Compile(code)
+	compiled, err := p.Compile(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 			return nil, &CompilationError{Message: "parse error", Cause: err}
 		}
 
-		compiled, err := p.compileExpr(stx)
+		compiled, err := p.compileExpr(ctx, stx)
 		if err != nil {
 			return nil, err
 		}
@@ -142,16 +142,16 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 }
 
 // Compile parses and compiles code without executing.
-func (p *Engine) Compile(code string) (*CompiledCode, error) {
+func (p *Engine) Compile(ctx context.Context, code string) (*CompiledCode, error) {
 	reader := strings.NewReader(code)
 	pr := parser.NewParser(p.env, true, reader)
 
-	stx, err := pr.ReadSyntax(context.Background())
+	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {
 		return nil, &CompilationError{Message: "parse error", Cause: err}
 	}
 
-	return p.compileExpr(stx)
+	return p.compileExpr(ctx, stx)
 }
 
 // Run executes previously compiled code.
@@ -295,16 +295,16 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 
 // internal helpers
 
-func (p *Engine) compileExpr(stx syntax.SyntaxValue) (*CompiledCode, error) {
+func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, &CompilationError{Message: "expansion error", Cause: err}
 	}
 
-	cctx := machine.NewCompileTimeCallContext(false, true, p.env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, p.env)
 	err = machine.NewCompiletimeContinuation(tpl, p.env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, &CompilationError{Message: "compilation error", Cause: err}
@@ -357,13 +357,13 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			}
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			ectx := machine.NewExpandTimeCallContext()
+			ectx := machine.NewExpandTimeCallContext(ctx)
 			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 			if err != nil {
 				return err
 			}
 
-			cctx := machine.NewCompileTimeCallContext(false, true, env)
+			cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			if err != nil {
 				return err

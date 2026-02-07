@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -34,7 +35,7 @@ func TestCompileDefineForSyntax_Error_NilEnv(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(false, true, nil), expr)
+	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true, nil), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "define-for-syntax")
 }
@@ -50,7 +51,7 @@ func TestCompileDefineForSyntax_Error_NilTemplate(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "define-for-syntax")
 }
@@ -65,7 +66,7 @@ func TestCompileDefineForSyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "define-for-syntax")
 }
@@ -81,7 +82,7 @@ func TestCompileDefineForSyntax_Error_MissingExpression(t *testing.T) {
 	name := syntax.NewSyntaxSymbol("x", nil)
 	expr := syntax.NewSyntaxCons(name, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "define-for-syntax")
 }

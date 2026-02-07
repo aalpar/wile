@@ -34,7 +34,7 @@ func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("foo", nil)
-	result, err := cont.ExpandSymbol(NewExpandTimeCallContext(), sym)
+	result, err := cont.ExpandSymbol(NewExpandTimeCallContext(context.Background()), sym)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	num := syntax.NewSyntaxObject(values.NewInteger(42), nil)
-	result, err := cont.ExpandSelfEvaluating(NewExpandTimeCallContext(), num)
+	result, err := cont.ExpandSelfEvaluating(NewExpandTimeCallContext(context.Background()), num)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestExpandExpression_Symbol(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
 	sym := syntax.NewSyntaxSymbol("bar", nil)
-	cctx := NewExpandTimeCallContext()
+	cctx := NewExpandTimeCallContext(context.Background())
 	result, err := cont.ExpandExpression(cctx, sym)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,7 +120,7 @@ func TestExpandExpression_List(t *testing.T) {
 		syntax.NewSyntaxSymbol("list", nil),
 		syntax.NewSyntaxObject(values.NewInteger(20), nil),
 		syntax.NewSyntaxObject(values.NewInteger(10), nil))
-	cctx := NewExpandTimeCallContext()
+	cctx := NewExpandTimeCallContext(context.Background())
 	result, err := cont.ExpandExpression(cctx, lst0)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.UnwrapAll(), values.SchemeEquals, lst1.UnwrapAll())
@@ -129,7 +129,7 @@ func TestExpandExpression_List(t *testing.T) {
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
-	cctx := NewExpandTimeCallContext()
+	cctx := NewExpandTimeCallContext(context.Background())
 
 	// (case-lambda ((x) x) ((x y) (+ x y)))
 	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
@@ -169,7 +169,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewExpanderTimeContinuation(env)
-	cctx := NewExpandTimeCallContext()
+	cctx := NewExpandTimeCallContext(context.Background())
 
 	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
 	emptyClauses := syntax.SyntaxList(nil)

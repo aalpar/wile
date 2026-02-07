@@ -67,7 +67,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		if !literalsPair.IsEmptyList() {
 			// syntax-case always uses the default ellipsis "..."
 			// Use extractLiteralsWithSyntax to enable scope-aware literal matching
-			err := extractLiteralsWithSyntax(literalsPair, nil, literalSyntax, match.DefaultEllipsis)
+			err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, nil, literalSyntax, match.DefaultEllipsis)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}
@@ -94,7 +94,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	var failJumps []jumpPatch    // Jumps to next clause on match failure
 
 	clauseIndex := 0
-	v, err := clausesCdr.SyntaxForEach(context.TODO(), func(_ context.Context, i int, hasNext bool, clauseVal syntax.SyntaxValue) error {
+	v, err := clausesCdr.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, clauseVal syntax.SyntaxValue) error {
 		clausePair, ok := clauseVal.(*syntax.SyntaxPair)
 		if !ok || clausePair.IsEmptyList() {
 			return values.NewForeignError("syntax-case: clause must be a list")
@@ -231,7 +231,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Create expander for the body environment (to expand macros like let)
 	bodyExpander := NewExpanderTimeContinuation(bodyEnv)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 
 	// If there's a fender, evaluate it and branch to cleanup on false
 	var fenderBranchIdx int

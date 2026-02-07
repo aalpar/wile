@@ -209,7 +209,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			}
 
 			// Expand the syntax
-			ectx := machine.NewExpandTimeCallContext()
+			ectx := machine.NewExpandTimeCallContext(ctx)
 			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "error expanding bootstrap macro")
@@ -218,7 +218,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			// Compile and run
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			// Use inTail=false for top-level expressions
-			cctx := machine.NewCompileTimeCallContext(false, true, env)
+			cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "error compiling bootstrap macro")

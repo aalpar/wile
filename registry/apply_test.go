@@ -125,20 +125,16 @@ func TestApply_InitFunc(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
 
-	var calledCtx context.Context
 	var calledEnv *environment.EnvironmentFrame
 	reg.AddInitFunc(func(actx ApplyContext) error {
-		calledCtx = actx.Context()
 		calledEnv = actx.Environment()
 		return nil
 	})
 
 	topLevel := environment.NewTopLevelEnvironment()
 	env := topLevel.Runtime()
-	ctx := context.Background()
-	err := reg.Apply(ctx, env)
+	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
-	c.Assert(calledCtx, qt.Equals, ctx)
 	c.Assert(calledEnv, qt.Equals, env)
 }
 
@@ -184,11 +180,9 @@ func TestApply_EmptyRegistry(t *testing.T) {
 
 func TestApplyContext_Methods(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.Background()
 	topLevel := environment.NewTopLevelEnvironment()
 	env := topLevel.Runtime()
 
-	actx := &applyContext{ctx: ctx, env: env}
-	c.Assert(actx.Context(), qt.Equals, ctx)
+	actx := &applyContext{env: env}
 	c.Assert(actx.Environment(), qt.Equals, env)
 }

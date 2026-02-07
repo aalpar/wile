@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"errors"
 
 	"github.com/aalpar/wile/environment"
@@ -100,7 +99,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
 
 	// Expand the expression first (it may contain macros)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 	expandedExpr, err := expander.ExpandExpression(ectx, valueExpr)
 	if err != nil {
@@ -115,7 +114,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 
 	// Execute the compiled code at compile time
 	cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-	mc := NewMachineContext(context.Background(), cont)
+	mc := NewMachineContext(ctctx.ctx, cont)
 	err = mc.Run()
 	if err != nil {
 		if !errors.Is(err, ErrMachineHalt) {

@@ -54,7 +54,7 @@ func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFrame) (*machine.MachineContinuation, error) {
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFram
 	// Compile the expanded expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := machine.NewCompiletimeContinuation(tpl, env)
-	ctctx := machine.NewCompileTimeCallContext(false, true, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = ctc.CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err

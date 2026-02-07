@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -34,7 +35,7 @@ func TestCompileBeginForSyntax_Error_NilEnv(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(false, true, nil), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true, nil), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -50,7 +51,7 @@ func TestCompileBeginForSyntax_Error_NilTemplate(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -65,7 +66,7 @@ func TestCompileBeginForSyntax_Error_NotPair(t *testing.T) {
 	// Not a pair
 	expr := syntax.NewSyntaxSymbol("bad", nil)
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -80,6 +81,6 @@ func TestCompileBeginForSyntax_Empty(t *testing.T) {
 	// Use an empty SyntaxPair (which returns true for IsSyntaxEmptyList)
 	exprPair := &syntax.SyntaxPair{}
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(false, true, env), exprPair)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), exprPair)
 	c.Assert(err, qt.IsNil)
 }

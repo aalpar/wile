@@ -47,14 +47,14 @@ func runSchemeCodeWithEnvForShadowTest(t *testing.T, env *environment.Environmen
 		return nil, err
 	}
 
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(context.Background())
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err

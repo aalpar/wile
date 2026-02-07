@@ -48,7 +48,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	stx := schemeutil.DatumToSyntaxValue(sctx, expr)
 
 	// Expand the expression
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: expansion error")
@@ -56,7 +56,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Compile the expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: compilation error")
@@ -106,7 +106,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 	// Read and evaluate each expression
 	var lastValue = values.Void
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
+		stx, err := p.ReadSyntax(ctx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -115,7 +115,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Expand the expression
-		ectx := machine.NewExpandTimeCallContext()
+		ectx := machine.NewExpandTimeCallContext(ctx)
 		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
@@ -123,7 +123,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 
 		// Compile the expression
 		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(false, true, env)
+		cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
@@ -241,7 +241,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	// Process each import spec
 	v, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
-		importSet, err := machine.ParseImportSetFromDatum(specVal)
+		importSet, err := machine.ParseImportSetFromDatum(ctx, specVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "environment: invalid import spec")
 		}
@@ -306,7 +306,7 @@ func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
 	expander := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := expander.ExpandExpression(ectx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand: expansion failed")
@@ -342,7 +342,7 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
 	expander := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, didExpand, err := expander.ExpandOnce(ectx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
@@ -363,7 +363,7 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 // This is the final phase hook, completing the pipeline:
 //
 //	expand -> compile -> (execute via calling the returned thunk)
-func PrimCompile(_ context.Context, mc *machine.MachineContext) error {
+func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	expr := mc.Arg(0)
 
 	// Accept either syntax object or datum
@@ -380,7 +380,7 @@ func PrimCompile(_ context.Context, mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame()
 
 	// Step 1: Expand the syntax object
-	ectx := machine.NewExpandTimeCallContext()
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: expansion failed")
@@ -389,7 +389,7 @@ func PrimCompile(_ context.Context, mc *machine.MachineContext) error {
 	// Step 2: Compile to bytecode template
 	// Create a thunk template (0 params, 0 locals, not variadic)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: compilation failed")

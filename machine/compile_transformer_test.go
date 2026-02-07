@@ -119,7 +119,7 @@ func TestProceduralMacroExpandTimePath(t *testing.T) {
 	defineSyntaxStx := schemeutil.DatumToSyntaxValue(sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
 
 	// Use the expand-time path to compile the define-syntax
-	err := compileDefineSyntaxFromSyntax(env, defineSyntaxStx)
+	err := compileDefineSyntaxFromSyntax(context.Background(), env, defineSyntaxStx)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the macro is stored in the expand environment

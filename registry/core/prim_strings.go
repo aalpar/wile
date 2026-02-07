@@ -202,7 +202,7 @@ func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimListToString implements the (list->string) primitive.
 // Converts a list of characters to a string.
-func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
+func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewString(""))
@@ -213,7 +213,7 @@ func PrimListToString(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
-	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotACharacter, "list->string: expected a character but got %T", v)
@@ -260,7 +260,7 @@ func PrimStringToSymbol(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringAppend implements the (string-append) primitive.
 // Concatenates strings.
-func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
@@ -271,7 +271,7 @@ func PrimStringAppend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
-	v, err := tuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAString, "string-append: expected a string but got %T", v)

@@ -352,7 +352,7 @@ func evalSchemeString(code string) (values.Value, error) {
 		}
 
 		// Expand
-		ectx := NewExpandTimeCallContext()
+		ectx := NewExpandTimeCallContext(context.Background())
 		econt := NewExpanderTimeContinuation(env)
 		expanded, err := econt.ExpandExpression(ectx, stx)
 		if err != nil {
@@ -362,7 +362,7 @@ func evalSchemeString(code string) (values.Value, error) {
 		// Compile
 		tpl := NewNativeTemplate(0, 0, false)
 		cctx := NewCompiletimeContinuation(tpl, env)
-		cnt := NewCompileTimeCallContext(false, true, env)
+		cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
 		err = cctx.CompileExpression(cnt, expanded)
 		if err != nil {
 			return nil, err
@@ -571,7 +571,7 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame) (*MachineContinuation, error) {
 	tpl := NewNativeTemplate(0, 0, false)
 	cctx := NewCompiletimeContinuation(tpl, env)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 	econt := NewExpanderTimeContinuation(env)
 	prog, err := econt.ExpandExpression(ectx, prog)
 	if err != nil {
@@ -579,7 +579,7 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 	}
 	// Use inTail=false for top-level expressions. Top-level is NOT tail position
 	// because there's no outer function to return to.
-	cnt := NewCompileTimeCallContext(false, true, env)
+	cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
 	err = cctx.CompileExpression(cnt, prog)
 	if err != nil {
 		return nil, err
@@ -903,7 +903,7 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 
 	// Test quote expansion
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 	econt := NewExpanderTimeContinuation(env)
 	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
@@ -1099,7 +1099,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	econt := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext()
+	ectx := NewExpandTimeCallContext(context.Background())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test ExpandQuote - currently returns nil, nil
@@ -1895,7 +1895,7 @@ func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	// Call with nil to test the nil branch
 	err := ctc.CompileSelfEvaluating(ctctx, nil)

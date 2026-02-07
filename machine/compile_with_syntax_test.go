@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -34,7 +35,7 @@ func TestCompileWithSyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "with-syntax")
 }
@@ -50,7 +51,7 @@ func TestCompileWithSyntax_Error_NoBody(t *testing.T) {
 	bindings := syntax.NewSyntaxEmptyList(nil)
 	expr := syntax.NewSyntaxCons(bindings, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "with-syntax")
 }
@@ -68,6 +69,6 @@ func TestCompileWithSyntax_EmptyBindings(t *testing.T) {
 	expr := syntax.NewSyntaxCons(bindings,
 		syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNil)
 }

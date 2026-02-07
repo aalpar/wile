@@ -87,7 +87,7 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 // - Start with result = '(e) (last element)
 // - Process '(c d): collect [c, d], prepend d then c → result = '(c d e)
 // - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
-func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
+func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	args, ok := o.(*values.Pair)
 	if !ok {
@@ -100,7 +100,7 @@ func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
 
 	// Collect all argument lists into a vector for random access (right-to-left processing)
 	var lists values.Vector
-	v, err := args.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	v, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		lists = append(lists, elem)
 		return nil
 	})
@@ -137,7 +137,7 @@ func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
 		// E.g., for list (a b c), we collect [a, b, c], then prepend c, b, a
 		// to result, yielding (a b c . result).
 		var elems values.Vector
-		v, err = pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		v, err = pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			elems = append(elems, elem)
 			return nil
 		})
@@ -159,7 +159,7 @@ func PrimAppend(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimReverse implements the (reverse) primitive.
 // Returns reversed copy of list.
-func PrimReverse(_ context.Context, mc *machine.MachineContext) error {
+func PrimReverse(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -170,7 +170,7 @@ func PrimReverse(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
 	var result values.Value = values.EmptyList
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		result = values.NewCons(v, result)
 		return nil
 	})
@@ -186,7 +186,7 @@ func PrimReverse(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimLength implements the (length) primitive.
 // Returns the length of a proper list.
-func PrimLength(_ context.Context, mc *machine.MachineContext) error {
+func PrimLength(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewInteger(0))
@@ -197,7 +197,7 @@ func PrimLength(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a list but got %T", o)
 	}
 	count := int64(0)
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
+	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, _ values.Value) error {
 		count++
 		return nil
 	})
@@ -459,7 +459,7 @@ func PrimAssv(_ context.Context, mc *machine.MachineContext) error {
 // PrimAssoc implements the assoc primitive.
 // R7RS §6.4: (assoc obj alist [compare])
 // Finds an entry in an alist using equal? for comparison, or a custom compare procedure.
-func PrimAssoc(_ context.Context, mc *machine.MachineContext) error {
+func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	alist := mc.Arg(1)
 	rest := mc.Arg(2)
@@ -496,7 +496,7 @@ func PrimAssoc(_ context.Context, mc *machine.MachineContext) error {
 
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(*values.Pair)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)

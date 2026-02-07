@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -81,7 +82,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -95,7 +96,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax")
 }
@@ -109,7 +110,7 @@ func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax-splicing")
 }
@@ -221,7 +222,7 @@ func TestExpandQuasisyntax_SimpleSymbol(t *testing.T) {
 
 	// foo -> (syntax foo)
 	stx := makeTestSyntaxSymbol("foo")
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be a list starting with 'syntax'
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -241,7 +242,7 @@ func TestExpandQuasisyntax_SimpleList(t *testing.T) {
 		makeTestSyntaxSymbol("a"),
 		makeTestSyntaxSymbol("b"),
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be (list ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -262,7 +263,7 @@ func TestExpandQuasisyntax_UnsyntaxAtDepth1(t *testing.T) {
 		makeTestSyntaxSymbol("a"),
 		makeTestUnsyntax(exprSym),
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be (list (syntax a) expr)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -282,7 +283,7 @@ func TestExpandQuasisyntax_UnsyntaxAtDepth2(t *testing.T) {
 	// #,x at depth 2 becomes literal (list (syntax unsyntax) (syntax x))
 	exprSym := makeTestSyntaxSymbol("x")
 	stx := makeTestUnsyntax(exprSym)
-	expanded := ccnt.expandQuasisyntax(stx, 2)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 2)
 
 	// Should produce (list (syntax unsyntax) (syntax x))
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -299,7 +300,7 @@ func TestExpandQuasisyntax_EmptyList(t *testing.T) {
 
 	// () -> (syntax ())
 	stx := syntax.NewSyntaxEmptyList(nil)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -316,7 +317,7 @@ func TestExpandQuasisyntax_NestedQuasisyntax(t *testing.T) {
 	// (quasisyntax #,x) at depth 1 -> (list (syntax quasisyntax) x)
 	innerBody := makeTestUnsyntax(makeTestSyntaxSymbol("x"))
 	stx := makeTestQuasisyntax(innerBody)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -339,7 +340,7 @@ func TestExpandQuasisyntax_NestedList(t *testing.T) {
 		makeTestSyntaxSymbol("a"),
 		inner,
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be (list ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -371,7 +372,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 		makeTestSyntaxSymbol("b"),
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should produce append form (handled by expandQuasisyntaxList)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -391,7 +392,7 @@ func TestExpandQuasisyntax_MultipleSplice(t *testing.T) {
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("a")),
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("b")),
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be (append a b)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -425,7 +426,7 @@ func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("ys")),
 		makeTestSyntaxSymbol("z"),
 	)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	// Should be (append ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -474,7 +475,7 @@ func TestExpandQuasisyntax_SyntaxObject(t *testing.T) {
 
 	// A number wrapped in SyntaxObject -> (syntax 42)
 	stx := syntax.NewSyntaxObject(values.NewInteger(42), nil)
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -492,7 +493,7 @@ func TestExpandQuasisyntax_UnsyntaxWrongArgCountDepth1(t *testing.T) {
 	// (unsyntax) at depth 1 - Length != 2
 	// Falls through both Length==2 checks, wraps in (syntax ...)
 	stx := makeTestSyntaxList(makeTestSyntaxSymbol("unsyntax"))
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -509,7 +510,7 @@ func TestExpandQuasisyntax_UnsyntaxWrongArgCountDepth2(t *testing.T) {
 
 	// (unsyntax) at depth 2 - Length != 2, wraps in (syntax ...)
 	stx := makeTestSyntaxList(makeTestSyntaxSymbol("unsyntax"))
-	expanded := ccnt.expandQuasisyntax(stx, 2)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 2)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -526,7 +527,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingAtDepth2(t *testing.T) {
 
 	// (unsyntax-splicing x) at depth 2 -> (list (syntax unsyntax-splicing) (syntax x))
 	stx := makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("x"))
-	expanded := ccnt.expandQuasisyntax(stx, 2)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 2)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -555,7 +556,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingWrongArgCount(t *testing.T) {
 	// (unsyntax-splicing) at depth 1 - Length == 1, not 2
 	// depth > 1 check fails, falls to (syntax ...) wrapping
 	stx := makeTestSyntaxList(makeTestSyntaxSymbol("unsyntax-splicing"))
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -572,7 +573,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingWrongArgCountDepth2(t *testing.T) {
 
 	// (unsyntax-splicing) at depth 2 - Length != 2, wraps in (syntax ...)
 	stx := makeTestSyntaxList(makeTestSyntaxSymbol("unsyntax-splicing"))
-	expanded := ccnt.expandQuasisyntax(stx, 2)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 2)
 
 	// At depth > 1 but Length != 2, falls through to (syntax ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -590,7 +591,7 @@ func TestExpandQuasisyntax_QuasisyntaxWrongArgCount(t *testing.T) {
 
 	// (quasisyntax) - no arg, wraps in (syntax ...)
 	stx := makeTestSyntaxList(makeTestSyntaxSymbol("quasisyntax"))
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -612,7 +613,7 @@ func TestExpandQuasisyntaxList_SimpleList(t *testing.T) {
 		makeTestSyntaxSymbol("b"),
 		makeTestSyntaxSymbol("c"),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -632,7 +633,7 @@ func TestExpandQuasisyntaxList_WithSplice(t *testing.T) {
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 		makeTestSyntaxSymbol("b"),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -650,7 +651,7 @@ func TestExpandQuasisyntaxList_OnlySplice(t *testing.T) {
 	stx := makeTestSyntaxList(
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -670,7 +671,7 @@ func TestExpandQuasisyntaxList_MultipleSplices(t *testing.T) {
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("b")),
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("c")),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -691,7 +692,7 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 		makeTestSyntaxSymbol("b"), // cdr is not a list - makes it improper
 		nil,
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	// Should be (list* ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
@@ -729,7 +730,7 @@ func TestCompileQuasisyntaxTemplate_PureLiteral(t *testing.T) {
 
 	// Pure literal should emit only LoadLiteral
 	stx := makeTestSyntaxSymbol("foo")
-	ctctx := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -756,7 +757,7 @@ func TestCompileQuasisyntaxTemplate_WithUnsyntax(t *testing.T) {
 	c.Assert(needs, qt.IsTrue)
 
 	// Verify expansion produces list form
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	car := pair.SyntaxCar()
@@ -777,7 +778,7 @@ func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
 			makeTestSyntaxSymbol("c"),
 		),
 	)
-	ctctx := NewCompileTimeCallContext(false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -802,7 +803,7 @@ func TestCompileQuasisyntaxTemplate_NestedWithUnsyntax(t *testing.T) {
 	c.Assert(needs, qt.IsTrue)
 
 	// Verify expansion produces list form with syntax quasisyntax
-	expanded := ccnt.expandQuasisyntax(stx, 1)
+	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	car := pair.SyntaxCar()
@@ -818,7 +819,7 @@ func TestCompileQuasisyntax_Error_NonPairArg(t *testing.T) {
 	ccnt, env := newTestCompiler()
 
 	expr := makeTestSyntaxSymbol("foo")
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -831,7 +832,7 @@ func TestCompileQuasisyntax_Error_ExtraArgs(t *testing.T) {
 		makeTestSyntaxSymbol("template"),
 		makeTestSyntaxSymbol("extra"),
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -845,7 +846,7 @@ func TestCompileQuasisyntax_Error_ImproperArgsList(t *testing.T) {
 		makeTestSyntaxSymbol("extra"),
 		nil,
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -942,7 +943,7 @@ func TestExpandQuasisyntaxList_NonPairInSpliceContext(t *testing.T) {
 		syntax.NewSyntaxObject(values.NewInteger(42), nil),
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -958,7 +959,7 @@ func TestExpandQuasisyntaxList_SpliceAtDepth2(t *testing.T) {
 	stx := makeTestSyntaxList(
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 2)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 2)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -976,7 +977,7 @@ func TestExpandQuasisyntaxList_ImproperWithUnsyntax(t *testing.T) {
 		makeTestSyntaxSymbol("y"),
 		nil,
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -994,7 +995,7 @@ func TestExpandQuasisyntaxList_ImproperWithSplice(t *testing.T) {
 		makeTestSyntaxSymbol("y"),
 		nil,
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
@@ -1014,7 +1015,7 @@ func TestExpandQuasisyntaxList_SpliceWithNonSplicePairCar(t *testing.T) {
 		),
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
 	)
-	expanded := ccnt.expandQuasisyntaxList(stx, 1)
+	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
