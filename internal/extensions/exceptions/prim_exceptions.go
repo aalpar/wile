@@ -334,11 +334,7 @@ func PrimErrorObjectIrritants(_ context.Context, mc *machine.MachineContext) err
 func PrimReadErrorQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
-	if ok && errObj.IsReadError() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok && errObj.IsReadError()))
 	return nil
 }
 
@@ -347,10 +343,6 @@ func PrimReadErrorQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimFileErrorQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
-	if ok && errObj.IsFileError() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok && errObj.IsFileError()))
 	return nil
 }

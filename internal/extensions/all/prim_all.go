@@ -221,11 +221,7 @@ func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.Rec
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
-		if ok && rec.RecordType() == rt {
-			innerMC.SetValue(values.TrueValue)
-		} else {
-			innerMC.SetValue(values.FalseValue)
-		}
+		innerMC.SetValue(schemeutil.BoolToBoolean(ok && rec.RecordType() == rt))
 		return nil
 	}
 	return machine.NewForeignClosure(env, 1, false, fn)
