@@ -83,6 +83,8 @@ func (p *OperationApply) EqualTo(o values.Value) bool {
 // to call a non-procedure.
 func (p *OperationApply) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	vs := mc.evals.PopAll()
+	mc.counters.StackPopAlls++
+	mc.counters.StackElementsCopied += uint64(len(vs))
 	switch cls := mc.value[0].(type) {
 	case *MachineClosure:
 		return mc.Apply(cls, vs...)

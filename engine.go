@@ -31,9 +31,10 @@ import (
 
 // Engine is the main entry point for embedding Wile.
 type Engine struct {
-	topLevel *environment.TopLevelEnvironment
-	env      *environment.EnvironmentFrame
-	registry *registry.Registry
+	topLevel     *environment.TopLevelEnvironment
+	env          *environment.EnvironmentFrame
+	registry     *registry.Registry
+	lastCounters machine.VMCounters
 }
 
 // NewEngine creates a new Wile engine.
@@ -315,11 +316,18 @@ func (p *Engine) compileExpr(stx syntax.SyntaxValue) (*CompiledCode, error) {
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
 	mc := machine.NewMachineContext(ctx, cont)
-	err := mc.Run()
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	err := mc.RunWithEscapeHandling()
+	p.lastCounters = mc.Counters()
+	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(mc.GetValue()), nil
+}
+
+// LastCounters returns the VM performance counters from the most recent
+// Run or Eval call. Sub-context counters are not aggregated.
+func (p *Engine) LastCounters() machine.VMCounters {
+	return p.lastCounters
 }
 
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
