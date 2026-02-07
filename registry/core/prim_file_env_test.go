@@ -66,7 +66,7 @@ func TestGetEnvironmentVariablesReturnsAlist(t *testing.T) {
 
 	// Result should be a list (pair or empty list)
 	_, isPair := result.(*values.Pair)
-	isEmptyList := result == values.EmptyList
+	isEmptyList := values.IsEmptyList(result)
 	qt.Assert(t, isPair || isEmptyList, qt.IsTrue, qt.Commentf("expected list, got %T", result))
 
 	// If it's a pair, verify structure is an alist (list of pairs)
@@ -90,7 +90,7 @@ func TestCommandLineReturnsList(t *testing.T) {
 
 	// Result should be a list (pair or empty list)
 	_, isPair := result.(*values.Pair)
-	isEmptyList := result == values.EmptyList
+	isEmptyList := values.IsEmptyList(result)
 	qt.Assert(t, isPair || isEmptyList, qt.IsTrue, qt.Commentf("expected list, got %T", result))
 
 	// If it's a pair, verify elements are strings

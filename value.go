@@ -42,7 +42,7 @@ func (p *wrappedValue) SchemeString() string {
 }
 
 func (p *wrappedValue) IsVoid() bool {
-	return p.v == values.Void
+	return values.IsVoid(p.v)
 }
 
 func (p *wrappedValue) Internal() values.Value {

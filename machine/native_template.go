@@ -164,7 +164,7 @@ func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
 // Returns a new pair if any elements were changed, or the original pair otherwise.
 // TODO: optimize for the common case where no elements change.  consider in place modification?
 func (p *NativeTemplate) deduplicatePair(v *values.Pair) *values.Pair {
-	if v == nil || v == values.EmptyList {
+	if v == nil || v.IsEmptyList() {
 		return v
 	}
 	car := p.DeduplicateLiteral(v.Car())

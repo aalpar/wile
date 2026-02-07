@@ -59,7 +59,7 @@ func PrimHashtableRef(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Check for optional default value
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrInvalidArgument, "hashtable-ref: improper argument list")

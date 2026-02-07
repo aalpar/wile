@@ -151,7 +151,7 @@ func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "log: %v", err)
 	}
-	if rest == values.EmptyList {
+	if values.IsEmptyList(rest) {
 		mc.SetValue(ComplexOrFloat(cmplx.Log(z)))
 	} else {
 		baseArg, ok := rest.(*values.Pair)
@@ -227,7 +227,7 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	if rest == values.EmptyList {
+	if values.IsEmptyList(rest) {
 		z, err := ToComplex128(o)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "atan: %v", err)

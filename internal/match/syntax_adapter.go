@@ -731,7 +731,7 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 			//}
 		}
 
-		// Handle proper lists and improper lists
+		// nil: syntax node had no cdr; EmptyList: proper list terminator
 		if cdr == nil || values.IsEmptyList(cdr) {
 			return values.NewCons(car, values.EmptyList)
 		}
@@ -794,7 +794,7 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 		// Recursively wrap car and cdr
 		car := valueToSyntax(v[0], templateStx)
 
-		// Handle cdr - could be another pair or an atom (improper list)
+		// nil cdr: improper construction; EmptyList: proper list terminator
 		var cdr syntax.SyntaxValue
 		if v[1] == nil || values.IsEmptyList(v[1]) {
 			cdr = syntax.NewSyntaxEmptyList(srcCtx)

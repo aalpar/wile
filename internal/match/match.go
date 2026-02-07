@@ -641,9 +641,8 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 
 			pr, ok := cdr.(*values.Pair)
 			if !ok {
-				// cdr is not a pair, check if it's empty
+				// nil cdr: malformed pair; EmptyList: proper list terminator
 				if values.IsEmptyList(cdr) || cdr == nil {
-					// No more siblings - set position to empty list
 					p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
 				} else {
 					return ErrNotAMatch
@@ -717,7 +716,7 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			switch {
 			case ok:
 				p.valueStack[lvs-1] = valuePathEntry{pr: cdrPair}
-			case values.IsEmptyList(cdr) || cdr == nil:
+			case values.IsEmptyList(cdr) || cdr == nil: // nil cdr: malformed pair; EmptyList: proper list terminator
 				p.valueStack[lvs-1] = valuePathEntry{pr: values.EmptyList}
 			default:
 				return ErrNotAMatch

@@ -66,7 +66,7 @@ func (p *Pair) SetCdr(v Value) {
 // Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
 // Returns false for circular lists per R7RS §6.4.
 func (p *Pair) IsList() bool {
-	if p == nil || IsVoid(p) {
+	if IsVoid(p) {
 		return false
 	}
 	if p.IsEmptyList() {
@@ -195,7 +195,9 @@ func (p *Pair) EqualTo(o Value) bool {
 		if !EqualTo(p0[0], v0[0]) {
 			return false
 		}
-		// FIXME: consider using types for EmptyList and Void.  ugly void logic everywhere
+		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
+		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
+		// and a non-nil cdr are not.
 		if IsVoid(p0[1]) || IsVoid(v0[1]) {
 			if IsVoid(p0[1]) && IsVoid(v0[1]) {
 				return true

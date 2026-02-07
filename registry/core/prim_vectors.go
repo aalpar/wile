@@ -202,7 +202,7 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	atIdx := int(at.Value)
 
 	// Parse from vector and optional start/end from rest list
-	if rest == values.EmptyList {
+	if values.IsEmptyList(rest) {
 		return values.NewForeignError("vector-copy!: missing from argument")
 	}
 	tuple, ok := rest.(values.Tuple)

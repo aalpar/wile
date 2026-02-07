@@ -129,6 +129,9 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		if !equalToDeep(p0[0], v0[0], visited) {
 			return false
 		}
+		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
+		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
+		// and a non-nil cdr are not.
 		if IsVoid(p0[1]) || IsVoid(v0[1]) {
 			if IsVoid(p0[1]) && IsVoid(v0[1]) {
 				return true
@@ -235,8 +238,27 @@ func IsList(v Value) bool {
 	return false
 }
 
-// IsVoid returns true if the value represents the absence of a value.
-// A value is void if it is nil or its IsVoid() method returns true.
+// IsVoid returns true if the value represents the absence of a meaningful result.
+//
+// # Void, EmptyList, and nil Semantics
+//
+// The value system distinguishes three "absence/empty" concepts:
+//
+//   - Void (voidType{} singleton): no meaningful result (e.g., set!, display).
+//     Canonical check: values.IsVoid(v) — handles both nil and the Void singleton.
+//
+//   - EmptyList (*Pair{nil, nil} singleton): the empty list () — a valid first-class
+//     Scheme value. Canonical check: values.IsEmptyList(v) — handles nil safely (returns false).
+//
+//   - Go nil (nil interface): uninitialized / absent in Go — not a Scheme value.
+//     IsVoid(nil) returns true; IsEmptyList(nil) returns false.
+//
+// Anti-patterns to avoid:
+//
+//   - v == values.EmptyList or v != values.EmptyList → use values.IsEmptyList(v)
+//   - v == values.Void → use values.IsVoid(v)
+//   - v == nil || values.IsVoid(v) → redundant; values.IsVoid(v) handles nil
+//
 // Note: typed nil pointers (e.g., var p *Pair = nil) are handled by the
 // type's IsVoid() method, which checks for nil receiver.
 func IsVoid(v Value) bool {

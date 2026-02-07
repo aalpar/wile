@@ -30,7 +30,7 @@ func PrimString(_ context.Context, mc *machine.MachineContext) error {
 	args := mc.Arg(0)
 
 	var sb strings.Builder
-	for args != values.EmptyList {
+	for !values.IsEmptyList(args) {
 		tuple, ok := args.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string: expected a list of characters")
@@ -63,7 +63,7 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 
 	fillChar := rune(0) // default fill character (NUL)
 	rest := mc.Arg(1)
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if ok {
 			ch, ok := tuple.Car().(*values.Character)

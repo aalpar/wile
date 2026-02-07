@@ -381,7 +381,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional compare procedure
 	var compareCls *machine.MachineClosure
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "member: improper argument list")
@@ -466,7 +466,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional compare procedure
 	var compareCls *machine.MachineClosure
-	if rest != values.EmptyList {
+	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "assoc: improper argument list")
