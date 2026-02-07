@@ -98,6 +98,11 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 
 // ExpandExpression expands a syntax expression.
 func (p *ExpanderTimeContinuation) ExpandExpression(ectx ExpandTimeCallContext, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	select {
+	case <-ectx.ctx.Done():
+		return nil, ectx.ctx.Err()
+	default:
+	}
 	var result syntax.SyntaxValue
 	var err error
 	switch stx := expr.(type) {
