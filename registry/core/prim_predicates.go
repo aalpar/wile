@@ -138,68 +138,12 @@ func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if the argument is an integer (exact or inexact).
 // Inexact integers are floating-point numbers with zero fractional part.
 func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger:
-		mc.SetValue(values.TrueValue)
-	case *values.Rational:
-		if v.IsInteger() {
-			mc.SetValue(values.TrueValue)
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
-	case *values.Float:
-		f := v.Value
-		if f == float64(int64(f)) {
-			mc.SetValue(values.TrueValue)
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
-	case *values.BigFloat:
-		if v.BigFloatValue().IsInt() {
-			mc.SetValue(values.TrueValue)
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
-	case *values.Complex:
-		if imag(v.Value) == 0 {
-			r := real(v.Value)
-			if r == float64(int64(r)) {
-				mc.SetValue(values.TrueValue)
-			} else {
-				mc.SetValue(values.FalseValue)
-			}
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
-	case *values.BigComplex:
-		// Check if imaginary part is zero and real part is an integer
-		if v.IsReal() {
-			realPart := v.Real()
-			switch rp := realPart.(type) {
-			case *values.BigInteger:
-				mc.SetValue(values.TrueValue)
-			case *values.Rational:
-				if rp.IsInteger() {
-					mc.SetValue(values.TrueValue)
-				} else {
-					mc.SetValue(values.FalseValue)
-				}
-			case *values.BigFloat:
-				if rp.BigFloatValue().IsInt() {
-					mc.SetValue(values.TrueValue)
-				} else {
-					mc.SetValue(values.FalseValue)
-				}
-			default:
-				mc.SetValue(values.FalseValue)
-			}
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
-	default:
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
 		mc.SetValue(values.FalseValue)
+		return nil
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(n.IsInteger()))
 	return nil
 }
 
@@ -210,19 +154,11 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
+	case values.RealNumber:
+		_ = v
 		mc.SetValue(values.TrueValue)
-	case *values.Complex:
-		// R7RS: A complex is real only if imaginary part is exactly zero.
-		// Complex uses float64 parts (always inexact), so cannot be exactly zero.
-		// If the imaginary was exact 0 at parse time, parser returns Float instead.
-		mc.SetValue(values.FalseValue)
 	case *values.BigComplex:
-		if v.IsReal() {
-			mc.SetValue(values.TrueValue)
-		} else {
-			mc.SetValue(values.FalseValue)
-		}
+		mc.SetValue(schemeutil.BoolToBoolean(v.IsReal()))
 	default:
 		mc.SetValue(values.FalseValue)
 	}
@@ -234,27 +170,12 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if the argument is a rational number.
 // Integers (including BigInteger) are a subset of rationals.
 func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.BigInteger, *values.BigFloat, *values.Rational:
-		// BigFloat is always finite, so always rational
-		mc.SetValue(values.TrueValue)
-	case *values.Float:
-		// Float is rational if it's finite (not NaN or Inf)
-		f := v.Value
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.TrueValue)
-		}
-	case *values.Complex:
-		// R7RS: A complex is rational only if imaginary part is exactly zero.
-		// Complex uses float64 parts (always inexact), so cannot be exactly zero.
-		// If the imaginary was exact 0 at parse time, parser returns Float instead.
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
 		mc.SetValue(values.FalseValue)
-	default:
-		mc.SetValue(values.FalseValue)
+		return nil
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(n.IsRational()))
 	return nil
 }
 
@@ -286,13 +207,12 @@ func PrimInexactQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the argument is both exact and an integer.
 func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch o.(type) {
-	case *values.Integer, *values.BigInteger:
-		mc.SetValue(values.TrueValue)
-	default:
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
 		mc.SetValue(values.FalseValue)
+		return nil
 	}
+	mc.SetValue(schemeutil.BoolToBoolean(n.IsExact() && n.IsInteger()))
 	return nil
 }
 

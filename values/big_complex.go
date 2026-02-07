@@ -513,6 +513,38 @@ func (p *BigComplex) IsExact() bool {
 	return isExactPart(p.real) && isExactPart(p.imag)
 }
 
+// IsInteger returns true if the imaginary part is zero and the real part is an integer.
+//
+// R7RS §6.2.6: integer? returns #t for complex numbers with zero imaginary
+// part whose real part is an integer.
+func (p *BigComplex) IsInteger() bool {
+	return p.IsReal() && p.RealPart().IsInteger()
+}
+
+// IsRational returns true if this BigComplex is a real number.
+//
+// R7RS §6.2.6: rational? returns #t for real BigComplex values since
+// BigInteger, Rational, and BigFloat parts are all finite.
+func (p *BigComplex) IsRational() bool {
+	return p.IsReal()
+}
+
+// IsFinite returns true since BigComplex parts are always finite.
+//
+// R7RS §6.2.6: BigComplex uses BigInteger, Rational, or BigFloat parts,
+// none of which support Inf or NaN.
+func (p *BigComplex) IsFinite() bool {
+	return true
+}
+
+// IsNaN returns false since BigComplex parts cannot represent NaN.
+//
+// R7RS §6.2.6: BigComplex uses BigInteger, Rational, or BigFloat parts,
+// none of which support NaN.
+func (p *BigComplex) IsNaN() bool {
+	return false
+}
+
 // isExactPart returns true if the number is an exact type (BigInteger or Rational).
 func isExactPart(n Number) bool {
 	switch n.(type) {

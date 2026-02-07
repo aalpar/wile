@@ -248,6 +248,34 @@ func (p *BigFloat) IsExact() bool {
 	return false // BigFloat is inexact
 }
 
+// IsInteger returns true if this BigFloat represents an integer value.
+//
+// R7RS §6.2.6: integer? returns #t for inexact integers.
+func (p *BigFloat) IsInteger() bool {
+	return p.value.IsInt()
+}
+
+// IsRational returns true since BigFloat is always finite (big.Float has no Inf/NaN).
+//
+// R7RS §6.2.6: rational? returns #t for all finite real numbers.
+func (p *BigFloat) IsRational() bool {
+	return true
+}
+
+// IsFinite returns true since big.Float has no Inf or NaN representation.
+//
+// R7RS §6.2.6: finite? returns #t for finite numbers.
+func (p *BigFloat) IsFinite() bool {
+	return true
+}
+
+// IsNaN returns false since big.Float has no NaN representation.
+//
+// R7RS §6.2.6: nan? returns #f for big.Float values.
+func (p *BigFloat) IsNaN() bool {
+	return false
+}
+
 // ToExact converts this BigFloat to an exact Rational.
 func (p *BigFloat) ToExact() Number {
 	// Convert to Rational for exact representation

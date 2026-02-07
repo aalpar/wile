@@ -350,6 +350,27 @@ func (p *Rational) IsExact() bool {
 	return true
 }
 
+// IsRational returns true since Rational is always a rational number.
+//
+// R7RS §6.2.6: rational? returns #t for exact rationals.
+func (p *Rational) IsRational() bool {
+	return true
+}
+
+// IsFinite returns true since exact rationals are always finite.
+//
+// R7RS §6.2.6: finite? returns #t for all exact numbers.
+func (p *Rational) IsFinite() bool {
+	return true
+}
+
+// IsNaN returns false since exact rationals are never NaN.
+//
+// R7RS §6.2.6: nan? returns #f for exact numbers.
+func (p *Rational) IsNaN() bool {
+	return false
+}
+
 // IsVoid returns true if the rational is nil.
 func (p *Rational) IsVoid() bool {
 	return p == nil

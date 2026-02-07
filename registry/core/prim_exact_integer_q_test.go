@@ -34,7 +34,10 @@ func TestExactIntegerQ(t *testing.T) {
 		{name: "exact-integer? on float", code: `(exact-integer? 42.0)`, expected: values.FalseValue},
 		{name: "exact-integer? on rational", code: `(exact-integer? 3/4)`, expected: values.FalseValue},
 		{name: "exact-integer? on integer rational", code: `(exact-integer? 4/2)`, expected: values.TrueValue}, // 4/2 reduces to Integer(2) at parse time
-		{name: "exact-integer? on complex", code: `(exact-integer? 1+0i)`, expected: values.FalseValue},
+		// R7RS §6.2.6: 1+0i is exact, and (integer? 1+0i) is #t since
+		// imag is exactly zero and real is integer. So exact-integer? is #t.
+		{name: "exact-integer? on exact complex", code: `(exact-integer? 1+0i)`, expected: values.TrueValue},
+		{name: "exact-integer? on inexact complex", code: `(exact-integer? 1.0+0.0i)`, expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

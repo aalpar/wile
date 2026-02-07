@@ -284,6 +284,35 @@ func (p *Float) IsExact() bool {
 	return false
 }
 
+// IsInteger returns true if this float represents an integer value.
+//
+// R7RS §6.2.6: integer? returns #t for inexact integers (e.g., 3.0).
+// Uses math.Trunc to correctly handle large floats outside int64 range.
+func (p *Float) IsInteger() bool {
+	return p.Value == math.Trunc(p.Value) && !math.IsInf(p.Value, 0) && !math.IsNaN(p.Value)
+}
+
+// IsRational returns true if this float is finite (not NaN or Inf).
+//
+// R7RS §6.2.6: rational? returns #t for finite inexact reals.
+func (p *Float) IsRational() bool {
+	return !math.IsNaN(p.Value) && !math.IsInf(p.Value, 0)
+}
+
+// IsFinite returns true if this float is finite (not Inf or NaN).
+//
+// R7RS §6.2.6: finite? returns #t for finite numbers.
+func (p *Float) IsFinite() bool {
+	return !math.IsInf(p.Value, 0) && !math.IsNaN(p.Value)
+}
+
+// IsNaN returns true if this float is NaN.
+//
+// R7RS §6.2.6: nan? returns #t for NaN values.
+func (p *Float) IsNaN() bool {
+	return math.IsNaN(p.Value)
+}
+
 // IsVoid returns true if the float is nil.
 func (p *Float) IsVoid() bool {
 	return p == nil

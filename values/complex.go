@@ -329,6 +329,40 @@ func (p *Complex) IsExact() bool {
 	return false
 }
 
+// IsInteger returns true if this complex has zero imaginary part and an integer real part.
+//
+// R7RS §6.2.6: integer? returns #t for complex numbers with zero imaginary
+// part whose real part is an integer.
+func (p *Complex) IsInteger() bool {
+	return imag(p.Value) == 0 &&
+		real(p.Value) == math.Trunc(real(p.Value)) &&
+		!math.IsInf(real(p.Value), 0) &&
+		!math.IsNaN(real(p.Value))
+}
+
+// IsRational returns false for Complex numbers.
+//
+// R7RS §6.2.6: Complex numbers with inexact imaginary parts cannot be
+// exactly zero, so complex values are not rational.
+func (p *Complex) IsRational() bool {
+	return false
+}
+
+// IsFinite returns true if both real and imaginary parts are finite.
+//
+// R7RS §6.2.6: finite? returns #t if neither part is Inf or NaN.
+func (p *Complex) IsFinite() bool {
+	return !math.IsInf(real(p.Value), 0) && !math.IsNaN(real(p.Value)) &&
+		!math.IsInf(imag(p.Value), 0) && !math.IsNaN(imag(p.Value))
+}
+
+// IsNaN returns true if either the real or imaginary part is NaN.
+//
+// R7RS §6.2.6: nan? returns #t if any component is NaN.
+func (p *Complex) IsNaN() bool {
+	return math.IsNaN(real(p.Value)) || math.IsNaN(imag(p.Value))
+}
+
 // IsReal returns true if the imaginary part is zero.
 func (p *Complex) IsReal() bool {
 	return imag(p.Value) == 0
