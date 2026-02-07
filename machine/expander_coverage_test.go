@@ -138,9 +138,9 @@ func TestExpandOnce_NonMacroCall(t *testing.T) {
 	ectx := NewExpandTimeCallContext(context.Background())
 	sctx := syntax.NewZeroValueSourceContext()
 
-	// (foo 1 2) where foo is not a macro
+	// (bindSymbolWithScopes 1 2) where bindSymbolWithScopes is not a macro
 	form := syntax.SyntaxList(sctx,
-		syntax.NewSyntaxSymbol("foo", sctx),
+		syntax.NewSyntaxSymbol("bindSymbolWithScopes", sctx),
 		syntax.NewSyntaxObject(values.NewInteger(1), sctx),
 		syntax.NewSyntaxObject(values.NewInteger(2), sctx),
 	)

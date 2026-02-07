@@ -61,13 +61,13 @@ func extractDefineSyntaxArgs(t *testing.T, form syntax.SyntaxValue) syntax.Synta
 }
 
 func TestSyntaxRulesSimpleVariable(t *testing.T) {
-	// Test: (define-syntax foo (syntax-rules () ((foo x) x)))
-	// Usage: (foo 42) => 42
+	// Test: (define-syntax bindSymbolWithScopes (syntax-rules () ((bindSymbolWithScopes x) x)))
+	// Usage: (bindSymbolWithScopes 42) => 42
 
 	env := createTestEnv()
 
 	// Parse the define-syntax form and extract args
-	defineSyntaxForm := parseSyntax(t, env, "(define-syntax foo (syntax-rules () ((foo x) x)))")
+	defineSyntaxForm := parseSyntax(t, env, "(define-syntax bindSymbolWithScopes (syntax-rules () ((bindSymbolWithScopes x) x)))")
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
@@ -79,20 +79,20 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 	}
 
 	// Check that the transformer was stored in the expand phase environment
-	fooSym := values.NewSymbol("foo")
+	fooSym := values.NewSymbol("bindSymbolWithScopes")
 	binding := env.Expand().GetBinding(fooSym)
 	if binding == nil {
-		t.Fatal("foo not bound in expand phase environment")
+		t.Fatal("bindSymbolWithScopes not bound in expand phase environment")
 	}
 
 	if binding.BindingType() != environment.BindingTypeSyntax {
-		t.Fatalf("foo binding type is %v, expected BindingTypeSyntax", binding.BindingType())
+		t.Fatalf("bindSymbolWithScopes binding type is %v, expected BindingTypeSyntax", binding.BindingType())
 	}
 
 	// Get the transformer closure
 	closure, ok := binding.Value().(*machine.MachineClosure)
 	if !ok {
-		t.Fatalf("foo binding value is %T, expected MachineClosure", binding.Value())
+		t.Fatalf("bindSymbolWithScopes binding value is %T, expected MachineClosure", binding.Value())
 	}
 
 	// Test passes if we got this far - the syntax-rules macro was successfully compiled
@@ -225,7 +225,7 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 	// Test: (define-syntax test-underscore (syntax-rules (_) ((test-underscore _ x) x)))
 	// The _ is in the literals list, so it should be matched literally, not as a wildcard.
 	// Usage: (test-underscore _ 42) => 42
-	//        (test-underscore foo 42) => no match (foo doesn't match literal _)
+	//        (test-underscore bindSymbolWithScopes 42) => no match (bindSymbolWithScopes doesn't match literal _)
 
 	env := createTestEnv()
 

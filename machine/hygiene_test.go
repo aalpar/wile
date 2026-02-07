@@ -203,7 +203,7 @@ func TestLetMacroSimple(t *testing.T) {
 	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll())
 }
 
-// TestMultipleElementsWithTrailingEllipsis tests patterns like (foo a b ...)
+// TestMultipleElementsWithTrailingEllipsis tests patterns like (bindSymbolWithScopes a b ...)
 func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	env := createHygieneTestEnv()
 
@@ -302,9 +302,9 @@ func TestScopeCreation(t *testing.T) {
 
 	// Define a simple macro without arguments
 	defineSyntaxForm := parseString(t, env, `
-		(define-syntax foo
+		(define-syntax bindSymbolWithScopes
 		  (syntax-rules ()
-		    ((foo) 'expanded)))
+		    ((bindSymbolWithScopes) 'expanded)))
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
@@ -314,10 +314,10 @@ func TestScopeCreation(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use the macro
-	useForm := parseString(t, env, "(foo)")
+	useForm := parseString(t, env, "(bindSymbolWithScopes)")
 
 	// Get the transformer from expand phase (syntax bindings live in expand phase)
-	fooSym := values.NewSymbol("foo")
+	fooSym := values.NewSymbol("bindSymbolWithScopes")
 	binding := env.Expand().GetBinding(fooSym)
 	qt.Assert(t, binding, qt.Not(qt.IsNil))
 

@@ -1125,7 +1125,7 @@ func TestSymbolIdentityAcrossCompilationBoundaries(t *testing.T) {
 		},
 		{
 			name: "define and reference",
-			code: "(begin (define test-sym 'foo) (eq? test-sym 'foo))",
+			code: "(begin (define test-sym 'bindSymbolWithScopes) (eq? test-sym 'bindSymbolWithScopes))",
 		},
 	}
 
@@ -2373,9 +2373,9 @@ func TestCoverageImportSets(t *testing.T) {
 	t.Run("library with multiple exports", func(t *testing.T) {
 		testEnv := newFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, testEnv, `(define-library (test lib1)
-			(export foo bar)
+			(export bindSymbolWithScopes bar)
 			(begin
-				(define foo 1)
+				(define bindSymbolWithScopes 1)
 				(define bar 2)))`)
 		qt.Assert(t, err, qt.IsNil)
 	})

@@ -128,7 +128,7 @@ func TestCompileSyntaxRules_LiteralsNonMatch(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use with a non-literal identifier; should match the second clause
-	sv = parseSchemeExprExt(t, env, "(m foo 10)")
+	sv = parseSchemeExprExt(t, env, "(m bindSymbolWithScopes 10)")
 	cont, err = newTopLevelThunkExt(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)

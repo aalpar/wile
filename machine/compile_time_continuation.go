@@ -356,14 +356,21 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
 	symbolScopes := nameSym.Scopes()
 
+	p.bindSymbolWithScopes(name, symbolScopes)
+}
+
+// bindSymbolWithScopes creates a binding for the given symbol with the specified scopes.
+// If a binding already exists, it updates the scopes if possible. This is used for pre-declaring
+// define bindings with the correct scopes for hygiene.
+func (p *CompileTimeContinuation) bindSymbolWithScopes(name *values.Symbol, scopes []*syntax.Scope) {
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, symbolScopes)
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
 	} else {
 		gi, created := p.env.CreateGlobalBinding(name, environment.BindingTypeVariable)
 		if !created {
 			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil && symbolScopes != nil {
-				binding.SetScopes(symbolScopes)
+			if binding != nil && scopes != nil {
+				binding.SetScopes(scopes)
 			}
 		}
 	}
@@ -1790,6 +1797,31 @@ func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName
 		return LibraryName{}, values.NewForeignErrorf("library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
+}
+
+// foo is a helper function that demonstrates how to load a library and apply import modifiers.
+// This is not directly called by the compiler, but shows the core logic of CompileImport.  It takes an import set
+// expression, parses it, loads the library, and applies modifiers to get the final bindings.
+func (p *CompileTimeContinuation) foo(ctx context.Context, importSetExpr syntax.SyntaxValue) (map[string]string, error) { //nolint:unused
+	importSet, err := parseImportSet(ctx, importSetExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load the library
+	lib, err := LoadLibrary(ctx, importSet.LibraryName, p.env)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "import: failed to load library %s",
+			importSet.LibraryName.SchemeString())
+	}
+
+	// Apply import modifiers (only, except, prefix, rename) to get final bindings
+	bindings, err := importSet.ApplyToExports(lib)
+	if err != nil {
+		return nil, values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+			importSet.LibraryName.SchemeString())
+	}
+	return bindings, err
 }
 
 // CompileImport handles top-level (import <import-set> ...).

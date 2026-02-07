@@ -48,7 +48,6 @@ package match
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -57,9 +56,9 @@ import (
 
 var (
 	// ErrUnknownOpCode is returned when an unknown bytecode is encountered.
-	ErrUnknownOpCode = errors.New("unknown op code")
+	ErrUnknownOpCode = values.ErrUnknownOpCode
 	// ErrNotAMatch is returned when the input does not match the pattern.
-	ErrNotAMatch = errors.New("not a match")
+	ErrNotAMatch = values.ErrNotAMatch
 )
 
 type syntaxCompilerStackEntry struct {

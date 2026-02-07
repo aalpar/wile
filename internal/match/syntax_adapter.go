@@ -36,7 +36,6 @@ package match
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -174,7 +173,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	// Ensure input is a pair
 	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
-		return errors.New("pattern matching requires a pair")
+		return values.WrapForeignErrorf(values.ErrNotAPair, "MatchWithBindingChecker: pattern matching requires a pair")
 	}
 
 	// Create literal matcher function that uses the binding checker
@@ -256,7 +255,7 @@ func (p *SyntaxMatcher) ExpandWithPatternVarSyntax(
 	patternVarSyntax map[string]*syntax.SyntaxSymbol,
 ) (syntax.SyntaxValue, error) {
 	if len(p.matcher.captureStack) == 0 {
-		return nil, errors.New("no capture context for expansion")
+		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "ExpandWithPatternVarSyntax: no captures available for template expansion")
 	}
 
 	// Perform syntax-preserving expansion with scope comparison
@@ -862,7 +861,7 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	// Ensure it's a pair
 	pair, ok := rawPattern.(*values.Pair)
 	if !ok {
-		return nil, errors.New("pattern must be a list")
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
 	}
 
 	// Compile using compiler with custom ellipsis and literals

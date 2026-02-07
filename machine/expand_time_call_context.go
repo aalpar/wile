@@ -21,8 +21,5 @@ type ExpandTimeCallContext struct {
 }
 
 func NewExpandTimeCallContext(ctx context.Context) ExpandTimeCallContext {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return ExpandTimeCallContext{ctx: ctx}
 }

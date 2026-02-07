@@ -68,12 +68,12 @@ func TestSchemeError_Error_WithSource(t *testing.T) {
 func TestSchemeError_Error_WithStackTrace(t *testing.T) {
 	c := qt.New(t)
 
-	err := NewSchemeError("error message", nil, "Stack trace:\n  at foo")
+	err := NewSchemeError("error message", nil, "Stack trace:\n  at bindSymbolWithScopes")
 
 	s := err.Error()
 	c.Assert(strings.Contains(s, "error message"), qt.IsTrue)
 	c.Assert(strings.Contains(s, "Stack trace:"), qt.IsTrue)
-	c.Assert(strings.Contains(s, "at foo"), qt.IsTrue)
+	c.Assert(strings.Contains(s, "at bindSymbolWithScopes"), qt.IsTrue)
 }
 
 func TestSchemeError_Error_NoSource(t *testing.T) {

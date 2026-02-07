@@ -67,9 +67,6 @@ type CompileTimeCallContext struct {
 //   - inExpression: true if compiling an expression (vs. a definition)
 //   - env: the environment frame for variable resolution during compilation
 func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool, env *environment.EnvironmentFrame) CompileTimeCallContext {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return CompileTimeCallContext{
 		ctx:          ctx,
 		env:          env,

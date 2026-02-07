@@ -41,7 +41,7 @@ import (
 // This avoids import cycles between machine and runtime packages.
 // The function should return a fresh environment with primitives registered,
 // but MUST share the TopLevelEnvironment with callerEnv to ensure symbol identity.
-// R7RS §6.5: (eq? 'foo (string->symbol "foo")) must be #t.
+// R7RS §6.5: (eq? 'bindSymbolWithScopes (string->symbol "bindSymbolWithScopes")) must be #t.
 var LibraryEnvFactory func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error)
 
 // LoadLibrary loads a library by name, compiling and executing it if not already loaded.
@@ -73,7 +73,7 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 
 	// Cycle detection
 	if registry.IsLoading(name) {
-		return nil, values.WrapForeignErrorf(ErrCircularDependency,
+		return nil, values.WrapForeignErrorf(values.ErrCircularDependency,
 			"circular dependency detected while loading %s", name.SchemeString())
 	}
 	registry.StartLoading(name)

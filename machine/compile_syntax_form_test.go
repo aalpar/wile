@@ -31,8 +31,8 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	// (syntax foo) -> (foo)
-	template := syntax.NewSyntaxSymbol("foo", nil)
+	// (syntax bindSymbolWithScopes) -> (bindSymbolWithScopes)
+	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
@@ -62,8 +62,8 @@ func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	// (syntax foo bar) -> (foo bar)
-	template := syntax.NewSyntaxSymbol("foo", nil)
+	// (syntax bindSymbolWithScopes bar) -> (bindSymbolWithScopes bar)
+	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	extra := syntax.NewSyntaxSymbol("bar", nil)
 	expr := syntax.NewSyntaxCons(template,
 		syntax.NewSyntaxCons(extra, syntax.NewSyntaxEmptyList(nil), nil), nil)
@@ -77,7 +77,7 @@ func TestTemplateContainsEllipsis_NoEllipsis(t *testing.T) {
 	c := qt.New(t)
 
 	// Simple symbol
-	stx := syntax.NewSyntaxSymbol("foo", nil)
+	stx := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	c.Assert(templateContainsEllipsis(stx), qt.IsFalse)
 }
 
@@ -92,9 +92,9 @@ func TestTemplateContainsEllipsis_WithEllipsis(t *testing.T) {
 func TestTemplateContainsEllipsis_InList(t *testing.T) {
 	c := qt.New(t)
 
-	// (foo ...)
+	// (bindSymbolWithScopes ...)
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
-	foo := syntax.NewSyntaxSymbol("foo", nil)
+	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	list := syntax.NewSyntaxCons(foo,
 		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
@@ -111,10 +111,10 @@ func TestTemplateContainsEllipsis_EmptyList(t *testing.T) {
 func TestTemplateContainsEllipsis_EscapeForm(t *testing.T) {
 	c := qt.New(t)
 
-	// (... foo) - escape form, should return false because the ellipsis
+	// (... bindSymbolWithScopes) - escape form, should return false because the ellipsis
 	// is the escape marker, not an actual ellipsis to expand
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
-	foo := syntax.NewSyntaxSymbol("foo", nil)
+	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	escapeForm := syntax.NewSyntaxCons(ellipsis,
 		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
@@ -137,10 +137,10 @@ func TestTemplateContainsEllipsis_EscapeFormWithEllipsisInside(t *testing.T) {
 func TestTemplateContainsEllipsis_EscapeFormFollowedByEllipsis(t *testing.T) {
 	c := qt.New(t)
 
-	// ((... foo) x ...) - escape form followed by actual ellipsis
+	// ((... bindSymbolWithScopes) x ...) - escape form followed by actual ellipsis
 	// Should return true because of the trailing ellipsis
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
-	foo := syntax.NewSyntaxSymbol("foo", nil)
+	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	x := syntax.NewSyntaxSymbol("x", nil)
 	trailingEllipsis := syntax.NewSyntaxSymbol("...", nil)
 
@@ -175,9 +175,9 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	// (syntax (... foo)) - escape form should compile directly
+	// (syntax (... bindSymbolWithScopes)) - escape form should compile directly
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
-	foo := syntax.NewSyntaxSymbol("foo", nil)
+	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	escapeForm := syntax.NewSyntaxCons(ellipsis,
 		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
 	expr := syntax.NewSyntaxCons(escapeForm, syntax.NewSyntaxEmptyList(nil), nil)
@@ -203,8 +203,8 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	// (syntax (foo ...)) - actual ellipsis, needs runtime expansion
-	foo := syntax.NewSyntaxSymbol("foo", nil)
+	// (syntax (bindSymbolWithScopes ...)) - actual ellipsis, needs runtime expansion
+	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
 	template := syntax.NewSyntaxCons(foo,
 		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)

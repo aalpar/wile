@@ -32,7 +32,6 @@ package machine
 //       (define (public-fn x) (private-fn x))))
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -378,12 +377,3 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 	}
 	return nil
 }
-
-// Error types for library operations
-var (
-	ErrLibraryNotFound      = errors.New("library not found")
-	ErrCircularDependency   = errors.New("circular library dependency")
-	ErrDuplicateExport      = errors.New("duplicate export")
-	ErrDuplicateImport      = errors.New("duplicate import")
-	ErrUnexportedIdentifier = errors.New("identifier not exported")
-)
