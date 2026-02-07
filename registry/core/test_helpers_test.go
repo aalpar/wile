@@ -188,14 +188,14 @@ func runSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 		return nil, err
 	}
 
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err

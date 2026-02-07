@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
@@ -830,12 +828,12 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 //	after_after:                   ; Stack: [before, thunk, after, result]
 //	PEEK_K 0                       ; value = result (thunk's return value)
 //	DROP DROP DROP DROP            ; clean up stack
-func (p *CompileTimeContinuation) CompileValidatedDynamicWind(_ CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
+func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
 	startPC := len(p.template.operations)
 
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
-	exprCtx := NewCompileTimeCallContext(context.Background(), false, true, p.env)
+	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true, p.env)
 
 	err := p.compileValidated(exprCtx, v.Before)
 	if err != nil {
