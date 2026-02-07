@@ -12,10 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `CompilationError` and `RuntimeError` structured error types with `Unwrap()` support for programmatic error handling via `errors.As`
 - Add `RuntimeError.Condition` field carrying the Scheme raised value when errors originate from `raise`/`raise-continuable`
 - Add 16 value-inspection helpers for embedding: `IsList`, `IsPair`, `IsVector`, `IsSymbol`, `Car`, `Cdr`, `ToSlice`, `ToGoInt`, `ToGoFloat`, `ToGoString`, `ToGoBool`, `ToGoBytes`, `ListLength`, `VectorRef`, `VectorLength`, `VectorToSlice`
+- Add context cancellation support: engine operations respect `context.Context` through VM execution and macro expansion
+- Add VM performance counters to `MachineContext` for runtime introspection
+- Add `ComplexNumber` sub-interface with `RealPart()`, `ImagPart()`, `IsReal()` for interface-based complex number dispatch
+- Add `RealNumber` sub-interface with `IsPositive()`, `IsNegative()`, `Sign()` for interface-based real number dispatch
+- Add `Abs()`, `ToExact()`, `ToInexact()` methods to the `Number` interface
 
 ### Changed
 
 - `Engine.Call` now dispatches case-lambda, parameter objects, and composable continuations in addition to plain closures
+- `EmptyList` is now a dedicated singleton type (not `*Pair`), enforcing `(pair? '()) → #f` at the type level
+- `String` implements the `Indexable` interface with `Length()`, `Get()`, `Set()` methods
+
+### Removed
+
+- Remove unused `Tower*` dispatch functions from the numeric tower
+- Remove unused `*Same` methods from numeric types
 
 ### Fixed
 

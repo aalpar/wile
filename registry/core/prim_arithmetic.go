@@ -251,35 +251,11 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 // PrimAbs implements the abs primitive.
 // R7RS §6.2.6: For a complex number, abs returns its magnitude.
 func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(v.Abs())
-	case *values.BigInteger:
-		if v.IsNegative() {
-			mc.SetValue(v.Negate())
-		} else {
-			mc.SetValue(v)
-		}
-	case *values.Float:
-		mc.SetValue(values.NewFloat(math.Abs(v.Value)))
-	case *values.Rational:
-		mc.SetValue(values.NewRationalFromRat(new(big.Rat).Abs(v.Rat())))
-	case *values.BigFloat:
-		if v.IsNegative() {
-			mc.SetValue(v.Negate())
-		} else {
-			mc.SetValue(v)
-		}
-	case *values.Complex:
-		// R7RS §6.2.6: For complex numbers, abs returns the magnitude
-		mc.SetValue(values.NewFloat(v.Magnitude()))
-	case *values.BigComplex:
-		// R7RS §6.2.6: For complex numbers, abs returns the magnitude
-		mc.SetValue(v.Magnitude())
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "abs: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "abs: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(n.Abs())
 	return nil
 }
 
@@ -494,87 +470,17 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 	})
 }
 
-// floatToExact converts a float64 to its exact representation.
-// Returns BigInteger if the float is integral, Rational otherwise.
-func floatToExact(f float64) values.Number {
-	r := new(big.Rat).SetFloat64(f)
-	if r.IsInt() {
-		num := r.Num()
-		if num.IsInt64() {
-			return values.NewBigIntegerFromInt64(num.Int64())
-		}
-		return values.NewBigInteger(new(big.Int).Set(num))
-	}
-	return values.NewRationalFromRat(r)
-}
-
-// numberToExact converts a Number to its exact representation.
-// Exact numbers pass through; inexact numbers are converted.
-func numberToExact(n values.Number) values.Number {
-	switch v := n.(type) {
-	case *values.Integer:
-		return values.NewBigIntegerFromInt64(v.Value)
-	case *values.BigInteger:
-		return v
-	case *values.Rational:
-		return v
-	case *values.Float:
-		return floatToExact(v.Value)
-	case *values.BigFloat:
-		r, _ := v.BigFloatValue().Rat(nil)
-		if r.IsInt() {
-			return values.NewBigInteger(new(big.Int).Set(r.Num()))
-		}
-		return values.NewRationalFromRat(r)
-	default:
-		return values.NewBigIntegerFromInt64(0)
-	}
-}
-
 // PrimExact implements the (exact) primitive.
 // Converts an inexact number to an exact representation.
 //
 // R7RS §6.2.6: The exact procedure returns an exact representation
 // of z that is numerically closest to the argument.
 func PrimExact(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer, *values.Rational, *values.BigInteger:
-		mc.SetValue(v)
-	case *values.Float:
-		// Convert float to rational
-		r := new(big.Rat).SetFloat64(v.Value)
-		if r == nil {
-			return values.NewForeignError("exact: cannot convert infinity or NaN to exact")
-		}
-		// If denominator is 1, return Integer instead of Rational
-		if r.IsInt() {
-			num := r.Num()
-			if num.IsInt64() {
-				mc.SetValue(values.NewInteger(num.Int64()))
-			} else {
-				mc.SetValue(values.NewBigInteger(num))
-			}
-		} else {
-			mc.SetValue(values.NewRationalFromRat(r))
-		}
-	case *values.Complex:
-		// R7RS §6.2.6: exact on inexact complex converts both parts
-		realPart := floatToExact(v.Real())
-		imagPart := floatToExact(v.Imag())
-		mc.SetValue(values.NewBigComplex(realPart, imagPart))
-	case *values.BigComplex:
-		// Already exact if parts are exact; otherwise convert
-		if v.IsExact() {
-			mc.SetValue(v)
-		} else {
-			realPart := numberToExact(v.Real())
-			imagPart := numberToExact(v.Imag())
-			mc.SetValue(values.NewBigComplex(realPart, imagPart))
-		}
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "exact: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "exact: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(n.ToExact())
 	return nil
 }
 
@@ -584,24 +490,10 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: The inexact procedure returns an inexact representation
 // of z that is numerically closest to the argument.
 func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(values.NewFloat(float64(v.Value)))
-	case *values.Float:
-		mc.SetValue(v)
-	case *values.Rational:
-		mc.SetValue(values.NewFloat(v.Float64()))
-	case *values.Complex:
-		mc.SetValue(v)
-	case *values.BigInteger:
-		mc.SetValue(v.ToInexact())
-	case *values.BigFloat:
-		mc.SetValue(v)
-	case *values.BigComplex:
-		mc.SetValue(v.ToInexact())
-	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact: expected a number but got %T", o)
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact: expected a number but got %T", mc.Arg(0))
 	}
+	mc.SetValue(n.ToInexact())
 	return nil
 }

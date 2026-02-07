@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	_ Value    = (*BigInteger)(nil)
-	_ Number   = (*BigInteger)(nil)
-	_ Hashable = (*BigInteger)(nil)
+	_ Value      = (*BigInteger)(nil)
+	_ Number     = (*BigInteger)(nil)
+	_ RealNumber = (*BigInteger)(nil)
+	_ Hashable   = (*BigInteger)(nil)
 )
 
 // BigInteger represents an arbitrary-precision integer.
@@ -306,8 +307,13 @@ func (p *BigInteger) ToInexact() Number {
 }
 
 // Abs returns the absolute value of this BigInteger.
-func (p *BigInteger) Abs() *BigInteger {
+func (p *BigInteger) Abs() Number {
 	return NewBigInteger(new(big.Int).Abs(p.value))
+}
+
+// Sign returns -1 if negative, 0 if zero, or 1 if positive.
+func (p *BigInteger) Sign() int {
+	return p.value.Sign()
 }
 
 // Compare compares this BigInteger with another number.

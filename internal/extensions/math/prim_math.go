@@ -1176,11 +1176,11 @@ func PrimMakePolar(_ context.Context, mc *machine.MachineContext) error {
 // PrimRealPart implements the (real-part) primitive.
 func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
+	if c, ok := o.(values.ComplexNumber); ok {
+		mc.SetValue(c.RealPart())
+		return nil
+	}
 	switch v := o.(type) {
-	case *values.Complex:
-		mc.SetValue(values.NewFloat(real(v.Value)))
-	case *values.BigComplex:
-		mc.SetValue(v.Real())
 	case *values.Integer:
 		mc.SetValue(values.NewFloat(float64(v.Value)))
 	case *values.BigInteger:
@@ -1200,11 +1200,11 @@ func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 // PrimImagPart implements the (imag-part) primitive.
 func PrimImagPart(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	switch v := o.(type) {
-	case *values.Complex:
-		mc.SetValue(values.NewFloat(imag(v.Value)))
-	case *values.BigComplex:
-		mc.SetValue(v.Imag())
+	if c, ok := o.(values.ComplexNumber); ok {
+		mc.SetValue(c.ImagPart())
+		return nil
+	}
+	switch o.(type) {
 	case *values.Integer, *values.Float, *values.Rational:
 		mc.SetValue(values.NewFloat(0))
 	case *values.BigInteger:

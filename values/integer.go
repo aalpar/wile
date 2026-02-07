@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	_ Value    = (*Integer)(nil)
-	_ Number   = (*Integer)(nil)
-	_ Hashable = (*Integer)(nil)
-	// _ Comparable = (*Integer)(nil)
+	_ Value      = (*Integer)(nil)
+	_ Number     = (*Integer)(nil)
+	_ RealNumber = (*Integer)(nil)
+	_ Hashable   = (*Integer)(nil)
 )
 
 // Integer cache for small integers (-32768 to 32767).
@@ -330,6 +330,45 @@ func (p *Integer) Abs() Number {
 // R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
 func (p *Integer) Negate() Number {
 	return negateInt64(p.Value)
+}
+
+// ToExact returns this Integer unchanged since it is already exact.
+//
+// R7RS §6.2.6: exact returns an exact representation of its argument.
+func (p *Integer) ToExact() Number {
+	return p
+}
+
+// ToInexact converts this Integer to an inexact Float.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+func (p *Integer) ToInexact() Number {
+	return NewFloat(float64(p.Value))
+}
+
+// IsPositive returns true if this integer is positive.
+//
+// R7RS §6.2.6: positive? returns #t if the real number is positive.
+func (p *Integer) IsPositive() bool {
+	return p.Value > 0
+}
+
+// IsNegative returns true if this integer is negative.
+//
+// R7RS §6.2.6: negative? returns #t if the real number is negative.
+func (p *Integer) IsNegative() bool {
+	return p.Value < 0
+}
+
+// Sign returns -1 if negative, 0 if zero, or 1 if positive.
+func (p *Integer) Sign() int {
+	if p.Value < 0 {
+		return -1
+	}
+	if p.Value > 0 {
+		return 1
+	}
+	return 0
 }
 
 // Compare compares this integer with another number.

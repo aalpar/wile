@@ -18,6 +18,20 @@ import (
 	"math/big"
 )
 
+// floatToExact converts a float64 to its exact Number representation.
+// Returns Integer or BigInteger if the float is integral, Rational otherwise.
+func floatToExact(f float64) Number {
+	r := new(big.Rat).SetFloat64(f)
+	if r.IsInt() {
+		num := r.Num()
+		if num.IsInt64() {
+			return NewBigIntegerFromInt64(num.Int64())
+		}
+		return NewBigInteger(new(big.Int).Set(num))
+	}
+	return NewRationalFromRat(r)
+}
+
 // Simplify attempts to reduce a number to a simpler type without losing information.
 //
 // Simplification rules:

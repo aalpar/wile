@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	_ Value    = (*Float)(nil)
-	_ Number   = (*Float)(nil)
-	_ Hashable = (*Float)(nil)
-	// _ Comparable = (*Float)(nil)
+	_ Value      = (*Float)(nil)
+	_ Number     = (*Float)(nil)
+	_ RealNumber = (*Float)(nil)
+	_ Hashable   = (*Float)(nil)
 )
 
 // Float represents a Scheme floating-point number.
@@ -193,8 +193,46 @@ func (p *Float) LessThan(o Number) bool {
 	panic(ErrNotANumber)
 }
 
-func (p *Float) Abs() *Float {
+// Abs returns the absolute value of this float.
+func (p *Float) Abs() Number {
 	return NewFloat(math.Abs(p.Value))
+}
+
+// ToExact converts this Float to an exact Number.
+//
+// R7RS §6.2.6: exact returns an exact representation of its argument.
+// Returns Integer if the float is integral, Rational otherwise.
+func (p *Float) ToExact() Number {
+	return floatToExact(p.Value)
+}
+
+// ToInexact returns this Float unchanged since it is already inexact.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+func (p *Float) ToInexact() Number {
+	return p
+}
+
+// IsPositive returns true if this float is positive.
+func (p *Float) IsPositive() bool {
+	return p.Value > 0
+}
+
+// IsNegative returns true if this float is negative.
+func (p *Float) IsNegative() bool {
+	return p.Value < 0
+}
+
+// Sign returns -1 if negative, 0 if zero, or 1 if positive.
+// NaN returns 0.
+func (p *Float) Sign() int {
+	if p.Value < 0 {
+		return -1
+	}
+	if p.Value > 0 {
+		return 1
+	}
+	return 0
 }
 
 // Negate returns the negation of this float.

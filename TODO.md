@@ -70,9 +70,10 @@ Code Cleanup
 ---
 
 ### compile_eval_when.go Phase Table
-- [ ] **Location:** `machine/compile_eval_when.go`
-- [ ] **Issue:** Hardcoded list of phases
-- [ ] **Goal:** Move to table-driven approach or use phase constants from `environment/`
+- [x] **Location:** `machine/compile_eval_when.go`
+- [x] **Issue:** Hardcoded list of phases
+- [x] **Goal:** Move to table-driven approach or use phase constants from `environment/`
+- [x] **Status:** Replaced switch/map[string]bool with evalWhenBehavior bit flags and evalWhenPhaseTable
 
 ---
 

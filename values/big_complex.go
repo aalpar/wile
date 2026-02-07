@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	_ Value  = (*BigComplex)(nil)
-	_ Number = (*BigComplex)(nil)
+	_ Value         = (*BigComplex)(nil)
+	_ Number        = (*BigComplex)(nil)
+	_ ComplexNumber = (*BigComplex)(nil)
 )
 
 // BigComplex represents an arbitrary-precision complex number.
@@ -570,6 +571,27 @@ func (p *BigComplex) ToInexact() Number {
 		return realInexact
 	}
 	return NewBigComplexFromBigFloats(realInexact, imagInexact)
+}
+
+// Abs returns the magnitude of this BigComplex as a Number.
+//
+// R7RS §6.2.6: For complex numbers, abs returns the magnitude.
+func (p *BigComplex) Abs() Number {
+	return p.Magnitude()
+}
+
+// RealPart returns the real part of this complex number as a Number.
+//
+// R7RS §6.2.6: real-part returns the real part of a complex number.
+func (p *BigComplex) RealPart() Number {
+	return p.real
+}
+
+// ImagPart returns the imaginary part of this complex number as a Number.
+//
+// R7RS §6.2.6: imag-part returns the imaginary part of a complex number.
+func (p *BigComplex) ImagPart() Number {
+	return p.imag
 }
 
 // Magnitude returns the absolute value (modulus) of the complex number.
