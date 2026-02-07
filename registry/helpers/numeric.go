@@ -144,9 +144,9 @@ func NumericChainCompare(
 		mc.SetValue(values.TrueValue)
 		return nil
 	}
-	pr, ok := rest.(*values.Pair)
+	pr, ok := rest.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, rest)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
@@ -198,13 +198,13 @@ func NumericExtremum(
 	}
 
 	rest := mc.Arg(1)
-	pr, ok := rest.(*values.Pair)
+	if values.IsEmptyList(rest) {
+		mc.SetValue(MaybeToInexact(best, hasInexact))
+		return nil
+	}
+	pr, ok := rest.(values.Tuple)
 	if !ok {
-		if values.IsEmptyList(rest) {
-			mc.SetValue(MaybeToInexact(best, hasInexact))
-			return nil
-		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, rest)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 
 	foundNaN := false

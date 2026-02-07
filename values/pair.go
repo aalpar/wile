@@ -130,13 +130,10 @@ func (p *Pair) Append(vs Value) Value {
 // It panics if the Pair does not represent a proper list.
 func (p *Pair) Length() int {
 	q := 0
-	r, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
+	Must(p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1
 		return nil
-	})
-	if !IsEmptyList(r) {
-		panic(ErrNotAList)
-	}
+	}))
 	return q
 }
 
@@ -171,6 +168,19 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		i++
 	}
 	return pr, nil
+}
+
+// Must panics if err is non-nil or v is not EmptyList.
+// Designed for use with ForEach on lists guaranteed to be proper:
+//
+//	Must(p.ForEach(ctx, func(...) error { ... }))
+func Must(v Value, err error) {
+	if err != nil {
+		panic(err)
+	}
+	if !IsEmptyList(v) {
+		panic(ErrNotAList)
+	}
 }
 
 // EqualTo checks if the Pair is equal to another Value o.
@@ -288,12 +298,9 @@ func (p *Pair) AsVector() *Vector {
 		return nil
 	}
 	vs := []Value{}
-	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {
+	Must(p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {
 		vs = append(vs, v)
 		return nil
-	})
-	if !IsEmptyList(cdr) {
-		panic(ErrNotAList)
-	}
+	}))
 	return NewVector(vs...)
 }

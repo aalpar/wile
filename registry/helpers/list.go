@@ -29,7 +29,7 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 		mc.SetValue(values.NewVector())
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
@@ -61,7 +61,7 @@ func AssocLookup(
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	pr, ok := alist.(*values.Pair)
+	pr, ok := alist.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, alist)
 	}

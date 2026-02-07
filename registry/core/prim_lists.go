@@ -51,8 +51,10 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 	fill := values.Value(values.FalseValue)
 
 	// Check for optional fill argument
-	if rest, ok := restVal.(*values.Pair); ok {
-		fill = rest.Car()
+	if !values.IsEmptyList(restVal) {
+		if rest, ok := restVal.(values.Tuple); ok {
+			fill = rest.Car()
+		}
 	}
 
 	// Build list from tail to head
@@ -89,13 +91,9 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 // - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
 func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	args, ok := o.(*values.Pair)
+	args, ok := o.(values.Tuple)
 	if !ok {
-		if values.IsEmptyList(o) {
-			mc.SetValue(values.EmptyList)
-			return nil
-		}
-		return values.WrapForeignErrorf(values.ErrNotAPair, "append: expected a list but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "append: expected a list but got %T", o)
 	}
 
 	// Collect all argument lists into a vector for random access (right-to-left processing)
@@ -127,7 +125,7 @@ func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 		if values.IsEmptyList(lst) {
 			continue
 		}
-		pr, ok := lst.(*values.Pair)
+		pr, ok := lst.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "append: expected list but got %T", lst)
 		}
@@ -165,7 +163,7 @@ func PrimReverse(ctx context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.EmptyList)
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
@@ -192,7 +190,7 @@ func PrimLength(ctx context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.NewInteger(0))
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a list but got %T", o)
 	}
@@ -330,7 +328,7 @@ func PrimMemq(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
 	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(*values.Pair)
+		pr, ok := lst.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "memq: expected a list but got %T", lst)
 		}
@@ -350,7 +348,7 @@ func PrimMemv(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
 	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(*values.Pair)
+		pr, ok := lst.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "memv: expected a list but got %T", lst)
 		}
@@ -389,7 +387,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 	// If no compare procedure, use equal?
 	if compareCls == nil {
 		for !values.IsEmptyList(lst) {
-			pr, ok := lst.(*values.Pair)
+			pr, ok := lst.(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
 			}
@@ -406,7 +404,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
 	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(*values.Pair)
+		pr, ok := lst.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
 		}
@@ -482,7 +480,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
-	pr, ok := alist.(*values.Pair)
+	pr, ok := alist.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected a list but got %T", alist)
 	}

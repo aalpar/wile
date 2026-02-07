@@ -27,9 +27,10 @@ Code Cleanup
 ---
 
 ### Use values.Tuple Instead of *values.Pair
-- [ ] **Goal:** Where code processes list-like data internally, prefer `values.Tuple` interface over concrete `*values.Pair`
-- [ ] **Benefit:** Allows `ArrayList` and `Vector` to be used interchangeably
-- [ ] **Scope:** Audit compiler and primitive implementations
+- [x] **Goal:** Where code processes list-like data internally, prefer `values.Tuple` interface over concrete `*values.Pair`
+- [x] **Benefit:** Allows `ArrayList` and `Vector` to be used interchangeably
+- [x] **Scope:** Audit compiler and primitive implementations
+- [x] **Status:** Replaced `*values.Pair` with `values.Tuple` in list-processing primitives (prim_lists.go, helpers/list.go, helpers/numeric.go, helpers/char.go, machine/operations.go). Deleted dead code in internal/schemeutil/collections.go.
 
 ---
 
@@ -56,9 +57,9 @@ Code Cleanup
 ---
 
 ### ForEach "Must" Wrapper
-- [ ] **Goal:** Create wrapper that panics on improper list instead of returning error
-- [ ] **Benefit:** Simplify code where proper list is guaranteed (e.g., after validation)
-- [ ] **Location:** `values/pair.go`
+- [x] **Goal:** Create wrapper that panics on improper list instead of returning error
+- [x] **Benefit:** Simplify code where proper list is guaranteed (e.g., after validation)
+- [x] **Location:** `values/pair.go`
 
 ---
 
