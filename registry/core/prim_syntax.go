@@ -94,12 +94,19 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 		return syntax.NewSyntaxSymbol(v.Key, sctx)
 
 	case *values.Pair:
-		if v.IsEmptyList() {
-			return syntax.NewSyntaxEmptyList(sctx)
-		}
 		car := datumToSyntax(v.Car(), sctx)
 		cdr := datumToSyntax(v.Cdr(), sctx)
 		return syntax.NewSyntaxCons(car, cdr, sctx)
+
+	case syntax.SyntaxValue:
+		return v
+
+	case values.Tuple:
+		if v.IsEmptyList() {
+			return syntax.NewSyntaxEmptyList(sctx)
+		}
+		// Non-empty non-Pair tuple — shouldn't normally occur
+		return syntax.NewSyntaxObject(datum, sctx)
 
 	case *values.Vector:
 		data := v.Datum()
@@ -108,10 +115,6 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 			elems[i] = datumToSyntax(elem, sctx)
 		}
 		return syntax.NewSyntaxVector(sctx, elems...)
-
-	case syntax.SyntaxValue:
-		// Already a syntax value, return as-is
-		return v
 
 	default:
 		// Other values (numbers, strings, booleans, etc.) get wrapped

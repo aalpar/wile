@@ -30,7 +30,7 @@ const (
 // List constructs a proper list from the given values.
 // Returns EmptyList if no arguments are provided.
 // The resulting list has the values in the same order as the arguments.
-func List(os ...Value) *Pair {
+func List(os ...Value) Tuple {
 	l := len(os)
 	switch l {
 	case 0:
@@ -119,7 +119,7 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 	}
 	p0 := p
 	v0 := v
-	for !p0.IsEmptyList() && !v0.IsEmptyList() {
+	for {
 		key := equalPairKey{p0, v0}
 		if visited[key] {
 			return true
@@ -139,7 +139,7 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 			return p0[1] == v0[1]
 		}
 		if p0[1] == v0[1] {
-			break
+			return true
 		}
 		pv0, _ := p0[1].(*Pair)
 		vv0, _ := v0[1].(*Pair)
@@ -149,7 +149,6 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		p0 = pv0
 		v0 = vv0
 	}
-	return p0.IsEmptyList() == v0.IsEmptyList()
 }
 
 // vectorEqualToDeep compares two Vectors with cycle detection.
@@ -226,6 +225,7 @@ func IsList(v Value) bool {
 	if v == nil {
 		return false
 	}
+	// Interface equality on zero-size struct: works for emptyListType{}.
 	if v == EmptyList {
 		return true
 	}
@@ -247,8 +247,8 @@ func IsList(v Value) bool {
 //   - Void (voidType{} singleton): no meaningful result (e.g., set!, display).
 //     Canonical check: values.IsVoid(v) — handles both nil and the Void singleton.
 //
-//   - EmptyList (*Pair{nil, nil} singleton): the empty list () — a valid first-class
-//     Scheme value. Canonical check: values.IsEmptyList(v) — handles nil safely (returns false).
+//   - EmptyList (emptyListType{} singleton): the empty list () — a valid first-class
+//     Scheme value. Implements Tuple but not *Pair. Canonical check: values.IsEmptyList(v) — handles nil safely (returns false).
 //
 //   - Go nil (nil interface): uninitialized / absent in Go — not a Scheme value.
 //     IsVoid(nil) returns true; IsEmptyList(nil) returns false.
@@ -281,15 +281,15 @@ func IsEmptyList(v Value) bool {
 // VectorToList converts a Vector to a proper list preserving element order.
 // Iterates backward through the vector, prepending each element to build the list.
 // Returns EmptyList for nil or void vectors.
-func VectorToList(vs *Vector) *Pair {
+func VectorToList(vs *Vector) Tuple {
 	if IsVoid(vs) {
 		return EmptyList
 	}
-	q := EmptyList
+	var q Value = EmptyList
 	for j := len(*vs) - 1; j >= 0; j-- {
 		q = NewCons((*vs)[j], q)
 	}
-	return q
+	return q.(Tuple)
 }
 
 // ExactInteger extracts an exact integer from a Scheme value.

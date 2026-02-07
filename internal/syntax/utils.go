@@ -113,13 +113,18 @@ func IsSyntaxVoid(v SyntaxValue) bool {
 }
 
 // IsSyntaxEmptyList returns true if the value is the empty syntax list.
+// Checks both SyntaxPair (syntax empty list) and SyntaxObject wrapping
+// values.EmptyList (e.g., from quasisyntax expansion).
 func IsSyntaxEmptyList(v SyntaxValue) bool {
 	if v == nil {
 		return false
 	}
-	pr, ok := v.(*SyntaxPair)
-	if ok {
-		return pr.IsEmptyList()
+	switch sv := v.(type) {
+	case *SyntaxPair:
+		return sv.IsEmptyList()
+	case *SyntaxObject:
+		return sv.IsEmptyList()
+	default:
+		return false
 	}
-	return false
 }

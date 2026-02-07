@@ -255,7 +255,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
 			variables := map[string]struct{}{"x": {}}
-			pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+			pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
@@ -325,7 +325,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
 			variables := map[string]struct{}{"x": {}}
-			pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+			pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
@@ -360,7 +360,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -526,7 +526,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -573,7 +573,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 	// Test that pattern variable substitution respects scope compatibility
 	// when patternVarSyntax is provided.
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -612,7 +612,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	// When template symbol has extra scopes vs pattern variable, substitution
 	// should NOT occur (nested macro hygiene).
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -655,7 +655,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -740,7 +740,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -788,7 +788,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := values.List(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables

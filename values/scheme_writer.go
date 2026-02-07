@@ -96,7 +96,7 @@ func (p *SchemeWriter) WriteString(v Value) string {
 func (p *SchemeWriter) findShared(v Value) {
 	switch val := v.(type) {
 	case *Pair:
-		if val == nil || val.IsEmptyList() {
+		if val == nil {
 			return
 		}
 		if _, found := p.seenPairs[val]; found {
@@ -140,7 +140,7 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 	walk = func(v Value) {
 		switch val := v.(type) {
 		case *Pair:
-			if val == nil || val.IsEmptyList() {
+			if val == nil {
 				return
 			}
 			if onStackPairs[val] {
@@ -220,10 +220,6 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 		sb.WriteString("#<void>")
 		return
 	}
-	if pr.IsEmptyList() {
-		sb.WriteString("()")
-		return
-	}
 
 	// Check if this is a back-reference
 	if label, found := p.seenPairs[pr]; found && label >= 0 {
@@ -251,7 +247,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 	first := true
 	curr := pr
 
-	for curr != nil && !curr.IsEmptyList() {
+	for curr != nil {
 		if !first {
 			sb.WriteString(" ")
 		}

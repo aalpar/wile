@@ -57,6 +57,10 @@ func AssocLookup(
 ) error {
 	obj := mc.Arg(0)
 	alist := mc.Arg(1)
+	if values.IsEmptyList(alist) {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
 	pr, ok := alist.(*values.Pair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, alist)

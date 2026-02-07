@@ -26,7 +26,7 @@ func TestPair_SchemeString(t *testing.T) {
 		out string
 	}{
 		{nil, "#<void>"},
-		{NewCons(nil, nil), "()"},
+		{NewCons(nil, nil), "(#<void> . #<void>)"},
 		{NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList)), "(1 2)"},
 		{NewCons(NewInteger(1), NewCons(NewInteger(2), NewCons(NewInteger(3), EmptyList))), "(1 2 3)"},
 		{NewCons(NewCons(NewInteger(1), NewInteger(2)), EmptyList), "((1 . 2))"},
@@ -43,7 +43,7 @@ func TestPair_EqualTo(t *testing.T) {
 	tcs := []struct {
 		nm  string
 		in0 *Pair
-		in1 *Pair
+		in1 Value
 		out bool
 	}{
 		{
@@ -53,20 +53,8 @@ func TestPair_EqualTo(t *testing.T) {
 			out: true,
 		},
 		{
-			nm:  "2",
-			in0: EmptyList,
-			in1: EmptyList,
-			out: true,
-		},
-		{
 			nm:  "3",
 			in0: &Pair{nil, nil},
-			in1: EmptyList,
-			out: true,
-		},
-		{
-			nm:  "4",
-			in0: EmptyList,
 			in1: &Pair{nil, nil},
 			out: true,
 		},
@@ -157,6 +145,12 @@ func TestPair_EqualTo(t *testing.T) {
 	}
 }
 
+func TestEmptyList_EqualTo(t *testing.T) {
+	qt.Assert(t, EmptyList.EqualTo(EmptyList), qt.IsTrue)
+	qt.Assert(t, EqualTo(EmptyList, EmptyList), qt.IsTrue)
+	qt.Assert(t, EmptyList.EqualTo(NewCons(NewInteger(1), EmptyList)), qt.IsFalse)
+}
+
 func TestPair_NewCons(t *testing.T) {
 	pr := NewCons(nil, nil)
 	qt.Assert(t, pr, qt.Not(qt.IsNil))
@@ -168,7 +162,6 @@ func TestPair_IsList(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: EmptyList, out: true},
 		{in: NewCons(NewInteger(10), EmptyList), out: true},
 		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: true},
 		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: true},
@@ -183,6 +176,10 @@ func TestPair_IsList(t *testing.T) {
 			qt.Assert(t, got, qt.Equals, tc.out)
 		})
 	}
+}
+
+func TestEmptyList_IsList(t *testing.T) {
+	qt.Assert(t, EmptyList.IsList(), qt.IsTrue)
 }
 
 func TestPair_IsList_Circular(t *testing.T) {
@@ -239,7 +236,6 @@ func TestPair_Length(t *testing.T) {
 			panicMatches: "not a list",
 			out:          -1,
 		},
-		{in: EmptyList, out: 0},
 		{in: NewCons(NewInteger(10), EmptyList), out: 1},
 		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: 1},
 		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: 2},
@@ -261,36 +257,54 @@ func TestPair_Length(t *testing.T) {
 	}
 }
 
+func TestEmptyList_Length(t *testing.T) {
+	qt.Assert(t, EmptyList.Length(), qt.Equals, 0)
+}
+
 func TestPair_IsVoid(t *testing.T) {
-	tcs := []struct {
-		in  *Pair
-		out bool
-	}{
-		{in: nil, out: true},
-		{in: EmptyList, out: false},
-	}
-	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			got := tc.in.IsVoid()
-			qt.Assert(t, got, qt.Equals, tc.out)
-		})
-	}
+	qt.Assert(t, (*Pair)(nil).IsVoid(), qt.IsTrue)
+	qt.Assert(t, NewCons(NewInteger(1), EmptyList).IsVoid(), qt.IsFalse)
 }
 
 func TestPair_IsEmptyList(t *testing.T) {
-	tcs := []struct {
-		in  *Pair
-		out bool
-	}{
-		{in: nil, out: false},
-		{in: EmptyList, out: true},
-	}
-	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			got := tc.in.IsEmptyList()
-			qt.Assert(t, got, qt.Equals, tc.out)
-		})
-	}
+	// *Pair.IsEmptyList() always returns false now that EmptyList is a separate type
+	qt.Assert(t, (*Pair)(nil).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, NewCons(NewInteger(1), EmptyList).IsEmptyList(), qt.IsFalse)
+}
+
+func TestEmptyList_IsVoidAndIsEmptyList(t *testing.T) {
+	qt.Assert(t, EmptyList.IsEmptyList(), qt.IsTrue)
+	qt.Assert(t, EmptyList.IsVoid(), qt.IsFalse)
+	qt.Assert(t, IsEmptyList(EmptyList), qt.IsTrue)
+	qt.Assert(t, IsVoid(EmptyList), qt.IsFalse)
+}
+
+func TestEmptyList_AsVector(t *testing.T) {
+	got := EmptyList.AsVector()
+	qt.Assert(t, got, qt.Not(qt.IsNil))
+	qt.Assert(t, len(got.Datum()), qt.Equals, 0)
+}
+
+func TestEmptyList_Append(t *testing.T) {
+	// Appending to empty list returns the argument
+	got := EmptyList.Append(NewCons(NewInteger(10), EmptyList))
+	qt.Assert(t, got, SchemeEquals, NewCons(NewInteger(10), EmptyList))
+
+	// Appending nil/void returns it
+	got = EmptyList.Append((*Pair)(nil))
+	qt.Assert(t, got, qt.Equals, Value((*Pair)(nil)))
+}
+
+func TestEmptyList_SchemeString(t *testing.T) {
+	qt.Assert(t, EmptyList.SchemeString(), qt.Equals, "()")
+}
+
+func TestEmptyList_Car_Panics(t *testing.T) {
+	qt.Assert(t, func() { EmptyList.Car() }, qt.PanicMatches, "not a pair")
+}
+
+func TestEmptyList_Cdr_Panics(t *testing.T) {
+	qt.Assert(t, func() { EmptyList.Cdr() }, qt.PanicMatches, "not a pair")
 }
 
 func TestPair_AsVector(t *testing.T) {
@@ -306,9 +320,9 @@ func TestPair_AsVector(t *testing.T) {
 			out:  nil,
 		},
 		{
-			name: "empty list returns empty vector",
-			in:   EmptyList,
-			out:  NewVector(),
+			name:         "void pair panics",
+			in:           NewCons(nil, nil),
+			panicMatches: "not a list",
 		},
 		{
 			name: "single element list",
@@ -378,22 +392,10 @@ func TestPair_Append(t *testing.T) {
 			panicMatches: "not a list",
 		},
 		{
-			name: "empty list input",
-			in:   EmptyList,
-			vs:   (*Pair)(nil),
-			out:  (*Pair)(nil),
-		},
-		{
-			name: "nil vs",
-			in:   NewCons(nil, nil),
-			vs:   (*Pair)(nil),
-			out:  (*Pair)(nil),
-		},
-		{
-			name: "empty vs",
-			in:   EmptyList,
-			vs:   NewCons(NewInteger(10), EmptyList),
-			out:  NewCons(NewInteger(10), EmptyList),
+			name:         "void pair input",
+			in:           NewCons(nil, nil),
+			vs:           (*Pair)(nil),
+			panicMatches: "not a list",
 		},
 		{
 			name: "empty vs with nil",

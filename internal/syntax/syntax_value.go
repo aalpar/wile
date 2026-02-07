@@ -119,14 +119,7 @@ func (p *SyntaxObject) IsPair() bool {
 
 // IsEmptyList returns true if the wrapped datum is the empty list.
 func (p *SyntaxObject) IsEmptyList() bool {
-	q, ok := p.Datum().(*values.Pair)
-	if !ok {
-		return false
-	}
-	if !q.IsEmptyList() {
-		return false
-	}
-	return true
+	return values.IsEmptyList(p.Datum())
 }
 
 // SourceContext returns the source context of the syntax object.

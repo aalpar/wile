@@ -67,7 +67,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: values.List(values.NewInteger(10), values.NewSymbol("a")),
+			in: testList(values.NewInteger(10), values.NewSymbol("a")),
 			out: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
@@ -77,7 +77,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			in:        testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
 			out: []SyntaxCommand{
 				ByteCodeVisitCar{},
 				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
@@ -90,7 +90,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: values.List(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
+			in: testList(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
 			out: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
@@ -105,7 +105,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			in:        testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
 			out: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
 				ByteCodeVisitCdr{},
@@ -117,7 +117,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in: values.List(
+			in: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
 			out: []SyntaxCommand{
@@ -138,7 +138,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: values.List(
+			in: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
 			out: []SyntaxCommand{
@@ -184,26 +184,26 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in:      values.List(values.NewInteger(10), values.NewSymbol("a")),
-			target:  values.List(values.NewInteger(10), values.NewInteger(20)),
+			in:      testList(values.NewInteger(10), values.NewSymbol("a")),
+			target:  testList(values.NewInteger(10), values.NewInteger(20)),
 			matches: true,
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
-			target:    values.List(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			in:        testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			target:    testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
 			matches:   true,
 		},
 		{
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: values.List(
+			in: testList(
 				values.NewInteger(10), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b"),
 				), values.NewInteger(40),
 			),
-			target: values.List(
+			target: testList(
 				values.NewInteger(10), values.List(
 					values.NewInteger(20), values.NewSymbol("b"),
 				), values.NewInteger(40),
@@ -212,16 +212,16 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
-			target:    values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			in:        testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			target:    testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
 			matches:   true,
 		},
 		{
 			variables: map[string]struct{}{},
-			in: values.List(
+			in: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
-			target: values.List(
+			target: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
 			matches: true,
@@ -230,12 +230,12 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: values.List(
+			in: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b"),
 				), values.NewSymbol("..."),
 			),
-			target: values.List(
+			target: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewInteger(30), values.NewSymbol("b"),
 				),

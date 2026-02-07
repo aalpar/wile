@@ -101,15 +101,17 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 			*q = append(*q, (*vs)[:len(*vs)]...)
 		}
 	case *Pair:
-		for v0 := vs; !v0.IsEmptyList(); {
+		v0 := vs
+		for {
 			if v0.IsVoid() {
 				panic(ErrNotAList)
 			}
-			if v0.IsEmptyList() {
+			*q = append(*q, v0.Car())
+			next, ok := v0.Cdr().(*Pair)
+			if !ok {
 				break
 			}
-			*q = append(*q, v0.Car())
-			v0 = v0.Cdr().(*Pair)
+			v0 = next
 		}
 	default:
 		if !IsEmptyList(p) {
@@ -266,6 +268,9 @@ func (p *ArrayList) Copy() *ArrayList {
 func (p *ArrayList) SchemeString() string {
 	if p == nil || len(*p) == 0 {
 		return "#<void>"
+	}
+	if p.IsEmptyList() {
+		return "()"
 	}
 	if len(*p) == 1 {
 		if IsEmptyList((*p)[0]) {

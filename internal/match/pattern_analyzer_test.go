@@ -23,6 +23,7 @@ import (
 )
 
 func TestAnalyzePatternWithLiterals(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	tcs := []struct {
 		name      string
 		pattern   *values.Pair
@@ -31,7 +32,7 @@ func TestAnalyzePatternWithLiterals(t *testing.T) {
 	}{
 		{
 			name: "Simple pattern with literals",
-			pattern: values.List(
+			pattern: list(
 				values.NewSymbol("define"),
 				values.NewSymbol("x"),
 				values.NewSymbol("y"),
@@ -43,7 +44,7 @@ func TestAnalyzePatternWithLiterals(t *testing.T) {
 		},
 		{
 			name: "Pattern with no literals",
-			pattern: values.List(
+			pattern: list(
 				values.NewSymbol("foo"),
 				values.NewSymbol("a"),
 				values.NewSymbol("b"),
@@ -53,7 +54,7 @@ func TestAnalyzePatternWithLiterals(t *testing.T) {
 		},
 		{
 			name: "Pattern with multiple literals",
-			pattern: values.List(
+			pattern: list(
 				values.NewSymbol("let"),
 				values.NewSymbol("name"),
 				values.NewSymbol("else"),
@@ -147,7 +148,7 @@ func TestContainsVariables(t *testing.T) {
 		values.NewSymbol("define"),
 		values.NewSymbol("x"),
 		values.NewInteger(42),
-	)
+	).(*values.Pair)
 	variables := map[string]struct{}{
 		"x": {},
 	}
@@ -166,7 +167,7 @@ func TestGetVariables(t *testing.T) {
 		values.NewSymbol("define"),
 		values.NewSymbol("x"),
 		values.NewSymbol("y"),
-	)
+	).(*values.Pair)
 	variables := map[string]struct{}{
 		"x": {},
 		"y": {},

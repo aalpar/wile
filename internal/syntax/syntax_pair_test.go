@@ -143,35 +143,17 @@ func TestSyntaxPair_Length(t *testing.T) {
 }
 
 func TestSyntaxPair_IsVoid(t *testing.T) {
-	tcs := []struct {
-		in  *values.Pair
-		out bool
-	}{
-		{in: nil, out: true},
-		{in: values.EmptyList, out: false},
-	}
-	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			got := tc.in.IsVoid()
-			qt.Assert(t, got, qt.Equals, tc.out)
-		})
-	}
+	qt.Assert(t, (*values.Pair)(nil).IsVoid(), qt.IsTrue)
+	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsVoid(), qt.IsFalse)
+	qt.Assert(t, values.EmptyList.IsVoid(), qt.IsFalse)
 }
 
 func TestSyntaxPair_IsEmptyList(t *testing.T) {
-	tcs := []struct {
-		in  *values.Pair
-		out bool
-	}{
-		{in: nil, out: false},
-		{in: values.EmptyList, out: true},
-	}
-	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			got := tc.in.IsEmptyList()
-			qt.Assert(t, got, qt.Equals, tc.out)
-		})
-	}
+	// *Pair.IsEmptyList() always returns false now that EmptyList is a separate type
+	qt.Assert(t, (*values.Pair)(nil).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsEmptyList(), qt.IsFalse)
+	// EmptyList itself is no longer *Pair, test via interface
+	qt.Assert(t, values.EmptyList.IsEmptyList(), qt.IsTrue)
 }
 
 func TestSyntaxPair_AsVector(t *testing.T) {

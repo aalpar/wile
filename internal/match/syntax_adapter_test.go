@@ -62,7 +62,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		}
 
 		// Compile pattern: (define x)
-		pattern := values.List(
+		pattern := testList(
 			values.NewSymbol("define"),
 			values.NewSymbol("x"),
 		)
@@ -116,7 +116,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			"x": {},
 		}
 
-		pattern := values.List(
+		pattern := testList(
 			values.NewSymbol("define"),
 			values.NewSymbol("x"),
 		)
@@ -359,7 +359,7 @@ func TestExpandWithUseSite(t *testing.T) {
 		"x": {},
 	}
 
-	pattern := values.List(
+	pattern := testList(
 		values.NewSymbol("macro"),
 		values.NewSymbol("x"),
 	)
@@ -446,7 +446,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 		"x": {},
 	}
 
-	pattern := values.List(
+	pattern := testList(
 		values.NewSymbol("test"),
 		values.NewSymbol("x"),
 	)
@@ -509,7 +509,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 
 	variables := map[string]struct{}{}
 
-	pattern := values.List(values.NewSymbol("test"))
+	pattern := testList(values.NewSymbol("test"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -549,7 +549,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test)
-	pattern := values.List(values.NewSymbol("test"))
+	pattern := testList(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
 	err := compiler.Compile(context.TODO(), pattern)
@@ -596,7 +596,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test)
-	pattern := values.List(values.NewSymbol("test"))
+	pattern := testList(values.NewSymbol("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
 	err := compiler.Compile(context.TODO(), pattern)
@@ -647,7 +647,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test x) where x is a pattern variable
-	pattern := values.List(
+	pattern := testList(
 		values.NewSymbol("test"),
 		values.NewSymbol("x"),
 	)

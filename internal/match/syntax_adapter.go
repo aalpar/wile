@@ -511,9 +511,6 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 
 	switch v := val.(type) {
 	case *values.Pair:
-		if values.IsEmptyList(v) {
-			return syntax.NewSyntaxEmptyList(srcCtx), nil
-		}
 		car, err := p.capturedValueToSyntax(v[0], introScope, useSiteCtx, origin)
 		if err != nil {
 			return nil, err
@@ -523,6 +520,12 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 			return nil, err
 		}
 		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
+
+	case values.Tuple:
+		if v.IsEmptyList() {
+			return syntax.NewSyntaxEmptyList(srcCtx), nil
+		}
+		return syntax.NewSyntaxObject(val, srcCtx), nil
 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, srcCtx), nil
@@ -786,11 +789,6 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 
 	switch v := val.(type) {
 	case *values.Pair:
-		if values.IsEmptyList(v) {
-			// Return syntax empty list for empty list
-			return syntax.NewSyntaxEmptyList(srcCtx)
-		}
-
 		// Recursively wrap car and cdr
 		car := valueToSyntax(v[0], templateStx)
 
@@ -803,6 +801,15 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 		}
 
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
+
+	case syntax.SyntaxValue:
+		return v
+
+	case values.Tuple:
+		if v.IsEmptyList() {
+			return syntax.NewSyntaxEmptyList(srcCtx)
+		}
+		return syntax.NewSyntaxObject(val, srcCtx)
 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, srcCtx)

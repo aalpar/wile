@@ -24,6 +24,7 @@ import (
 )
 
 func TestMatchAndExpand(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	tcs := []struct {
 		name      string
 		variables map[string]struct{}
@@ -37,9 +38,9 @@ func TestMatchAndExpand(t *testing.T) {
 			variables: map[string]struct{}{
 				"x": {},
 			},
-			pattern:  values.List(values.NewSymbol("x")),
+			pattern:  list(values.NewSymbol("x")),
 			template: values.NewSymbol("x"),
-			input:    values.List(values.NewInteger(42)),
+			input:    list(values.NewInteger(42)),
 			expected: values.NewInteger(42),
 		},
 		{
@@ -48,9 +49,9 @@ func TestMatchAndExpand(t *testing.T) {
 				"a": {},
 				"b": {},
 			},
-			pattern:  values.List(values.NewSymbol("a"), values.NewSymbol("b")),
+			pattern:  list(values.NewSymbol("a"), values.NewSymbol("b")),
 			template: values.List(values.NewSymbol("b"), values.NewSymbol("a")),
-			input:    values.List(values.NewInteger(1), values.NewInteger(2)),
+			input:    list(values.NewInteger(1), values.NewInteger(2)),
 			expected: values.List(values.NewInteger(2), values.NewInteger(1)),
 		},
 		{
@@ -58,9 +59,9 @@ func TestMatchAndExpand(t *testing.T) {
 			variables: map[string]struct{}{
 				"x": {},
 			},
-			pattern:  values.List(values.NewSymbol("define"), values.NewSymbol("x")),
+			pattern:  list(values.NewSymbol("define"), values.NewSymbol("x")),
 			template: values.List(values.NewSymbol("set!"), values.NewSymbol("global"), values.NewSymbol("x")),
-			input:    values.List(values.NewSymbol("define"), values.NewInteger(100)),
+			input:    list(values.NewSymbol("define"), values.NewInteger(100)),
 			expected: values.List(values.NewSymbol("set!"), values.NewSymbol("global"), values.NewInteger(100)),
 		},
 		{
@@ -68,7 +69,7 @@ func TestMatchAndExpand(t *testing.T) {
 			variables: map[string]struct{}{
 				"x": {},
 			},
-			pattern: values.List(
+			pattern: list(
 				values.NewSymbol("list"),
 				values.NewSymbol("x"),
 				values.NewSymbol("..."),
@@ -78,7 +79,7 @@ func TestMatchAndExpand(t *testing.T) {
 				values.NewSymbol("x"),
 				values.NewSymbol("..."),
 			),
-			input: values.List(
+			input: list(
 				values.NewSymbol("list"),
 				values.NewInteger(1),
 				values.NewInteger(2),
@@ -97,7 +98,7 @@ func TestMatchAndExpand(t *testing.T) {
 				"a": {},
 				"b": {},
 			},
-			pattern: values.List(
+			pattern: list(
 				values.NewSymbol("let"),
 				values.List(
 					values.List(values.NewSymbol("a"), values.NewSymbol("b")),
@@ -109,7 +110,7 @@ func TestMatchAndExpand(t *testing.T) {
 				values.List(values.NewSymbol("define"), values.NewSymbol("a"), values.NewSymbol("b")),
 				values.NewSymbol("..."),
 			),
-			input: values.List(
+			input: list(
 				values.NewSymbol("let"),
 				values.List(
 					values.List(values.NewSymbol("x"), values.NewInteger(10)),
@@ -149,6 +150,7 @@ func TestMatchAndExpand(t *testing.T) {
 
 // TestMultipleIndependentEllipsis tests patterns with multiple independent ... at the same level
 func TestMultipleIndependentEllipsis(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	// This is the key test for the let macro pattern:
 	// ((let ((name val) ...) body ...) -> ((lambda (name ...) (begin body ...)) val ...))
 	t.Run("let macro pattern", func(t *testing.T) {
@@ -159,7 +161,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 		}
 
 		// Pattern: (let ((name val) ...) body ...)
-		pattern := values.List(
+		pattern := list(
 			values.NewSymbol("let"),
 			values.List(
 				values.List(values.NewSymbol("name"), values.NewSymbol("val")),
@@ -185,7 +187,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 		)
 
 		// Input: (let ((x 1) (y 2)) e1 e2)
-		input := values.List(
+		input := list(
 			values.NewSymbol("let"),
 			values.List(
 				values.List(values.NewSymbol("x"), values.NewInteger(1)),
@@ -240,7 +242,7 @@ func TestMultipleIndependentEllipsis(t *testing.T) {
 		}
 
 		// Pattern: (foo a ... b ...)
-		pattern := values.List(
+		pattern := list(
 			values.NewSymbol("foo"),
 			values.NewSymbol("a"),
 			values.NewSymbol("..."),
@@ -275,13 +277,14 @@ func TestExpandErrors(t *testing.T) {
 // A template of the form (... <template>) is identical to <template>,
 // except that ellipses within the template have no special meaning.
 func TestEllipsisEscape(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	t.Run("Simple ellipsis escape", func(t *testing.T) {
 		// Pattern: (foo x)
 		// Template: (... ...) - the (... ...) escape form should produce literal ...
 		// Expected: ... (a single ellipsis symbol)
 		variables := map[string]struct{}{"x": {}}
-		pattern := values.List(values.NewSymbol("foo"), values.NewSymbol("x"))
-		input := values.List(values.NewSymbol("foo"), values.NewInteger(42))
+		pattern := list(values.NewSymbol("foo"), values.NewSymbol("x"))
+		input := list(values.NewSymbol("foo"), values.NewInteger(42))
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
@@ -309,8 +312,8 @@ func TestEllipsisEscape(t *testing.T) {
 		// Template: (... (x ...)) - escape form containing x and ...
 		// Expected: (42 ...) - x substituted, ... kept literally
 		variables := map[string]struct{}{"x": {}}
-		pattern := values.List(values.NewSymbol("foo"), values.NewSymbol("x"))
-		input := values.List(values.NewSymbol("foo"), values.NewInteger(42))
+		pattern := list(values.NewSymbol("foo"), values.NewSymbol("x"))
+		input := list(values.NewSymbol("foo"), values.NewInteger(42))
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
@@ -351,12 +354,13 @@ func TestEllipsisEscape(t *testing.T) {
 // TestEllipsisInMiddle tests R7RS §4.3.2 patterns with ellipsis in the middle of a list.
 // For example: (_ a b c ... x y) where the ellipsis is followed by additional pattern elements.
 func TestEllipsisInMiddle(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	t.Run("Simple ellipsis in middle - zero iterations", func(t *testing.T) {
 		// Pattern: (_ a c ... x y)
 		// Input: (_ 1 6 7)
 		// Expected: a=1, c=<none>, x=6, y=7
 		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
-		pattern := values.List(
+		pattern := list(
 			values.NewSymbol("_"),
 			values.NewSymbol("a"),
 			values.NewSymbol("c"),
@@ -364,7 +368,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 			values.NewSymbol("x"),
 			values.NewSymbol("y"),
 		)
-		input := values.List(
+		input := list(
 			values.NewSymbol("_"),
 			values.NewInteger(1),
 			values.NewInteger(6),
@@ -401,7 +405,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		// Input: (_ 1 2 3 4 5 6 7)
 		// Expected: a=1, c=2,3,4,5 (4 iterations), x=6, y=7
 		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
-		pattern := values.List(
+		pattern := list(
 			values.NewSymbol("_"),
 			values.NewSymbol("a"),
 			values.NewSymbol("c"),
@@ -409,7 +413,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 			values.NewSymbol("x"),
 			values.NewSymbol("y"),
 		)
-		input := values.List(
+		input := list(
 			values.NewSymbol("_"),
 			values.NewInteger(1),
 			values.NewInteger(2),
@@ -441,7 +445,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		// Template: (list a x y)
 		// Expected: (list 1 6 7)
 		variables := map[string]struct{}{"a": {}, "c": {}, "x": {}, "y": {}}
-		pattern := values.List(
+		pattern := list(
 			values.NewSymbol("_"),
 			values.NewSymbol("a"),
 			values.NewSymbol("c"),
@@ -449,7 +453,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 			values.NewSymbol("x"),
 			values.NewSymbol("y"),
 		)
-		input := values.List(
+		input := list(
 			values.NewSymbol("_"),
 			values.NewInteger(1),
 			values.NewInteger(2),
@@ -487,6 +491,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 
 // TestImproperListPattern tests R7RS §4.3.2 improper list patterns like (_ a . rest).
 func TestImproperListPattern(t *testing.T) {
+	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	t.Run("Simple improper list pattern", func(t *testing.T) {
 		// Pattern: (_ a . rest)
 		// Input: (_ 1 2 3)
@@ -500,7 +505,7 @@ func TestImproperListPattern(t *testing.T) {
 				values.NewSymbol("rest"), // improper tail
 			),
 		)
-		input := values.List(
+		input := list(
 			values.NewSymbol("_"),
 			values.NewInteger(1),
 			values.NewInteger(2),
@@ -543,7 +548,7 @@ func TestImproperListPattern(t *testing.T) {
 				values.NewSymbol("rest"),
 			),
 		)
-		input := values.List(
+		input := list(
 			values.NewSymbol("_"),
 			values.NewInteger(1),
 			values.NewInteger(2),

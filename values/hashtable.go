@@ -178,7 +178,7 @@ func (p *Hashtable) Delete(key Value) error {
 }
 
 // Keys returns a list of all keys in the hash table.
-func (p *Hashtable) Keys() *Pair {
+func (p *Hashtable) Keys() Tuple {
 	if p.size == 0 {
 		return EmptyList
 	}
@@ -192,7 +192,7 @@ func (p *Hashtable) Keys() *Pair {
 }
 
 // Values returns a list of all values in the hash table.
-func (p *Hashtable) Values() *Pair {
+func (p *Hashtable) Values() Tuple {
 	if p.size == 0 {
 		return EmptyList
 	}

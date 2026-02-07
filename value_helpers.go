@@ -27,10 +27,11 @@ func IsList(v Value) bool {
 }
 
 // IsPair returns true if v is a non-empty pair (cons cell).
+// EmptyList is not a *Pair (it's a separate type), so the type assertion
+// handles the distinction without an explicit IsEmptyList check.
 func IsPair(v Value) bool {
-	inner := unwrapValue(v)
-	p, ok := inner.(*values.Pair)
-	return ok && !p.IsEmptyList()
+	_, ok := unwrapValue(v).(*values.Pair)
+	return ok
 }
 
 // IsNull returns true if v is the empty list.

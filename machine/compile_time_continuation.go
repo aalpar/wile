@@ -1114,8 +1114,8 @@ func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) values.Va
 	case *values.Symbol:
 		return p.env.InternSymbol(val)
 	case *values.Pair:
-		if val == nil || val.IsEmptyList() {
-			return val
+		if val == nil {
+			return nil
 		}
 		car := p.internSymbolsInValue(val.Car())
 		cdr := p.internSymbolsInValue(val.Cdr())
