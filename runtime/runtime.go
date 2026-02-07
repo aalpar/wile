@@ -38,13 +38,13 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
 )
 
 // Compile expands and compiles a syntax expression into an executable template.
@@ -57,14 +57,14 @@ func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax
 	ectx := machine.NewExpandTimeCallContext(ctx)
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
 	if err != nil {
-		return nil, fmt.Errorf("expansion error: %w", err)
+		return nil, values.WrapForeignErrorf(err, "expansion error")
 	}
 
 	// Use inTail=false for top-level expressions
 	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, fmt.Errorf("compilation error: %w", err)
+		return nil, values.WrapForeignErrorf(err, "compilation error")
 	}
 
 	return tpl, nil
@@ -102,7 +102,7 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return fmt.Errorf("parse error in %s: %w", filename, err)
+			return values.WrapForeignErrorf(err, "parse error in %s", filename)
 		}
 		exprs = append(exprs, stx)
 	}
@@ -128,12 +128,12 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	// Compile and run
 	tpl, err := Compile(ctx, env, programStx)
 	if err != nil {
-		return fmt.Errorf("compile error in %s: %w", filename, err)
+		return values.WrapForeignErrorf(err, "compile error in %s", filename)
 	}
 
 	_, err = Run(ctx, tpl, env)
 	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
-		return fmt.Errorf("runtime error in %s: %w", filename, err)
+		return values.WrapForeignErrorf(err, "runtime error in %s", filename)
 	}
 
 	return nil

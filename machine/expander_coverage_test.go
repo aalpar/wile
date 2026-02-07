@@ -203,7 +203,7 @@ func TestExpandSyntaxError(t *testing.T) {
 	result, err := expander.expandSyntaxError(ectx, sym, body)
 	c.Assert(result, qt.IsNil)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err, qt.ErrorMatches, `syntax-error: bad thing happened`)
+	c.Assert(err, qt.ErrorMatches, `syntax-error: bad thing happened: .*`)
 }
 
 // TestExpandSyntaxError_WithIrritants verifies syntax-error with irritant arguments.
@@ -239,7 +239,7 @@ func TestExpandSyntaxError_MissingMessage(t *testing.T) {
 
 	_, err := expander.expandSyntaxError(ectx, sym, body)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err, qt.ErrorMatches, `syntax-error: missing message argument`)
+	c.Assert(err, qt.ErrorMatches, `syntax-error: missing message argument: .*`)
 }
 
 // --- formatIrritants ---

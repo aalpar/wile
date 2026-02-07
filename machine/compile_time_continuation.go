@@ -1799,31 +1799,6 @@ func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName
 	return NewLibraryName(parts...), nil
 }
 
-// foo is a helper function that demonstrates how to load a library and apply import modifiers.
-// This is not directly called by the compiler, but shows the core logic of CompileImport.  It takes an import set
-// expression, parses it, loads the library, and applies modifiers to get the final bindings.
-func (p *CompileTimeContinuation) foo(ctx context.Context, importSetExpr syntax.SyntaxValue) (map[string]string, error) { //nolint:unused
-	importSet, err := parseImportSet(ctx, importSetExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Load the library
-	lib, err := LoadLibrary(ctx, importSet.LibraryName, p.env)
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "import: failed to load library %s",
-			importSet.LibraryName.SchemeString())
-	}
-
-	// Apply import modifiers (only, except, prefix, rename) to get final bindings
-	bindings, err := importSet.ApplyToExports(lib)
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
-			importSet.LibraryName.SchemeString())
-	}
-	return bindings, err
-}
-
 // CompileImport handles top-level (import <import-set> ...).
 //
 // This is for top-level imports outside of a library definition.

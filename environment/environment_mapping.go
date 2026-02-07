@@ -15,8 +15,6 @@
 package environment
 
 import (
-	"fmt"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -128,7 +126,7 @@ func NewExportSet(spec ExportSpec) (*ExportSet, error) {
 		case *RenameExportDirective:
 		case *OnlyExportDirective:
 		default:
-			return nil, fmt.Errorf("unsupported spec type: %T", spec)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "unsupported spec type: %T", spec)
 		}
 		spec = spec.Next()
 	}
@@ -146,7 +144,7 @@ func NewImportSet(spec ImportSpec) (*ImportSet, error) {
 		case *PrefixImportDirective:
 		case *LibraryImportDirective:
 		default:
-			return nil, fmt.Errorf("unsupported spec type: %T", spec)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "unsupported spec type: %T", spec)
 		}
 		spec = spec.Next()
 	}

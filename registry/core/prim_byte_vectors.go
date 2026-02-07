@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -163,32 +164,9 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy: expected a bytevector but got %T", o)
 	}
 
-	start := int64(0)
-	end := int64(len(*bv))
-
-	// Parse optional start and end arguments
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			startVal, ok := tuple.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: start must be an integer but got %T", tuple.Car())
-			}
-			start = startVal.Value
-
-			// Check for end argument
-			cdr := tuple.Cdr()
-			if !values.IsEmptyList(cdr) {
-				tuple2, ok := cdr.(values.Tuple)
-				if ok && !tuple2.IsEmptyList() {
-					endVal, ok := tuple2.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy: end must be an integer but got %T", tuple2.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "bytevector-copy")
+	if err != nil {
+		return err
 	}
 
 	if start < 0 || start > int64(len(*bv)) {
@@ -225,32 +203,9 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy!: from must be a bytevector but got %T", from)
 	}
 
-	start := int64(0)
-	end := int64(len(*fromBv))
-
-	// Parse optional start and end arguments
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			startVal, ok := tuple.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: start must be an integer but got %T", tuple.Car())
-			}
-			start = startVal.Value
-
-			// Check for end argument
-			cdr := tuple.Cdr()
-			if !values.IsEmptyList(cdr) {
-				tuple2, ok := cdr.(values.Tuple)
-				if ok && !tuple2.IsEmptyList() {
-					endVal, ok := tuple2.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: end must be an integer but got %T", tuple2.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*fromBv)), "bytevector-copy!")
+	if err != nil {
+		return err
 	}
 
 	if start < 0 || start > int64(len(*fromBv)) {
@@ -314,32 +269,9 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAByteVector, "utf8->string: expected a bytevector but got %T", o)
 	}
 
-	start := int64(0)
-	end := int64(len(*bv))
-
-	// Parse optional start and end arguments
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			startVal, ok := tuple.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: start must be an integer but got %T", tuple.Car())
-			}
-			start = startVal.Value
-
-			// Check for end argument
-			cdr := tuple.Cdr()
-			if !values.IsEmptyList(cdr) {
-				tuple2, ok := cdr.(values.Tuple)
-				if ok && !tuple2.IsEmptyList() {
-					endVal, ok := tuple2.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "utf8->string: end must be an integer but got %T", tuple2.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "utf8->string")
+	if err != nil {
+		return err
 	}
 
 	if start < 0 || start > int64(len(*bv)) {
@@ -369,32 +301,9 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	s := str.Value
-	start := int64(0)
-	end := int64(len(s))
-
-	// Parse optional start and end arguments
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			startVal, ok := tuple.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: start must be an integer but got %T", tuple.Car())
-			}
-			start = startVal.Value
-
-			// Check for end argument
-			cdr := tuple.Cdr()
-			if !values.IsEmptyList(cdr) {
-				tuple2, ok := cdr.(values.Tuple)
-				if ok && !tuple2.IsEmptyList() {
-					endVal, ok := tuple2.Car().(*values.Integer)
-					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotAnInteger, "string->utf8: end must be an integer but got %T", tuple2.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
+	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(s)), "string->utf8")
+	if err != nil {
+		return err
 	}
 
 	if start < 0 || start > int64(len(s)) {

@@ -155,36 +155,12 @@ func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 
 	runes := s.Runes()
 	length := len(runes)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "string->list: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string->list: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string->list")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
@@ -330,36 +306,12 @@ func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
 
 	runes := str.Runes()
 	length := len(runes)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "string-copy: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string-copy")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {

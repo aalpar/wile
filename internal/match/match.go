@@ -37,7 +37,6 @@ package match
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -804,7 +803,7 @@ func (p *Matcher) expandValue(template values.Value, ctx *captureContext, ellips
 			_, ok := ellipsisVars[t.Key]
 			if ok {
 				// This variable should be expanded in the context of ellipsis
-				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
 		}
 		// Not a pattern variable, return as-is
@@ -1002,7 +1001,7 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 		// Check if it's an ellipsis variable (from outer repetition)
 		if ellipsisVars != nil {
 			if _, ok := ellipsisVars[t.Key]; ok {
-				return nil, fmt.Errorf("ellipsis variable %s used outside of ellipsis context", t.Key)
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
 		}
 		// Not a pattern variable, return as-is (including ellipsis symbols)

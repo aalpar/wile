@@ -124,36 +124,12 @@ func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	length := len(*v)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector->list: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "vector->list: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "vector->list: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "vector->list: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector->list")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
@@ -186,36 +162,12 @@ func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	length := len(*v)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-copy: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "vector-copy: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "vector-copy: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "vector-copy: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector-copy")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
@@ -264,33 +216,12 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	fromLen := len(*from)
-	start := 0
-	end := fromLen
 
-	// Parse optional start/end
-	if tuple.Cdr() != values.EmptyList {
-		tuple2, ok := tuple.Cdr().(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-copy!: improper argument list")
-		}
-		startVal, ok := tuple2.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "vector-copy!: expected an integer for start but got %T", tuple2.Car())
-		}
-		start = int(startVal.Value)
-
-		if tuple2.Cdr() != values.EmptyList {
-			tuple3, ok := tuple2.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "vector-copy!: improper argument list")
-			}
-			endVal, ok := tuple3.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "vector-copy!: expected an integer for end but got %T", tuple3.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(tuple.Cdr(), int64(fromLen), "vector-copy!")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > fromLen || start > end {
@@ -320,36 +251,12 @@ func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	length := len(*v)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-fill!: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "vector-fill!: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "vector-fill!: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "vector-fill!: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector-fill!")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
@@ -552,36 +459,12 @@ func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	length := len(*v)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector->string: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "vector->string: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "vector->string: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "vector->string: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector->string")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
@@ -616,36 +499,12 @@ func PrimStringToVector(_ context.Context, mc *machine.MachineContext) error {
 
 	runes := str.Runes()
 	length := len(runes)
-	start := 0
-	end := length
 
-	// Parse optional arguments: [start [end]]
-	if rest != values.EmptyList {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string->vector: improper argument list")
-		}
-
-		// Parse start
-		startVal, ok := tuple.Car().(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string->vector: expected an integer for start but got %T", tuple.Car())
-		}
-		start = int(startVal.Value)
-
-		// Check for end argument
-		if tuple.Cdr() != values.EmptyList {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "string->vector: improper argument list")
-			}
-			endVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string->vector: expected an integer for end but got %T", tuple2.Car())
-			}
-			end = int(endVal.Value)
-		}
+	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string->vector")
+	if err != nil {
+		return err
 	}
+	start, end := int(start64), int(end64)
 
 	// Validate indices
 	if start < 0 || end > length || start > end {

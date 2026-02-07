@@ -731,7 +731,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 		if errors.As(err, &abortErr) {
 			prompt, found := p.FindPrompt(abortErr.Tag)
 			if !found {
-				return fmt.Errorf("abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
+				return values.WrapForeignErrorf(values.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
 			}
 
 			// Unwind dynamic-wind from current to prompt's winding depth.
