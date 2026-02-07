@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -57,11 +58,7 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 func PrimChannelQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Channel)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -246,11 +243,7 @@ func PrimMakeWaitGroup(_ context.Context, mc *machine.MachineContext) error {
 func PrimWaitGroupQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.WaitGroup)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -335,11 +328,7 @@ func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
 func PrimRWMutexQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.RWMutex)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -450,11 +439,7 @@ func PrimMakeOnce(_ context.Context, mc *machine.MachineContext) error {
 func PrimOnceQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Once)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -530,11 +515,7 @@ func PrimMakeAtomic(_ context.Context, mc *machine.MachineContext) error {
 func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.AtomicBox)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 

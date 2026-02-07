@@ -34,11 +34,7 @@ func PrimIdentifierQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	_, ok := obj.(*syntax.SyntaxSymbol)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 

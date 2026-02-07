@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -298,11 +299,7 @@ func PrimError(ctx context.Context, mc *machine.MachineContext) error {
 func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.NativeError)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 

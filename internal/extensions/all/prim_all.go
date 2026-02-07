@@ -55,11 +55,7 @@ func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.RecordType)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
@@ -67,11 +63,7 @@ func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.Record)
-	if ok {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ok))
 	return nil
 }
 
