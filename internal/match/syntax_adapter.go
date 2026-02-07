@@ -512,11 +512,11 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 
 	switch v := val.(type) {
 	case *values.Pair:
-		car, err := p.capturedValueToSyntax(v[0], introScope, useSiteCtx, origin)
+		car, err := p.capturedValueToSyntax(v.Car(), introScope, useSiteCtx, origin)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.capturedValueToSyntax(v[1], introScope, useSiteCtx, origin)
+		cdr, err := p.capturedValueToSyntax(v.Cdr(), introScope, useSiteCtx, origin)
 		if err != nil {
 			return nil, err
 		}
@@ -791,14 +791,14 @@ func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.Synt
 	switch v := val.(type) {
 	case *values.Pair:
 		// Recursively wrap car and cdr
-		car := valueToSyntax(v[0], templateStx)
+		car := valueToSyntax(v.Car(), templateStx)
 
 		// nil cdr: improper construction; EmptyList: proper list terminator
 		var cdr syntax.SyntaxValue
-		if v[1] == nil || values.IsEmptyList(v[1]) {
+		if v.Cdr() == nil || values.IsEmptyList(v.Cdr()) {
 			cdr = syntax.NewSyntaxEmptyList(srcCtx)
 		} else {
-			cdr = valueToSyntax(v[1], templateStx)
+			cdr = valueToSyntax(v.Cdr(), templateStx)
 		}
 
 		return syntax.NewSyntaxCons(car, cdr, srcCtx)
