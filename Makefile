@@ -115,8 +115,8 @@ SCHELOG_LIBS=-i -f $(SCHELOG_DIR)/schelog.scm \
 
 .PHONY: bench-schelog
 bench-schelog: build
-	@if command -v time >/dev/null 2>&1; then \
-		time -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+	@if command -v gtime >/dev/null 2>&1; then \
+		gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
 		/usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
 	else \
@@ -154,7 +154,7 @@ profile-cpu:
 	@rm -f $(PROFILE_DIR)/cpu/*.prof
 	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
 		name=$$(echo "$$pkg" | tr '/' '_'); \
-		$(GO_TEST) -run='^$$' -bench=. -cpuprofile=$(PROFILE_DIR)/cpu/$$name.prof -benchmem "$$pkg" 2>/dev/null || true; \
+		$(GO_TEST) -run='^$$' -bench=. -cpuprofile=$(PROFILE_DIR)/cpu/$$name.prof -benchmem "$$pkg"; \
 	done
 	@profs=$$(find $(PROFILE_DIR)/cpu -name '*.prof' -size +0c 2>/dev/null); \
 	if [ -n "$$profs" ]; then \
@@ -176,7 +176,7 @@ profile-mem:
 	@rm -f $(PROFILE_DIR)/mem/*.prof
 	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
 		name=$$(echo "$$pkg" | tr '/' '_'); \
-		$(GO_TEST) -run='^$$' -bench=. -memprofile=$(PROFILE_DIR)/mem/$$name.prof -benchmem "$$pkg" 2>/dev/null || true; \
+		$(GO_TEST) -run='^$$' -bench=. -memprofile=$(PROFILE_DIR)/mem/$$name.prof -benchmem "$$pkg"; \
 	done
 	@profs=$$(find $(PROFILE_DIR)/mem -name '*.prof' -size +0c 2>/dev/null); \
 	if [ -n "$$profs" ]; then \
