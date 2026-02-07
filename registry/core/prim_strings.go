@@ -52,10 +52,9 @@ func PrimString(_ context.Context, mc *machine.MachineContext) error {
 // (make-string k) creates a string of k unspecified characters.
 // (make-string k char) creates a string of k copies of char.
 func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
-	k := mc.Arg(0)
-	kInt, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-string: expected an integer but got %T", k)
+	kInt, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-string")
+	if err != nil {
+		return err
 	}
 	if kInt.Value < 0 {
 		return values.NewForeignError("make-string: length must be non-negative")
@@ -83,10 +82,9 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringLength implements string-length.
 // Returns the number of characters (runes) in the string.
 func PrimStringLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-length: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-length")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(utf8.RuneCountInString(s.Value))))
 	return nil
@@ -95,15 +93,13 @@ func PrimStringLength(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringRef implements the string-ref primitive.
 // Returns the character at the given index in the string.
 func PrimStringRef(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-ref: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-ref")
+	if err != nil {
+		return err
 	}
-	idx, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "string-ref: expected an integer but got %T", k)
+	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "string-ref")
+	if err != nil {
+		return err
 	}
 	runes := []rune(s.Value)
 	if idx.Value < 0 || idx.Value >= int64(len(runes)) {
@@ -117,20 +113,17 @@ func PrimStringRef(_ context.Context, mc *machine.MachineContext) error {
 // Stores char in element k of string.
 // R7RS §6.7: (string-set! string k char)
 func PrimStringSet(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	c := mc.Arg(2)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-set!: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-set!")
+	if err != nil {
+		return err
 	}
-	idx, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "string-set!: expected an integer but got %T", k)
+	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "string-set!")
+	if err != nil {
+		return err
 	}
-	char, ok := c.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "string-set!: expected a character but got %T", c)
+	char, err := helpers.RequireArg[*values.Character](mc, 2, values.ErrNotACharacter, "string-set!")
+	if err != nil {
+		return err
 	}
 	length := s.Len()
 	if idx.Value < 0 || idx.Value >= int64(length) {
@@ -145,13 +138,11 @@ func PrimStringSet(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.7: (string->list string [start [end]])
 // Converts a string (or substring) to a list of characters.
 func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string->list: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->list")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	runes := s.Runes()
 	length := len(runes)
@@ -210,10 +201,9 @@ func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
 // PrimSymbolToString implements the symbol->string primitive.
 // Converts a symbol to a string.
 func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	sym, ok := o.(*values.Symbol)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASymbol, "symbol->string: expected a symbol but got %T", o)
+	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewString(sym.Key))
 	return nil
@@ -222,10 +212,9 @@ func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringToSymbol implements the string->symbol primitive.
 // Converts a string to an interned symbol.
 func PrimStringToSymbol(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string->symbol: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->symbol")
+	if err != nil {
+		return err
 	}
 	sym := values.NewSymbol(s.Value)
 	// Intern the symbol
@@ -268,20 +257,17 @@ func PrimStringAppend(ctx context.Context, mc *machine.MachineContext) error {
 // PrimSubstring implements the substring primitive.
 // Returns a substring between the given start and end indices.
 func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	start := mc.Arg(1)
-	end := mc.Arg(2)
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "substring: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "substring")
+	if err != nil {
+		return err
 	}
-	startIdx, ok := start.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "substring: expected an integer but got %T", start)
+	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "substring")
+	if err != nil {
+		return err
 	}
-	endIdx, ok := end.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "substring: expected an integer but got %T", end)
+	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, values.ErrNotANumber, "substring")
+	if err != nil {
+		return err
 	}
 	runes := []rune(s.Value)
 	if startIdx.Value < 0 || endIdx.Value > int64(len(runes)) || startIdx.Value > endIdx.Value {
@@ -296,13 +282,11 @@ func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
 // Returns a newly allocated copy of the given string (or substring).
 // The returned string is mutable and distinct from the original.
 func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	str, ok := s.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy: expected a string but got %T", s)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-copy")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	runes := str.Runes()
 	length := len(runes)

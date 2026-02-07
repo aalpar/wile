@@ -25,12 +25,11 @@ import (
 // PrimMakeBytevector implements the (make-bytevector) primitive.
 // Creates a bytevector of the given size, optionally filled with a specified byte value.
 func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
-	k := mc.Arg(0)
-	rest := mc.Arg(1)
-	size, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: expected an integer but got %T", k)
+	size, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-bytevector")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 	if size.Value < 0 {
 		return values.NewForeignError("make-bytevector: size must be non-negative")
 	}
@@ -96,10 +95,9 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorLength implements the bytevector-length primitive.
 // Returns length of bytevector.
 func PrimBytevectorLength(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-length: expected a bytevector but got %T", o)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-length")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(len(*bv))))
 	return nil
@@ -108,15 +106,13 @@ func PrimBytevectorLength(_ context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorU8Ref implements the bytevector-u8-ref primitive.
 // Returns byte at index.
 func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-u8-ref: expected a bytevector but got %T", o)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-u8-ref")
+	if err != nil {
+		return err
 	}
-	idx, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-u8-ref: expected an integer but got %T", k)
+	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "bytevector-u8-ref")
+	if err != nil {
+		return err
 	}
 	if idx.Value < 0 || idx.Value >= int64(len(*bv)) {
 		return values.NewForeignError("bytevector-u8-ref: index out of bounds")
@@ -128,23 +124,21 @@ func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorU8Set implements the bytevector-u8-set! primitive.
 // Sets byte at index.
 func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-u8-set!")
+	if err != nil {
+		return err
+	}
+	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "bytevector-u8-set!")
+	if err != nil {
+		return err
+	}
 	obj := mc.Arg(2)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-u8-set!: expected a bytevector but got %T", o)
-	}
-	idx, ok := k.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-u8-set!: expected an integer but got %T", k)
-	}
 	if idx.Value < 0 || idx.Value >= int64(len(*bv)) {
 		return values.NewForeignError("bytevector-u8-set!: index out of bounds")
 	}
-	byteVal, ok := obj.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-u8-set!: expected an integer but got %T", obj)
+	byteVal, err := helpers.RequireType[*values.Integer](obj, values.ErrNotAnInteger, "bytevector-u8-set!")
+	if err != nil {
+		return err
 	}
 	if byteVal.Value < 0 || byteVal.Value > 255 {
 		return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
@@ -157,12 +151,11 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorCopy implements the bytevector-copy primitive.
 // Returns a copy of a bytevector.
 func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy: expected a bytevector but got %T", o)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-copy")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "bytevector-copy")
 	if err != nil {
@@ -185,23 +178,19 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorCopyBang implements the bytevector-copy! primitive.
 // Copies bytes between bytevectors.
 func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error {
-	to := mc.Arg(0)
-	at := mc.Arg(1)
-	from := mc.Arg(2)
+	toBv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-copy!")
+	if err != nil {
+		return err
+	}
+	atIdx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "bytevector-copy!")
+	if err != nil {
+		return err
+	}
+	fromBv, err := helpers.RequireArg[*values.ByteVector](mc, 2, values.ErrNotAByteVector, "bytevector-copy!")
+	if err != nil {
+		return err
+	}
 	rest := mc.Arg(3)
-
-	toBv, ok := to.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy!: expected a bytevector but got %T", to)
-	}
-	atIdx, ok := at.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector-copy!: at must be an integer but got %T", at)
-	}
-	fromBv, ok := from.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-copy!: from must be a bytevector but got %T", from)
-	}
 
 	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*fromBv)), "bytevector-copy!")
 	if err != nil {
@@ -262,12 +251,11 @@ func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error
 // PrimUtf8ToString implements the utf8->string primitive.
 // Converts a UTF-8 encoded bytevector to a string with optional start and end indices.
 func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-	bv, ok := o.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "utf8->string: expected a bytevector but got %T", o)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "utf8->string")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "utf8->string")
 	if err != nil {
@@ -293,12 +281,11 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringToUtf8 implements the string->utf8 primitive.
 // Converts a string to a UTF-8 encoded bytevector with optional start and end indices.
 func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-	str, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string->utf8: expected a string but got %T", o)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->utf8")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	s := str.Value
 	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(s)), "string->utf8")

@@ -251,9 +251,9 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 // PrimAbs implements the abs primitive.
 // R7RS §6.2.6: For a complex number, abs returns its magnitude.
 func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "abs: expected a number but got %T", mc.Arg(0))
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(n.Abs())
 	return nil
@@ -476,9 +476,9 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: The exact procedure returns an exact representation
 // of z that is numerically closest to the argument.
 func PrimExact(_ context.Context, mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "exact: expected a number but got %T", mc.Arg(0))
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "exact")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(n.ToExact())
 	return nil
@@ -490,9 +490,9 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: The inexact procedure returns an inexact representation
 // of z that is numerically closest to the argument.
 func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact: expected a number but got %T", mc.Arg(0))
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "inexact")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(n.ToInexact())
 	return nil

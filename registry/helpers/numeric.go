@@ -240,26 +240,11 @@ func NumericExtremum(
 	return nil
 }
 
-// MaybeToInexact converts an exact number to inexact (Float) if needed.
+// MaybeToInexact converts an exact number to inexact if needed.
 // If the number is already inexact or hasInexact is false, returns it unchanged.
 func MaybeToInexact(n values.Number, hasInexact bool) values.Value {
-	if !hasInexact {
+	if !hasInexact || !n.IsExact() {
 		return n
 	}
-	// If already inexact, return as-is
-	if !n.IsExact() {
-		return n
-	}
-	// Convert exact to inexact
-	switch v := n.(type) {
-	case *values.Integer:
-		return values.NewFloat(float64(v.Value))
-	case *values.BigInteger:
-		f, _ := v.ToInexact().(*values.Float)
-		return f
-	case *values.Rational:
-		return values.NewFloat(v.Float64())
-	default:
-		return n
-	}
+	return n.ToInexact()
 }

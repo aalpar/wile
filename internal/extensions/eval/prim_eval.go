@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -84,9 +85,9 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 // Loads and evaluates a Scheme source file.
 func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 	filenameVal := mc.Arg(0)
-	filename, ok := filenameVal.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "load: expected a string but got %T", filenameVal)
+	filename, err := helpers.RequireType[*values.String](filenameVal, values.ErrNotAString, "load")
+	if err != nil {
+		return err
 	}
 
 	// Open the file
@@ -164,9 +165,9 @@ func PrimInteractionEnvironment(_ context.Context, mc *machine.MachineContext) e
 // Returns R5RS env.
 func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	version := mc.Arg(0)
-	versionInt, ok := version.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "scheme-report-environment: expected an integer but got %T", version)
+	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "scheme-report-environment")
+	if err != nil {
+		return err
 	}
 
 	// R7RS specifies version 5 (for R5RS) or 7 (for R7RS)
@@ -187,9 +188,9 @@ func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) 
 // Returns an empty R5RS environment with no bindings.
 func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 	version := mc.Arg(0)
-	versionInt, ok := version.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInteger, "null-environment: expected an integer but got %T", version)
+	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "null-environment")
+	if err != nil {
+		return err
 	}
 
 	// R7RS specifies version 5 (for R5RS)

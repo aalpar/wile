@@ -14,7 +14,33 @@
 
 package helpers
 
-import "github.com/aalpar/wile/values"
+import (
+	"strings"
+
+	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
+)
+
+// RequireArg extracts mc.Arg(index) and asserts it has concrete type T.
+// On failure it returns a wrapped error using the given sentinel and primitive name.
+// The error message format is "<name>: expected <type> but got <actual>", where
+// <type> is derived from the sentinel message by trimming the "not " prefix
+// (e.g., ErrNotAVector "not a vector" → "a vector").
+func RequireArg[T any](mc *machine.MachineContext, index int, sentinel error, name string) (T, error) {
+	return RequireType[T](mc.Arg(index), sentinel, name)
+}
+
+// RequireType asserts that v has concrete type T.
+// On failure it returns a wrapped error using the given sentinel and primitive name.
+func RequireType[T any](v values.Value, sentinel error, name string) (T, error) {
+	result, ok := v.(T)
+	if !ok {
+		var zero T
+		return zero, values.WrapForeignErrorf(sentinel, "%s: expected %s but got %T",
+			name, strings.TrimPrefix(sentinel.Error(), "not "), v)
+	}
+	return result, nil
+}
 
 // ParseOptionalStartEnd extracts optional [start [end]] integer arguments from a rest list.
 // defaultEnd is the value used if end is not provided.

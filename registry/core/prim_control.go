@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -127,9 +128,9 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call/cc: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call/cc")
+	if err != nil {
+		return err
 	}
 
 	// Capture the current continuation and winding stack.
@@ -165,7 +166,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	// Sub-context mode: run the lambda in an isolated context.
 	sub := mc.NewSubContext()
 	sub.SetWindingStack(mc.WindingStack())
-	_, err := sub.Apply(mcls, contClosure)
+	_, err = sub.Apply(mcls, contClosure)
 	if err != nil {
 		return err
 	}
@@ -359,19 +360,19 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 
-	producerCls, ok := producer.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-values: producer must be a procedure, got %T", producer)
+	producerCls, err := helpers.RequireType[*machine.MachineClosure](producer, values.ErrNotAProcedure, "call-with-values")
+	if err != nil {
+		return err
 	}
 
-	consumerCls, ok := consumer.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-values: consumer must be a procedure, got %T", consumer)
+	consumerCls, err := helpers.RequireType[*machine.MachineClosure](consumer, values.ErrNotAProcedure, "call-with-values")
+	if err != nil {
+		return err
 	}
 
 	// Call producer with no arguments
 	sub := mc.NewSubContext()
-	_, err := sub.Apply(producerCls)
+	_, err = sub.Apply(producerCls)
 	if err != nil {
 		return err
 	}

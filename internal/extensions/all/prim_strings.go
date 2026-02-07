@@ -26,6 +26,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -50,9 +51,9 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	toArg := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	to, ok := toArg.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy!: expected a string for 'to' but got %T", toArg)
+	to, err := helpers.RequireType[*values.String](toArg, values.ErrNotAString, "string-copy!")
+	if err != nil {
+		return err
 	}
 
 	// Parse variadic arguments: at from [start [end]]
@@ -71,15 +72,15 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("string-copy!: expected at least 3 arguments")
 	}
 
-	atVal, ok := args[0].(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy!: expected an integer for 'at' but got %T", args[0])
+	atVal, err := helpers.RequireType[*values.Integer](args[0], values.ErrNotANumber, "string-copy!")
+	if err != nil {
+		return err
 	}
 	at := int(atVal.Value)
 
-	from, ok := args[1].(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-copy!: expected a string for 'from' but got %T", args[1])
+	from, err := helpers.RequireType[*values.String](args[1], values.ErrNotAString, "string-copy!")
+	if err != nil {
+		return err
 	}
 
 	fromLen := from.Len()
@@ -126,13 +127,11 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringFill implements the string-fill! primitive.
 // R7RS §6.7: (string-fill! string fill [start [end]])
 func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	s, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-fill!: expected a string but got %T", o)
+	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-fill!")
+	if err != nil {
+		return err
 	}
+	rest := mc.Arg(1)
 
 	// Parse variadic arguments: fill [start [end]]
 	var args []values.Value
@@ -150,9 +149,9 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("string-fill!: expected at least 2 arguments")
 	}
 
-	char, ok := args[0].(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "string-fill!: expected a character but got %T", args[0])
+	char, err := helpers.RequireType[*values.Character](args[0], values.ErrNotACharacter, "string-fill!")
+	if err != nil {
+		return err
 	}
 
 	length := s.Len()
@@ -190,9 +189,9 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "string-map: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "string-map")
+	if err != nil {
+		return err
 	}
 
 	if values.IsEmptyList(stringsVal) {
@@ -207,9 +206,9 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-map: improper argument list")
 		}
-		s, ok := tuple.Car().(*values.String)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "string-map: expected a string but got %T", tuple.Car())
+		s, err := helpers.RequireType[*values.String](tuple.Car(), values.ErrNotAString, "string-map")
+		if err != nil {
+			return err
 		}
 		strs = append(strs, s)
 		current = tuple.Cdr()
@@ -275,9 +274,9 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "string-for-each: expected a procedure but got %T", proc)
+	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "string-for-each")
+	if err != nil {
+		return err
 	}
 
 	if values.IsEmptyList(stringsVal) {
@@ -292,9 +291,9 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "string-for-each: improper argument list")
 		}
-		s, ok := tuple.Car().(*values.String)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "string-for-each: expected a string but got %T", tuple.Car())
+		s, err := helpers.RequireType[*values.String](tuple.Car(), values.ErrNotAString, "string-for-each")
+		if err != nil {
+			return err
 		}
 		strs = append(strs, s)
 		current = tuple.Cdr()
@@ -382,10 +381,9 @@ func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error
 // R7RS §6.7: Returns a string whose characters are the uppercase versions of the characters in string.
 // Uses Unicode full case mapping which can expand characters (e.g., ß → SS).
 func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.Arg(0)
-	str, ok := s.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-upcase: expected a string but got %T", s)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-upcase")
+	if err != nil {
+		return err
 	}
 	// Use Unicode full case mapping (language-independent)
 	caser := cases.Upper(language.Und)
@@ -398,10 +396,9 @@ func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.7: Returns a string whose characters are the lowercase versions of the characters in string.
 // Uses Unicode full case mapping which can expand characters.
 func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.Arg(0)
-	str, ok := s.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-downcase: expected a string but got %T", s)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-downcase")
+	if err != nil {
+		return err
 	}
 	// Use Unicode full case mapping (language-independent)
 	caser := cases.Lower(language.Und)
@@ -414,10 +411,9 @@ func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.7: Returns a string whose characters are the case-folded versions of the characters in string.
 // Uses Unicode full case folding which can expand characters (e.g., ß → ss).
 func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
-	s := mc.Arg(0)
-	str, ok := s.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string-foldcase: expected a string but got %T", s)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-foldcase")
+	if err != nil {
+		return err
 	}
 	// Use Unicode full case folding
 	caser := cases.Fold()

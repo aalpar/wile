@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -252,10 +253,9 @@ func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 // PrimWriteChar implements the write-char primitive.
 // Writes a character to the current output port or to the specified output port.
 func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	ch, ok := obj.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "expected a character but got %T", obj)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "write-char")
+	if err != nil {
+		return err
 	}
 	o := mc.EnvironmentFrame().GetLocalBinding(environment.NewLocalIndex(1, 0)).Value()
 	tuple, ok := o.(values.Tuple)
@@ -276,7 +276,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 		writer = p
 	}
 	buf := make([]byte, 0, utf8.UTFMax)
-	_, err := writer.Write(utf8.AppendRune(buf, ch.Value))
+	_, err = writer.Write(utf8.AppendRune(buf, ch.Value))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing character to output port")
 	}
@@ -551,12 +551,11 @@ func PrimCharReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
 func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
-	kVal := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	k, ok := kVal.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "read-string: expected an integer for k but got %T", kVal)
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-string")
+	if err != nil {
+		return err
 	}
 	if k.Value < 0 {
 		return values.NewForeignError("read-string: k must be non-negative")
@@ -608,12 +607,11 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (write-string string [port [start [end]]])
 // Writes the characters of string (optionally between start and end) to port.
 func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
-	strVal := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	str, ok := strVal.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "write-string: expected a string but got %T", strVal)
+	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "write-string")
+	if err != nil {
+		return err
 	}
 
 	runes := str.Runes()
@@ -672,7 +670,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// WriteByte the substring
-	_, err := writer.Write([]byte(string(runes[start:end])))
+	_, err = writer.Write([]byte(string(runes[start:end])))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-string: error writing to output port")
 	}
@@ -823,12 +821,11 @@ func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
 func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
-	kVal := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	k, ok := kVal.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "read-bytevector: expected an integer for k but got %T", kVal)
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-bytevector")
+	if err != nil {
+		return err
 	}
 	if k.Value < 0 {
 		return values.NewForeignError("read-bytevector: k must be non-negative")
@@ -879,12 +876,11 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 // Reads bytes from port into an existing bytevector.
 // Returns the number of bytes read, or eof-object if no bytes available.
 func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error {
-	bvVal := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	bv, ok := bvVal.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "read-bytevector!: expected a bytevector but got %T", bvVal)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "read-bytevector!")
+	if err != nil {
+		return err
 	}
 
 	// Parse optional arguments: [port [start [end]]]
@@ -947,17 +943,14 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 // R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
 // Writes the bytes of bytevector to port.
 func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
-	bvVal := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	bv, ok := bvVal.(*values.ByteVector)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAByteVector, "write-bytevector: expected a bytevector but got %T", bvVal)
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "write-bytevector")
+	if err != nil {
+		return err
 	}
 
 	bvLen := int64(len(*bv))
-	start := int64(0)
-	end := int64(0)
 
 	// Parse optional arguments: [port [start [end]]]
 	tuple, ok := rest.(values.Tuple)

@@ -41,16 +41,14 @@ Code Cleanup
 ---
 
 ### Use values.Number Interface
-- [ ] **Goal:** Use `values.Number` interface where code accepts any numeric type
-- [ ] **Benefit:** Cleaner type checking, better error messages
-- [ ] **Files:** Primitive implementations, compiler
+- [x] **Status:** CLOSED (2026-02-07) — Already using `values.Number` at all major call sites
+- [x] **Resolution:** All numeric fold/comparison helpers, predicates, and math extensions already use `values.Number`. Remaining type switches on individual numeric types are legitimately type-specific (extracting Go native values, R7RS eqv? semantics, overflow detection). Simplified `MaybeToInexact` to use `n.ToInexact()` instead of a manual type switch.
 
 ---
 
 ### Use values.Indexable Interface
-- [ ] **Goal:** Use `values.Indexable` for indexable values (vectors, strings, bytevectors)
-- [ ] **Note:** For maps use `values.Mappable`
-- [ ] **Benefit:** Unified ref/set operations
+- [x] **Status:** CLOSED (2026-02-07) — Interface exists but has no applicable call sites
+- [x] **Resolution:** The `Indexable` interface is defined and implemented by `Vector`, `String`, and `ByteVector` with compile-time assertions. However, R7RS mandates separate ref/set primitives per type (`vector-ref`, `string-ref`, `bytevector-u8-ref`) with type-specific validation and error messages. No code type-switches across all three doing the same operation. The `Mappable` interface referenced in the original TODO does not exist. The interface remains available for future generic consumers.
 
 ---
 
@@ -145,7 +143,7 @@ func TestPrimName(t *testing.T) {
 
 Code Refactoring
 ----------------
-- [ ] Add `registry/helpers/args.go` - helper functions for argument extraction (~600 lines saved)
+- [x] ~~Add `registry/helpers/args.go`~~ - `RequireArg[T]` and `RequireType[T]` generics replace ~190 type assertion sites across 20+ prim files
 - [x] ~~Add `machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
 - [ ] Migrate ~7 remaining operation files to use EqualTo helpers (23/30 already migrated)
 

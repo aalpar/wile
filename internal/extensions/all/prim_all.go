@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -36,9 +37,9 @@ func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
-	name, ok := nameArg.(*values.Symbol)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASymbol, "make-record-type: expected a symbol for name but got %T", nameArg)
+	name, err := helpers.RequireType[*values.Symbol](nameArg, values.ErrNotASymbol, "make-record-type")
+	if err != nil {
+		return err
 	}
 
 	fieldNames, err := listToSymbols(ctx, fieldNamesArg)
@@ -70,10 +71,9 @@ func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
 func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	rec, ok := obj.(*values.Record)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARecord, "record-type: expected a record but got %T", obj)
+	rec, err := helpers.RequireArg[*values.Record](mc, 0, values.ErrNotARecord, "record-type")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(rec.RecordType())
 	return nil
@@ -85,9 +85,9 @@ func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) erro
 	rtArg := mc.Arg(0)
 	fieldTagsArg := mc.Arg(1)
 
-	rt, ok := rtArg.(*values.RecordType)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARecordType, "record-constructor: expected a record type but got %T", rtArg)
+	rt, err := helpers.RequireType[*values.RecordType](rtArg, values.ErrNotARecordType, "record-constructor")
+	if err != nil {
+		return err
 	}
 
 	constructorFields, err := listToSymbols(ctx, fieldTagsArg)
@@ -114,11 +114,9 @@ func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) erro
 // PrimRecordPredicate implements the (record-predicate rt) primitive.
 // Returns a predicate procedure for the record type.
 func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.Arg(0)
-
-	rt, ok := rtArg.(*values.RecordType)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARecordType, "record-predicate: expected a record type but got %T", rtArg)
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-predicate")
+	if err != nil {
+		return err
 	}
 
 	closure := newRecordPredicateClosure(mc.EnvironmentFrame().TopLevel(), rt)
@@ -129,17 +127,16 @@ func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordAccessor implements the (record-accessor rt field-tag) primitive.
 // Returns an accessor procedure for the specified field.
 func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.Arg(0)
 	fieldTagArg := mc.Arg(1)
 
-	rt, ok := rtArg.(*values.RecordType)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARecordType, "record-accessor: expected a record type but got %T", rtArg)
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-accessor")
+	if err != nil {
+		return err
 	}
 
-	fieldTag, ok := fieldTagArg.(*values.Symbol)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASymbol, "record-accessor: expected a symbol for field-tag but got %T", fieldTagArg)
+	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, values.ErrNotASymbol, "record-accessor")
+	if err != nil {
+		return err
 	}
 
 	idx := rt.FieldIndex(fieldTag)
@@ -155,17 +152,16 @@ func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
 // PrimRecordModifier implements the (record-modifier rt field-tag) primitive.
 // Returns a modifier procedure for the specified field.
 func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
-	rtArg := mc.Arg(0)
 	fieldTagArg := mc.Arg(1)
 
-	rt, ok := rtArg.(*values.RecordType)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotARecordType, "record-modifier: expected a record type but got %T", rtArg)
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-modifier")
+	if err != nil {
+		return err
 	}
 
-	fieldTag, ok := fieldTagArg.(*values.Symbol)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASymbol, "record-modifier: expected a symbol for field-tag but got %T", fieldTagArg)
+	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, values.ErrNotASymbol, "record-modifier")
+	if err != nil {
+		return err
 	}
 
 	idx := rt.FieldIndex(fieldTag)

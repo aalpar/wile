@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -73,21 +74,22 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
 
-	thunkCls, ok := thunk.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-continuation-prompt: thunk must be a procedure, got %T", thunk)
+	thunkCls, err := helpers.RequireType[*machine.MachineClosure](thunk, values.ErrNotAProcedure, "call-with-continuation-prompt")
+	if err != nil {
+		return err
 	}
 
-	tag, ok := tagVal.(*machine.PromptTag)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-continuation-prompt: expected a prompt tag, got %T", tagVal)
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
+	if err != nil {
+		return err
 	}
 
 	var handlerCls *machine.MachineClosure
 	if handlerVal != values.FalseValue {
-		handlerCls, ok = handlerVal.(*machine.MachineClosure)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-continuation-prompt: handler must be a procedure or #f, got %T", handlerVal)
+		var handlerErr error
+		handlerCls, handlerErr = helpers.RequireType[*machine.MachineClosure](handlerVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
+		if handlerErr != nil {
+			return handlerErr
 		}
 	}
 
@@ -100,7 +102,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 	sub.SetWindingStack(mc.WindingStack())
 	sub.SetPromptTag(tag)
 
-	_, err := sub.Apply(thunkCls)
+	_, err = sub.Apply(thunkCls)
 	if err != nil {
 		return err
 	}
@@ -164,13 +166,11 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
 func PrimAbortCurrentContinuation(_ context.Context, mc *machine.MachineContext) error {
-	tagVal := mc.Arg(0)
-	restVal := mc.Arg(1)
-
-	tag, ok := tagVal.(*machine.PromptTag)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "abort-current-continuation: expected a prompt tag, got %T", tagVal)
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, values.ErrNotAProcedure, "abort-current-continuation")
+	if err != nil {
+		return err
 	}
+	restVal := mc.Arg(1)
 
 	var abortValues []values.Value
 	if !values.IsEmptyList(restVal) {
@@ -205,14 +205,14 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
-	procCls, ok := proc.(*machine.MachineClosure)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-composable-continuation: expected a procedure, got %T", proc)
+	procCls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call-with-composable-continuation")
+	if err != nil {
+		return err
 	}
 
-	tag, ok := tagVal.(*machine.PromptTag)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-composable-continuation: expected a prompt tag, got %T", tagVal)
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAProcedure, "call-with-composable-continuation")
+	if err != nil {
+		return err
 	}
 
 	// Find the prompt in the continuation chain or on the context itself.
@@ -235,7 +235,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	// The result of proc becomes the value delivered to the prompt boundary.
 	sub := mc.NewSubContext()
 	sub.SetWindingStack(mc.WindingStack())
-	_, err := sub.Apply(procCls, cc)
+	_, err = sub.Apply(procCls, cc)
 	if err != nil {
 		return err
 	}

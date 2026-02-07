@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -84,10 +85,9 @@ func PrimEmergencyExit(_ context.Context, mc *machine.MachineContext) error {
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
 // Gets environment variable value.
 func PrimGetEnvironmentVariable(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	name, ok := o.(*values.String)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "get-environment-variable: expected a string but got %T", o)
+	name, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "get-environment-variable")
+	if err != nil {
+		return err
 	}
 	val, exists := os.LookupEnv(name.Value)
 	if exists {
