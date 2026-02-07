@@ -77,13 +77,12 @@ func (p *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool 
 // This is used for R7RS §4.3.2 auxiliary syntax hygiene: we compare the
 // actual bindings (not just whether they exist) to determine if a literal
 // matches. Two identifiers match only if they have the same binding.
-func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) any {
+func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
 	if p.env == nil {
 		return nil
 	}
 	s := values.NewSymbol(sym)
-	binding := p.env.GetBindingWithScopes(s, scopes)
-	return binding
+	return p.env.GetBindingWithScopes(s, scopes)
 }
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.

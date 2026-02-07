@@ -37,6 +37,7 @@ package match
 import (
 	"context"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
@@ -50,7 +51,7 @@ type localScopesProvider interface {
 // globalBindingProvider is an interface for getting global bindings from a free ID resolution.
 // Implemented by machine.FreeIdResolution to avoid circular imports.
 type globalBindingProvider interface {
-	GetGlobal() any
+	GetGlobal() *environment.GlobalIndex
 }
 
 // hasLocalBindingProvider is an interface for checking if a local binding was found
@@ -71,10 +72,10 @@ type BindingChecker interface {
 	HasBinding(sym string, scopes []*syntax.Scope) bool
 
 	// GetBinding returns the binding for sym with the given scopes.
-	// Returns nil if no binding exists. The returned value is opaque but
-	// can be compared for equality to check if two identifiers have the
-	// same binding (per R7RS §4.3.2).
-	GetBinding(sym string, scopes []*syntax.Scope) any
+	// Returns nil if no binding exists. Bindings can be compared for
+	// pointer equality to check if two identifiers have the same
+	// binding (per R7RS §4.3.2).
+	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
 }
 
 // SyntaxMatcher adapts the core Matcher to work with syntax objects and hygiene.

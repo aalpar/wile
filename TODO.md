@@ -4,8 +4,9 @@ TODO
 Code Cleanup
 ------------
 ### FreeIdResolution
-- [ ] Try and find a more specific type for the interface, instead of 'any'.
-- [ ] **Location:** `internal/match/syntax_adapter.go` and `machine/compile_syntax_rules.go`
+- [x] Try and find a more specific type for the interface, instead of 'any'.
+- [x] **Location:** `internal/match/syntax_adapter.go` and `machine/compile_syntax_rules.go`
+- [x] **Resolution:** Replaced `any` with `*environment.GlobalIndex` in `FreeIdResolution.Global` and `globalBindingProvider.GetGlobal()`, and `*environment.Binding` in `BindingChecker.GetBinding()` and `envBindingChecker.GetBinding()`. Import is safe: `match` → `environment` (no cycle). `SyntaxSymbol.ResolvedBinding any` stays `any` to avoid `syntax` ↔ `environment` cycle.
 
 ### Scope Matching Optimization
 - [ ] **Location:** `internal/syntax/` and `internal/match/`

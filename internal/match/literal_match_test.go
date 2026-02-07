@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 
@@ -272,10 +273,10 @@ func (p mockLocalScopes) GetLocalScopes() []*syntax.Scope { return p.scopes }
 
 // mockGlobalBinding implements globalBindingProvider for testing.
 type mockGlobalBinding struct {
-	binding any
+	binding *environment.GlobalIndex
 }
 
-func (p mockGlobalBinding) GetGlobal() any { return p.binding }
+func (p mockGlobalBinding) GetGlobal() *environment.GlobalIndex { return p.binding }
 
 // mockHasLocalBinding implements hasLocalBindingProvider for testing.
 type mockHasLocalBinding struct {
@@ -316,7 +317,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 	})
 
 	c.Run("free identifier with global binding", func(c *qt.C) {
-		globalIdx := 42 // some mock global binding
+		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
 		freeIds := map[string]any{
 			"baz": mockGlobalBinding{binding: globalIdx},
 		}
@@ -356,7 +357,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 	})
 
 	c.Run("global binding with existing scopes clears them", func(c *qt.C) {
-		globalIdx := 99
+		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
 		freeIds := map[string]any{
 			"baz": mockGlobalBinding{binding: globalIdx},
 		}
