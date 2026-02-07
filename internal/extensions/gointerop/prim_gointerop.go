@@ -120,11 +120,7 @@ func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "channel-try-send!")
 	}
 
-	if sent {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(sent))
 	return nil
 }
 
@@ -192,11 +188,7 @@ func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAChannel, "channel-closed?: expected channel, got %T", o)
 	}
 
-	if ch.IsClosed() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(ch.IsClosed()))
 	return nil
 }
 
@@ -397,11 +389,7 @@ func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-read-lock!: expected rw-mutex, got %T", o)
 	}
 
-	if rwm.TryRLock() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryRLock()))
 	return nil
 }
 
@@ -414,11 +402,7 @@ func PrimRWMutexTryWriteLock(_ context.Context, mc *machine.MachineContext) erro
 		return values.WrapForeignErrorf(values.ErrNotARWMutex, "rw-mutex-try-write-lock!: expected rw-mutex, got %T", o)
 	}
 
-	if rwm.TryLock() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryLock()))
 	return nil
 }
 
@@ -471,11 +455,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		}
 	})
 
-	if executed {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(executed))
 	return nil
 }
 
@@ -488,11 +468,7 @@ func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAOnce, "once-done?: expected once, got %T", o)
 	}
 
-	if once.Done() {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(once.Done()))
 	return nil
 }
 
@@ -585,10 +561,6 @@ func PrimAtomicCompareAndSwap(_ context.Context, mc *machine.MachineContext) err
 		return values.WrapForeignErrorf(values.ErrNotAnAtomic, "atomic-compare-and-swap!: expected atomic, got %T", o)
 	}
 
-	if a.CompareAndSwap(oldVal, newVal) {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(a.CompareAndSwap(oldVal, newVal)))
 	return nil
 }

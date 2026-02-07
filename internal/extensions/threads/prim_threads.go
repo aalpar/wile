@@ -461,11 +461,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	if acquired {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(acquired))
 	return nil
 }
 
@@ -512,11 +508,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	result := mutex.Unlock(cv, timeout)
-	if result {
-		mc.SetValue(values.TrueValue)
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
+	mc.SetValue(schemeutil.BoolToBoolean(result))
 	return nil
 }
 
