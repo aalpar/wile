@@ -22,15 +22,43 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// evalWhenBehavior categorizes what an eval-when phase name triggers.
+type evalWhenBehavior int
+
+const (
+	evalWhenExpand  evalWhenBehavior = 1 << iota // execute at compile time
+	evalWhenRuntime                              // compile for runtime execution
+)
+
+// evalWhenPhaseTable maps eval-when phase name strings to their behaviors.
+//
+// Phase names follow Chez Scheme's eval-when (R. Kent Dybvig, "The Scheme
+// Programming Language", §12.10). "compile", "load", "eval", and "visit"
+// are Chez phase modes; "expand" and "run" are Wile-specific aliases that
+// map to compile-time execution and runtime code generation respectively.
+//
+// eval-when is not part of R7RS-small; it is a Wile extension.
+var evalWhenPhaseTable = map[string]evalWhenBehavior{
+	"expand":  evalWhenExpand,  // Wile: expand-time execution
+	"compile": evalWhenExpand,  // Chez: compile-time (same as expand)
+	"run":     evalWhenRuntime, // Wile: runtime execution
+	"load":    evalWhenRuntime, // Chez: load-time (same as run)
+	"eval":    evalWhenRuntime, // Chez: eval-time (same as run)
+	"visit":   0,               // Chez: visit-time (accepted, no effect)
+}
+
 // CompileEvalWhen handles (eval-when (phase ...) body ...).
 //
-// This form controls when code is evaluated based on phase specifiers:
+// This form controls when code is evaluated based on phase specifiers.
+// Phase names follow Chez Scheme's eval-when (Dybvig, TSPL §12.10):
 //   - expand: evaluate during macro expansion (at compile time)
 //   - compile: evaluate during compilation (currently same as expand)
 //   - run: evaluate at runtime (generate code for normal execution)
 //
 // Multiple phases can be specified. If both expand and run are specified,
 // the body is evaluated at compile time AND code is generated for runtime.
+//
+// eval-when is not part of R7RS-small; it is a Wile extension.
 //
 // Examples:
 //
@@ -59,7 +87,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	// Get the phase list
 	phasesExpr := argsPair.SyntaxCar()
 	phasesStx := phasesExpr
-	phases, err := p.parseEvalWhenPhases(ctctx.ctx, phasesStx)
+	behavior, err := p.parseEvalWhenPhases(ctctx.ctx, phasesStx)
 	if err != nil {
 		return err
 	}
@@ -71,12 +99,8 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: expected body expressions")
 	}
 
-	// Check which phases are specified
-	hasExpand := phases["expand"] || phases["compile"]
-	hasRun := phases["run"] || phases["load"] || phases["eval"]
-
 	// If expand phase, evaluate at compile time
-	if hasExpand {
+	if behavior&evalWhenExpand != 0 {
 		err := p.evalWhenExecuteAtCompileTime(ctctx, bodyPair)
 		if err != nil {
 			return err
@@ -84,7 +108,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	}
 
 	// If run phase, compile for runtime execution
-	if hasRun {
+	if behavior&evalWhenRuntime != 0 {
 		err := p.evalWhenCompileForRuntime(ctctx, bodyPair)
 		if err != nil {
 			return err
@@ -101,20 +125,20 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 }
 
 // parseEvalWhenPhases parses the phase list from an eval-when form.
-// Returns a map of phase names to booleans.
+// Returns the combined evalWhenBehavior flags for the specified phases.
 // Accepts both (expand run) and (expand compile run) forms.
-// Also accepts R6RS-style phase names: load, eval, visit.
-func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phasesExpr syntax.SyntaxValue) (map[string]bool, error) {
-	phases := make(map[string]bool)
+// Also accepts Chez-style phase names: load, eval, visit.
+func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phasesExpr syntax.SyntaxValue) (evalWhenBehavior, error) {
+	var behavior evalWhenBehavior
 
 	phasesPair, ok := phasesExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: phase list must be a list")
+		return 0, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: phase list must be a list")
 	}
 
 	// Handle empty phase list
 	if syntax.IsSyntaxEmptyList(phasesPair) {
-		return phases, nil
+		return behavior, nil
 	}
 
 	// Iterate through phase symbols
@@ -126,21 +150,20 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 		}
 
 		phaseName := phaseSym.Sym.Key
-		switch phaseName {
-		case "expand", "compile", "run", "load", "eval", "visit":
-			phases[phaseName] = true
-		default:
-			return values.NewForeignErrorf("eval-when: unknown phase %q", phaseName)
+		b, ok := evalWhenPhaseTable[phaseName]
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "eval-when: unknown phase %q", phaseName)
 		}
+		behavior |= b
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return nil, values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper phase list")
+		return 0, values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper phase list")
 	}
-	return phases, nil
+	return behavior, nil
 }
 
 // evalWhenExecuteAtCompileTime executes body expressions at compile time.
