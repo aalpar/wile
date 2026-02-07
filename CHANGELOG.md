@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `ComplexNumber` sub-interface with `RealPart()`, `ImagPart()`, `IsReal()` for interface-based complex number dispatch
 - Add `RealNumber` sub-interface with `IsPositive()`, `IsNegative()`, `Sign()` for interface-based real number dispatch
 - Add `Abs()`, `ToExact()`, `ToInexact()` methods to the `Number` interface
+- Add `IsInteger()`, `IsRational()`, `IsFinite()`, `IsNaN()` predicate methods to the `Number` interface
 
 ### Changed
 
@@ -36,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix parameter converter errors returned without context (now wrapped with "parameter: converter error")
 - Use `errors.Is` for all sentinel error comparisons (`io.EOF`, `ErrMachineHalt`) to handle wrapped errors correctly
 - Fix empty list `()` in expression position causing "empty application in call form" compiler error (R7RS §4.1.2)
+- Fix `(exact-integer? 1+0i)` returning `#f` instead of `#t` for exact complex with zero imaginary part (R7RS §6.2.6)
+- Fix `(rational? z)` returning `#f` for real `BigComplex` values
+- Fix `(integer? z)` for large inexact floats outside int64 range
 
 ## [1.0.3] - 2026-02-05
 
