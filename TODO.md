@@ -184,11 +184,22 @@ func TestPrimName(t *testing.T) {
 - [x] **Tested in `prim_gointerop_test.go`** — 76 test cases: buffered channel send/receive round-trips with FIFO ordering, non-blocking try-send/try-receive with 3-value return via call-with-values, channel close semantics and error conditions, WaitGroup add/done/wait lifecycle, RWMutex lock contention (try-write-lock fails while read-locked and vice versa), Once single-execution guarantee with side-effect verification, AtomicBox load/store/swap/CAS with pointer-identity semantics, type predicate coverage for all 5 value types, 27 error cases for type mismatches and invalid operations
 
 #### Threads — `internal/extensions/threads/prim_threads.go` (637 lines, 22 primitives)
-- [ ] `current-thread`, `thread?`, `make-thread`, `thread-name`, `thread-specific`, `thread-specific-set!` — thread identity/metadata
-- [ ] `thread-start!`, `thread-yield!`, `thread-sleep!`, `thread-terminate!`, `thread-join!` — thread lifecycle
-- [ ] `mutex?`, `make-mutex`, `mutex-name`, `mutex-specific`, `mutex-specific-set!`, `mutex-state`, `mutex-lock!`, `mutex-unlock!` — SRFI-18 mutexes
-- [ ] `condition-variable?`, `make-condition-variable`, `condition-variable-name`, `condition-variable-specific`, `condition-variable-specific-set!`, `condition-variable-signal!`, `condition-variable-broadcast!` — condition variables
-- [ ] `current-time`, `time?`, `time->seconds`, `seconds->time` — SRFI-18 time
+- [x] `current-thread`, `thread?`, `make-thread`, `thread-name`, `thread-specific`, `thread-specific-set!` — thread identity/metadata
+- [x] `thread-start!`, `thread-yield!`, `thread-sleep!`, `thread-terminate!`, `thread-join!` — thread lifecycle
+- [x] `mutex?`, `make-mutex`, `mutex-name`, `mutex-specific`, `mutex-specific-set!`, `mutex-state`, `mutex-lock!`, `mutex-unlock!` — SRFI-18 mutexes
+- [x] `condition-variable?`, `make-condition-variable`, `condition-variable-name`, `condition-variable-specific`, `condition-variable-specific-set!`, `condition-variable-signal!`, `condition-variable-broadcast!` — condition variables
+- [x] `current-time`, `time?`, `time->seconds`, `seconds->time` — SRFI-18 time
+- [x] **Tested in `prim_threads_test.go`** — 72 test cases: thread creation with named/auto-generated names, thread-specific storage round-trips, full start/join lifecycle returning computed values across goroutine boundary, thread-sleep with zero/float/time-object, mutex lock/unlock/relock cycles with state verification via symbol->string (NewSymbol not interned), condition variable creation and no-op signal/broadcast, time round-trip preservation within tolerance, 23 error cases for type mismatches and double-start
+
+---
+
+Test Coverage Enforcement
+-------------------------
+
+### covercheck Threshold (80%)
+- [x] **`runtime` package** — was 0.0%, now 95.3%. Added `runtime/runtime_test.go` with tests for `Compile`, `Run`, and `Load` (success, empty input, multiple expressions, compile error, runtime error).
+- [x] **`values` package** — was 77.5%, now 83.2%. Added `values/numeric_methods_coverage_test.go` with tests for uncovered numeric predicates (`IsInteger`, `IsRational`, `IsFinite`, `IsNaN`), comparison (`Compare` across all type pairs), sign/abs/negate, exactness conversions (`ToExact`, `ToInexact`), `HashCode`, and numeric tower utilities (`Simplify`, `ExactnessOf`, `ResultExactness`).
+- [x] All 14 non-excluded packages now pass `make covercheck` (80% threshold).
 
 ---
 
