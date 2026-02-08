@@ -17,6 +17,7 @@ package wile
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 
 	"github.com/aalpar/wile/values"
@@ -144,7 +145,10 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 		// void
 	case 1:
 		outType := fnType.Out(0)
-		if outType.Implements(errorType) {
+		// Require the exact error interface, not concrete types that implement
+		// error. Concrete error types are non-nilable, and the wrapper calls
+		// IsNil() which would panic on non-interface kinds.
+		if outType == errorType {
 			spec.hasError = true
 		} else {
 			conv, err := makeRetConverter(name, outType)
@@ -154,8 +158,8 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 			spec.retConv = conv
 		}
 	case 2:
-		// Must be (T, error).
-		if !fnType.Out(1).Implements(errorType) {
+		// Must be (T, error) with the exact error interface type.
+		if fnType.Out(1) != errorType {
 			return nil, &Error{
 				Message: fmt.Sprintf("RegisterFunc %q: second return value must be error, got %s", name, fnType.Out(1)),
 			}
@@ -177,8 +181,10 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 
 // makeArgConverter creates a converter for a single Go parameter type.
 func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
-	// Check Value interface first.
-	if t.Implements(valueInterfaceType) {
+	// Only accept the exact wile.Value interface type. Concrete Value
+	// implementers (e.g., *values.Integer) would cause reflect.Call to panic
+	// since the converter produces a *wrappedValue, not the concrete type.
+	if t == valueInterfaceType {
 		return func(v values.Value) (reflect.Value, error) {
 			return reflect.ValueOf(wrapValue(v)), nil
 		}, nil
@@ -206,6 +212,12 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "integer", v)
+			}
+			if n < math.MinInt || n > math.MaxInt {
+				return reflect.Value{}, values.WrapForeignErrorf(
+					values.ErrTypeConversion,
+					"%s: argument %d: integer %d overflows int", name, pos, n,
+				)
 			}
 			return reflect.ValueOf(int(n)), nil
 		}, nil
@@ -272,9 +284,13 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 // makeRetConverter creates a converter for a single Go return type.
 func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
-	// Check Value interface first.
-	if t.Implements(valueInterfaceType) {
+	// Only accept the exact wile.Value interface type. This avoids panics
+	// from typed-nil returns and keeps the API surface predictable.
+	if t == valueInterfaceType {
 		return func(v reflect.Value) values.Value {
+			if v.IsNil() {
+				return values.Void
+			}
 			val := v.Interface().(Value)
 			return unwrapValue(val)
 		}, nil

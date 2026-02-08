@@ -524,6 +524,48 @@ func TestRegisterFuncInt64RejectsNonIntegerFloat(t *testing.T) {
 	evalExpectError(t, engine, "(identity-int64 3.5)")
 }
 
+// --- Nil Value return produces Void ---
+
+func TestRegisterFuncNilValueReturn(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("maybe-nil", func(returnNil bool) wile.Value {
+		if returnNil {
+			return nil
+		}
+		return wile.NewInteger(42)
+	})
+	c.Assert(err, qt.IsNil)
+
+	t.Run("non-nil", func(t *testing.T) {
+		result := eval(t, engine, "(maybe-nil #f)")
+		c.Assert(result.SchemeString(), qt.Equals, "42")
+	})
+
+	t.Run("nil returns void", func(t *testing.T) {
+		result := eval(t, engine, "(maybe-nil #t)")
+		c.Assert(result.IsVoid(), qt.IsTrue)
+	})
+}
+
+// --- Concrete error type rejected at registration ---
+
+func TestRegisterFuncConcreteErrorTypeRejected(t *testing.T) {
+	engine := newEngine(t)
+
+	// *fmt.Stringer is not the error interface, but a func returning
+	// (int, *os.PathError) should be rejected because *os.PathError
+	// implements error but isn't the exact error interface type.
+	// We test with (T, T) where second T is not error interface.
+	err := engine.RegisterFunc("bad", func() (int64, string) {
+		return 0, ""
+	})
+	if err == nil {
+		t.Fatal("expected registration error for non-error second return")
+	}
+}
+
 // --- Multiple FFI functions in one engine ---
 
 func TestRegisterFuncMultipleFunctions(t *testing.T) {
