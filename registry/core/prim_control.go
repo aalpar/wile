@@ -147,7 +147,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	windingStack := mc.WindingStack().Copy()
 
-	contClosure := newEscapeContinuationClosureWithWinding(mc.EnvironmentFrame().TopLevel(), cont, windingStack, escapeCont)
+	contClosure := newEscapeContinuationClosureWithWinding(mc.EnvironmentFrame().TopLevel(), cont, windingStack, escapeCont, mc.ThreadID())
 
 	if mc.Parent() != nil {
 		// Inline mode: apply the lambda directly in the current VM context.
@@ -200,13 +200,23 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 // continuation when called, including winding stack information for proper dynamic-wind handling.
 // The escapeCont parameter is used for continuations captured inside sub-contexts - it represents
 // where execution should continue after the inner continuation completes.
+//
+// The capturingThreadID parameter records which thread captured the continuation. Invoking the
+// continuation from a different thread returns ErrCrossThreadContinuation per SRFI-18 semantics.
 func newEscapeContinuationClosureWithWinding(
 	env *environment.EnvironmentFrame,
 	cont *machine.MachineContinuation,
 	windingStack machine.WindingStack,
 	escapeCont *machine.MachineContinuation,
+	capturingThreadID uint64,
 ) *machine.MachineClosure {
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+		// Reject cross-thread continuation invocation
+		if innerMC.ThreadID() != capturingThreadID {
+			return values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+				"call/cc: continuation captured in thread %d, invoked from thread %d",
+				capturingThreadID, innerMC.ThreadID())
+		}
 		// Get the value passed to the continuation (from the closure's argument)
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		// Return an escape error that will propagate up through sub-contexts

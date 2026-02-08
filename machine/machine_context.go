@@ -63,6 +63,8 @@ type MachineContext struct {
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 	promptTag        *PromptTag           // prompt tag for this context (set by call-with-continuation-prompt)
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
+	threadID         uint64               // SRFI-18 thread identity: 0 = primordial thread
+	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -327,6 +329,8 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 		expanderCtx: nil,          // sub-contexts don't inherit expander context by default
 		parentMC:    p,            // track parent for call/cc continuation capture
 		escapeCont:  p.escapeCont, // inherit escape continuation for nested call/cc
+		threadID:    p.threadID,   // inherit SRFI-18 thread identity
+		thread:      p.thread,     // inherit SRFI-18 thread object
 	}
 }
 
@@ -657,6 +661,28 @@ func (p *MachineContext) PromptTag() *PromptTag {
 // Counters returns a snapshot of the performance counters for this context.
 func (p *MachineContext) Counters() VMCounters {
 	return p.counters
+}
+
+// ThreadID returns the SRFI-18 thread ID for this context.
+// 0 means the primordial thread (main goroutine).
+func (p *MachineContext) ThreadID() uint64 {
+	return p.threadID
+}
+
+// Thread returns the SRFI-18 thread object for this context, or nil for the primordial thread.
+func (p *MachineContext) Thread() *values.Thread {
+	return p.thread
+}
+
+// SetThread sets the SRFI-18 thread identity on this context.
+// Both the thread object and its ID are stored for efficient comparison.
+func (p *MachineContext) SetThread(t *values.Thread) {
+	p.thread = t
+	if t != nil {
+		p.threadID = t.ID()
+	} else {
+		p.threadID = 0
+	}
 }
 
 // RunWithEscapeHandling runs the VM loop, handling continuation escapes

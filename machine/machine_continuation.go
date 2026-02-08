@@ -32,6 +32,7 @@ type MachineContinuation struct {
 	windingStack  WindingStack    // Captured dynamic extent for R7RS dynamic-wind
 	promptTag     *PromptTag      // Non-nil marks this frame as a continuation prompt
 	promptHandler *MachineClosure // Handler invoked on abort to this prompt
+	threadID      uint64          // SRFI-18: thread that captured this continuation (0 = primordial)
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -57,6 +58,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 		value:    mc.value,
 		evals:    mc.evals,
 		pc:       mc.pc + off,
+		threadID: mc.threadID,
 	}
 	return q
 }
@@ -111,6 +113,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 		windingStack:  p.windingStack.Copy(),
 		promptTag:     p.promptTag,
 		promptHandler: p.promptHandler,
+		threadID:      p.threadID,
 	}
 	return q
 }
@@ -119,6 +122,7 @@ func (p *MachineContinuation) PromptTag() *PromptTag              { return p.pro
 func (p *MachineContinuation) SetPromptTag(t *PromptTag)          { p.promptTag = t }
 func (p *MachineContinuation) PromptHandler() *MachineClosure     { return p.promptHandler }
 func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) { p.promptHandler = h }
+func (p *MachineContinuation) ThreadID() uint64                   { return p.threadID }
 
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as
 // a continuation prompt. The tag identifies the prompt for abort/capture, and
