@@ -225,6 +225,10 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Create environment with pattern variables bound (shared between fender and body)
 	bodyEnv := p.createPatternVarEnvironment(patternVars)
 	bodyCompiler := NewCompiletimeContinuation(p.template, bodyEnv)
+	// Inherit the parent compiler's current source so that operations emitted
+	// by bodyCompiler (like BindPatternVars) are tagged with the syntax-case
+	// form's source location.
+	bodyCompiler.pushSource(p.currentSource())
 
 	// Bind pattern variables from the match result
 	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))

@@ -36,6 +36,15 @@ import (
 //  2. Type switch fallback: Expressions without form names (symbols, calls, literals)
 //     are dispatched by their concrete ValidatedExpr type.
 func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext, expr validate.ValidatedExpr) error {
+	// Push the validated expression's source for finer-grained attribution.
+	// Inner sub-expressions will push their own source, naturally creating
+	// the correct nesting on the source stack.
+	src := expr.Source()
+	if src != nil {
+		p.pushSource(src)
+		defer p.popSource()
+	}
+
 	// Strategy 1: Form-name based dispatch via the forms registry.
 	// Special forms like "if", "define", "lambda", "begin", "quote", etc. have
 	// their formName set during validation. The forms registry maps these names
@@ -65,13 +74,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 	case *validate.ValidatedSymbol:
 		// Variable reference: looks up binding and emits load operation.
 		// May be local (stack-relative) or global (environment lookup).
-		startPC := len(p.template.operations)
-		err := p.CompileSymbol(ctctx, v.Symbol)
-		if err != nil {
-			return err
-		}
-		p.recordSource(startPC, v.Source())
-		return nil
+		return p.CompileSymbol(ctctx, v.Symbol)
 
 	case *validate.ValidatedLiteral:
 		// Self-evaluating literal or passthrough form.
@@ -91,18 +94,16 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 // CompileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
 func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedIf) error {
-	startPC := len(p.template.operations)
-
 	// Compile the test condition (not in tail position)
 	err := p.compileValidated(ctctx.NotInTail(), v.Test)
 	if err != nil {
 		return err
 	}
-	p.template.AppendOperations(NewOperationPush())
+	p.AppendOperations(NewOperationPush())
 
 	// Set up branch-on-false to skip consequent
 	branchOnFalseIndex := p.template.operations.Len()
-	p.template.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
+	p.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Compile consequent (inherits tail position)
 	err = p.compileValidated(ctctx, v.Conseq)
@@ -112,7 +113,7 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 
 	// Set up unconditional branch to skip alternative
 	branchToEndIndex := p.template.operations.Len()
-	p.template.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
+	p.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Target for branch-on-false
 	altStart := p.template.operations.Len()
@@ -126,7 +127,7 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 	} else {
 		// No alternative - return void
 		voidIdx := p.template.MaybeAppendLiteral(values.Void)
-		p.template.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(voidIdx))
+		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(voidIdx))
 	}
 
 	// Fix up branch targets
@@ -134,7 +135,6 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseOffsetImmediate(altStart - branchOnFalseIndex)
 	p.template.operations[branchToEndIndex] = NewOperationBranchOffsetImmediate(endIndex - branchToEndIndex)
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -188,9 +188,6 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 //
 // For the function shorthand form, see CompileValidatedDefineFn.
 func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
-	// Record start PC for source mapping (associates bytecode range with source location).
-	startPC := len(p.template.operations)
-
 	// Step 1: Declare the binding in the environment.
 	// For variable defines, this still happens early, but since the value expression
 	// cannot reference itself (unlike function defines), the order is less critical.
@@ -209,12 +206,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// Step 3: Store the compiled value into the binding and load void.
 	// After this, the binding holds the value and the value register contains void
 	// (since define returns an unspecified value per R7RS).
-	err = p.emitDefineStore(startPC, sym, v)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.emitDefineStore(sym)
 }
 
 // emitDefineStore emits bytecode to store the compiled value into the defined binding.
@@ -225,34 +217,30 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 // and CompileValidatedDefineFn. The caller has already:
 //  1. Declared the binding via declareDefineBinding
 //  2. Compiled the value expression (leaving result in value register)
-func (p *CompileTimeContinuation) emitDefineStore(startPC int, sym *values.Symbol, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol) error {
 	// Push the value from the value register to the eval stack.
 	// Store operations consume from the stack, not the value register.
-	p.template.AppendOperations(NewOperationPush())
+	p.AppendOperations(NewOperationPush())
 
 	if p.env.LocalEnvironment() != nil {
 		// Local context (inside a lambda body): store to local variable slot.
 		// CreateLocalBinding returns the slot index; the binding was already
 		// declared by declareDefineBinding, so this just retrieves the index.
 		li, _ := p.env.CreateLocalBinding(sym, environment.BindingTypeVariable)
-		p.template.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
+		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 	} else {
 		// Global context (top-level): store to global environment.
 		// Global indices are stored in the literals pool since they're runtime values.
 		// The operation loads the index from literals and stores the value there.
 		gi, _ := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
 		liti := p.template.MaybeAppendLiteral(gi)
-		p.template.AppendOperations(NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
+		p.AppendOperations(NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
 	}
 
 	// Load void into the value register as define's return value.
 	// Per R7RS 5.3.1: "The result of a definition is unspecified."
 	// We use void to represent this unspecified value.
-	p.template.AppendOperations(NewOperationLoadVoid())
-
-	// Record source location for the entire define form (from startPC to current PC).
-	// This enables source mapping for debugging and error messages.
-	p.recordSource(startPC, v.Source())
+	p.AppendOperations(NewOperationLoadVoid())
 	return nil
 }
 
@@ -276,8 +264,6 @@ func (p *CompileTimeContinuation) emitDefineStore(startPC int, sym *values.Symbo
 //
 //	(define (fact n) (if (<= n 1) 1 (* n (fact (- n 1)))))
 func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDefine) error {
-	startPC := len(p.template.operations)
-
 	// Step 1: Declare the binding early for self-recursion support.
 	// This must happen before compiling the body so that references to the
 	// function name within the body resolve correctly.
@@ -303,12 +289,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 4: Store the closure in the binding and load void as the result.
 	// define returns an unspecified value per R7RS; we use void.
-	err = p.emitDefineStore(startPC, sym, v)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.emitDefineStore(sym)
 }
 
 // setScopesOnLastBinding attaches hygiene scopes to the most recently created local binding.
@@ -400,7 +381,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, c
 	//   3. Load child environment from literals → value register
 	//   4. Push environment to eval stack
 	//   5. MakeClosure pops both and creates closure → value register
-	p.template.AppendOperations(
+	p.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 		NewOperationPush(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(envi),
@@ -413,8 +394,6 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, c
 
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedLambda) error {
-	startPC := len(p.template.operations)
-
 	// Create child environment and template for lambda body
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
@@ -424,7 +403,6 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 	if err != nil {
 		return err
 	}
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -457,7 +435,7 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 		}
 	}
 
-	tpl.AppendOperations(NewOperationRestoreContinuation())
+	childCompiler.AppendOperations(NewOperationRestoreContinuation())
 	return nil
 }
 
@@ -533,8 +511,6 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 //
 // At runtime, the VM selects the first clause whose arity matches the call.
 func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedCaseLambda) error {
-	startPC := len(p.template.operations)
-
 	// Phase 1: Compile each clause as a separate closure.
 	// Unlike regular lambda which produces one closure, case-lambda produces
 	// multiple closures (one per clause) that are combined into a dispatch structure.
@@ -591,7 +567,7 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 
 		// Emit bytecode to construct this clause's closure and push it to the stack.
 		// After processing all clauses, the stack will contain [clause0, clause1, ...].
-		p.template.AppendOperations(
+		p.AppendOperations(
 			NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 			NewOperationPush(),
 			NewOperationLoadLiteralByLiteralIndexImmediate(envi),
@@ -605,18 +581,15 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 	// MakeCaseLambdaClosure pops N closures from the stack (in reverse order) and
 	// creates a CaseLambdaClosure that, when called, dispatches to the appropriate
 	// clause based on argument count. Clauses are tried in order; first match wins.
-	p.template.AppendOperations(
+	p.AppendOperations(
 		NewOperationMakeCaseLambdaClosure(len(v.Clauses())),
 	)
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // CompileValidatedSetBang compiles a validated (set! name expr) form.
 func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedSetBang) error {
-	startPC := len(p.template.operations)
-
 	// Get the interned symbol (validator guarantees it's a SyntaxSymbol)
 	sym := p.env.InternSymbol(v.Name.Sym)
 	symbolScopes := v.Name.Scopes()
@@ -651,14 +624,11 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		)
 	}
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // CompileValidatedQuote compiles a validated (quote datum) form.
 func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, _ string, v *validate.ValidatedQuote) error {
-	startPC := len(p.template.operations)
-
 	// Unwrap all syntax and intern symbols in the global environment.
 	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
 	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
@@ -666,21 +636,17 @@ func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext
 	interned := p.internSymbolsInValue(unwrapped)
 	litIdx := p.template.MaybeAppendLiteral(interned)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // CompileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
 func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedQuasiquote) error {
-	startPC := len(p.template.operations)
-
 	// The existing quasiquote compiler expects the raw syntax template
 	err := p.compileQuasiquoteDatum(ctctx, v.Template, 1)
 	if err != nil {
 		return err
 	}
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -695,8 +661,6 @@ func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCa
 //
 // Example: (begin (display "hello") (newline) 42) => 42 (after printing)
 func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedBegin) error {
-	startPC := len(p.template.operations)
-
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
 	for _, expr := range v.Body() {
@@ -717,14 +681,11 @@ func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallCon
 		}
 	}
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
 // compileValidatedCall compiles a validated function call (proc args...).
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
-	startPC := len(p.template.operations)
-
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
@@ -761,7 +722,6 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
 	}
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -775,12 +735,10 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 	}
 
 	// Self-evaluating literal
-	startPC := len(p.template.operations)
 	err := p.CompileSelfEvaluating(ctctx, v.Value)
 	if err != nil {
 		return err
 	}
-	p.recordSource(startPC, v.Source())
 	return nil
 }
 
@@ -817,8 +775,6 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 //	PEEK_K 0                       ; value = result (thunk's return value)
 //	DROP DROP DROP DROP            ; clean up stack
 func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
-	startPC := len(p.template.operations)
-
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
 	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true, p.env)
@@ -903,6 +859,5 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 		NewOperationDrop(), // before
 	)
 
-	p.recordSource(startPC, v.Source())
 	return nil
 }

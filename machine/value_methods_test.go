@@ -209,9 +209,9 @@ func TestOperationPopWind_Boilerplate(t *testing.T) {
 
 // --- NativeTemplate ---
 
-func TestNativeTemplate_SourceMap(t *testing.T) {
+func TestNativeTemplate_SourceAt(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
-	qt.Assert(t, tpl.SourceMap(), qt.IsNotNil)
+	qt.Assert(t, tpl.SourceAt(0), qt.IsNil)
 }
 
 // --- Operations ---

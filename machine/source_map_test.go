@@ -22,139 +22,110 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestSourceMap_NewSourceMap(t *testing.T) {
+func TestSourceAt_FreshTemplate(t *testing.T) {
 	c := qt.New(t)
-	sm := NewSourceMap()
-	c.Assert(sm, qt.IsNotNil)
-	c.Assert(sm.Len(), qt.Equals, 0)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Fresh template has no operations, so any PC returns nil
+	c.Assert(tpl.SourceAt(0), qt.IsNil)
+	c.Assert(tpl.SourceAt(100), qt.IsNil)
+	c.Assert(tpl.SourceAt(-1), qt.IsNil)
 }
 
-func TestSourceMap_Add(t *testing.T) {
+func TestSourceAt_WithSource(t *testing.T) {
 	c := qt.New(t)
-	sm := NewSourceMap()
+	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
-	sm.Add(0, 5, source)
+	tpl.appendOperationsWithSource(source,
+		NewOperationLoadVoid(),
+		NewOperationLoadVoid(),
+	)
 
-	c.Assert(sm.Len(), qt.Equals, 1)
+	c.Assert(tpl.SourceAt(0), qt.IsNotNil)
+	c.Assert(tpl.SourceAt(0).File, qt.Equals, "test.scm")
+	c.Assert(tpl.SourceAt(1), qt.IsNotNil)
+	c.Assert(tpl.SourceAt(1).File, qt.Equals, "test.scm")
+	c.Assert(tpl.SourceAt(2), qt.IsNil) // Out of bounds
 }
 
-func TestSourceMap_Add_EmptyRange(t *testing.T) {
+func TestSourceAt_NilSource(t *testing.T) {
 	c := qt.New(t)
-	sm := NewSourceMap()
+	tpl := NewNativeTemplate(0, 0, false)
 
-	source := &syntax.SourceContext{File: "test.scm"}
-	sm.Add(5, 5, source)  // Empty range (start == end)
-	sm.Add(10, 5, source) // Invalid range (start > end)
+	// AppendOperations without source (nil)
+	tpl.AppendOperations(NewOperationLoadVoid())
 
-	c.Assert(sm.Len(), qt.Equals, 0)
+	c.Assert(tpl.SourceAt(0), qt.IsNil) // index 0 in sourceTable is nil
 }
 
-func TestSourceMap_Add_Merge(t *testing.T) {
+func TestSourceAt_MixedSources(t *testing.T) {
 	c := qt.New(t)
-	sm := NewSourceMap()
+	tpl := NewNativeTemplate(0, 0, false)
+
+	source1 := &syntax.SourceContext{File: "file1.scm"}
+	source2 := &syntax.SourceContext{File: "file2.scm"}
+
+	tpl.appendOperationsWithSource(source1, NewOperationLoadVoid())
+	tpl.appendOperationsWithSource(source2, NewOperationLoadVoid())
+	tpl.AppendOperations(NewOperationLoadVoid()) // nil source
+
+	c.Assert(tpl.SourceAt(0).File, qt.Equals, "file1.scm")
+	c.Assert(tpl.SourceAt(1).File, qt.Equals, "file2.scm")
+	c.Assert(tpl.SourceAt(2), qt.IsNil)
+}
+
+func TestInternSource_Deduplication(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(1, 1, 0),
 	}
 
-	// Add consecutive ranges with same source - should merge
-	sm.Add(0, 5, source)
-	sm.Add(5, 10, source)
+	// Same pointer should return same index
+	idx1 := tpl.internSource(source)
+	idx2 := tpl.internSource(source)
+	c.Assert(idx1, qt.Equals, idx2)
 
-	c.Assert(sm.Len(), qt.Equals, 1)
-
-	// Verify merged range covers both
-	c.Assert(sm.Lookup(0), qt.IsNotNil)
-	c.Assert(sm.Lookup(4), qt.IsNotNil)
-	c.Assert(sm.Lookup(5), qt.IsNotNil)
-	c.Assert(sm.Lookup(9), qt.IsNotNil)
-}
-
-func TestSourceMap_Add_NoMerge_DifferentSource(t *testing.T) {
-	c := qt.New(t)
-	sm := NewSourceMap()
-
-	source1 := &syntax.SourceContext{
-		File:  "test1.scm",
-		Start: syntax.NewSourceIndexes(1, 1, 0),
-	}
+	// Different pointer, same content should also deduplicate
 	source2 := &syntax.SourceContext{
-		File:  "test2.scm",
+		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(1, 1, 0),
 	}
+	idx3 := tpl.internSource(source2)
+	c.Assert(idx1, qt.Equals, idx3)
 
-	sm.Add(0, 5, source1)
-	sm.Add(5, 10, source2)
-
-	c.Assert(sm.Len(), qt.Equals, 2)
-}
-
-func TestSourceMap_Lookup(t *testing.T) {
-	c := qt.New(t)
-	sm := NewSourceMap()
-
-	source1 := &syntax.SourceContext{File: "test1.scm"}
-	source2 := &syntax.SourceContext{File: "test2.scm"}
-
-	sm.Add(0, 10, source1)
-	sm.Add(10, 20, source2)
-
-	// Test lookups within ranges
-	c.Assert(sm.Lookup(0).File, qt.Equals, "test1.scm")
-	c.Assert(sm.Lookup(5).File, qt.Equals, "test1.scm")
-	c.Assert(sm.Lookup(9).File, qt.Equals, "test1.scm")
-	c.Assert(sm.Lookup(10).File, qt.Equals, "test2.scm")
-	c.Assert(sm.Lookup(15).File, qt.Equals, "test2.scm")
-	c.Assert(sm.Lookup(19).File, qt.Equals, "test2.scm")
-
-	// Test lookups outside ranges
-	c.Assert(sm.Lookup(20), qt.IsNil)
-	c.Assert(sm.Lookup(100), qt.IsNil)
-}
-
-func TestSourceMap_Lookup_Empty(t *testing.T) {
-	c := qt.New(t)
-	sm := NewSourceMap()
-
-	c.Assert(sm.Lookup(0), qt.IsNil)
-	c.Assert(sm.Lookup(100), qt.IsNil)
-}
-
-func TestSourceMap_Lookup_NilSourceMap(t *testing.T) {
-	c := qt.New(t)
-	var sm *SourceMap
-
-	c.Assert(sm.Lookup(0), qt.IsNil)
-}
-
-func TestSourceMap_Lookup_BinarySearch(t *testing.T) {
-	c := qt.New(t)
-	sm := NewSourceMap()
-
-	// Add many non-contiguous ranges to test binary search
-	for i := 0; i < 100; i++ {
-		source := &syntax.SourceContext{File: "test.scm"}
-		sm.Add(i*10, i*10+5, source)
+	// Different content should get different index
+	source3 := &syntax.SourceContext{
+		File:  "other.scm",
+		Start: syntax.NewSourceIndexes(1, 1, 0),
 	}
-
-	// Test lookups at various positions
-	c.Assert(sm.Lookup(0), qt.IsNotNil)
-	c.Assert(sm.Lookup(4), qt.IsNotNil)
-	c.Assert(sm.Lookup(5), qt.IsNil) // Gap
-	c.Assert(sm.Lookup(10), qt.IsNotNil)
-	c.Assert(sm.Lookup(500), qt.IsNotNil)
-	c.Assert(sm.Lookup(505), qt.IsNil) // Gap
-	c.Assert(sm.Lookup(990), qt.IsNotNil)
-	c.Assert(sm.Lookup(995), qt.IsNil) // After last range
+	idx4 := tpl.internSource(source3)
+	c.Assert(idx4, qt.Not(qt.Equals), idx1)
 }
 
-func TestSourceMap_Len_Nil(t *testing.T) {
+func TestInternSource_Nil(t *testing.T) {
 	c := qt.New(t)
-	var sm *SourceMap
+	tpl := NewNativeTemplate(0, 0, false)
 
-	c.Assert(sm.Len(), qt.Equals, 0)
+	idx := tpl.internSource(nil)
+	c.Assert(idx, qt.Equals, uint16(0))
+}
+
+func TestCopy_PreservesSourceRefs(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	source := &syntax.SourceContext{File: "test.scm"}
+	tpl.appendOperationsWithSource(source, NewOperationLoadVoid())
+	tpl.AppendOperations(NewOperationLoadVoid())
+
+	copied := tpl.Copy()
+	c.Assert(copied.SourceAt(0), qt.IsNotNil)
+	c.Assert(copied.SourceAt(0).File, qt.Equals, "test.scm")
+	c.Assert(copied.SourceAt(1), qt.IsNil)
 }
 
 func TestSourceEqual(t *testing.T) {

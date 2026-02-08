@@ -322,8 +322,7 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 
 Track variable definition sites and enable source-level debugging at runtime.
 
-Infrastructure is partially complete (binding source locations, source maps, stack traces). Remaining work:
-- [ ] Wire up compilation to record source locations in source map
+- [x] **Per-operation source tracking** (2026-02-08) — Replaced range-based `SourceMap` (binary search, gap-prone) with per-operation source attribution. Parallel `sourceRefs []uint16` array indexes into deduplicated `sourceTable`. Compiler source stack auto-tags every operation — including infrastructure ops (Branch, Push, Apply) — with the enclosing form's source. O(1) lookup via `sourceTable[sourceRefs[pc]]`. PR #137.
 - [ ] Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
 
