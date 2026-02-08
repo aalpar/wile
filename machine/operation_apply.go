@@ -171,6 +171,13 @@ func applyComposableContinuation(mc *MachineContext, cc *ComposableContinuation,
 		return mc, err
 	}
 
+	// Reject cross-thread composable continuation invocation
+	if mc.threadID != cc.threadID {
+		return mc, values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+			"composable continuation: captured in thread %d, invoked from thread %d",
+			cc.threadID, mc.threadID)
+	}
+
 	// Deep-copy the segment for safe re-invocation
 	segment := cc.Cont().DeepCopy()
 

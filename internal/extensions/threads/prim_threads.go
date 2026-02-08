@@ -72,32 +72,21 @@ func parseOptionalName(rest values.Value) string {
 	return ""
 }
 
-// currentThread stores the thread for the current goroutine
-// This is set when a thread starts execution
-var currentThread *values.Thread
-
-// SetCurrentThread sets the current thread for the goroutine
-func SetCurrentThread(t *values.Thread) {
-	currentThread = t
-}
-
-// GetCurrentThread returns the current thread
-func GetCurrentThread() *values.Thread {
-	return currentThread
-}
-
 // =============================================================================
 // Thread Primitives
 // =============================================================================
 
-// PrimCurrentThread returns the current executing thread
+// PrimCurrentThread returns the current executing thread.
+// Returns the thread object if running inside a thread, or the symbol 'primordial
+// for the main goroutine.
 // (current-thread) -> thread
 func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
-	if currentThread == nil {
+	thread := mc.Thread()
+	if thread == nil {
 		// Return primordial thread placeholder
 		mc.SetValue(values.NewSymbol("primordial"))
 	} else {
-		mc.SetValue(currentThread)
+		mc.SetValue(thread)
 	}
 	return nil
 }
@@ -132,6 +121,10 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		// Create a new machine context for this thread.
 		// Sub-contexts have isolated continuation chains, which is appropriate for threads.
 		sub := mc.NewSubContext()
+		sub.SetThread(thread) // Set thread identity on the sub-context
+		thread.CleanupFunc = func() {
+			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
+		}
 		if _, err := sub.Apply(cls); err != nil {
 			return nil, err
 		}
@@ -404,7 +397,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 	restVal := mc.Arg(1)
 
 	var timeout *time.Duration
-	owner := currentThread
+	owner := mc.Thread()
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {
@@ -441,12 +434,18 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 		// Check for abandoned mutex exception
 		if _, ok := err.(*values.AbandonedMutexException); ok {
 			// Still acquired, but signal the exception
+			if owner != nil {
+				owner.TrackMutex(mutex)
+			}
 			mc.SetValue(values.TrueValue)
 			return err
 		}
 		return err
 	}
 
+	if acquired && owner != nil {
+		owner.TrackMutex(mutex)
+	}
 	mc.SetValue(schemeutil.BoolToBoolean(acquired))
 	return nil
 }
@@ -489,6 +488,11 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 				}
 			}
 		}
+	}
+
+	// Untrack mutex from the owning thread before unlocking
+	if owner := mutex.Owner(); owner != nil {
+		owner.UntrackMutex(mutex)
 	}
 
 	result := mutex.Unlock(cv, timeout)

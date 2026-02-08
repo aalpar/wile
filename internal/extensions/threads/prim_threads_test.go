@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
+	extexceptions "github.com/aalpar/wile/internal/extensions/exceptions"
 	extthreads "github.com/aalpar/wile/internal/extensions/threads"
 	"github.com/aalpar/wile/values"
 
@@ -30,6 +31,18 @@ func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(
 		wile.WithExtension(extthreads.Extension),
+	)
+	qt.New(t).Assert(err, qt.IsNil)
+	return engine
+}
+
+// newEngineWithExceptions creates a Wile engine with threads and exceptions.
+// Needed for tests that use guard, with-exception-handler, etc.
+func newEngineWithExceptions(t *testing.T) *wile.Engine {
+	t.Helper()
+	engine, err := wile.NewEngine(
+		wile.WithExtension(extthreads.Extension),
+		wile.WithExtension(extexceptions.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
 	return engine
@@ -490,6 +503,210 @@ func TestThreadsErrors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// Thread Identity Tests
+// =============================================================================
+
+func TestCurrentThreadIdentity(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// current-thread in primordial thread returns 'primordial
+		{"primordial thread",
+			`(and (symbol? (current-thread))
+			      (equal? (symbol->string (current-thread)) "primordial"))`,
+			values.TrueValue},
+
+		// current-thread inside a thread returns the thread object itself
+		{"thread identity",
+			`(let ((t (make-thread
+			            (lambda ()
+			              (thread? (current-thread))))))
+			   (thread-start! t)
+			   (thread-join! t))`,
+			values.TrueValue},
+
+		// current-thread inside a thread returns the same object as make-thread created
+		{"thread self identity",
+			`(let* ((result #f)
+			        (t (make-thread
+			             (lambda ()
+			               (set! result (current-thread))))))
+			   (thread-start! t)
+			   (thread-join! t)
+			   (eq? result t))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// =============================================================================
+// Cross-Thread Continuation Rejection Tests
+// =============================================================================
+
+func TestCrossThreadContinuationRejection(t *testing.T) {
+	engine := newEngineWithExceptions(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// Capture continuation in one thread, invoke from another -> error
+		{"cross-thread call/cc",
+			`(let* ((k #f)
+			        (t1 (make-thread
+			              (lambda ()
+			                (call/cc (lambda (cont) (set! k cont)))))))
+			   (thread-start! t1)
+			   (thread-join! t1)
+			   ;; k now holds a continuation captured in t1
+			   ;; invoking from primordial thread should fail
+			   (k 42))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestSameThreadContinuationAllowed(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Capture and invoke continuation in the same thread -> works
+		{"same-thread call/cc",
+			`(= (call/cc (lambda (k) (k 42))) 42)`,
+			values.TrueValue},
+
+		// Primordial thread continuation invoked from primordial -> works
+		{"primordial call/cc",
+			`(let ((result (call/cc (lambda (k) (k 99)))))
+			   (= result 99))`,
+			values.TrueValue},
+
+		// call/cc inside a thread works within that thread
+		{"thread-internal call/cc",
+			`(let ((t (make-thread
+			            (lambda ()
+			              (call/cc (lambda (k) (k 77)))))))
+			   (thread-start! t)
+			   (= (thread-join! t) 77))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// =============================================================================
+// Dynamic-Wind Cleanup on Thread Termination Tests
+// =============================================================================
+
+func TestDynamicWindCleanupOnThreadExit(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// dynamic-wind after-thunk runs on normal thread exit
+		{"after-thunk on normal exit",
+			`(let* ((box (cons #f '()))
+			        (t (make-thread
+			             (lambda ()
+			               (dynamic-wind
+			                 (lambda () #f)
+			                 (lambda () 42)
+			                 (lambda () (set-car! box #t)))))))
+			   (thread-start! t)
+			   (thread-join! t)
+			   (car box))`,
+			values.TrueValue},
+
+		// nested dynamic-wind after-thunks run in correct order (innermost first)
+		{"nested after-thunks order",
+			`(let* ((log '())
+			        (t (make-thread
+			             (lambda ()
+			               (dynamic-wind
+			                 (lambda () #f)
+			                 (lambda ()
+			                   (dynamic-wind
+			                     (lambda () #f)
+			                     (lambda () 42)
+			                     (lambda () (set! log (cons 'inner log)))))
+			                 (lambda () (set! log (cons 'outer log))))))))
+			   (thread-start! t)
+			   (thread-join! t)
+			   ;; log should be (outer inner) - inner runs first, then outer
+			   (and (equal? (car log) 'outer)
+			        (equal? (car (cdr log)) 'inner)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// =============================================================================
+// Mutex Abandonment on Thread Termination Tests
+// =============================================================================
+
+func TestMutexAbandonedOnTermination(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Mutex state becomes 'abandoned when owning thread is terminated
+		{"mutex abandoned on terminate",
+			`(let* ((m (make-mutex))
+			        (t (make-thread
+			             (lambda ()
+			               (mutex-lock! m)
+			               ;; sleep to keep thread alive while we terminate it
+			               (thread-sleep! 10)))))
+			   (thread-start! t)
+			   ;; Give the thread time to acquire the mutex
+			   (thread-sleep! 0)
+			   (thread-yield!)
+			   (thread-terminate! t)
+			   ;; The mutex should be abandoned
+			   (let ((state (mutex-state m)))
+			     (and (symbol? state)
+			          (equal? (symbol->string state) "abandoned"))))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
 }

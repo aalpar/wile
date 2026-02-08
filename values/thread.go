@@ -89,6 +89,16 @@ type Thread struct {
 	// RunFunc is set by the machine package to actually run the thread
 	// This avoids circular dependency between values and machine
 	RunFunc func(ctx context.Context, thunk Value) (Value, error)
+
+	// CleanupFunc is injected by the machine package to run dynamic-wind
+	// after thunks (UnwindTo(0)) on thread exit. Called on both normal exit
+	// and forced termination.
+	CleanupFunc func()
+
+	// ownedMutexes tracks mutexes currently owned by this thread.
+	// On thread termination, all owned mutexes are marked as abandoned.
+	ownedMutexes []*Mutex
+	mutexMu      sync.Mutex // protects ownedMutexes
 }
 
 // NewThread creates a new thread that will execute the given thunk
@@ -174,6 +184,14 @@ func (p *Thread) Start() error {
 	go func() {
 		defer close(p.done)
 		defer func() {
+			// Abandon all owned mutexes on thread exit
+			p.AbandonOwnedMutexes()
+			// Run dynamic-wind after thunks
+			if p.CleanupFunc != nil {
+				p.CleanupFunc()
+			}
+		}()
+		defer func() {
 			r := recover()
 			if r != nil {
 				p.mu.Lock()
@@ -221,7 +239,12 @@ func (p *Thread) Join(timeout *time.Duration) (Value, error) {
 	return p.result, nil
 }
 
-// Terminate forcefully terminates the thread
+// Terminate forcefully terminates the thread.
+// Marks all owned mutexes as abandoned and cancels the thread's context.
+// The deferred cleanup in the goroutine (dynamic-wind after thunks) will fire
+// when the goroutine exits. However, AbandonOwnedMutexes is also called here
+// directly because the goroutine may be blocked on a Go-level operation
+// (e.g., sync.Cond.Wait) and won't exit immediately on context cancellation.
 func (p *Thread) Terminate() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -229,6 +252,9 @@ func (p *Thread) Terminate() {
 	if p.state == ThreadTerminated {
 		return
 	}
+
+	// Mark mutexes abandoned even if goroutine is blocked
+	p.AbandonOwnedMutexes()
 
 	if p.cancel != nil {
 		p.cancel()
@@ -256,6 +282,40 @@ func (p *Thread) Sleep(d time.Duration) {
 		p.state = ThreadRunnable
 	}
 	p.mu.Unlock()
+}
+
+// TrackMutex adds a mutex to this thread's ownership tracking set.
+// Called by mutex-lock! when a mutex is acquired with this thread as owner.
+func (p *Thread) TrackMutex(m *Mutex) {
+	p.mutexMu.Lock()
+	defer p.mutexMu.Unlock()
+	p.ownedMutexes = append(p.ownedMutexes, m)
+}
+
+// UntrackMutex removes a mutex from this thread's ownership tracking set.
+// Called by mutex-unlock! when a mutex is released.
+func (p *Thread) UntrackMutex(m *Mutex) {
+	p.mutexMu.Lock()
+	defer p.mutexMu.Unlock()
+	for i, owned := range p.ownedMutexes {
+		if owned == m {
+			p.ownedMutexes = append(p.ownedMutexes[:i], p.ownedMutexes[i+1:]...)
+			return
+		}
+	}
+}
+
+// AbandonOwnedMutexes marks all mutexes owned by this thread as abandoned.
+// Called during thread termination to ensure waiting threads are notified.
+func (p *Thread) AbandonOwnedMutexes() {
+	p.mutexMu.Lock()
+	mutexes := p.ownedMutexes
+	p.ownedMutexes = nil
+	p.mutexMu.Unlock()
+
+	for _, m := range mutexes {
+		m.MarkAbandoned()
+	}
 }
 
 // Done returns a channel that's closed when the thread terminates

@@ -29,21 +29,24 @@ import (
 type ComposableContinuation struct {
 	cont         *MachineContinuation
 	windingStack WindingStack
+	threadID     uint64 // SRFI-18: thread that captured this continuation (0 = primordial)
 }
 
 // NewComposableContinuation creates a composable continuation from a
 // continuation chain segment and the winding stack captured at the point
 // of capture.
-func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack) *ComposableContinuation {
+func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, threadID uint64) *ComposableContinuation {
 	q := &ComposableContinuation{
 		cont:         cont,
 		windingStack: windingStack,
+		threadID:     threadID,
 	}
 	return q
 }
 
 func (p *ComposableContinuation) Cont() *MachineContinuation { return p.cont }
 func (p *ComposableContinuation) WindingStack() WindingStack { return p.windingStack }
+func (p *ComposableContinuation) ThreadID() uint64           { return p.threadID }
 
 func (p *ComposableContinuation) SchemeString() string {
 	return "#<composable-continuation>"

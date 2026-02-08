@@ -229,7 +229,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	windingStack := mc.WindingStack().Copy()
 
 	// Create the composable continuation value
-	cc := machine.NewComposableContinuation(segment, windingStack)
+	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID())
 
 	// Call proc with the composable continuation.
 	// The result of proc becomes the value delivered to the prompt boundary.
