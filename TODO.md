@@ -176,11 +176,12 @@ func TestPrimName(t *testing.T) {
 - [x] **Tested in `prim_math_test.go`** — 164 test cases: transcendental functions with tolerance checks, banker's rounding, floor/truncate division with multi-value returns, numeric predicates on special values, rationalize via Stern-Brocot, exact-integer-sqrt, complex construction/decomposition, number↔string conversion with radix and exactness prefixes, error conditions
 
 #### Go Interop — `internal/extensions/gointerop/prim_gointerop.go` (536 lines, 28 primitives)
-- [ ] `make-channel`, `channel?`, `channel-send!`, `channel-receive`, `channel-try-send!`, `channel-try-receive`, `channel-close!`, `channel-closed?`, `channel-length`, `channel-capacity` — Go channel primitives
-- [ ] `make-wait-group`, `wait-group?`, `wait-group-add!`, `wait-group-done!`, `wait-group-wait!` — sync.WaitGroup
-- [ ] `make-rw-mutex`, `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`, `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`, `rw-mutex-try-write-lock!` — sync.RWMutex
-- [ ] `make-once`, `once?`, `once-do!`, `once-done?` — sync.Once
-- [ ] `make-atomic`, `atomic?`, `atomic-load`, `atomic-store!`, `atomic-swap!`, `atomic-compare-and-swap!` — atomic operations
+- [x] `make-channel`, `channel?`, `channel-send!`, `channel-receive`, `channel-try-send!`, `channel-try-receive`, `channel-close!`, `channel-closed?`, `channel-length`, `channel-capacity` — Go channel primitives
+- [x] `make-wait-group`, `wait-group?`, `wait-group-add!`, `wait-group-done!`, `wait-group-wait!` — sync.WaitGroup
+- [x] `make-rw-mutex`, `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`, `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`, `rw-mutex-try-write-lock!` — sync.RWMutex
+- [x] `make-once`, `once?`, `once-do!`, `once-done?` — sync.Once
+- [x] `make-atomic`, `atomic?`, `atomic-load`, `atomic-store!`, `atomic-swap!`, `atomic-compare-and-swap!` — atomic operations
+- [x] **Tested in `prim_gointerop_test.go`** — 76 test cases: buffered channel send/receive round-trips with FIFO ordering, non-blocking try-send/try-receive with 3-value return via call-with-values, channel close semantics and error conditions, WaitGroup add/done/wait lifecycle, RWMutex lock contention (try-write-lock fails while read-locked and vice versa), Once single-execution guarantee with side-effect verification, AtomicBox load/store/swap/CAS with pointer-identity semantics, type predicate coverage for all 5 value types, 27 error cases for type mismatches and invalid operations
 
 #### Threads — `internal/extensions/threads/prim_threads.go` (637 lines, 22 primitives)
 - [ ] `current-thread`, `thread?`, `make-thread`, `thread-name`, `thread-specific`, `thread-specific-set!` — thread identity/metadata
