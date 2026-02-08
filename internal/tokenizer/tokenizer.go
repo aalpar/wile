@@ -1562,23 +1562,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		}
 		switch {
 		case isDot(p.curr()):
-			// R7RS §7.1.1 production 4: if integer part had hash digits,
-			// fraction part can only have hash digits (no real digits).
-			hadHash := p.hashDigit
-			p.next() // consume '.'
-			if p.err != nil {
-				return
-			}
-			if hadHash {
-				p.readHashDigits()
-			} else {
-				p.readUnsignedBaseNNumber(r) //nolint:errcheck
-				p.readHashDigits()
-			}
-			if p.err != nil {
-				return
-			}
-			p.mayReadExponent(r) //nolint:errcheck
+			p.readDecimalFractionWithExponent(r)
 		case isExtendedExponentMarkerForRadix(p.curr()):
 			p.mayReadExponent(r) // nolint:errcheck
 		case p.curr() == '/':
