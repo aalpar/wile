@@ -36,8 +36,9 @@ func NewOperationForeignFunctionCall(ffn ForeignFunction) *OperationForeignFunct
 
 // goErrorToSchemeException converts a Go error to a Scheme exception escape.
 // It detects ForeignFileError and ForeignReadError to set the appropriate
-// NativeError kind per R7RS §6.11.
-func goErrorToSchemeException(err error) error {
+// NativeError kind per R7RS §6.11. The MachineContext is used to capture
+// the source location and stack trace at the point where the error occurred.
+func goErrorToSchemeException(mc *MachineContext, err error) error {
 	kind := values.NativeErrorKindGeneric
 	var fileErr *values.ForeignFileError
 	var readErr *values.ForeignReadError
@@ -51,6 +52,8 @@ func goErrorToSchemeException(err error) error {
 		Condition:   errObj,
 		Continuable: false,
 		Handled:     false,
+		Source:      mc.CurrentSource(),
+		StackTrace:  mc.CaptureStackTrace(20),
 	}
 }
 
@@ -76,7 +79,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 			err = fmt.Errorf("%v", v)
 		}
 		rmc = nil
-		rerr = goErrorToSchemeException(err)
+		rerr = goErrorToSchemeException(mc, err)
 	}()
 	mc.counters.ForeignCalls++
 	err := p.Function(ctx, mc)
@@ -110,7 +113,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 		// Convert Go error to Scheme exception so guard/with-exception-handler can catch it.
 		// Create an error object that wraps the original Go error for debugging.
 		// Use errors.As to detect ForeignFileError/ForeignReadError and set the appropriate kind.
-		return nil, goErrorToSchemeException(err)
+		return nil, goErrorToSchemeException(mc, err)
 	}
 	mc.pc++
 	return mc, nil

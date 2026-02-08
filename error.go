@@ -17,6 +17,7 @@ package wile
 import (
 	"errors"
 	"io"
+	"strings"
 )
 
 // Error represents a Wile engine error, including initialization failures.
@@ -55,18 +56,38 @@ func (p *CompilationError) Unwrap() error {
 
 // RuntimeError wraps errors from executing Scheme code.
 // If the error originated from a Scheme raise/raise-continuable,
-// Condition holds the raised value.
+// Condition holds the raised value. Source and StackTrace provide
+// the source location and VM stack trace at the point of the error
+// (populated when per-operation source tracking is available).
 type RuntimeError struct {
-	Message   string
-	Cause     error
-	Condition Value // non-nil when Scheme raise produced the error
+	Message    string
+	Cause      error
+	Condition  Value  // non-nil when Scheme raise produced the error
+	Source     string // formatted source location ("file:line:col"), empty if unavailable
+	StackTrace string // formatted VM stack trace, empty if unavailable
 }
 
 func (p *RuntimeError) Error() string {
-	if p.Cause != nil {
-		return p.Message + ": " + p.Cause.Error()
+	var b strings.Builder
+
+	if p.Source != "" {
+		b.WriteString(p.Source)
+		b.WriteString(": ")
 	}
-	return p.Message
+
+	b.WriteString(p.Message)
+
+	if p.Cause != nil {
+		b.WriteString(": ")
+		b.WriteString(p.Cause.Error())
+	}
+
+	if p.StackTrace != "" {
+		b.WriteString("\n")
+		b.WriteString(p.StackTrace)
+	}
+
+	return b.String()
 }
 
 func (p *RuntimeError) Unwrap() error {

@@ -234,6 +234,8 @@ func PrimRaise(_ context.Context, mc *machine.MachineContext) error {
 		Continuable:  false,
 		Handled:      false,
 		WindingStack: mc.WindingStack().Copy(),
+		Source:       mc.CurrentSource(),
+		StackTrace:   mc.CaptureStackTrace(20),
 	}
 }
 
@@ -258,6 +260,8 @@ func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
 		Continuation: cont,
 		Handled:      false,
 		WindingStack: mc.WindingStack().Copy(),
+		Source:       mc.CurrentSource(),
+		StackTrace:   mc.CaptureStackTrace(20),
 	}
 }
 
@@ -291,6 +295,8 @@ func PrimError(ctx context.Context, mc *machine.MachineContext) error {
 		Continuable:  false,
 		Handled:      false,
 		WindingStack: mc.WindingStack().Copy(),
+		Source:       mc.CurrentSource(),
+		StackTrace:   mc.CaptureStackTrace(20),
 	}
 }
 

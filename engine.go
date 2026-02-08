@@ -333,11 +333,21 @@ func (p *Engine) LastCounters() machine.VMCounters {
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	var ee *machine.ErrExceptionEscape
 	if errors.As(err, &ee) {
-		return &RuntimeError{
+		re := &RuntimeError{
 			Message:   "runtime error",
 			Cause:     err,
 			Condition: wrapValue(ee.Condition),
 		}
+		if ee.Source != nil && ee.Source.File != "" {
+			re.Source = fmt.Sprintf("%s:%d:%d",
+				ee.Source.File,
+				ee.Source.Start.Line(),
+				ee.Source.Start.Column())
+		}
+		if len(ee.StackTrace) > 0 {
+			re.StackTrace = ee.StackTrace.String()
+		}
+		return re
 	}
 	return &RuntimeError{Message: "runtime error", Cause: err}
 }
