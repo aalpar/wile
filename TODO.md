@@ -193,6 +193,16 @@ func TestPrimName(t *testing.T) {
 
 ---
 
+Test Coverage Enforcement
+-------------------------
+
+### covercheck Threshold (80%)
+- [x] **`runtime` package** — was 0.0%, now 95.3%. Added `runtime/runtime_test.go` with tests for `Compile`, `Run`, and `Load` (success, empty input, multiple expressions, compile error, runtime error).
+- [x] **`values` package** — was 77.5%, now 83.2%. Added `values/numeric_methods_coverage_test.go` with tests for uncovered numeric predicates (`IsInteger`, `IsRational`, `IsFinite`, `IsNaN`), comparison (`Compare` across all type pairs), sign/abs/negate, exactness conversions (`ToExact`, `ToInexact`), `HashCode`, and numeric tower utilities (`Simplify`, `ExactnessOf`, `ResultExactness`).
+- [x] All 14 non-excluded packages now pass `make covercheck` (80% threshold).
+
+---
+
 Code Refactoring
 ----------------
 - [x] ~~Add `registry/helpers/args.go`~~ - `RequireArg[T]` and `RequireType[T]` generics replace ~190 type assertion sites across 20+ prim files
