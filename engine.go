@@ -111,10 +111,32 @@ func (p *Engine) Eval(ctx context.Context, code string) (Value, error) {
 	return p.Run(ctx, compiled)
 }
 
+// EvalWithSource parses, compiles, and executes Scheme code, returning the result.
+// The source parameter identifies where the code came from (e.g. a filename)
+// and appears in error messages and stack traces.
+func (p *Engine) EvalWithSource(ctx context.Context, code string, source string) (Value, error) {
+	compiled, err := p.CompileWithSource(ctx, code, source)
+	if err != nil {
+		return nil, err
+	}
+	return p.Run(ctx, compiled)
+}
+
 // EvalMultiple evaluates multiple expressions, returning the last result.
 func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
+	return p.evalMultiple(ctx, code, "")
+}
+
+// EvalMultipleWithSource evaluates multiple expressions, returning the last result.
+// The source parameter identifies where the code came from (e.g. a filename)
+// and appears in error messages and stack traces.
+func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source string) (Value, error) {
+	return p.evalMultiple(ctx, code, source)
+}
+
+func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
 	reader := strings.NewReader(code)
-	pr := parser.NewParser(p.env, true, reader)
+	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
 	var lastResult Value
 	for {
@@ -143,8 +165,19 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 
 // Compile parses and compiles code without executing.
 func (p *Engine) Compile(ctx context.Context, code string) (*CompiledCode, error) {
+	return p.compile(ctx, code, "")
+}
+
+// CompileWithSource parses and compiles code without executing.
+// The source parameter identifies where the code came from (e.g. a filename)
+// and appears in error messages and stack traces.
+func (p *Engine) CompileWithSource(ctx context.Context, code string, source string) (*CompiledCode, error) {
+	return p.compile(ctx, code, source)
+}
+
+func (p *Engine) compile(ctx context.Context, code string, source string) (*CompiledCode, error) {
 	reader := strings.NewReader(code)
-	pr := parser.NewParser(p.env, true, reader)
+	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {

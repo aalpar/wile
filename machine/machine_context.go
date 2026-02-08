@@ -382,9 +382,26 @@ func (p *MachineContext) Debugger() *Debugger {
 }
 
 // CurrentSource returns the source location for the current execution point.
+// When the current template has no source (e.g., inside a foreign function),
+// walks up the continuation chain to find the nearest call site with source info.
+// Continuation PCs are return addresses (one past the call), so pc-1 gives the call site.
 func (p *MachineContext) CurrentSource() *syntax.SourceContext {
 	if p.template != nil {
-		return p.template.SourceAt(p.pc)
+		src := p.template.SourceAt(p.pc)
+		if src != nil {
+			return src
+		}
+	}
+	// Walk continuation chain looking for source info
+	cont := p.cont
+	for cont != nil {
+		if cont.template != nil {
+			src := cont.template.SourceAt(cont.pc - 1)
+			if src != nil {
+				return src
+			}
+		}
+		cont = cont.parent
 	}
 	return nil
 }
@@ -401,14 +418,16 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 		})
 	}
 
-	// Walk continuation chain
+	// Walk continuation chain.
+	// Continuation PCs are return addresses (one past the call instruction),
+	// so pc-1 gives the call site source location.
 	cont := p.cont
 	depth := 1
 	for cont != nil && depth < maxDepth {
 		frame := StackFrame{}
 		if cont.template != nil {
 			frame.FunctionName = cont.template.Name()
-			frame.CurrentLoc = cont.template.SourceAt(cont.pc)
+			frame.CurrentLoc = cont.template.SourceAt(cont.pc - 1)
 		}
 		trace = append(trace, frame)
 		cont = cont.parent
