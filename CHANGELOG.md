@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `RealNumber` sub-interface with `IsPositive()`, `IsNegative()`, `Sign()` for interface-based real number dispatch
 - Add `Abs()`, `ToExact()`, `ToInexact()` methods to the `Number` interface
 - Add `IsInteger()`, `IsRational()`, `IsFinite()`, `IsNaN()` predicate methods to the `Number` interface
+- Add `EvalWithSource`, `EvalMultipleWithSource`, and `CompileWithSource` methods for source-tracked evaluation — source locations appear in `RuntimeError.Source` and `RuntimeError.StackTrace`
+- Wire `ErrExceptionEscape` to carry source location and stack trace from per-operation source tracking
 
 ### Changed
 
@@ -39,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix void-returning primitives (`display`, `newline`, `vector-set!`, etc.) silently dropping argument slots when used as function arguments
+- Fix `CurrentSource()` not walking the continuation chain when the current template has no source info
+- Fix `CaptureStackTrace` using wrong PC for continuation frames (return addresses pointed past the call site)
 - Fix `(pair? '())` returning `#t` instead of `#f` (R7RS §6.4: the empty list is not a pair)
 - Fix `Engine.Call` and `runCompiled` leaking internal `ErrMachineHalt` sentinel to callers
 - Fix parameter converter errors returned without context (now wrapped with "parameter: converter error")
