@@ -16,10 +16,12 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
 
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
@@ -31,7 +33,9 @@ var (
 )
 
 // argConverter converts a Scheme value to a Go reflect.Value.
-type argConverter func(v values.Value) (reflect.Value, error)
+// ctx and mc are provided for composite types (slices, callbacks) that need
+// VM access; scalar converters ignore both.
+type argConverter func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error)
 
 // retConverter converts a Go reflect.Value to a Scheme value.
 type retConverter func(v reflect.Value) values.Value
@@ -51,9 +55,10 @@ type ffiSpec struct {
 
 // RegisterFunc registers a Go function as a Scheme primitive using
 // natural Go signatures. Supported parameter types: int64, int, float64,
-// string, bool, []byte, wile.Value, and context.Context (first param only).
+// string, bool, []byte, []T (typed slices), map[K]V, structs (exported fields),
+// func(...) (callbacks), wile.Value, and context.Context (first param only).
 // Supported return types: int64, int, float64, string, bool, []byte,
-// wile.Value, error (last return only), and void.
+// []T, map[K]V, structs, wile.Value, error (last return only), and void.
 //
 // Variadic Go functions are supported. The variadic parameter receives
 // all excess arguments from Scheme, converted element-by-element.
@@ -180,19 +185,21 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 }
 
 // makeArgConverter creates a converter for a single Go parameter type.
+// Converters are recursive: composite types (slices, maps, structs) build
+// inner converters for their element/field types at registration time.
 func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
 	// Only accept the exact wile.Value interface type. Concrete Value
 	// implementers (e.g., *values.Integer) would cause reflect.Call to panic
 	// since the converter produces a *wrappedValue, not the concrete type.
 	if t == valueInterfaceType {
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			return reflect.ValueOf(wrapValue(v)), nil
 		}, nil
 	}
 
 	switch t.Kind() {
 	case reflect.Int64:
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				// Also accept floats that are exact integers.
@@ -208,7 +215,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.Int:
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "integer", v)
@@ -223,7 +230,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.Float64:
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			switch n := v.(type) {
 			case *values.Float:
 				return reflect.ValueOf(n.Value), nil
@@ -244,7 +251,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.String:
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			s, ok := v.(*values.String)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "string", v)
@@ -253,7 +260,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.Bool:
-		return func(v values.Value) (reflect.Value, error) {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			b, ok := v.(*values.Boolean)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "boolean", v)
@@ -262,18 +269,16 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
-			return func(v values.Value) (reflect.Value, error) {
-				bv, ok := v.(*values.ByteVector)
-				if !ok {
-					return reflect.Value{}, fmtArgError(name, pos, "bytevector", v)
-				}
-				return reflect.ValueOf(bv.AsBytes()), nil
-			}, nil
-		}
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported parameter type at position %d: %s", name, pos, t),
-		}
+		return makeSliceArgConverter(name, pos, t)
+
+	case reflect.Map:
+		return makeMapArgConverter(name, pos, t)
+
+	case reflect.Struct:
+		return makeStructArgConverter(name, pos, t)
+
+	case reflect.Func:
+		return makeCallbackArgConverter(name, pos, t)
 
 	default:
 		return nil, &Error{
@@ -282,7 +287,349 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 	}
 }
 
+// makeSliceArgConverter creates a converter for Go slice types.
+// []byte is special-cased to ByteVector; all other element types use
+// recursive inner converters that walk Scheme proper lists.
+func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+	elemType := t.Elem()
+
+	// []byte special case: ByteVector.
+	if elemType.Kind() == reflect.Uint8 {
+		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+			bv, ok := v.(*values.ByteVector)
+			if !ok {
+				return reflect.Value{}, fmtArgError(name, pos, "bytevector", v)
+			}
+			return reflect.ValueOf(bv.AsBytes()), nil
+		}, nil
+	}
+
+	// Typed slice: build inner converter for element type.
+	elemConv, err := makeArgConverter(name, pos, elemType)
+	if err != nil {
+		return nil, err
+	}
+
+	sliceType := t
+	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		result := reflect.MakeSlice(sliceType, 0, 0)
+		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
+			converted, convErr := elemConv(innerCtx, mc, elem)
+			if convErr != nil {
+				return convErr
+			}
+			result = reflect.Append(result, converted)
+			return nil
+		})
+		if walkErr != nil {
+			return reflect.Value{}, walkErr
+		}
+		return result, nil
+	}, nil
+}
+
+// makeMapArgConverter creates a converter for Go map types.
+// Key types are restricted to Go types that produce Hashable Scheme values.
+func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+	keyType := t.Key()
+	valType := t.Elem()
+
+	// Validate key type at registration time.
+	if !isSupportedMapKeyType(keyType) {
+		return nil, &Error{
+			Message: fmt.Sprintf("RegisterFunc %q: unsupported map key type at position %d: %s (must be string, int64, int, or bool)", name, pos, keyType),
+		}
+	}
+
+	keyConv, err := makeArgConverter(name, pos, keyType)
+	if err != nil {
+		return nil, err
+	}
+	valConv, err := makeArgConverter(name, pos, valType)
+	if err != nil {
+		return nil, err
+	}
+
+	mapType := t
+	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		ht, ok := v.(*values.Hashtable)
+		if !ok {
+			return reflect.Value{}, fmtArgError(name, pos, "hashtable", v)
+		}
+		result := reflect.MakeMap(mapType)
+		walkErr := ht.Entries(func(key values.Hashable, val values.Value) error {
+			goKey, keyErr := keyConv(ctx, mc, key)
+			if keyErr != nil {
+				return keyErr
+			}
+			goVal, valErr := valConv(ctx, mc, val)
+			if valErr != nil {
+				return valErr
+			}
+			result.SetMapIndex(goKey, goVal)
+			return nil
+		})
+		if walkErr != nil {
+			return reflect.Value{}, walkErr
+		}
+		return result, nil
+	}, nil
+}
+
+// isSupportedMapKeyType returns whether a Go type can serve as a map key
+// in FFI conversions. Only types that produce Hashable Scheme values qualify.
+func isSupportedMapKeyType(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.String, reflect.Int64, reflect.Int, reflect.Bool:
+		return true
+	default:
+		return false
+	}
+}
+
+// makeStructArgConverter creates a converter for Go struct types.
+// Scheme alists ((FieldName . value) ...) are mapped to struct fields by
+// matching the car symbol against exported field names.
+func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+	type fieldInfo struct {
+		index int
+		conv  argConverter
+	}
+
+	fieldMap := make(map[string]fieldInfo)
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		conv, err := makeArgConverter(name, pos, f.Type)
+		if err != nil {
+			return nil, err
+		}
+		fieldMap[f.Name] = fieldInfo{index: i, conv: conv}
+	}
+
+	structType := t
+	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		result := reflect.New(structType).Elem()
+		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
+			pair, ok := elem.(*values.Pair)
+			if !ok {
+				return values.WrapForeignErrorf(
+					values.ErrTypeConversion,
+					"%s: argument %d: expected alist pair, got %s", name, pos, elem.SchemeString(),
+				)
+			}
+			sym, ok := pair.Car().(*values.Symbol)
+			if !ok {
+				return values.WrapForeignErrorf(
+					values.ErrTypeConversion,
+					"%s: argument %d: alist key must be a symbol, got %s", name, pos, pair.Car().SchemeString(),
+				)
+			}
+			fi, found := fieldMap[sym.Key]
+			if !found {
+				// Extra keys are silently ignored.
+				return nil
+			}
+			converted, convErr := fi.conv(innerCtx, mc, pair.Cdr())
+			if convErr != nil {
+				return convErr
+			}
+			result.Field(fi.index).Set(converted)
+			return nil
+		})
+		if walkErr != nil {
+			return reflect.Value{}, walkErr
+		}
+		return result, nil
+	}, nil
+}
+
+// makeCallbackArgConverter creates a converter for Go function types used as
+// callbacks. The Scheme procedure (lambda) is wrapped in a Go function via
+// reflect.MakeFunc that invokes it through a VM sub-context.
+//
+// The direction of inner converters is inverted relative to the outer function:
+// callback parameters use retConverters (Go→Scheme) and callback returns use
+// argConverters (Scheme→Go), since data flows in the opposite direction.
+func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+	// Build Go→Scheme converters for callback parameters.
+	numIn := t.NumIn()
+	paramConvs := make([]retConverter, numIn)
+	for i := range numIn {
+		conv, err := makeRetConverter(name, t.In(i))
+		if err != nil {
+			return nil, &Error{
+				Message: fmt.Sprintf("RegisterFunc %q: unsupported callback parameter type at position %d: %s", name, pos, t.In(i)),
+			}
+		}
+		paramConvs[i] = conv
+	}
+
+	// Determine callback return shape.
+	numOut := t.NumOut()
+	var resultConv argConverter
+	hasErrorReturn := false
+
+	switch numOut {
+	case 0:
+		// void callback
+	case 1:
+		if t.Out(0) == errorType {
+			hasErrorReturn = true
+		} else {
+			conv, err := makeArgConverter(name, pos, t.Out(0))
+			if err != nil {
+				return nil, &Error{
+					Message: fmt.Sprintf("RegisterFunc %q: unsupported callback return type at position %d: %s", name, pos, t.Out(0)),
+				}
+			}
+			resultConv = conv
+		}
+	case 2:
+		if t.Out(1) != errorType {
+			return nil, &Error{
+				Message: fmt.Sprintf("RegisterFunc %q: callback second return must be error at position %d, got %s", name, pos, t.Out(1)),
+			}
+		}
+		hasErrorReturn = true
+		conv, err := makeArgConverter(name, pos, t.Out(0))
+		if err != nil {
+			return nil, &Error{
+				Message: fmt.Sprintf("RegisterFunc %q: unsupported callback return type at position %d: %s", name, pos, t.Out(0)),
+			}
+		}
+		resultConv = conv
+	default:
+		return nil, &Error{
+			Message: fmt.Sprintf("RegisterFunc %q: callback at position %d has too many return values (%d)", name, pos, numOut),
+		}
+	}
+
+	funcType := t
+	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		// Determine the callable type.
+		var mcls *machine.MachineClosure
+		var clcls *machine.CaseLambdaClosure
+
+		switch proc := v.(type) {
+		case *machine.MachineClosure:
+			mcls = proc
+		case *machine.CaseLambdaClosure:
+			clcls = proc
+		default:
+			return reflect.Value{}, values.WrapForeignErrorf(
+				values.ErrNotAProcedure,
+				"%s: argument %d: expected procedure, got %s", name, pos, v.SchemeString(),
+			)
+		}
+
+		goFunc := reflect.MakeFunc(funcType, func(goArgs []reflect.Value) []reflect.Value {
+			// Convert Go args → Scheme values.
+			schemeArgs := make([]values.Value, len(goArgs))
+			for i, arg := range goArgs {
+				schemeArgs[i] = paramConvs[i](arg)
+			}
+
+			// Invoke the Scheme procedure in a sub-context.
+			sub := mc.NewSubContext()
+			sub.SetContext(ctx)
+
+			var applyErr error
+			if mcls != nil {
+				_, applyErr = sub.Apply(mcls, schemeArgs...)
+			} else {
+				_, applyErr = sub.ApplyCaseLambda(clcls, schemeArgs...)
+			}
+			if applyErr != nil {
+				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
+			}
+
+			runErr := sub.Run()
+			if runErr != nil {
+				var escapeErr *machine.ErrContinuationEscape
+				if errors.As(runErr, &escapeErr) {
+					return callbackErrorResult(funcType, hasErrorReturn, runErr)
+				}
+				if !errors.Is(runErr, machine.ErrMachineHalt) {
+					return callbackErrorResult(funcType, hasErrorReturn, runErr)
+				}
+			}
+
+			// Build Go return values.
+			return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, sub.GetValue())
+		})
+
+		return goFunc, nil
+	}, nil
+}
+
+// callbackErrorResult builds reflect return values when a callback encounters an error.
+// If the Go func type includes an error return, the error is returned normally.
+// Otherwise, the error is panicked (standard Go pattern for unrecoverable callback failures).
+func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) []reflect.Value {
+	if hasErrorReturn {
+		out := make([]reflect.Value, funcType.NumOut())
+		for i := range out {
+			if i == funcType.NumOut()-1 {
+				out[i] = reflect.ValueOf(&err).Elem()
+			} else {
+				out[i] = reflect.Zero(funcType.Out(i))
+			}
+		}
+		return out
+	}
+	panic(err)
+}
+
+// callbackSuccessResult builds reflect return values from a successful callback invocation.
+func callbackSuccessResult(
+	ctx context.Context,
+	mc *MachineContext,
+	funcType reflect.Type,
+	resultConv argConverter,
+	hasErrorReturn bool,
+	schemeResult values.Value,
+) []reflect.Value {
+	numOut := funcType.NumOut()
+	out := make([]reflect.Value, numOut)
+
+	if resultConv != nil {
+		converted, convErr := resultConv(ctx, mc, schemeResult)
+		if convErr != nil {
+			if hasErrorReturn {
+				for i := range out {
+					if i == numOut-1 {
+						out[i] = reflect.ValueOf(&convErr).Elem()
+					} else {
+						out[i] = reflect.Zero(funcType.Out(i))
+					}
+				}
+				return out
+			}
+			panic(convErr)
+		}
+		out[0] = converted
+	}
+
+	if hasErrorReturn {
+		// Set error return to nil.
+		out[numOut-1] = reflect.Zero(errorType)
+	}
+
+	// Fill any unset slots with zero values (for void callbacks with error return).
+	for i := range out {
+		if !out[i].IsValid() {
+			out[i] = reflect.Zero(funcType.Out(i))
+		}
+	}
+
+	return out
+}
+
 // makeRetConverter creates a converter for a single Go return type.
+// Converters are recursive for composite types (slices, maps, structs).
 func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 	// Only accept the exact wile.Value interface type. This avoids panics
 	// from typed-nil returns and keeps the API surface predictable.
@@ -326,20 +673,109 @@ func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 		}, nil
 
 	case reflect.Slice:
-		if t.Elem().Kind() == reflect.Uint8 {
-			return func(v reflect.Value) values.Value {
-				return values.NewByteVectorFromBytes(v.Bytes()...)
-			}, nil
-		}
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported return type: %s", name, t),
-		}
+		return makeSliceRetConverter(name, t)
+
+	case reflect.Map:
+		return makeMapRetConverter(name, t)
+
+	case reflect.Struct:
+		return makeStructRetConverter(name, t)
 
 	default:
 		return nil, &Error{
 			Message: fmt.Sprintf("RegisterFunc %q: unsupported return type: %s", name, t),
 		}
 	}
+}
+
+// makeSliceRetConverter creates a return converter for Go slice types.
+// []byte is special-cased to ByteVector; all other element types build
+// Scheme proper lists from converted elements.
+func makeSliceRetConverter(name string, t reflect.Type) (retConverter, error) {
+	elemType := t.Elem()
+
+	// []byte special case: ByteVector.
+	if elemType.Kind() == reflect.Uint8 {
+		return func(v reflect.Value) values.Value {
+			return values.NewByteVectorFromBytes(v.Bytes()...)
+		}, nil
+	}
+
+	elemConv, err := makeRetConverter(name, elemType)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(v reflect.Value) values.Value {
+		if v.IsNil() || v.Len() == 0 {
+			return values.EmptyList
+		}
+		elems := make([]values.Value, v.Len())
+		for i := range v.Len() {
+			elems[i] = elemConv(v.Index(i))
+		}
+		return values.List(elems...)
+	}, nil
+}
+
+// makeMapRetConverter creates a return converter for Go map types.
+func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
+	keyConv, err := makeRetConverter(name, t.Key())
+	if err != nil {
+		return nil, err
+	}
+	valConv, err := makeRetConverter(name, t.Elem())
+	if err != nil {
+		return nil, err
+	}
+
+	return func(v reflect.Value) values.Value {
+		ht := values.NewEmptyHashtable()
+		if v.IsNil() {
+			return ht
+		}
+		iter := v.MapRange()
+		for iter.Next() {
+			schemeKey := keyConv(iter.Key())
+			schemeVal := valConv(iter.Value())
+			_ = ht.Set(schemeKey, schemeVal)
+		}
+		return ht
+	}, nil
+}
+
+// makeStructRetConverter creates a return converter for Go struct types.
+// Exported fields are converted to a Scheme alist ((FieldName . value) ...).
+func makeStructRetConverter(name string, t reflect.Type) (retConverter, error) {
+	type fieldConvInfo struct {
+		name  string
+		index int
+		conv  retConverter
+	}
+
+	var fields []fieldConvInfo
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		conv, err := makeRetConverter(name, f.Type)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, fieldConvInfo{name: f.Name, index: i, conv: conv})
+	}
+
+	return func(v reflect.Value) values.Value {
+		pairs := make([]values.Value, len(fields))
+		for i, f := range fields {
+			pairs[i] = values.NewCons(
+				values.NewSymbol(f.name),
+				f.conv(v.Field(f.index)),
+			)
+		}
+		return values.List(pairs...)
+	}, nil
 }
 
 // makeWrapper generates the ForeignFunction closure that bridges between
@@ -359,7 +795,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			fixedCount := s.paramCount - 1
 
 			for i := range fixedCount {
-				converted, err := s.argConvs[i](mc.Arg(i))
+				converted, err := s.argConvs[i](ctx, mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}
@@ -371,7 +807,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			varList := mc.Arg(fixedCount)
 
 			_, err := values.ForEach(ctx, varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
-				converted, convErr := variadicConv(v)
+				converted, convErr := variadicConv(ctx, mc, v)
 				if convErr != nil {
 					return convErr
 				}
@@ -383,7 +819,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			}
 		} else {
 			for i := range s.paramCount {
-				converted, err := s.argConvs[i](mc.Arg(i))
+				converted, err := s.argConvs[i](ctx, mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}
