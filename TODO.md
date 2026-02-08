@@ -323,7 +323,7 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 Track variable definition sites and enable source-level debugging at runtime.
 
 - [x] **Per-operation source tracking** (2026-02-08) — Replaced range-based `SourceMap` (binary search, gap-prone) with per-operation source attribution. Parallel `sourceRefs []uint16` array indexes into deduplicated `sourceTable`. Compiler source stack auto-tags every operation — including infrastructure ops (Branch, Push, Apply) — with the enclosing form's source. O(1) lookup via `sourceTable[sourceRefs[pc]]`. PR #137.
-- [ ] Wire up error handling to use `SchemeError` with `CaptureStackTrace()`
+- [x] **Wire up error handling to per-operation source tracking** (2026-02-08) — `ErrExceptionEscape` carries `Source` and `StackTrace` from `CaptureStackTrace()`. New public API: `EvalWithSource`, `EvalMultipleWithSource`, `CompileWithSource` accept a source filename; `RuntimeError` exposes `Source` (file:line:col) and `StackTrace`. Fixed `CurrentSource()` to walk continuation chain, `CaptureStackTrace` to use pc-1 for continuation frames. Also fixed void-returning primitives (`SetValues()` → `SetValue(Void)`) across 18 sites. PR #138. Note: `SchemeError` exists as dormant infrastructure (`mc.Error()`, `mc.WrapError()`) but isn't used in the active execution path yet.
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
 
 ---
