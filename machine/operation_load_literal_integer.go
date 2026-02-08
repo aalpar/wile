@@ -46,5 +46,8 @@ func (p *OperationLoadLiteralInteger) IsVoid() bool {
 
 func (p *OperationLoadLiteralInteger) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadLiteralInteger)
-	return sameType(p, v, ok)
+	return fieldMatches(p, v, ok,
+		func(op *OperationLoadLiteralInteger) int64 {
+			return op.Value
+		})
 }

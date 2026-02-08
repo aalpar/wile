@@ -50,8 +50,8 @@ func (p *OperationPopEnv) SchemeString() string {
 }
 
 func (p *OperationPopEnv) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationPopEnv)
-	return ok
+	v, ok := other.(*OperationPopEnv)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationPopEnv) IsVoid() bool {

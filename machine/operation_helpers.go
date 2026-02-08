@@ -14,6 +14,8 @@
 
 package machine
 
+import "slices"
+
 // sameType is a helper for EqualTo methods on zero-field operations.
 // The caller must perform the type assertion and pass the result.
 //
@@ -50,4 +52,44 @@ func fieldMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) T)
 		return v == p
 	}
 	return getField(p) == getField(v)
+}
+
+// fieldMethodMatches is a helper for EqualTo methods on single-field operations
+// where the field is compared via a method rather than ==.
+//
+// Usage:
+//
+//	func (p *OperationType) EqualTo(o values.Value) bool {
+//	    v, ok := o.(*OperationType)
+//	    return fieldMethodMatches(p, v, ok,
+//	        func(op *OperationType) *FieldType { return op.Field },
+//	        func(a, b *FieldType) bool { return a.EqualTo(b) })
+//	}
+func fieldMethodMatches[T any, Op any](p, v *Op, ok bool, getField func(*Op) T, eq func(T, T) bool) bool {
+	if !ok {
+		return false
+	}
+	if v == nil || p == nil {
+		return v == p
+	}
+	return eq(getField(p), getField(v))
+}
+
+// sliceMatches is a helper for EqualTo methods on operations with a single
+// comparable-element slice field.
+//
+// Usage:
+//
+//	func (p *OperationType) EqualTo(o values.Value) bool {
+//	    v, ok := o.(*OperationType)
+//	    return sliceMatches(p, v, ok, func(op *OperationType) []string { return op.Items })
+//	}
+func sliceMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) []T) bool {
+	if !ok {
+		return false
+	}
+	if v == nil || p == nil {
+		return v == p
+	}
+	return slices.Equal(getField(p), getField(v))
 }

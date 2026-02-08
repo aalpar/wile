@@ -65,8 +65,11 @@ func (p *OperationBuildSyntaxList) SchemeString() string {
 }
 
 func (p *OperationBuildSyntaxList) EqualTo(other values.Value) bool {
-	o, ok := other.(*OperationBuildSyntaxList)
-	return ok && p.Count == o.Count
+	v, ok := other.(*OperationBuildSyntaxList)
+	return fieldMatches(p, v, ok,
+		func(op *OperationBuildSyntaxList) int {
+			return op.Count
+		})
 }
 
 func (p *OperationBuildSyntaxList) IsVoid() bool {
