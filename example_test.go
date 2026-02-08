@@ -184,6 +184,30 @@ func ExampleEngine_Call() {
 	// Output: 144
 }
 
+func ExampleEngine_RegisterFunc() {
+	engine, err := wile.NewEngine()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Register a Go function with a natural signature — no MachineContext needed.
+	err = engine.RegisterFunc("double", func(n int64) int64 {
+		return n * 2
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
+	result, err := engine.Eval(ctx, "(map double '(1 2 3 4 5))")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(result.SchemeString())
+	// Output: (2 4 6 8 10)
+}
+
 func ExampleNewEngine_withExtension() {
 	_, err := wile.NewEngine(
 		wile.WithExtension(io.Extension),
