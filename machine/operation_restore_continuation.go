@@ -44,8 +44,5 @@ func (p *OperationRestoreContinuation) IsVoid() bool {
 
 func (p *OperationRestoreContinuation) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationRestoreContinuation)
-	if !ok {
-		return false
-	}
-	return v == p
+	return sameType(p, v, ok)
 }

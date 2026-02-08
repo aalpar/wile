@@ -440,9 +440,9 @@ func TestOperationValueMethods(t *testing.T) {
 		op1 := NewOperationRestoreContinuation()
 		op2 := NewOperationRestoreContinuation()
 		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
-		// RestoreContinuation uses pointer equality in EqualTo, so different instances are not equal
+		// RestoreContinuation is a zero-field operation: all non-nil instances are structurally equal
 		qt.Assert(t, op1.EqualTo(op1), qt.IsTrue)
-		qt.Assert(t, op1.EqualTo(op2), qt.IsFalse)
+		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
 		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 	})
 
@@ -821,9 +821,9 @@ func TestOperationLoadLiteralIntegerMethods(t *testing.T) {
 	op2 := NewOperationLoadLiteralInteger(42)
 	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
 
-	// Different value - EqualTo only checks type, not value
+	// Different value
 	op3 := NewOperationLoadLiteralInteger(99)
-	qt.Assert(t, op.EqualTo(op3), qt.IsTrue) // EqualTo returns true for same type
+	qt.Assert(t, op.EqualTo(op3), qt.IsFalse)
 
 	// Different type
 	qt.Assert(t, op.EqualTo(values.NewInteger(42)), qt.IsFalse)
@@ -831,7 +831,9 @@ func TestOperationLoadLiteralIntegerMethods(t *testing.T) {
 
 // TestOperationBrkMethods tests OperationBrk methods
 func TestOperationBrkMethods(t *testing.T) {
-	fn := func(ctx context.Context, mc *MachineContext) error { return nil }
+	fn := func(ctx context.Context, mc *MachineContext) error {
+		return nil
+	}
 	op := NewOperationBrk(fn)
 	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)

@@ -98,8 +98,8 @@ func (p *OperationSyntaxCaseMatch) SchemeString() string {
 }
 
 func (p *OperationSyntaxCaseMatch) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationSyntaxCaseMatch)
-	return ok
+	v, ok := other.(*OperationSyntaxCaseMatch)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationSyntaxCaseMatch) IsVoid() bool {
@@ -165,19 +165,11 @@ func (p *OperationBindPatternVars) SchemeString() string {
 }
 
 func (p *OperationBindPatternVars) EqualTo(other values.Value) bool {
-	o, ok := other.(*OperationBindPatternVars)
-	if !ok {
-		return false
-	}
-	if len(p.PatternVars) != len(o.PatternVars) {
-		return false
-	}
-	for i, v := range p.PatternVars {
-		if o.PatternVars[i] != v {
-			return false
-		}
-	}
-	return true
+	v, ok := other.(*OperationBindPatternVars)
+	return sliceMatches(p, v, ok,
+		func(op *OperationBindPatternVars) []string {
+			return op.PatternVars
+		})
 }
 
 func (p *OperationBindPatternVars) IsVoid() bool {
@@ -204,8 +196,8 @@ func (p *OperationSyntaxCaseNoMatch) SchemeString() string {
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationSyntaxCaseNoMatch)
-	return ok
+	v, ok := other.(*OperationSyntaxCaseNoMatch)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationSyntaxCaseNoMatch) IsVoid() bool {
@@ -257,8 +249,8 @@ func (p *OperationSyntaxTemplateExpand) SchemeString() string {
 }
 
 func (p *OperationSyntaxTemplateExpand) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationSyntaxTemplateExpand)
-	return ok
+	v, ok := other.(*OperationSyntaxTemplateExpand)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationSyntaxTemplateExpand) IsVoid() bool {
@@ -294,8 +286,8 @@ func (p *OperationStoreSyntaxCaseInput) SchemeString() string {
 }
 
 func (p *OperationStoreSyntaxCaseInput) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationStoreSyntaxCaseInput)
-	return ok
+	v, ok := other.(*OperationStoreSyntaxCaseInput)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationStoreSyntaxCaseInput) IsVoid() bool {
@@ -325,8 +317,8 @@ func (p *OperationClearSyntaxCaseInput) SchemeString() string {
 }
 
 func (p *OperationClearSyntaxCaseInput) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationClearSyntaxCaseInput)
-	return ok
+	v, ok := other.(*OperationClearSyntaxCaseInput)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationClearSyntaxCaseInput) IsVoid() bool {

@@ -226,8 +226,8 @@ func (p *OperationSyntaxRulesTransform) SchemeString() string {
 }
 
 func (p *OperationSyntaxRulesTransform) EqualTo(other values.Value) bool {
-	_, ok := other.(*OperationSyntaxRulesTransform)
-	return ok
+	v, ok := other.(*OperationSyntaxRulesTransform)
+	return sameType(p, v, ok)
 }
 
 func (p *OperationSyntaxRulesTransform) IsVoid() bool {

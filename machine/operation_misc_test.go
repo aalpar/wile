@@ -83,8 +83,12 @@ func TestOperationBrk_IsVoid(t *testing.T) {
 }
 
 func TestOperationBrk_EqualTo(t *testing.T) {
-	fn1 := func(ctx context.Context, mc *MachineContext) error { return nil }
-	fn2 := func(ctx context.Context, mc *MachineContext) error { return nil }
+	fn1 := func(ctx context.Context, mc *MachineContext) error {
+		return nil
+	}
+	fn2 := func(ctx context.Context, mc *MachineContext) error {
+		return nil
+	}
 
 	op1 := NewOperationBrk(fn1)
 	op2 := NewOperationBrk(fn2)
@@ -135,7 +139,7 @@ func TestOperationLoadLiteralInteger_EqualTo(t *testing.T) {
 	op3 := NewOperationLoadLiteralInteger(99)
 
 	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-	qt.Assert(t, op1.EqualTo(op3), qt.IsTrue) // Implementation returns true for all non-nil
+	qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
 	qt.Assert(t, op1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 
 	var nilOp1 *OperationLoadLiteralInteger

@@ -40,13 +40,13 @@ func (p *OperationLoadLocalByLocalIndexImmediate) IsVoid() bool {
 
 func (p *OperationLoadLocalByLocalIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadLocalByLocalIndexImmediate)
-	if !ok {
-		return false
-	}
-	if v == nil || p == nil {
-		return v == p
-	}
-	return p.LocalIndex.EqualTo(v.LocalIndex)
+	return fieldMethodMatches(p, v, ok,
+		func(op *OperationLoadLocalByLocalIndexImmediate) *environment.LocalIndex {
+			return op.LocalIndex
+		},
+		func(a, b *environment.LocalIndex) bool {
+			return a.EqualTo(b)
+		})
 }
 
 func (p *OperationLoadLocalByLocalIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
