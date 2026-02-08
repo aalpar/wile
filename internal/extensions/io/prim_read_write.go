@@ -246,7 +246,7 @@ func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -284,7 +284,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -306,7 +306,7 @@ func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -339,7 +339,7 @@ func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -375,7 +375,7 @@ func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-simple: error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -400,7 +400,7 @@ func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-shared: error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -678,7 +678,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-string: error flushing output port")
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -726,7 +726,7 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "write-u8: error writing byte")
 	}
 
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -992,7 +992,7 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "write-bytevector: error writing to port")
 	}
 
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -1025,6 +1025,6 @@ func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 	}
 
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }

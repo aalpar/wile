@@ -95,7 +95,7 @@ func PrimClosePort(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "close-port: %v", err)
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 

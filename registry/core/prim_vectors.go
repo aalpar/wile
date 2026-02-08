@@ -103,7 +103,7 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("vector-set!: index out of bounds")
 	}
 	(*v)[idx] = obj
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -221,7 +221,7 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 
 	// Copy elements
 	copy((*to)[atIdx:], (*from)[start:end])
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -253,7 +253,7 @@ func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
 	for i := start; i < end; i++ {
 		(*v)[i] = fillArg
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -428,7 +428,7 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 

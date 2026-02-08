@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -103,4 +104,91 @@ func TestErrExceptionEscape_Handled(t *testing.T) {
 	}
 
 	c.Assert(err.Handled, qt.IsTrue)
+}
+
+func TestErrExceptionEscape_Error_WithSource(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		err  *ErrExceptionEscape
+		want string
+	}{
+		{
+			"NativeError with source",
+			&ErrExceptionEscape{
+				Condition: values.NewErrorObject("division by zero"),
+				Source: syntax.NewSourceContext("", "example.scm",
+					syntax.NewSourceIndexes(0, 3, 5),
+					syntax.NewSourceIndexes(0, 10, 5)),
+			},
+			"example.scm:5:3: error: division by zero",
+		},
+		{
+			"non-error condition with source",
+			&ErrExceptionEscape{
+				Condition: values.NewSymbol("my-error"),
+				Source: syntax.NewSourceContext("", "test.scm",
+					syntax.NewSourceIndexes(0, 1, 10),
+					syntax.NewSourceIndexes(0, 5, 10)),
+			},
+			"test.scm:10:1: exception: my-error",
+		},
+		{
+			"NativeError without source falls back",
+			&ErrExceptionEscape{
+				Condition: values.NewErrorObject("boom"),
+			},
+			`exception: #<error-object "boom">`,
+		},
+		{
+			"nil condition with source",
+			&ErrExceptionEscape{
+				Condition: nil,
+				Source: syntax.NewSourceContext("", "nil.scm",
+					syntax.NewSourceIndexes(0, 0, 1),
+					syntax.NewSourceIndexes(0, 0, 1)),
+			},
+			"nil.scm:1:0: exception: <nil>",
+		},
+		{
+			"backward compat: no source no stack",
+			&ErrExceptionEscape{
+				Condition: values.NewInteger(42),
+			},
+			"exception: 42",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.err.Error(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestErrExceptionEscape_Error_WithStackTrace(t *testing.T) {
+	c := qt.New(t)
+
+	source := syntax.NewSourceContext("", "example.scm",
+		syntax.NewSourceIndexes(0, 3, 5),
+		syntax.NewSourceIndexes(0, 10, 5))
+
+	trace := StackTrace{
+		{
+			FunctionName: "f",
+			CurrentLoc:   source,
+		},
+	}
+
+	err := &ErrExceptionEscape{
+		Condition:  values.NewErrorObject("boom"),
+		Source:     source,
+		StackTrace: trace,
+	}
+
+	got := err.Error()
+	c.Assert(got, qt.Contains, "example.scm:5:3: error: boom")
+	c.Assert(got, qt.Contains, "Stack trace:")
+	c.Assert(got, qt.Contains, "at f (example.scm:5:3)")
 }
