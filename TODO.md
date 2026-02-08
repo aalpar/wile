@@ -76,17 +76,15 @@ Code Cleanup
 ---
 
 ### Tokenizer Refactoring
-- [ ] `readRadixPrefix` — consolidate `#b/#o/#d/#x` handling
-- [ ] `readBooleanLiteral` — consolidate `#t/#true` and `#f/#false`
-- [ ] `scanKeyword` — unify `scan()`, `scanCaseInsensitive()`, `readToken()`
-- [ ] `readDecimalFractionWithExponent` — extract decimal+exponent pattern
-- [ ] `readImaginarySuffix` — consolidate imaginary number suffixes
-- [ ] `readExplicitSignNumber` — consolidate `+/-` number handling
-- [ ] `advanceOrError` — combine `next()` + error check
-- [ ] `checkDelimiter` — replace inline delimiter checking
-- [ ] `readInfNan` — consolidate `inf.0/nan.0` parsing
-
-**Estimated reduction:** ~200-300 lines
+- [x] `readRadixPrefix` — already consolidated: single `readRadixMarker()` function with 4 call sites
+- [x] `readBooleanLiteral` — already consolidated: single `readBoolean()` function with 2 call sites
+- [x] `scanKeyword` — already consolidated: `scanWith()` dispatcher + `scan()`/`scanCaseInsensitive()` wrappers
+- [x] `readDecimalFractionWithExponent` — eliminated 17-line duplicate in `mayReadUnsignedFractionalRealNumberOrRationalRealNumber`
+- [x] `readImaginarySuffix` — CLOSED: 12 `isImaginary()` call sites each have distinct surrounding logic (different states, error handling, return patterns); no common extractable block
+- [x] `readExplicitSignNumber` — CLOSED: sign dispatch has divergent flows (imaginary, nan, digit, dot, subsequent) that don't share structure
+- [x] `advanceOrError` — CLOSED: 23 bare-return sites × 1 line saved each = ~19 net lines; not worth the churn on a 2360-line file
+- [x] `checkDelimiter` — already consolidated: `isDelimiter()` and `isDelimiterOrMarker()` helpers exist
+- [x] `readInfNan` — already consolidated: `readSpecialNumber()` with strategy callback + `readNan()`/`readInf()` wrappers
 
 ---
 
@@ -145,7 +143,7 @@ Code Refactoring
 ----------------
 - [x] ~~Add `registry/helpers/args.go`~~ - `RequireArg[T]` and `RequireType[T]` generics replace ~190 type assertion sites across 20+ prim files
 - [x] ~~Add `machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
-- [ ] Migrate ~7 remaining operation files to use EqualTo helpers (23/30 already migrated)
+- [x] ~~Migrate ~7 remaining operation files to use EqualTo helpers~~ (all 30 migrated)
 
 ---
 
