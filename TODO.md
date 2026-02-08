@@ -9,10 +9,9 @@ Code Cleanup
 - [x] **Resolution:** Replaced `any` with `*environment.GlobalIndex` in `FreeIdResolution.Global` and `globalBindingProvider.GetGlobal()`, and `*environment.Binding` in `BindingChecker.GetBinding()` and `envBindingChecker.GetBinding()`. Import is safe: `match` → `environment` (no cycle). `SyntaxSymbol.ResolvedBinding any` stays `any` to avoid `syntax` ↔ `environment` cycle.
 
 ### Scope Matching Optimization
-- [ ] **Location:** `internal/syntax/` and `internal/match/`
-- [ ] **Issue:** Scope set matching is mostly brute force O(n×m) comparison
-- [ ] **Goal:** Investigate optimization opportunities (hash-based set comparison, scope indexing)
-- [ ] **Impact:** Performance improvement for complex macro expansions
+- [x] **Status:** CLOSED (2026-02-07) — Linear scan is optimal for practical scope set sizes
+- [x] **Investigation:** Scope sets are typically 0-4 elements (one per lexical form). Hash maps cross over at ~20-30 elements; bitmaps require unbounded IDs; sorted merge adds O(n) insertion cost. Linear scan with pointer equality in a cache line is faster for these sizes.
+- [x] **Changes:** Added size guard (`len(binding) > len(use)` early return), cached `Scopes()` calls in `GetBindingWithScopes`, added perfect-match early termination in `GetLocalIndexWithScopes`, documented rationale in `ScopesMatch`.
 
 ---
 

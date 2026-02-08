@@ -324,13 +324,14 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 		if i, ok := env.local.keys[*key]; ok {
 			binding := env.local.bindings[i]
 			if binding != nil {
+				bindingScopes := binding.Scopes()
 				// Check if scopes match
-				if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
+				if len(bindingScopes) == 0 {
 					// Binding has no scopes (top-level or pre-hygiene), accept it
 					return binding
 				}
 				// Check scope compatibility using ScopesMatch from scope_utils
-				if syntax.ScopesMatch(scopes, binding.Scopes()) {
+				if syntax.ScopesMatch(scopes, bindingScopes) {
 					return binding
 				}
 				// Scopes don't match - continue searching parent frames
@@ -352,13 +353,14 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	if ok {
 		binding := ge.global.bindings[i]
 		if binding != nil {
+			bindingScopes := binding.Scopes()
 			// Check if scopes match
-			if binding.Scopes() == nil || len(binding.Scopes()) == 0 {
+			if len(bindingScopes) == 0 {
 				// Binding has no scopes (top-level or pre-hygiene), accept it
 				return binding
 			}
 			// Check scope compatibility
-			if syntax.ScopesMatch(scopes, binding.Scopes()) {
+			if syntax.ScopesMatch(scopes, bindingScopes) {
 				return binding
 			}
 		}
@@ -477,6 +479,10 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 					// This is a valid candidate with scope count 0
 					candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})
 				} else if syntax.ScopesMatch(scopes, bindingScopes) {
+					// Perfect match — maximally specific, no need to search further
+					if len(bindingScopes) == len(scopes) {
+						return NewLocalIndex(i, j)
+					}
 					// Scopes match - count how many scopes are in common
 					// (which equals len(bindingScopes) since it's a subset)
 					candidates = append(candidates, candidate{NewLocalIndex(i, j), len(bindingScopes)})
