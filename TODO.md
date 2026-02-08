@@ -314,7 +314,9 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
 ---
 
 ### Go FFI
-- [ ] Registry-based (Phase 1) → Reflection-based (Phase 2) → Plugin support (Phase 3).
+- [x] **Phase 1: `RegisterFunc`** — Register Go functions with natural signatures via reflection. Supports `int64`, `int`, `float64`, `string`, `bool`, `[]byte`, `Value`, `context.Context`, variadic params, and `(T, error)` returns. Reflection happens once at registration; runtime uses pre-computed converters. PR #139.
+- [ ] Phase 2: Struct/slice/map mapping (Go structs ↔ Scheme records/alists, `[]T` ↔ lists/vectors, `map[K]V` ↔ hash tables), bidirectional callbacks (Scheme procedures as Go `func(...)` arguments)
+- [ ] Phase 3: Plugin support (dynamic extension loading via registry pattern)
 
 ---
 

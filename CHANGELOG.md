@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add `Abs()`, `ToExact()`, `ToInexact()` methods to the `Number` interface
 - Add `IsInteger()`, `IsRational()`, `IsFinite()`, `IsNaN()` predicate methods to the `Number` interface
 - Add `EvalWithSource`, `EvalMultipleWithSource`, and `CompileWithSource` methods for source-tracked evaluation — source locations appear in `RuntimeError.Source` and `RuntimeError.StackTrace`
+- Add `RegisterFunc` for registering Go functions with natural signatures — supports `int64`, `int`, `float64`, `string`, `bool`, `[]byte`, `Value`, `context.Context`, variadic parameters, and `(T, error)` returns
+- Add `ErrTypeConversion` sentinel for FFI runtime type mismatch errors
 - Wire `ErrExceptionEscape` to carry source location and stack trace from per-operation source tracking
 
 ### Changed
