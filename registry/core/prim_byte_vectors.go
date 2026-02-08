@@ -144,7 +144,7 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
 	}
 	(*bv)[idx.Value] = values.NewByte(uint8(byteVal.Value))
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -212,7 +212,7 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 
 	// Use copy with correct slice bounds - handles overlapping regions correctly
 	copy((*toBv)[atIdx.Value:], (*fromBv)[start:end])
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 

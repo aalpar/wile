@@ -109,7 +109,7 @@ func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignFileError(err, "delete-file", filename.Value)
 	}
-	mc.SetValues()
+	mc.SetValue(values.Void)
 	return nil
 }
 
