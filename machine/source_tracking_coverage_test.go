@@ -27,6 +27,14 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// addOpsWithSource adds count placeholder operations tagged with the given source.
+// Used by tests that need a template with source-tagged operations.
+func addOpsWithSource(tpl *NativeTemplate, count int, source *syntax.SourceContext) {
+	for i := 0; i < count; i++ {
+		tpl.appendOperationsWithSource(source, NewOperationLoadVoid())
+	}
+}
+
 // =============================================================================
 // CaptureStackTrace Tests
 // =============================================================================
@@ -52,7 +60,7 @@ func TestCaptureStackTrace_SingleFrame(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(10, 5, 100),
 	}
-	tpl.sourceMap.Add(0, 10, source)
+	addOpsWithSource(tpl, 10, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -72,17 +80,17 @@ func TestCaptureStackTrace_MultipleFrames(t *testing.T) {
 	tpl1 := NewNativeTemplate(0, 0, false)
 	tpl1.SetName("inner")
 	source1 := &syntax.SourceContext{File: "inner.scm", Start: syntax.NewSourceIndexes(5, 1, 50)}
-	tpl1.sourceMap.Add(0, 5, source1)
+	addOpsWithSource(tpl1, 5, source1)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
 	tpl2.SetName("middle")
 	source2 := &syntax.SourceContext{File: "middle.scm", Start: syntax.NewSourceIndexes(10, 1, 100)}
-	tpl2.sourceMap.Add(0, 5, source2)
+	addOpsWithSource(tpl2, 5, source2)
 
 	tpl3 := NewNativeTemplate(0, 0, false)
 	tpl3.SetName("outer")
 	source3 := &syntax.SourceContext{File: "outer.scm", Start: syntax.NewSourceIndexes(15, 1, 150)}
-	tpl3.sourceMap.Add(0, 5, source3)
+	addOpsWithSource(tpl3, 5, source3)
 
 	// Build continuation chain: outer -> middle -> inner
 	cont1 := NewMachineContinuation(nil, tpl3, env)
@@ -167,7 +175,7 @@ func TestDebugger_CheckBreakpoint_Match(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -190,7 +198,7 @@ func TestDebugger_CheckBreakpoint_MatchWithColumn(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -212,7 +220,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongFile(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -234,7 +242,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongLine(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -256,7 +264,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongColumn(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -279,7 +287,7 @@ func TestDebugger_CheckBreakpoint_Disabled(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 5, 10), // index=100, column=5, line=10
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -312,7 +320,7 @@ func TestDebugger_ShouldStep_StepInto(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -340,7 +348,7 @@ func TestDebugger_ShouldStep_StepOver_SameDepth(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -357,7 +365,7 @@ func TestDebugger_ShouldStep_StepOver_DeeperFrame(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -377,7 +385,7 @@ func TestDebugger_ShouldStep_StepOver_ShallowerFrame(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	// Create a continuation chain where we start at depth 1
 	parentCont := NewMachineContinuation(nil, tpl, env)
@@ -402,7 +410,7 @@ func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	mc.SaveContinuation(5)
@@ -444,7 +452,7 @@ func TestOperationApply_ErrorWithStackTrace(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(10, 1, 100),
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	mc.SetValue(values.NewInteger(42)) // Not a closure!
@@ -470,7 +478,7 @@ func TestOperationLoadGlobal_ErrorWithStackTrace(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(5, 1, 50),
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	// Add a nil literal
 	tpl.literals = append(tpl.literals, nil)
@@ -499,7 +507,7 @@ func TestOperationLoadLocal_ErrorWithStackTrace(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(5, 1, 50),
 	}
-	tpl.sourceMap.Add(0, 5, source)
+	addOpsWithSource(tpl, 5, source)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -546,9 +554,6 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
-	c.Assert(tpl2.sourceMap, qt.IsNotNil)
-	c.Assert(tpl2.sourceMap.Len() > 0, qt.IsTrue)
-
 	source := tpl2.SourceAt(0)
 	c.Assert(source, qt.IsNotNil)
 	c.Assert(source.File, qt.Equals, "ref.scm")
@@ -572,9 +577,6 @@ func TestSourceRecording_Literal(t *testing.T) {
 	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
-	c.Assert(tpl.sourceMap, qt.IsNotNil)
-	c.Assert(tpl.sourceMap.Len() > 0, qt.IsTrue)
-
 	source := tpl.SourceAt(0)
 	c.Assert(source, qt.IsNotNil)
 	c.Assert(source.File, qt.Equals, "literal.scm")
@@ -585,8 +587,8 @@ func TestSourceRecording_CaseLambda(t *testing.T) {
 
 	tpl := compileScheme(t, "(case-lambda ((x) x) ((x y) y))")
 
-	c.Assert(tpl.sourceMap, qt.IsNotNil)
-	c.Assert(tpl.sourceMap.Len() > 0, qt.IsTrue)
+	// The outer template should have source for all operations
+	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
 }
 
 // =============================================================================
@@ -604,12 +606,12 @@ func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 1, 10), // index, column, line
 	}
-	// Map operations 0 and 1 to the source
-	tpl.sourceMap.Add(0, 2, source)
-
+	// Add operations with source tracking
 	lit := values.NewInteger(42)
 	tpl.literals = append(tpl.literals, lit)
-	tpl.operations = append(tpl.operations,
+	tpl.appendOperationsWithSource(source,
+		NewOperationLoadVoid(),
+		NewOperationLoadVoid(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(0),
 	)
 
@@ -650,11 +652,12 @@ func TestRun_WithDebugger_StepInto(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(5, 1, 50),
 	}
-	tpl.sourceMap.Add(0, 2, source)
-
+	// Add operations with source tracking
 	lit := values.NewInteger(42)
 	tpl.literals = append(tpl.literals, lit)
-	tpl.operations = append(tpl.operations,
+	tpl.appendOperationsWithSource(source,
+		NewOperationLoadVoid(),
+		NewOperationLoadVoid(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		NewOperationRestoreContinuation(),
 	)

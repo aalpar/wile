@@ -39,8 +39,9 @@ const (
 // CompileTimeContinuation is a continuation used during the compilation phase
 type CompileTimeContinuation struct {
 	// FIXME: only binding keys needed - no values
-	env      *environment.EnvironmentFrame
-	template *NativeTemplate
+	env         *environment.EnvironmentFrame
+	template    *NativeTemplate
+	sourceStack []*syntax.SourceContext
 	// libraryCallback is called when a library is compiled (for LoadLibrary)
 	libraryCallback func(*CompiledLibrary)
 }
@@ -1094,7 +1095,13 @@ func (p *CompileTimeContinuation) CompileUnquoteSplicing(_ CompileTimeCallContex
 }
 
 // CompileExpression compiles a general expression.
+// Pushes the expression's source context onto the source stack so that all
+// operations emitted during compilation (including infrastructure ops like
+// Branch and Push) are tagged with the source location.
 func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	p.pushSource(expr.SourceContext())
+	defer p.popSource()
+
 	// Validate the expression first
 	// Pass the environment so validation can check for local variable shadowing
 	// of special forms (R7RS §4.2.2)
@@ -1165,17 +1172,28 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 	return nil
 }
 
+// AppendOperations appends operations tagged with the current source from the source stack.
+// This routes through the template's source-aware append so every emitted op
+// automatically gets the innermost source context.
 func (p *CompileTimeContinuation) AppendOperations(ops ...Operation) {
-	p.template.operations = append(p.template.operations, ops...)
+	p.template.appendOperationsWithSource(p.currentSource(), ops...)
 }
 
-// recordSource records source location mapping for operations emitted between
-// startPC and the current PC. This enables stack traces and debugging.
-func (p *CompileTimeContinuation) recordSource(startPC int, source *syntax.SourceContext) {
-	if source != nil && p.template.sourceMap != nil {
-		endPC := len(p.template.operations)
-		p.template.sourceMap.Add(startPC, endPC, source)
+func (p *CompileTimeContinuation) pushSource(src *syntax.SourceContext) {
+	p.sourceStack = append(p.sourceStack, src)
+}
+
+func (p *CompileTimeContinuation) popSource() {
+	if len(p.sourceStack) > 0 {
+		p.sourceStack = p.sourceStack[:len(p.sourceStack)-1]
 	}
+}
+
+func (p *CompileTimeContinuation) currentSource() *syntax.SourceContext {
+	if len(p.sourceStack) == 0 {
+		return nil
+	}
+	return p.sourceStack[len(p.sourceStack)-1]
 }
 
 // CompileDefineLibrary handles (define-library (lib-name) <library-declaration> ...).
@@ -2027,7 +2045,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	if syntax.IsSyntaxEmptyList(bodyExpr) {
 		// Empty body - emit void
 		voidIdx := p.template.MaybeAppendLiteral(values.Void)
-		p.template.AppendOperations(
+		p.AppendOperations(
 			NewOperationLoadLiteralByLiteralIndexImmediate(voidIdx),
 		)
 		return nil

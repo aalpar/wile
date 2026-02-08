@@ -50,8 +50,6 @@ func TestSourceRecording_Quote(t *testing.T) {
 	tpl := compileScheme(t, "'hello")
 
 	// Source map should have entries
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
 
 	// Should be able to look up source at PC 0
 	source := tpl.SourceAt(0)
@@ -62,9 +60,6 @@ func TestSourceRecording_Quote(t *testing.T) {
 func TestSourceRecording_If(t *testing.T) {
 	tpl := compileScheme(t, "(if #t 1 2)")
 
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
-
 	source := tpl.SourceAt(0)
 	qt.Assert(t, source, qt.IsNotNil)
 }
@@ -72,18 +67,12 @@ func TestSourceRecording_If(t *testing.T) {
 func TestSourceRecording_Define(t *testing.T) {
 	tpl := compileScheme(t, "(define x 42)")
 
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
-
 	source := tpl.SourceAt(0)
 	qt.Assert(t, source, qt.IsNotNil)
 }
 
 func TestSourceRecording_DefineFunction(t *testing.T) {
 	tpl := compileScheme(t, "(define (bindSymbolWithScopes x) x)")
-
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
 
 	// The function template should have a name
 	// Find the child template in literals
@@ -101,15 +90,13 @@ func TestSourceRecording_DefineFunction(t *testing.T) {
 func TestSourceRecording_Lambda(t *testing.T) {
 	tpl := compileScheme(t, "(lambda (x) x)")
 
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
+	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_Begin(t *testing.T) {
 	tpl := compileScheme(t, "(begin 1 2 3)")
 
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
+	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_Call(t *testing.T) {
@@ -140,9 +127,6 @@ func TestSourceRecording_Call(t *testing.T) {
 
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
-
-	qt.Assert(t, tpl2.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl2.sourceMap.Len() > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_SetBang(t *testing.T) {
@@ -172,16 +156,12 @@ func TestSourceRecording_SetBang(t *testing.T) {
 
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
-
-	qt.Assert(t, tpl2.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl2.sourceMap.Len() > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_Quasiquote(t *testing.T) {
 	tpl := compileScheme(t, "`(1 2 3)")
 
-	qt.Assert(t, tpl.sourceMap, qt.IsNotNil)
-	qt.Assert(t, tpl.sourceMap.Len() > 0, qt.IsTrue)
+	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
@@ -211,4 +191,93 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	qt.Assert(t, source.File, qt.Equals, "multiline.scm")
 	// Line numbers start at 0 in internal representation
 	qt.Assert(t, source.Start.Line() >= 0, qt.IsTrue)
+}
+
+// =============================================================================
+// Gap Coverage Tests — verify infrastructure ops have source attribution
+//
+// These tests validate the architectural improvement from per-operation source
+// tracking. With the old range-based SourceMap, infrastructure operations
+// (Branch, Push, Apply, SaveContinuation) could fall in gaps between inner
+// entries and return nil. Now every operation inherits source from the
+// compiler's source stack.
+// =============================================================================
+
+func TestSourceRecording_IfAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	tpl := compileScheme(t, "(if #t 1 2)")
+
+	// Every operation in the template should have source, including
+	// BranchOnFalse and BranchOffset infrastructure ops
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
+}
+
+func TestSourceRecording_LambdaAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	// Lambda generates MakeClosure and LoadLiteral (template) ops.
+	// Uses only core syntax (no primitives needed).
+	tpl := compileScheme(t, "(lambda (x) x)")
+
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
+}
+
+func TestSourceRecording_BeginAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	tpl := compileScheme(t, "(begin 1 2 3)")
+
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
+}
+
+func TestSourceRecording_NestedIfAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	// Nested forms test the source stack's push/pop behavior —
+	// inner sub-expressions push their own source, outer infrastructure
+	// ops inherit the enclosing form's source
+	tpl := compileScheme(t, "(if #t (if #f 42 0) -1)")
+
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
+}
+
+func TestSourceRecording_DefineAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	tpl := compileScheme(t, "(define x 42)")
+
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
+}
+
+func TestSourceRecording_QuoteAllOpsHaveSource(t *testing.T) {
+	c := qt.New(t)
+
+	tpl := compileScheme(t, "'(a b c)")
+
+	for pc := 0; pc < len(tpl.operations); pc++ {
+		source := tpl.SourceAt(pc)
+		c.Assert(source, qt.IsNotNil,
+			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+	}
 }

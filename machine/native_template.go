@@ -31,8 +31,9 @@ type NativeTemplate struct {
 	isVariadic     bool
 	literals       MultipleValues
 	operations     Operations
-	sourceMap      *SourceMap // PC → source location mapping
-	name           string     // Function name (for stack traces)
+	sourceRefs     []uint16                // parallel to operations, index into sourceTable
+	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
+	name           string                  // Function name (for stack traces)
 }
 
 func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *NativeTemplate {
@@ -41,7 +42,11 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		valueCount:     vcnt,
 		isVariadic:     vd,
 		operations:     operations,
-		sourceMap:      NewSourceMap(),
+		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
+	}
+	// Tag any initial operations with nil source (index 0)
+	for range operations {
+		q.sourceRefs = append(q.sourceRefs, 0)
 	}
 	return q
 }
@@ -62,15 +67,51 @@ func (p *NativeTemplate) Operations() Operations {
 	return p.operations
 }
 
-func (p *NativeTemplate) SourceMap() *SourceMap {
-	return p.sourceMap
-}
-
+// SourceAt returns the source location for the operation at pc.
+// Returns nil if pc is out of bounds or no source was recorded.
+// O(1) lookup via the parallel sourceRefs array.
 func (p *NativeTemplate) SourceAt(pc int) *syntax.SourceContext {
-	if p.sourceMap == nil {
+	if pc < 0 || pc >= len(p.sourceRefs) {
 		return nil
 	}
-	return p.sourceMap.Lookup(pc)
+	return p.sourceTable[p.sourceRefs[pc]]
+}
+
+// internSource deduplicates a source context and returns its index in the sourceTable.
+// Uses pointer equality first (fast path), then structural equality via sourceEqual.
+// Index 0 is reserved for nil (no source).
+func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint16 {
+	if src == nil {
+		return 0
+	}
+	for i, s := range p.sourceTable {
+		if s == src || sourceEqual(s, src) {
+			return uint16(i)
+		}
+	}
+	idx := uint16(len(p.sourceTable))
+	p.sourceTable = append(p.sourceTable, src)
+	return idx
+}
+
+// appendOperationsWithSource appends operations and tags each with the given source.
+// This is the source-aware path used by the compiler's AppendOperations method.
+func (p *NativeTemplate) appendOperationsWithSource(src *syntax.SourceContext, ops ...Operation) {
+	idx := p.internSource(src)
+	p.operations = append(p.operations, ops...)
+	for range ops {
+		p.sourceRefs = append(p.sourceRefs, idx)
+	}
+}
+
+// sourceEqual compares two source contexts for equality (by location only).
+func sourceEqual(a, b *syntax.SourceContext) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.File == b.File &&
+		a.Start.Line() == b.Start.Line() &&
+		a.Start.Column() == b.Start.Column()
 }
 
 func (p *NativeTemplate) Name() string {
@@ -193,8 +234,13 @@ func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
 	}
 }
 
+// AppendOperations appends operations with no source attribution (index 0 = nil).
+// This is the fallback for direct template calls outside the compiler.
 func (p *NativeTemplate) AppendOperations(ops ...Operation) {
 	p.operations = append(p.operations, ops...)
+	for range ops {
+		p.sourceRefs = append(p.sourceRefs, 0)
+	}
 }
 
 func (p *NativeTemplate) SchemeString() string {
@@ -258,8 +304,7 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	}
 	q.literals = slices.Clone(p.literals)
 	q.operations = slices.Clone(p.operations)
-	if p.sourceMap != nil {
-		q.sourceMap = &SourceMap{entries: slices.Clone(p.sourceMap.entries)}
-	}
+	q.sourceRefs = slices.Clone(p.sourceRefs)
+	q.sourceTable = slices.Clone(p.sourceTable)
 	return q
 }
