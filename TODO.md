@@ -166,13 +166,14 @@ func TestPrimName(t *testing.T) {
 - [x] **Tested in `prim_ports_test.go`** — 86 test cases including port predicates, textual/binary classification, lifecycle (open/close), EOF handling, string port roundtrip, bytevector port roundtrip, call-with-port auto-close, error conditions
 
 #### Math — `internal/extensions/math/prim_math.go` (1497 lines, 30 primitives)
-- [ ] `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `square` — transcendental functions
-- [ ] `floor`, `ceiling`, `truncate`, `round` — rounding (exact→exact, inexact→inexact)
-- [ ] `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder` — integer division
-- [ ] `finite?`, `infinite?`, `nan?` — numeric predicates
-- [ ] `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt` — rational/exact operations
-- [ ] `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle` — complex number operations
-- [ ] `number->string`, `string->number` — numeric conversion with radix support
+- [x] `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `square` — transcendental functions
+- [x] `floor`, `ceiling`, `truncate`, `round` — rounding (exact→exact, inexact→inexact)
+- [x] `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder` — integer division
+- [x] `finite?`, `infinite?`, `nan?` — numeric predicates
+- [x] `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt` — rational/exact operations
+- [x] `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle` — complex number operations
+- [x] `number->string`, `string->number` — numeric conversion with radix support
+- [x] **Tested in `prim_math_test.go`** — 164 test cases: transcendental functions with tolerance checks, banker's rounding, floor/truncate division with multi-value returns, numeric predicates on special values, rationalize via Stern-Brocot, exact-integer-sqrt, complex construction/decomposition, number↔string conversion with radix and exactness prefixes, error conditions
 
 #### Go Interop — `internal/extensions/gointerop/prim_gointerop.go` (536 lines, 28 primitives)
 - [ ] `make-channel`, `channel?`, `channel-send!`, `channel-receive`, `channel-try-send!`, `channel-try-receive`, `channel-close!`, `channel-closed?`, `channel-length`, `channel-capacity` — Go channel primitives
@@ -195,6 +196,7 @@ Code Refactoring
 - [x] ~~Add `registry/helpers/args.go`~~ - `RequireArg[T]` and `RequireType[T]` generics replace ~190 type assertion sites across 20+ prim files
 - [x] ~~Add `machine/operation_helpers.go`~~ - EqualTo helper functions (exists)
 - [x] ~~Migrate ~7 remaining operation files to use EqualTo helpers~~ (all 30 migrated)
+- [x] ~~Add per-type numeric conversion helpers~~ - `bigInt()`, `bigFloat()`, `bigRat()`, `toComplex()`, `toBigComplex()`, `float64Val()` eliminate ~80 duplicated conversion expressions in `values/`
 
 ---
 
