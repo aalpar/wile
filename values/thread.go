@@ -184,12 +184,13 @@ func (p *Thread) Start() error {
 	go func() {
 		defer close(p.done)
 		defer func() {
-			// Abandon all owned mutexes on thread exit
-			p.AbandonOwnedMutexes()
-			// Run dynamic-wind after thunks
+			// Run dynamic-wind after thunks first — they may include proper
+			// mutex-unlock! calls that release mutexes cleanly.
 			if p.CleanupFunc != nil {
 				p.CleanupFunc()
 			}
+			// Abandon any mutexes still owned after cleanup ran.
+			p.AbandonOwnedMutexes()
 		}()
 		defer func() {
 			r := recover()
