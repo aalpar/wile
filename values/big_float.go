@@ -78,13 +78,13 @@ func (p *BigFloat) Add(o Number) Number {
 	case *BigFloat:
 		return &BigFloat{value: new(big.Float).Add(p.value, v.value)}
 	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
 	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
 	case *Float:
-		vf := new(big.Float).SetFloat64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
@@ -115,13 +115,13 @@ func (p *BigFloat) Subtract(o Number) Number {
 	case *BigFloat:
 		return &BigFloat{value: new(big.Float).Sub(p.value, v.value)}
 	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
 	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
 	case *Float:
-		vf := new(big.Float).SetFloat64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
@@ -155,13 +155,13 @@ func (p *BigFloat) Multiply(o Number) Number {
 	case *BigFloat:
 		return &BigFloat{value: new(big.Float).Mul(p.value, v.value)}
 	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
 	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
 	case *Float:
-		vf := new(big.Float).SetFloat64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
@@ -192,13 +192,13 @@ func (p *BigFloat) Divide(o Number) Number {
 	case *BigFloat:
 		return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
 	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
 	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
 	case *Float:
-		vf := new(big.Float).SetFloat64(v.Value)
+		vf := v.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())
@@ -307,13 +307,13 @@ func (p *BigFloat) Compare(o Number) int {
 	case *BigFloat:
 		return p.value.Cmp(v.value)
 	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
+		vf := v.bigFloat()
 		return p.value.Cmp(vf)
 	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
+		vf := v.bigFloat()
 		return p.value.Cmp(vf)
 	case *Float:
-		vf := new(big.Float).SetFloat64(v.Value)
+		vf := v.bigFloat()
 		return p.value.Cmp(vf)
 	case *Rational:
 		vf := new(big.Float).SetRat(v.Rat())

@@ -87,6 +87,18 @@ func (p *Rational) Float64() float64 {
 	return f
 }
 
+// Per-type conversion helpers for Rational.
+// These eliminate repeated conversion expressions in the type-switch
+// dispatch methods below. Each produces the representation needed by
+// the target type's native arithmetic.
+
+func (p *Rational) bigFloat() *big.Float {
+	return new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+}
+func (p *Rational) toComplex() complex128 {
+	return complex(p.Float64(), 0)
+}
+
 // IsInteger returns true if the rational represents an integer (denominator is 1).
 func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
@@ -107,22 +119,22 @@ func (p *Rational) Add(o Number) Number {
 		result := new(big.Rat).Add(p.value, v.value)
 		return &Rational{value: result}
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		result := new(big.Rat).Add(p.value, other)
 		return &Rational{value: result}
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.value)
+		other := v.bigRat()
 		result := new(big.Rat).Add(p.value, other)
 		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() + v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *Complex:
-		return NewComplex(complex(p.Float64(), 0) + v.Value)
+		return NewComplex(p.toComplex() + v.Value)
 	case *BigComplex:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		bf := p.bigFloat()
 		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
 		return bc.Add(v)
 	}
@@ -141,22 +153,22 @@ func (p *Rational) Subtract(o Number) Number {
 		result := new(big.Rat).Sub(p.value, v.value)
 		return &Rational{value: result}
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		result := new(big.Rat).Sub(p.value, other)
 		return &Rational{value: result}
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.value)
+		other := v.bigRat()
 		result := new(big.Rat).Sub(p.value, other)
 		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() - v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *Complex:
-		return NewComplex(complex(p.Float64(), 0) - v.Value)
+		return NewComplex(p.toComplex() - v.Value)
 	case *BigComplex:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		bf := p.bigFloat()
 		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
 		return bc.Subtract(v)
 	}
@@ -175,22 +187,22 @@ func (p *Rational) Multiply(o Number) Number {
 		result := new(big.Rat).Mul(p.value, v.value)
 		return &Rational{value: result}
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		result := new(big.Rat).Mul(p.value, other)
 		return &Rational{value: result}
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.value)
+		other := v.bigRat()
 		result := new(big.Rat).Mul(p.value, other)
 		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() * v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *Complex:
-		return NewComplex(complex(p.Float64(), 0) * v.Value)
+		return NewComplex(p.toComplex() * v.Value)
 	case *BigComplex:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		bf := p.bigFloat()
 		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
 		return bc.Multiply(v)
 	}
@@ -209,22 +221,22 @@ func (p *Rational) Divide(o Number) Number {
 		result := new(big.Rat).Quo(p.value, v.value)
 		return &Rational{value: result}
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		result := new(big.Rat).Quo(p.value, other)
 		return &Rational{value: result}
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.value)
+		other := v.bigRat()
 		result := new(big.Rat).Quo(p.value, other)
 		return &Rational{value: result}
 	case *Float:
 		return NewFloat(p.Float64() / v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *Complex:
-		return NewComplex(complex(p.Float64(), 0) / v.Value)
+		return NewComplex(p.toComplex() / v.Value)
 	case *BigComplex:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		bf := p.bigFloat()
 		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
 		return bc.Divide(v)
 	}
@@ -242,10 +254,10 @@ func (p *Rational) LessThan(o Number) bool {
 	case *Rational:
 		return p.value.Cmp(v.value) < 0
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		return p.value.Cmp(other) < 0
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.BigInt())
+		other := v.bigRat()
 		return p.value.Cmp(other) < 0
 	case *Float:
 		return p.Float64() < v.Value
@@ -255,7 +267,7 @@ func (p *Rational) LessThan(o Number) bool {
 	case *Complex:
 		return p.Float64() < real(v.Value)
 	case *BigComplex:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
 	panic(ErrNotANumber)
@@ -311,10 +323,10 @@ func (p *Rational) Compare(o Number) int {
 	case *Rational:
 		return p.value.Cmp(v.value)
 	case *Integer:
-		other := big.NewRat(v.Value, 1)
+		other := v.bigRat()
 		return p.value.Cmp(other)
 	case *BigInteger:
-		other := new(big.Rat).SetInt(v.BigInt())
+		other := v.bigRat()
 		return p.value.Cmp(other)
 	case *Float:
 		pf := p.Float64()
@@ -337,7 +349,7 @@ func (p *Rational) Compare(o Number) int {
 		}
 		return 0
 	case *BigComplex:
-		self := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
+		self := p.bigFloat()
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
 	panic(ErrNotANumber)
