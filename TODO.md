@@ -328,6 +328,21 @@ Track variable definition sites and enable source-level debugging at runtime.
 
 ---
 
+Hashtable: Replace Bucket Chaining with Native Go Map
+------------------------------------------------------
+
+- [ ] **Location:** `values/hashtable.go`
+- [ ] **Problem:** `Hashtable` re-implements a hash map on top of `map[uint64][]hashtableEntry` — Go's map already does bucket chaining, resizing, and amortized O(1) lookup internally. The current design hashes keys to `uint64` via `Hashable.HashCode()`, then does a linear scan within the bucket using `EqualTo()` to resolve collisions. This is a hash map built on top of a hash map.
+- [ ] **Goal:** Use `map[K]Value` directly where `K` is a comparable key type, eliminating the manual bucket layer.
+- [ ] **Challenge:** Go maps require `comparable` keys. Scheme's `equal?`-based hash tables need structural equality (e.g., `(equal? '(1 2) '(1 2))` is `#t`), but Go's `==` operator uses reference equality for slices/pointers. Options to investigate:
+  1. **Wrapper key type** — A struct wrapping a `Hashable` value with custom hash-based map key (would still need the collision list for non-identical-but-equal keys)
+  2. **String-keyed map** — Use `SchemeString()` as the map key (simple but expensive for large values, breaks for circular structures)
+  3. **Typed maps for common cases** — `map[int64]Value` for integer keys, `map[string]Value` for string/symbol keys, falling back to the current bucket approach for compound keys
+  4. **Accept the current design** — The bucket layer adds ~50 lines but handles arbitrary `Hashable` keys correctly. The overhead may be negligible for typical hash table sizes in Scheme scripts.
+- [ ] **Measurement:** Profile actual workloads before committing to a redesign. If most hash tables use symbol/string/integer keys, option 3 may give the best balance.
+
+---
+
 Reflection
 ----------
 - [ ] Procedures for reflection into the environment:

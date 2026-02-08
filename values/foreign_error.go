@@ -105,6 +105,7 @@ var (
 	ErrInvalidFormat         = NewStaticError("invalid number format")
 	ErrUnknownOpCode         = NewStaticError("unknown op code")
 	ErrNotAMatch             = NewStaticError("not a match")
+	ErrTypeConversion        = NewStaticError("type conversion failed")
 )
 
 // StaticError represents a compile-time or static error.
