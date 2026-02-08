@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Centralize ~190 type assertion sites into `RequireArg[T]` and `RequireType[T]` generic helpers, reducing boilerplate across 22 primitive files
 - `Engine.Call` now dispatches case-lambda, parameter objects, and composable continuations in addition to plain closures
 - `EmptyList` is now a dedicated singleton type (not `*Pair`), enforcing `(pair? '()) → #f` at the type level
 - `String` implements the `Indexable` interface with `Length()`, `Get()`, `Set()` methods
