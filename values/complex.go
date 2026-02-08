@@ -57,6 +57,17 @@ func (p *Complex) Imag() float64 {
 	return imag(p.Value)
 }
 
+// Per-type conversion helper for Complex.
+// This eliminates repeated conversion expressions in the type-switch
+// dispatch methods below for BigFloat and BigComplex cases.
+
+func (p *Complex) toBigComplex() *BigComplex {
+	return NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(real(p.Value)),
+		NewBigFloatFromFloat64(imag(p.Value)),
+	)
+}
+
 // Add returns the sum of this complex number and another number.
 func (p *Complex) Add(o Number) Number {
 	if o.IsZero() {
@@ -69,24 +80,18 @@ func (p *Complex) Add(o Number) Number {
 	case *Complex:
 		return NewComplex(p.Value + v.Value)
 	case *Float:
-		return NewComplex(p.Value + complex(v.Value, 0))
+		return NewComplex(p.Value + v.toComplex())
 	case *Integer:
-		return NewComplex(p.Value + complex(float64(v.Value), 0))
+		return NewComplex(p.Value + v.toComplex())
 	case *BigInteger:
-		return NewComplex(p.Value + complex(float64FromBigInt(v.value), 0))
+		return NewComplex(p.Value + complex(v.float64Val(), 0))
 	case *BigFloat:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Add(v)
 	case *Rational:
-		return NewComplex(p.Value + complex(v.Float64(), 0))
+		return NewComplex(p.Value + v.toComplex())
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
@@ -103,24 +108,18 @@ func (p *Complex) Subtract(o Number) Number {
 	case *Complex:
 		return NewComplex(p.Value - v.Value)
 	case *Float:
-		return NewComplex(p.Value - complex(v.Value, 0))
+		return NewComplex(p.Value - v.toComplex())
 	case *Integer:
-		return NewComplex(p.Value - complex(float64(v.Value), 0))
+		return NewComplex(p.Value - v.toComplex())
 	case *BigInteger:
-		return NewComplex(p.Value - complex(float64FromBigInt(v.value), 0))
+		return NewComplex(p.Value - complex(v.float64Val(), 0))
 	case *BigFloat:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Subtract(v)
 	case *Rational:
-		return NewComplex(p.Value - complex(v.Float64(), 0))
+		return NewComplex(p.Value - v.toComplex())
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
@@ -137,24 +136,18 @@ func (p *Complex) Multiply(o Number) Number {
 	case *Complex:
 		return NewComplex(p.Value * v.Value)
 	case *Float:
-		return NewComplex(p.Value * complex(v.Value, 0))
+		return NewComplex(p.Value * v.toComplex())
 	case *Integer:
-		return NewComplex(p.Value * complex(float64(v.Value), 0))
+		return NewComplex(p.Value * v.toComplex())
 	case *BigInteger:
-		return NewComplex(p.Value * complex(float64FromBigInt(v.value), 0))
+		return NewComplex(p.Value * complex(v.float64Val(), 0))
 	case *BigFloat:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Multiply(v)
 	case *Rational:
-		return NewComplex(p.Value * complex(v.Float64(), 0))
+		return NewComplex(p.Value * v.toComplex())
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
@@ -169,24 +162,18 @@ func (p *Complex) Divide(o Number) Number {
 	case *Complex:
 		return NewComplex(p.Value / v.Value)
 	case *Float:
-		return NewComplex(p.Value / complex(v.Value, 0))
+		return NewComplex(p.Value / v.toComplex())
 	case *Integer:
-		return NewComplex(p.Value / complex(float64(v.Value), 0))
+		return NewComplex(p.Value / v.toComplex())
 	case *BigInteger:
-		return NewComplex(p.Value / complex(float64FromBigInt(v.value), 0))
+		return NewComplex(p.Value / complex(v.float64Val(), 0))
 	case *BigFloat:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Divide(v)
 	case *Rational:
-		return NewComplex(p.Value / complex(v.Float64(), 0))
+		return NewComplex(p.Value / v.toComplex())
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(p.Value)),
-			NewBigFloatFromFloat64(imag(p.Value)),
-		)
+		bc := p.toBigComplex()
 		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
@@ -207,7 +194,7 @@ func (p *Complex) LessThan(o Number) bool {
 	case *Integer:
 		return real(p.Value) < float64(v.Value)
 	case *BigInteger:
-		return real(p.Value) < float64FromBigInt(v.value)
+		return real(p.Value) < v.float64Val()
 	case *BigFloat:
 		self := NewBigFloatFromFloat64(real(p.Value))
 		return self.Compare(v) < 0
@@ -297,7 +284,7 @@ func (p *Complex) Compare(o Number) int {
 		return 0
 	case *BigInteger:
 		r := real(p.Value)
-		vf := float64FromBigInt(v.value)
+		vf := v.float64Val()
 		if r < vf {
 			return -1
 		} else if r > vf {

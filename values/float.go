@@ -50,6 +50,22 @@ func (p *Float) Datum() float64 {
 	return p.Value
 }
 
+// Per-type conversion helpers for Float.
+// These eliminate repeated conversion expressions in the type-switch
+// dispatch methods below. Each produces the representation needed by
+// the target type's native arithmetic.
+
+func (p *Float) bigFloat() *big.Float {
+	return new(big.Float).SetFloat64(p.Value)
+}
+
+func (p *Float) toComplex() complex128 {
+	return complex(p.Value, 0)
+}
+func (p *Float) toBigComplex() *BigComplex {
+	return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+}
+
 // Add returns the sum of two numbers.
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
@@ -65,14 +81,14 @@ func (p *Float) Add(o Number) Number {
 	case *Float:
 		return NewFloat(p.Value + v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *Rational:
 		return NewFloat(p.Value + v.Float64())
 	case *Complex:
-		return NewComplex(complex(p.Value, 0) + v.Value)
+		return NewComplex(p.toComplex() + v.Value)
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		bc := p.toBigComplex()
 		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
@@ -93,14 +109,14 @@ func (p *Float) Subtract(o Number) Number {
 	case *Float:
 		return NewFloat(p.Value - v.Value)
 	case *BigFloat:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *Rational:
 		return NewFloat(p.Value - v.Float64())
 	case *Complex:
-		return NewComplex(complex(p.Value, 0) - v.Value)
+		return NewComplex(p.toComplex() - v.Value)
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		bc := p.toBigComplex()
 		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
@@ -122,16 +138,16 @@ func (p *Float) Multiply(o Number) Number {
 	case *BigInteger:
 		return NewFloat(p.Value * float64FromBigInt(v.value))
 	case *BigFloat:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *Float:
 		return NewFloat(p.Value * v.Value)
 	case *Rational:
 		return NewFloat(p.Value * v.Float64())
 	case *Complex:
-		return NewComplex(complex(p.Value, 0) * v.Value)
+		return NewComplex(p.toComplex() * v.Value)
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		bc := p.toBigComplex()
 		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
@@ -148,16 +164,16 @@ func (p *Float) Divide(o Number) Number {
 	case *BigInteger:
 		return NewFloat(p.Value / float64FromBigInt(v.value))
 	case *BigFloat:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *Float:
 		return NewFloat(p.Value / v.Value)
 	case *Rational:
 		return NewFloat(p.Value / v.Float64())
 	case *Complex:
-		return NewComplex(complex(p.Value, 0) / v.Value)
+		return NewComplex(p.toComplex() / v.Value)
 	case *BigComplex:
-		bc := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(p.Value), NewBigFloatFromFloat64(0))
+		bc := p.toBigComplex()
 		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
@@ -174,20 +190,20 @@ func (p *Float) LessThan(o Number) bool {
 	case *Integer:
 		return p.Value < float64(v.Value)
 	case *BigInteger:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		other := new(big.Float).SetInt(v.BigInt())
 		return self.Cmp(other) < 0
 	case *Float:
 		return p.Value < v.Value
 	case *BigFloat:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return self.Cmp(v.BigFloatValue()) < 0
 	case *Rational:
 		return p.Value < v.Float64()
 	case *Complex:
 		return p.Value < real(v.Value)
 	case *BigComplex:
-		self := new(big.Float).SetFloat64(p.Value)
+		self := p.bigFloat()
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
 	panic(ErrNotANumber)
@@ -247,7 +263,7 @@ func (p *Float) Negate() Number {
 // R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
 // Returns -1 if p < o, 0 if p == o, 1 if p > o.
 func (p *Float) Compare(o Number) int {
-	pf := new(big.Float).SetFloat64(p.Value)
+	pf := p.bigFloat()
 	switch v := o.(type) {
 	case *BigFloat:
 		return pf.Cmp(v.value)

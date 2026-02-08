@@ -87,6 +87,26 @@ func (p *BigInteger) Int64() int64 {
 	return p.value.Int64()
 }
 
+// Per-type conversion helpers for BigInteger.
+// These eliminate repeated conversion expressions in the type-switch
+// dispatch methods below. Each produces the representation needed by
+// the target type's native arithmetic.
+
+func (p *BigInteger) float64Val() float64 {
+	return float64FromBigInt(p.value)
+}
+
+func (p *BigInteger) bigRat() *big.Rat {
+	return new(big.Rat).SetInt(p.value)
+}
+
+func (p *BigInteger) bigFloat() *big.Float {
+	return new(big.Float).SetInt(p.value)
+}
+func (p *BigInteger) toBigComplex() *BigComplex {
+	return NewBigComplex(p, NewBigIntegerFromInt64(0))
+}
+
 // Add returns the sum of this BigInteger and another number.
 //
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
@@ -105,24 +125,24 @@ func (p *BigInteger) Add(o Number) Number {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.bigInt())}
 	case *Float:
 		// no constructor for big.Float from big.Int, so convert via float64
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewFloat(f + v.Value)
 	case *Rational:
 		// Convert BigInteger to Rational and add
-		pRat := new(big.Rat).SetInt(p.value)
+		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Add(pRat, v.Rat()))
 	case *Complex:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) + v.Datum())
 	case *BigFloat:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Add(self, v.value)}
 	case *BigComplex:
-		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		bc := p.toBigComplex()
 		return bc.Add(v)
 	}
 	panic(ErrNotANumber)
@@ -142,22 +162,22 @@ func (p *BigInteger) Subtract(o Number) Number {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.bigInt())}
 	case *Float:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewFloat(f - v.Value)
 	case *Rational:
-		pRat := new(big.Rat).SetInt(p.value)
+		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Sub(pRat, v.Rat()))
 	case *Complex:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) - v.Datum())
 	case *BigFloat:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
 	case *BigComplex:
-		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		bc := p.toBigComplex()
 		return bc.Subtract(v)
 	}
 	panic(ErrNotANumber)
@@ -183,21 +203,21 @@ func (p *BigInteger) Multiply(o Number) Number {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.value)}
 	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, big.NewInt(v.Value))}
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.bigInt())}
 	case *Float:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewFloat(f * v.Value)
 	case *Rational:
-		pRat := new(big.Rat).SetInt(p.value)
+		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Mul(pRat, v.Rat()))
 	case *Complex:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewComplex(complex(f, 0) * v.Datum())
 	case *BigFloat:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
 	case *BigComplex:
-		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		bc := p.toBigComplex()
 		return bc.Multiply(v)
 	}
 	panic(ErrNotANumber)
@@ -226,26 +246,26 @@ func (p *BigInteger) Divide(o Number) Number {
 		return NewRationalFromBigInt(p.value, v.value)
 	case *Integer:
 		// Check if division is exact
-		divisor := big.NewInt(v.Value)
+		divisor := v.bigInt()
 		quo, rem := new(big.Int).QuoRem(p.value, divisor, new(big.Int))
 		if rem.Sign() == 0 {
 			return &BigInteger{value: quo}
 		}
 		return NewRationalFromBigInt(p.value, divisor)
 	case *Float:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewFloat(f / v.Value)
 	case *Rational:
-		pRat := new(big.Rat).SetInt(p.value)
+		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Quo(pRat, v.Rat()))
 	case *Complex:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		return NewComplex(complex(f, 0) / v.Datum())
 	case *BigFloat:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
 	case *BigComplex:
-		bc := NewBigComplex(p, NewBigIntegerFromInt64(0))
+		bc := p.toBigComplex()
 		return bc.Divide(v)
 	}
 	panic(ErrNotANumber)
@@ -330,7 +350,7 @@ func (p *BigInteger) ToExact() Number {
 // R7RS §6.2.3: The inexact representation may have limited precision,
 // but the conversion should be as close as practical.
 func (p *BigInteger) ToInexact() Number {
-	f := float64FromBigInt(p.value)
+	f := p.float64Val()
 	return NewFloat(f)
 }
 
@@ -353,9 +373,9 @@ func (p *BigInteger) Compare(o Number) int {
 	case *BigInteger:
 		return p.value.Cmp(v.value)
 	case *Integer:
-		return p.value.Cmp(big.NewInt(v.Value))
+		return p.value.Cmp(v.bigInt())
 	case *Float:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		if f < v.Value {
 			return -1
 		} else if f > v.Value {
@@ -363,13 +383,13 @@ func (p *BigInteger) Compare(o Number) int {
 		}
 		return 0
 	case *BigFloat:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return self.Cmp(v.BigFloatValue())
 	case *Rational:
-		pRat := new(big.Rat).SetInt(p.value)
+		pRat := p.bigRat()
 		return pRat.Cmp(v.Rat())
 	case *Complex:
-		f := float64FromBigInt(p.value)
+		f := p.float64Val()
 		if f < real(v.Value) {
 			return -1
 		} else if f > real(v.Value) {
@@ -377,7 +397,7 @@ func (p *BigInteger) Compare(o Number) int {
 		}
 		return 0
 	case *BigComplex:
-		self := new(big.Float).SetInt(p.value)
+		self := p.bigFloat()
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
 	panic(ErrNotANumber)
@@ -402,7 +422,7 @@ func (p *BigInteger) EqualTo(o Value) bool {
 	if !ok {
 		// Also check if equal to regular Integer
 		if i, ok := o.(*Integer); ok {
-			return p.value.Cmp(big.NewInt(i.Value)) == 0
+			return p.value.Cmp(i.bigInt()) == 0
 		}
 		return false
 	}
