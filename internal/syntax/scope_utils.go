@@ -24,15 +24,24 @@ import "slices"
 // - Top-level bindings (empty scope set) match any reference: {} ⊆ X for all X
 // - A macro-introduced binding only matches references with that macro's intro scope
 // - User bindings don't capture macro-introduced identifiers (different scope sets)
+//
+// Implementation note: Linear scan with pointer equality is intentionally used here.
+// Scope sets are typically 0-4 elements (one per lexical form: macro invocation, lambda,
+// let-syntax, with-binding-scope). For sets this small, linear scan is faster than
+// hash-based or bitmap approaches due to cache locality and zero allocation overhead.
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 	// A binding matches a use if all of the binding's scopes are present in the use's scopes.
 	// This is the subset relationship: bindingScopes ⊆ useScopes
 	//
 	// Empty binding scopes (top-level) match everything since {} ⊆ X for all X.
+
+	// A larger set cannot be a subset of a smaller one.
+	if len(bindingScopes) > len(useScopes) {
+		return false
+	}
 	for _, bindScope := range bindingScopes {
-		found := slices.Contains(useScopes, bindScope)
-		if !found {
-			return false // Binding has a scope that use doesn't have
+		if !slices.Contains(useScopes, bindScope) {
+			return false
 		}
 	}
 	return true
