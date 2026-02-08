@@ -120,22 +120,73 @@ func TestPrimName(t *testing.T) {
 }
 ```
 
-### Remaining Untested Primitives
+### Core Primitives (Complete)
 
-#### Control Flow
-- [ ] `call/cc` - expand existing tests for edge cases (no dedicated test file)
+- [x] `registry/core/` — 15 source files, 107 test files, full coverage
 
-#### Expansion/Compilation
-- [ ] `expand` - test expand primitive
-- [ ] `expand-once` - test expand-once primitive
-- [ ] `compile` - test compile primitive
+### Previously Untested (Now Complete)
 
-#### Process/Environment
-- [ ] `exit` - test exit primitive
-- [ ] `emergency-exit` - test emergency-exit primitive
+- [x] `call/cc` - extensively tested in `prim_control_test.go` (1000+ lines) and `prim_dynamic_wind_test.go`
+- [x] `expand`, `expand-once`, `compile` - tested in `internal/extensions/eval/prim_eval_test.go`
+- [x] `exit`, `emergency-exit` - tested via subprocess in `internal/extensions/system/prim_system_test.go`
+- [x] All system primitives - tested in `internal/extensions/system/prim_system_test.go`
 
-#### Miscellaneous
-- [ ] `prim_utils_test.go` - test utility primitives
+### Extension Primitives (Remaining)
+
+~130 primitives across 7 files in `internal/extensions/` lack test coverage.
+
+#### Characters — `internal/extensions/all/prim_characters.go` (207 lines, 14 primitives)
+- [x] `char-ci=?`, `char-ci<?`, `char-ci>?`, `char-ci<=?`, `char-ci>=?` — case-insensitive comparison via `unicode.ToLower`
+- [x] `char-alphabetic?`, `char-numeric?`, `char-whitespace?`, `char-upper-case?`, `char-lower-case?` — Unicode classification predicates
+- [x] `char-upcase`, `char-downcase`, `char-foldcase` — case mapping (foldcase has special ẞ→ß handling)
+- [x] `digit-value` — Unicode decimal digit value (0-9) or #f; supports non-ASCII digit scripts
+- [x] **Tested in `prim_characters_test.go`** — 59 test cases including Unicode scripts (Arabic-Indic, Devanagari), variadic comparison, error conditions
+
+#### Strings — `internal/extensions/all/prim_strings.go` (423 lines, 12 primitives)
+- [x] `string-ci=?`, `string-ci<?`, `string-ci>?`, `string-ci<=?`, `string-ci>=?` — case-insensitive comparison (ci=? uses `strings.EqualFold`, others use `strings.ToLower`)
+- [x] `string-upcase`, `string-downcase`, `string-foldcase` — full Unicode case mapping via `x/text/cases` (can change string length)
+- [x] `string-copy!` — mutable copy with optional start/end (3-5 args)
+- [x] `string-fill!` — fill range with character (2-4 args)
+- [x] `string-map`, `string-for-each` — higher-order string operations (multi-string, min-length semantics)
+- [x] **Tested in `prim_strings_test.go`** — 68 test cases including mutative ops, higher-order with lambdas, multi-string min-length, error conditions
+
+#### Records & Promises — `internal/extensions/all/prim_all.go` (418 lines, 12 primitives)
+- [x] `make-record-type`, `record-type?`, `record?`, `record-type` — SRFI-9 record type construction and predicates
+- [x] `record-constructor`, `record-predicate`, `record-accessor`, `record-modifier` — record closure factories
+- [x] `promise?`, `make-promise`, `force`, `%make-lazy-promise` — R7RS promise semantics with memoization
+- [x] **Tested in `prim_all_test.go`** — 72 test cases including low-level primitives, define-record-type macro integration, partial constructors, field ordering, type mismatch errors, R7RS promise memoization semantics, delay-force recursive iteration
+
+#### Ports — `internal/extensions/io/prim_ports.go` (261 lines, 16 primitives)
+- [x] `port?`, `input-port?`, `output-port?`, `textual-port?`, `binary-port?` — port type predicates
+- [x] `input-port-open?`, `output-port-open?`, `close-port` — port lifecycle
+- [x] `eof-object`, `eof-object?` — EOF sentinel
+- [x] `call-with-port` — port with automatic close
+- [x] `open-input-string`, `open-output-string`, `get-output-string` — string ports
+- [x] `open-input-bytevector`, `open-output-bytevector`, `get-output-bytevector` — bytevector ports
+- [x] **Tested in `prim_ports_test.go`** — 86 test cases including port predicates, textual/binary classification, lifecycle (open/close), EOF handling, string port roundtrip, bytevector port roundtrip, call-with-port auto-close, error conditions
+
+#### Math — `internal/extensions/math/prim_math.go` (1497 lines, 30 primitives)
+- [ ] `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `square` — transcendental functions
+- [ ] `floor`, `ceiling`, `truncate`, `round` — rounding (exact→exact, inexact→inexact)
+- [ ] `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder` — integer division
+- [ ] `finite?`, `infinite?`, `nan?` — numeric predicates
+- [ ] `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt` — rational/exact operations
+- [ ] `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle` — complex number operations
+- [ ] `number->string`, `string->number` — numeric conversion with radix support
+
+#### Go Interop — `internal/extensions/gointerop/prim_gointerop.go` (536 lines, 28 primitives)
+- [ ] `make-channel`, `channel?`, `channel-send!`, `channel-receive`, `channel-try-send!`, `channel-try-receive`, `channel-close!`, `channel-closed?`, `channel-length`, `channel-capacity` — Go channel primitives
+- [ ] `make-wait-group`, `wait-group?`, `wait-group-add!`, `wait-group-done!`, `wait-group-wait!` — sync.WaitGroup
+- [ ] `make-rw-mutex`, `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`, `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`, `rw-mutex-try-write-lock!` — sync.RWMutex
+- [ ] `make-once`, `once?`, `once-do!`, `once-done?` — sync.Once
+- [ ] `make-atomic`, `atomic?`, `atomic-load`, `atomic-store!`, `atomic-swap!`, `atomic-compare-and-swap!` — atomic operations
+
+#### Threads — `internal/extensions/threads/prim_threads.go` (637 lines, 22 primitives)
+- [ ] `current-thread`, `thread?`, `make-thread`, `thread-name`, `thread-specific`, `thread-specific-set!` — thread identity/metadata
+- [ ] `thread-start!`, `thread-yield!`, `thread-sleep!`, `thread-terminate!`, `thread-join!` — thread lifecycle
+- [ ] `mutex?`, `make-mutex`, `mutex-name`, `mutex-specific`, `mutex-specific-set!`, `mutex-state`, `mutex-lock!`, `mutex-unlock!` — SRFI-18 mutexes
+- [ ] `condition-variable?`, `make-condition-variable`, `condition-variable-name`, `condition-variable-specific`, `condition-variable-specific-set!`, `condition-variable-signal!`, `condition-variable-broadcast!` — condition variables
+- [ ] `current-time`, `time?`, `time->seconds`, `seconds->time` — SRFI-18 time
 
 ---
 
