@@ -1,12 +1,11 @@
 (define-library (scheme file)
   (export open-input-file
           open-output-file
-          close-port
-          close-input-port
-          close-output-port
-          input-port?
-          output-port?
-          input-port-open?
-          output-port-open?
+          open-binary-input-file
+          open-binary-output-file
+          call-with-input-file
+          call-with-output-file
+          with-input-from-file
+          with-output-to-file
           file-exists?
           delete-file))
