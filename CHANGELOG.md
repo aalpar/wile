@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `(exact-integer? 1+0i)` returning `#f` instead of `#t` for exact complex with zero imaginary part (R7RS §6.2.6)
 - Fix `(rational? z)` returning `#f` for real `BigComplex` values
 - Fix `(integer? z)` for large inexact floats outside int64 range
+- Fix `RegisterFunc` silently producing empty slices/structs when a non-list value is passed where a proper list is expected
+- Fix `RegisterFunc` panicking on named scalar types (e.g., `type MyInt int64`) due to `reflect.Call` type mismatch
 
 ## [1.0.3] - 2026-02-05
 
