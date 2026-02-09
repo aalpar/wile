@@ -24,9 +24,8 @@ var (
 	_ Value = (*ArrayList)(nil)
 	_ Tuple = (*ArrayList)(nil)
 
-	// ArrayListEmptyList is the canonical empty ArrayList. It uses the
-	// two-nil encoding [nil, nil], which IsEmptyList() recognizes as ().
-	ArrayListEmptyList = NewArrayList(nil, nil)
+	// ArrayListEmptyList is the canonical empty ArrayList encoding: [EmptyList].
+	ArrayListEmptyList = NewArrayList(EmptyList)
 )
 
 // ArrayList is an array-backed representation of Scheme lists. It stores list
@@ -40,7 +39,7 @@ var (
 //	                           ^^^elements^^^  ^^^terminator
 //	Improper list (1 2 . 3):  [1, 2, 3]
 //	                           ^^elems^^  ^^last=cdr
-//	Empty list ():             [EmptyList]  or  [nil, nil]
+//	Empty list ():             [EmptyList]
 //	Void (no value):           nil  |  []  |  [Void]
 //
 // Length() returns len(slice)-1 for proper lists (element count, excluding
@@ -119,20 +118,14 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 		if IsEmptyList(p) {
 			return vs
 		}
-		if IsVoid(vs) {
+		switch {
+		case IsVoid(vs):
 			*q = append(*q, Void)
-		} else {
-			if len(*vs) == 0 {
-				return q
-			}
-			if len(*vs) == 1 && (*vs)[0] == EmptyList {
-				return q
-			}
-			if len(*vs) == 2 && IsVoid((*vs)[0]) && IsVoid((*vs)[1]) {
-				return q
-			}
+		case vs.IsEmptyList():
+			return q
+		default:
 			*q = (*q)[:len(*q)-1]
-			*q = append(*q, (*vs)[:len(*vs)]...)
+			*q = append(*q, (*vs)...)
 		}
 	case *Pair:
 		v0 := vs
@@ -168,21 +161,11 @@ func (p *ArrayList) Cdr() Value {
 	return &q
 }
 
-// IsList returns true if the last element is EmptyList (proper list) or if
-// the list matches an empty-list encoding. Returns false for nil, empty
-// slices, and improper lists.
+// IsList returns true if the last element is EmptyList (proper list).
+// Returns false for nil, empty slices, and improper lists.
 func (p *ArrayList) IsList() bool {
-	if p == nil {
+	if p == nil || len(*p) == 0 {
 		return false
-	}
-	if len(*p) == 0 {
-		return false
-	}
-	if len(*p) == 1 && (*p)[0] == EmptyList {
-		return true
-	}
-	if len(*p) == 2 && IsVoid((*p)[0]) && IsVoid((*p)[1]) {
-		return true
 	}
 	return (*p)[len(*p)-1] == EmptyList
 }
@@ -199,20 +182,13 @@ func (p *ArrayList) Length() int {
 	return len(*p) - 1
 }
 
-// IsEmptyList returns true if this ArrayList encodes the empty list ().
-// Two representations are recognized: [EmptyList] and any two-element slice
-// of void values (for example [nil, nil] or [Void, Void]).
+// IsEmptyList returns true if this ArrayList encodes the empty list ():
+// a single-element slice containing the EmptyList sentinel.
 func (p *ArrayList) IsEmptyList() bool {
 	if p == nil {
 		return false
 	}
-	if len(*p) == 1 && (*p)[0] == EmptyList {
-		return true
-	}
-	if len(*p) == 2 && IsVoid((*p)[0]) && IsVoid((*p)[1]) {
-		return true
-	}
-	return false
+	return len(*p) == 1 && (*p)[0] == EmptyList
 }
 
 // IsVoid returns true if this ArrayList represents the absence of a value.
