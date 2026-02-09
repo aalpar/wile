@@ -48,6 +48,9 @@ var compileTimeBindings = []string{
 	"else",
 	"=>",
 	// Auxiliary syntax (R7RS §4.3.2)
+	// syntax-rules is handled by define-syntax at compile time, but needs
+	// a binding for library export resolution (like else, =>, ..., _)
+	"syntax-rules",
 	// These are special identifiers in syntax-rules patterns
 	"...",
 	"_",

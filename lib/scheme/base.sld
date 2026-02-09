@@ -8,6 +8,7 @@
     begin
     define
     define-syntax
+    syntax-rules
     syntax-error
     quasiquote
     unquote
@@ -41,6 +42,7 @@
     delay
     delay-force
     define-record-type
+    define-values
     ;; Equivalence predicates
     eq?
     eqv?
@@ -203,12 +205,18 @@
     current-input-port
     current-output-port
     current-error-port
+    binary-port?
+    textual-port?
     close-port
     close-input-port
     close-output-port
+    call-with-port
     open-input-string
     open-output-string
     get-output-string
+    open-input-bytevector
+    open-output-bytevector
+    get-output-bytevector
     ;; Input
     eof-object
     eof-object?
@@ -216,6 +224,7 @@
     peek-char
     read-line
     read-string
+    char-ready?
     read
     ;; Binary Input (R7RS §6.13.3)
     read-u8
@@ -239,6 +248,8 @@
     make-parameter
     ;; Exception handling (R7RS 6.11)
     error-object?
+    file-error?
+    read-error?
     error-object-message
     error-object-irritants
     error
