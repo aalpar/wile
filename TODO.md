@@ -166,3 +166,33 @@ Support for Racket's `@`-reader syntax for inline documentation and text process
   - Runtime debugging (variable set/get for debugging)
 - [ ] **Use case:** IDE integration, debugging, profiling
 - [ ] **Pattern:** Similar to dynamic-wind but for compiler/expander phases
+
+---
+
+### Feature Flags
+
+Three-tier feature flag system for controlling Wile behavior at different lifecycle stages.
+
+**Tiers:**
+
+| Tier | Set When | Mutability | Mechanism |
+|------|----------|------------|-----------|
+| **Compile-time** | Go build (`-tags`, `-ldflags`) | Immutable after build | Build tags + `const` via linker |
+| **Runtime global** | Go initialization (`Engine` config) | Mutable from Go at any point during runtime | Go-side flag registry |
+| **Extension-defined** | Extension registration | Same as runtime global | Extensions add flags via registry pattern |
+
+**Compile-time flags** — set via Go build tags or `-ldflags`. These control code inclusion (dead code elimination) and cannot change after the binary is built. Examples: disable macro expander for minimal embed, strip debug support, select GC strategy.
+
+**Runtime global flags** — configured during Wile initialization from Go. Mutable at any point during the Go program's lifetime. These control runtime behavior without recompilation. Examples: enable/disable tail-call optimization, set recursion depth limits, toggle debug tracing.
+
+**Extension-defined flags** — extensions register their own flags through the same runtime registry. This lets third-party extensions participate in the feature flag system without modifying core Wile. The extension interface exposes flag registration alongside primitive registration.
+
+**Design requirements:**
+- [ ] Flag registry with typed values (bool, int, string)
+- [ ] Compile-time flags via build tags and linker-injected constants
+- [ ] Runtime flag registry queryable from both Go and Scheme
+- [ ] Extension interface for registering custom flags (`AddFeatureFlag` on `Registry`)
+- [ ] Scheme-side introspection: `(feature-flag? name)`, `(feature-flags)` to list active flags
+- [ ] Thread-safe reads/writes for runtime flags (concurrent Scheme goroutines)
+- [ ] Immutability enforcement: compile-time flags reject mutation attempts
+- [ ] Integration with R7RS `cond-expand` for feature-based conditional compilation in Scheme
