@@ -505,7 +505,8 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
 	qt.Assert(t, mc.value, qt.HasLen, 0)
-	_ = mc.Run()
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.value, qt.HasLen, 1)
 	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewBoolean(true))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
