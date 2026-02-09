@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -371,6 +372,270 @@ func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
 	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "no matching clause")
+}
+
+func TestMachineContext_Apply_FixedArityTooManyArgs(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(2)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(2, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
+	qt.Assert(t, err.Error(), qt.Contains, "expected 2 arguments, got 3")
+}
+
+func TestMachineContext_Apply_ZeroArity(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(0)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	// Thunk: zero parameters, zero args
+	result, err := mc.Apply(cls)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.Equals, mc)
+	qt.Assert(t, mc.template, qt.Equals, tpl)
+	qt.Assert(t, mc.pc, qt.Equals, 0)
+}
+
+func TestMachineContext_Apply_VariadicExactlyRequiredArgs(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(3)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	// 2 required + rest: (lambda (a b . rest) ...)
+	tpl := NewNativeTemplate(3, 0, true)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	// Provide exactly the required args — rest should be empty list
+	_, err := mc.Apply(cls, values.NewInteger(10), values.NewInteger(20))
+	qt.Assert(t, err, qt.IsNil)
+
+	bnds := mc.env.LocalEnvironment().Bindings()
+	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, bnds[2].Value(), values.SchemeEquals, values.EmptyList)
+}
+
+func TestMachineContext_Apply_VariadicRestOnly(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	// (lambda args ...) — paramCount=1, variadic, 0 required
+	tpl := NewNativeTemplate(1, 0, true)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	// All args go into rest
+	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	qt.Assert(t, err, qt.IsNil)
+
+	bnds := mc.env.LocalEnvironment().Bindings()
+	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.List(
+		values.NewInteger(1), values.NewInteger(2), values.NewInteger(3),
+	))
+}
+
+func TestMachineContext_Apply_VariadicRestOnlyNoArgs(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	// (lambda args ...) called with zero args
+	tpl := NewNativeTemplate(1, 0, true)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.Apply(cls)
+	qt.Assert(t, err, qt.IsNil)
+
+	bnds := mc.env.LocalEnvironment().Bindings()
+	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.EmptyList)
+}
+
+func TestMachineContext_Apply_EnvironmentIsolation(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(1, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+
+	// First call
+	mc1 := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err := mc1.Apply(cls, values.NewInteger(10))
+	qt.Assert(t, err, qt.IsNil)
+	env1 := mc1.env
+
+	// Second call on a fresh context — must get an independent environment
+	mc2 := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err = mc2.Apply(cls, values.NewInteger(20))
+	qt.Assert(t, err, qt.IsNil)
+	env2 := mc2.env
+
+	// Environments must be distinct objects
+	qt.Assert(t, env1 != env2, qt.IsTrue)
+	// Neither should be the original closure env
+	qt.Assert(t, env1 != env, qt.IsTrue)
+	qt.Assert(t, env2 != env, qt.IsTrue)
+
+	// Modifying one must not affect the other
+	bnds1 := env1.LocalEnvironment().Bindings()
+	bnds2 := env2.LocalEnvironment().Bindings()
+	qt.Assert(t, bnds1[0].Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds2[0].Value(), values.SchemeEquals, values.NewInteger(20))
+}
+
+func TestMachineContext_Apply_PCResetFromNonZero(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(1, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.pc = 42 // simulate mid-execution
+
+	_, err := mc.Apply(cls, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.pc, qt.Equals, 0)
+}
+
+func TestMachineContext_Apply_Counters(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(3)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(3, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	before := mc.Counters()
+	qt.Assert(t, before.ClosuresApplied, qt.Equals, uint64(0))
+	qt.Assert(t, before.EnvsCopied, qt.Equals, uint64(0))
+	qt.Assert(t, before.BindingsCopied, qt.Equals, uint64(0))
+
+	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	qt.Assert(t, err, qt.IsNil)
+
+	after := mc.Counters()
+	qt.Assert(t, after.ClosuresApplied, qt.Equals, uint64(1))
+	qt.Assert(t, after.EnvsCopied, qt.Equals, uint64(1))
+	qt.Assert(t, after.BindingsCopied, qt.Equals, uint64(3))
+}
+
+func TestMachineContext_Apply_ReturnsSameContext(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(1, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	result, err := mc.Apply(cls, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result == mc, qt.IsTrue)
+}
+
+func TestMachineContext_Apply_ErrorsWrapSentinel(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	tcs := []struct {
+		name       string
+		paramCount int
+		variadic   bool
+		args       []values.Value
+	}{
+		{
+			"fixed arity too few",
+			2, false,
+			[]values.Value{values.NewInteger(1)},
+		},
+		{
+			"fixed arity too many",
+			2, false,
+			[]values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)},
+		},
+		{
+			"variadic too few",
+			3, true,
+			[]values.Value{values.NewInteger(1)},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			lenv := environment.NewLocalEnvironment(tc.paramCount)
+			env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+			tpl := NewNativeTemplate(tc.paramCount, 0, tc.variadic)
+			cls := NewClosureWithTemplate(tpl, env)
+			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+			_, err := mc.Apply(cls, tc.args...)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
+		})
+	}
+}
+
+func TestMachineContext_ApplyCaseLambda_VariadicClause(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	// Fixed 1-arity clause
+	lenv1 := environment.NewLocalEnvironment(1)
+	env1 := environment.NewEnvironmentFrameWithParent(lenv1, topEnv)
+	tpl1 := NewNativeTemplate(1, 0, false)
+	cls1 := NewClosureWithTemplate(tpl1, env1)
+
+	// Variadic clause: (a . rest) — catches 2+ args
+	lenv2 := environment.NewLocalEnvironment(2)
+	env2 := environment.NewEnvironmentFrameWithParent(lenv2, topEnv)
+	tpl2 := NewNativeTemplate(2, 0, true)
+	cls2 := NewClosureWithTemplate(tpl2, env2)
+
+	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	// 1 arg → fixed clause
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.template, qt.Equals, tpl1)
+
+	// 3 args → variadic clause, rest = (20 30)
+	mc = NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err = mc.ApplyCaseLambda(caseLambda, values.NewInteger(10), values.NewInteger(20), values.NewInteger(30))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.template, qt.Equals, tpl2)
+	bnds := mc.env.LocalEnvironment().Bindings()
+	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.List(values.NewInteger(20), values.NewInteger(30)))
+}
+
+func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	lenv := environment.NewLocalEnvironment(2)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(2, 0, false)
+	cls := NewClosureWithTemplate(tpl, env)
+
+	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls})
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 func TestErrContinuationEscape_Error(t *testing.T) {
