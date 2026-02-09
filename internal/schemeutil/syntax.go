@@ -25,7 +25,8 @@ import (
 // stripping away source location and scope information. Recursively unwraps
 // pairs, vectors, and boxed values.
 func SyntaxValueToDatum(sv values.Value) values.Value {
-	if syntaxVal, ok := sv.(syntax.SyntaxValue); ok { //nolint:gocritic
+	syntaxVal, ok := sv.(syntax.SyntaxValue)
+	if ok {
 		if syntax.IsSyntaxVoid(syntaxVal) {
 			return values.Void
 		}
@@ -42,7 +43,8 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 		for {
 			cars = append(cars, SyntaxValueToDatum(curr.Car()))
 			cdr := curr.Cdr()
-			if cdrSyntax, ok := cdr.(syntax.SyntaxValue); ok && syntax.IsSyntaxEmptyList(cdrSyntax) { //nolint:gocritic
+			cdrSyntax, ok := cdr.(syntax.SyntaxValue)
+			if ok && syntax.IsSyntaxEmptyList(cdrSyntax) {
 				break
 			}
 			next, ok := cdr.(*syntax.SyntaxPair)
@@ -71,7 +73,8 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 		}
 		return &vt
 	case *syntax.SyntaxObject:
-		if bx, ok := v.Datum().(*values.Box); ok { //nolint:gocritic
+		bx, ok := v.Datum().(*values.Box)
+		if ok {
 			return values.NewBox(SyntaxValueToDatum(bx.Unbox()))
 		}
 		return v.Datum()

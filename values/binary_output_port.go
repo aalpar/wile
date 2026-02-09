@@ -98,7 +98,8 @@ func (p *BinaryOutputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports wrap the same buf.
 func (p *BinaryOutputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*BinaryOutputPort); ok { //nolint:gocritic
+	other, ok := v.(*BinaryOutputPort)
+	if ok {
 		return p.wrt == other.wrt
 	}
 	return false

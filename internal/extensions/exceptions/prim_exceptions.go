@@ -41,12 +41,14 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	var thunkErr error
 	switch t := thunk.(type) {
 	case *machine.MachineClosure:
-		if _, err := sub.Apply(t); err != nil { //nolint:gocritic
+		_, err := sub.Apply(t)
+		if err != nil {
 			mc.PopExceptionHandler()
 			return err
 		}
 	case *machine.CaseLambdaClosure:
-		if _, err := sub.ApplyCaseLambda(t); err != nil { //nolint:gocritic
+		_, err := sub.ApplyCaseLambda(t)
+		if err != nil {
 			mc.PopExceptionHandler()
 			return err
 		}
@@ -86,11 +88,13 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 
 	switch h := handler.(type) {
 	case *machine.MachineClosure:
-		if _, err := sub.Apply(h, condition); err != nil { //nolint:gocritic
+		_, err := sub.Apply(h, condition)
+		if err != nil {
 			return nil, err
 		}
 	case *machine.CaseLambdaClosure:
-		if _, err := sub.ApplyCaseLambda(h, condition); err != nil { //nolint:gocritic
+		_, err := sub.ApplyCaseLambda(h, condition)
+		if err != nil {
 			return nil, err
 		}
 	default:
@@ -280,10 +284,11 @@ func PrimError(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Convert irritants list to slice
 	var irritants []values.Value
-	if _, err := values.ForEach(ctx, irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error { //nolint:gocritic
+	_, err := values.ForEach(ctx, irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error {
 		irritants = append(irritants, v)
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return values.WrapForeignErrorf(err, "error: invalid irritants list")
 	}
 

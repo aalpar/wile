@@ -198,9 +198,6 @@ func (p *MachineContext) CallDepth() int {
 	return p.cont.CallDepth() + 1
 }
 
-// FIXME: needs unit tests
-// FIXME: not symmetric with Apply of MachineClosure
-// FIXME: variadic parameters but no return values
 func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*MachineContext, error) {
 	tpl := mcls.Template()
 	// Create a fresh copy of the local environment for this call.

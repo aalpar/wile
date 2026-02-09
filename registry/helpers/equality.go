@@ -42,27 +42,33 @@ func Eqv(a, b values.Value) bool {
 			return va.Compare(vb) == 0
 		}
 	case *values.Float:
-		if vb, ok := b.(*values.Float); ok { //nolint:gocritic
+		vb, ok := b.(*values.Float)
+		if ok {
 			return va.Value == vb.Value
 		}
 	case *values.BigFloat:
-		if vb, ok := b.(*values.BigFloat); ok { //nolint:gocritic
+		vb, ok := b.(*values.BigFloat)
+		if ok {
 			return va.BigFloatValue().Cmp(vb.BigFloatValue()) == 0
 		}
 	case *values.Rational:
-		if vb, ok := b.(*values.Rational); ok { //nolint:gocritic
+		vb, ok := b.(*values.Rational)
+		if ok {
 			return va.Rat().Cmp(vb.Rat()) == 0
 		}
 	case *values.Complex:
-		if vb, ok := b.(*values.Complex); ok { //nolint:gocritic
+		vb, ok := b.(*values.Complex)
+		if ok {
 			return va.Value == vb.Value
 		}
 	case *values.BigComplex:
-		if vb, ok := b.(*values.BigComplex); ok { //nolint:gocritic
+		vb, ok := b.(*values.BigComplex)
+		if ok {
 			return va.EqualTo(vb)
 		}
 	case *values.Character:
-		if vb, ok := b.(*values.Character); ok { //nolint:gocritic
+		vb, ok := b.(*values.Character)
+		if ok {
 			return va.Value == vb.Value
 		}
 	}

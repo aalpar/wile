@@ -62,7 +62,6 @@ func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
 
 // CreateLocalBinding creates a new local binding with the given key and binding type.
 func (p *LocalEnvironmentFrame) CreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
-	// FIXME: this is a MaybeCreate function, not a Create function
 	i, ok := p.keys[*key]
 	if ok {
 		return &LocalIndex{i, 0}, false

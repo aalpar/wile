@@ -58,7 +58,8 @@ func (p *Symbol) IsVoid() bool {
 
 // EqualTo returns true if the symbols have equal keys.
 func (p *Symbol) EqualTo(v Value) bool {
-	if other, ok := v.(*Symbol); ok { //nolint:gocritic
+	other, ok := v.(*Symbol)
+	if ok {
 		return p.Key == other.Key
 	}
 	return false

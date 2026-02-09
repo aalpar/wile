@@ -1050,9 +1050,12 @@ func TestTranscendentalIdentities(t *testing.T) {
 			if !ok {
 				if intVal, ok := expected.(*values.Integer); ok {
 					expectedFloat = values.NewFloat(float64(intVal.Value))
-				} else if ratVal, ok := expected.(*values.Rational); ok { //nolint:gocritic
-					f, _ := ratVal.Rat().Float64()
-					expectedFloat = values.NewFloat(f)
+				} else {
+					ratVal, ok := expected.(*values.Rational)
+					if ok {
+						f, _ := ratVal.Rat().Float64()
+						expectedFloat = values.NewFloat(f)
+					}
 				}
 			}
 			assertFloatResult(t, code, expectedFloat.Value, 1e-10)

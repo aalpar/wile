@@ -116,7 +116,8 @@ func (p *TopLevelEnvironment) InternSymbol(s *values.Symbol) *values.Symbol {
 
 	// Fast path: check if already interned with read lock
 	p.symbolInternsMu.RLock()
-	if v, ok := p.symbolInterns[*s]; ok { //nolint:gocritic
+	v, ok := p.symbolInterns[*s]
+	if ok {
 		p.symbolInternsMu.RUnlock()
 		return v
 	}
@@ -127,7 +128,8 @@ func (p *TopLevelEnvironment) InternSymbol(s *values.Symbol) *values.Symbol {
 	defer p.symbolInternsMu.Unlock()
 
 	// Double-check after acquiring write lock (another goroutine may have interned it)
-	if v, ok := p.symbolInterns[*s]; ok { //nolint:gocritic
+	v, ok = p.symbolInterns[*s]
+	if ok {
 		return v
 	}
 
@@ -150,7 +152,8 @@ func (p *TopLevelEnvironment) InternSyntax(k values.Value, v syntax.SyntaxValue)
 	}
 
 	p.syntaxInternsMu.RLock()
-	if val, ok := p.syntaxInterns[k]; ok { //nolint:gocritic
+	val, ok := p.syntaxInterns[k]
+	if ok {
 		p.syntaxInternsMu.RUnlock()
 		return val
 	}
@@ -160,7 +163,8 @@ func (p *TopLevelEnvironment) InternSyntax(k values.Value, v syntax.SyntaxValue)
 	defer p.syntaxInternsMu.Unlock()
 
 	// Double-check after acquiring write lock
-	if val, ok := p.syntaxInterns[k]; ok { //nolint:gocritic
+	val, ok = p.syntaxInterns[k]
+	if ok {
 		return val
 	}
 

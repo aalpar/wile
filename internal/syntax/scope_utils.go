@@ -111,7 +111,8 @@ func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
 	var newCar SyntaxValue
 	car := pair.Car()
 	if car != nil {
-		if carStx, ok := car.(SyntaxValue); ok { //nolint:gocritic
+		carStx, ok := car.(SyntaxValue)
+		if ok {
 			newCar = FlipScope(carStx, scope)
 		}
 	}
@@ -120,7 +121,8 @@ func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
 	var newCdr SyntaxValue
 	cdr := pair.Cdr()
 	if cdr != nil {
-		if cdrStx, ok := cdr.(SyntaxValue); ok { //nolint:gocritic
+		cdrStx, ok := cdr.(SyntaxValue)
+		if ok {
 			newCdr = FlipScope(cdrStx, scope)
 		}
 	}

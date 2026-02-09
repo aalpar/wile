@@ -101,7 +101,8 @@ func IsSyntaxList(v SyntaxValue) bool {
 	if v == nil {
 		return false
 	}
-	if pr, ok := v.(*SyntaxPair); ok { //nolint:gocritic
+	pr, ok := v.(*SyntaxPair)
+	if ok {
 		return pr.IsList()
 	}
 	return false

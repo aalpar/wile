@@ -685,7 +685,8 @@ func (p *BigComplex) EqualTo(o Value) bool {
 	v, ok := o.(*BigComplex)
 	if !ok {
 		// Check if equal to regular Complex
-		if c, ok := o.(*Complex); ok { //nolint:gocritic
+		c, ok := o.(*Complex)
+		if ok {
 			pReal := toBigFloat(p.real).Float64()
 			pImag := toBigFloat(p.imag).Float64()
 			return pReal == real(c.Value) && pImag == imag(c.Value)

@@ -24,7 +24,6 @@ var (
 	_ Value = (*ArrayList)(nil)
 	_ Tuple = (*ArrayList)(nil)
 
-	// FIXME: consider using types for EmptyList and Void
 	ArrayListEmptyList = NewArrayList(nil, nil)
 )
 
@@ -87,7 +86,6 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 		if IsVoid(vs) {
 			*q = append(*q, Void)
 		} else {
-			// FIXME: this is a bit ugly
 			if len(*vs) == 0 {
 				return q
 			}
@@ -135,7 +133,6 @@ func (p *ArrayList) Cdr() Value {
 
 // IsList returns true if this ArrayList represents a proper list.
 func (p *ArrayList) IsList() bool {
-	// FIXME: ugly
 	if p == nil {
 		return false
 	}

@@ -276,7 +276,8 @@ func PrimPromiseQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimMakePromise(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// If already a promise, return it unchanged
-	if p, ok := o.(*values.Promise); ok { //nolint:gocritic
+	p, ok := o.(*values.Promise)
+	if ok {
 		mc.SetValue(p)
 		return nil
 	}
@@ -328,7 +329,8 @@ func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.V
 	}
 
 	// Recursively force promise results (delay-force semantics)
-	if rp, ok := result.(*values.Promise); ok && rp != promise { //nolint:gocritic
+	rp, ok := result.(*values.Promise)
+	if ok && rp != promise {
 		result, err = forcePromise(mc, rp)
 		if err != nil {
 			return nil, err

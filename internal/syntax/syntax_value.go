@@ -158,7 +158,8 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		return values.Void
 	}
 	// Check if we've already unwrapped this syntax value
-	if cached, ok := cache[sv]; ok { //nolint:gocritic
+	cached, ok := cache[sv]
+	if ok {
 		return cached
 	}
 
@@ -201,7 +202,8 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		return vec
 
 	case *SyntaxObject:
-		if datum, ok := v.Datum().(SyntaxValue); ok { //nolint:gocritic
+		datum, ok := v.Datum().(SyntaxValue)
+		if ok {
 			result := UnwrapAllShared(datum, cache)
 			cache[sv] = result
 			return result
@@ -212,7 +214,8 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 
 	case *SyntaxDatumLabelAssignment:
 		// Unwrap the labeled value
-		if datum, ok := v.Value.(SyntaxValue); ok { //nolint:gocritic
+		datum, ok := v.Value.(SyntaxValue)
+		if ok {
 			result := UnwrapAllShared(datum, cache)
 			cache[sv] = result
 			return result

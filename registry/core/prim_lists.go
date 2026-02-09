@@ -52,7 +52,8 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional fill argument
 	if !values.IsEmptyList(restVal) {
-		if rest, ok := restVal.(values.Tuple); ok { //nolint:gocritic
+		rest, ok := restVal.(values.Tuple)
+		if ok {
 			fill = rest.Car()
 		}
 	}

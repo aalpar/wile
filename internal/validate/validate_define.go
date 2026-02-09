@@ -128,7 +128,8 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	params := &ValidatedParams{formName: "@params"}
 
 	// Handle single symbol as rest parameter: (lambda x body)
-	if sym, ok := asSyntaxSymbol(paramExpr); ok { //nolint:gocritic
+	sym, ok := asSyntaxSymbol(paramExpr)
+	if ok {
 		params.Rest = sym
 		return params
 	}
@@ -153,7 +154,8 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 		p, ok := current.(*syntax.SyntaxPair)
 		if !ok {
 			// Not a pair - check if it's a rest parameter (improper list)
-			if sv, ok := current.(syntax.SyntaxValue); ok { //nolint:gocritic
+			sv, ok := current.(syntax.SyntaxValue)
+			if ok {
 				sym, ok := asSyntaxSymbol(sv)
 				if !ok {
 					result.addErrorf(getSourceContext(sv), params.formName, "expected symbol as rest parameter, got %T", current)
