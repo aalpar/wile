@@ -20,9 +20,8 @@ import (
 )
 
 var (
-	_ Value      = (*Vector)(nil)
-	_ Collection = (*Vector)(nil)
-	_ Indexable  = (*Vector)(nil)
+	_ Value     = (*Vector)(nil)
+	_ Indexable = (*Vector)(nil)
 )
 
 // Vector represents an R7RS vector, a fixed-size mutable array of values.

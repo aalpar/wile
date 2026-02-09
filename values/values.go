@@ -30,6 +30,10 @@ const (
 	SpecialVoid = PrefixDirective + `void`
 )
 
+// ---------------------------------------------------------------------------
+// Sentinel types and singletons
+// ---------------------------------------------------------------------------
+
 // voidType is a sentinel value representing the absence of a value.
 // It is used as the result of expressions that have no meaningful return value.
 type voidType struct{}
@@ -54,21 +58,109 @@ func (eofType) EqualTo(v Value) bool {
 // EOFObject is the singleton EOF value.
 var EOFObject Value = eofType{}
 
+// ---------------------------------------------------------------------------
+// Value — base interface for all Scheme values
+// ---------------------------------------------------------------------------
+
+// Value is the base interface for all Scheme values.
+//
+// Every runtime object in Wile implements Value. The three methods correspond
+// to fundamental Scheme operations:
+//
+//   - SchemeString returns the external representation (R7RS §13.2 write).
+//   - IsVoid reports whether this value represents the absence of a result
+//     (e.g., the return value of set! or display). A nil receiver must
+//     return true so that missing values are treated as void.
+//   - EqualTo implements structural equality (R7RS §6.1 equal?).
+type Value interface {
+	SchemeString() string
+	IsVoid() bool
+	EqualTo(Value) bool
+}
+
+// ---------------------------------------------------------------------------
+// Hashable — hashtable key interface
+// ---------------------------------------------------------------------------
+
 // Hashable represents a Value that can be used as a hashtable key.
-// Types implementing Hashable must satisfy the contract:
+//
+// R7RS §6.10: Hashtables map keys to values. Keys are compared using equal?,
+// and the hash function must be consistent with the equality predicate:
 // if a.EqualTo(b) then a.HashCode() == b.HashCode().
+//
+// Implemented by: Integer, BigInteger, Float, Rational, Boolean, Character,
+// Symbol, Byte, String.
 type Hashable interface {
 	Value
 	HashCode() uint64
 }
 
-// Wrapped represents a value that wraps another value.
-type Wrapped interface {
+// ---------------------------------------------------------------------------
+// ForEachFunc + Tuple — list protocol
+// ---------------------------------------------------------------------------
+
+// ForEachFunc is the callback signature for iterating over a Tuple.
+//
+// Parameters:
+//   - ctx: context for cancellation
+//   - i: zero-based element index
+//   - hasNext: true if more elements follow
+//   - v: the current element value
+//
+// Return a non-nil error to stop iteration early.
+type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
+
+// Tuple represents the Scheme list protocol — any value that can be consumed
+// as a sequence of car/cdr pairs.
+//
+// R7RS §6.4: Lists are chains of pairs terminated by the empty list.
+// Tuple captures the operations needed to traverse, measure, and convert
+// list-shaped values without requiring a concrete *Pair type.
+//
+// Implemented by: Pair, ArrayList, emptyListType (EmptyList singleton).
+//
+// IsVoid is listed explicitly because Pair uses a nil-receiver convention
+// where (*Pair)(nil) represents void, and the method must be dispatched
+// through the interface to handle that case.
+type Tuple interface {
 	Value
-	Unwrap() Value
-	Wrap(Value)
+	// Car returns the first element of the pair (R7RS §6.4).
+	Car() Value
+	// Cdr returns the rest of the list after the first element (R7RS §6.4).
+	Cdr() Value
+	// ForEach calls fn for each element in order. Returns the tail value
+	// (EmptyList for proper lists, the improper cdr otherwise).
+	ForEach(ctx context.Context, fn ForEachFunc) (Value, error)
+	// Length returns the number of elements. For improper lists, this
+	// counts only the proper prefix.
+	Length() int
+	// Append creates a new list with value appended (R7RS §6.4 append).
+	Append(value Value) Value
+	// AsVector converts the list to a Vector (R7RS §6.4 list->vector).
+	AsVector() *Vector
+	// IsList reports whether this is a proper list (R7RS §6.4 list?).
+	// Uses Floyd's cycle detection (tortoise-and-hare).
+	IsList() bool
+	// IsEmptyList reports whether this is the empty list (R7RS §6.4 null?).
+	IsEmptyList() bool
+	// IsVoid reports whether this value is void (nil receiver handling).
+	IsVoid() bool
 }
 
+// ---------------------------------------------------------------------------
+// Indexable — random-access containers
+// ---------------------------------------------------------------------------
+
+// Indexable represents a fixed-size, random-access container of values.
+//
+// R7RS §6.3.6 (vectors), §6.3.7 (strings as character sequences), §6.4
+// (bytevectors): these types support O(1) element access by integer index.
+//
+// This interface is used for compile-time documentation and type grouping.
+// No runtime type assertions against Indexable exist in the codebase;
+// dispatch uses concrete types (*Vector, *ByteVector) directly.
+//
+// Implemented by: Vector, ByteVector.
 type Indexable interface {
 	Value
 	Length() int
@@ -76,34 +168,9 @@ type Indexable interface {
 	Set(int, Value)
 }
 
-// Collection represents a container that can be converted to a list.
-type Collection interface {
-	Value
-	AsList() Tuple
-}
-
-// Set represents an unordered collection of unique values.
-type Set interface {
-	Value
-	AsList() Tuple
-}
-
-// ForEachFunc is the type of function called for each element in the Pair list.
-type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
-
-// Tuple represents a list-like sequence of values.
-type Tuple interface {
-	Value
-	Length() int
-	Append(value Value) Value
-	ForEach(ctx context.Context, fn ForEachFunc) (Value, error)
-	IsEmptyList() bool
-	IsList() bool
-	IsVoid() bool
-	AsVector() *Vector
-	Car() Value
-	Cdr() Value
-}
+// ---------------------------------------------------------------------------
+// SourceLocation — source positions
+// ---------------------------------------------------------------------------
 
 // SourceLocation represents a position in source code.
 type SourceLocation interface {
@@ -112,6 +179,10 @@ type SourceLocation interface {
 	Column() int
 	Line() int
 }
+
+// ---------------------------------------------------------------------------
+// Port hierarchy — I/O ports
+// ---------------------------------------------------------------------------
 
 // Port represents a Scheme I/O port.
 //
@@ -180,18 +251,9 @@ type ByteVectorExtractor interface {
 	ReadByteVector() (*ByteVector, error)
 }
 
-// Value is the base interface for all Scheme values.
-type Value interface {
-	SchemeString() string
-	IsVoid() bool
-	EqualTo(Value) bool
-}
-
-// Comparable represents a value that can be compared for ordering.
-type Comparable interface {
-	Value
-	CompareTo(Value) int
-}
+// ---------------------------------------------------------------------------
+// Number hierarchy — numeric tower
+// ---------------------------------------------------------------------------
 
 // Number represents a numeric value in the Scheme numeric tower.
 //

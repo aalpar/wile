@@ -18,11 +18,7 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-var (
-	_ values.Value      = Operations{}
-	_ values.Collection = Operations{}
-	_ values.Set        = Operations{}
-)
+var _ values.Value = Operations{}
 
 type Operations []Operation
 
