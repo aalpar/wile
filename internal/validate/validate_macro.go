@@ -140,7 +140,7 @@ func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *
 	for i := 1; i < len(elements); i++ {
 		_, ok := elements[i].(*syntax.SyntaxPair)
 		if !ok {
-			_, ok := elements[i].(*syntax.SyntaxSymbol)
+			_, ok = elements[i].(*syntax.SyntaxSymbol)
 			if !ok {
 				result.addErrorf(getSourceContext(elements[i]), "import", "import-set %d must be a list or symbol", i)
 			}
@@ -218,7 +218,7 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 		}
 		obj, ok := v.(*syntax.SyntaxObject)
 		if ok {
-			_, ok := obj.Unwrap().(*values.Integer)
+			_, ok = obj.Unwrap().(*values.Integer)
 			if ok {
 				return nil
 			}
@@ -255,7 +255,7 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 	for i := 1; i < len(elements); i++ {
 		obj, ok := elements[i].(*syntax.SyntaxObject)
 		if ok {
-			_, ok := obj.Unwrap().(*values.String)
+			_, ok = obj.Unwrap().(*values.String)
 			if ok {
 				continue
 			}

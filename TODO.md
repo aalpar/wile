@@ -1,6 +1,44 @@
 TODO
 ----
 
+Code Quality
+------------
+
+### Sentinel Value Types
+
+- [ ] Consider using distinct types for EmptyList and Void instead of sentinel values in `SyntaxPair` (`internal/syntax/syntax_pair.go`) and `ArrayList` (`values/array_list.go`). Both packages use the same pattern of sentinel comparison; typed singletons would make the distinction compile-time checkable.
+
+### ArrayList Special-Case Logic
+
+- [ ] Clean up `ArrayList.Cons` / `Append` logic (`values/array_list.go:~90`). The method has multiple special-case branches for empty lists, void values, and single-element lists that are difficult to follow.
+- [ ] Clean up `ArrayList.IsList` (`values/array_list.go:~138`). Same issue — multiple branches checking length, void, and EmptyList sentinels.
+
+### ByteVector Overflow Handling
+
+- [ ] `NewByteVector` and `NewByteVectorFromIntegers` (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
+
+### Environment Naming
+
+- [ ] `LocalEnvironmentFrame.CreateLocalBinding` (`environment/local_environment_frame.go`) is actually a "get-or-create" (returns existing binding if key already exists). Rename to `EnsureLocalBinding` or `GetOrCreateLocalBinding` to match its semantics.
+
+### MachineContext.Apply
+
+- [ ] Add unit tests for `MachineContext.Apply` (`machine/machine_context.go`).
+- [ ] Make `MachineContext.Apply` symmetric with `MachineClosure` apply dispatch — currently the two paths have different calling conventions.
+- [ ] `MachineContext.Apply` accepts variadic parameters but has no mechanism for returning multiple values.
+
+### CompileTimeContinuation Environment
+
+- [ ] `CompileTimeContinuation.env` (`machine/compile_time_continuation.go`) stores full environment bindings, but only the binding keys are needed at compile time. Replace with a key-only data structure to reduce memory during compilation.
+
+### Test Improvements
+
+- [ ] `operation_test.go:~212` — `OperationApply` test reports `pc=0` because the test does not set up a real function call. Improve test to use a real closure invocation so the PC reflects actual behavior.
+- [ ] `operation_test.go:~240` — `OperationRestoreContinuation` test shows `CallDepth()=0` because no real call is active. Same improvement needed.
+- [ ] `compile_time_continuation_test.go:~509` — `mc.Run()` should return `ErrMachineHalt` but currently does not. Investigate and fix the assertion.
+
+---
+
 Future Extensions
 -----------------
 

@@ -194,7 +194,7 @@ func asSyntaxSymbol(v syntax.SyntaxValue) (*syntax.SyntaxSymbol, bool) {
 	// Also check for SyntaxObject wrapping a symbol
 	obj, ok := v.(*syntax.SyntaxObject)
 	if ok {
-		_, ok := obj.Unwrap().(*values.Symbol)
+		_, ok = obj.Unwrap().(*values.Symbol)
 		if ok {
 			// This is unusual - symbols should be SyntaxSymbol
 			return nil, false

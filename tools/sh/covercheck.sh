@@ -41,7 +41,9 @@ EXCLUDED_PKGS=(
 	"registry/helpers"
 	"registry/testhelpers"
 	"examples/embedding"
+	"examples/embedding/source-tracking"
 	"integration"
+	"ruleguard"
 )
 
 is_excluded() {
