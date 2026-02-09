@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ func compileScheme(t *testing.T, code string) *NativeTemplate {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -109,7 +109,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true, env)
@@ -139,7 +139,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 	err := NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
@@ -178,7 +178,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 

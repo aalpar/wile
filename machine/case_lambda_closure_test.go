@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -105,8 +105,8 @@ func TestCaseLambdaClosure_Clauses(t *testing.T) {
 	clauses := caseLambda.Clauses()
 
 	qt.Assert(t, clauses, qt.HasLen, 2)
-	qt.Assert(t, clauses[0].closure, qt.Equals, cls1)
-	qt.Assert(t, clauses[1].closure, qt.Equals, cls2)
+	qt.Assert(t, clauses[0], qt.Equals, cls1)
+	qt.Assert(t, clauses[1], qt.Equals, cls2)
 }
 
 func TestCaseLambdaClosure_IsVoid(t *testing.T) {

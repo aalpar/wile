@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -752,7 +752,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	stx := parseLibrarySyntax(t, env, libraryCode)
 
 	// Create compiler and expand the library definition
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	c.Assert(err, qt.IsNil)
 

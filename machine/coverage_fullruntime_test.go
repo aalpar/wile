@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFrame) (*machine.MachineContinuation, error) {
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err

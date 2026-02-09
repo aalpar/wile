@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,9 +29,9 @@ func TestNewExpanderContext(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 
-	ctx := NewExpanderContext(env, expander, ectx)
+	ctx := NewExpanderContext(ectx, env, expander)
 
 	c.Assert(ctx, qt.IsNotNil)
 	c.Assert(ctx.Env(), qt.Equals, env)
@@ -42,9 +42,9 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 
-	ctx := NewExpanderContext(env, expander, ectx)
+	ctx := NewExpanderContext(ectx, env, expander)
 
 	// Initially nil
 	c.Assert(ctx.IntroductionScope(), qt.IsNil)
@@ -60,9 +60,9 @@ func TestExpanderContext_UseSiteScope(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	expander := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 
-	ctx := NewExpanderContext(env, expander, ectx)
+	ctx := NewExpanderContext(ectx, env, expander)
 
 	// Initially nil
 	c.Assert(ctx.UseSiteScope(), qt.IsNil)

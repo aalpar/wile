@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -209,8 +209,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			}
 
 			// Expand the syntax
-			ectx := machine.NewExpandTimeCallContext(ctx)
-			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "error expanding bootstrap macro")
 			}

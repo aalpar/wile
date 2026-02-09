@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -172,8 +172,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Expand the form
-	ectx := NewExpandTimeCallContext(ctx)
-	expanded, err := NewExpanderTimeContinuation(libEnv).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(libEnv).ExpandExpression(ctx, stx)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error expanding library")
 	}

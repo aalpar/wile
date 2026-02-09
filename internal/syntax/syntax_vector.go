@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package syntax
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aalpar/wile/values"
@@ -98,4 +99,45 @@ func (p *SyntaxVector) EqualTo(o values.Value) bool {
 		return false
 	}
 	return p == v
+}
+
+// ForEach iterates over the elements of the vector as regular values in index order.
+// It provides tuple-style iteration compatible with values.ForEachFunc callbacks.
+func (p *SyntaxVector) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
+	if p.IsVoid() {
+		return values.Void, nil
+	}
+	for i, v := range p.Values {
+		hasNext := i+1 < len(p.Values)
+		err := fn(ctx, i, hasNext, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return values.EmptyList, nil
+}
+
+// SyntaxForEach iterates over the syntax elements of the vector.
+// A nil receiver is treated as the distinguished syntax void value and
+// results in no iteration and a SyntaxVoid tail.
+//
+// The callback is invoked for each element with its index and a boolean
+// indicating whether there is another element after the current one.
+// If the callback returns an error, iteration stops immediately and the
+// error is returned.
+func (p *SyntaxVector) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
+	if p.IsVoid() {
+		return SyntaxVoid, nil
+	}
+	for i, v := range p.Values {
+		hasNext := i+1 < len(p.Values)
+		err := fn(ctx, i, hasNext, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Vectors do not have a list tail, so we return SyntaxEmptyList as a
+	// conventional "no remainder" sentinel for callers that expect a tail
+	// value similar to SyntaxPair.SyntaxForEach.
+	return SyntaxEmptyList, nil
 }

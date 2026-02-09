@@ -29,11 +29,12 @@
 //
 //   - [Boolean]: #t and #f singletons ([TrueValue], [FalseValue])
 //   - [Character]: Unicode rune wrapper
-//   - [String]: interned strings (<=64 chars)
+//   - [String]: interned strings (<=64 bytes)
 //   - [Symbol]: interned identifiers for eq? identity
 //   - [Pair]: cons cells as [2]Value arrays
-//   - [Vector]: growable value arrays
+//   - [Vector]: fixed-size mutable value arrays
 //   - [ByteVector]: byte arrays for binary data
+//   - [ArrayList]: array-backed list representation with O(1) element access
 //   - [Hashtable]: bucket-chaining hash maps with [Hashable] keys
 //
 // # I/O Ports (R7RS 6.13)

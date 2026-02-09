@@ -2,6 +2,8 @@
 
 ## Status: PLANNED
 
+> **Cross-reference**: See also `MACRO_EXPANSION_TRACING.md` for complementary work on extending `OriginInfo` with `IntroScope`, `Template`, and `UseSite` fields.
+
 This document describes a debugging-focused approach to hygiene tooling, emphasizing introspection over manipulation.
 
 ## Design Philosophy

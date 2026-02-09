@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -352,7 +352,7 @@ func evalSchemeString(code string) (values.Value, error) {
 		}
 
 		// Expand
-		ectx := NewExpandTimeCallContext(context.Background())
+		ectx := context.Background()
 		econt := NewExpanderTimeContinuation(env)
 		expanded, err := econt.ExpandExpression(ectx, stx)
 		if err != nil {
@@ -570,7 +570,7 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame) (*MachineContinuation, error) {
 	tpl := NewNativeTemplate(0, 0, false)
 	cctx := NewCompiletimeContinuation(tpl, env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	econt := NewExpanderTimeContinuation(env)
 	prog, err := econt.ExpandExpression(ectx, prog)
 	if err != nil {
@@ -766,8 +766,8 @@ func TestCompileContext_CompileCaseLambda(t *testing.T) {
 
 	// Verify clause arities
 	clauses := caseLambda.Clauses()
-	qt.Assert(t, clauses[0].closure.Template().ParameterCount(), qt.Equals, 1)
-	qt.Assert(t, clauses[1].closure.Template().ParameterCount(), qt.Equals, 2)
+	qt.Assert(t, clauses[0].Template().ParameterCount(), qt.Equals, 1)
+	qt.Assert(t, clauses[1].Template().ParameterCount(), qt.Equals, 2)
 }
 
 func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
@@ -902,7 +902,7 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 
 	// Test quote expansion
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	econt := NewExpanderTimeContinuation(env)
 	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
@@ -1098,7 +1098,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	econt := NewExpanderTimeContinuation(env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test ExpandQuote - currently returns nil, nil

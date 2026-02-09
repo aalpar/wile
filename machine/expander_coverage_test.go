@@ -39,7 +39,7 @@ func newExpanderEnv() (*environment.EnvironmentFrame, *ExpanderTimeContinuation)
 func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test with various form names that use expandUnchanged
@@ -65,7 +65,7 @@ func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 func TestExpandPrimitiveForm_KnownForm(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// "quote" has a registered primitive expander that returns unchanged
@@ -81,7 +81,7 @@ func TestExpandPrimitiveForm_KnownForm(t *testing.T) {
 func TestExpandPrimitiveForm_UnknownForm(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	sym := syntax.NewSyntaxSymbol("not-a-real-primitive", sctx)
@@ -98,7 +98,7 @@ func TestExpandPrimitiveForm_UnknownForm(t *testing.T) {
 func TestExpandOnce_NonPair(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Symbol: not a macro call
@@ -120,7 +120,7 @@ func TestExpandOnce_NonPair(t *testing.T) {
 func TestExpandOnce_EmptyList(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	empty := syntax.SyntaxList(sctx)
@@ -135,7 +135,7 @@ func TestExpandOnce_EmptyList(t *testing.T) {
 func TestExpandOnce_NonMacroCall(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (bindSymbolWithScopes 1 2) where bindSymbolWithScopes is not a macro
@@ -156,10 +156,10 @@ func TestExpandOnce_NonMacroCall(t *testing.T) {
 func TestExpanderContext_Expand(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
-	expanderCtx := NewExpanderContext(env, expander, ectx)
+	expanderCtx := NewExpanderContext(ectx, env, expander)
 
 	// Self-evaluating value should pass through
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
@@ -172,10 +172,10 @@ func TestExpanderContext_Expand(t *testing.T) {
 func TestExpanderContext_ExpandOnce(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
-	expanderCtx := NewExpanderContext(env, expander, ectx)
+	expanderCtx := NewExpanderContext(ectx, env, expander)
 
 	// Non-macro call should return unchanged
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
@@ -191,7 +191,7 @@ func TestExpanderContext_ExpandOnce(t *testing.T) {
 func TestExpandSyntaxError(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (syntax-error "bad thing happened")
@@ -210,7 +210,7 @@ func TestExpandSyntaxError(t *testing.T) {
 func TestExpandSyntaxError_WithIrritants(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (syntax-error "bad" x y)
@@ -231,7 +231,7 @@ func TestExpandSyntaxError_WithIrritants(t *testing.T) {
 func TestExpandSyntaxError_MissingMessage(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	sym := syntax.NewSyntaxSymbol("syntax-error", sctx)

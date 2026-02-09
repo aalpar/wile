@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -616,7 +616,7 @@ func TestDynamicWindEscape(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	qt.Assert(t, err, qt.IsNil)
 

@@ -2,6 +2,8 @@
 
 **Status:** PROPOSED — Design document for future consideration
 
+> **Cross-reference**: See also `EXTERNAL_EXTENSIONS_PLAN.md` for the detailed `EnvironmentAccess` interface design needed to decouple extensions from internal packages.
+
 ## Overview
 
 This proposal outlines a plugin architecture for Wile that enables embedding the Scheme interpreter in Go applications with customizable functionality. The design separates a minimal core from optional extensions, allowing users to compose exactly the capabilities they need.

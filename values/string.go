@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ var (
 )
 
 // String interning for commonly used strings.
-// Short strings (up to 64 characters) are automatically interned.
+// Short strings (up to 64 bytes) are automatically interned.
 const stringInternMaxLen = 64
 
 var stringInterns sync.Map // map[string]*String
@@ -37,7 +37,7 @@ type String struct {
 	Value string
 }
 
-// NewString returns a String value. Short strings (up to 64 characters)
+// NewString returns a String value. Short strings (up to 64 bytes)
 // are automatically interned and return the same pointer for the same value.
 func NewString(str string) *String {
 	if len(str) <= stringInternMaxLen {

@@ -255,7 +255,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 }
 
 func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, args []values.Value) (Value, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
+	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
 
@@ -273,7 +273,7 @@ func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, a
 }
 
 func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClosure, args []values.Value) (Value, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
+	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
 
@@ -329,10 +329,9 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 // internal helpers
 
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
+	tpl := machine.NewEmptyNativeTemplate()
 
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ctx, stx)
 	if err != nil {
 		return nil, &CompilationError{Message: "expansion error", Cause: err}
 	}
@@ -399,27 +398,35 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				return err
 			}
 
-			tpl := machine.NewNativeTemplate(0, 0, false)
-			ectx := machine.NewExpandTimeCallContext(ctx)
-			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+			err = runBootstrapMacroStx(ctx, env, stx)
 			if err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
 
-			cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
-			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
-			if err != nil {
-				return err
-			}
+// runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
+func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) error {
+	tpl := machine.NewEmptyNativeTemplate()
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
+	if err != nil {
+		return err
+	}
 
-			cont := machine.NewMachineContinuation(nil, tpl, env)
-			mc := machine.NewMachineContext(ctx, cont)
-			err = mc.Run()
-			if err != nil {
-				if !errors.Is(err, machine.ErrMachineHalt) {
-					return err
-				}
-			}
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	if err != nil {
+		return err
+	}
+
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(ctx, cont)
+	err = mc.Run()
+	if err != nil {
+		if !errors.Is(err, machine.ErrMachineHalt) {
+			return err
 		}
 	}
 	return nil

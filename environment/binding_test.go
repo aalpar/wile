@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ func TestBinding_BindingType(t *testing.T) {
 
 func TestBinding_SetValue(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b.Value(), qt.Equals, values.Void)
+	qt.Assert(t, b.Value(), values.SchemeEquals, values.Void)
 
 	newVal := values.NewInteger(123)
 	b.SetValue(newVal)

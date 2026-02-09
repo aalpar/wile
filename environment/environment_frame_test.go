@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -152,14 +152,14 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, qt.Equals, values.Void)
+	qt.Assert(t, gb.value, values.SchemeEquals, values.Void)
 
 	// check local environment
 	li0 := env.GetLocalIndex(tv0)
 	qt.Assert(t, li0, qt.IsNotNil)
 	lb := env.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, qt.Equals, values.Void)
+	qt.Assert(t, lb.value, values.SchemeEquals, values.Void)
 
 	err := env.SetLocalValue(li0, values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNil)
@@ -207,7 +207,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, qt.Equals, values.Void)
+	qt.Assert(t, gb.value, values.SchemeEquals, values.Void)
 
 	lenv := NewLocalEnvironment(0)
 	env = NewEnvironmentFrameWithParent(lenv, env)
@@ -218,7 +218,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 	lb := env.GetLocalBinding(li)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, qt.Equals, values.Void)
+	qt.Assert(t, lb.value, values.SchemeEquals, values.Void)
 }
 
 func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {

@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	sv := parseSchemeExpr(t, env, libCode)
 
 	// Expand
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, sv)
 	c.Assert(err, qt.IsNil, qt.Commentf("library expansion should succeed"))
 

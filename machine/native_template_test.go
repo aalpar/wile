@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -177,7 +177,7 @@ func TestNativeTemplate_DeduplicateLiteral_EmptyPair(t *testing.T) {
 
 	// Empty list
 	result := tmpl.DeduplicateLiteral(values.EmptyList)
-	qt.Assert(t, result, qt.Equals, values.EmptyList)
+	qt.Assert(t, result, values.SchemeEquals, values.EmptyList)
 }
 
 func TestNativeTemplate_DeduplicateLiteral_EmptyVector(t *testing.T) {
@@ -330,7 +330,7 @@ func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
 
 	// Test with empty list
 	result = tpl.DeduplicateLiteral(values.EmptyList)
-	qt.Assert(t, result, qt.Equals, values.EmptyList)
+	qt.Assert(t, result, values.SchemeEquals, values.EmptyList)
 
 	// Test with nil Vector
 	var nilVec *values.Vector

@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
@@ -25,14 +27,14 @@ import (
 //
 // Parameters:
 //   - etc: The expander-time continuation (expander state)
-//   - ectx: The expand-time call context
+//   - ctx: The context for cancellation and deadlines
 //   - sym: The keyword symbol (e.g., 'if', 'lambda')
 //   - expr: The expression arguments (everything after the keyword)
 //
 // Returns the expanded syntax value.
 type PrimitiveExpanderFunc func(
 	etc *ExpanderTimeContinuation,
-	ectx ExpandTimeCallContext,
+	ctx context.Context,
 	sym *syntax.SyntaxSymbol,
 	expr syntax.SyntaxValue,
 ) (syntax.SyntaxValue, error)
@@ -56,12 +58,12 @@ func (p *PrimitiveExpander) Name() string {
 
 // Expand invokes the primitive expander function.
 func (p *PrimitiveExpander) Expand(
+	ctx context.Context,
 	etc *ExpanderTimeContinuation,
-	ectx ExpandTimeCallContext,
 	sym *syntax.SyntaxSymbol,
 	expr syntax.SyntaxValue,
 ) (syntax.SyntaxValue, error) {
-	return p.fn(etc, ectx, sym, expr)
+	return p.fn(etc, ctx, sym, expr)
 }
 
 // SchemeString implements values.Value interface.

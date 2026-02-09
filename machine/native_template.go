@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,12 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		q.sourceRefs = append(q.sourceRefs, 0)
 	}
 	return q
+}
+
+// NewEmptyNativeTemplate creates a new NativeTemplate with default empty parameters.
+// This is used when a template is initialized without any known parameters or operations yet.
+func NewEmptyNativeTemplate() *NativeTemplate {
+	return NewNativeTemplate(0, 0, false)
 }
 
 func (p *NativeTemplate) ParameterCount() int {

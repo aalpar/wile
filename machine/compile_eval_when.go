@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -178,7 +178,6 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Process each expression
@@ -190,7 +189,7 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 
 		stxVal := exprVal
 		// Expand the expression (it may contain macros)
-		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
+		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "eval-when: expansion failed")
 		}
@@ -237,7 +236,6 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 	}
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Collect all expressions
@@ -259,7 +257,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		isLast := i == len(exprs)-1
 
 		// Expand the expression
-		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
+		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "eval-when: expansion failed")
 		}

@@ -49,8 +49,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	stx := schemeutil.DatumToSyntaxValue(sctx, expr)
 
 	// Expand the expression
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: expansion error")
 	}
@@ -116,8 +115,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Expand the expression
-		ectx := machine.NewExpandTimeCallContext(ctx)
-		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
 		}
@@ -307,8 +305,7 @@ func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
 	expander := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, err := expander.ExpandExpression(ectx, syntaxVal)
+	expanded, err := expander.ExpandExpression(ctx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand: expansion failed")
 	}
@@ -343,8 +340,7 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
 	expander := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, didExpand, err := expander.ExpandOnce(ectx, syntaxVal)
+	expanded, didExpand, err := expander.ExpandOnce(ctx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
@@ -381,8 +377,7 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame()
 
 	// Step 1: Expand the syntax object
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, syntaxVal)
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: expansion failed")
 	}

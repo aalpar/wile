@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -236,13 +236,12 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Create expander for the body environment (to expand macros like let)
 	bodyExpander := NewExpanderTimeContinuation(bodyEnv)
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 
 	// If there's a fender, evaluate it and branch to cleanup on false
 	var fenderBranchIdx int
 	if fender != nil {
 		// Expand the fender first
-		expandedFender, err := bodyExpander.ExpandExpression(ectx, fender)
+		expandedFender, err := bodyExpander.ExpandExpression(ctctx.ctx, fender)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "error expanding fender")
 		}
@@ -260,7 +259,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	}
 
 	// Expand and compile the body
-	expandedBody, err := bodyExpander.ExpandExpression(ectx, body)
+	expandedBody, err := bodyExpander.ExpandExpression(ctctx.ctx, body)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error expanding body")
 	}
