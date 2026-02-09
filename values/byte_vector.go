@@ -27,7 +27,7 @@ var (
 // ByteVector represents a Scheme bytevector.
 type ByteVector []*Byte
 
-// NewByteVector creates a new bytevector from integer values.
+// NewByteVector creates a new bytevector from byte values.
 func NewByteVector(vs ...*Byte) *ByteVector {
 	if len(vs) == 0 {
 		return &ByteVector{}
@@ -55,17 +55,22 @@ func NewByteVectorFromBytes(vs ...byte) *ByteVector {
 }
 
 // NewByteVectorFromIntegers creates a new bytevector from integer values.
-func NewByteVectorFromIntegers(vs ...*Integer) *ByteVector {
+// Each integer must be in the range [0, 255] per R7RS §6.4.
+func NewByteVectorFromIntegers(vs ...*Integer) (*ByteVector, error) {
 	if len(vs) == 0 {
-		return &ByteVector{}
+		return &ByteVector{}, nil
 	}
 	bs := make([]*Byte, len(vs))
 	q := ByteVector(bs)
 	for i := range vs {
-		b := NewByte(uint8(vs[i].Value))
+		v := vs[i].Value
+		if v < 0 || v > 255 {
+			return nil, WrapForeignErrorf(ErrNotAByte, "NewByteVectorFromIntegers: integer %d is not a byte (0-255)", v)
+		}
+		b := NewByte(uint8(v))
 		q[i] = b
 	}
-	return &q
+	return &q, nil
 }
 
 func (p *ByteVector) Get(i int) Value {

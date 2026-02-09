@@ -871,7 +871,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVectorUnsignedByteMarker:
 		var stx syntax.SyntaxValue
-		q0 := values.NewByteVectorFromIntegers()
+		q0, _ := values.NewByteVectorFromIntegers()
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -889,6 +889,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		for {
 			if !ok {
 				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
+			}
+			if i.Value < 0 || i.Value > 255 {
+				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
 			}
 			*q0 = append(*q0, values.NewByte(uint8(i.Value)))
 			p.cur, p.err = p.toks.Next()
