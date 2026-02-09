@@ -15,6 +15,7 @@
 package values
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -26,11 +27,11 @@ func TestByteVector_SchemeString(t *testing.T) {
 		out string
 	}{
 		{
-			in:  NewByteVectorFromIntegers(NewInteger(10)),
+			in:  NewByteVector(NewByte(10)),
 			out: "#u8( 10 )",
 		},
 		{
-			in:  NewByteVectorFromIntegers(NewInteger(10), NewInteger(20)),
+			in:  NewByteVector(NewByte(10), NewByte(20)),
 			out: "#u8( 10 20 )",
 		},
 	}
@@ -48,13 +49,13 @@ func TestByteVector_EqualTo(t *testing.T) {
 		out bool
 	}{
 		{
-			in0: NewByteVectorFromIntegers(NewInteger(10)),
-			in1: NewByteVectorFromIntegers(NewInteger(20)),
+			in0: NewByteVector(NewByte(10)),
+			in1: NewByteVector(NewByte(20)),
 			out: false,
 		},
 		{
-			in0: NewByteVectorFromIntegers(NewInteger(10)),
-			in1: NewByteVectorFromIntegers(NewInteger(10)),
+			in0: NewByteVector(NewByte(10)),
+			in1: NewByteVector(NewByte(10)),
 			out: true,
 		},
 	}
@@ -67,7 +68,7 @@ func TestByteVector_EqualTo(t *testing.T) {
 
 func TestByteVector_Get(t *testing.T) {
 	c := qt.New(t)
-	bv := NewByteVectorFromIntegers(NewInteger(10), NewInteger(20), NewInteger(30))
+	bv := NewByteVector(NewByte(10), NewByte(20), NewByte(30))
 	c.Assert(bv.Get(0), SchemeEquals, NewByte(10))
 	c.Assert(bv.Get(1), SchemeEquals, NewByte(20))
 	c.Assert(bv.Get(2), SchemeEquals, NewByte(30))
@@ -75,7 +76,7 @@ func TestByteVector_Get(t *testing.T) {
 
 func TestByteVector_Set(t *testing.T) {
 	c := qt.New(t)
-	bv := NewByteVectorFromIntegers(NewInteger(10), NewInteger(20), NewInteger(30))
+	bv := NewByteVector(NewByte(10), NewByte(20), NewByte(30))
 	bv.Set(1, NewByte(99))
 	c.Assert(bv.Get(1), SchemeEquals, NewByte(99))
 	c.Assert(bv.SchemeString(), qt.Equals, "#u8( 10 99 30 )")
@@ -83,7 +84,7 @@ func TestByteVector_Set(t *testing.T) {
 
 func TestByteVector_Set_Panic(t *testing.T) {
 	c := qt.New(t)
-	bv := NewByteVectorFromIntegers(NewInteger(10))
+	bv := NewByteVector(NewByte(10))
 	c.Assert(func() { bv.Set(0, NewInteger(42)) }, qt.PanicMatches, ".*bytevector element must be a byte.*")
 }
 
@@ -97,17 +98,17 @@ func TestByteVector_AsList(t *testing.T) {
 	}{
 		{
 			name:     "empty bytevector",
-			bv:       NewByteVectorFromIntegers(),
+			bv:       NewByteVector(),
 			expected: "()",
 		},
 		{
 			name:     "single element",
-			bv:       NewByteVectorFromIntegers(NewInteger(42)),
+			bv:       NewByteVector(NewByte(42)),
 			expected: "(42)",
 		},
 		{
 			name:     "multiple elements",
-			bv:       NewByteVectorFromIntegers(NewInteger(10), NewInteger(20), NewInteger(30)),
+			bv:       NewByteVector(NewByte(10), NewByte(20), NewByte(30)),
 			expected: "(10 20 30)",
 		},
 	}
@@ -129,7 +130,7 @@ func TestByteVector_AsList_Void(t *testing.T) {
 
 func TestByteVector_Datum(t *testing.T) {
 	c := qt.New(t)
-	bv := NewByteVectorFromIntegers(NewInteger(10), NewInteger(20), NewInteger(30))
+	bv := NewByteVector(NewByte(10), NewByte(20), NewByte(30))
 	datum := bv.Datum()
 	c.Assert(len(datum), qt.Equals, 3)
 	c.Assert(datum[0], SchemeEquals, NewByte(10))
@@ -152,12 +153,12 @@ func TestByteVector_IsVoid(t *testing.T) {
 		},
 		{
 			name:     "empty bytevector",
-			bv:       NewByteVectorFromIntegers(),
+			bv:       NewByteVector(),
 			expected: false,
 		},
 		{
 			name:     "non-empty bytevector",
-			bv:       NewByteVectorFromIntegers(NewInteger(42)),
+			bv:       NewByteVector(NewByte(42)),
 			expected: false,
 		},
 	}
@@ -165,6 +166,70 @@ func TestByteVector_IsVoid(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			c.Assert(tt.bv.IsVoid(), qt.Equals, tt.expected)
+		})
+	}
+}
+
+func TestNewByteVectorFromIntegers(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		ints []*Integer
+		want string
+	}{
+		{
+			name: "empty",
+			ints: nil,
+			want: "#u8()",
+		},
+		{
+			name: "single byte",
+			ints: []*Integer{NewInteger(42)},
+			want: "#u8( 42 )",
+		},
+		{
+			name: "boundary values",
+			ints: []*Integer{NewInteger(0), NewInteger(255)},
+			want: "#u8( 0 255 )",
+		},
+	}
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			bv, err := NewByteVectorFromIntegers(tc.ints...)
+			c.Assert(err, qt.IsNil)
+			c.Assert(bv.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestNewByteVectorFromIntegers_Overflow(t *testing.T) {
+	tcs := []struct {
+		name string
+		ints []*Integer
+	}{
+		{
+			name: "negative value",
+			ints: []*Integer{NewInteger(-1)},
+		},
+		{
+			name: "above 255",
+			ints: []*Integer{NewInteger(256)},
+		},
+		{
+			name: "large positive",
+			ints: []*Integer{NewInteger(1000)},
+		},
+		{
+			name: "valid then invalid",
+			ints: []*Integer{NewInteger(10), NewInteger(300)},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewByteVectorFromIntegers(tc.ints...)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, ErrNotAByte), qt.IsTrue)
 		})
 	}
 }

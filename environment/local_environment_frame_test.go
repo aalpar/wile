@@ -40,7 +40,7 @@ func TestLocalEnvironment(t *testing.T) {
 	qt.Assert(t, li0, qt.IsNil)
 
 	// Test adding a binding
-	li0, ok := env.CreateLocalBinding(tv0, BindingTypeVariable)
+	li0, ok := env.EnsureLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li0[0], qt.Equals, 0)
 	qt.Assert(t, li0[1], qt.Equals, 0)
@@ -50,14 +50,14 @@ func TestLocalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Re-adding the same binding should not change the index
-	li0, ok = env.CreateLocalBinding(tv0, BindingTypeVariable)
+	li0, ok = env.EnsureLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsFalse)
 	qt.Assert(t, li0[0], qt.Equals, 0)
 	qt.Assert(t, li0[1], qt.Equals, 0)
 
 	// Adding a new binding should create a new index
 	tv1 := values.NewSymbol("testVar1")
-	li1, ok := env.CreateLocalBinding(tv1, BindingTypeVariable)
+	li1, ok := env.EnsureLocalBinding(tv1, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li1[0], qt.Equals, 1)
 	qt.Assert(t, li1[1], qt.Equals, 0)
@@ -75,7 +75,7 @@ func TestLocalEnvironment(t *testing.T) {
 func TestLocalEnvironmentFrame_Bindings(t *testing.T) {
 	le := NewLocalEnvironment(0)
 	qt.Assert(t, le, qt.Not(qt.IsNil))
-	le.CreateLocalBinding(values.NewSymbol("testVar0"), BindingTypeVariable)
+	le.EnsureLocalBinding(values.NewSymbol("testVar0"), BindingTypeVariable)
 
 	bindings := le.Bindings()
 	qt.Assert(t, bindings, qt.HasLen, 1)
@@ -85,7 +85,7 @@ func TestLocalEnvironmentFrame_SetBindings(t *testing.T) {
 	le := NewLocalEnvironment(0)
 
 	sym := values.NewSymbol("test")
-	le.CreateLocalBinding(sym, BindingTypeVariable)
+	le.EnsureLocalBinding(sym, BindingTypeVariable)
 
 	// Create new bindings
 	newBindings := []*Binding{
@@ -103,8 +103,8 @@ func TestLocalEnvironmentFrame_Keys(t *testing.T) {
 	sym1 := values.NewSymbol("var1")
 	sym2 := values.NewSymbol("var2")
 
-	le.CreateLocalBinding(sym1, BindingTypeVariable)
-	le.CreateLocalBinding(sym2, BindingTypeVariable)
+	le.EnsureLocalBinding(sym1, BindingTypeVariable)
+	le.EnsureLocalBinding(sym2, BindingTypeVariable)
 
 	keys := le.Keys()
 	qt.Assert(t, keys, qt.HasLen, 2)
@@ -136,7 +136,7 @@ func TestLocalEnvironmentFrame_EqualTo(t *testing.T) {
 
 	// After adding different bindings, they should not be equal
 	sym := values.NewSymbol("test")
-	le1.CreateLocalBinding(sym, BindingTypeVariable)
+	le1.EnsureLocalBinding(sym, BindingTypeVariable)
 	qt.Assert(t, le1.EqualTo(le2), qt.IsFalse)
 
 	// Non-LocalEnvironmentFrame comparison
@@ -147,7 +147,7 @@ func TestLocalEnvironmentFrame_Copy(t *testing.T) {
 	le := NewLocalEnvironment(0)
 
 	sym := values.NewSymbol("test")
-	le.CreateLocalBinding(sym, BindingTypeVariable)
+	le.EnsureLocalBinding(sym, BindingTypeVariable)
 
 	copied := le.Copy()
 	leCopy, ok := copied.(*LocalEnvironmentFrame)

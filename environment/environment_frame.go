@@ -370,14 +370,15 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	return nil
 }
 
-// CreateLocalBinding creates a new local binding in the current local environment.
-// It returns the LocalIndex of the new binding and a boolean indicating whether
-// the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) CreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
+// EnsureLocalBinding returns the local binding for the given key, creating it if
+// it does not already exist. Returns (index, true) if a new binding was created,
+// or (index, false) if the binding already existed.
+// Returns (nil, false) if the receiver is nil or has no local environment.
+func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	if p == nil || p.local == nil {
 		return nil, false
 	}
-	return p.local.CreateLocalBinding(key, bt)
+	return p.local.EnsureLocalBinding(key, bt)
 }
 
 // MaybeCreateLocalBindingWithScopes creates a new local binding with associated scopes in the current local environment.

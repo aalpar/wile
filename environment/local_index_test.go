@@ -37,7 +37,7 @@ func TestLocalIndex_GetBinding(t *testing.T) {
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	tv := values.NewSymbol("test")
-	li, ok := env.CreateLocalBinding(tv, BindingTypeVariable)
+	li, ok := env.EnsureLocalBinding(tv, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 
 	val := values.NewInteger(42)

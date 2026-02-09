@@ -250,7 +250,7 @@ func TestSetScopesOnLastBinding_WithBinding(t *testing.T) {
 
 	lenv := environment.NewLocalEnvironment(0)
 	sym := values.NewSymbol("x")
-	lenv.CreateLocalBinding(sym, environment.BindingTypeVariable)
+	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
 
 	scope := syntax.NewScope()
 	setScopesOnLastBinding([]*syntax.Scope{scope}, lenv)
@@ -264,7 +264,7 @@ func TestSetScopesOnLastBinding_WithBinding(t *testing.T) {
 func TestSetScopesOnLastBinding_NilScopes(t *testing.T) {
 	lenv := environment.NewLocalEnvironment(0)
 	sym := values.NewSymbol("x")
-	lenv.CreateLocalBinding(sym, environment.BindingTypeVariable)
+	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
 
 	// Should not modify anything
 	setScopesOnLastBinding(nil, lenv)

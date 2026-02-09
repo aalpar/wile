@@ -287,7 +287,19 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#u8( 10 20 )",
-			expect: values.NewByteVectorFromIntegers(values.NewInteger(10), values.NewInteger(20)),
+			expect: values.NewByteVector(values.NewByte(10), values.NewByte(20)),
+		},
+		{
+			in:  "#u8( 256 )",
+			err: values.ErrNotAByte,
+		},
+		{
+			in:  "#u8( -1 )",
+			err: values.ErrNotAByte,
+		},
+		{
+			in:  "#u8( 10 300 )",
+			err: values.ErrNotAByte,
 		},
 		{
 			in:     "( 10 . 20 )",

@@ -125,7 +125,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationLoadLocalByLocalIndexImmediate(environment.NewLocalIndex(0, 0)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				li, _ := mc.env.LocalEnvironment().CreateLocalBinding(mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes")), environment.BindingTypeVariable)
+				li, _ := mc.env.LocalEnvironment().EnsureLocalBinding(mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes")), environment.BindingTypeVariable)
 				mc.env.LocalEnvironment().SetLocalValue(li, values.NewInteger(10)) //nolint:errcheck
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
@@ -139,7 +139,7 @@ func TestOperation(t *testing.T) {
 			evals: NewStack(values.NewInteger(10)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
-				mc.env.LocalEnvironment().CreateLocalBinding(sym, environment.BindingTypeVariable)
+				mc.env.LocalEnvironment().EnsureLocalBinding(sym, environment.BindingTypeVariable)
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
