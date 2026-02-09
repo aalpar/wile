@@ -158,7 +158,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 
 		local := NewLocalEnvironment(0)
 		sym := env.InternSymbol(values.NewSymbol("x"))
-		local.CreateLocalBinding(sym, BindingTypeVariable)
+		local.EnsureLocalBinding(sym, BindingTypeVariable)
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
 		result := childEnv.GetLocalIndexWithScopes(sym, nil)

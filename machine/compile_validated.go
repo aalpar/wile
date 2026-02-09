@@ -224,9 +224,9 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol) error {
 
 	if p.env.LocalEnvironment() != nil {
 		// Local context (inside a lambda body): store to local variable slot.
-		// CreateLocalBinding returns the slot index; the binding was already
+		// EnsureLocalBinding returns the slot index; the binding was already
 		// declared by declareDefineBinding, so this just retrieves the index.
-		li, _ := p.env.CreateLocalBinding(sym, environment.BindingTypeVariable)
+		li, _ := p.env.EnsureLocalBinding(sym, environment.BindingTypeVariable)
 		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 	} else {
 		// Global context (top-level): store to global environment.
@@ -294,8 +294,8 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 // setScopesOnLastBinding attaches hygiene scopes to the most recently created local binding.
 //
-// This function is called after CreateLocalBinding to preserve macro hygiene information.
-// CreateLocalBinding doesn't accept scopes as a parameter, so scopes must be attached
+// This function is called after EnsureLocalBinding to preserve macro hygiene information.
+// EnsureLocalBinding doesn't accept scopes as a parameter, so scopes must be attached
 // separately. The scopes track which macro expansion introduced the binding, enabling
 // hygienic macro expansion per R6RS/R7RS.
 //
@@ -303,7 +303,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 //
 // Example flow:
 //
-//	lenv.CreateLocalBinding(param, BindingTypeVariable)  // creates binding without scopes
+//	lenv.EnsureLocalBinding(param, BindingTypeVariable)  // creates binding without scopes
 //	setScopesOnLastBinding(paramScopes, lenv)            // attaches scopes to that binding
 //
 // If scopes is nil or empty, this is a no-op (the binding came from source code, not a macro).
@@ -337,7 +337,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, c
 
 		// Create a local binding slot for this parameter. The binding index
 		// corresponds to the argument position at runtime.
-		_, ok := lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
+		_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in lambda", param.Key)
 		}
@@ -475,7 +475,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 	// Create a local binding slot for the rest parameter. This slot comes after
 	// all required parameter slots. The VM knows to populate it with a list of
 	// excess arguments because tpl.isVariadic is set below.
-	_, ok := lenv.CreateLocalBinding(rest, environment.BindingTypeVariable)
+	_, ok := lenv.EnsureLocalBinding(rest, environment.BindingTypeVariable)
 	if !ok {
 		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
 		return values.ErrDuplicateBinding
@@ -529,7 +529,7 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 			for _, paramSym := range clause.Params().Required {
 				param := p.env.InternSymbol(paramSym.Sym)
 				paramScopes := paramSym.Scopes()
-				_, ok := lenv.CreateLocalBinding(param, environment.BindingTypeVariable)
+				_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
 				if !ok {
 					return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in case-lambda clause", param.Key)
 				}

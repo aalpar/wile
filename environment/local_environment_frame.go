@@ -60,8 +60,10 @@ func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
 	return p.keys
 }
 
-// CreateLocalBinding creates a new local binding with the given key and binding type.
-func (p *LocalEnvironmentFrame) CreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
+// EnsureLocalBinding returns the local binding for the given key, creating it if
+// it does not already exist. Returns (index, true) if a new binding was created,
+// or (index, false) if the binding already existed.
+func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	i, ok := p.keys[*key]
 	if ok {
 		return &LocalIndex{i, 0}, false

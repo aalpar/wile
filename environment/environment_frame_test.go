@@ -176,7 +176,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, gb.value, values.SchemeEquals, values.NewInteger(42))
 
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-	li1, ok := env.CreateLocalBinding(tv0, BindingTypeVariable)
+	li1, ok := env.EnsureLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li1[0], qt.Equals, 0)
 	qt.Assert(t, li1[1], qt.Equals, 0)
@@ -202,7 +202,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 	gi, ok := env.CreateGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 
-	_, ok = env.CreateLocalBinding(tv0, BindingTypeVariable)
+	_, ok = env.EnsureLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsFalse)
 
 	gb := env.GetGlobalBinding(gi)
@@ -212,7 +212,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 	lenv := NewLocalEnvironment(0)
 	env = NewEnvironmentFrameWithParent(lenv, env)
 
-	li, ok := env.CreateLocalBinding(tv0, BindingTypeVariable)
+	li, ok := env.EnsureLocalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li, qt.IsNotNil)
 
@@ -359,7 +359,7 @@ func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
 
 	// Create a binding without scopes
 	sym1 := values.NewSymbol("var1")
-	li1, _ := env.CreateLocalBinding(sym1, BindingTypeVariable)
+	li1, _ := env.EnsureLocalBinding(sym1, BindingTypeVariable)
 	env.SetLocalValue(li1, values.NewInteger(42)) //nolint:errcheck
 
 	// GetBindingWithScopes should return it (no scopes = always matches)
@@ -401,7 +401,7 @@ func TestEnvironmentFrame_GetLocalBindingByIndex(t *testing.T) {
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test-var")
-	li, _ := env.CreateLocalBinding(sym, BindingTypeVariable)
+	li, _ := env.EnsureLocalBinding(sym, BindingTypeVariable)
 	val := values.NewInteger(42)
 	env.SetLocalValue(li, val) //nolint:errcheck
 
@@ -482,7 +482,7 @@ func TestEnvironmentFrame_Copy(t *testing.T) {
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test")
-	env.CreateLocalBinding(sym, BindingTypeVariable)
+	env.EnsureLocalBinding(sym, BindingTypeVariable)
 
 	copied := env.Copy()
 	qt.Assert(t, copied, qt.Not(qt.IsNil))
