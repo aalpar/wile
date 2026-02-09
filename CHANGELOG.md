@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-08
+
 ### Added
 
 - Enforce cross-thread continuation rejection: continuations captured in one thread now raise `ErrCrossThreadContinuation` when invoked from a different thread, preventing VM state corruption
@@ -103,4 +105,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Docker build support with `TARGETOS`/`TARGETARCH` platform awareness
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
+
+[1.1.0]: https://github.com/aalpar/wile/compare/v1.0.4...v1.1.0
+[1.0.4]: https://github.com/aalpar/wile/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/aalpar/wile/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/aalpar/wile/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/aalpar/wile/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/aalpar/wile/releases/tag/v1.0.0
 
