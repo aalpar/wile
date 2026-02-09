@@ -539,24 +539,23 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 
 	funcType := t
 	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
-		// Determine the callable type.
-		var mcls *machine.MachineClosure
-		var clcls *machine.CaseLambdaClosure
-		var param *machine.Parameter
-
-		switch proc := v.(type) {
-		case *machine.MachineClosure:
-			mcls = proc
-		case *machine.CaseLambdaClosure:
-			clcls = proc
-		case *machine.Parameter:
-			param = proc
+		// Validate that the value is a supported callback procedure type.
+		// Note: *machine.ComposableContinuation is callable via ApplyCallable, but is
+		// intentionally not accepted here as a Go callback target because it represents
+		// a captured continuation rather than a standalone procedure.
+		switch v.(type) {
+		case *machine.MachineClosure, *machine.CaseLambdaClosure, *machine.Parameter:
+			// valid callback procedure
 		default:
 			return reflect.Value{}, values.WrapForeignErrorf(
 				values.ErrNotAProcedure,
 				"%s: argument %d: expected procedure, got %s", name, pos, v.SchemeString(),
 			)
 		}
+
+		// Parameter objects are callable with 0 args (get) or 1 arg (set).
+		// Handle directly without VM sub-context for efficiency.
+		param, isParam := v.(*machine.Parameter)
 
 		goFunc := reflect.MakeFunc(funcType, func(goArgs []reflect.Value) []reflect.Value {
 			// Convert Go args → Scheme values.
@@ -565,9 +564,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 				schemeArgs[i] = paramConvs[i](arg)
 			}
 
-			// Parameter objects are callable with 0 args (get) or 1 arg (set).
-			// Handle directly without VM sub-context.
-			if param != nil {
+			if isParam {
 				return callbackParameterResult(ctx, mc, funcType, resultConv, hasErrorReturn, param, schemeArgs)
 			}
 
@@ -575,12 +572,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 			sub := mc.NewSubContext()
 			sub.SetContext(ctx)
 
-			var applyErr error
-			if mcls != nil {
-				_, applyErr = sub.Apply(mcls, schemeArgs...)
-			} else {
-				_, applyErr = sub.ApplyCaseLambda(clcls, schemeArgs...)
-			}
+			_, applyErr := sub.ApplyCallable(v, schemeArgs...)
 			if applyErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
 			}

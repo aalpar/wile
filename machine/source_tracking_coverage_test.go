@@ -463,7 +463,7 @@ func TestOperationApply_ErrorWithStackTrace(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	schemeErr, ok := err.(*SchemeError)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(schemeErr.Message, qt.Contains, "expected a closure")
+	c.Assert(schemeErr.Message, qt.Contains, "expected a procedure")
 	c.Assert(schemeErr.Source, qt.IsNotNil)
 	c.Assert(schemeErr.Source.File, qt.Equals, "test.scm")
 }

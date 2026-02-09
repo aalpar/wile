@@ -1036,3 +1036,41 @@ func TestCallCCCoroutines(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyWithParameter(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{
+			"apply parameter get",
+			`(let ((p (make-parameter 42)))
+			   (apply p '()))`,
+			values.NewInteger(42),
+		},
+		{
+			"apply parameter set then get",
+			`(let ((p (make-parameter 0)))
+			   (apply p '(99))
+			   (p))`,
+			values.NewInteger(99),
+		},
+		{
+			"apply parameter with converter",
+			`(let ((p (make-parameter 0 (lambda (x) (* x 2)))))
+			   (apply p '(5))
+			   (p))`,
+			values.NewInteger(10),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result, values.SchemeEquals, tc.want)
+		})
+	}
+}

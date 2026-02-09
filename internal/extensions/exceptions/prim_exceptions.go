@@ -38,27 +38,13 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	sub := mc.NewSubContext()
 	sub.SetExceptionHandler(mc.ExceptionHandler())
 
-	var thunkErr error
-	switch t := thunk.(type) {
-	case *machine.MachineClosure:
-		_, err := sub.Apply(t)
-		if err != nil {
-			mc.PopExceptionHandler()
-			return err
-		}
-	case *machine.CaseLambdaClosure:
-		_, err := sub.ApplyCaseLambda(t)
-		if err != nil {
-			mc.PopExceptionHandler()
-			return err
-		}
-	default:
+	_, err := sub.ApplyCallable(thunk)
+	if err != nil {
 		mc.PopExceptionHandler()
-		return values.WrapForeignErrorf(values.ErrNotAProcedure,
-			"with-exception-handler: thunk must be a procedure but got %T", thunk)
+		return err
 	}
 
-	thunkErr = sub.Run()
+	thunkErr := sub.Run()
 
 	// Check for exception escape
 	var excErr *machine.ErrExceptionEscape
@@ -86,23 +72,12 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 	sub := mc.NewSubContext()
 	sub.SetExceptionHandler(mc.ExceptionHandler())
 
-	switch h := handler.(type) {
-	case *machine.MachineClosure:
-		_, err := sub.Apply(h, condition)
-		if err != nil {
-			return nil, err
-		}
-	case *machine.CaseLambdaClosure:
-		_, err := sub.ApplyCaseLambda(h, condition)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure,
-			"with-exception-handler: handler must be a procedure but got %T", handler)
+	_, err := sub.ApplyCallable(handler, condition)
+	if err != nil {
+		return nil, err
 	}
 
-	err := sub.Run()
+	err = sub.Run()
 
 	// Handler raised another exception - propagate it
 	var innerExc *machine.ErrExceptionEscape

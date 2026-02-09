@@ -24,18 +24,41 @@ var (
 	_ Value = (*ArrayList)(nil)
 	_ Tuple = (*ArrayList)(nil)
 
+	// ArrayListEmptyList is the canonical empty ArrayList. It uses the
+	// two-nil encoding [nil, nil], which IsEmptyList() recognizes as ().
 	ArrayListEmptyList = NewArrayList(nil, nil)
 )
 
-// ArrayList represents a mutable list backed by a slice.
+// ArrayList is an array-backed representation of Scheme lists. It stores list
+// elements and a terminator in a contiguous []Value slice, providing O(1)
+// element access and better cache locality than the equivalent Pair chain.
+//
+// Internal layout — the last element is the terminator (CDR of the final
+// cons cell in the equivalent Pair chain):
+//
+//	Proper list (1 2 3):      [1, 2, 3, EmptyList]
+//	                           ^^^elements^^^  ^^^terminator
+//	Improper list (1 2 . 3):  [1, 2, 3]
+//	                           ^^elems^^  ^^last=cdr
+//	Empty list ():             [EmptyList]  or  [nil, nil]
+//	Void (no value):           nil  |  []  |  [Void]
+//
+// Length() returns len(slice)-1 for proper lists (element count, excluding
+// the terminator).
+//
+// ArrayList implements Value and Tuple. It is interconvertible with Pair
+// chains via AsList() and with Vectors via AsVector().
+//
+// R7RS §6.4: Pairs and lists.
 type ArrayList []Value
 
-// Datum returns the underlying slice.
+// Datum returns the raw underlying slice, including the terminator element.
 func (p *ArrayList) Datum() []Value {
 	return *p
 }
 
-// AsVector converts the ArrayList to a Vector.
+// AsVector converts the ArrayList to a Vector containing all elements
+// including the terminator. Returns nil if the receiver is void.
 func (p *ArrayList) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
@@ -46,13 +69,21 @@ func (p *ArrayList) AsVector() *Vector {
 	return q
 }
 
-// NewArrayList creates a new ArrayList from the given values.
+// NewArrayList creates a new ArrayList from the given values. The caller is
+// responsible for including the terminator: pass EmptyList as the final
+// element for a proper list, or omit it for an improper list.
+//
+//	NewArrayList(Int(1), Int(2), EmptyList)  →  (1 2)
+//	NewArrayList(Int(1), Int(2), Int(3))     →  (1 2 . 3)
+//	NewArrayList(EmptyList)                  →  ()
 func NewArrayList(vs ...Value) *ArrayList {
 	q := (ArrayList)(slices.Clone(vs))
 	return &q
 }
 
-// Append adds a value to the list and returns a new ArrayList.
+// Append inserts a value before the terminator, extending the list by one
+// element. Returns a new ArrayList; does not mutate the receiver. Panics if
+// the receiver is void (not a list).
 func (p *ArrayList) Append(vs Value) Value {
 	if IsVoid(p) {
 		panic(ErrNotAList)
@@ -72,7 +103,12 @@ func (p *ArrayList) Append(vs Value) Value {
 	return q
 }
 
-// AppendList appends another list to this ArrayList.
+// AppendList concatenates another list (ArrayList or Pair chain) onto this
+// list. Returns a new ArrayList; does not mutate either operand.
+// Panics with ErrNotAList if the receiver is void, or if the operand is not
+// a recognized list type and the receiver is not the empty list. When the
+// receiver is the empty list and the operand is not a list, returns a new
+// (improper) ArrayList containing the operand.
 func (p *ArrayList) AppendList(o Value) *ArrayList {
 	if IsVoid(p) {
 		panic(ErrNotAList)
@@ -120,18 +156,21 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 	return q
 }
 
-// Car returns the first element of this ArrayList.
+// Car returns the first element. Panics if the receiver is nil or the slice is empty.
 func (p *ArrayList) Car() Value {
 	return (*p)[0]
 }
 
-// Cdr returns all but the first element of this ArrayList.
+// Cdr returns a new ArrayList sharing the underlying storage from index 1
+// onward (sub-slice, no copy). The terminator is preserved.
 func (p *ArrayList) Cdr() Value {
 	q := (*p)[1:]
 	return &q
 }
 
-// IsList returns true if this ArrayList represents a proper list.
+// IsList returns true if the last element is EmptyList (proper list) or if
+// the list matches an empty-list encoding. Returns false for nil, empty
+// slices, and improper lists.
 func (p *ArrayList) IsList() bool {
 	if p == nil {
 		return false
@@ -148,7 +187,8 @@ func (p *ArrayList) IsList() bool {
 	return (*p)[len(*p)-1] == EmptyList
 }
 
-// Len returns the number of elements in this ArrayList.
+// Length returns the number of list elements, excluding the terminator.
+// Panics with ErrNotAList if the receiver is not a proper list.
 func (p *ArrayList) Length() int {
 	if !p.IsList() {
 		panic(ErrNotAList)
@@ -159,7 +199,9 @@ func (p *ArrayList) Length() int {
 	return len(*p) - 1
 }
 
-// IsEmptyList returns true if this ArrayList represents an empty list.
+// IsEmptyList returns true if this ArrayList encodes the empty list ().
+// Two representations are recognized: [EmptyList] and any two-element slice
+// of void values (for example [nil, nil] or [Void, Void]).
 func (p *ArrayList) IsEmptyList() bool {
 	if p == nil {
 		return false
@@ -173,7 +215,9 @@ func (p *ArrayList) IsEmptyList() bool {
 	return false
 }
 
-// IsVoid returns true if this ArrayList is void.
+// IsVoid returns true if this ArrayList represents the absence of a value.
+// Three representations are recognized: nil receiver, empty slice, and
+// single-element [Void].
 func (p *ArrayList) IsVoid() bool {
 	if p == nil {
 		return true
@@ -187,7 +231,9 @@ func (p *ArrayList) IsVoid() bool {
 	return false
 }
 
-// ForEach iterates over each element in this ArrayList.
+// ForEach iterates over every element in the slice, including the terminator.
+// The callback receives the index, whether the element is non-terminal
+// (i < len-1), and the element value. Returns EmptyList on success.
 func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return EmptyList, nil
@@ -202,7 +248,9 @@ func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) 
 	return EmptyList, nil
 }
 
-// AsList converts this ArrayList to a Pair-based list.
+// AsList converts this ArrayList to a Pair (cons cell) chain. Returns nil if
+// void. The terminator element becomes the CDR of the final Pair — EmptyList
+// for proper lists, any other value for improper lists.
 func (p *ArrayList) AsList() Value {
 	if IsVoid(p) {
 		return nil
@@ -224,7 +272,9 @@ func (p *ArrayList) AsList() Value {
 	return q
 }
 
-// EqualTo returns true if this ArrayList equals another value.
+// EqualTo returns true if the other value is an *ArrayList with the same
+// length and element-wise structural equality (via Value.EqualTo).
+// Void elements are compared by void-ness, not identity.
 func (p *ArrayList) EqualTo(o Value) bool {
 	if p == nil || o == nil {
 		return p == o
@@ -261,7 +311,10 @@ func (p *ArrayList) Copy() *ArrayList {
 	return q
 }
 
-// SchemeString returns the Scheme representation of this ArrayList.
+// SchemeString returns the Scheme external representation. Proper lists print
+// as (a b c), improper lists as (a b . c), empty lists as (), and void
+// values as #<void>. Single-element lists without a terminator print as the
+// element's SchemeString directly (unwrapped).
 func (p *ArrayList) SchemeString() string {
 	if p == nil || len(*p) == 0 {
 		return "#<void>"
