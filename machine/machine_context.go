@@ -29,6 +29,11 @@ var (
 	ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
 )
 
+// immediateReturnTemplate is an empty NativeTemplate used for callables that
+// complete their work during Apply (e.g., Parameter get/set). Setting this as
+// the template causes Run() to return nil immediately (0 operations).
+var immediateReturnTemplate = &NativeTemplate{}
+
 // ErrContinuationEscape is used to signal that a continuation was invoked from within
 // a sub-context. This allows the escape to propagate up through nested foreign function calls.
 type ErrContinuationEscape struct {
@@ -240,6 +245,131 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 		return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "no matching clause in case-lambda for %d arguments", len(vs))
 	}
 	return p.Apply(mcls, vs...)
+}
+
+// ApplyCallable dispatches a procedure call to the appropriate handler based
+// on the callee's concrete type. This is the unified entry point for all
+// Scheme procedure application, symmetric with OperationApply.
+//
+// Supported callable types:
+//   - *MachineClosure: standard Scheme lambda
+//   - *CaseLambdaClosure: R7RS case-lambda (§4.2.9)
+//   - *Parameter: R7RS parameter object (§4.2.6)
+//   - *ComposableContinuation: delimited continuation
+//
+// Precondition: p.ctx must be set (always true for contexts created via
+// NewMachineContext or NewSubContext).
+func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Value) (*MachineContext, error) {
+	if callable == nil {
+		err := p.Error("application: cannot apply nil value")
+		return p, err
+	}
+	switch cls := callable.(type) {
+	case *MachineClosure:
+		return p.Apply(cls, args...)
+	case *CaseLambdaClosure:
+		return p.ApplyCaseLambda(cls, args...)
+	case *Parameter:
+		return p.applyParameter(cls, args)
+	case *ComposableContinuation:
+		return p.applyComposableContinuation(cls, args)
+	default:
+		err := p.Error(fmt.Sprintf("expected a procedure, got %s", callable.SchemeString()))
+		return p, err
+	}
+}
+
+// returnImmediate returns control to the caller after a non-bytecode callable
+// (e.g., Parameter get/set) has placed its result in the value register.
+// If a continuation is saved, it restores it (like RestoreContinuation for
+// closures). Otherwise (sub-context, cont == nil) it sets immediateReturnTemplate
+// so that Run() returns nil immediately.
+func (p *MachineContext) returnImmediate() (*MachineContext, error) {
+	if p.cont != nil {
+		p.Restore(p.cont)
+	} else {
+		p.template = immediateReturnTemplate
+		p.pc = 0
+	}
+	return p, nil
+}
+
+// applyParameter handles calling a parameter object.
+// With 0 args: returns the current value.
+// With 1 arg: sets the value (after applying converter if present).
+func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (*MachineContext, error) {
+	switch len(args) {
+	case 0:
+		p.SetValue(param.Value())
+		return p.returnImmediate()
+
+	case 1:
+		newVal := args[0]
+
+		if param.HasConverter() {
+			converter := param.Converter()
+			sub := p.NewSubContext()
+			_, err := sub.Apply(converter, newVal)
+			if err != nil {
+				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
+				return p, wrapErr
+			}
+			err = sub.Run()
+			if err != nil {
+				if !errors.Is(err, ErrMachineHalt) {
+					wrapErr := p.WrapError(err, "parameter: converter error")
+					return p, wrapErr
+				}
+			}
+			newVal = sub.GetValue()
+		}
+
+		param.SetValue(newVal)
+		p.SetValue(values.Void)
+		return p.returnImmediate()
+
+	default:
+		err := p.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
+		return p, err
+	}
+}
+
+// applyComposableContinuation applies a composable continuation by splicing
+// its captured frames onto the current continuation chain. The continuation
+// is deep-copied for safe re-invocation.
+//
+// See: Flatt, Yu, Findler, Felleisen "Adding Delimited and Composable Control
+// to a Production Programming Environment" (ICFP 2007).
+func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation, args []values.Value) (*MachineContext, error) {
+	if len(args) != 1 {
+		err := p.Error(fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
+		return p, err
+	}
+
+	// Reject cross-thread composable continuation invocation
+	if p.threadID != cc.threadID {
+		return p, values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+			"composable continuation: captured in thread %d, invoked from thread %d",
+			cc.threadID, p.threadID)
+	}
+
+	// Deep-copy the segment for safe re-invocation
+	segment := cc.Cont().DeepCopy()
+
+	// Graft the segment's bottom frame onto the current continuation chain
+	GraftContinuation(segment, p.cont)
+
+	// Handle dynamic-wind: unwind current extents not in captured stack,
+	// rewind captured extents not in current stack.
+	err := p.RestoreWithWindingFrom(nil, p.windingStack, cc.WindingStack())
+	if err != nil {
+		return p, err
+	}
+
+	// Restore from the top of the segment (resume captured computation)
+	p.Restore(segment)
+	p.SetValue(args[0])
+	return p, nil
 }
 
 // SetContext sets the context for this machine context.

@@ -73,24 +73,8 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 		}
 	}
 
-	// Resolve the callable to a MachineClosure, handling case-lambda dispatch.
-	var mcls *machine.MachineClosure
-	switch p := proc.(type) {
-	case *machine.MachineClosure:
-		mcls = p
-	case *machine.CaseLambdaClosure:
-		var found bool
-		mcls, found = p.FindMatchingClause(len(prefixArgs))
-		if !found {
-			return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
-				"apply: no matching clause in case-lambda for %d arguments", len(prefixArgs))
-		}
-	default:
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "apply: expected a procedure but got %T", proc)
-	}
-
 	sub := mc.NewSubContext()
-	_, err := sub.Apply(mcls, prefixArgs...)
+	_, err := sub.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
 	}

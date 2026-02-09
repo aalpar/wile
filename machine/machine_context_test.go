@@ -858,3 +858,200 @@ func TestMachineContextNewSubContextAdditional(t *testing.T) {
 	// Sub context should have its own environment
 	qt.Assert(t, sub.EnvironmentFrame(), qt.IsNotNil)
 }
+
+func TestApplyCallable_MachineClosure(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(2)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(2, 0, false)
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	result, err := mc.ApplyCallable(cls, values.NewInteger(10), values.NewInteger(20))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.Equals, mc)
+	c.Assert(mc.template, qt.Equals, tpl)
+	c.Assert(mc.pc, qt.Equals, 0)
+
+	bnds := mc.env.LocalEnvironment().Bindings()
+	c.Assert(bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
+	c.Assert(bnds[1].Value(), values.SchemeEquals, values.NewInteger(20))
+}
+
+func TestApplyCallable_CaseLambdaClosure(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	lenv1 := environment.NewLocalEnvironment(1)
+	env1 := environment.NewEnvironmentFrameWithParent(lenv1, topEnv)
+	tpl1 := NewNativeTemplate(1, 0, false)
+	cls1 := NewClosureWithTemplate(tpl1, env1)
+
+	lenv2 := environment.NewLocalEnvironment(2)
+	env2 := environment.NewEnvironmentFrameWithParent(lenv2, topEnv)
+	tpl2 := NewNativeTemplate(2, 0, false)
+	cls2 := NewClosureWithTemplate(tpl2, env2)
+
+	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	// 1 arg → first clause
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err := mc.ApplyCallable(caseLambda, values.NewInteger(42))
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.template, qt.Equals, tpl1)
+
+	// 2 args → second clause
+	mc = NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	_, err = mc.ApplyCallable(caseLambda, values.NewInteger(1), values.NewInteger(2))
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.template, qt.Equals, tpl2)
+}
+
+func TestApplyCallable_Parameter(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	tcs := []struct {
+		name      string
+		initVal   values.Value
+		args      []values.Value
+		wantValue values.Value
+		wantParam values.Value // expected parameter value after call
+	}{
+		{
+			"get value with 0 args",
+			values.NewInteger(42),
+			nil,
+			values.NewInteger(42),
+			values.NewInteger(42),
+		},
+		{
+			"set value with 1 arg",
+			values.NewInteger(0),
+			[]values.Value{values.NewInteger(99)},
+			values.Void,
+			values.NewInteger(99),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			param := NewParameter(tc.initVal, nil)
+			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+			// Sub-context: cont == nil
+			sub := mc.NewSubContext()
+			_, err := sub.ApplyCallable(param, tc.args...)
+			c.Assert(err, qt.IsNil)
+
+			// Run should return nil (immediateReturnTemplate)
+			err = sub.Run()
+			c.Assert(err, qt.IsNil)
+
+			c.Assert(sub.GetValue(), values.SchemeEquals, tc.wantValue)
+			c.Assert(param.Value(), values.SchemeEquals, tc.wantParam)
+		})
+	}
+}
+
+func TestApplyCallable_Parameter_WrongArgCount(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	param := NewParameter(values.NewInteger(0), nil)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	sub := mc.NewSubContext()
+	_, err := sub.ApplyCallable(param, values.NewInteger(1), values.NewInteger(2))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "expected 0 or 1 arguments")
+}
+
+func TestApplyCallable_Parameter_WithContinuation(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+
+	param := NewParameter(values.NewInteger(42), nil)
+
+	// With a continuation (bytecode path): should restore continuation
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.SaveContinuation(0)
+	mc.template = tpl
+	mc.pc = 0
+
+	_, err := mc.ApplyCallable(param)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+}
+
+func TestApplyCallable_ComposableContinuation(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationRestoreContinuation())
+
+	// Create a simple continuation to compose
+	cont := NewMachineContinuation(nil, tpl, env)
+	cc := NewComposableContinuation(cont, nil, 0)
+
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.ApplyCallable(cc, values.NewInteger(7))
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+}
+
+func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	cc := NewComposableContinuation(nil, nil, 0)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.ApplyCallable(cc, values.NewInteger(1), values.NewInteger(2))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "expected 1 argument")
+}
+
+func TestApplyCallable_NonCallable(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	tcs := []struct {
+		name  string
+		value values.Value
+	}{
+		{"integer", values.NewInteger(42)},
+		{"string", values.NewString("hello")},
+		{"boolean", values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+			_, err := mc.ApplyCallable(tc.value)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, "expected a procedure")
+		})
+	}
+}
+
+func TestApplyCallable_Nil(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.ApplyCallable(nil)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "cannot apply nil")
+}
