@@ -15,11 +15,11 @@ Code Quality
 
 ### ByteVector Overflow Handling
 
-- [ ] `NewByteVector` and `NewByteVectorFromIntegers` (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
+- [x] `NewByteVector` and `NewByteVectorFromIntegers` (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
 
 ### Environment Naming
 
-- [ ] `LocalEnvironmentFrame.CreateLocalBinding` (`environment/local_environment_frame.go`) is actually a "get-or-create" (returns existing binding if key already exists). Rename to `EnsureLocalBinding` or `GetOrCreateLocalBinding` to match its semantics.
+- [x] `LocalEnvironmentFrame.CreateLocalBinding` (`environment/local_environment_frame.go`) is actually a "get-or-create" (returns existing binding if key already exists). Rename to `EnsureLocalBinding` or `GetOrCreateLocalBinding` to match its semantics.
 
 ### MachineContext.Apply
 
