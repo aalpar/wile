@@ -95,6 +95,7 @@ func TestRegisterFuncUnsupportedTypes(t *testing.T) {
 		{"three returns", func() (int64, int64, error) { return 0, 0, nil }},
 		{"error not last", func() (error, int64) { return nil, 0 }}, //nolint:staticcheck // intentionally wrong signature to test validation
 		{"unsupported callback param", func(f func(complex128)) { f(0) }},
+		{"unsupported return map key", func() map[float64]string { return nil }},
 	}
 
 	for _, tc := range tcs {
@@ -1025,6 +1026,41 @@ func TestRegisterFuncCallbackExceptionToError(t *testing.T) {
 
 	// Scheme exception should become a Go error.
 	evalExpectError(t, engine, `(try-callback (lambda (x) (error "boom" x)) 5)`)
+}
+
+// --- Parameter as callback ---
+
+func TestRegisterFuncParameterAsCallback(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Register a function that calls a 0-arg callback to get a value.
+	err := engine.RegisterFunc("call-getter", func(f func() int64) int64 {
+		return f()
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Register a function that calls a 1-arg callback to set a value.
+	err = engine.RegisterFunc("call-setter", func(f func(int64)) {
+		f(99)
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"parameter get", `(let ((p (make-parameter 42))) (call-getter p))`, "42"},
+		{"parameter set then get", `(let ((p (make-parameter 0))) (call-setter p) (p))`, "99"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
 }
 
 // --- Composite round-trip ---

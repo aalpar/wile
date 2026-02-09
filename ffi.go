@@ -203,7 +203,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				// Also accept floats that are exact integers.
-				if f, fok := v.(*values.Float); fok {
+				if f, fok := v.(*values.Float); fok { //nolint:gocritic
 					fi := int64(f.Value)
 					if float64(fi) == f.Value {
 						return reflect.ValueOf(fi), nil
@@ -377,7 +377,11 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 }
 
 // isSupportedMapKeyType returns whether a Go type can serve as a map key
-// in FFI conversions. Only types that produce Hashable Scheme values qualify.
+// in FFI conversions. Only string, int64, int, and bool are allowed.
+//
+// Although float64 produces a Hashable Scheme value (*values.Float), it is
+// excluded because IEEE 754 NaN != NaN breaks hashtable lookup invariants,
+// and exact/inexact conversion can silently change keys during round-trips.
 func isSupportedMapKeyType(t reflect.Type) bool {
 	switch t.Kind() {
 	case reflect.String, reflect.Int64, reflect.Int, reflect.Bool:
@@ -512,12 +516,15 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 		// Determine the callable type.
 		var mcls *machine.MachineClosure
 		var clcls *machine.CaseLambdaClosure
+		var param *machine.Parameter
 
 		switch proc := v.(type) {
 		case *machine.MachineClosure:
 			mcls = proc
 		case *machine.CaseLambdaClosure:
 			clcls = proc
+		case *machine.Parameter:
+			param = proc
 		default:
 			return reflect.Value{}, values.WrapForeignErrorf(
 				values.ErrNotAProcedure,
@@ -530,6 +537,12 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 			schemeArgs := make([]values.Value, len(goArgs))
 			for i, arg := range goArgs {
 				schemeArgs[i] = paramConvs[i](arg)
+			}
+
+			// Parameter objects are callable with 0 args (get) or 1 arg (set).
+			// Handle directly without VM sub-context.
+			if param != nil {
+				return callbackParameterResult(ctx, mc, funcType, resultConv, hasErrorReturn, param, schemeArgs)
 			}
 
 			// Invoke the Scheme procedure in a sub-context.
@@ -628,6 +641,48 @@ func callbackSuccessResult(
 	return out
 }
 
+// callbackParameterResult handles invoking a Parameter object as a callback.
+// Parameters accept 0 args (get current value) or 1 arg (set new value).
+// Converter parameters are supported: when setting a value on a parameter
+// that has a converter, the converter closure is invoked via a VM sub-context.
+func callbackParameterResult(
+	ctx context.Context,
+	mc *MachineContext,
+	funcType reflect.Type,
+	resultConv argConverter,
+	hasErrorReturn bool,
+	param *machine.Parameter,
+	args []values.Value,
+) []reflect.Value {
+	switch len(args) {
+	case 0:
+		return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, param.Value())
+	case 1:
+		newVal := args[0]
+		if param.HasConverter() {
+			sub := mc.NewSubContext()
+			sub.SetContext(ctx)
+			_, applyErr := sub.Apply(param.Converter(), newVal)
+			if applyErr != nil {
+				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
+			}
+			runErr := sub.Run()
+			if runErr != nil && !errors.Is(runErr, machine.ErrMachineHalt) {
+				return callbackErrorResult(funcType, hasErrorReturn, runErr)
+			}
+			newVal = sub.GetValue()
+		}
+		param.SetValue(newVal)
+		return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, values.Void)
+	default:
+		paramErr := values.WrapForeignErrorf(
+			values.ErrWrongNumberOfArguments,
+			"parameter callback: expected 0 or 1 arguments, got %d", len(args),
+		)
+		return callbackErrorResult(funcType, hasErrorReturn, paramErr)
+	}
+}
+
 // makeRetConverter creates a converter for a single Go return type.
 // Converters are recursive for composite types (slices, maps, structs).
 func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
@@ -719,7 +774,16 @@ func makeSliceRetConverter(name string, t reflect.Type) (retConverter, error) {
 }
 
 // makeMapRetConverter creates a return converter for Go map types.
+// Key types are validated at registration time using the same restrictions
+// as makeMapArgConverter to ensure bidirectional consistency.
 func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
+	keyType := t.Key()
+	if !isSupportedMapKeyType(keyType) {
+		return nil, &Error{
+			Message: fmt.Sprintf("RegisterFunc %q: unsupported map key type in return: %s (must be string, int64, int, or bool)", name, keyType),
+		}
+	}
+
 	keyConv, err := makeRetConverter(name, t.Key())
 	if err != nil {
 		return nil, err
@@ -738,7 +802,10 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 		for iter.Next() {
 			schemeKey := keyConv(iter.Key())
 			schemeVal := valConv(iter.Value())
-			_ = ht.Set(schemeKey, schemeVal)
+			setErr := ht.Set(schemeKey, schemeVal)
+			if setErr != nil {
+				panic(fmt.Sprintf("wile: RegisterFunc %q: map return conversion failed: %v", name, setErr))
+			}
 		}
 		return ht
 	}, nil
