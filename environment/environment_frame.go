@@ -373,6 +373,7 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 // EnsureLocalBinding returns the local binding for the given key, creating it if
 // it does not already exist. Returns (index, true) if a new binding was created,
 // or (index, false) if the binding already existed.
+// Returns (nil, false) if the receiver is nil or has no local environment.
 func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	if p == nil || p.local == nil {
 		return nil, false

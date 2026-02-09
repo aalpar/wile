@@ -15,7 +15,7 @@ Code Quality
 
 ### ByteVector Overflow Handling
 
-- [x] `NewByteVector` and `NewByteVectorFromIntegers` (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
+- [x] Integer-to-byte conversion paths such as `NewByteVectorFromIntegers` and the `#u8(...)` parser (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
 
 ### Environment Naming
 

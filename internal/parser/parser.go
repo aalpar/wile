@@ -871,7 +871,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q0, p.cur, nil
 	case tokenizer.TokenizerStateOpenVectorUnsignedByteMarker:
 		var stx syntax.SyntaxValue
-		q0, _ := values.NewByteVectorFromIntegers()
+		q0 := values.NewByteVector()
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
