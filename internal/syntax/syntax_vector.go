@@ -101,8 +101,8 @@ func (p *SyntaxVector) EqualTo(o values.Value) bool {
 	return p == v
 }
 
-// ForEach iterates over the elements of the vector as regular values.
-// This implements the values.Collection interface.
+// ForEach iterates over the elements of the vector as regular values in index order.
+// It provides tuple-style iteration compatible with values.ForEachFunc callbacks.
 func (p *SyntaxVector) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
 	if p.IsVoid() {
 		return values.Void, nil
