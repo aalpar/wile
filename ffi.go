@@ -539,10 +539,13 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 
 	funcType := t
 	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
-		// Validate that the value is a callable type.
+		// Validate that the value is a supported callback procedure type.
+		// Note: *machine.ComposableContinuation is callable via ApplyCallable, but is
+		// intentionally not accepted here as a Go callback target because it represents
+		// a captured continuation rather than a standalone procedure.
 		switch v.(type) {
 		case *machine.MachineClosure, *machine.CaseLambdaClosure, *machine.Parameter:
-			// valid callable
+			// valid callback procedure
 		default:
 			return reflect.Value{}, values.WrapForeignErrorf(
 				values.ErrNotAProcedure,

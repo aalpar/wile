@@ -1041,6 +1041,7 @@ func TestApplyCallable_NonCallable(t *testing.T) {
 			_, err := mc.ApplyCallable(tc.value)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, "expected a procedure")
+			c.Assert(errors.Is(err, values.ErrNotAProcedure), qt.IsTrue)
 		})
 	}
 }
@@ -1054,4 +1055,5 @@ func TestApplyCallable_Nil(t *testing.T) {
 	_, err := mc.ApplyCallable(nil)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "cannot apply nil")
+	c.Assert(errors.Is(err, values.ErrNotAProcedure), qt.IsTrue)
 }

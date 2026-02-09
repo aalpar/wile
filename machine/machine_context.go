@@ -32,6 +32,12 @@ var (
 // immediateReturnTemplate is an empty NativeTemplate used for callables that
 // complete their work during Apply (e.g., Parameter get/set). Setting this as
 // the template causes Run() to return nil immediately (0 operations).
+//
+// INVARIANT: immediateReturnTemplate MUST remain empty and MUST NOT be mutated.
+// Do not append, remove, or modify operations on this template. Its emptiness
+// is relied upon so that Run() for immediate-return callables performs zero
+// operations and returns immediately. If additional behavior is needed, create
+// a new NativeTemplate instance instead of changing this one.
 var immediateReturnTemplate = &NativeTemplate{}
 
 // ErrContinuationEscape is used to signal that a continuation was invoked from within
@@ -261,8 +267,8 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 // NewMachineContext or NewSubContext).
 func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Value) (*MachineContext, error) {
 	if callable == nil {
-		err := p.Error("application: cannot apply nil value")
-		return p, err
+		return p, values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"application: cannot apply nil value")
 	}
 	switch cls := callable.(type) {
 	case *MachineClosure:
@@ -274,8 +280,8 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 	case *ComposableContinuation:
 		return p.applyComposableContinuation(cls, args)
 	default:
-		err := p.Error(fmt.Sprintf("expected a procedure, got %s", callable.SchemeString()))
-		return p, err
+		return p, values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"application: expected a procedure, got %s", callable.SchemeString())
 	}
 }
 

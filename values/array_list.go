@@ -105,8 +105,10 @@ func (p *ArrayList) Append(vs Value) Value {
 
 // AppendList concatenates another list (ArrayList or Pair chain) onto this
 // list. Returns a new ArrayList; does not mutate either operand.
-// Panics with ErrNotAList if the receiver is void or the operand is not a
-// recognized list type.
+// Panics with ErrNotAList if the receiver is void, or if the operand is not
+// a recognized list type and the receiver is not the empty list. When the
+// receiver is the empty list and the operand is not a list, returns a new
+// (improper) ArrayList containing the operand.
 func (p *ArrayList) AppendList(o Value) *ArrayList {
 	if IsVoid(p) {
 		panic(ErrNotAList)
@@ -154,7 +156,7 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 	return q
 }
 
-// Car returns the first element. Panics if the list is empty (no bounds check).
+// Car returns the first element. Panics if the receiver is nil or the slice is empty.
 func (p *ArrayList) Car() Value {
 	return (*p)[0]
 }
@@ -198,7 +200,8 @@ func (p *ArrayList) Length() int {
 }
 
 // IsEmptyList returns true if this ArrayList encodes the empty list ().
-// Two representations are recognized: [EmptyList] and [Void, Void].
+// Two representations are recognized: [EmptyList] and any two-element slice
+// of void values (for example [nil, nil] or [Void, Void]).
 func (p *ArrayList) IsEmptyList() bool {
 	if p == nil {
 		return false
