@@ -29,7 +29,7 @@ func TestArrayList_SchemeString(t *testing.T) {
 		{nil, "#<void>"},
 		{NewArrayList(EmptyList), "()"},
 		{NewArrayList(NewCons(nil, nil)), "(#<void> . #<void>)"},
-		{NewArrayList(NewArrayList(nil, nil)), "()"},
+		{NewArrayList(NewArrayList(EmptyList)), "()"},
 		{NewArrayList(EmptyList), "()"},
 		{NewArrayList(NewInteger(1), NewInteger(2), EmptyList), "(1 2)"},
 		{NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3), EmptyList), "(1 2 3)"},
@@ -57,13 +57,13 @@ func TestArrayLis_EqualTo(t *testing.T) {
 			out: true,
 		},
 		{
-			in0: NewArrayList(nil, nil),
-			in1: NewArrayList(nil, nil),
+			in0: NewArrayList(EmptyList),
+			in1: NewArrayList(EmptyList),
 			out: true,
 		},
 		{
-			in0: NewArrayList(nil, nil),
-			in1: NewArrayList(nil, nil),
+			in0: NewArrayList(EmptyList),
+			in1: NewArrayList(EmptyList),
 			out: true,
 		},
 		{
@@ -141,7 +141,7 @@ func TestArrayList_IsList(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: NewArrayList(nil, nil), out: true},
+		{in: NewArrayList(EmptyList), out: true},
 		{in: NewArrayList(NewInteger(10), EmptyList), out: true},
 		{in: NewArrayList(NewArrayList(NewInteger(10), EmptyList), EmptyList), out: true},
 		{in: NewArrayList(NewInteger(10), NewInteger(20), EmptyList), out: true},
@@ -169,7 +169,7 @@ func TestArrayLis_Length(t *testing.T) {
 			panicMatches: "not a list",
 			out:          -1,
 		},
-		{in: NewArrayList(nil, nil), out: 0},
+		{in: NewArrayList(EmptyList), out: 0},
 		{in: NewArrayList(NewInteger(10), EmptyList), out: 1},
 		{in: NewArrayList(NewArrayList(NewInteger(10), EmptyList), EmptyList), out: 1},
 		{in: NewArrayList(NewInteger(10), NewInteger(20), EmptyList), out: 2},
@@ -197,7 +197,7 @@ func TestArrayLis_IsVoid(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: true},
-		{in: NewArrayList(nil, nil), out: false},
+		{in: NewArrayList(EmptyList), out: false},
 	}
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
@@ -213,7 +213,7 @@ func TestArrayLis_IsEmptyList(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: NewArrayList(nil, nil), out: true},
+		{in: NewArrayList(EmptyList), out: true},
 	}
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
@@ -237,23 +237,23 @@ func TestArrayList_Append(t *testing.T) {
 			panicMatches: "not a list",
 		},
 		{
-			in:  NewArrayList(nil, nil),
+			in:  NewArrayList(EmptyList),
 			vs:  (*ArrayList)(nil),
 			out: (*ArrayList)(nil),
 		},
 		{
-			in:  NewArrayList(nil, nil),
+			in:  NewArrayList(EmptyList),
 			vs:  (*ArrayList)(nil),
 			out: (*ArrayList)(nil),
 		},
 		{
-			in:  NewArrayList(nil, nil),
+			in:  NewArrayList(EmptyList),
 			vs:  NewArrayList(NewInteger(10), EmptyList),
 			out: NewArrayList(NewInteger(10), EmptyList),
 		},
 		{
 			in:  NewArrayList(NewInteger(10), EmptyList),
-			vs:  NewArrayList(nil, nil),
+			vs:  NewArrayList(EmptyList),
 			out: NewArrayList(NewInteger(10), EmptyList),
 		},
 		{

@@ -225,8 +225,7 @@ func IsList(v Value) bool {
 	if v == nil {
 		return false
 	}
-	// Interface equality on zero-size struct: works for emptyListType{}.
-	if v == EmptyList {
+	if IsEmptyList(v) {
 		return true
 	}
 	switch pr := v.(type) {

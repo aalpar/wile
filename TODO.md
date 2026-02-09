@@ -6,12 +6,12 @@ Code Quality
 
 ### Sentinel Value Types
 
-- [ ] Consider using distinct types for EmptyList and Void instead of sentinel values in `SyntaxPair` (`internal/syntax/syntax_pair.go`) and `ArrayList` (`values/array_list.go`). Both packages use the same pattern of sentinel comparison; typed singletons would make the distinction compile-time checkable.
+- [x] Consider using distinct types for EmptyList and Void instead of sentinel values in `SyntaxPair` (`internal/syntax/syntax_pair.go`) and `ArrayList` (`values/array_list.go`). Already done: `emptyListType` and `voidType` are distinct types. Stale `== EmptyList` comparisons cleaned up.
 
 ### ArrayList Special-Case Logic
 
-- [ ] Clean up `ArrayList.Cons` / `Append` logic (`values/array_list.go:~90`). The method has multiple special-case branches for empty lists, void values, and single-element lists that are difficult to follow.
-- [ ] Clean up `ArrayList.IsList` (`values/array_list.go:~138`). Same issue — multiple branches checking length, void, and EmptyList sentinels.
+- [x] Clean up `ArrayList.Cons` / `Append` logic (`values/array_list.go`). Normalized `ArrayListEmptyList` from `[nil, nil]` to `[EmptyList]`. Replaced manual encoding checks in `AppendList` with `IsEmptyList()` helper.
+- [x] Clean up `ArrayList.IsList` (`values/array_list.go`). Removed redundant two-nil encoding branches. `IsList` and `IsEmptyList` now have single clear checks.
 
 ### ByteVector Overflow Handling
 
@@ -24,12 +24,12 @@ Code Quality
 ### MachineContext.Apply
 
 - [x] Add unit tests for `MachineContext.Apply` (`machine/machine_context.go`).
-- [ ] Make `MachineContext.Apply` symmetric with `MachineClosure` apply dispatch — currently the two paths have different calling conventions.
-- [ ] `MachineContext.Apply` accepts variadic parameters but has no mechanism for returning multiple values.
+- [x] Make `MachineContext.Apply` symmetric with `MachineClosure` apply dispatch. Asymmetry is by design: closures run in VM loop (bytecode handles continuation restoration), while Parameters and ComposableContinuation return immediately via `returnImmediate()`.
+- [x] `MachineContext.Apply` accepts variadic parameters but has no mechanism for returning multiple values. Mechanism exists: `Apply` sets up the call, `Run()` executes it, `GetValues()` retrieves multiple return values.
 
 ### CompileTimeContinuation Environment
 
-- [ ] `CompileTimeContinuation.env` (`machine/compile_time_continuation.go`) stores full environment bindings, but only the binding keys are needed at compile time. Replace with a key-only data structure to reduce memory during compilation.
+- [x] `CompileTimeContinuation.env` (`machine/compile_time_continuation.go`) stores full environment bindings. Full env is justified: symbol resolution, macro detection, scope chain, and compile-phase bindings all require the complete environment. Splitting to key-only adds complexity without benefit.
 
 ### Test Improvements
 
