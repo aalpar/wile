@@ -19,9 +19,8 @@ import (
 )
 
 var (
-	_ Value      = (*ByteVector)(nil)
-	_ Collection = (*ByteVector)(nil)
-	_ Indexable  = (*ByteVector)(nil)
+	_ Value     = (*ByteVector)(nil)
+	_ Indexable = (*ByteVector)(nil)
 )
 
 // ByteVector represents a Scheme bytevector.
