@@ -1,4 +1,4 @@
-// Copyright 2025 Aaron Alpar
+// Copyright 2026 Aaron Alpar
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -109,7 +109,8 @@ func (p *SyntaxVector) ForEach(ctx context.Context, fn values.ForEachFunc) (valu
 	}
 	for i, v := range p.Values {
 		hasNext := i+1 < len(p.Values)
-		if err := fn(ctx, i, hasNext, v); err != nil {
+		err := fn(ctx, i, hasNext, v)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -130,7 +131,8 @@ func (p *SyntaxVector) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) 
 	}
 	for i, v := range p.Values {
 		hasNext := i+1 < len(p.Values)
-		if err := fn(ctx, i, hasNext, v); err != nil {
+		err := fn(ctx, i, hasNext, v)
+		if err != nil {
 			return nil, err
 		}
 	}

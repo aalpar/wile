@@ -398,7 +398,8 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				return err
 			}
 
-			if err := runBootstrapMacroStx(ctx, env, stx); err != nil {
+			err = runBootstrapMacroStx(ctx, env, stx)
+			if err != nil {
 				return err
 			}
 		}
