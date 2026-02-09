@@ -18,44 +18,43 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// CaseLambdaClause represents a single clause in a case-lambda.
-// Each clause has its own template and environment for parameter bindings.
-type CaseLambdaClause struct {
-	closure *MachineClosure
-}
-
+// CaseLambdaClosure dispatches to the first clause whose arity matches
+// the argument count. Each clause is a MachineClosure with its own
+// template and captured environment.
 type CaseLambdaClosure struct {
-	clauses []*CaseLambdaClause
+	clauses []*MachineClosure
 }
 
 func NewCaseLambdaClosure(closures []*MachineClosure) *CaseLambdaClosure {
-	clauses := make([]*CaseLambdaClause, len(closures))
-	for i, cls := range closures {
-		clauses[i] = &CaseLambdaClause{closure: cls}
-	}
+	clauses := make([]*MachineClosure, len(closures))
+	copy(clauses, closures)
 	return &CaseLambdaClosure{
 		clauses: clauses,
 	}
 }
 
-func (p *CaseLambdaClosure) Clauses() []*CaseLambdaClause {
+func (p *CaseLambdaClosure) Clauses() []*MachineClosure {
 	return p.clauses
 }
 
 // FindMatchingClause finds the first clause that matches the given argument count.
 // Returns the matching closure and a boolean indicating success.
 func (p *CaseLambdaClosure) FindMatchingClause(argCount int) (*MachineClosure, bool) {
+	// If p is nil, there are no clauses to match.
+	if p == nil {
+		return nil, false
+	}
 	for _, clause := range p.clauses {
-		tpl := clause.closure.Template()
+		tpl := clause.Template()
 		if tpl.IsVariadic() {
 			// Variadic: needs at least (parameterCount - 1) args
 			if argCount >= tpl.ParameterCount()-1 {
-				return clause.closure, true
+				return clause, true
 			}
 		} else {
 			// Fixed arity: needs exact match
 			if argCount == tpl.ParameterCount() {
-				return clause.closure, true
+				return clause, true
 			}
 		}
 	}
@@ -75,14 +74,17 @@ func (p *CaseLambdaClosure) EqualTo(o values.Value) bool {
 	if !ok {
 		return false
 	}
-	if v == nil || p == nil {
-		return p == v
+	if p.IsVoid() {
+		return v.IsVoid()
+	}
+	if v.IsVoid() {
+		return false
 	}
 	if len(p.clauses) != len(v.clauses) {
 		return false
 	}
 	for i, clause := range p.clauses {
-		if !clause.closure.EqualTo(v.clauses[i].closure) {
+		if !clause.EqualTo(v.clauses[i]) {
 			return false
 		}
 	}

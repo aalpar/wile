@@ -164,6 +164,8 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 	}
 
 	switch p.stepMode {
+	case StepNone:
+		return false
 	case StepInto:
 		return mc.CurrentSource() != nil
 	case StepOver:
@@ -172,8 +174,9 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 	case StepOut:
 		// Only break if we've returned from the target frame
 		return mc.cont != p.stepFrame
+	default:
+		return false
 	}
-	return false
 }
 
 // Continue resumes execution.

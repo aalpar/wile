@@ -99,9 +99,8 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
 
 	// Expand the expression first (it may contain macros)
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
-	expandedExpr, err := expander.ExpandExpression(ectx, valueExpr)
+	expandedExpr, err := expander.ExpandExpression(ctctx.ctx, valueExpr)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "define-for-syntax: expansion failed")
 	}

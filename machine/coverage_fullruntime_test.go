@@ -54,7 +54,7 @@ func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFrame) (*machine.MachineContinuation, error) {
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err

@@ -536,7 +536,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true, env)
 	_ = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
@@ -569,7 +569,7 @@ func TestSourceRecording_Literal(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	c.Assert(err, qt.IsNil)
 

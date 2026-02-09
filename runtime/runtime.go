@@ -54,8 +54,7 @@ import (
 func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	ectx := machine.NewExpandTimeCallContext(ctx)
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, expr)
+	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, expr)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "expansion error")
 	}

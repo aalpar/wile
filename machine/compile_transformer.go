@@ -80,8 +80,7 @@ func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.Envir
 
 	expandEnv := env.Expand()
 
-	ectx := NewExpandTimeCallContext(ctx)
-	expandedExpr, err := NewExpanderTimeContinuation(expandEnv).ExpandExpression(ectx, lambdaExpr)
+	expandedExpr, err := NewExpanderTimeContinuation(expandEnv).ExpandExpression(ctx, lambdaExpr)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error expanding transformer")
 	}

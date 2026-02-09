@@ -14,12 +14,18 @@
 
 package machine
 
-import "context"
+import "fmt"
 
-type ExpandTimeCallContext struct {
-	ctx context.Context
+// operationBase provides common implementations for values.Value methods
+// for VM operations, reducing boilerplate.
+type operationBase struct {
+	opName string
 }
 
-func NewExpandTimeCallContext(ctx context.Context) ExpandTimeCallContext {
-	return ExpandTimeCallContext{ctx: ctx}
+func (p *operationBase) SchemeString() string {
+	return fmt.Sprintf("#<machine-operation-%s>", p.opName)
+}
+
+func (p *operationBase) String() string {
+	return p.SchemeString()
 }

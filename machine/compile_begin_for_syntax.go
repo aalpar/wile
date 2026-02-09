@@ -55,14 +55,13 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
 
 	// Process each expression
 	current := exprPair
 	v, err := current.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, stxVal syntax.SyntaxValue) error {
 		// Expand the expression (it may contain macros)
-		expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
+		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "begin-for-syntax: expansion failed")
 		}

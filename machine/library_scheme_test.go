@@ -76,7 +76,7 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 
 	// Expand the expression
 	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := econt.ExpandExpression(ectx, sv)
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	sv := parseSchemeExpr(t, env, libCode)
 
 	// Expand
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, sv)
 	c.Assert(err, qt.IsNil, qt.Commentf("library expansion should succeed"))
 

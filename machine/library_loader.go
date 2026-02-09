@@ -172,8 +172,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Expand the form
-	ectx := NewExpandTimeCallContext(ctx)
-	expanded, err := NewExpanderTimeContinuation(libEnv).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(libEnv).ExpandExpression(ctx, stx)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "error expanding library")
 	}

@@ -108,7 +108,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Expand the macro
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
@@ -151,7 +151,7 @@ func TestLetMacroExpansion(t *testing.T) {
 	testForm := parseString(t, env, `(my-list 1 2 3)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand my-list: %v", err)
@@ -191,7 +191,7 @@ func TestLetMacroSimple(t *testing.T) {
 	testForm := parseString(t, env, `(let1 ((x 1)) x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let1: %v", err)
@@ -228,7 +228,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	testForm := parseString(t, env, `(begin-with-first x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
@@ -282,7 +282,7 @@ func TestLetMacroFull(t *testing.T) {
 	testForm := parseString(t, env, `(let ((x 1)) x)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let: %v", err)
@@ -336,7 +336,7 @@ func TestScopeCreation(t *testing.T) {
 
 	// Test that we can expand using the ExpanderTimeContinuation
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 
 	// Debug: Check what the binding actually contains
 	qt.Assert(t, binding.Value(), qt.Not(qt.IsNil))
@@ -513,7 +513,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 					// Expand and compile each setup form
 					etc := machine.NewExpanderTimeContinuation(env)
-					ectx := machine.NewExpandTimeCallContext(context.Background())
+					ectx := context.Background()
 					expanded, err := etc.ExpandExpression(ectx, form)
 					if err != nil {
 						t.Fatalf("failed to expand setup: %v", err)
@@ -544,7 +544,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 			// Expand the test form
 			etc := machine.NewExpanderTimeContinuation(env)
-			ectx := machine.NewExpandTimeCallContext(context.Background())
+			ectx := context.Background()
 			expanded, err := etc.ExpandExpression(ectx, testForm)
 			if err != nil {
 				t.Fatalf("failed to expand: %v", err)
@@ -618,7 +618,7 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	testForm := parseString(t, env, `(m k)`)
 
 	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := etc.ExpandExpression(ectx, testForm)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to expand (m k)"))
 

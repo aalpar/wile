@@ -58,7 +58,7 @@ func TestCompileContext_CompileDefine_MutualRecursion_NotSupported(t *testing.T)
 	// Try to compile first function - should error because g is not defined yet
 	tpl1 := NewNativeTemplate(0, 0, false)
 	cctx1 := NewCompiletimeContinuation(tpl1, env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	econt1 := NewExpanderTimeContinuation(env)
 	prog1Syntax, err := econt1.ExpandExpression(ectx, prog1)
 	qt.Assert(t, err, qt.IsNil)
@@ -87,7 +87,7 @@ func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {
 	// Compile the function - should not error even though fact references itself
 	tpl := NewNativeTemplate(0, 0, false)
 	cctx := NewCompiletimeContinuation(tpl, env)
-	ectx := NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	econt := NewExpanderTimeContinuation(env)
 	progSyntax, err := econt.ExpandExpression(ectx, prog)
 	qt.Assert(t, err, qt.IsNil)

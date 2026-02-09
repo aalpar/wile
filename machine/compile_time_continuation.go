@@ -188,7 +188,7 @@ func findFile(_ *CompileTimeContinuation, _ CompileTimeCallContext, path string)
 		return nil, "", values.WrapForeignErrorf(values.ErrInvalidSyntax, "environment variable %q not set", SchemeIncludePathEnv)
 	}
 	includePaths := filepath.SplitList(includePath)
-	for i := range includePath {
+	for i := range includePaths {
 		fn := filepath.Join(includePaths[i], path)
 		f, err := os.Open(fn)
 		// return the first found file
@@ -284,9 +284,8 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // subsequent body expressions.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
-	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ctctx.ctx, forms)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
 	}
@@ -459,9 +458,8 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 	}
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	ectx := NewExpandTimeCallContext(ctctx.ctx)
 	expander := NewExpanderTimeContinuation(p.env)
-	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ectx, forms)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ctctx.ctx, forms)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "library: error expanding forms")
 	}
@@ -2070,8 +2068,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	// (since cond-expand is not expanded, we must expand the body here)
 	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(_ context.Context, _ int, hasNext bool, expr syntax.SyntaxValue) error {
 		// Expand the expression
-		ectx := NewExpandTimeCallContext(ctctx.ctx)
-		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ectx, expr)
+		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ctctx.ctx, expr)
 		if expandErr != nil {
 			return values.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
 		}
@@ -2320,5 +2317,8 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }

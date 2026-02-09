@@ -51,6 +51,12 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 	return q
 }
 
+// NewEmptyNativeTemplate creates a new NativeTemplate with default empty parameters.
+// This is used when a template is initialized without any known parameters or operations yet.
+func NewEmptyNativeTemplate() *NativeTemplate {
+	return NewNativeTemplate(0, 0, false)
+}
+
 func (p *NativeTemplate) ParameterCount() int {
 	return p.parameterCount
 }

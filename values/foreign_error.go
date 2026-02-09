@@ -108,7 +108,9 @@ var (
 	ErrTypeConversion        = NewStaticError("type conversion failed")
 )
 
-// StaticError represents a compile-time or static error.
+// StaticError is a sentinel error type for programmatic matching via errors.Is.
+// Each sentinel carries a fixed human-readable message and serves as a stable
+// identity that callers can match across error wrapping layers.
 type StaticError struct {
 	message string
 }
@@ -125,7 +127,9 @@ func (p *StaticError) Error() string {
 	return p.message
 }
 
-// ForeignError is an error that wraps an error from foreign code, such as C code.
+// ForeignError is an error type for Go primitive implementations (functions
+// foreign to Scheme). It wraps an optional underlying error with a message
+// and captures a stack trace at the point of creation.
 type ForeignError struct {
 	err     error
 	message string

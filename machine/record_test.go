@@ -49,7 +49,7 @@ func evalScheme(t *testing.T, code string) values.Value {
 		qt.Assert(t, err, qt.IsNil)
 
 		// Expand
-		ectx := machine.NewExpandTimeCallContext(context.Background())
+		ectx := context.Background()
 		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 		qt.Assert(t, err, qt.IsNil)
 

@@ -38,7 +38,7 @@ func evalSchemeEscape(t *testing.T, env *environment.EnvironmentFrame, code stri
 		return nil, err
 	}
 
-	ectx := machine.NewExpandTimeCallContext(context.Background())
+	ectx := context.Background()
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
 	if err != nil {
 		return nil, err
