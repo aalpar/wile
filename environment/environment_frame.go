@@ -321,7 +321,8 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	// but an outer binding might.
 	env := p
 	for env != nil && env.local != nil {
-		if i, ok := env.local.keys[*key]; ok { //nolint:gocritic
+		i, ok := env.local.keys[*key]
+		if ok {
 			binding := env.local.bindings[i]
 			if binding != nil {
 				bindingScopes := binding.Scopes()
@@ -469,7 +470,8 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 	env := p
 	j := 0
 	for env != nil && env.local != nil {
-		if i, ok := env.local.keys[*key]; ok { //nolint:gocritic
+		i, ok := env.local.keys[*key]
+		if ok {
 			binding := env.local.bindings[i]
 			if binding != nil {
 				bindingScopes := binding.Scopes()

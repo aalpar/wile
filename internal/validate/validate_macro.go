@@ -41,7 +41,8 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	// Second element must be a symbol (the keyword to bind)
-	if _, ok := asSyntaxSymbol(elements[1]); !ok { //nolint:gocritic
+	_, ok := asSyntaxSymbol(elements[1])
+	if !ok {
 		result.addError(getSourceContext(elements[1]), "define-syntax", "define-syntax keyword must be a symbol")
 		return nil
 	}
@@ -81,7 +82,8 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 		// Validate each literal is a symbol
 		if !literalsPair.IsEmptyList() {
 			_, err := syntax.SyntaxForEach(ctx, literalsPair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-				if _, ok := asSyntaxSymbol(v); !ok { //nolint:gocritic
+				_, ok := asSyntaxSymbol(v)
+				if !ok {
 					result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
 				}
 				return nil
@@ -136,8 +138,10 @@ func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *
 
 	// Basic validation - each import-set should be a list
 	for i := 1; i < len(elements); i++ {
-		if _, ok := elements[i].(*syntax.SyntaxPair); !ok { //nolint:gocritic
-			if _, ok := elements[i].(*syntax.SyntaxSymbol); !ok { //nolint:gocritic
+		_, ok := elements[i].(*syntax.SyntaxPair)
+		if !ok {
+			_, ok := elements[i].(*syntax.SyntaxSymbol)
+			if !ok {
 				result.addErrorf(getSourceContext(elements[i]), "import", "import-set %d must be a list or symbol", i)
 			}
 		}
@@ -161,10 +165,12 @@ func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *
 	// Each export-spec should be a symbol or (rename ...)
 	for i := 1; i < len(elements); i++ {
 		spec := elements[i]
-		if _, ok := asSyntaxSymbol(spec); ok { //nolint:gocritic
+		_, ok := asSyntaxSymbol(spec)
+		if ok {
 			continue // Simple export
 		}
-		if specPair, ok := spec.(*syntax.SyntaxPair); ok { //nolint:gocritic
+		specPair, ok := spec.(*syntax.SyntaxPair)
+		if ok {
 			// Could be (rename internal external)
 			if specPair.IsList() {
 				continue
@@ -206,11 +212,14 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 
 	// Validate library name components are symbols or integers
 	_, err := syntax.SyntaxForEach(ctx, namePair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		if _, ok := asSyntaxSymbol(v); ok { //nolint:gocritic
+		_, ok := asSyntaxSymbol(v)
+		if ok {
 			return nil
 		}
-		if obj, ok := v.(*syntax.SyntaxObject); ok { //nolint:gocritic
-			if _, ok := obj.Unwrap().(*values.Integer); ok { //nolint:gocritic
+		obj, ok := v.(*syntax.SyntaxObject)
+		if ok {
+			_, ok := obj.Unwrap().(*values.Integer)
+			if ok {
 				return nil
 			}
 		}
@@ -244,8 +253,10 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 
 	// Each argument should be a string
 	for i := 1; i < len(elements); i++ {
-		if obj, ok := elements[i].(*syntax.SyntaxObject); ok { //nolint:gocritic
-			if _, ok := obj.Unwrap().(*values.String); ok { //nolint:gocritic
+		obj, ok := elements[i].(*syntax.SyntaxObject)
+		if ok {
+			_, ok := obj.Unwrap().(*values.String)
+			if ok {
 				continue
 			}
 		}

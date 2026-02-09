@@ -116,7 +116,8 @@ func Test_ForEach(t *testing.T) {
 
 	tail, err := ForEach(context.TODO(), list, func(_ context.Context, _ int, _ bool, v Value) error {
 		count++
-		if intVal, ok := v.(*Integer); ok { //nolint:gocritic
+		intVal, ok := v.(*Integer)
+		if ok {
 			sum += intVal.Value
 		}
 		return nil

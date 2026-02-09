@@ -421,7 +421,8 @@ func (p *BigInteger) EqualTo(o Value) bool {
 	v, ok := o.(*BigInteger)
 	if !ok {
 		// Also check if equal to regular Integer
-		if i, ok := o.(*Integer); ok { //nolint:gocritic
+		i, ok := o.(*Integer)
+		if ok {
 			return p.value.Cmp(i.bigInt()) == 0
 		}
 		return false

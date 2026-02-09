@@ -96,7 +96,8 @@ func (p *CharacterInputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports wrap the same rdr.
 func (p *CharacterInputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*CharacterInputPort); ok { //nolint:gocritic
+	other, ok := v.(*CharacterInputPort)
+	if ok {
 		return p.rdr == other.rdr
 	}
 	return false

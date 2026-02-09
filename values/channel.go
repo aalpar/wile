@@ -228,11 +228,13 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 			continue
 		}
 		if c.IsSend {
-			if ok, _ := c.Channel.TrySend(c.Value); ok { //nolint:gocritic
+			ok, _ := c.Channel.TrySend(c.Value)
+			if ok {
 				return i, nil, true
 			}
 		} else {
-			if v, received, ok := c.Channel.TryReceive(); received { //nolint:gocritic
+			v, received, ok := c.Channel.TryReceive()
+			if received {
 				return i, v, ok
 			}
 		}
@@ -254,11 +256,13 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 				continue
 			}
 			if c.IsSend {
-				if ok, _ := c.Channel.TrySend(c.Value); ok { //nolint:gocritic
+				ok, _ := c.Channel.TrySend(c.Value)
+				if ok {
 					return i, nil, true
 				}
 			} else {
-				if v, received, ok := c.Channel.TryReceive(); received { //nolint:gocritic
+				v, received, ok := c.Channel.TryReceive()
+				if received {
 					return i, v, ok
 				}
 			}

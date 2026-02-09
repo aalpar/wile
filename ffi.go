@@ -210,7 +210,8 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				// Also accept floats that are exact integers.
-				if f, fok := v.(*values.Float); fok { //nolint:gocritic
+				f, fok := v.(*values.Float)
+				if fok {
 					fi := int64(f.Value)
 					if float64(fi) == f.Value {
 						return reflect.ValueOf(fi).Convert(targetType), nil

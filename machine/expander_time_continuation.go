@@ -594,7 +594,8 @@ func formatIrritants(irritants []string) string {
 // Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
 // ensuring macros defined in begin are available to subsequent forms.
 func (p *ExpanderTimeContinuation) expandBeginForm(ectx ExpandTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	if exprPair, ok := expr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(exprPair) { //nolint:gocritic
+	exprPair, ok := expr.(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(exprPair) {
 		// Collect forms from the begin body
 		forms, err := collectBodyExpressions(exprPair)
 		if err != nil {
@@ -959,7 +960,8 @@ func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
 	case *syntax.SyntaxPair:
 		// (define (name args...) body...) - extract name from the pair
 		if !syntax.IsSyntaxEmptyList(s) {
-			if nameExpr, ok := s.SyntaxCar().(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+			nameExpr, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
+			if ok {
 				return nameExpr
 			}
 		}
@@ -1101,7 +1103,8 @@ func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
 		current := f
 		for !syntax.IsSyntaxEmptyList(current) {
 			car := current.SyntaxCar()
-			if sym, ok := car.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+			sym, ok := car.(*syntax.SyntaxSymbol)
+			if ok {
 				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
 			}
 			cdr := current.SyntaxCdr()
@@ -1129,7 +1132,8 @@ func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
 	pair, ok := idList.(*syntax.SyntaxPair)
 	if !ok {
 		// Single identifier or empty
-		if sym, ok := idList.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+		sym, ok := idList.(*syntax.SyntaxSymbol)
+		if ok {
 			return []*syntax.SyntaxSymbol{sym}
 		}
 		return nil
@@ -1139,7 +1143,8 @@ func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
 	current := pair
 	for !syntax.IsSyntaxEmptyList(current) {
 		car := current.SyntaxCar()
-		if sym, ok := car.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+		sym, ok := car.(*syntax.SyntaxSymbol)
+		if ok {
 			result = append(result, sym)
 		}
 		cdr := current.SyntaxCdr()

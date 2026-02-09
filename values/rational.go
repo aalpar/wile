@@ -390,7 +390,8 @@ func (p *Rational) IsVoid() bool {
 
 // EqualTo returns true if the rationals have equal values.
 func (p *Rational) EqualTo(v Value) bool {
-	if other, ok := v.(*Rational); ok { //nolint:gocritic
+	other, ok := v.(*Rational)
+	if ok {
 		return p.value.Cmp(other.value) == 0
 	}
 	return false

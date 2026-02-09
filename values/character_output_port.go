@@ -108,7 +108,8 @@ func (p *CharacterOutputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports wrap the same buf.
 func (p *CharacterOutputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*CharacterOutputPort); ok { //nolint:gocritic
+	other, ok := v.(*CharacterOutputPort)
+	if ok {
 		return p.wrt == other.wrt
 	}
 	return false

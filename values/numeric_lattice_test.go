@@ -352,7 +352,8 @@ func TestLattice_PredictionsVsActual(t *testing.T) {
 			actualType := reflect.TypeOf(result).String()
 
 			// Check if this is a known divergence
-			if div, known := knownDivergences[key]; known { //nolint:gocritic
+			div, known := knownDivergences[key]
+			if known {
 				c.Run(key+"_known_divergence", func(c *qt.C) {
 					c.Assert(latticePrediction, qt.Equals, div.lattice, qt.Commentf("lattice prediction"))
 					c.Assert(actualType, qt.Equals, div.actual, qt.Commentf("actual type"))

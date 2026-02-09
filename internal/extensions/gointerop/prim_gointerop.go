@@ -39,8 +39,10 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 	bufferSize := 0
 	// Parse optional buffer-size from rest list
 	if !values.IsEmptyList(restVal) {
-		if restList, ok := restVal.(*values.Pair); ok { //nolint:gocritic
-			if n, ok := restList.Car().(*values.Integer); ok { //nolint:gocritic
+		restList, ok := restVal.(*values.Pair)
+		if ok {
+			n, ok := restList.Car().(*values.Integer)
+			if ok {
 				bufferSize = int(n.Value)
 				if bufferSize < 0 {
 					bufferSize = 0
@@ -286,12 +288,16 @@ func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
 	name := ""
 	// Parse optional name from rest list
 	if !values.IsEmptyList(restVal) {
-		if restList, ok := restVal.(*values.Pair); ok { //nolint:gocritic
+		restList, ok := restVal.(*values.Pair)
+		if ok {
 			nameVal := restList.Car()
 			if s, ok := nameVal.(*values.String); ok {
 				name = s.Value
-			} else if sym, ok := nameVal.(*values.Symbol); ok { //nolint:gocritic
-				name = sym.Key
+			} else {
+				sym, ok := nameVal.(*values.Symbol)
+				if ok {
+					name = sym.Key
+				}
 			}
 		}
 	}
@@ -424,10 +430,11 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		}
 
 		sub := mc.NewSubContext()
-		if _, err := sub.Apply(cls); err != nil { //nolint:gocritic
+		_, err := sub.Apply(cls)
+		if err != nil {
 			return
 		}
-		err := sub.Run()
+		err = sub.Run()
 		if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
 			return
 		}

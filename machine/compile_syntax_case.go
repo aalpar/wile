@@ -63,7 +63,8 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	literalsExpr := rest.SyntaxCar()
 
 	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
-	if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok { //nolint:gocritic
+	literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
+	if ok {
 		if !literalsPair.IsEmptyList() {
 			// syntax-case always uses the default ellipsis "..."
 			// Use extractLiteralsWithSyntax to enable scope-aware literal matching

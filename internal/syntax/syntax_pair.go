@@ -27,7 +27,6 @@ var (
 	_ SyntaxTuple  = (*SyntaxPair)(nil)
 
 	// SyntaxEmptyList is the empty list sentinel value.
-	// FIXME: consider using types for EmptyList and Void
 	SyntaxEmptyList = &SyntaxPair{Values: [2]SyntaxValue{}}
 )
 

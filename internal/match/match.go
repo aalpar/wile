@@ -374,9 +374,11 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			// Check for literal hygiene: if pattern is a literal symbol,
 			// verify input symbol passes the literal matcher
 			if literalMatcher != nil && literalSyntax != nil {
-				if patternSym, ok := cd.Value.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+				patternSym, ok := cd.Value.(*syntax.SyntaxSymbol)
+				if ok {
 					symKey := patternSym.Sym.Key
-					if _, isLiteral := literalSyntax[symKey]; isLiteral { //nolint:gocritic
+					_, isLiteral := literalSyntax[symKey]
+					if isLiteral {
 						inputSym, inputIsSym := inputCar.(*syntax.SyntaxSymbol)
 						if !inputIsSym {
 							// Input is not a symbol, can't match literal
@@ -639,7 +641,8 @@ func (p *Matcher) Match(ctx context.Context, target *values.Pair) error {
 			pr, ok := cdr.(*values.Pair)
 			if ok {
 				if i+1 < len(p.codes) {
-					if _, isDone := p.codes[i+1].(ByteCodeDone); isDone { //nolint:gocritic
+					_, isDone := p.codes[i+1].(ByteCodeDone)
+					if isDone {
 						// Pattern expects no more elements but input has more
 						return ErrNotAMatch
 					}
@@ -783,12 +786,14 @@ func unwrapSyntaxValues(v values.Value) values.Value {
 	}
 
 	// Unwrap syntax values
-	if sv, ok := v.(syntax.SyntaxValue); ok { //nolint:gocritic
+	sv, ok := v.(syntax.SyntaxValue)
+	if ok {
 		return sv.UnwrapAll()
 	}
 
 	// Recursively unwrap pairs
-	if pr, ok := v.(*values.Pair); ok { //nolint:gocritic
+	pr, ok := v.(*values.Pair)
+	if ok {
 		car := unwrapSyntaxValues(pr.Car())
 		cdr := unwrapSyntaxValues(pr.Cdr())
 		return values.NewCons(car, cdr)
@@ -942,7 +947,8 @@ func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 		ellipsisVars := p.ellipsisVars[id]
 		allFound := true
 		for v := range vars {
-			if _, ok := ellipsisVars[v]; !ok { //nolint:gocritic
+			_, ok := ellipsisVars[v]
+			if !ok {
 				allFound = false
 				break
 			}
@@ -956,7 +962,8 @@ func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 	for _, id := range ids {
 		ellipsisVars := p.ellipsisVars[id]
 		for v := range vars {
-			if _, ok := ellipsisVars[v]; ok { //nolint:gocritic
+			_, ok := ellipsisVars[v]
+			if ok {
 				return id
 			}
 		}
@@ -974,7 +981,8 @@ func (p *Matcher) findPatternVariables(template values.Value) map[string]struct{
 func (p *Matcher) findVarsRecursive(template values.Value, vars map[string]struct{}) {
 	switch t := template.(type) {
 	case *values.Symbol:
-		if _, ok := p.variables[t.Key]; ok { //nolint:gocritic
+		_, ok := p.variables[t.Key]
+		if ok {
 			vars[t.Key] = struct{}{}
 		}
 	case *values.Pair:
@@ -1001,12 +1009,14 @@ func (p *Matcher) expandEscapedTemplate(template values.Value, ctx *captureConte
 	switch t := template.(type) {
 	case *values.Symbol:
 		// Check if it's a pattern variable
-		if val, ok := ctx.bindings[t.Key]; ok { //nolint:gocritic
+		val, ok := ctx.bindings[t.Key]
+		if ok {
 			return val, nil
 		}
 		// Check if it's an ellipsis variable (from outer repetition)
 		if ellipsisVars != nil {
-			if _, ok := ellipsisVars[t.Key]; ok { //nolint:gocritic
+			_, ok := ellipsisVars[t.Key]
+			if ok {
 				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "ellipsis variable %s used outside of ellipsis context", t.Key)
 			}
 		}
@@ -1123,7 +1133,8 @@ func valueToSyntaxValue(v values.Value) syntax.SyntaxValue {
 	}
 
 	// Already a syntax value
-	if sv, ok := v.(syntax.SyntaxValue); ok { //nolint:gocritic
+	sv, ok := v.(syntax.SyntaxValue)
+	if ok {
 		return sv
 	}
 

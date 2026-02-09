@@ -336,7 +336,8 @@ func (p *Float) IsVoid() bool {
 
 // EqualTo returns true if both floats have the same value.
 func (p *Float) EqualTo(v Value) bool {
-	if other, ok := v.(*Float); ok { //nolint:gocritic
+	other, ok := v.(*Float)
+	if ok {
 		return p.Value == other.Value
 	}
 	return false

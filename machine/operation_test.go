@@ -209,7 +209,6 @@ func TestOperation(t *testing.T) {
 				mc.evals.PushAll([]values.Value{tpl, env})
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
-				// FIXME: this is 0 because we are not actually calling a function here.
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.value, qt.HasLen, 1)
 				mcls, ok := mc.value[0].(*MachineClosure)
@@ -237,7 +236,6 @@ func TestOperation(t *testing.T) {
 				qt.Assert(t, mc.pc, qt.Equals, 0)
 				qt.Assert(t, mc.value, qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				// FIXME: this is -1 because we are not actually calling a function here.
 				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 0)
 			},
 		},

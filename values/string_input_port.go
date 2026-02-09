@@ -100,7 +100,8 @@ func (p *StringInputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports use the same buffer.
 func (p *StringInputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*StringInputPort); ok { //nolint:gocritic
+	other, ok := v.(*StringInputPort)
+	if ok {
 		return p.buf == other.buf
 	}
 	return false

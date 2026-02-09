@@ -52,7 +52,8 @@ func (p *Character) IsVoid() bool {
 
 // EqualTo returns true if both characters have the same rune value.
 func (p *Character) EqualTo(v Value) bool {
-	if other, ok := v.(*Character); ok { //nolint:gocritic
+	other, ok := v.(*Character)
+	if ok {
 		return p.Value == other.Value
 	}
 	return false

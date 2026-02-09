@@ -147,8 +147,10 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 // signed zero semantics in operations like atan2.
 func literalIdentical(a, b values.Value) bool {
 	// For floats, check both numeric equality and sign bit equality
-	if af, ok := a.(*values.Float); ok { //nolint:gocritic
-		if bf, ok := b.(*values.Float); ok { //nolint:gocritic
+	af, ok := a.(*values.Float)
+	if ok {
+		bf, ok := b.(*values.Float)
+		if ok {
 			return af.Value == bf.Value && math.Signbit(af.Value) == math.Signbit(bf.Value)
 		}
 		return false

@@ -194,7 +194,8 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// If firstArg is a symbol, it's a custom ellipsis identifier
 	if sym, ok := firstArg.(*syntax.SyntaxSymbol); ok {
 		symVal := sym.Unwrap()
-		if symValSym, ok := symVal.(*values.Symbol); ok { //nolint:gocritic
+		symValSym, ok := symVal.(*values.Symbol)
+		if ok {
 			ellipsis = symValSym.Key
 		}
 
@@ -383,13 +384,15 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
-		if symVal, ok := sym.(*values.Symbol); ok { //nolint:gocritic
+		symVal, ok := sym.(*values.Symbol)
+		if ok {
 			// Skip ellipsis marker
 			if symVal.Key == ellipsis {
 				return
 			}
 			// If it's not a pattern variable, it's a free identifier
-			if _, isPatternVar := patternVars[symVal.Key]; !isPatternVar { //nolint:gocritic
+			_, isPatternVar := patternVars[symVal.Key]
+			if !isPatternVar {
 				// Resolve the free identifier to its definition-time binding
 				// Use the interned symbol for consistent lookup
 				internedSym := env.InternSymbol(symVal)
@@ -426,9 +429,11 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			// that should not be walked for free identifiers
 			car := t.SyntaxCar()
 			if car != nil {
-				if carSym, ok := car.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+				carSym, ok := car.(*syntax.SyntaxSymbol)
+				if ok {
 					carVal := carSym.Unwrap()
-					if sym, ok := carVal.(*values.Symbol); ok { //nolint:gocritic
+					sym, ok := carVal.(*values.Symbol)
+					if ok {
 						// Skip nested syntax-rules and define-syntax forms
 						// These define their own scope and shouldn't pollute the
 						// outer macro's free identifier set
@@ -479,7 +484,8 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
-		if symVal, ok := sym.(*values.Symbol); ok { //nolint:gocritic
+		symVal, ok := sym.(*values.Symbol)
+		if ok {
 			// Skip if it's a keyword (first position) or ellipsis
 			if !isFirst && symVal.Key != ellipsis {
 				// Check if this identifier matches a literal via bound-identifier=?

@@ -327,10 +327,12 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "expt: expected a number but got %T", exp)
 	}
 
-	if expInt, ok := expNum.(*values.Integer); ok { //nolint:gocritic
+	expInt, ok := expNum.(*values.Integer)
+	if ok {
 		e := expInt.Value
 
-		if baseInt, ok := baseNum.(*values.Integer); ok { //nolint:gocritic
+		baseInt, ok := baseNum.(*values.Integer)
+		if ok {
 			if e >= 0 {
 				// Use big.Int to avoid overflow, then simplify if possible
 				baseBig := big.NewInt(baseInt.Value)
@@ -351,7 +353,8 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 			return nil
 		}
 
-		if baseBig, ok := baseNum.(*values.BigInteger); ok { //nolint:gocritic
+		baseBig, ok := baseNum.(*values.BigInteger)
+		if ok {
 			if e >= 0 {
 				result := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(e), nil)
 				mc.SetValue(values.NewBigInteger(result))
@@ -363,7 +366,8 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 			return nil
 		}
 
-		if baseRat, ok := baseNum.(*values.Rational); ok { //nolint:gocritic
+		baseRat, ok := baseNum.(*values.Rational)
+		if ok {
 			num := baseRat.Num()
 			denom := baseRat.Denom()
 			if e >= 0 {
@@ -1143,7 +1147,8 @@ func PrimMakePolar(_ context.Context, mc *machine.MachineContext) error {
 // PrimRealPart implements the (real-part) primitive.
 func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	if c, ok := o.(values.ComplexNumber); ok { //nolint:gocritic
+	c, ok := o.(values.ComplexNumber)
+	if ok {
 		mc.SetValue(c.RealPart())
 		return nil
 	}
@@ -1167,7 +1172,8 @@ func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 // PrimImagPart implements the (imag-part) primitive.
 func PrimImagPart(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	if c, ok := o.(values.ComplexNumber); ok { //nolint:gocritic
+	c, ok := o.(values.ComplexNumber)
+	if ok {
 		mc.SetValue(c.ImagPart())
 		return nil
 	}
@@ -1404,24 +1410,29 @@ func parseStringToNumber(input string, radix int) values.Value {
 	}
 
 	// Try integer first.
-	if i, err := strconv.ParseInt(input, radix, 64); err == nil { //nolint:gocritic
+	i, err := strconv.ParseInt(input, radix, 64)
+	if err == nil {
 		return values.NewInteger(i)
 	}
 
 	// Try big integer for overflow.
 	bi := new(big.Int)
-	if _, ok := bi.SetString(input, radix); ok { //nolint:gocritic
+	_, ok := bi.SetString(input, radix)
+	if ok {
 		return values.NewBigInteger(bi)
 	}
 
 	// Try rational (only if radix applies to both parts).
-	if idx := strings.Index(input, "/"); idx > 0 && idx < len(input)-1 { //nolint:gocritic
+	idx := strings.Index(input, "/")
+	if idx > 0 && idx < len(input)-1 {
 		numStr := input[:idx]
 		denStr := input[idx+1:]
 		num := new(big.Int)
 		den := new(big.Int)
-		if _, ok := num.SetString(numStr, radix); ok { //nolint:gocritic
-			if _, ok := den.SetString(denStr, radix); ok { //nolint:gocritic
+		_, ok := num.SetString(numStr, radix)
+		if ok {
+			_, ok := den.SetString(denStr, radix)
+			if ok {
 				if den.Sign() == 0 {
 					return nil
 				}
@@ -1433,7 +1444,8 @@ func parseStringToNumber(input string, radix int) values.Value {
 
 	// Float and scientific notation only for radix 10.
 	if radix == 10 {
-		if f, err := strconv.ParseFloat(normalizeExponentMarker(input), 64); err == nil { //nolint:gocritic
+		f, err := strconv.ParseFloat(normalizeExponentMarker(input), 64)
+		if err == nil {
 			return values.NewFloat(f)
 		}
 	}

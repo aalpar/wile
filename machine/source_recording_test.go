@@ -78,7 +78,8 @@ func TestSourceRecording_DefineFunction(t *testing.T) {
 	// Find the child template in literals
 	var childTpl *NativeTemplate
 	for _, lit := range tpl.literals {
-		if nt, ok := lit.(*NativeTemplate); ok { //nolint:gocritic
+		nt, ok := lit.(*NativeTemplate)
+		if ok {
 			childTpl = nt
 			break
 		}

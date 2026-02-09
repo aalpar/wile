@@ -70,7 +70,8 @@ func TestGetEnvironmentVariablesReturnsAlist(t *testing.T) {
 	qt.Assert(t, isPair || isEmptyList, qt.IsTrue, qt.Commentf("expected list, got %T", result))
 
 	// If it's a pair, verify structure is an alist (list of pairs)
-	if pair, ok := result.(*values.Pair); ok { //nolint:gocritic
+	pair, ok := result.(*values.Pair)
+	if ok {
 		// First element should be a pair (key . value)
 		firstElem := pair.Car()
 		firstPair, ok := firstElem.(*values.Pair)
@@ -94,7 +95,8 @@ func TestCommandLineReturnsList(t *testing.T) {
 	qt.Assert(t, isPair || isEmptyList, qt.IsTrue, qt.Commentf("expected list, got %T", result))
 
 	// If it's a pair, verify elements are strings
-	if pair, ok := result.(*values.Pair); ok { //nolint:gocritic
+	pair, ok := result.(*values.Pair)
+	if ok {
 		firstElem := pair.Car()
 		_, ok := firstElem.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected first element to be string, got %T", firstElem))

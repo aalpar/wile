@@ -46,7 +46,8 @@ func PrimExit(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
-		if pr, ok := rest.(*values.Pair); ok && !values.IsEmptyList(pr) { //nolint:gocritic
+		pr, ok := rest.(*values.Pair)
+		if ok && !values.IsEmptyList(pr) {
 			switch v := pr.Car().(type) {
 			case *values.Integer:
 				code = int(v.Value)
@@ -67,7 +68,8 @@ func PrimEmergencyExit(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
-		if pr, ok := rest.(*values.Pair); ok && !values.IsEmptyList(pr) { //nolint:gocritic
+		pr, ok := rest.(*values.Pair)
+		if ok && !values.IsEmptyList(pr) {
 			switch v := pr.Car().(type) {
 			case *values.Integer:
 				code = int(v.Value)

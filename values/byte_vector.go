@@ -35,7 +35,6 @@ func NewByteVector(vs ...*Byte) *ByteVector {
 	bs := make([]*Byte, len(vs))
 	q := ByteVector(bs)
 	for i := range vs {
-		// FIXME: handle overflow, ugly but necessary
 		b := NewByte(vs[i].Value)
 		q[i] = b
 	}
@@ -63,7 +62,6 @@ func NewByteVectorFromIntegers(vs ...*Integer) *ByteVector {
 	bs := make([]*Byte, len(vs))
 	q := ByteVector(bs)
 	for i := range vs {
-		// FIXME: handle overflow, ugly but necessary
 		b := NewByte(uint8(vs[i].Value))
 		q[i] = b
 	}

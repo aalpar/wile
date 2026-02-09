@@ -87,7 +87,8 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 		}
 
 		// Check for unsyntax/unsyntax-splicing/quasisyntax keywords
-		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok { //nolint:gocritic
+		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		if ok {
 			switch carSymName {
 			case "unsyntax", "unsyntax-splicing":
 				if depth == 1 {
@@ -156,7 +157,8 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 			)
 		}
 
-		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok { //nolint:gocritic
+		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		if ok {
 			switch carSymName {
 			case "unsyntax":
 				if depth == 1 {

@@ -41,7 +41,8 @@ func InternSymbol(s *Symbol) *Symbol {
 
 	// Fast path: check if already interned with read lock
 	globalSymbolInternsMu.RLock()
-	if v, ok := globalSymbolInterns[*s]; ok { //nolint:gocritic
+	v, ok := globalSymbolInterns[*s]
+	if ok {
 		globalSymbolInternsMu.RUnlock()
 		return v
 	}
@@ -52,7 +53,8 @@ func InternSymbol(s *Symbol) *Symbol {
 	defer globalSymbolInternsMu.Unlock()
 
 	// Double-check after acquiring write lock (another goroutine may have interned it)
-	if v, ok := globalSymbolInterns[*s]; ok { //nolint:gocritic
+	v, ok = globalSymbolInterns[*s]
+	if ok {
 		return v
 	}
 

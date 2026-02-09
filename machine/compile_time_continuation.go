@@ -38,7 +38,6 @@ const (
 
 // CompileTimeContinuation is a continuation used during the compilation phase
 type CompileTimeContinuation struct {
-	// FIXME: only binding keys needed - no values
 	env         *environment.EnvironmentFrame
 	template    *NativeTemplate
 	sourceStack []*syntax.SourceContext
@@ -344,7 +343,8 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	case *syntax.SyntaxPair:
 		// (define (name params...) body...)
 		nameExpr := s.SyntaxCar()
-		if ns, ok := nameExpr.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+		ns, ok := nameExpr.(*syntax.SyntaxSymbol)
+		if ok {
 			nameSym = ns
 		}
 	}
@@ -609,7 +609,8 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 			return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
 		}
 
-		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok { //nolint:gocritic
+		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		if ok {
 			switch carSymName {
 			case "unquote":
 				if depth == 1 {
@@ -682,8 +683,10 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 		// Check if any element is unquote-splicing at depth 1
 		hasSplice := false
 		for _, elem := range v.Values {
-			if elemPair, ok := elem.(*syntax.SyntaxPair); ok { //nolint:gocritic
-				if carSymName, ok := p.getSymbolName(elemPair.SyntaxCar()); ok { //nolint:gocritic
+			elemPair, ok := elem.(*syntax.SyntaxPair)
+			if ok {
+				carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
+				if ok {
 					if carSymName == "unquote-splicing" && depth == 1 {
 						hasSplice = true
 						break
@@ -730,8 +733,10 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 		}
 
 		for _, elem := range v.Values {
-			if elemPair, ok := elem.(*syntax.SyntaxPair); ok { //nolint:gocritic
-				if carSymName, ok := p.getSymbolName(elemPair.SyntaxCar()); ok { //nolint:gocritic
+			elemPair, ok := elem.(*syntax.SyntaxPair)
+			if ok {
+				carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
+				if ok {
 					if carSymName == "unquote-splicing" && depth == 1 {
 						flushNormal()
 						if elemPair.Length() == 2 {
@@ -820,7 +825,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 			// When we see the symbol `unquote` as a bare element followed by
 			// exactly one more element, treat the remaining `(unquote expr)` as
 			// the tail expression per R7RS §4.2.8.
-			if carSymName, ok := p.getSymbolName(carSyntax); ok && carSymName == "unquote" && depth == 1 { //nolint:gocritic
+			carSymName, ok := p.getSymbolName(carSyntax)
+			if ok && carSymName == "unquote" && depth == 1 {
 				cdr := current.SyntaxCdr()
 				cdrPair, ok := cdr.(*syntax.SyntaxPair)
 				if ok && cdrPair.Length() == 1 {
@@ -1006,7 +1012,8 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 			return false
 		}
 		// Check if this is (unquote ...) or (unquote-splicing ...) at depth 1
-		if carSymName, ok := p.getSymbolName(v.SyntaxCar()); ok { //nolint:gocritic
+		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		if ok {
 			switch carSymName {
 			case "unquote", "unquote-splicing":
 				if depth == 1 {
@@ -1052,7 +1059,8 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 		// Detect dotted-pair unquote: `(a . ,x)` parses as `(a unquote x)`.
 		// The bare symbol `unquote` followed by exactly one element signals
 		// a runtime-evaluated tail per R7RS §4.2.8.
-		if carSymName, ok := p.getSymbolName(carSyntax); ok && carSymName == "unquote" && depth == 1 { //nolint:gocritic
+		carSymName, ok := p.getSymbolName(carSyntax)
+		if ok && carSymName == "unquote" && depth == 1 {
 			cdr := current.SyntaxCdr()
 			cdrPair, ok := cdr.(*syntax.SyntaxPair)
 			if ok && cdrPair.Length() == 1 {
@@ -1078,7 +1086,8 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 
 // getSymbolName returns the symbol name if the value is a symbol
 func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
-	if s, ok := v.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+	s, ok := v.(*syntax.SyntaxSymbol)
+	if ok {
 		return s.Sym.Key, true
 	}
 	return "", false
@@ -1518,7 +1527,8 @@ func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, e
 
 	// Check if first element is a modifier keyword
 	carExpr := pair.SyntaxCar()
-	if carSym, ok := carExpr.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+	carSym, ok := carExpr.(*syntax.SyntaxSymbol)
+	if ok {
 		keyword := carSym.Unwrap().(*values.Symbol).Key
 
 		switch keyword {

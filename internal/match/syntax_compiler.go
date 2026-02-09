@@ -186,12 +186,14 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 	}
 
 	// Handle pair elements (nested lists)
-	if pr, ok := element.(*values.Pair); ok { //nolint:gocritic
+	pr, ok := element.(*values.Pair)
+	if ok {
 		return compilePairElement(vis, stack, pr, element, elementStart)
 	}
 
 	// Handle symbol elements
-	if sym, ok := element.(*values.Symbol); ok { //nolint:gocritic
+	sym, ok := element.(*values.Symbol)
+	if ok {
 		skipCdr := compileSymbolElement(vis, &stack[l-1], sym)
 		return stack, skipCdr
 	}
@@ -240,7 +242,8 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
 	// it appears in the list of literals, in which case it is matched literally.
 	if sym.Key == "_" {
-		if _, isLiteral := vis.literals[sym.Key]; !isLiteral { //nolint:gocritic
+		_, isLiteral := vis.literals[sym.Key]
+		if !isLiteral {
 			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
 			return false
 		}
@@ -330,10 +333,12 @@ func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStack
 		return false
 	}
 
-	if prevPair, ok := entry.lastElement.(*values.Pair); ok { //nolint:gocritic
+	prevPair, ok := entry.lastElement.(*values.Pair)
+	if ok {
 		return vis.analysis.ContainsVariables(prevPair)
 	}
-	if prevSym, ok := entry.lastElement.(*values.Symbol); ok { //nolint:gocritic
+	prevSym, ok := entry.lastElement.(*values.Symbol)
+	if ok {
 		_, isVar := vis.variables[prevSym.Key]
 		return isVar
 	}
@@ -349,10 +354,13 @@ func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEnt
 		for v := range vars {
 			capturedVars[v] = struct{}{}
 		}
-	} else if prevSym, ok := entry.lastElement.(*values.Symbol); ok { //nolint:gocritic
-		_, isVar := vis.variables[prevSym.Key]
-		if isVar {
-			capturedVars[prevSym.Key] = struct{}{}
+	} else {
+		prevSym, ok := entry.lastElement.(*values.Symbol)
+		if ok {
+			_, isVar := vis.variables[prevSym.Key]
+			if isVar {
+				capturedVars[prevSym.Key] = struct{}{}
+			}
 		}
 	}
 	return capturedVars
@@ -366,7 +374,8 @@ func extractPatternBytecode(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 
 	// Remove trailing VisitCdr if present (loop handles advancement)
 	if patternEnd > 0 {
-		if _, ok := vis.codes[patternEnd-1].(ByteCodeVisitCdr); ok { //nolint:gocritic
+		_, ok := vis.codes[patternEnd-1].(ByteCodeVisitCdr)
+		if ok {
 			patternEnd--
 		}
 	}
@@ -459,7 +468,8 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	}
 
 	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
-	if sym, ok := cdr.(*values.Symbol); ok { //nolint:gocritic
+	sym, ok := cdr.(*values.Symbol)
+	if ok {
 		if _, isVar := vis.variables[sym.Key]; isVar {
 			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
 			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key})
