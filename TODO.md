@@ -23,7 +23,7 @@ Code Quality
 
 ### MachineContext.Apply
 
-- [ ] Add unit tests for `MachineContext.Apply` (`machine/machine_context.go`).
+- [x] Add unit tests for `MachineContext.Apply` (`machine/machine_context.go`).
 - [ ] Make `MachineContext.Apply` symmetric with `MachineClosure` apply dispatch — currently the two paths have different calling conventions.
 - [ ] `MachineContext.Apply` accepts variadic parameters but has no mechanism for returning multiple values.
 
