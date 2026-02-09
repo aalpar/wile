@@ -2,6 +2,8 @@
 
 **Status:** PROPOSED — Not yet implemented
 
+> **Cross-reference**: See also `PLUGIN_ARCHITECTURE_PROPOSAL.md` for the broader architectural design (Registry, Extension interface, REPL separation, package organization). This document focuses specifically on the `EnvironmentAccess` interface needed to decouple extensions from internal packages.
+
 This document describes how to make Wile's extension system publicly consumable so extensions can live in separate repositories.
 
 ## Problem Statement

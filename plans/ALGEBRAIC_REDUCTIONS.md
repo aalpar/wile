@@ -420,39 +420,11 @@ If reduction VII (environment binding lookup) is done first, this becomes a sing
 
 ## IX. Registry: Optional Range Argument Parsing
 
+> **Cross-reference**: This reduction is described in detail in `CODE_CONSOLIDATION_PLAN.md` Phase 4 (`ParseOptionalRange` helper). See that document for the full implementation plan.
+
 **Severity**: High (7 identical implementations)
 
-### Problem
-
-Seven primitives parse optional `[start [end]]` arguments with identical boilerplate (~20 lines each):
-
-- `vector->list`, `vector-copy`, `vector-fill!` (`prim_vectors.go`)
-- `bytevector-copy`, `bytevector-copy!` (`prim_byte_vectors.go`)
-- `string->list`, `string-copy` (`prim_strings.go`)
-
-All extract two optional integers from the rest parameter with the same type checking and error handling.
-
-### Reduction
-
-```go
-// helpers/range.go
-func ParseOptionalRange(rest values.Value, length int64, name string) (start, end int64, err error) {
-    start, end = 0, length
-    if values.IsEmptyList(rest) {
-        return
-    }
-    // single implementation of the extraction logic
-}
-```
-
-### Files
-
-| File | Change |
-|------|--------|
-| `registry/helpers/range.go` | New: `ParseOptionalRange` |
-| `registry/core/prim_vectors.go` | 3 sites use helper |
-| `registry/core/prim_byte_vectors.go` | 2 sites use helper |
-| `registry/core/prim_strings.go` | 2 sites use helper |
+Seven primitives parse optional `[start [end]]` arguments with identical boilerplate (~20 lines each): `vector->list`, `vector-copy`, `vector-fill!`, `bytevector-copy`, `bytevector-copy!`, `string->list`, `string-copy`.
 
 ### Estimated reduction: ~120 lines removed, ~25 lines added.
 

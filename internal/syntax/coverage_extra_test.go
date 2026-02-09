@@ -44,11 +44,11 @@ func TestSyntaxVoid_SourceContext(t *testing.T) {
 }
 
 func TestSyntaxVoid_Unwrap(t *testing.T) {
-	qt.Assert(t, SyntaxVoid.Unwrap(), qt.Equals, values.Void)
+	qt.Assert(t, SyntaxVoid.Unwrap(), values.SchemeEquals, values.Void)
 }
 
 func TestSyntaxVoid_UnwrapAll(t *testing.T) {
-	qt.Assert(t, SyntaxVoid.UnwrapAll(), qt.Equals, values.Void)
+	qt.Assert(t, SyntaxVoid.UnwrapAll(), values.SchemeEquals, values.Void)
 }
 
 // SourceIndexes.Tab

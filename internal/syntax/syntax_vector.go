@@ -15,6 +15,7 @@
 package syntax
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aalpar/wile/values"
@@ -98,4 +99,43 @@ func (p *SyntaxVector) EqualTo(o values.Value) bool {
 		return false
 	}
 	return p == v
+}
+
+// ForEach iterates over the elements of the vector as regular values.
+// This implements the values.Collection interface.
+func (p *SyntaxVector) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
+	if p.IsVoid() {
+		return values.Void, nil
+	}
+	for i, v := range p.Values {
+		hasNext := i+1 < len(p.Values)
+		if err := fn(ctx, i, hasNext, v); err != nil {
+			return nil, err
+		}
+	}
+	return values.EmptyList, nil
+}
+
+// SyntaxForEach iterates over the syntax elements of the vector.
+// A nil receiver is treated as the distinguished syntax void value and
+// results in no iteration and a SyntaxVoid tail.
+//
+// The callback is invoked for each element with its index and a boolean
+// indicating whether there is another element after the current one.
+// If the callback returns an error, iteration stops immediately and the
+// error is returned.
+func (p *SyntaxVector) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
+	if p.IsVoid() {
+		return SyntaxVoid, nil
+	}
+	for i, v := range p.Values {
+		hasNext := i+1 < len(p.Values)
+		if err := fn(ctx, i, hasNext, v); err != nil {
+			return nil, err
+		}
+	}
+	// Vectors do not have a list tail, so we return SyntaxEmptyList as a
+	// conventional "no remainder" sentinel for callers that expect a tail
+	// value similar to SyntaxPair.SyntaxForEach.
+	return SyntaxEmptyList, nil
 }

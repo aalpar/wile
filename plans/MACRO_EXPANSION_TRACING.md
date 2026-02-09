@@ -2,6 +2,8 @@
 
 **Status:** PLANNED — Design in progress, implementation not started
 
+> **Cross-reference**: See also `HYGIENE_DEBUGGING_DESIGN.md` for complementary work on scope provenance (`ScopeReason`, `formName`, `location`) and debugging primitives (`identifier-scopes`, `scope-info`, `binding-info`).
+
 ## Goal
 
 Enable tracing of macro-generated code back to:

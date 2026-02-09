@@ -15,6 +15,8 @@
 package syntax
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -47,9 +49,9 @@ func (p *SyntaxVectorSuite) TestNewSyntaxVector_WithValues(c *qt.C) {
 
 	vec := NewSyntaxVector(p.sctx, v1, v2, v3)
 	c.Assert(len(vec.Values), qt.Equals, 3)
-	c.Assert(vec.Values[0], qt.Equals, v1)
-	c.Assert(vec.Values[1], qt.Equals, v2)
-	c.Assert(vec.Values[2], qt.Equals, v3)
+	c.Assert(vec.Values[0], values.SchemeEquals, v1)
+	c.Assert(vec.Values[1], values.SchemeEquals, v2)
+	c.Assert(vec.Values[2], values.SchemeEquals, v3)
 }
 
 func (p *SyntaxVectorSuite) TestSourceContext(c *qt.C) {
@@ -86,14 +88,14 @@ func (p *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(*resultVec), qt.Equals, 2)
 	// Unwrap keeps syntax values inside
-	c.Assert((*resultVec)[0], qt.Equals, v1)
-	c.Assert((*resultVec)[1], qt.Equals, v2)
+	c.Assert((*resultVec)[0], values.SchemeEquals, v1)
+	c.Assert((*resultVec)[1], values.SchemeEquals, v2)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.Unwrap()
-	c.Assert(result, qt.Equals, values.Void)
+	c.Assert(result, values.SchemeEquals, values.Void)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
@@ -139,7 +141,7 @@ func (p *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
 func (p *SyntaxVectorSuite) TestUnwrapAll_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.UnwrapAll()
-	c.Assert(result, qt.Equals, values.Void)
+	c.Assert(result, values.SchemeEquals, values.Void)
 }
 
 func (p *SyntaxVectorSuite) TestSchemeString_Empty(c *qt.C) {
@@ -206,6 +208,85 @@ func (p *SyntaxVectorSuite) TestEqualTo_Empty(c *qt.C) {
 	vec1 := NewSyntaxVector(p.sctx)
 	vec2 := NewSyntaxVector(p.sctx)
 	c.Assert(vec1.EqualTo(vec2), qt.IsFalse)
+}
+
+func (p *SyntaxVectorSuite) TestSyntaxForEach_IteratesElements(c *qt.C) {
+	v1 := NewSyntaxObject(values.NewInteger(1), p.sctx)
+	v2 := NewSyntaxObject(values.NewInteger(2), p.sctx)
+	v3 := NewSyntaxObject(values.NewInteger(3), p.sctx)
+	vec := NewSyntaxVector(p.sctx, v1, v2, v3)
+
+	var seen []SyntaxValue
+	var idxs []int
+	var lastFlags []bool
+
+	tail, err := vec.SyntaxForEach(context.Background(), func(_ context.Context, i int, hasNext bool, v SyntaxValue) error {
+		seen = append(seen, v)
+		idxs = append(idxs, i)
+		lastFlags = append(lastFlags, hasNext)
+		return nil
+	})
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(IsSyntaxEmptyList(tail), qt.IsTrue)
+	c.Assert(len(seen), qt.Equals, 3)
+	c.Assert(seen[0], values.SchemeEquals, v1)
+	c.Assert(seen[1], values.SchemeEquals, v2)
+	c.Assert(seen[2], values.SchemeEquals, v3)
+	c.Assert(idxs, qt.DeepEquals, []int{0, 1, 2})
+	c.Assert(lastFlags, qt.DeepEquals, []bool{true, true, false})
+}
+
+func (p *SyntaxVectorSuite) TestSyntaxForEach_EmptyVector(c *qt.C) {
+	vec := NewSyntaxVector(p.sctx)
+
+	called := false
+	tail, err := vec.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, _ SyntaxValue) error {
+		called = true
+		return nil
+	})
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(called, qt.IsFalse)
+	c.Assert(IsSyntaxEmptyList(tail), qt.IsTrue)
+}
+
+func (p *SyntaxVectorSuite) TestSyntaxForEach_NilVector(c *qt.C) {
+	var vec *SyntaxVector
+
+	called := false
+	tail, err := vec.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, _ SyntaxValue) error {
+		called = true
+		return nil
+	})
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(called, qt.IsFalse)
+	c.Assert(tail, qt.Equals, SyntaxVoid)
+}
+
+func (p *SyntaxVectorSuite) TestSyntaxForEach_ErrorStopsIteration(c *qt.C) {
+	v1 := NewSyntaxObject(values.NewInteger(1), p.sctx)
+	v2 := NewSyntaxObject(values.NewInteger(2), p.sctx)
+	v3 := NewSyntaxObject(values.NewInteger(3), p.sctx)
+	vec := NewSyntaxVector(p.sctx, v1, v2, v3)
+
+	var seen []SyntaxValue
+	sentinel := errors.New("stop")
+
+	tail, err := vec.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, v SyntaxValue) error {
+		seen = append(seen, v)
+		if i == 1 {
+			return sentinel
+		}
+		return nil
+	})
+
+	c.Assert(err, qt.Equals, sentinel)
+	c.Assert(tail, qt.IsNil)
+	c.Assert(len(seen), qt.Equals, 2)
+	c.Assert(seen[0], values.SchemeEquals, v1)
+	c.Assert(seen[1], values.SchemeEquals, v2)
 }
 
 func TestSyntaxVector(t *testing.T) {

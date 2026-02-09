@@ -1,5 +1,9 @@
 # Plan: Improve `machine/` Package Test Coverage
 
+> **Cross-reference**: Detailed subplans exist for specific coverage areas:
+> - `COMPILE_VALIDATED_COVERAGE.md` — `compile_validated.go` coverage (Categories D/E)
+> - `QUASISYNTAX_COVERAGE_PLAN.md` — `compile_quasisyntax.go` coverage (Category E)
+
 ## Current State
 
 Package coverage: **72.7%** (545 functions across 74 files).

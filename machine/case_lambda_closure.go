@@ -38,7 +38,10 @@ func (p *CaseLambdaClosure) Clauses() []*MachineClosure {
 }
 
 // FindMatchingClause finds the first clause that matches the given argument count.
-// Returns the matching closure and a boolean indicating success.
+// It returns the matching closure and true when a clause can accept exactly
+// argCount arguments (for fixed-arity clauses) or at least argCount arguments
+// (for variadic clauses). If the receiver is nil or no clause matches, it
+// returns nil, false.
 func (p *CaseLambdaClosure) FindMatchingClause(argCount int) (*MachineClosure, bool) {
 	// If p is nil, there are no clauses to match.
 	if p == nil {
@@ -61,14 +64,24 @@ func (p *CaseLambdaClosure) FindMatchingClause(argCount int) (*MachineClosure, b
 	return nil, false
 }
 
+// IsVoid reports whether this value represents the absence of a case-lambda
+// closure. A nil receiver is treated as a distinguished "void" closure value,
+// used as a sentinel to mean "no closure" rather than an error.
 func (p *CaseLambdaClosure) IsVoid() bool {
 	return p == nil
 }
 
+// SchemeString returns the Scheme-readable representation of a case-lambda
+// closure. Note that the void value (nil receiver) still prints as a
+// case-lambda closure; callers must use IsVoid to distinguish the sentinel.
 func (p *CaseLambdaClosure) SchemeString() string {
 	return "#<case-lambda-closure>"
 }
 
+// EqualTo implements Scheme equality for case-lambda closures. Two void
+// closures (nil receivers) are considered equal to each other. Non-void
+// closures are equal only if they have the same number of clauses and each
+// corresponding clause is EqualTo its counterpart.
 func (p *CaseLambdaClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*CaseLambdaClosure)
 	if !ok {

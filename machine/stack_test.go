@@ -145,7 +145,7 @@ func TestStackOperations(t *testing.T) {
 
 	// AsList on empty stack
 	emptyList := s.AsList()
-	qt.Assert(t, emptyList, qt.Equals, values.EmptyList)
+	qt.Assert(t, emptyList, values.SchemeEquals, values.EmptyList)
 
 	// Single element stack
 	s.Push(values.NewInteger(42))
@@ -255,7 +255,7 @@ func TestStackAsListEmpty(t *testing.T) {
 	s2 := NewStack(values.NewInteger(1))
 	s2.Pop()
 	list2 := s2.AsList()
-	qt.Assert(t, list2, qt.Equals, values.EmptyList) // empty (non-nil) slice returns EmptyList
+	qt.Assert(t, list2, values.SchemeEquals, values.EmptyList) // empty (non-nil) slice returns EmptyList
 }
 
 // TestStackSchemeString tests stack SchemeString

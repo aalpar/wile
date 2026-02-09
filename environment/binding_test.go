@@ -46,7 +46,7 @@ func TestBinding_BindingType(t *testing.T) {
 
 func TestBinding_SetValue(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b.Value(), qt.Equals, values.Void)
+	qt.Assert(t, b.Value(), values.SchemeEquals, values.Void)
 
 	newVal := values.NewInteger(123)
 	b.SetValue(newVal)
