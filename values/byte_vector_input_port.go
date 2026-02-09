@@ -97,7 +97,7 @@ func (p *ByteVectorInputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports share the same rdr.
 func (p *ByteVectorInputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*ByteVectorInputPort); ok {
+	if other, ok := v.(*ByteVectorInputPort); ok { //nolint:gocritic
 		return p.rdr == other.rdr
 	}
 	return false

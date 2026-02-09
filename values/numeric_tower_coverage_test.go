@@ -72,7 +72,7 @@ type operationResult struct {
 // tryOperation safely executes an operation and captures the result
 func tryOperation(op func() Number) (result operationResult) {
 	defer func() {
-		if r := recover(); r != nil {
+		if r := recover(); r != nil { //nolint:gocritic
 			result.panicked = true
 			result.panicMsg = fmt.Sprintf("%v", r)
 		}
@@ -210,7 +210,7 @@ func TestNumericTower_LessThan(t *testing.T) {
 
 				func() {
 					defer func() {
-						if r := recover(); r != nil {
+						if r := recover(); r != nil { //nolint:gocritic
 							panicked = true
 							panicMsg = fmt.Sprintf("%v", r)
 						}
@@ -744,7 +744,7 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 			var panicked bool
 			func() {
 				defer func() {
-					if r := recover(); r != nil {
+					if r := recover(); r != nil { //nolint:gocritic
 						panicked = true
 					}
 				}()

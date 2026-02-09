@@ -43,11 +43,17 @@ linters:
       enabled-tags:
         - diagnostic
         - performance
+      enabled-checks:
+        - ruleguard
       disabled-checks:
         - appendAssign
         - commentedOutCode
         - hugeParam
         - rangeValCopy
+      settings:
+        ruleguard:
+          failOn: dsl,import
+          rules: '${config-path}/ruleguard/rules.go'
     revive:
       rules:
         - name: blank-imports

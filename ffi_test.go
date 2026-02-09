@@ -90,10 +90,12 @@ func TestRegisterFuncUnsupportedTypes(t *testing.T) {
 		fn   any
 	}{
 		{"complex128 param", func(c complex128) float64 { return real(c) }},
-		{"map param", func(m map[string]int) int { return len(m) }},
+		{"unsupported map key", func(m map[float64]int) int { return len(m) }},
 		{"unsupported return", func() complex128 { return 0 }},
 		{"three returns", func() (int64, int64, error) { return 0, 0, nil }},
 		{"error not last", func() (error, int64) { return nil, 0 }}, //nolint:staticcheck // intentionally wrong signature to test validation
+		{"unsupported callback param", func(f func(complex128)) { f(0) }},
+		{"unsupported return map key", func() map[float64]string { return nil }},
 	}
 
 	for _, tc := range tcs {
@@ -602,6 +604,575 @@ func TestRegisterFuncMultipleFunctions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Typed slices ---
+
+func TestRegisterFuncSlices(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("sum-list", func(nums []int64) int64 {
+		var total int64
+		for _, n := range nums {
+			total += n
+		}
+		return total
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("join-list", func(parts []string) string {
+		return strings.Join(parts, ",")
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("all-true", func(bools []bool) bool {
+		for _, b := range bools {
+			if !b {
+				return false
+			}
+		}
+		return true
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("avg-list", func(nums []float64) float64 {
+		if len(nums) == 0 {
+			return 0.0
+		}
+		var sum float64
+		for _, n := range nums {
+			sum += n
+		}
+		return sum / float64(len(nums))
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("make-ints", func(n int64) []int64 {
+		result := make([]int64, n)
+		for i := range result {
+			result[i] = int64(i) + 1
+		}
+		return result
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("make-strings", func(n int64) []string {
+		result := make([]string, n)
+		for i := range result {
+			result[i] = fmt.Sprintf("s%d", i)
+		}
+		return result
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("empty-slice", func() []int64 {
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"int64 list", "(sum-list '(1 2 3 4 5))", "15"},
+		{"int64 empty list", "(sum-list '())", "0"},
+		{"string list", `(join-list '("a" "b" "c"))`, `"a,b,c"`},
+		{"bool list all true", "(all-true '(#t #t #t))", "#t"},
+		{"bool list has false", "(all-true '(#t #f #t))", "#f"},
+		{"float64 list", "(avg-list '(1.0 2.0 3.0))", "2.0"},
+		{"return int slice", "(make-ints 3)", "(1 2 3)"},
+		{"return string slice", "(make-strings 2)", `("s0" "s1")`},
+		{"return nil slice", "(empty-slice)", "()"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Nested slices ---
+
+func TestRegisterFuncSliceNested(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("flatten", func(matrix [][]int64) []int64 {
+		var result []int64
+		for _, row := range matrix {
+			result = append(result, row...)
+		}
+		return result
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("make-matrix", func() [][]int64 {
+		return [][]int64{{1, 2}, {3, 4}}
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"flatten nested list", "(flatten '((1 2) (3 4) (5 6)))", "(1 2 3 4 5 6)"},
+		{"flatten single row", "(flatten '((10 20)))", "(10 20)"},
+		{"flatten empty", "(flatten '())", "()"},
+		{"return nested slice", "(make-matrix)", "((1 2) (3 4))"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Maps ---
+
+func TestRegisterFuncMaps(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("map-size", func(m map[string]int64) int64 {
+		return int64(len(m))
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("map-get", func(m map[string]string, key string) string {
+		return m[key]
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("make-map", func() map[string]int64 {
+		return map[string]int64{"a": 1, "b": 2}
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("empty-map", func() map[string]int64 {
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("int-key-map", func(m map[int64]string) string {
+		return m[1]
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Helper: build a hashtable in Scheme using set!
+	mkht := func(sets string) string {
+		return `(let ((ht (make-hashtable))) ` + sets + ` ht)`
+	}
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"map size 3", `(map-size ` + mkht(`(hashtable-set! ht "x" 1) (hashtable-set! ht "y" 2) (hashtable-set! ht "z" 3)`) + `)`, "3"},
+		{"map size empty", `(map-size (make-hashtable))`, "0"},
+		{"map get", `(map-get ` + mkht(`(hashtable-set! ht "hello" "world")`) + ` "hello")`, `"world"`},
+		{"return map size", `(hashtable-size (make-map))`, "2"},
+		{"return nil map size", `(hashtable-size (empty-map))`, "0"},
+		{"int key map", `(int-key-map ` + mkht(`(hashtable-set! ht 1 "one")`) + `)`, `"one"`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Nested maps ---
+
+func TestRegisterFuncMapNested(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("nested-sum", func(m map[string][]int64) int64 {
+		var total int64
+		for _, vs := range m {
+			for _, v := range vs {
+				total += v
+			}
+		}
+		return total
+	})
+	c.Assert(err, qt.IsNil)
+
+	code := `(let ((ht (make-hashtable)))
+		(hashtable-set! ht "a" '(1 2 3))
+		(hashtable-set! ht "b" '(4 5))
+		(nested-sum ht))`
+	result := eval(t, engine, code)
+	c.Assert(result.SchemeString(), qt.Equals, "15")
+}
+
+// --- Structs ---
+
+type testPerson struct {
+	Name string
+	Age  int64
+}
+
+type testPoint struct {
+	X float64
+	Y float64
+}
+
+type testNested struct {
+	Label  string
+	Coords testPoint
+}
+
+type testWithSlice struct {
+	Name   string
+	Scores []int64
+}
+
+func TestRegisterFuncStructs(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("greet-person", func(p testPerson) string {
+		return fmt.Sprintf("Hello, %s (age %d)!", p.Name, p.Age)
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("make-person", func(name string, age int64) testPerson {
+		return testPerson{Name: name, Age: age}
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("point-dist", func(p testPoint) float64 {
+		return p.X*p.X + p.Y*p.Y
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("nested-label", func(n testNested) string {
+		return fmt.Sprintf("%s@(%.0f,%.0f)", n.Label, n.Coords.X, n.Coords.Y)
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("with-slice", func(ws testWithSlice) int64 {
+		var total int64
+		for _, s := range ws.Scores {
+			total += s
+		}
+		return total
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"alist to struct", `(greet-person '((Name . "Alice") (Age . 30)))`, `"Hello, Alice (age 30)!"`},
+		{"struct with missing field", `(greet-person '((Name . "Bob")))`, `"Hello, Bob (age 0)!"`},
+		{"struct with extra key", `(greet-person '((Name . "Eve") (Age . 25) (Extra . "ignored")))`, `"Hello, Eve (age 25)!"`},
+		// Struct alist: (Name . "Charlie") is a dotted pair, (Age . 40) is a dotted pair.
+		// Scheme prints these as-is since cdr is not a pair/list.
+		{"return struct", `(make-person "Charlie" 40)`, `((Name . "Charlie") (Age . 40))`},
+		{"float struct", `(point-dist '((X . 3.0) (Y . 4.0)))`, "25.0"},
+		{"nested struct", `(nested-label '((Label . "origin") (Coords . ((X . 0.0) (Y . 0.0)))))`, `"origin@(0,0)"`},
+		{"struct with slice field", `(with-slice '((Name . "test") (Scores . (10 20 30))))`, "60"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Struct error cases ---
+
+func TestRegisterFuncStructErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("need-struct", func(p testPerson) string {
+		return p.Name
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"non-alist element", `(need-struct '(42))`},
+		{"non-symbol key", `(need-struct '((42 . "Alice")))`},
+		{"type mismatch in field", `(need-struct '((Name . 42)))`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// --- Callbacks ---
+
+func TestRegisterFuncCallbacks(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// func(int64) int64 callback
+	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
+		return f(n)
+	})
+	c.Assert(err, qt.IsNil)
+
+	// void callback
+	err = engine.RegisterFunc("call-void", func(f func(int64)) {
+		f(42)
+	})
+	c.Assert(err, qt.IsNil)
+
+	// callback with error return
+	err = engine.RegisterFunc("try-callback", func(f func(int64) (int64, error), n int64) (int64, error) {
+		return f(n)
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"double via callback", "(apply-f (lambda (x) (* x 2)) 5)", "10"},
+		{"square via callback", "(apply-f (lambda (x) (* x x)) 7)", "49"},
+		{"identity callback", "(apply-f (lambda (x) x) 42)", "42"},
+		{"callback success path", "(try-callback (lambda (x) (* x 3)) 10)", "30"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Callback Scheme interop ---
+
+func TestRegisterFuncCallbackSchemeInterop(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
+		return f(n)
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Define a Scheme function, then pass it as a callback.
+	eval(t, engine, "(define (double x) (* x 2))")
+	result := eval(t, engine, "(apply-f double 21)")
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
+
+// --- Callback error cases ---
+
+func TestRegisterFuncCallbackErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
+		return f(n)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"non-procedure", `(apply-f 42 5)`},
+		{"string not procedure", `(apply-f "hello" 5)`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// --- Callback exception → error ---
+
+func TestRegisterFuncCallbackExceptionToError(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("try-callback", func(f func(int64) (int64, error), n int64) (int64, error) {
+		return f(n)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Scheme exception should become a Go error.
+	evalExpectError(t, engine, `(try-callback (lambda (x) (error "boom" x)) 5)`)
+}
+
+// --- Parameter as callback ---
+
+func TestRegisterFuncParameterAsCallback(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Register a function that calls a 0-arg callback to get a value.
+	err := engine.RegisterFunc("call-getter", func(f func() int64) int64 {
+		return f()
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Register a function that calls a 1-arg callback to set a value.
+	err = engine.RegisterFunc("call-setter", func(f func(int64)) {
+		f(99)
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"parameter get", `(let ((p (make-parameter 42))) (call-getter p))`, "42"},
+		{"parameter set then get", `(let ((p (make-parameter 0))) (call-setter p) (p))`, "99"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Composite round-trip ---
+
+func TestRegisterFuncCompositeRoundTrip(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	type record struct {
+		Name   string
+		Values []int64
+	}
+
+	err := engine.RegisterFunc("identity-record", func(r record) record {
+		return r
+	})
+	c.Assert(err, qt.IsNil)
+
+	result := eval(t, engine, `(identity-record '((Name . "test") (Values . (1 2 3))))`)
+	// (Values . (1 2 3)) and (Values 1 2 3) are the same structure;
+	// Scheme prints the compact form.
+	c.Assert(result.SchemeString(), qt.Equals, `((Name . "test") (Values 1 2 3))`)
+}
+
+// --- Named scalar types ---
+
+type myInt int64
+type myFloat float64
+type myString string
+type myBool bool
+
+func TestRegisterFuncNamedScalarTypes(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("named-int", func(n myInt) myInt {
+		return n * 2
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-float", func(f myFloat) myFloat {
+		return f + 1.0
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-string", func(s myString) myString {
+		return "hello-" + s
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-bool", func(b myBool) myBool {
+		return !b
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"named int64", "(named-int 21)", "42"},
+		{"named float64", "(named-float 2.5)", "3.5"},
+		{"named string", `(named-string "world")`, `"hello-world"`},
+		{"named bool", "(named-bool #t)", "#f"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Non-list to slice/struct converter errors ---
+
+func TestRegisterFuncNonListToComposite(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("need-list", func(nums []int64) int64 {
+		var total int64
+		for _, n := range nums {
+			total += n
+		}
+		return total
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = engine.RegisterFunc("need-struct", func(p testPerson) string {
+		return p.Name
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"integer to slice", `(need-list 42)`},
+		{"string to slice", `(need-list "hello")`},
+		{"boolean to slice", `(need-list #t)`},
+		{"integer to struct", `(need-struct 42)`},
+		{"string to struct", `(need-struct "hello")`},
+		{"boolean to struct", `(need-struct #f)`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }

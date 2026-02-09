@@ -339,7 +339,7 @@ func TestArrayList_ForEach(t *testing.T) {
 	sum := int64(0)
 	a.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error { //nolint:errcheck
 		count++
-		if intVal, ok := v.(*Integer); ok {
+		if intVal, ok := v.(*Integer); ok { //nolint:gocritic
 			sum += intVal.Value
 		}
 		return nil

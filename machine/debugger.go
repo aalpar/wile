@@ -87,7 +87,7 @@ func (p *Debugger) RemoveBreakpoint(id BreakpointID) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if _, ok := p.breakpoints[id]; ok {
+	if _, ok := p.breakpoints[id]; ok { //nolint:gocritic
 		delete(p.breakpoints, id)
 		return true
 	}
@@ -99,7 +99,7 @@ func (p *Debugger) EnableBreakpoint(id BreakpointID) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if bp, ok := p.breakpoints[id]; ok {
+	if bp, ok := p.breakpoints[id]; ok { //nolint:gocritic
 		bp.Enabled = true
 		return true
 	}
@@ -111,7 +111,7 @@ func (p *Debugger) DisableBreakpoint(id BreakpointID) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if bp, ok := p.breakpoints[id]; ok {
+	if bp, ok := p.breakpoints[id]; ok { //nolint:gocritic
 		bp.Enabled = false
 		return true
 	}

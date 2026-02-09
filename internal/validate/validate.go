@@ -72,7 +72,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	car := pair.SyntaxCar()
 
 	// Check if it's a special form by looking at the head
-	if sym, ok := car.(*syntax.SyntaxSymbol); ok {
+	if sym, ok := car.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
 			// R7RS §4.2.2: Local variable bindings shadow special forms
@@ -186,12 +186,12 @@ func getSourceContext(v syntax.SyntaxValue) *syntax.SourceContext {
 
 // isSyntaxSymbol checks if a SyntaxValue is a symbol
 func asSyntaxSymbol(v syntax.SyntaxValue) (*syntax.SyntaxSymbol, bool) {
-	if sym, ok := v.(*syntax.SyntaxSymbol); ok {
+	if sym, ok := v.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
 		return sym, true
 	}
 	// Also check for SyntaxObject wrapping a symbol
-	if obj, ok := v.(*syntax.SyntaxObject); ok {
-		if _, ok := obj.Unwrap().(*values.Symbol); ok {
+	if obj, ok := v.(*syntax.SyntaxObject); ok { //nolint:gocritic
+		if _, ok := obj.Unwrap().(*values.Symbol); ok { //nolint:gocritic
 			// This is unusual - symbols should be SyntaxSymbol
 			return nil, false
 		}

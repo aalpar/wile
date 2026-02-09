@@ -96,7 +96,7 @@ func (p *ByteVectorBufferdOutputPort) IsVoid() bool {
 
 // EqualTo returns true if both ports share the same buffer.
 func (p *ByteVectorBufferdOutputPort) EqualTo(v Value) bool {
-	if other, ok := v.(*ByteVectorBufferdOutputPort); ok {
+	if other, ok := v.(*ByteVectorBufferdOutputPort); ok { //nolint:gocritic
 		return p.buf == other.buf
 	}
 	return false

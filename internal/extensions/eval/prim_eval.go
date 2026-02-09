@@ -444,7 +444,7 @@ func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
 	val := binding.Value()
 
 	// If it's a CompileTimeValue, unwrap it
-	if ctv, ok := val.(*values.CompileTimeValue); ok {
+	if ctv, ok := val.(*values.CompileTimeValue); ok { //nolint:gocritic
 		val = ctv.Unwrap()
 	}
 

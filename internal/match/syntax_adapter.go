@@ -294,12 +294,12 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		symVal := t.Unwrap().(*values.Symbol)
 
 		// Check if it's a pattern variable by name
-		if capturedVal, ok := ctx.bindings[symVal.Key]; ok {
+		if capturedVal, ok := ctx.bindings[symVal.Key]; ok { //nolint:gocritic
 			// Check scope compatibility before substituting
 			// R7RS nested macro hygiene: only substitute if template symbol's scopes
 			// are compatible with pattern variable's scopes
 			if patternVarSyntax != nil {
-				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern {
+				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern { //nolint:gocritic
 					templateScopes := t.Scopes()
 					patternScopes := patternSym.Scopes()
 
@@ -327,10 +327,10 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 
 		// Check for ellipsis escape form: (<ellipsis> <template>)
 		car := t.SyntaxCar()
-		if carSym, ok := car.(*syntax.SyntaxSymbol); ok {
+		if carSym, ok := car.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
 			if carSym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
 				cdr := t.SyntaxCdr()
-				if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) {
+				if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) { //nolint:gocritic
 					// Escape form - expand inner template without ellipsis handling
 					return p.expandEscapedSyntaxTemplate(
 						cdrPair.SyntaxCar(),
@@ -341,8 +341,8 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 
 		// Check for ellipsis pattern (something <ellipsis>)
 		cdr := t.SyntaxCdr()
-		if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) {
-			if sym, ok := cdrPair.SyntaxCar().(*syntax.SyntaxSymbol); ok {
+		if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !syntax.IsSyntaxEmptyList(cdrPair) { //nolint:gocritic
+			if sym, ok := cdrPair.SyntaxCar().(*syntax.SyntaxSymbol); ok { //nolint:gocritic
 				if sym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
 					// Found ellipsis - handle repetition
 					return p.expandSyntaxEllipsis(
@@ -433,7 +433,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 
 	if isFree && resolution != nil {
 		// Handle free identifier resolution (local or global binding)
-		if lsp, ok := resolution.(localScopesProvider); ok {
+		if lsp, ok := resolution.(localScopesProvider); ok { //nolint:gocritic
 			localScopes := lsp.GetLocalScopes()
 			if len(localScopes) > 0 {
 				// Local binding - use definition-site scopes
@@ -449,7 +449,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			}
 		}
 
-		if gbp, ok := resolution.(globalBindingProvider); ok {
+		if gbp, ok := resolution.(globalBindingProvider); ok { //nolint:gocritic
 			globalBinding := gbp.GetGlobal()
 			if globalBinding != nil {
 				symCtx := srcCtx
@@ -467,7 +467,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			}
 		}
 
-		if hlp, ok := resolution.(hasLocalBindingProvider); ok && hlp.GetHasLocalBinding() {
+		if hlp, ok := resolution.(hasLocalBindingProvider); ok && hlp.GetHasLocalBinding() { //nolint:gocritic
 			return syntax.NewSyntaxSymbol(symVal.Key, srcCtx)
 		}
 	}
@@ -498,7 +498,7 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 ) (syntax.SyntaxValue, error) {
 	// If the value is already a syntax value (from syntax-native capture), return it directly.
 	// This is the normal case because captureContext.bindings stores syntax.SyntaxValue directly.
-	if sv, ok := val.(syntax.SyntaxValue); ok {
+	if sv, ok := val.(syntax.SyntaxValue); ok { //nolint:gocritic
 		return sv, nil
 	}
 
@@ -614,7 +614,7 @@ func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, var
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		symVal := t.Unwrap().(*values.Symbol)
-		if _, ok := p.matcher.variables[symVal.Key]; ok {
+		if _, ok := p.matcher.variables[symVal.Key]; ok { //nolint:gocritic
 			vars[symVal.Key] = struct{}{}
 		}
 	case *syntax.SyntaxPair:
@@ -647,10 +647,10 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 		symVal := t.Unwrap().(*values.Symbol)
 
 		// Check if it's a pattern variable by name
-		if capturedVal, ok := ctx.bindings[symVal.Key]; ok {
+		if capturedVal, ok := ctx.bindings[symVal.Key]; ok { //nolint:gocritic
 			// Check scope compatibility before substituting
 			if patternVarSyntax != nil {
-				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern {
+				if patternSym, hasPattern := patternVarSyntax[symVal.Key]; hasPattern { //nolint:gocritic
 					templateScopes := t.Scopes()
 					patternScopes := patternSym.Scopes()
 
@@ -754,7 +754,7 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 
 	default:
 		// For other syntax types, try to unwrap
-		if unwrapper, ok := stx.(interface{ Unwrap() values.Value }); ok {
+		if unwrapper, ok := stx.(interface{ Unwrap() values.Value }); ok { //nolint:gocritic
 			return unwrapper.Unwrap()
 		}
 		// If it's already a value, return as-is

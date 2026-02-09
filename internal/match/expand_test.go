@@ -383,7 +383,7 @@ func TestEllipsisInMiddle(t *testing.T) {
 		// Check bytecode includes SkipIfTailCount
 		hasSkipIfTailCount := false
 		for _, code := range compiler.codes {
-			if _, ok := code.(ByteCodeSkipIfTailCount); ok {
+			if _, ok := code.(ByteCodeSkipIfTailCount); ok { //nolint:gocritic
 				hasSkipIfTailCount = true
 				break
 			}
@@ -520,7 +520,7 @@ func TestImproperListPattern(t *testing.T) {
 		// Check bytecode includes CaptureCdr
 		hasCaptureCdr := false
 		for _, code := range compiler.codes {
-			if _, ok := code.(ByteCodeCaptureCdr); ok {
+			if _, ok := code.(ByteCodeCaptureCdr); ok { //nolint:gocritic
 				hasCaptureCdr = true
 				break
 			}

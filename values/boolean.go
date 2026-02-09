@@ -55,7 +55,7 @@ func (p *Boolean) IsVoid() bool {
 
 // EqualTo returns true if the values are equal booleans.
 func (p *Boolean) EqualTo(v Value) bool {
-	if other, ok := v.(*Boolean); ok {
+	if other, ok := v.(*Boolean); ok { //nolint:gocritic
 		return p.Value == other.Value
 	}
 	return false

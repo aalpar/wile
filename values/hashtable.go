@@ -229,3 +229,17 @@ func (p *Hashtable) Clear() {
 	p.buckets = make(map[uint64][]hashtableEntry)
 	p.size = 0
 }
+
+// Entries iterates over all entries in the hash table, calling fn for each
+// key-value pair. Iteration stops early if fn returns a non-nil error.
+// This is more efficient than Keys()+Get() as it avoids intermediate allocations.
+func (p *Hashtable) Entries(fn func(key Hashable, value Value) error) error {
+	for _, bucket := range p.buckets {
+		for _, e := range bucket {
+			if err := fn(e.key, e.value); err != nil { //nolint:gocritic
+				return err
+			}
+		}
+	}
+	return nil
+}

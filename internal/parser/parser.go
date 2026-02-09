@@ -742,7 +742,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		// Look up the datum in the label table
 		if p.datumLabels != nil {
-			if labeled, ok := p.datumLabels[int(i)]; ok {
+			if labeled, ok := p.datumLabels[int(i)]; ok { //nolint:gocritic
 				// Return the actual datum, not a label reference
 				return labeled, p.cur, nil
 			}
@@ -1772,7 +1772,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 func (p *Parser) rewrapSyntax(orig syntax.SyntaxValue, newVal values.Value) syntax.SyntaxValue {
 	// Get the source context from the original syntax value
 	var sctx *syntax.SourceContext
-	if so, ok := orig.(*syntax.SyntaxObject); ok {
+	if so, ok := orig.(*syntax.SyntaxObject); ok { //nolint:gocritic
 		sctx = so.SourceContext()
 	}
 	return syntax.NewSyntaxObject(newVal, sctx)

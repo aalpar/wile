@@ -49,7 +49,7 @@ func (p *Byte) IsVoid() bool {
 
 // EqualTo returns true if the bytes have equal values.
 func (p *Byte) EqualTo(v Value) bool {
-	if other, ok := v.(*Byte); ok {
+	if other, ok := v.(*Byte); ok { //nolint:gocritic
 		return p.Value == other.Value
 	}
 	return false

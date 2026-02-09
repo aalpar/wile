@@ -151,7 +151,7 @@ func (p *LibraryRegistry) AddSearchPath(path string) {
 // Register adds a compiled library to the registry.
 func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
 	key := lib.Name.Key()
-	if _, exists := p.libraries[key]; exists {
+	if _, exists := p.libraries[key]; exists { //nolint:gocritic
 		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "register: library %s already registered", lib.Name.SchemeString())
 	}
 	p.libraries[key] = lib
@@ -186,7 +186,7 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 
 	for _, searchPath := range p.searchPaths {
 		fullPath := filepath.Join(searchPath, relativePath)
-		if _, err := os.Stat(fullPath); err == nil {
+		if _, err := os.Stat(fullPath); err == nil { //nolint:gocritic
 			return fullPath, nil
 		}
 	}
@@ -195,7 +195,7 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 	relativePathScm := strings.TrimSuffix(relativePath, ".sld") + ".scm"
 	for _, searchPath := range p.searchPaths {
 		fullPath := filepath.Join(searchPath, relativePathScm)
-		if _, err := os.Stat(fullPath); err == nil {
+		if _, err := os.Stat(fullPath); err == nil { //nolint:gocritic
 			return fullPath, nil
 		}
 	}
@@ -246,7 +246,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	if p.Only != nil {
 		filtered := make(map[string]string)
 		for _, name := range p.Only {
-			if _, ok := result[name]; !ok {
+			if _, ok := result[name]; !ok { //nolint:gocritic
 				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
@@ -258,7 +258,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	// Apply 'except' filter
 	if p.Except != nil {
 		for _, name := range p.Except {
-			if _, ok := result[name]; !ok {
+			if _, ok := result[name]; !ok { //nolint:gocritic
 				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
