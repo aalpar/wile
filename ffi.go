@@ -66,6 +66,12 @@ type ffiSpec struct {
 // If the first parameter is context.Context, the VM's context is forwarded
 // automatically and does not count toward the Scheme parameter count.
 //
+// Callback parameters (func types) receive a Go closure that invokes a
+// Scheme procedure through a VM sub-context. Callbacks must be called
+// synchronously during the registered function's execution. Storing a
+// callback for later invocation or calling it from another goroutine is
+// unsafe — the closure captures VM state that is not goroutine-safe.
+//
 // Returns a *wile.Error if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {
 	spec, err := buildFFISpec(name, fn)
@@ -199,6 +205,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 	switch t.Kind() {
 	case reflect.Int64:
+		targetType := t
 		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
@@ -206,15 +213,16 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 				if f, fok := v.(*values.Float); fok { //nolint:gocritic
 					fi := int64(f.Value)
 					if float64(fi) == f.Value {
-						return reflect.ValueOf(fi), nil
+						return reflect.ValueOf(fi).Convert(targetType), nil
 					}
 				}
 				return reflect.Value{}, fmtArgError(name, pos, "integer", v)
 			}
-			return reflect.ValueOf(n), nil
+			return reflect.ValueOf(n).Convert(targetType), nil
 		}, nil
 
 	case reflect.Int:
+		targetType := t
 		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
@@ -226,46 +234,49 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 					"%s: argument %d: integer %d overflows int", name, pos, n,
 				)
 			}
-			return reflect.ValueOf(int(n)), nil
+			return reflect.ValueOf(int(n)).Convert(targetType), nil
 		}, nil
 
 	case reflect.Float64:
+		targetType := t
 		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			switch n := v.(type) {
 			case *values.Float:
-				return reflect.ValueOf(n.Value), nil
+				return reflect.ValueOf(n.Value).Convert(targetType), nil
 			case *values.Integer:
-				return reflect.ValueOf(float64(n.Value)), nil
+				return reflect.ValueOf(float64(n.Value)).Convert(targetType), nil
 			case *values.BigInteger:
 				if n.BigInt().IsInt64() {
-					return reflect.ValueOf(float64(n.Int64())), nil
+					return reflect.ValueOf(float64(n.Int64())).Convert(targetType), nil
 				}
 				f, _ := n.BigInt().Float64()
-				return reflect.ValueOf(f), nil
+				return reflect.ValueOf(f).Convert(targetType), nil
 			case *values.Rational:
 				f, _ := n.Rat().Float64()
-				return reflect.ValueOf(f), nil
+				return reflect.ValueOf(f).Convert(targetType), nil
 			default:
 				return reflect.Value{}, fmtArgError(name, pos, "number", v)
 			}
 		}, nil
 
 	case reflect.String:
+		targetType := t
 		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			s, ok := v.(*values.String)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "string", v)
 			}
-			return reflect.ValueOf(s.Value), nil
+			return reflect.ValueOf(s.Value).Convert(targetType), nil
 		}, nil
 
 	case reflect.Bool:
+		targetType := t
 		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
 			b, ok := v.(*values.Boolean)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "boolean", v)
 			}
-			return reflect.ValueOf(b.Value), nil
+			return reflect.ValueOf(b.Value).Convert(targetType), nil
 		}, nil
 
 	case reflect.Slice:
@@ -312,6 +323,10 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 
 	sliceType := t
 	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		_, isTuple := v.(values.Tuple)
+		if !isTuple {
+			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
+		}
 		result := reflect.MakeSlice(sliceType, 0, 0)
 		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
 			converted, convErr := elemConv(innerCtx, mc, elem)
@@ -415,6 +430,10 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 
 	structType := t
 	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+		_, isTuple := v.(values.Tuple)
+		if !isTuple {
+			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
+		}
 		result := reflect.New(structType).Elem()
 		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
 			pair, ok := elem.(*values.Pair)
@@ -453,6 +472,12 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 // makeCallbackArgConverter creates a converter for Go function types used as
 // callbacks. The Scheme procedure (lambda) is wrapped in a Go function via
 // reflect.MakeFunc that invokes it through a VM sub-context.
+//
+// The returned Go closure captures the *MachineContext from the conversion
+// call. Because MachineContext is single-goroutine VM state, the callback
+// must be invoked synchronously within the same goroutine that called the
+// registered function. Storing the callback or invoking it from another
+// goroutine will race on VM internals and corrupt state.
 //
 // The direction of inner converters is inverted relative to the outer function:
 // callback parameters use retConverters (Go→Scheme) and callback returns use
@@ -872,6 +897,11 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			// Walk the Scheme list for variadic args.
 			variadicConv := s.argConvs[s.paramCount-1]
 			varList := mc.Arg(fixedCount)
+
+			_, isTuple := varList.(values.Tuple)
+			if !isTuple {
+				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
+			}
 
 			_, err := values.ForEach(ctx, varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
 				converted, convErr := variadicConv(ctx, mc, v)

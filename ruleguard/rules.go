@@ -1,5 +1,3 @@
-//go:build ruleguard
-
 // Package gorules defines custom lint rules for the Wile project.
 // These rules are loaded by gocritic's ruleguard checker at lint time.
 //
@@ -18,7 +16,7 @@ import "github.com/quasilyte/go-ruleguard/dsl"
 //	// Right:
 //	err := f()
 //	if err != nil { ... }
-func noCompoundIf(m dsl.Matcher) {
+func noCompoundIf(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
 	m.Match(`if $init; $cond { $*_ }`).
 		Report(`compound if-init statement: separate "$init" from the condition`)
 }

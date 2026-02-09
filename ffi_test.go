@@ -1084,3 +1084,95 @@ func TestRegisterFuncCompositeRoundTrip(t *testing.T) {
 	// Scheme prints the compact form.
 	c.Assert(result.SchemeString(), qt.Equals, `((Name . "test") (Values 1 2 3))`)
 }
+
+// --- Named scalar types ---
+
+type myInt int64
+type myFloat float64
+type myString string
+type myBool bool
+
+func TestRegisterFuncNamedScalarTypes(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("named-int", func(n myInt) myInt {
+		return n * 2
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-float", func(f myFloat) myFloat {
+		return f + 1.0
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-string", func(s myString) myString {
+		return "hello-" + s
+	})
+	c.Assert(err, qt.IsNil)
+
+	err = engine.RegisterFunc("named-bool", func(b myBool) myBool {
+		return !b
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"named int64", "(named-int 21)", "42"},
+		{"named float64", "(named-float 2.5)", "3.5"},
+		{"named string", `(named-string "world")`, `"hello-world"`},
+		{"named bool", "(named-bool #t)", "#f"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// --- Non-list to slice/struct converter errors ---
+
+func TestRegisterFuncNonListToComposite(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("need-list", func(nums []int64) int64 {
+		var total int64
+		for _, n := range nums {
+			total += n
+		}
+		return total
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = engine.RegisterFunc("need-struct", func(p testPerson) string {
+		return p.Name
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"integer to slice", `(need-list 42)`},
+		{"string to slice", `(need-list "hello")`},
+		{"boolean to slice", `(need-list #t)`},
+		{"integer to struct", `(need-struct 42)`},
+		{"string to struct", `(need-struct "hello")`},
+		{"boolean to struct", `(need-struct #f)`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
