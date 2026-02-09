@@ -224,19 +224,46 @@ func TestOperation(t *testing.T) {
 			},
 		},
 		{
+			op: NewOperationApply(),
+			setupFn: func(t *testing.T, mc *MachineContext) {
+				// Create a zero-arity closure that loads literal 42 and returns.
+				topEnv := environment.NewTopLevelEnvironment().Runtime()
+				lenv := environment.NewLocalEnvironment(0)
+				closureEnv := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+				closureTpl := NewNativeTemplate(0, 0, false,
+					NewOperationLoadLiteralByLiteralIndexImmediate(0),
+					NewOperationRestoreContinuation(),
+				)
+				closureTpl.MaybeAppendLiteral(values.NewInteger(42))
+				mcls := NewClosureWithTemplate(closureTpl, closureEnv)
+				// Save continuation so the closure can return to caller.
+				mc.SaveContinuation(1)
+				// Set callee in value register.
+				mc.SetValue(mcls)
+			},
+			checkFn: func(t *testing.T, mc *MachineContext) {
+				// Closure executed: value = 42; returned via RestoreContinuation.
+				qt.Assert(t, mc.pc, qt.Equals, 1)
+				qt.Assert(t, mc.value, qt.HasLen, 1)
+				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+				qt.Assert(t, *mc.evals, qt.HasLen, 0)
+			},
+		},
+		{
 			op: NewOperationSaveContinuationOffsetImmediate(1),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				topEnv := environment.NewTopLevelEnvironment().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
-				tpl := NewNativeTemplate(0, 0, false)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
-				mc.template = tpl
+				// Pre-save a continuation to build chain depth.
+				mc.SaveContinuation(0)
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 0)
+				// SaveCont pushed a second frame; chain depth is now 1.
+				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.value, qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 0)
+				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 1)
 			},
 		},
 		{
@@ -245,15 +272,17 @@ func TestOperation(t *testing.T) {
 				topEnv := environment.NewTopLevelEnvironment().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
-				mc.template = NewNativeTemplate(0, 0, false)
+				// Build a 3-level chain; RestoreContinuation will pop one level.
 				mc.SaveContinuation(1)
-				lenv = environment.NewLocalEnvironment(0)
-				mc.env = environment.NewEnvironmentFrameWithParent(lenv, mc.env)
+				mc.SaveContinuation(1)
+				mc.SaveContinuation(1)
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 0)
+				// Restored one level; two frames remain (CallDepth = 1).
+				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.value, qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
+				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 1)
 			},
 		},
 	}

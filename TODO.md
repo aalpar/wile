@@ -33,9 +33,9 @@ Code Quality
 
 ### Test Improvements
 
-- [ ] `operation_test.go:~212` — `OperationApply` test reports `pc=0` because the test does not set up a real function call. Improve test to use a real closure invocation so the PC reflects actual behavior.
-- [ ] `operation_test.go:~240` — `OperationRestoreContinuation` test shows `CallDepth()=0` because no real call is active. Same improvement needed.
-- [ ] `compile_time_continuation_test.go:~509` — `mc.Run()` should return `ErrMachineHalt` but currently does not. Investigate and fix the assertion.
+- [x] `operation_test.go:~212` — `OperationApply` test reports `pc=0` because the test does not set up a real function call. Improve test to use a real closure invocation so the PC reflects actual behavior.
+- [x] `operation_test.go:~240` — `OperationRestoreContinuation` test shows `CallDepth()=0` because no real call is active. Same improvement needed.
+- [x] `compile_time_continuation_test.go:~509` — `mc.Run()` should return `ErrMachineHalt` but currently does not. Investigate and fix the assertion.
 
 ---
 
