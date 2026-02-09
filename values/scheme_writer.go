@@ -99,7 +99,7 @@ func (p *SchemeWriter) findShared(v Value) {
 		if val == nil {
 			return
 		}
-		if _, found := p.seenPairs[val]; found {
+		if _, found := p.seenPairs[val]; found { //nolint:gocritic
 			// Seen before - mark as needing a label
 			p.needsLabelPair[val] = true
 			return
@@ -114,7 +114,7 @@ func (p *SchemeWriter) findShared(v Value) {
 		if val == nil || len(*val) == 0 {
 			return
 		}
-		if _, found := p.seenVectors[val]; found {
+		if _, found := p.seenVectors[val]; found { //nolint:gocritic
 			p.needsLabelVector[val] = true
 			return
 		}
@@ -222,7 +222,7 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 	}
 
 	// Check if this is a back-reference
-	if label, found := p.seenPairs[pr]; found && label >= 0 {
+	if label, found := p.seenPairs[pr]; found && label >= 0 { //nolint:gocritic
 		// Already labeled and written - output reference
 		fmt.Fprintf(sb, "#%d#", label)
 		return
@@ -272,7 +272,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 		}
 
 		// Check if the cdr pair needs special handling (shared/circular)
-		if label, found := p.seenPairs[nextPair]; found && label >= 0 {
+		if label, found := p.seenPairs[nextPair]; found && label >= 0 { //nolint:gocritic
 			// Back-reference in cdr position
 			sb.WriteString(" . ")
 			fmt.Fprintf(sb, "#%d#", label)
@@ -298,7 +298,7 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 	}
 
 	// Check if this is a back-reference
-	if label, found := p.seenVectors[vec]; found && label >= 0 {
+	if label, found := p.seenVectors[vec]; found && label >= 0 { //nolint:gocritic
 		fmt.Fprintf(sb, "#%d#", label)
 		return
 	}

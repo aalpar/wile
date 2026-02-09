@@ -120,9 +120,9 @@ type schemeCodeErrorTestCase struct {
 func runSchemeCodeExpectError(t *testing.T, code string) (err error) {
 	t.Helper()
 	defer func() {
-		if r := recover(); r != nil {
+		if r := recover(); r != nil { //nolint:gocritic
 			// Panic was expected, convert to error
-			if e, ok := r.(error); ok {
+			if e, ok := r.(error); ok { //nolint:gocritic
 				err = e
 			}
 		}

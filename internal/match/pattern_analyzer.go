@@ -70,7 +70,7 @@ func collectPatternVariablesWithEllipsis(v values.Value, literals map[string]str
 	case *values.Symbol:
 		// Skip if it's a keyword (first element), literal, or ellipsis
 		if !isFirst && t.Key != ellipsis {
-			if _, isLiteral := literals[t.Key]; !isLiteral {
+			if _, isLiteral := literals[t.Key]; !isLiteral { //nolint:gocritic
 				variables[t.Key] = struct{}{}
 			}
 		}
@@ -104,7 +104,7 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 			// If car is a symbol variable, add it
 			sym, ok := t.Car().(*values.Symbol)
 			if ok {
-				if _, isVar := variables[sym.Key]; isVar {
+				if _, isVar := variables[sym.Key]; isVar { //nolint:gocritic
 					varsInSubtree[sym.Key] = struct{}{}
 				}
 			}

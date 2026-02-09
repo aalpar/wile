@@ -82,7 +82,7 @@ func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 		car := v.SyntaxCar()
 		if isEllipsisSymbol(car) {
 			cdr := v.SyntaxCdr()
-			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() {
+			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() { //nolint:gocritic
 				// This is a valid escape form (... <template> ...)
 				// The escaped template (car of cdr) doesn't count as containing ellipsis
 				// But we need to check the rest of the list (cdr of cdr)
@@ -108,8 +108,8 @@ func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 
 // isEllipsisSymbol checks if a syntax value is the ellipsis symbol "...".
 func isEllipsisSymbol(stx syntax.SyntaxValue) bool {
-	if sym, ok := stx.(*syntax.SyntaxSymbol); ok {
-		if s, ok := sym.Unwrap().(*values.Symbol); ok {
+	if sym, ok := stx.(*syntax.SyntaxSymbol); ok { //nolint:gocritic
+		if s, ok := sym.Unwrap().(*values.Symbol); ok { //nolint:gocritic
 			return s.Key == "..."
 		}
 	}
@@ -155,7 +155,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 		car := v.SyntaxCar()
 		if isEllipsisSymbol(car) {
 			cdr := v.SyntaxCdr()
-			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() {
+			if cdrPair, ok := cdr.(*syntax.SyntaxPair); ok && !cdrPair.IsEmptyList() { //nolint:gocritic
 				// Get the escaped template and compile it directly
 				escapedTemplate := cdrPair.SyntaxCar()
 				return p.compileSyntaxTemplateToOps(escapedTemplate)

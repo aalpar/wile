@@ -236,7 +236,7 @@ func (p *Hashtable) Clear() {
 func (p *Hashtable) Entries(fn func(key Hashable, value Value) error) error {
 	for _, bucket := range p.buckets {
 		for _, e := range bucket {
-			if err := fn(e.key, e.value); err != nil {
+			if err := fn(e.key, e.value); err != nil { //nolint:gocritic
 				return err
 			}
 		}

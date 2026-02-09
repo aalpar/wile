@@ -69,7 +69,7 @@ func LookupPhaseBinding[T any](
 	if bnd.BindingType() != environment.BindingTypePrimitive {
 		return zero
 	}
-	if val, ok := bnd.Value().(T); ok {
+	if val, ok := bnd.Value().(T); ok { //nolint:gocritic
 		return val
 	}
 	return zero

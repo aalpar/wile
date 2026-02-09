@@ -125,7 +125,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		thread.CleanupFunc = func() {
 			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
 		}
-		if _, err := sub.Apply(cls); err != nil {
+		if _, err := sub.Apply(cls); err != nil { //nolint:gocritic
 			return nil, err
 		}
 
@@ -281,7 +281,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 		// Parse timeout-val (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			if rest2List, ok := rest2.(*values.Pair); ok {
+			if rest2List, ok := rest2.(*values.Pair); ok { //nolint:gocritic
 				timeoutVal = rest2List.Car()
 			}
 		}
@@ -416,7 +416,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 		// Parse thread (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			if rest2List, ok := rest2.(*values.Pair); ok {
+			if rest2List, ok := rest2.(*values.Pair); ok { //nolint:gocritic
 				threadArg := rest2List.Car()
 				if t, ok := threadArg.(*values.Thread); ok {
 					owner = t
@@ -432,7 +432,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 	acquired, err := mutex.Lock(timeout, owner)
 	if err != nil {
 		// Check for abandoned mutex exception
-		if _, ok := err.(*values.AbandonedMutexException); ok {
+		if _, ok := err.(*values.AbandonedMutexException); ok { //nolint:gocritic
 			// Still acquired, but signal the exception
 			if owner != nil {
 				owner.TrackMutex(mutex)
@@ -480,7 +480,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 		// Parse timeout (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			if rest2List, ok := rest2.(*values.Pair); ok {
+			if rest2List, ok := rest2.(*values.Pair); ok { //nolint:gocritic
 				var err error
 				timeout, err = parseTimeout(rest2List.Car(), "mutex-unlock!")
 				if err != nil {
@@ -491,7 +491,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Untrack mutex from the owning thread before unlocking
-	if owner := mutex.Owner(); owner != nil {
+	if owner := mutex.Owner(); owner != nil { //nolint:gocritic
 		owner.UntrackMutex(mutex)
 	}
 

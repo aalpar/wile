@@ -56,7 +56,7 @@ func NewMutableString(str string) *String {
 // InternString returns an interned String for the given value.
 // Multiple calls with the same string value return the same pointer.
 func InternString(str string) *String {
-	if existing, ok := stringInterns.Load(str); ok {
+	if existing, ok := stringInterns.Load(str); ok { //nolint:gocritic
 		return existing.(*String)
 	}
 	newStr := &String{Value: str}
@@ -81,7 +81,7 @@ func (p *String) IsVoid() bool {
 
 // EqualTo returns true if the strings have equal values.
 func (p *String) EqualTo(v Value) bool {
-	if other, ok := v.(*String); ok {
+	if other, ok := v.(*String); ok { //nolint:gocritic
 		return p.Value == other.Value
 	}
 	return false

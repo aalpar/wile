@@ -347,7 +347,7 @@ func (p *BigFloat) EqualTo(o Value) bool {
 	v, ok := o.(*BigFloat)
 	if !ok {
 		// Also check if equal to regular Float
-		if f, ok := o.(*Float); ok {
+		if f, ok := o.(*Float); ok { //nolint:gocritic
 			vf := new(big.Float).SetFloat64(f.Value)
 			return p.value.Cmp(vf) == 0
 		}

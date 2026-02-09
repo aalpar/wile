@@ -372,7 +372,7 @@ func TestScopeCreation(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SyntaxPair, got %T", expanded))
 
 	// The expansion (quote expanded) should have the quote symbol as car
-	if quoteSym, ok := expandedPair.Car().(*syntax.SyntaxSymbol); ok {
+	if quoteSym, ok := expandedPair.Car().(*syntax.SyntaxSymbol); ok { //nolint:gocritic
 		// Free identifiers like 'quote' should NOT have intro scope
 		// This is correct behavior - they need to resolve to their original bindings
 		qt.Assert(t, quoteSym.Unwrap().(*values.Symbol).Key, qt.Equals, "quote")
@@ -519,10 +519,10 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 					}
 
 					// If it's a define-syntax, compile it
-					if pair, ok := expanded.(*syntax.SyntaxPair); ok {
+					if pair, ok := expanded.(*syntax.SyntaxPair); ok { //nolint:gocritic
 						car := pair.Car()
 						if car != nil {
-							if sym, ok := car.(*syntax.SyntaxSymbol); ok && sym.Sym.Key == "define-syntax" {
+							if sym, ok := car.(*syntax.SyntaxSymbol); ok && sym.Sym.Key == "define-syntax" { //nolint:gocritic
 								ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
 								ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
 								args := extractDefineSyntaxArgs(t, expanded)

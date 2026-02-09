@@ -60,12 +60,12 @@ func getTestDataPath() string {
 func TestR7RSConformance(t *testing.T) {
 	// Check that the scheme binary exists
 	schemeBin := getSchemeBinary()
-	if _, err := os.Stat(schemeBin); os.IsNotExist(err) {
+	if _, err := os.Stat(schemeBin); os.IsNotExist(err) { //nolint:gocritic
 		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
 	}
 
 	testFile := filepath.Join(getTestDataPath(), "r7rs-tests.scm")
-	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+	if _, err := os.Stat(testFile); os.IsNotExist(err) { //nolint:gocritic
 		t.Fatalf("test file not found at %s", testFile)
 	}
 
@@ -96,7 +96,7 @@ func TestR7RSConformance(t *testing.T) {
 
 	// Check exit code
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr, ok := err.(*exec.ExitError); ok { //nolint:gocritic
 			// Test suite failed (exit code non-zero)
 			// Extract summary from output if available
 			summary := extractTestSummary(output)

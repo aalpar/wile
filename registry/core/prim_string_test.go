@@ -26,7 +26,7 @@ import (
 // stringValue returns the display representation of a value.
 // Uses String() if available (for human-readable output), otherwise SchemeString().
 func stringValue(o values.Value) string {
-	if stringer, ok := o.(interface{ String() string }); ok {
+	if stringer, ok := o.(interface{ String() string }); ok { //nolint:gocritic
 		return stringer.String()
 	}
 	return o.SchemeString()

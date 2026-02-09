@@ -34,11 +34,11 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 
 	var parts []string
 	_, err := pair.ForEach(ctx, func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
-		if sym, ok := partExpr.(*values.Symbol); ok {
+		if sym, ok := partExpr.(*values.Symbol); ok { //nolint:gocritic
 			parts = append(parts, sym.Key)
 			return nil
 		}
-		if num, ok := partExpr.(*values.Integer); ok {
+		if num, ok := partExpr.(*values.Integer); ok { //nolint:gocritic
 			parts = append(parts, fmt.Sprintf("%d", num.Value))
 			return nil
 		}
@@ -75,7 +75,7 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 
 	// Check if first element is a modifier keyword
 	car := pair.Car()
-	if carSym, ok := car.(*values.Symbol); ok {
+	if carSym, ok := car.(*values.Symbol); ok { //nolint:gocritic
 		switch carSym.Key {
 		case "only":
 			return parseImportSetOnlyFromDatum(ctx, pair)

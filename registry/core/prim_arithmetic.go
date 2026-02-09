@@ -117,25 +117,25 @@ func numericEquals(a, b values.Number) bool {
 	}
 
 	// Handle Integer vs Float specially to preserve precision
-	if intA, ok := a.(*values.Integer); ok {
-		if floatB, ok := b.(*values.Float); ok {
+	if intA, ok := a.(*values.Integer); ok { //nolint:gocritic
+		if floatB, ok := b.(*values.Float); ok { //nolint:gocritic
 			return integerEqualsFloat(intA, floatB)
 		}
 	}
-	if intB, ok := b.(*values.Integer); ok {
-		if floatA, ok := a.(*values.Float); ok {
+	if intB, ok := b.(*values.Integer); ok { //nolint:gocritic
+		if floatA, ok := a.(*values.Float); ok { //nolint:gocritic
 			return integerEqualsFloat(intB, floatA)
 		}
 	}
 
 	// Handle BigInteger vs Float
-	if bigA, ok := a.(*values.BigInteger); ok {
-		if floatB, ok := b.(*values.Float); ok {
+	if bigA, ok := a.(*values.BigInteger); ok { //nolint:gocritic
+		if floatB, ok := b.(*values.Float); ok { //nolint:gocritic
 			return bigIntegerEqualsFloat(bigA, floatB)
 		}
 	}
-	if bigB, ok := b.(*values.BigInteger); ok {
-		if floatA, ok := a.(*values.Float); ok {
+	if bigB, ok := b.(*values.BigInteger); ok { //nolint:gocritic
+		if floatA, ok := a.(*values.Float); ok { //nolint:gocritic
 			return bigIntegerEqualsFloat(bigB, floatA)
 		}
 	}

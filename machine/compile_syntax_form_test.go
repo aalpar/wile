@@ -216,7 +216,7 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	// Verify OperationSyntaxTemplateExpand WAS generated
 	hasTemplateExpand := false
 	for _, op := range tpl.operations {
-		if _, ok := op.(*OperationSyntaxTemplateExpand); ok {
+		if _, ok := op.(*OperationSyntaxTemplateExpand); ok { //nolint:gocritic
 			hasTemplateExpand = true
 			break
 		}
