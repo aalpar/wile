@@ -820,9 +820,7 @@ func TestMachineContextApplySimple(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
 }
 

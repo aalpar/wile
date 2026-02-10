@@ -55,8 +55,8 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	// Pop handler on normal completion
 	mc.PopExceptionHandler()
 
-	// Check for other errors (but ignore halt)
-	if thunkErr != nil && !errors.Is(thunkErr, machine.ErrMachineHalt) {
+	// Check for other errors
+	if thunkErr != nil {
 		return thunkErr
 	}
 
@@ -91,7 +91,7 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 		return nil, err
 	}
 
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	if err != nil {
 		return nil, err
 	}
 
@@ -114,8 +114,7 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 	resumeSub.SetValue(value)
 
 	err := resumeSub.Run()
-
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	if err != nil {
 		return nil, err
 	}
 
@@ -147,7 +146,7 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 					return err
 				}
 				err = sub.Run()
-				if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+				if err != nil {
 					return err
 				}
 			}
@@ -191,7 +190,7 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 		// Clean up handler stack
 		mc.PopExceptionHandler()
 
-		if resumeErr != nil && !errors.Is(resumeErr, machine.ErrMachineHalt) {
+		if resumeErr != nil {
 			return resumeErr
 		}
 

@@ -24,10 +24,12 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-var (
-	ErrMachineHalt           = values.NewStaticError("machine halt: no more operations to run")
-	ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
-)
+// errHalt is the internal VM sentinel returned by OperationRestoreContinuation
+// when mc.cont == nil (i.e., no more frames to pop — execution is complete).
+// Run() catches this and returns nil, so callers never see it.
+var errHalt = values.NewStaticError("machine halt: no more operations to run")
+
+var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
 
 // immediateReturnTemplate is an empty NativeTemplate used for callables that
 // complete their work during Apply (e.g., Parameter get/set). Setting this as
@@ -322,10 +324,8 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 			}
 			err = sub.Run()
 			if err != nil {
-				if !errors.Is(err, ErrMachineHalt) {
-					wrapErr := p.WrapError(err, "parameter: converter error")
-					return p, wrapErr
-				}
+				wrapErr := p.WrapError(err, "parameter: converter error")
+				return p, wrapErr
 			}
 			newVal = sub.GetValue()
 		}
@@ -429,6 +429,12 @@ func (p *MachineContext) Run() error {
 		mc.counters.OpsExecuted++
 		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
 		if err != nil {
+			// errHalt is a success sentinel — the continuation chain is
+			// exhausted, which means execution completed normally.
+			// Translate it to nil so callers use plain "if err != nil".
+			if errors.Is(err, errHalt) {
+				return nil
+			}
 			return err
 		}
 	}
@@ -642,7 +648,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 				return err
 			}
 			err = sub.Run()
-			if err != nil && !errors.Is(err, ErrMachineHalt) {
+			if err != nil {
 				// Propagate escapes and exceptions
 				return err
 			}
@@ -667,7 +673,7 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 				return err
 			}
 			err = sub.Run()
-			if err != nil && !errors.Is(err, ErrMachineHalt) {
+			if err != nil {
 				return err
 			}
 		}
@@ -717,7 +723,7 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 				return err
 			}
 			err = sub.Run()
-			if err != nil && !errors.Is(err, ErrMachineHalt) {
+			if err != nil {
 				return err
 			}
 		}
@@ -853,14 +859,14 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 // After the inner execution completes and unwinds, if there's a pending escape
 // continuation, execution continues from there.
 //
-// When execution completes (either normally or via ErrMachineHalt), any remaining
+// When execution completes normally (Run returns nil), any remaining
 // frames on the winding stack are unwound (after thunks are called).
 func (p *MachineContext) RunWithEscapeHandling() error {
 	for {
 		err := p.Run()
 
-		// Check for successful completion (nil or ErrMachineHalt)
-		if err == nil || errors.Is(err, ErrMachineHalt) {
+		// Check for successful completion
+		if err == nil {
 			// Unwind any remaining frames (call after thunks)
 			if len(p.windingStack) > 0 {
 				unwindErr := p.UnwindTo(0)

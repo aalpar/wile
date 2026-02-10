@@ -723,11 +723,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc2 := NewMachineContext(context.Background(), cont2)
 	err = mc2.Run()
-	// ErrMachineHalt is expected when execution completes with inTail=true at top-level
-	// (RestoreContinuation returns ErrMachineHalt when mc.cont is nil)
-	if err != nil && err != ErrMachineHalt {
-		qt.Assert(t, err, qt.IsNil)
-	}
+	qt.Assert(t, err, qt.IsNil)
 
 	// Without TCO: maxCallDepth should be >= 100 (grows with recursion depth)
 	// With TCO: maxCallDepth should be small (~2-3, constant)
@@ -790,9 +786,6 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err == ErrMachineHalt {
-		err = nil
-	}
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should call first clause with 1 arg: returns 42
@@ -1597,9 +1590,7 @@ func TestCompileDefineFn(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompileDefineFnVariadic tests define with variadic function shorthand
@@ -1614,9 +1605,7 @@ func TestCompileDefineFnVariadic(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompileSymbolGlobal tests compiling a global symbol reference
@@ -1631,9 +1620,7 @@ func TestCompileSymbolGlobal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 
 	// Then reference it
 	sv2 := parseSchemeExpr(t, env, `my-global`)
@@ -1641,9 +1628,7 @@ func TestCompileSymbolGlobal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc2 := NewMachineContext(context.Background(), cont2)
 	err = mc2.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc2.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
@@ -1659,9 +1644,7 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 
 	// Set it to new value
 	sv2 := parseSchemeExpr(t, env, `(set! my-var 20)`)
@@ -1669,9 +1652,7 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc2 := NewMachineContext(context.Background(), cont2)
 	err = mc2.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 
 	// Check the new value
 	sv3 := parseSchemeExpr(t, env, `my-var`)
@@ -1679,9 +1660,7 @@ func TestCompileSetBangGlobal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc3 := NewMachineContext(context.Background(), cont3)
 	err = mc3.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc3.GetValue(), values.SchemeEquals, values.NewInteger(20))
 }
 
@@ -1696,9 +1675,7 @@ func TestCompileBegin(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
 }
 
@@ -1713,9 +1690,7 @@ func TestCompileLambdaMultiExprBody(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
 }
 
@@ -1731,9 +1706,7 @@ func TestCompileCaseLambdaMultiClause(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompileQuoteSymbol tests quoting a symbol
@@ -1747,9 +1720,7 @@ func TestCompileQuoteSymbol(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	val := mc.GetValue()
 	_, isSymbol := val.(*values.Symbol)
 	qt.Assert(t, isSymbol, qt.IsTrue)
@@ -1766,9 +1737,7 @@ func TestCompileQuoteVector(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	val := mc.GetValue()
 	_, isVector := val.(*values.Vector)
 	qt.Assert(t, isVector, qt.IsTrue)
@@ -1785,9 +1754,7 @@ func TestCompileIfThenOnly(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
@@ -1802,9 +1769,7 @@ func TestCompileIfFalsePath(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
 }
 
@@ -1819,9 +1784,7 @@ func TestCompileDefineVarSimple(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompileLambdaWithMultipleParams tests lambda with multiple parameters
@@ -1835,9 +1798,7 @@ func TestCompileLambdaWithMultipleParams(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
 }
 
@@ -1852,9 +1813,7 @@ func TestCompileLambdaRest(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompileQuoteList tests quoting a list
@@ -1868,9 +1827,7 @@ func TestCompileQuoteList(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	val := mc.GetValue()
 	_, isPair := val.(*values.Pair)
 	qt.Assert(t, isPair, qt.IsTrue)
@@ -1915,9 +1872,7 @@ func TestCompileSyntaxRulesSimple(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestCompiledLibraryMethods tests CompiledLibrary methods

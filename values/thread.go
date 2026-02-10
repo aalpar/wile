@@ -22,6 +22,41 @@ import (
 	"time"
 )
 
+// Thread state symbol singletons.
+//
+// StateSymbol() and PrimCurrentThread return these package-level singletons
+// instead of allocating fresh symbols on each call. This guarantees
+// self-consistency: (eq? (thread-state t) (thread-state t)) → #t.
+//
+// However, these are process-global pointers, not per-VM interned symbols.
+// Reader-interned 'new (created via the parser gate) lives in the per-VM
+// TopLevelEnvironment intern table and is a different pointer. Therefore:
+//
+//	(eq? (thread-state t) (thread-state t))  → #t  (same singleton)
+//	(eq? (thread-state t) 'new)              → #f  (singleton ≠ interned)
+//	(equal? (thread-state t) 'new)           → #t  (string comparison)
+//
+// SRFI-18 defines thread states as symbols but does not mandate eq? identity
+// against reader-interned symbols, so this is conformant. The equal? path
+// works because Symbol.EqualTo compares .Key strings.
+//
+// To make eq? work against reader-interned symbols, these singletons would
+// need to participate in the per-VM intern table. That requires either:
+//   - Lazily interning on first use (needs access to an environment)
+//   - Registering these symbols during Engine initialization
+//
+// The values/ package cannot import environment/ (it's lower in the dependency
+// graph), so this would need to be driven from engine.go or registry/. This
+// is deferred until there is a concrete need.
+var (
+	SymbolThreadNew        = NewSymbol("new")
+	SymbolThreadRunnable   = NewSymbol("runnable")
+	SymbolThreadBlocked    = NewSymbol("blocked")
+	SymbolThreadTerminated = NewSymbol("terminated")
+	SymbolThreadUnknown    = NewSymbol("unknown")
+	SymbolPrimordial       = NewSymbol("primordial")
+)
+
 var (
 	_ Value = (*Thread)(nil)
 
@@ -147,21 +182,24 @@ func (p *Thread) State() ThreadState {
 	return p.state
 }
 
-// StateSymbol returns the state as a Scheme symbol
+// StateSymbol returns the state as a Scheme symbol.
+// Returns package-level singletons so that repeated calls return the same pointer:
+// (eq? (thread-state t) (thread-state t)) → #t.
+// See the doc comment on SymbolThreadNew for eq? vs equal? caveats.
 func (p *Thread) StateSymbol() *Symbol {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	switch p.state {
 	case ThreadNew:
-		return NewSymbol("new")
+		return SymbolThreadNew
 	case ThreadRunnable:
-		return NewSymbol("runnable")
+		return SymbolThreadRunnable
 	case ThreadBlocked:
-		return NewSymbol("blocked")
+		return SymbolThreadBlocked
 	case ThreadTerminated:
-		return NewSymbol("terminated")
+		return SymbolThreadTerminated
 	default:
-		return NewSymbol("unknown")
+		return SymbolThreadUnknown
 	}
 }
 

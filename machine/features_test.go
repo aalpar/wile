@@ -219,9 +219,7 @@ func TestCondExpandWithElse(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
@@ -237,9 +235,7 @@ func TestCondExpandR7RS(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
 }
 
@@ -254,9 +250,7 @@ func TestCondExpandAnd(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(200))
 }
 
@@ -271,9 +265,7 @@ func TestCondExpandOr(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(300))
 }
 
@@ -288,9 +280,7 @@ func TestCondExpandNot(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(400))
 }
 

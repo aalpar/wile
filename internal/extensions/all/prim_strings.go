@@ -19,7 +19,6 @@ package all
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -246,13 +245,7 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 
 		// Get the result character
@@ -330,13 +323,7 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 	}
 

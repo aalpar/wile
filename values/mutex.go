@@ -21,6 +21,16 @@ import (
 	"time"
 )
 
+// Mutex state symbol singletons.
+//
+// StateValue() returns these instead of allocating fresh symbols on each call.
+// Same process-global vs per-VM identity subtlety as the thread state symbols
+// — see the doc comment on SymbolThreadNew in thread.go for details.
+var (
+	SymbolMutexNotOwned  = NewSymbol("not-owned")
+	SymbolMutexAbandoned = NewSymbol("abandoned")
+)
+
 var (
 	_ Value = (*Mutex)(nil)
 
@@ -112,26 +122,29 @@ func (p *Mutex) State() MutexState {
 	return p.state
 }
 
-// StateValue returns the state as a Scheme value
-// Returns: 'not-owned, 'abandoned, or the owner thread
+// StateValue returns the state as a Scheme value.
+// Returns package-level singletons for symbol states so that repeated calls
+// return the same pointer: (eq? (mutex-state m) (mutex-state m)) → #t.
+// See the doc comment on SymbolThreadNew in thread.go for eq? vs equal? caveats.
+// Returns: 'not-owned, 'abandoned, or the owner thread.
 func (p *Mutex) StateValue() Value {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	switch p.state {
 	case MutexUnlocked:
-		return NewSymbol("not-owned")
+		return SymbolMutexNotOwned
 	case MutexLockedOwned:
 		if p.owner != nil {
 			return p.owner
 		}
-		return NewSymbol("not-owned")
+		return SymbolMutexNotOwned
 	case MutexLockedNotOwned:
-		return NewSymbol("not-owned")
+		return SymbolMutexNotOwned
 	case MutexAbandoned:
-		return NewSymbol("abandoned")
+		return SymbolMutexAbandoned
 	default:
-		return NewSymbol("not-owned")
+		return SymbolMutexNotOwned
 	}
 }
 

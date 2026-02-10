@@ -19,7 +19,6 @@ package gointerop
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
@@ -435,7 +434,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 			return
 		}
 		err = sub.Run()
-		if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+		if err != nil {
 			return
 		}
 	})

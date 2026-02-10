@@ -965,9 +965,7 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 	err := mc.Run()
-	if err != nil && err != ErrMachineHalt {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, called, qt.IsTrue)
 }
 

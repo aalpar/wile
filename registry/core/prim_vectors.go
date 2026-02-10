@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -349,13 +348,7 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 		results[i] = sub.GetValue()
 	}
@@ -418,13 +411,7 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 	}
 

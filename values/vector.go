@@ -109,22 +109,7 @@ func (p *Vector) AsList() Tuple {
 	if p.IsVoid() {
 		return (*Pair)(nil)
 	}
-	l := len(*p)
-	switch l {
-	case 0:
-		return EmptyList
-	case 1:
-		return NewCons((*p)[0], EmptyList)
-	}
-	q := NewCons((*p)[0], NewCons(nil, nil))
-	curr := q
-	for _, v := range (*p)[1:] {
-		curr = curr.Cdr().(*Pair)
-		curr.SetCar(v)
-		curr.SetCdr(NewCons(nil, nil))
-	}
-	curr.SetCdr(EmptyList)
-	return q
+	return List((*p)...)
 }
 
 // SchemeString returns the Scheme external representation of the vector.

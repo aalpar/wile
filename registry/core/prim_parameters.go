@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -55,9 +54,7 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 			}
 			err = sub.Run()
 			if err != nil {
-				if !errors.Is(err, machine.ErrMachineHalt) {
-					return values.WrapForeignErrorf(err, "make-parameter: converter error")
-				}
+				return values.WrapForeignErrorf(err, "make-parameter: converter error")
 			}
 			init = sub.GetValue()
 		}

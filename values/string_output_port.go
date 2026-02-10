@@ -29,8 +29,8 @@ var _ io.StringWriter = (*StringOutputPort)(nil)
 
 // StringOutputPort represents a Scheme string output port backed by a buffer.
 type StringOutputPort struct {
-	buf    *bytes.Buffer
-	closed bool
+	portBase
+	buf *bytes.Buffer
 }
 
 // NewStringOutputPort creates a new string output port.
@@ -50,44 +50,38 @@ func NewStringOutputPortWithBuffer(buffer *bytes.Buffer) *StringOutputPort {
 
 // WriteString writes a string to the port.
 func (p *StringOutputPort) WriteString(s string) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.WriteString(s)
 }
 
 // Write writes data to the port.
 func (p *StringOutputPort) Write(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.Write(bs)
 }
 
 // WriteRune writes a single rune to the port's buffer.
 func (p *StringOutputPort) WriteRune(rn rune) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.WriteRune(rn)
 }
 
 // Flush is a no-op for StringOutputPort.
 func (p *StringOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return nil
-}
-
-// Close closes the StringOutputPort.
-func (p *StringOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	return nil
-}
-
-func (p *StringOutputPort) IsClosed() bool {
-	return p.closed
 }
 
 // Datum returns the underlying buffer.

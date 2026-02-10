@@ -417,13 +417,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 
 		// If compare returns a true value (not #f), we found a match
@@ -501,13 +495,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 		}
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return err
-			}
+			return err
 		}
 
 		// If compare returns a true value (not #f), we found a match

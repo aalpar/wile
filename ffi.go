@@ -16,7 +16,6 @@ package wile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -579,13 +578,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 
 			runErr := sub.Run()
 			if runErr != nil {
-				var escapeErr *machine.ErrContinuationEscape
-				if errors.As(runErr, &escapeErr) {
-					return callbackErrorResult(funcType, hasErrorReturn, runErr)
-				}
-				if !errors.Is(runErr, machine.ErrMachineHalt) {
-					return callbackErrorResult(funcType, hasErrorReturn, runErr)
-				}
+				return callbackErrorResult(funcType, hasErrorReturn, runErr)
 			}
 
 			// Build Go return values.
@@ -685,7 +678,7 @@ func callbackParameterResult(
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
 			}
 			runErr := sub.Run()
-			if runErr != nil && !errors.Is(runErr, machine.ErrMachineHalt) {
+			if runErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, runErr)
 			}
 			newVal = sub.GetValue()
