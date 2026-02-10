@@ -693,9 +693,12 @@ func TestMutexAbandonedOnTermination(t *testing.T) {
 			               ;; sleep to keep thread alive while we terminate it
 			               (thread-sleep! 10)))))
 			   (thread-start! t)
-			   ;; Give the thread time to acquire the mutex
-			   (thread-sleep! 0)
-			   (thread-yield!)
+			   ;; Wait until the child thread actually acquires the mutex.
+			   ;; mutex-state returns the owner thread (not a symbol) when locked.
+			   (let wait ()
+			     (when (symbol? (mutex-state m))
+			       (thread-yield!)
+			       (wait)))
 			   (thread-terminate! t)
 			   ;; The mutex should be abandoned
 			   (let ((state (mutex-state m)))
