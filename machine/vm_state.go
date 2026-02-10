@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package machine
 
 import (
@@ -9,8 +23,8 @@ import (
 // set is documented in one place and impossible to get out of sync.
 //
 // IMPORTANT: The fields are NOT uniformly copied by save/restore operations.
-// See the per-method field tables in the doc comments for Restore,
-// PopContinuation, and SaveContinuation in machine_context.go.
+// The table below summarizes how each method (SaveContinuation, Restore,
+// PopContinuation) treats each field.
 //
 //	┌──────────────┬────────────────┬─────────────┬──────────────────┐
 //	│ Field        │ SaveCont saves │ Restore     │ PopContinuation  │

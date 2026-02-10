@@ -84,7 +84,7 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 			env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
 			template: cont.template, // not needed to copy, templates are immutable
 			value:    cont.value,    // must not copy the values, they are passed between contexts
-			evals:    cont.evals,    // must copy the eval stack
+			evals:    cont.evals,    // no copy needed: continuation is consumed once at context creation
 			pc:       cont.pc,
 		},
 		cont: cont.parent,
