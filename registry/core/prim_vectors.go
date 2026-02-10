@@ -72,16 +72,11 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	k := mc.Arg(1)
-	idx, ok := values.ExactInteger(k)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-ref: expected an exact integer but got %T", k)
-	}
-	err = helpers.CheckIndexBounds(idx, len(*v), "vector-ref")
+	idx, err := helpers.RequireIndex(mc, 1, v.Length(), "vector-ref")
 	if err != nil {
 		return err
 	}
-	mc.SetValue((*v)[idx])
+	mc.SetValue(v.Get(idx))
 	return nil
 }
 
@@ -93,17 +88,11 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	k := mc.Arg(1)
-	obj := mc.Arg(2)
-	idx, ok := values.ExactInteger(k)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-set!: expected an exact integer but got %T", k)
-	}
-	err = helpers.CheckIndexBounds(idx, len(*v), "vector-set!")
+	idx, err := helpers.RequireIndex(mc, 1, v.Length(), "vector-set!")
 	if err != nil {
 		return err
 	}
-	(*v)[idx] = obj
+	v.Set(idx, mc.Arg(2))
 	mc.SetValue(values.Void)
 	return nil
 }

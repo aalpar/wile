@@ -110,15 +110,11 @@ func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "bytevector-u8-ref")
+	idx, err := helpers.RequireIndex(mc, 1, bv.Length(), "bytevector-u8-ref")
 	if err != nil {
 		return err
 	}
-	err = helpers.CheckIndexBounds(idx.Value, len(*bv), "bytevector-u8-ref")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64((*bv)[idx.Value].Value)))
+	mc.SetValue(values.NewInteger(int64((*bv)[idx].Value)))
 	return nil
 }
 
@@ -129,23 +125,18 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotAnInteger, "bytevector-u8-set!")
+	idx, err := helpers.RequireIndex(mc, 1, bv.Length(), "bytevector-u8-set!")
 	if err != nil {
 		return err
 	}
-	obj := mc.Arg(2)
-	err = helpers.CheckIndexBounds(idx.Value, len(*bv), "bytevector-u8-set!")
-	if err != nil {
-		return err
-	}
-	byteVal, err := helpers.RequireType[*values.Integer](obj, values.ErrNotAnInteger, "bytevector-u8-set!")
+	byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), values.ErrNotAnInteger, "bytevector-u8-set!")
 	if err != nil {
 		return err
 	}
 	if byteVal.Value < 0 || byteVal.Value > 255 {
 		return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
 	}
-	(*bv)[idx.Value] = values.NewByte(uint8(byteVal.Value))
+	(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
 	mc.SetValue(values.Void)
 	return nil
 }
