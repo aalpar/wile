@@ -95,50 +95,35 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 // PrimBytevectorLength implements the bytevector-length primitive.
 // Returns length of bytevector.
 func PrimBytevectorLength(_ context.Context, mc *machine.MachineContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-length")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(len(*bv))))
-	return nil
+	return helpers.SequenceLength[*values.ByteVector](mc, values.ErrNotAByteVector, "bytevector-length")
 }
 
 // PrimBytevectorU8Ref implements the bytevector-u8-ref primitive.
-// Returns byte at index.
+// Returns byte at index as an exact integer (R7RS §6.9).
 func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-u8-ref")
-	if err != nil {
-		return err
-	}
-	idx, err := helpers.RequireIndex(mc, 1, bv.Length(), "bytevector-u8-ref")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64((*bv)[idx].Value)))
-	return nil
+	return helpers.SequenceRef(mc, values.ErrNotAByteVector, "bytevector-u8-ref",
+		func(bv *values.ByteVector, idx int) values.Value {
+			return values.NewInteger(int64((*bv)[idx].Value))
+		},
+	)
 }
 
 // PrimBytevectorU8Set implements the bytevector-u8-set! primitive.
 // Sets byte at index.
 func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-u8-set!")
-	if err != nil {
-		return err
-	}
-	idx, err := helpers.RequireIndex(mc, 1, bv.Length(), "bytevector-u8-set!")
-	if err != nil {
-		return err
-	}
-	byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), values.ErrNotAnInteger, "bytevector-u8-set!")
-	if err != nil {
-		return err
-	}
-	if byteVal.Value < 0 || byteVal.Value > 255 {
-		return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
-	}
-	(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
-	mc.SetValue(values.Void)
-	return nil
+	return helpers.SequenceSet(mc, values.ErrNotAByteVector, "bytevector-u8-set!",
+		func(bv *values.ByteVector, idx int, mc *machine.MachineContext) error {
+			byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), values.ErrNotAnInteger, "bytevector-u8-set!")
+			if err != nil {
+				return err
+			}
+			if byteVal.Value < 0 || byteVal.Value > 255 {
+				return values.NewForeignError("bytevector-u8-set!: value must be a byte (0-255)")
+			}
+			(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
+			return nil
+		},
+	)
 }
 
 // PrimBytevectorCopy implements the bytevector-copy primitive.
