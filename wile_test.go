@@ -139,6 +139,110 @@ func TestNewBigFloatFromString(t *testing.T) {
 	})
 }
 
+func TestNewRational(t *testing.T) {
+	c := qt.New(t)
+	tcs := []struct {
+		name     string
+		num, den int64
+		wantStr  string
+	}{
+		{"3/4", 3, 4, "3/4"},
+		{"negative", -1, 2, "-1/2"},
+		{"whole number reduces", 6, 3, "2"},
+		{"zero numerator", 0, 5, "0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			v := NewRational(tc.num, tc.den)
+			c.Assert(v.SchemeString(), qt.Equals, tc.wantStr)
+			c.Assert(v.IsVoid(), qt.IsFalse)
+		})
+	}
+}
+
+func TestNewRationalFromBigInt(t *testing.T) {
+	c := qt.New(t)
+	v := NewRationalFromBigInt(big.NewInt(7), big.NewInt(3))
+	c.Assert(v.SchemeString(), qt.Equals, "7/3")
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewComplex(t *testing.T) {
+	c := qt.New(t)
+	tcs := []struct {
+		name    string
+		val     complex128
+		wantStr string
+	}{
+		{"1+2i", 1 + 2i, "1.0+2.0i"},
+		{"pure imaginary", 0 + 3i, "0.0+3.0i"},
+		{"real only", 5 + 0i, "5.0+0.0i"},
+		{"negative imaginary", 1 - 2i, "1.0-2.0i"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			v := NewComplex(tc.val)
+			c.Assert(v.SchemeString(), qt.Equals, tc.wantStr)
+			c.Assert(v.IsVoid(), qt.IsFalse)
+		})
+	}
+}
+
+func TestNewComplexFromParts(t *testing.T) {
+	c := qt.New(t)
+	v := NewComplexFromParts(3.0, 4.0)
+	c.Assert(v.SchemeString(), qt.Equals, "3.0+4.0i")
+	c.Assert(v.IsVoid(), qt.IsFalse)
+}
+
+func TestNewVector(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("empty vector", func(t *testing.T) {
+		v := NewVector()
+		c.Assert(v.SchemeString(), qt.Equals, "#()")
+		c.Assert(v.IsVoid(), qt.IsFalse)
+	})
+
+	t.Run("with elements", func(t *testing.T) {
+		v := NewVector(NewInteger(1), NewString("two"), NewBoolean(true))
+		c.Assert(v.SchemeString(), qt.Equals, `#( 1 "two" #t )`)
+	})
+
+	t.Run("single element", func(t *testing.T) {
+		v := NewVector(NewFloat(3.14))
+		c.Assert(v.SchemeString(), qt.Equals, "#( 3.14 )")
+	})
+}
+
+func TestValueConstructors_RoundTrip(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine()
+	c.Assert(err, qt.IsNil)
+	ctx := context.Background()
+
+	tcs := []struct {
+		name    string
+		val     Value
+		code    string
+		wantStr string
+	}{
+		{"rational arithmetic", NewRational(1, 3), "(+ x 1/3)", "2/3"},
+		{"complex arithmetic", NewComplex(1 + 2i), "(+ x 3+4i)", "4+6i"},
+		{"vector-ref", NewVector(NewInteger(10), NewInteger(20), NewInteger(30)), "(vector-ref x 1)", "20"},
+		{"vector-length", NewVector(NewInteger(1), NewInteger(2)), "(vector-length x)", "2"},
+		{"big integer arithmetic", NewBigInteger(big.NewInt(1000000000000)), "(+ x 1)", "1000000000001"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine.Define("x", tc.val)
+			result, err := engine.Eval(ctx, tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.wantStr)
+		})
+	}
+}
+
 // Value methods
 
 func TestValue_IsVoid(t *testing.T) {
