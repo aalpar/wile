@@ -1,6 +1,6 @@
 # Code Consolidation Plan: Reducing Code Volume Through Parameterization
 
-**Status:** IN PROGRESS — Phases 2 and 4 partially complete via `RequireArg[T]` and `ParseOptionalStartEnd`
+**Status:** COMPLETE — All 6 phases implemented
 
 ## Executive Summary
 
@@ -16,12 +16,12 @@ This plan identifies opportunities to reduce code volume in the Wile Scheme inte
 
 | Area | Potential Savings | Risk | Status |
 |------|------------------|------|--------|
-| Primitive type extraction | ~2,000 bytes | LOW | **IN PROGRESS** — `RequireArg[T]` exists, 54/260 sites migrated |
+| Primitive type extraction | ~2,000 bytes | LOW | **✅ COMPLETE** — `RequireArg[T]` + `RequireIndex` |
 | Optional argument parsing | ~650 bytes | LOW | **✅ COMPLETE** — `ParseOptionalStartEnd` in `helpers/args.go` |
-| Compile-time execution pattern | ~400 bytes | MEDIUM | Not started |
-| Operation EqualTo helpers | ~300 bytes | LOW | **IN PROGRESS** — helpers exist, 30 ops need migration |
-| Duplicate math helpers | ~250 bytes | LOW | Not started |
-| Index bounds checking | ~100 bytes | LOW | Not started |
+| Compile-time execution pattern | ~400 bytes | MEDIUM | **✅ COMPLETE** — `expandCompileExecute` in `compile_helpers.go` |
+| Operation EqualTo helpers | ~300 bytes | LOW | **✅ COMPLETE** — all 34 ops migrated |
+| Duplicate math helpers | ~250 bytes | LOW | **✅ COMPLETE** |
+| Index bounds checking | ~100 bytes | LOW | **✅ COMPLETE** — `CheckIndexBounds` + `RequireIndex` |
 | Values arithmetic methods | ~1,600 bytes | HIGH | **Do not implement** |
 | IsVoid boilerplate | ~50 bytes | LOW | **Do not implement** (idiomatic Go) |
 
@@ -135,48 +135,29 @@ make lint
 
 ---
 
-## Phase 3: Index Bounds Checking Helper
+## Phase 3: Index Bounds Checking Helper ✅ COMPLETE
 
 **Savings**: ~100 bytes
 **Risk**: LOW
 
-### Problem
+### Status
 
-6 identical bounds-check patterns in ref/set operations:
+Implemented as two complementary helpers in `registry/helpers/args.go`:
 
-```go
-if idx.Value < 0 || idx.Value >= int64(len(*v)) {
-    return values.NewForeignError("string-ref: index out of bounds")
-}
-```
+1. **`CheckIndexBounds(idx int64, length int, name string) error`** — low-level bounds check
+2. **`RequireIndex(mc, argIdx, length, name) (int, error)`** — extracts exact integer index + bounds check in one call
 
-### Solution
+`RequireIndex` uses `values.ExactInteger` (accepts `*Integer`, `*BigInteger`, integer-valued `*Rational`)
+which is more R7RS-correct than the previous `RequireArg[*values.Integer]` (only accepted `*Integer`).
 
-Add to `registry/helpers/args.go`:
+### Files Modified
 
-```go
-// CheckIndexBounds validates that idx is in range [0, length).
-func CheckIndexBounds(idx int64, length int, name string) error {
-    if idx < 0 || idx >= int64(length) {
-        return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "%s: index %d out of bounds for length %d", name, idx, length)
-    }
-    return nil
-}
-```
-
-### Files to Modify
-
-| File | Pattern |
-|------|---------|
-| `registry/core/prim_strings.go` | string-ref, string-set! |
-| `registry/core/prim_vectors.go` | vector-ref, vector-set! |
-| `registry/core/prim_byte_vectors.go` | bytevector-u8-ref, bytevector-u8-set! |
-
-### Verification
-
-```bash
-go test -v -run "TestPrimString|TestPrimVector|TestPrimByte" ./registry/core/...
-```
+| File | Change |
+|------|--------|
+| `registry/helpers/args.go` | Added `RequireIndex` (~15 lines) |
+| `registry/core/prim_vectors.go` | `PrimVectorRef`, `PrimVectorSet` use `RequireIndex` |
+| `registry/core/prim_byte_vectors.go` | `PrimBytevectorU8Ref`, `PrimBytevectorU8Set` use `RequireIndex` |
+| `registry/core/prim_strings.go` | `PrimStringRef`, `PrimStringSet` use `RequireIndex` |
 
 ---
 
@@ -193,64 +174,15 @@ No further work needed.
 
 ---
 
-## Phase 5: Compile-Time Execution Helper
+## Phase 5: Compile-Time Execution Helper ✅ COMPLETE
 
 **Savings**: ~400 bytes
 **Risk**: MEDIUM
 
-### Problem
+### Status
 
-3 files share identical 30-line expand-compile-execute pattern:
-
-| File | Form |
-|------|------|
-| `machine/compile_begin_for_syntax.go` | begin-for-syntax |
-| `machine/compile_define_for_syntax.go` | define-for-syntax |
-| `machine/compile_eval_when.go` | eval-when |
-
-Common pattern:
-```go
-expandEnv := p.env.Expand()
-ectx := NewExpandTimeCallContext()
-expander := NewExpanderTimeContinuation(p.env)
-
-expandedExpr, err := expander.ExpandExpression(ectx, stxVal)
-if err != nil {
-    return values.WrapForeignErrorf(err, "[form]: expansion failed")
-}
-
-tmpTpl := NewNativeTemplate(0, 0, false)
-tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
-err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
-if err != nil {
-    return values.WrapForeignErrorf(err, "[form]: compilation failed")
-}
-
-cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-mc := NewMachineContext(context.Background(), cont)
-err = mc.Run()
-if err != nil {
-    return values.WrapForeignErrorf(err, "[form]: evaluation failed")
-}
-```
-
-### Solution
-
-Extract `ExecuteAtCompileTime` helper on `*CompileTimeContinuation`. Create in `machine/compile_helpers.go` or add to existing helpers file.
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `machine/compile_begin_for_syntax.go` | Replace expand-compile-execute block with helper call |
-| `machine/compile_define_for_syntax.go` | Replace expand-compile-execute block with helper call |
-| `machine/compile_eval_when.go` | Replace expand-compile-execute block with helper call |
-
-### Verification
-
-```bash
-go test -v -run "TestMacro|TestSyntax|TestBeginForSyntax|TestDefineForSyntax|TestEvalWhen" ./machine/...
-```
+Implemented as `expandCompileExecute` on `*CompileTimeContinuation` in `machine/compile_helpers.go`.
+All 3 call sites (`begin-for-syntax`, `define-for-syntax`, `eval-when`) use the helper.
 
 ---
 
@@ -356,9 +288,9 @@ Already documented as a separate initiative in `plans/TOKENIZER_CONSOLIDATION_PL
 |-------|-------------|---------|------|--------|
 | 1 | Remove duplicate math helpers | 250 bytes | LOW | **✅ COMPLETE** |
 | 2 | `RequireArg[T]` migration | ~18 lines | LOW | **✅ COMPLETE** (67/67 convertible; see triage for non-convertible) |
-| 3 | Index bounds checking | 100 bytes | LOW | Not started |
+| 3 | Index bounds checking | 100 bytes | LOW | **✅ COMPLETE** — `CheckIndexBounds` + `RequireIndex` |
 | 4 | Optional start/end parser | 650 bytes | LOW | **✅ COMPLETE** |
-| 5 | Compile-time execution helper | 400 bytes | MEDIUM | Not started |
+| 5 | Compile-time execution helper | 400 bytes | MEDIUM | **✅ COMPLETE** — `expandCompileExecute` |
 | 6 | Operation EqualTo migration | 300 bytes | LOW | **✅ COMPLETE** |
 
 ---

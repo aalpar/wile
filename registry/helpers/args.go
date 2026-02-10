@@ -90,6 +90,24 @@ func CheckIndexBounds(idx int64, length int, name string) error {
 	return nil
 }
 
+// RequireIndex extracts an exact integer index from mc.Arg(argIdx) and validates
+// it is in range [0, length). Accepts *Integer, *BigInteger, and integer-valued
+// *Rational via values.ExactInteger, which is more R7RS-correct than requiring
+// *Integer alone (R7RS §6.1: indices are exact non-negative integers).
+func RequireIndex(mc *machine.MachineContext, argIdx int, length int, name string) (int, error) {
+	k := mc.Arg(argIdx)
+	idx, ok := values.ExactInteger(k)
+	if !ok {
+		return 0, values.WrapForeignErrorf(values.ErrNotAnInteger,
+			"%s: expected an exact integer index but got %s", name, k.SchemeString())
+	}
+	err := CheckIndexBounds(idx, length, name)
+	if err != nil {
+		return 0, err
+	}
+	return int(idx), nil
+}
+
 // ValidateStartEnd checks the invariant 0 <= start <= end <= length.
 // Returns a wrapped ErrIndexOutOfRange error if any bound is violated.
 func ValidateStartEnd(start, end, length int64, name string) error {

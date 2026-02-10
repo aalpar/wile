@@ -97,16 +97,12 @@ func PrimStringRef(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "string-ref")
-	if err != nil {
-		return err
-	}
 	runes := []rune(s.Value)
-	err = helpers.CheckIndexBounds(idx.Value, len(runes), "string-ref")
+	idx, err := helpers.RequireIndex(mc, 1, len(runes), "string-ref")
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewCharacter(runes[idx.Value]))
+	mc.SetValue(values.NewCharacter(runes[idx]))
 	return nil
 }
 
@@ -118,20 +114,15 @@ func PrimStringSet(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	idx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "string-set!")
-	if err != nil {
-		return err
-	}
 	char, err := helpers.RequireArg[*values.Character](mc, 2, values.ErrNotACharacter, "string-set!")
 	if err != nil {
 		return err
 	}
-	length := s.Len()
-	err = helpers.CheckIndexBounds(idx.Value, length, "string-set!")
+	idx, err := helpers.RequireIndex(mc, 1, s.Len(), "string-set!")
 	if err != nil {
 		return err
 	}
-	s.SetChar(int(idx.Value), char.Value)
+	s.SetChar(idx, char.Value)
 	mc.SetValue(values.Void)
 	return nil
 }
