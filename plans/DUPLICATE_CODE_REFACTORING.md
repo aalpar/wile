@@ -9,7 +9,7 @@
 
 ## Overview
 
-The linter identified 39 duplicate code blocks across 6 packages. 13 have been eliminated (output port helpers, parity checks, integer division, variadic comparisons, optional position extraction, registry helpers). 24 numeric tower type-switch duplicates were closed as intentional architecture (see below). 2 remain actionable.
+The linter identified 39 duplicate code blocks across 6 packages. 13 have been eliminated (output port helpers, parity checks, integer division, variadic comparisons, optional position extraction, registry helpers). 24 numeric tower type-switch duplicates were closed as intentional architecture (see below). 2 match package VM loop duplicates were eliminated by delegating `MatchSyntax` to `MatchSyntaxWithLiterals` (PR #157).
 
 ## Closed: Numeric Tower Type Switch Duplicates (24 duplicates)
 
