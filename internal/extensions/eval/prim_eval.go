@@ -56,7 +56,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Compile the expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: compilation error")
@@ -116,7 +116,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 
 		// Compile the expression
 		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+		cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
@@ -373,7 +373,7 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	// Step 2: Compile to bytecode template
 	// Create a thunk template (0 params, 0 locals, not variadic)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: compilation failed")

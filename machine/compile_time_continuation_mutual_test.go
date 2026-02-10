@@ -62,7 +62,7 @@ func TestCompileContext_CompileDefine_MutualRecursion_NotSupported(t *testing.T)
 	econt1 := NewExpanderTimeContinuation(env)
 	prog1Syntax, err := econt1.ExpandExpression(ectx, prog1)
 	qt.Assert(t, err, qt.IsNil)
-	cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
+	cnt := NewCompileTimeCallContext(context.Background(), false, true)
 	err = cctx1.CompileExpression(cnt, prog1Syntax)
 	// This SHOULD fail - mutual recursion requires both functions to be pre-declared
 	qt.Assert(t, err, qt.IsNotNil, qt.Commentf("Should fail: forward references not supported"))
@@ -91,7 +91,7 @@ func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {
 	econt := NewExpanderTimeContinuation(env)
 	progSyntax, err := econt.ExpandExpression(ectx, prog)
 	qt.Assert(t, err, qt.IsNil)
-	cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
+	cnt := NewCompileTimeCallContext(context.Background(), false, true)
 	err = cctx.CompileExpression(cnt, progSyntax)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("Should be able to compile fact referencing itself"))
 

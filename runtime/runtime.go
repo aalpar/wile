@@ -60,7 +60,7 @@ func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax
 	}
 
 	// Use inTail=false for top-level expressions
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "compilation error")

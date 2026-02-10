@@ -72,7 +72,7 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
@@ -116,7 +116,7 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
@@ -154,7 +154,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
@@ -197,7 +197,7 @@ func TestSyntaxRulesWithCustomEllipsis(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax with custom ellipsis: %v", err)
@@ -238,7 +238,7 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 
 	// Compile define-syntax
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax with _ in literals: %v", err)
@@ -276,7 +276,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
 		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-		ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+		ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 		err := ctc.CompileDefineSyntax(ctctx, args)
 		if err != nil {
 			t.Fatalf("expected ellipsis in literals to compile, got: %v", err)
@@ -296,7 +296,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
 		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-		ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false, env)
+		ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
 		err := ctc.CompileDefineSyntax(ctctx, args)
 		if err != nil {
 			t.Fatalf("expected custom ellipsis in literals to compile, got: %v", err)

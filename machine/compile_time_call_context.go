@@ -16,8 +16,6 @@ package machine
 
 import (
 	"context"
-
-	"github.com/aalpar/wile/environment"
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.
@@ -56,7 +54,6 @@ import (
 // Use NotInExpression() when entering a definition-only context (e.g., library body).
 type CompileTimeCallContext struct {
 	ctx          context.Context
-	env          *environment.EnvironmentFrame
 	inTail       bool
 	inExpression bool
 }
@@ -65,11 +62,9 @@ type CompileTimeCallContext struct {
 // Parameters:
 //   - inTail: true if compiling an expression in tail position
 //   - inExpression: true if compiling an expression (vs. a definition)
-//   - env: the environment frame for variable resolution during compilation
-func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool, env *environment.EnvironmentFrame) CompileTimeCallContext {
+func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool) CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:          ctx,
-		env:          env,
 		inTail:       inTail,
 		inExpression: inExpression,
 	}
@@ -89,7 +84,6 @@ func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool, e
 func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:          p.ctx,
-		env:          p.env,
 		inTail:       false,
 		inExpression: p.inExpression,
 	}
@@ -101,7 +95,6 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 func (p CompileTimeCallContext) NotInExpression() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:          p.ctx,
-		env:          p.env,
 		inTail:       p.inTail,
 		inExpression: false,
 	}

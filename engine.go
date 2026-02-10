@@ -336,7 +336,7 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 		return nil, &CompilationError{Message: "expansion error", Cause: err}
 	}
 
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, p.env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, p.env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, &CompilationError{Message: "compilation error", Cause: err}
@@ -415,7 +415,7 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 		return err
 	}
 
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return err

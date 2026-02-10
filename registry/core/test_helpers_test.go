@@ -43,7 +43,7 @@ func runProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 // runProgramASTWithEnv runs a program AST with the given environment.
 func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog values.Value) (values.Value, error) {
 	t.Helper()
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -86,7 +86,7 @@ func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code 
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true, env)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func runSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err

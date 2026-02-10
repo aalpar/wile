@@ -288,9 +288,6 @@ func TestOperationStoreSyntaxCaseInput_IsVoid(t *testing.T) {
 func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	c := qt.New(t)
 
-	// Clear any previous state
-	currentSyntaxCaseInput = nil
-
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -303,15 +300,13 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(currentSyntaxCaseInput, qt.IsNotNil)
+	c.Assert(mc.syntaxCase, qt.IsNotNil)
+	c.Assert(mc.syntaxCase.input, qt.IsNotNil)
 	c.Assert(mc.pc, qt.Equals, 1)
 }
 
 func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	c := qt.New(t)
-
-	// Clear any previous state
-	currentSyntaxCaseInput = nil
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
@@ -325,7 +320,8 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(currentSyntaxCaseInput, qt.IsNotNil)
+	c.Assert(mc.syntaxCase, qt.IsNotNil)
+	c.Assert(mc.syntaxCase.input, qt.IsNotNil)
 }
 
 // =============================================================================
@@ -373,18 +369,20 @@ func TestOperationClearSyntaxCaseInput_IsVoid(t *testing.T) {
 func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	c := qt.New(t)
 
-	// Set up some input
-	currentSyntaxCaseInput = syntax.NewSyntaxSymbol("test", nil)
-
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+
+	// Set up some input via the per-context state
+	mc.syntaxCase = &syntaxCaseState{
+		input: syntax.NewSyntaxSymbol("test", nil),
+	}
 
 	op := NewOperationClearSyntaxCaseInput()
 	result, err := op.Apply(context.Background(), mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(currentSyntaxCaseInput, qt.IsNil)
+	c.Assert(mc.syntaxCase, qt.IsNil)
 	c.Assert(mc.pc, qt.Equals, 1)
 }
