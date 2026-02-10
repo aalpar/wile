@@ -98,6 +98,12 @@ buildtest: examples
 	    fi \
 	done
 
+# Verify that Go code blocks in README.md compile against the current API.
+#   make readme-check
+.PHONY: readme-check
+readme-check:
+	$(GO_TEST) -v -run TestREADMEGoSnippetsCompile .
+
 # Run all tests with verbose output.
 #   make test
 .PHONY: test
