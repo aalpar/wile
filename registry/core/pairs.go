@@ -29,45 +29,12 @@ func addPairs(r *registry.Registry) error {
 		{"set-cdr!", 2, false, PrimSetCdr},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
-	// CxR accessors (2-level)
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"caar", 1, false, PrimCaar},
-		{"cadr", 1, false, PrimCadr},
-		{"cdar", 1, false, PrimCdar},
-		{"cddr", 1, false, PrimCddr},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-
-	// CxR accessors (3-level)
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"caaar", 1, false, PrimCaaar},
-		{"caadr", 1, false, PrimCaadr},
-		{"cadar", 1, false, PrimCadar},
-		{"caddr", 1, false, PrimCaddr},
-		{"cdaar", 1, false, PrimCdaar},
-		{"cdadr", 1, false, PrimCdadr},
-		{"cddar", 1, false, PrimCddar},
-		{"cdddr", 1, false, PrimCdddr},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-
-	// CxR accessors (4-level)
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"caaaar", 1, false, PrimCaaaar},
-		{"caaadr", 1, false, PrimCaaadr},
-		{"caadar", 1, false, PrimCaadar},
-		{"caaddr", 1, false, PrimCaaddr},
-		{"cadaar", 1, false, PrimCadaar},
-		{"cadadr", 1, false, PrimCadadr},
-		{"caddar", 1, false, PrimCaddar},
-		{"cadddr", 1, false, PrimCadddr},
-		{"cdaaar", 1, false, PrimCdaaar},
-		{"cdaadr", 1, false, PrimCdaadr},
-		{"cdadar", 1, false, PrimCdadar},
-		{"cdaddr", 1, false, PrimCdaddr},
-		{"cddaar", 1, false, PrimCddaar},
-		{"cddadr", 1, false, PrimCddadr},
-		{"cdddar", 1, false, PrimCdddar},
-		{"cddddr", 1, false, PrimCddddr},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	// CxR accessors (2/3/4-level) — generated from cxrSpecs table
+	cxrPrims := make([]registry.PrimitiveSpec, len(cxrSpecs))
+	for i, spec := range cxrSpecs {
+		cxrPrims[i] = registry.PrimitiveSpec{spec.name, 1, false, makeCxrPrimitive(spec.name, spec.ops)}
+	}
+	r.AddPrimitives(cxrPrims, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
 }

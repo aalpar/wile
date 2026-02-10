@@ -89,36 +89,15 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Intern the symbol
 	nameSym = p.env.InternSymbol(nameSym)
 
-	// Compile the expression to a temporary template
-	// Use the expand-phase environment so the expression can access other
+	// Expand, compile, and execute the expression at compile time
+	// Uses the expand-phase environment so the expression can access other
 	// define-for-syntax bindings and runtime primitives
 	expandEnv := p.env.Expand()
-	tmpTpl := NewNativeTemplate(0, 0, false)
-	tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
-
-	// Expand the expression first (it may contain macros)
 	expander := NewExpanderTimeContinuation(p.env)
-	expandedExpr, err := expander.ExpandExpression(ctctx.ctx, valueExpr)
+	result, err := p.expandCompileExecute(ctctx.ctx, ctctx, valueExpr, expandEnv, expander, "define-for-syntax")
 	if err != nil {
-		return values.WrapForeignErrorf(err, "define-for-syntax: expansion failed")
+		return err
 	}
-
-	// Compile the expanded expression
-	err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
-	if err != nil {
-		return values.WrapForeignErrorf(err, "define-for-syntax: compilation failed")
-	}
-
-	// Execute the compiled code at compile time
-	cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-	mc := NewMachineContext(ctctx.ctx, cont)
-	err = mc.Run()
-	if err != nil {
-		return values.WrapForeignErrorf(err, "define-for-syntax: evaluation failed")
-	}
-
-	// Get the result
-	result := mc.GetValue()
 
 	// Store the result in the expand phase environment with BindingTypeVariable
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)

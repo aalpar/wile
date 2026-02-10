@@ -227,42 +227,75 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return p.local
 }
 
+// resolveLocal walks local bindings up the parent chain, calling visitor
+// for each binding that matches key and optionally passes scope filtering.
+//
+// If checkScopes is true, only bindings whose scopes are empty (pre-hygiene)
+// or compatible via syntax.ScopesMatch are visited. If checkScopes is false,
+// all bindings with the given key are visited (no scope filtering).
+//
+// The visitor receives the matching binding, its slot index within the
+// local frame, and the depth (number of parent frames traversed). Return
+// a non-nil value to stop the walk and propagate the result.
+func (p *EnvironmentFrame) resolveLocal(
+	key *values.Symbol,
+	scopes []*syntax.Scope,
+	checkScopes bool,
+	visitor func(binding *Binding, slot int, depth int) any,
+) any {
+	env := p
+	depth := 0
+	for env != nil && env.local != nil {
+		i, ok := env.local.keys[*key]
+		if ok {
+			binding := env.local.bindings[i]
+			if binding != nil && (!checkScopes || scopesCompatible(binding, scopes)) {
+				result := visitor(binding, i, depth)
+				if result != nil {
+					return result
+				}
+			}
+		}
+		if env.IsTopLevel() {
+			break
+		}
+		env = env.parent
+		depth++
+	}
+	return nil
+}
+
+// scopesCompatible returns true if the binding's scopes are compatible
+// with the reference scopes per Flatt's hygiene model.
+// A binding with no scopes (pre-hygiene) is always compatible.
+// Otherwise, the binding's scopes must be a subset of the reference scopes.
+func scopesCompatible(binding *Binding, scopes []*syntax.Scope) bool {
+	bs := binding.Scopes()
+	if len(bs) == 0 {
+		return true
+	}
+	return syntax.ScopesMatch(scopes, bs)
+}
+
 // GetBinding returns the binding for the given symbol, searching local
 // bindings first (up the parent chain), then global bindings.
 // It returns nil if the binding does not exist.
-//
-// Note: this method accesses local.keys and global.keys directly rather
-// than delegating to LocalEnvironmentFrame/GlobalEnvironmentFrame because
-// it returns a *Binding (not an index), and the return value requires no
-// depth tracking — the binding is the same regardless of which frame it
-// was found in.
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
-	cenv := p
-	var (
-		i  int
-		ok bool
-	)
-	for cenv.local != nil {
-		// always check local first
-
-		i, ok = cenv.local.keys[*key]
-		if ok {
-			return cenv.local.bindings[i]
-		}
-		// move to parent
-		if cenv.IsTopLevel() {
-			break
-		}
-		cenv = cenv.parent
+	// Search locals (no scope filtering)
+	result := p.resolveLocal(key, nil, false, func(binding *Binding, _ int, _ int) any {
+		return binding
+	})
+	if result != nil {
+		return result.(*Binding)
 	}
-	for cenv.global != nil {
-		// then check global
 
-		i, ok = cenv.global.keys[*key]
+	// Search globals
+	cenv := p
+	for cenv.global != nil {
+		i, ok := cenv.global.keys[*key]
 		if ok {
 			return cenv.global.bindings[i]
 		}
-		// stop if at top-level
 		if cenv.IsTopLevel() {
 			break
 		}
@@ -280,42 +313,16 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
 //   - Each let-bound variable has scopes from the binding site
 //   - A macro free identifier carries scopes from its definition site
 //   - We search ALL local bindings (not just innermost) to find one with matching scopes
-//
-// Note: this method accesses local.keys and global.keys directly because
-// each iteration requires per-binding scope matching (ScopesMatch) that
-// LocalEnvironmentFrame does not know about. Delegation would push the
-// scope logic into the leaf type or require passing a predicate, neither
-// of which simplifies the code.
 func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*syntax.Scope) *Binding {
-	// Search local bindings in parent chain, checking scopes at each level
-	// This is critical for hygiene: inner bindings may not match the reference's scopes,
-	// but an outer binding might.
-	env := p
-	for env != nil && env.local != nil {
-		i, ok := env.local.keys[*key]
-		if ok {
-			binding := env.local.bindings[i]
-			if binding != nil {
-				bindingScopes := binding.Scopes()
-				// Check if scopes match
-				if len(bindingScopes) == 0 {
-					// Binding has no scopes (top-level or pre-hygiene), accept it
-					return binding
-				}
-				// Check scope compatibility using ScopesMatch from scope_utils
-				if syntax.ScopesMatch(scopes, bindingScopes) {
-					return binding
-				}
-				// Scopes don't match - continue searching parent frames
-			}
-		}
-		if env.IsTopLevel() {
-			break
-		}
-		env = env.parent
+	// Search locals with scope matching
+	result := p.resolveLocal(key, scopes, true, func(binding *Binding, _ int, _ int) any {
+		return binding
+	})
+	if result != nil {
+		return result.(*Binding)
 	}
 
-	// Then try global bindings
+	// Search globals with scope matching
 	ge := p
 	i, ok := ge.global.keys[*key]
 	for !ok && !ge.IsTopLevel() {
@@ -324,17 +331,8 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	}
 	if ok {
 		binding := ge.global.bindings[i]
-		if binding != nil {
-			bindingScopes := binding.Scopes()
-			// Check if scopes match
-			if len(bindingScopes) == 0 {
-				// Binding has no scopes (top-level or pre-hygiene), accept it
-				return binding
-			}
-			// Check scope compatibility
-			if syntax.ScopesMatch(scopes, bindingScopes) {
-				return binding
-			}
+		if binding != nil && scopesCompatible(binding, scopes) {
+			return binding
 		}
 	}
 
@@ -405,25 +403,15 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt Bindin
 // GetLocalIndex returns the LocalIndex of the binding for the given symbol,
 // searching local bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
-//
-// The parent-chain walk is EnvironmentFrame's responsibility; single-frame
-// lookup delegates to LocalEnvironmentFrame.GetLocalIndex.
 func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 	if p == nil || p.local == nil {
 		return nil
 	}
-	env := p
-	depth := 0
-	for {
-		li := env.local.GetLocalIndex(key)
-		if li != nil {
-			return NewLocalIndex(li[0], depth)
-		}
-		if env.IsTopLevel() || env.parent.local == nil {
-			break
-		}
-		env = env.parent
-		depth++
+	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
+		return NewLocalIndex(slot, depth)
+	})
+	if result != nil {
+		return result.(*LocalIndex)
 	}
 	return nil
 }
