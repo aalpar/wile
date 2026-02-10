@@ -106,6 +106,7 @@ var (
 	ErrUnknownOpCode         = NewStaticError("unknown op code")
 	ErrNotAMatch             = NewStaticError("not a match")
 	ErrTypeConversion        = NewStaticError("type conversion failed")
+	ErrIndexOutOfRange       = NewStaticError("index out of range")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.

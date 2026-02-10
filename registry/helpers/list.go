@@ -48,6 +48,36 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 	return nil
 }
 
+// CollectVectors extracts a non-empty list of vectors from a rest argument,
+// validates that each element is a vector, and returns the minimum length.
+// Used by vector-map, vector-for-each, and vector-append.
+func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, error) {
+	var vectors []*values.Vector
+	current := rest
+	for !values.IsEmptyList(current) {
+		tuple, ok := current.(values.Tuple)
+		if !ok {
+			return nil, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+		}
+		v, ok := tuple.Car().(*values.Vector)
+		if !ok {
+			return nil, 0, values.WrapForeignErrorf(values.ErrNotAVector, "%s: expected a vector but got %T", name, tuple.Car())
+		}
+		vectors = append(vectors, v)
+		current = tuple.Cdr()
+	}
+	if len(vectors) == 0 {
+		return nil, 0, nil
+	}
+	minLen := len(*vectors[0])
+	for _, v := range vectors[1:] {
+		if len(*v) < minLen {
+			minLen = len(*v)
+		}
+	}
+	return vectors, minLen, nil
+}
+
 // AssocLookup is a helper for alist lookup primitives (assq, assv, assoc).
 // Takes key at index 0, alist at index 1. Uses eq predicate to find match.
 func AssocLookup(

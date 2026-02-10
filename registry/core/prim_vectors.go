@@ -77,8 +77,9 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-ref: expected an exact integer but got %T", k)
 	}
-	if idx < 0 || idx >= int64(len(*v)) {
-		return values.NewForeignError("vector-ref: index out of bounds")
+	err = helpers.CheckIndexBounds(idx, len(*v), "vector-ref")
+	if err != nil {
+		return err
 	}
 	mc.SetValue((*v)[idx])
 	return nil
@@ -98,8 +99,9 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "vector-set!: expected an exact integer but got %T", k)
 	}
-	if idx < 0 || idx >= int64(len(*v)) {
-		return values.NewForeignError("vector-set!: index out of bounds")
+	err = helpers.CheckIndexBounds(idx, len(*v), "vector-set!")
+	if err != nil {
+		return err
 	}
 	(*v)[idx] = obj
 	mc.SetValue(values.Void)
@@ -116,17 +118,9 @@ func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	length := len(*v)
-
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector->list")
+	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector->list")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("vector->list: invalid indices")
 	}
 
 	var result values.Value = values.EmptyList
@@ -152,17 +146,9 @@ func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	length := len(*v)
-
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector-copy")
+	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector-copy")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("vector-copy: invalid indices")
 	}
 
 	// Create a new vector with the copied elements
@@ -202,20 +188,12 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	fromLen := len(*from)
-
-	start64, end64, err := helpers.ParseOptionalStartEnd(tuple.Cdr(), int64(fromLen), "vector-copy!")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*from), "vector-copy!")
 	if err != nil {
 		return err
 	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > fromLen || start > end {
-		return values.NewForeignError("vector-copy!: invalid source indices")
-	}
 	if atIdx < 0 || atIdx+(end-start) > len(*to) {
-		return values.NewForeignError("vector-copy!: invalid destination index")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "vector-copy!: invalid destination index")
 	}
 
 	// Copy elements
@@ -235,17 +213,9 @@ func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
 	fillArg := mc.Arg(1)
 	rest := mc.Arg(2)
 
-	length := len(*v)
-
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector-fill!")
+	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector-fill!")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("vector-fill!: invalid indices")
 	}
 
 	// Fill the elements
@@ -260,28 +230,16 @@ func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.8: (vector-append vector ...)
 // Returns a newly allocated vector whose elements are the concatenation of the elements of the given vectors.
 func PrimVectorAppend(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.Arg(0)
-
-	// Collect all vectors
-	var vectors []*values.Vector
-	totalLen := 0
-
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-append: improper argument list")
-		}
-		v, ok := tuple.Car().(*values.Vector)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAVector, "vector-append: expected a vector but got %T", tuple.Car())
-		}
-		vectors = append(vectors, v)
-		totalLen += len(*v)
-		current = tuple.Cdr()
+	vectors, _, err := helpers.CollectVectors(mc.Arg(0), "vector-append")
+	if err != nil {
+		return err
 	}
 
 	// Create the result vector
+	totalLen := 0
+	for _, v := range vectors {
+		totalLen += len(*v)
+	}
 	elems := make(values.Vector, totalLen)
 	idx := 0
 	for _, v := range vectors {
@@ -305,32 +263,12 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	if values.IsEmptyList(rest) {
+	vectors, minLen, err := helpers.CollectVectors(rest, "vector-map")
+	if err != nil {
+		return err
+	}
+	if len(vectors) == 0 {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "vector-map: expected at least one vector")
-	}
-
-	// Collect all vectors into a slice
-	var vectors []*values.Vector
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-map: improper argument list")
-		}
-		v, err := helpers.RequireType[*values.Vector](tuple.Car(), values.ErrNotAVector, "vector-map")
-		if err != nil {
-			return err
-		}
-		vectors = append(vectors, v)
-		current = tuple.Cdr()
-	}
-
-	// Find the minimum length
-	minLen := len(*vectors[0])
-	for _, v := range vectors[1:] {
-		if len(*v) < minLen {
-			minLen = len(*v)
-		}
 	}
 
 	// Apply the procedure to each set of elements
@@ -369,32 +307,12 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	if values.IsEmptyList(rest) {
+	vectors, minLen, err := helpers.CollectVectors(rest, "vector-for-each")
+	if err != nil {
+		return err
+	}
+	if len(vectors) == 0 {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "vector-for-each: expected at least one vector")
-	}
-
-	// Collect all vectors into a slice
-	var vectors []*values.Vector
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "vector-for-each: improper argument list")
-		}
-		v, err := helpers.RequireType[*values.Vector](tuple.Car(), values.ErrNotAVector, "vector-for-each")
-		if err != nil {
-			return err
-		}
-		vectors = append(vectors, v)
-		current = tuple.Cdr()
-	}
-
-	// Find the minimum length
-	minLen := len(*vectors[0])
-	for _, v := range vectors[1:] {
-		if len(*v) < minLen {
-			minLen = len(*v)
-		}
 	}
 
 	// Apply the procedure to each set of elements
@@ -429,17 +347,9 @@ func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	length := len(*v)
-
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "vector->string")
+	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector->string")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("vector->string: invalid indices")
 	}
 
 	// Convert characters to string
@@ -467,17 +377,10 @@ func PrimStringToVector(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	runes := str.Runes()
-	length := len(runes)
 
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string->vector")
+	start, end, err := helpers.ParseSubrange(rest, len(runes), "string->vector")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("string->vector: invalid indices")
 	}
 
 	// Create vector of characters

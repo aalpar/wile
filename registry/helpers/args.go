@@ -79,3 +79,39 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 
 	return start, end, nil
 }
+
+// CheckIndexBounds validates that idx is in range [0, length).
+// Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds.
+func CheckIndexBounds(idx int64, length int, name string) error {
+	if idx < 0 || idx >= int64(length) {
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange,
+			"%s: index %d out of bounds for length %d", name, idx, length)
+	}
+	return nil
+}
+
+// ValidateStartEnd checks the invariant 0 <= start <= end <= length.
+// Returns a wrapped ErrIndexOutOfRange error if any bound is violated.
+func ValidateStartEnd(start, end, length int64, name string) error {
+	if start < 0 || end > length || start > end {
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange,
+			"%s: invalid indices start=%d end=%d for length %d", name, start, end, length)
+	}
+	return nil
+}
+
+// ParseSubrange extracts optional [start [end]] from a rest list, validates
+// bounds against length, and returns the range as int values.
+// This bundles ParseOptionalStartEnd + ValidateStartEnd + int conversion
+// for the common case where the caller works with int-indexed collections.
+func ParseSubrange(rest values.Value, length int, name string) (int, int, error) {
+	start, end, err := ParseOptionalStartEnd(rest, int64(length), name)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = ValidateStartEnd(start, end, int64(length), name)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(start), int(end), nil
+}

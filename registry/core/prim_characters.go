@@ -25,10 +25,9 @@ import (
 // PrimCharToInteger implements the (char->integer) primitive.
 // Returns the Unicode code point of the character as an integer.
 func PrimCharToInteger(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	ch, ok := o.(*values.Character)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "char->integer: expected a character but got %T", o)
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char->integer")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(ch.Value)))
 	return nil
@@ -40,10 +39,9 @@ func PrimCharToInteger(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.6: The argument must be a valid Unicode scalar value,
 // i.e., an integer in [0, #xD7FF] ∪ [#xE000, #x10FFFF].
 func PrimIntegerToChar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	n, ok := o.(*values.Integer)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "integer->char: expected an integer but got %T", o)
+	n, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "integer->char")
+	if err != nil {
+		return err
 	}
 	v := n.Value
 	if v < 0 || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF) {
@@ -53,27 +51,23 @@ func PrimIntegerToChar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimCharEqVariadic implements the variadic char=? primitive.
-func PrimCharEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char=?", func(a, b rune) bool { return a == b })
+// charCompareSpecs defines the five R7RS §6.6 character comparison predicates.
+// Each entry pairs a primitive name with its comparison function.
+var charCompareSpecs = []struct {
+	name string
+	cmp  func(rune, rune) bool
+}{
+	{"char=?", func(a, b rune) bool { return a == b }},
+	{"char<?", func(a, b rune) bool { return a < b }},
+	{"char>?", func(a, b rune) bool { return a > b }},
+	{"char<=?", func(a, b rune) bool { return a <= b }},
+	{"char>=?", func(a, b rune) bool { return a >= b }},
 }
 
-// PrimCharLtVariadic implements the variadic char<? primitive.
-func PrimCharLtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char<?", func(a, b rune) bool { return a < b })
-}
-
-// PrimCharGtVariadic implements the variadic char>? primitive.
-func PrimCharGtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char>?", func(a, b rune) bool { return a > b })
-}
-
-// PrimCharLeVariadic implements the variadic char<=? primitive.
-func PrimCharLeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char<=?", func(a, b rune) bool { return a <= b })
-}
-
-// PrimCharGeVariadic implements the variadic char>=? primitive.
-func PrimCharGeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char>=?", func(a, b rune) bool { return a >= b })
+// makeCharComparePrimitive returns a ForeignFunction that performs a variadic
+// character comparison using the given comparator.
+func makeCharComparePrimitive(name string, cmp func(rune, rune) bool) machine.ForeignFunction {
+	return func(_ context.Context, mc *machine.MachineContext) error {
+		return helpers.CharCompareVariadic(mc, name, cmp)
+	}
 }

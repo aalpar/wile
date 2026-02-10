@@ -277,6 +277,30 @@ func scopesCompatible(binding *Binding, scopes []*syntax.Scope) bool {
 	return syntax.ScopesMatch(scopes, bs)
 }
 
+// resolveGlobal walks global bindings up the parent chain.
+// The visitor receives the frame and slot index for each matching key.
+// Returns the first non-nil visitor result.
+func (p *EnvironmentFrame) resolveGlobal(
+	key values.Symbol,
+	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
+) any {
+	ge := p
+	for {
+		i, ok := ge.global.keys[key]
+		if ok {
+			result := visitor(ge.global, i)
+			if result != nil {
+				return result
+			}
+		}
+		if ge.IsTopLevel() {
+			break
+		}
+		ge = ge.parent
+	}
+	return nil
+}
+
 // GetBinding returns the binding for the given symbol, searching local
 // bindings first (up the parent chain), then global bindings.
 // It returns nil if the binding does not exist.
@@ -290,16 +314,11 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
 	}
 
 	// Search globals
-	cenv := p
-	for cenv.global != nil {
-		i, ok := cenv.global.keys[*key]
-		if ok {
-			return cenv.global.bindings[i]
-		}
-		if cenv.IsTopLevel() {
-			break
-		}
-		cenv = cenv.parent
+	gResult := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, i int) any {
+		return g.bindings[i]
+	})
+	if gResult != nil {
+		return gResult.(*Binding)
 	}
 	return nil
 }
@@ -323,17 +342,15 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	}
 
 	// Search globals with scope matching
-	ge := p
-	i, ok := ge.global.keys[*key]
-	for !ok && !ge.IsTopLevel() {
-		ge = ge.parent
-		i, ok = ge.global.keys[*key]
-	}
-	if ok {
-		binding := ge.global.bindings[i]
+	gResult := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, i int) any {
+		binding := g.bindings[i]
 		if binding != nil && scopesCompatible(binding, scopes) {
 			return binding
 		}
+		return nil
+	})
+	if gResult != nil {
+		return gResult.(*Binding)
 	}
 
 	return nil
@@ -564,33 +581,27 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 // was found, enabling cross-library macro hygiene (see GlobalIndex.Env).
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	key = p.InternSymbol(key)
-	ge := p
-	_, ok := ge.global.keys[*key]
-	for !ok && !ge.IsTopLevel() {
-		ge = ge.parent
-		_, ok = ge.global.keys[*key]
+	result := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, _ int) any {
+		gi := NewGlobalIndex(key)
+		gi.Env = g
+		return gi
+	})
+	if result != nil {
+		return result.(*GlobalIndex)
 	}
-	if !ok {
-		return nil
-	}
-	gi := NewGlobalIndex(key)
-	gi.Env = ge.global
-	return gi
+	return nil
 }
 
 // GetGlobalBinding returns the binding for the given GlobalIndex, searching global bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	ge := p
-	i, ok := ge.global.keys[*key.Index]
-	for !ok && !ge.IsTopLevel() {
-		ge = ge.parent
-		i, ok = ge.global.keys[*key.Index]
+	result := p.resolveGlobal(*key.Index, func(g *GlobalEnvironmentFrame, i int) any {
+		return g.bindings[i]
+	})
+	if result != nil {
+		return result.(*Binding)
 	}
-	if !ok {
-		return nil
-	}
-	return ge.global.bindings[i]
+	return nil
 }
 
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.

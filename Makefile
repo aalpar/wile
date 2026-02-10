@@ -80,11 +80,18 @@ build-linux-amd64: $(DIST_DIR)/linux/amd64/$(MY_BIN)
 .PHONY: build-all
 build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-amd64
 
+# Build all embedding examples. Verifies that the public API compiles.
+#   make examples
+.PHONY: examples
+examples:
+	$(GO_BUILD) -o /dev/null ./examples/embedding/
+	$(GO_BUILD) -o /dev/null ./examples/embedding/source-tracking/
+
 # Compile tests for all packages without running them.
 # Useful for verifying that tests compile after refactoring.
 #   make buildtest
 .PHONY: buildtest
-buildtest:
+buildtest: examples
 	for dir in $(SOURCE_DIRS); do \
 	    if [ -d "$$dir" ]; then \
 	        $(GO_TEST) -c -o /dev/null $$dir/...; \

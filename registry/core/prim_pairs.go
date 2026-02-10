@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
 
@@ -35,10 +36,9 @@ func PrimCons(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.4: It is an error to take the car of the empty list.
 func PrimCar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	v, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "car: expected a pair but got %T", o)
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "car")
+	if err != nil {
+		return err
 	}
 	if v.IsEmptyList() {
 		return values.NewForeignError("car: cannot take car of empty list")
@@ -52,10 +52,9 @@ func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.4: It is an error to take the cdr of the empty list.
 func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	v, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cdr: expected a pair but got %T", o)
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "cdr")
+	if err != nil {
+		return err
 	}
 	if v.IsEmptyList() {
 		return values.NewForeignError("cdr: cannot take cdr of empty list")
@@ -66,12 +65,11 @@ func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimSetCar implements the set-car! primitive.
 func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
-	pair := mc.Arg(0)
-	val := mc.Arg(1)
-	p, ok := pair.(*values.Pair)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "set-car!: expected a pair but got %T", pair)
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-car!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 	p.SetCar(val)
 	mc.SetValue(values.Void)
 	return nil
@@ -79,12 +77,11 @@ func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimSetCdr implements the set-cdr! primitive.
 func PrimSetCdr(_ context.Context, mc *machine.MachineContext) error {
-	pair := mc.Arg(0)
-	val := mc.Arg(1)
-	p, ok := pair.(*values.Pair)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "set-cdr!: expected a pair but got %T", pair)
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-cdr!")
+	if err != nil {
+		return err
 	}
+	val := mc.Arg(1)
 	p.SetCdr(val)
 	mc.SetValue(values.Void)
 	return nil

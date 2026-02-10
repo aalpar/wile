@@ -183,9 +183,9 @@ func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
 func PrimExactQ(_ context.Context, mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "exact?: expected a number but got %T", mc.Arg(0))
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "exact?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(n.IsExact()))
 	return nil
@@ -195,9 +195,9 @@ func PrimExactQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the number is inexact, #f otherwise.
 func PrimInexactQ(_ context.Context, mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "inexact?: expected a number but got %T", mc.Arg(0))
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "inexact?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(!n.IsExact()))
 	return nil
@@ -219,10 +219,9 @@ func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimZeroQ implements the zero? predicate.
 // Returns #t if the number is zero, #f otherwise.
 func PrimZeroQ(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	n, ok := o.(values.Number)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "zero?: expected a number but got %T", o)
+	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "zero?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(n.IsZero()))
 	return nil
@@ -232,9 +231,9 @@ func PrimZeroQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the real number is positive.
 func PrimPositiveQ(_ context.Context, mc *machine.MachineContext) error {
-	r, ok := mc.Arg(0).(values.RealNumber)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "positive?: expected a real number but got %T", mc.Arg(0))
+	r, err := helpers.RequireArg[values.RealNumber](mc, 0, values.ErrNotANumber, "positive?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(r.IsPositive()))
 	return nil
@@ -244,9 +243,9 @@ func PrimPositiveQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the real number is negative.
 func PrimNegativeQ(_ context.Context, mc *machine.MachineContext) error {
-	r, ok := mc.Arg(0).(values.RealNumber)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "negative?: expected a real number but got %T", mc.Arg(0))
+	r, err := helpers.RequireArg[values.RealNumber](mc, 0, values.ErrNotANumber, "negative?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(schemeutil.BoolToBoolean(r.IsNegative()))
 	return nil
