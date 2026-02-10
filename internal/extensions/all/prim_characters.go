@@ -27,52 +27,37 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// charCompareVariadic is a helper for variadic character comparison primitives.
-func charCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
-	return variadicCompare(mc, name,
-		func(v values.Value) (*values.Character, bool) {
-			c, ok := v.(*values.Character)
-			return c, ok
-		},
-		func(c *values.Character) rune {
-			return c.Value
-		},
-		cmp,
-		values.ErrNotACharacter,
-		"a character")
-}
-
 // PrimCharCiEqVariadic implements the variadic char-ci=? primitive.
 func PrimCharCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return charCompareVariadic(mc, "char-ci=?", func(a, b rune) bool {
+	return helpers.CharCompareVariadic(mc, "char-ci=?", func(a, b rune) bool {
 		return unicode.ToLower(a) == unicode.ToLower(b)
 	})
 }
 
 // PrimCharCiLtVariadic implements the variadic char-ci<? primitive.
 func PrimCharCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return charCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
+	return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
 		return unicode.ToLower(a) < unicode.ToLower(b)
 	})
 }
 
 // PrimCharCiGtVariadic implements the variadic char-ci>? primitive.
 func PrimCharCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return charCompareVariadic(mc, "char-ci>?", func(a, b rune) bool {
+	return helpers.CharCompareVariadic(mc, "char-ci>?", func(a, b rune) bool {
 		return unicode.ToLower(a) > unicode.ToLower(b)
 	})
 }
 
 // PrimCharCiLeVariadic implements the variadic char-ci<=? primitive.
 func PrimCharCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return charCompareVariadic(mc, "char-ci<=?", func(a, b rune) bool {
+	return helpers.CharCompareVariadic(mc, "char-ci<=?", func(a, b rune) bool {
 		return unicode.ToLower(a) <= unicode.ToLower(b)
 	})
 }
 
 // PrimCharCiGeVariadic implements the variadic char-ci>=? primitive.
 func PrimCharCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return charCompareVariadic(mc, "char-ci>=?", func(a, b rune) bool {
+	return helpers.CharCompareVariadic(mc, "char-ci>=?", func(a, b rune) bool {
 		return unicode.ToLower(a) >= unicode.ToLower(b)
 	})
 }

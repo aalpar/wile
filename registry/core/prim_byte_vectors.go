@@ -114,8 +114,9 @@ func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	if idx.Value < 0 || idx.Value >= int64(len(*bv)) {
-		return values.NewForeignError("bytevector-u8-ref: index out of bounds")
+	err = helpers.CheckIndexBounds(idx.Value, len(*bv), "bytevector-u8-ref")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64((*bv)[idx.Value].Value)))
 	return nil
@@ -133,8 +134,9 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	obj := mc.Arg(2)
-	if idx.Value < 0 || idx.Value >= int64(len(*bv)) {
-		return values.NewForeignError("bytevector-u8-set!: index out of bounds")
+	err = helpers.CheckIndexBounds(idx.Value, len(*bv), "bytevector-u8-set!")
+	if err != nil {
+		return err
 	}
 	byteVal, err := helpers.RequireType[*values.Integer](obj, values.ErrNotAnInteger, "bytevector-u8-set!")
 	if err != nil {
@@ -161,12 +163,9 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-
-	if start < 0 || start > int64(len(*bv)) {
-		return values.NewForeignError("bytevector-copy: start index out of bounds")
-	}
-	if end < start || end > int64(len(*bv)) {
-		return values.NewForeignError("bytevector-copy: end index out of bounds")
+	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "bytevector-copy")
+	if err != nil {
+		return err
 	}
 
 	result := make(values.ByteVector, end-start)
@@ -196,18 +195,12 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 	if err != nil {
 		return err
 	}
-
-	if start < 0 || start > int64(len(*fromBv)) {
-		return values.NewForeignError("bytevector-copy!: start index out of bounds")
+	err = helpers.ValidateStartEnd(start, end, int64(len(*fromBv)), "bytevector-copy!")
+	if err != nil {
+		return err
 	}
-	if end < start || end > int64(len(*fromBv)) {
-		return values.NewForeignError("bytevector-copy!: end index out of bounds")
-	}
-	if atIdx.Value < 0 {
-		return values.NewForeignError("bytevector-copy!: at index out of bounds")
-	}
-	if atIdx.Value+(end-start) > int64(len(*toBv)) {
-		return values.NewForeignError("bytevector-copy!: not enough space in destination")
+	if atIdx.Value < 0 || atIdx.Value+(end-start) > int64(len(*toBv)) {
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
 
 	// Use copy with correct slice bounds - handles overlapping regions correctly
@@ -261,12 +254,9 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-
-	if start < 0 || start > int64(len(*bv)) {
-		return values.NewForeignError("utf8->string: start index out of bounds")
-	}
-	if end < start || end > int64(len(*bv)) {
-		return values.NewForeignError("utf8->string: end index out of bounds")
+	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "utf8->string")
+	if err != nil {
+		return err
 	}
 
 	// Convert bytes to string
@@ -292,12 +282,9 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-
-	if start < 0 || start > int64(len(s)) {
-		return values.NewForeignError("string->utf8: start index out of bounds")
-	}
-	if end < start || end > int64(len(s)) {
-		return values.NewForeignError("string->utf8: end index out of bounds")
+	err = helpers.ValidateStartEnd(start, end, int64(len(s)), "string->utf8")
+	if err != nil {
+		return err
 	}
 
 	// Convert string to bytevector

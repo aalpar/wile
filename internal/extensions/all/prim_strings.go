@@ -29,21 +29,6 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// stringCompareVariadic is a helper for variadic string comparison primitives.
-func stringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
-	return variadicCompare(mc, name,
-		func(v values.Value) (*values.String, bool) {
-			s, ok := v.(*values.String)
-			return s, ok
-		},
-		func(s *values.String) string {
-			return s.Value
-		},
-		cmp,
-		values.ErrNotAString,
-		"a string")
-}
-
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
 func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
@@ -333,33 +318,33 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringCiEqVariadic implements the variadic string-ci=? primitive.
 func PrimStringCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompareVariadic(mc, "string-ci=?", strings.EqualFold)
+	return helpers.StringCompareVariadic(mc, "string-ci=?", strings.EqualFold)
 }
 
 // PrimStringCiLtVariadic implements the variadic string-ci<? primitive.
 func PrimStringCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
+	return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
 		return strings.ToLower(a) < strings.ToLower(b)
 	})
 }
 
 // PrimStringCiGtVariadic implements the variadic string-ci>? primitive.
 func PrimStringCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompareVariadic(mc, "string-ci>?", func(a, b string) bool {
+	return helpers.StringCompareVariadic(mc, "string-ci>?", func(a, b string) bool {
 		return strings.ToLower(a) > strings.ToLower(b)
 	})
 }
 
 // PrimStringCiLeVariadic implements the variadic string-ci<=? primitive.
 func PrimStringCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompareVariadic(mc, "string-ci<=?", func(a, b string) bool {
+	return helpers.StringCompareVariadic(mc, "string-ci<=?", func(a, b string) bool {
 		return strings.ToLower(a) <= strings.ToLower(b)
 	})
 }
 
 // PrimStringCiGeVariadic implements the variadic string-ci>=? primitive.
 func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return stringCompareVariadic(mc, "string-ci>=?", func(a, b string) bool {
+	return helpers.StringCompareVariadic(mc, "string-ci>=?", func(a, b string) bool {
 		return strings.ToLower(a) >= strings.ToLower(b)
 	})
 }

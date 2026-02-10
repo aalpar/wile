@@ -24,61 +24,9 @@ import (
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
-
-// ToComplex128 converts a Scheme number to a Go complex128.
-func ToComplex128(v values.Value) (complex128, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return complex(float64(n.Value), 0), nil
-	case *values.BigInteger:
-		f, _ := n.BigInt().Float64()
-		return complex(f, 0), nil
-	case *values.Float:
-		return complex(n.Value, 0), nil
-	case *values.BigFloat:
-		f, _ := n.BigFloatValue().Float64()
-		return complex(f, 0), nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return complex(f, 0), nil
-	case *values.Complex:
-		return n.Value, nil
-	case *values.BigComplex:
-		r := n.RealAsBigFloat().Float64()
-		i := n.ImagAsBigFloat().Float64()
-		return complex(r, i), nil
-	default:
-		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a number but got %T", v)
-	}
-}
-
-// ComplexOrFloat returns a Float if the imaginary part is zero,
-// otherwise returns a Complex.
-func ComplexOrFloat(c complex128) values.Value {
-	r := real(c)
-	i := imag(c)
-	if i == 0 || (math.IsNaN(r) && math.IsNaN(i)) {
-		return values.NewFloat(r)
-	}
-	return values.NewComplex(c)
-}
-
-// ToFloat64 converts a Scheme number to a Go float64.
-func ToFloat64(v values.Value) (float64, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return float64(n.Value), nil
-	case *values.Float:
-		return n.Value, nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return f, nil
-	default:
-		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a real number but got %T", v)
-	}
-}
 
 // extractReal extracts a float64 from a real number for division operations.
 // Returns the float64 value, whether the input was exact, and any error.
@@ -121,25 +69,14 @@ func ensureInexactDecimal(s string) string {
 	return s
 }
 
-// FloorDivide performs floor division, returning quotient and remainder.
-func FloorDivide(n0, n1 int64) (q, r int64) {
-	q = n0 / n1
-	r = n0 % n1
-	if r != 0 && (n0 < 0) != (n1 < 0) {
-		q--
-		r += n1
-	}
-	return q, r
-}
-
 // PrimExp implements the (exp z) primitive.
 func PrimExp(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "exp: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Exp(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Exp(z)))
 	return nil
 }
 
@@ -147,22 +84,22 @@ func PrimExp(_ context.Context, mc *machine.MachineContext) error {
 func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "log: %v", err)
 	}
 	if values.IsEmptyList(rest) {
-		mc.SetValue(ComplexOrFloat(cmplx.Log(z)))
+		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
 	} else {
 		baseArg, ok := rest.(*values.Pair)
 		if !ok {
 			return values.NewForeignError("log: expected a list for rest arguments")
 		}
-		base, err := ToComplex128(baseArg.Car())
+		base, err := helpers.ToComplex128(baseArg.Car())
 		if err != nil {
 			return values.WrapForeignErrorf(err, "log: %v", err)
 		}
-		mc.SetValue(ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
+		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
 	}
 	return nil
 }
@@ -170,55 +107,55 @@ func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 // PrimSin implements the (sin z) primitive.
 func PrimSin(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "sin: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Sin(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Sin(z)))
 	return nil
 }
 
 // PrimCos implements the (cos z) primitive.
 func PrimCos(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "cos: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Cos(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Cos(z)))
 	return nil
 }
 
 // PrimTan implements the (tan z) primitive.
 func PrimTan(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "tan: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Tan(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Tan(z)))
 	return nil
 }
 
 // PrimAsin implements the (asin z) primitive.
 func PrimAsin(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "asin: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Asin(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Asin(z)))
 	return nil
 }
 
 // PrimAcos implements the (acos z) primitive.
 func PrimAcos(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	z, err := ToComplex128(o)
+	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "acos: %v", err)
 	}
-	mc.SetValue(ComplexOrFloat(cmplx.Acos(z)))
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Acos(z)))
 	return nil
 }
 
@@ -228,13 +165,13 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	if values.IsEmptyList(rest) {
-		z, err := ToComplex128(o)
+		z, err := helpers.ToComplex128(o)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "atan: %v", err)
 		}
-		mc.SetValue(ComplexOrFloat(cmplx.Atan(z)))
+		mc.SetValue(helpers.ComplexOrFloat(cmplx.Atan(z)))
 	} else {
-		y, err := ToFloat64(o)
+		y, err := helpers.ToFloat64(o)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "atan: %v", err)
 		}
@@ -242,7 +179,7 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.NewForeignError("atan: expected a list for rest arguments")
 		}
-		x, err := ToFloat64(xArg.Car())
+		x, err := helpers.ToFloat64(xArg.Car())
 		if err != nil {
 			return values.WrapForeignErrorf(err, "atan: %v", err)
 		}

@@ -102,8 +102,9 @@ func PrimStringRef(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	runes := []rune(s.Value)
-	if idx.Value < 0 || idx.Value >= int64(len(runes)) {
-		return values.NewForeignError("string-ref: index out of bounds")
+	err = helpers.CheckIndexBounds(idx.Value, len(runes), "string-ref")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewCharacter(runes[idx.Value]))
 	return nil
@@ -126,8 +127,9 @@ func PrimStringSet(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	length := s.Len()
-	if idx.Value < 0 || idx.Value >= int64(length) {
-		return values.NewForeignError("string-set!: index out of bounds")
+	err = helpers.CheckIndexBounds(idx.Value, length, "string-set!")
+	if err != nil {
+		return err
 	}
 	s.SetChar(int(idx.Value), char.Value)
 	mc.SetValue(values.Void)
@@ -145,17 +147,10 @@ func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	runes := s.Runes()
-	length := len(runes)
 
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string->list")
+	start, end, err := helpers.ParseSubrange(rest, len(runes), "string->list")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("string->list: invalid indices")
 	}
 
 	// Build the list from the substring
@@ -270,8 +265,9 @@ func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	runes := []rune(s.Value)
-	if startIdx.Value < 0 || endIdx.Value > int64(len(runes)) || startIdx.Value > endIdx.Value {
-		return values.NewForeignError("substring: invalid indices")
+	err = helpers.ValidateStartEnd(startIdx.Value, endIdx.Value, int64(len(runes)), "substring")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewString(string(runes[startIdx.Value:endIdx.Value])))
 	return nil
@@ -289,17 +285,10 @@ func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	runes := str.Runes()
-	length := len(runes)
 
-	start64, end64, err := helpers.ParseOptionalStartEnd(rest, int64(length), "string-copy")
+	start, end, err := helpers.ParseSubrange(rest, len(runes), "string-copy")
 	if err != nil {
 		return err
-	}
-	start, end := int(start64), int(end64)
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.NewForeignError("string-copy: invalid indices")
 	}
 
 	// Use NewMutableString to ensure the copy is not interned and can be mutated
