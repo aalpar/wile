@@ -414,7 +414,7 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 // throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true, ctctx.inExpression, childEnv)
+	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true, ctctx.inExpression)
 
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
@@ -778,7 +778,7 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
-	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true, p.env)
+	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true)
 
 	err := p.compileValidated(exprCtx, v.Before)
 	if err != nil {

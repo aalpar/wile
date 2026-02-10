@@ -37,17 +37,22 @@ import (
 //   - If match fails: value register = #f
 type OperationSyntaxCaseMatch struct{}
 
-// syntaxCaseBindings stores pattern variable bindings from a successful match.
-// This is stored in the machine context and accessed by OperationBindPatternVars.
-var currentSyntaxCaseBindings map[string]syntax.SyntaxValue
+// syntaxCaseState holds per-context state for syntax-case expansion.
+// It is stored on MachineContext (not as package globals) so that
+// syntax-case is reentrant and safe for concurrent macro expansion.
+type syntaxCaseState struct {
+	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
+	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)
+	input    syntax.SyntaxValue            // input syntax object being matched
+}
 
-// currentSyntaxCaseMatcher stores the matcher from the last successful match.
-// This is needed for template expansion with ellipsis.
-var currentSyntaxCaseMatcher *match.SyntaxMatcher
-
-// currentSyntaxCaseInput stores the input syntax object being matched.
-// This is used instead of the eval stack to avoid interference with procedure calls in the body.
-var currentSyntaxCaseInput syntax.SyntaxValue
+// ensureSyntaxCaseState lazily initializes the syntaxCaseState on the context.
+func ensureSyntaxCaseState(mc *MachineContext) *syntaxCaseState {
+	if mc.syntaxCase == nil {
+		mc.syntaxCase = &syntaxCaseState{}
+	}
+	return mc.syntaxCase
+}
 
 func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	return &OperationSyntaxCaseMatch{}
@@ -61,11 +66,12 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 		return nil, mctx.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
 
-	// Get input from global (set by OperationStoreSyntaxCaseInput)
-	if currentSyntaxCaseInput == nil {
+	// Get input from per-context state (set by OperationStoreSyntaxCaseInput)
+	sc := mctx.syntaxCase
+	if sc == nil || sc.input == nil {
 		return nil, mctx.Error("syntax-case: no input available")
 	}
-	input := currentSyntaxCaseInput
+	input := sc.input
 
 	// Create a matcher
 	matcher := match.NewSyntaxMatcherWithEllipsisVars(clause.patternVars, clause.bytecode, clause.ellipsisVars)
@@ -81,9 +87,9 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 		return mctx, nil // nolint:errcheck, nilerr
 	}
 
-	// Match succeeded - store bindings and matcher
-	currentSyntaxCaseBindings = matcher.GetBindings()
-	currentSyntaxCaseMatcher = matcher
+	// Match succeeded - store bindings and matcher in per-context state
+	sc.bindings = matcher.GetBindings()
+	sc.matcher = matcher
 	mctx.SetValue(values.TrueValue)
 	mctx.pc++
 	return mctx, nil
@@ -127,7 +133,8 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 }
 
 func (p *OperationBindPatternVars) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
-	if currentSyntaxCaseBindings == nil {
+	sc := mctx.syntaxCase
+	if sc == nil || sc.bindings == nil {
 		return nil, mctx.Error("syntax-case: no pattern bindings available")
 	}
 
@@ -140,7 +147,7 @@ func (p *OperationBindPatternVars) Apply(ctx context.Context, mctx *MachineConte
 	for _, varName := range p.PatternVars {
 		sym := childEnv.InternSymbol(values.NewSymbol(varName))
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable)
-		stxVal, ok := currentSyntaxCaseBindings[varName]
+		stxVal, ok := sc.bindings[varName]
 		if ok && li == nil {
 			continue
 		}
@@ -217,7 +224,8 @@ func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 }
 
 func (p *OperationSyntaxTemplateExpand) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
-	if currentSyntaxCaseMatcher == nil {
+	sc := mctx.syntaxCase
+	if sc == nil || sc.matcher == nil {
 		return nil, mctx.Error("syntax: no pattern matcher available for template expansion")
 	}
 
@@ -230,7 +238,7 @@ func (p *OperationSyntaxTemplateExpand) Apply(ctx context.Context, mctx *Machine
 
 	// Expand the template using the matcher (handles ellipsis)
 	// Use nil for intro scope and freeIds for now - hygiene can be added later
-	expanded, err := currentSyntaxCaseMatcher.ExpandWithIntroScope(template, nil, nil)
+	expanded, err := sc.matcher.ExpandWithIntroScope(template, nil, nil)
 	if err != nil {
 		return nil, mctx.WrapError(err, "syntax: template expansion error")
 	}
@@ -266,12 +274,13 @@ func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
 }
 
 func (p *OperationStoreSyntaxCaseInput) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+	sc := ensureSyntaxCaseState(mctx)
 	val := mctx.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
 	if stx, ok := val.(syntax.SyntaxValue); ok {
-		currentSyntaxCaseInput = stx
+		sc.input = stx
 	} else {
-		currentSyntaxCaseInput = schemeutil.DatumToSyntaxValue(nil, val)
+		sc.input = schemeutil.DatumToSyntaxValue(nil, val)
 	}
 	mctx.pc++
 	return mctx, nil
@@ -303,7 +312,7 @@ func NewOperationClearSyntaxCaseInput() *OperationClearSyntaxCaseInput {
 }
 
 func (p *OperationClearSyntaxCaseInput) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
-	currentSyntaxCaseInput = nil
+	mctx.syntaxCase = nil
 	mctx.pc++
 	return mctx, nil
 }

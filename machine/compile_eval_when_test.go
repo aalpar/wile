@@ -36,7 +36,7 @@ func TestCompileEvalWhen_Error_NilEnv(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, nil), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "eval-when")
 }
@@ -52,7 +52,7 @@ func TestCompileEvalWhen_Error_NilTemplate(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "eval-when")
 }
@@ -67,7 +67,7 @@ func TestCompileEvalWhen_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "eval-when")
 }
@@ -85,7 +85,7 @@ func TestCompileEvalWhen_EmptyBody(t *testing.T) {
 		syntax.NewSyntaxEmptyList(nil), nil)
 	expr := syntax.NewSyntaxCons(phases, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil) // Empty body is valid, emits void
 }
 
@@ -104,7 +104,7 @@ func TestCompileEvalWhen_Error_UnknownPhase(t *testing.T) {
 	expr := syntax.NewSyntaxCons(phases,
 		syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unknown phase")
 }
@@ -124,7 +124,7 @@ func TestCompileEvalWhen_RunPhase(t *testing.T) {
 	expr := syntax.NewSyntaxCons(phases,
 		syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
 }
@@ -142,6 +142,6 @@ func TestCompileEvalWhen_EmptyPhases(t *testing.T) {
 	expr := syntax.NewSyntaxCons(phases,
 		syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
 }

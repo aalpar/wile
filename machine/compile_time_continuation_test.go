@@ -362,7 +362,7 @@ func evalSchemeString(code string) (values.Value, error) {
 		// Compile
 		tpl := NewNativeTemplate(0, 0, false)
 		cctx := NewCompiletimeContinuation(tpl, env)
-		cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
+		cnt := NewCompileTimeCallContext(context.Background(), false, true)
 		err = cctx.CompileExpression(cnt, expanded)
 		if err != nil {
 			return nil, err
@@ -578,7 +578,7 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 	}
 	// Use inTail=false for top-level expressions. Top-level is NOT tail position
 	// because there's no outer function to return to.
-	cnt := NewCompileTimeCallContext(context.Background(), false, true, env)
+	cnt := NewCompileTimeCallContext(context.Background(), false, true)
 	err = cctx.CompileExpression(cnt, prog)
 	if err != nil {
 		return nil, err
@@ -1851,7 +1851,7 @@ func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 
 	// Call with nil to test the nil branch
 	err := ctc.CompileSelfEvaluating(ctctx, nil)

@@ -78,6 +78,7 @@ type MachineContext struct {
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
 	threadID         uint64               // SRFI-18 thread identity: 0 = primordial thread
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
+	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.

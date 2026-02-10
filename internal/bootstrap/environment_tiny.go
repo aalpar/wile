@@ -217,7 +217,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			// Compile and run
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			// Use inTail=false for top-level expressions
-			cctx := machine.NewCompileTimeCallContext(ctx, false, true, env)
+			cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "error compiling bootstrap macro")

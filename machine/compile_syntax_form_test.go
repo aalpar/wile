@@ -35,7 +35,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
 }
@@ -50,7 +50,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax")
 }
@@ -68,7 +68,7 @@ func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	expr := syntax.NewSyntaxCons(template,
 		syntax.NewSyntaxCons(extra, syntax.NewSyntaxEmptyList(nil), nil), nil)
 
-	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax")
 }
@@ -182,7 +182,7 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
 	expr := syntax.NewSyntaxCons(escapeForm, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
 
 	// Verify NO OperationSyntaxTemplateExpand was generated
@@ -210,7 +210,7 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)
 	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
 
-	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
 
 	// Verify OperationSyntaxTemplateExpand WAS generated

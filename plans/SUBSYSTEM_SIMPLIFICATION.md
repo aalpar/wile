@@ -31,7 +31,7 @@ The dependency graph is clean (no cycles) and the package layering is sound. The
                    registry/helpers
 ```
 
-## Phase 1: Unified Port Base (Low Risk, High Impact)
+## Phase 1: Unified Port Base (Low Risk, High Impact) ✅ DONE
 
 ### Problem
 
@@ -124,7 +124,7 @@ make lint                  # No new issues
 
 ---
 
-## Phase 2: AsList() Deduplication (Low Risk, Moderate Impact)
+## Phase 2: AsList() Deduplication (Low Risk, Moderate Impact) ✅ DONE
 
 ### Problem
 
@@ -191,7 +191,7 @@ make lint
 
 ---
 
-## Phase 3: ErrMachineHalt → nil at Run() Boundary (Medium Risk, High Impact)
+## Phase 3: ErrMachineHalt → nil at Run() Boundary (Medium Risk, High Impact) ✅ DONE
 
 ### Problem
 
@@ -272,7 +272,7 @@ Medium — requires careful audit of all `Run()` callers. Some callers may depen
 
 ---
 
-## Phase 4: syntax-case Globals → Per-Context State (Medium Risk, Medium Impact)
+## Phase 4: syntax-case Globals → Per-Context State (Medium Risk, Medium Impact) ✅ DONE
 
 ### Problem
 
@@ -314,16 +314,16 @@ Each `OperationStoreSyntaxCaseInput`, `OperationSyntaxCaseMatch`, `OperationBind
 | File | Changes |
 |------|---------|
 | `machine/machine_context.go` | Add `syntaxCase *syntaxCaseState` field |
-| `machine/operation_syntax_case.go` | Replace global reads/writes with `mc.syntaxCase.*` |
+| `machine/operation_syntax_case.go` | Replace 3 globals with `syntaxCaseState` struct + `ensureSyntaxCaseState()` helper; all operations use `mc.syntaxCase.*` |
+| `machine/operation_syntax_case_test.go` | Update tests to use `mc.syntaxCase` instead of package globals |
 
-### Verification
+### Implementation Notes
 
-```bash
-go test ./machine/...
-make lint
-# Verify no remaining references to the globals:
-grep -n 'currentSyntaxCase' machine/*.go
-```
+- `syntaxCaseState` struct defined in `operation_syntax_case.go` (co-located with the operations that use it)
+- `ensureSyntaxCaseState(mc)` lazily allocates the state on first use (StoreSyntaxCaseInput)
+- `ClearSyntaxCaseInput` sets `mc.syntaxCase = nil` (releases the entire state)
+- `NewSubContext()` does NOT propagate `syntaxCase` — it's per-expansion, not per-thread
+- Zero behavioral change: all tests pass unchanged
 
 ### Impact
 
@@ -334,7 +334,7 @@ grep -n 'currentSyntaxCase' machine/*.go
 
 ---
 
-## Phase 5: Environment Lookup Delegation (Low Risk, Moderate Impact)
+## Phase 5: Environment Lookup Delegation (Low Risk, Moderate Impact) ✅ DONE
 
 ### Problem
 
@@ -342,51 +342,43 @@ grep -n 'currentSyntaxCase' machine/*.go
 
 There is also a semantic discrepancy: `GlobalEnvironmentFrame.GetGlobalIndex` interns the symbol before lookup; `EnvironmentFrame.GetGlobalIndex` does not.
 
-### Design
+### Investigation Results
 
-Refactor `EnvironmentFrame` lookup methods to delegate to the underlying frame types for leaf-level lookups, keeping only parent-chain traversal as `EnvironmentFrame`'s unique responsibility:
+1. **Depth tracking**: `EnvironmentFrame.GetLocalIndex` walks the parent chain with a depth counter `j`. `LocalEnvironmentFrame.GetLocalIndex` always returns depth 0. Delegation requires the walker to adjust depth: `NewLocalIndex(li[0], depth)`. Same applies to `MaybeCreateLocalBinding`.
 
-```go
-func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
-    curr := p
-    depth := 0
-    for curr != nil {
-        if li := curr.local.GetLocalIndex(key); li != nil {
-            li.Depth = depth  // adjust depth for parent chain
-            return li
-        }
-        curr = curr.parent
-        depth++
-    }
-    return nil
-}
-```
+2. **Interning discrepancy**: Confirmed latent bug. `EnvironmentFrame.GetGlobalIndex` returned `GlobalIndex.Index` pointing to an uninternmed symbol. Works today because all consumers use `*gi.Index` (value comparison), but violates the invariant that returned `GlobalIndex` values should hold interned symbols. Same gap existed in `CreateGlobalBinding` and `MaybeCreateOwnGlobalBinding`.
 
-### Investigation Required
+3. **GetIndex**: Zero production callers, documented bug (skips first frame). Deleted.
 
-Before implementing, verify:
-1. Whether `EnvironmentFrame.GetLocalIndex` adjusts the `LocalIndex.Depth` field (parent-chain depth tracking) — this is the part that can't delegate naively
-2. Whether the symbol-interning discrepancy in `GetGlobalIndex` is a bug or intentional
-3. Whether `GetBinding` and `GetIndex` have subtle differences from their delegate candidates
+4. **GetBinding/GetBindingWithScopes/GetLocalIndexWithScopes**: Complex per-iteration scope matching logic (ScopesMatch, candidate accumulation, Flatt's maximization) makes delegation a net negative — it would push scope-awareness into the leaf types or require a predicate parameter, neither of which simplifies anything. Documented in comments.
+
+### Changes Implemented
+
+**Tier 1 — High value, safe:**
+- Deleted `GetIndex` (dead code with documented bug, zero callers)
+- Added `InternSymbol(key)` to `GetGlobalIndex`, `CreateGlobalBinding`, `MaybeCreateOwnGlobalBinding` — all three now intern the key before lookup/create, consistent with `GlobalEnvironmentFrame.CreateGlobalBinding` and `GlobalEnvironmentFrame.GetGlobalIndex`
+
+**Tier 2 — Moderate value, delegation:**
+- `GetLocalIndex`: delegates single-frame lookup to `LocalEnvironmentFrame.GetLocalIndex`, adjusts depth
+- `MaybeCreateLocalBinding`: delegates single-frame lookup to `LocalEnvironmentFrame.GetLocalIndex`, creation to `LocalEnvironmentFrame.EnsureLocalBinding`
+
+**Tier 3 — Low value, documented as intentionally non-delegated:**
+- `GetBinding`: returns `*Binding` (no depth tracking needed), direct map access is equivalent
+- `GetBindingWithScopes`: per-iteration scope matching prevents clean delegation
+- `GetLocalIndexWithScopes`: cross-frame candidate maximization (Flatt model) prevents delegate-and-adjust pattern
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `environment/environment_frame.go` | Refactor `GetLocalIndex`, `GetGlobalIndex`, `GetBinding`, `GetIndex` to delegate |
-
-### Verification
-
-```bash
-go test ./environment/... ./machine/... ./registry/...
-make lint
-```
+| `environment/environment_frame.go` | Deleted `GetIndex`; added interning to `GetGlobalIndex`, `CreateGlobalBinding`, `MaybeCreateOwnGlobalBinding`; refactored `GetLocalIndex` and `MaybeCreateLocalBinding` to delegate; added doc comments to Tier 3 methods |
 
 ### Impact
 
-- Removes duplicated map-lookup code
-- Closes the symbol-interning gap (or documents it)
-- Makes delegation chain explicit
+- Dead code (`GetIndex`) eliminated
+- Symbol interning gap closed — `GlobalIndex.Index` now always points to interned symbol
+- `GetLocalIndex` and `MaybeCreateLocalBinding` have clear responsibility split: `EnvironmentFrame` owns the walk, `LocalEnvironmentFrame` owns the lookup
+- Non-delegated methods documented with rationale
 
 ---
 
@@ -496,7 +488,7 @@ Medium — `Restore` vs `PopContinuation` have intentionally different semantics
 
 ---
 
-## Phase 7: CompileTimeCallContext.env Audit (Low Risk, Low Impact)
+## Phase 7: CompileTimeCallContext.env Audit (Low Risk, Low Impact) ✅ DONE
 
 ### Problem
 
@@ -517,18 +509,24 @@ grep -n 'NewCompileTimeCallContext' machine/*.go | grep -v test
 
 If they always agree, remove `env` from `CompileTimeCallContext`. If they sometimes differ, document when and why.
 
-### Files Modified (if removing env)
+### Investigation Result
+
+`ctctx.env` is never read anywhere in the codebase — confirmed by grep. The field is written at construction and copied through `NotInTail()`/`NotInExpression()` but never consumed. It is pure dead state.
+
+### Files Modified
 
 | File | Changes |
 |------|---------|
-| `machine/compile_time_call_context.go` | Remove `env` field |
-| All callers of `NewCompileTimeCallContext` | Remove `env` argument |
-| All readers of `ctctx.env` | Replace with `p.env` (receiver) |
+| `machine/compile_time_call_context.go` | Remove `env` field, remove `env` parameter from constructor, remove from copy methods |
+| ~30 production + test files | Remove 4th argument from `NewCompileTimeCallContext()` calls |
+| `machine/coverage_improvement_test.go` | Remove assertion on `newCtx.env` |
+| `machine/compile_quasisyntax_test.go` | Replace `ccnt, env := newTestCompiler()` with `ccnt, _ :=` (5 sites) |
 
 ### Impact
 
-- Either removes a redundant field or documents a subtle invariant
-- Low effort either way
+- Dead field removed from a value-type struct passed by copy through the entire compiler
+- Constructor signature simplified: `NewCompileTimeCallContext(ctx, inTail, inExpression)` — no more env parameter
+- State space reduced from `ctx × env × inTail × inExpression` to `ctx × inTail × inExpression`
 
 ---
 
@@ -676,13 +674,13 @@ Do not reintroduce a dispatch table. If the repetition becomes painful (e.g., ad
 Phases are independent and can be executed in any order. Recommended sequence by risk/impact:
 
 ```
-Phase 1 (Port Base)        ─── low risk, high impact, self-contained
-Phase 2 (AsList)           ─── low risk, moderate impact, trivial
-Phase 3 (ErrMachineHalt)   ─── medium risk, high impact, wide blast radius
-Phase 4 (syntax-case)      ─── medium risk, medium impact, 1 file
-Phase 5 (Env Delegation)   ─── low risk, moderate impact, investigation needed
+Phase 1 (Port Base)        ─── ✅ DONE (commit b99e98a)
+Phase 2 (AsList)           ─── ✅ DONE (commit b99e98a)
+Phase 3 (ErrMachineHalt)   ─── ✅ DONE (commit b99e98a)
+Phase 4 (syntax-case)      ─── ✅ DONE (moved globals to MachineContext.syntaxCase)
+Phase 5 (Env Delegation)   ─── ✅ DONE (interning gap closed, GetLocalIndex/MaybeCreateLocalBinding delegated, GetIndex deleted)
 Phase 6 (VM State Struct)  ─── medium risk, high impact, investigation needed
-Phase 7 (CallContext env)  ─── low risk, low impact, investigation needed
+Phase 7 (CallContext env)  ─── ✅ DONE (env field removed from CompileTimeCallContext)
 ```
 
-Phases 5, 6, and 7 require investigation before implementation. The "Investigation Required" sections describe what to verify.
+Phase 6 requires investigation before implementation. The "Investigation Required" section describes what to verify.

@@ -179,7 +179,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 
 	// Compile the form
 	// Use inTail=false for top-level expressions
-	cctx := NewCompileTimeCallContext(ctx, false, true, libEnv)
+	cctx := NewCompileTimeCallContext(ctx, false, true)
 	compiler := NewCompiletimeContinuation(tpl, libEnv)
 
 	// Set up to capture the compiled library

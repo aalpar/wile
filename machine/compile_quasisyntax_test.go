@@ -82,7 +82,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -96,7 +96,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax")
 }
@@ -110,7 +110,7 @@ func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 
 	expr := syntax.NewSyntaxEmptyList(nil)
 
-	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax-splicing")
 }
@@ -726,11 +726,11 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 
 func TestCompileQuasisyntaxTemplate_PureLiteral(t *testing.T) {
 	c := qt.New(t)
-	ccnt, env := newTestCompiler()
+	ccnt, _ := newTestCompiler()
 
 	// Pure literal should emit only LoadLiteral
 	stx := makeTestSyntaxSymbol("bindSymbolWithScopes")
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -768,7 +768,7 @@ func TestCompileQuasisyntaxTemplate_WithUnsyntax(t *testing.T) {
 
 func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
 	c := qt.New(t)
-	ccnt, env := newTestCompiler()
+	ccnt, _ := newTestCompiler()
 
 	// Nested but no unsyntax -> still pure literal
 	stx := makeTestSyntaxList(
@@ -778,7 +778,7 @@ func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
 			makeTestSyntaxSymbol("c"),
 		),
 	)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true, env)
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -816,37 +816,37 @@ func TestCompileQuasisyntaxTemplate_NestedWithUnsyntax(t *testing.T) {
 
 func TestCompileQuasisyntax_Error_NonPairArg(t *testing.T) {
 	c := qt.New(t)
-	ccnt, env := newTestCompiler()
+	ccnt, _ := newTestCompiler()
 
 	expr := makeTestSyntaxSymbol("bindSymbolWithScopes")
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
 
 func TestCompileQuasisyntax_Error_ExtraArgs(t *testing.T) {
 	c := qt.New(t)
-	ccnt, env := newTestCompiler()
+	ccnt, _ := newTestCompiler()
 
 	expr := makeTestSyntaxList(
 		makeTestSyntaxSymbol("template"),
 		makeTestSyntaxSymbol("extra"),
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
 
 func TestCompileQuasisyntax_Error_ImproperArgsList(t *testing.T) {
 	c := qt.New(t)
-	ccnt, env := newTestCompiler()
+	ccnt, _ := newTestCompiler()
 
 	expr := syntax.NewSyntaxCons(
 		makeTestSyntaxSymbol("template"),
 		makeTestSyntaxSymbol("extra"),
 		nil,
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true, env), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
