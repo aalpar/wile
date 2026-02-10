@@ -56,45 +56,28 @@ func PrimVector(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorLength implements the vector-length primitive.
 // Returns the number of elements in a vector as an integer.
 func PrimVectorLength(_ context.Context, mc *machine.MachineContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-length")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(len(*v))))
-	return nil
+	return helpers.SequenceLength[*values.Vector](mc, values.ErrNotAVector, "vector-length")
 }
 
 // PrimVectorRef implements the vector-ref primitive.
 // Returns the element of a vector at the given index.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-ref")
-	if err != nil {
-		return err
-	}
-	idx, err := helpers.RequireIndex(mc, 1, v.Length(), "vector-ref")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(v.Get(idx))
-	return nil
+	return helpers.SequenceRef(mc, values.ErrNotAVector, "vector-ref",
+		(*values.Vector).Get,
+	)
 }
 
 // PrimVectorSet implements the vector-set! primitive.
 // Sets the element of a vector at the given index to a new value.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-set!")
-	if err != nil {
-		return err
-	}
-	idx, err := helpers.RequireIndex(mc, 1, v.Length(), "vector-set!")
-	if err != nil {
-		return err
-	}
-	v.Set(idx, mc.Arg(2))
-	mc.SetValue(values.Void)
-	return nil
+	return helpers.SequenceSet(mc, values.ErrNotAVector, "vector-set!",
+		func(v *values.Vector, idx int, mc *machine.MachineContext) error {
+			v.Set(idx, mc.Arg(2))
+			return nil
+		},
+	)
 }
 
 // PrimVectorToList implements the vector->list primitive.

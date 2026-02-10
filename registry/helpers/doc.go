@@ -36,6 +36,12 @@
 //   - [ComplexOrFloat]: return Float if imaginary part is zero
 //   - [MakeTypePredicate]: factory for type predicate primitives
 //
+// # Sequence Accessors
+//
+//   - [SequenceLength]: generic length for Vector/ByteVector
+//   - [SequenceRef]: generic indexed read with element conversion closure
+//   - [SequenceSet]: generic indexed mutation with element setter closure
+//
 // # List Operations
 //
 //   - [ListToVector]: convert list to vector
