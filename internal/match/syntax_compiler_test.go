@@ -176,22 +176,21 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 	tcs := []struct {
 		variables map[string]struct{}
 		in        *values.Pair
-		target    *values.Pair
+		target    *syntax.SyntaxPair
 		matches   bool
-		result    values.Value
 	}{
 		{
 			variables: map[string]struct{}{
 				"a": {},
 			},
 			in:      testList(values.NewInteger(10), values.NewSymbol("a")),
-			target:  testList(values.NewInteger(10), values.NewInteger(20)),
+			target:  testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
 			matches: true,
 		},
 		{
 			variables: map[string]struct{}{},
 			in:        testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
-			target:    testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			target:    testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			matches:   true,
 		},
 		{
@@ -203,17 +202,17 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 					values.NewSymbol("a"), values.NewSymbol("b"),
 				), values.NewInteger(40),
 			),
-			target: testList(
-				values.NewInteger(10), values.List(
-					values.NewInteger(20), values.NewSymbol("b"),
-				), values.NewInteger(40),
+			target: testSyntaxList(
+				testSyntaxInt(10), testSyntaxList(
+					testSyntaxInt(20), testSyntaxSym("b"),
+				), testSyntaxInt(40),
 			),
 			matches: true,
 		},
 		{
 			variables: map[string]struct{}{},
 			in:        testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
-			target:    testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			target:    testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			matches:   true,
 		},
 		{
@@ -221,9 +220,9 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			in: testList(
 				values.NewInteger(10), values.NewInteger(20), values.List(
 					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
-			target: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
+			target: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
 			matches: true,
 		},
 		{
@@ -235,12 +234,12 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 					values.NewSymbol("a"), values.NewSymbol("b"),
 				), values.NewSymbol("..."),
 			),
-			target: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewInteger(30), values.NewSymbol("b"),
+			target: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxInt(30), testSyntaxSym("b"),
 				),
-				values.List(
-					values.NewInteger(40), values.NewSymbol("b"),
+				testSyntaxList(
+					testSyntaxInt(40), testSyntaxSym("b"),
 				),
 			),
 			matches: true,
@@ -253,7 +252,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			err := vst.Compile(context.TODO(), tc.in)
 			c.Assert(err, qt.IsNil)
 			mtc := NewMatcher(vst.variables, vst.codes)
-			err = mtc.Match(context.Background(), tc.target)
+			err = mtc.MatchSyntax(context.Background(), tc.target)
 			if tc.matches {
 				c.Assert(err, qt.IsNil, qt.Commentf("expected match for %s", tc.in.SchemeString()))
 			} else {
