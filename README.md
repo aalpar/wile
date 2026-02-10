@@ -268,15 +268,18 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 | `wile.NewBigInteger(n)` | Exact arbitrary-precision integer (`*big.Int`) |
 | `wile.NewFloat(f)` | Inexact real |
 | `wile.NewBigFloat(f)` | Inexact arbitrary-precision float (`*big.Float`) |
+| `wile.NewRational(num, den)` | Exact rational |
+| `wile.NewComplex(v)` | Complex number (`complex128`) |
 | `wile.NewString(s)` | String |
 | `wile.NewSymbol(s)` | Symbol |
 | `wile.NewBoolean(b)` | `#t` / `#f` |
 | `wile.True` / `wile.False` | Boolean constants |
+| `wile.NewVector(vals...)` | Vector |
 | `wile.NewList(vals...)` | Proper list |
 | `wile.Null` | Empty list `'()` |
 | `wile.Void` | Void value |
 
-Additional constructors for rationals, complex numbers, vectors, and big-number variants are available in the `values` package.
+Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the `values` package.
 
 ### Engine Options
 

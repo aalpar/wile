@@ -137,6 +137,35 @@ func NewBigFloatFromString(s string) Value {
 	return wrapValue(v)
 }
 
+// NewRational creates a Scheme exact rational number.
+func NewRational(num, denom int64) Value {
+	return wrapValue(values.NewRational(num, denom))
+}
+
+// NewRationalFromBigInt creates a Scheme exact rational from big.Int numerator and denominator.
+func NewRationalFromBigInt(num, denom *big.Int) Value {
+	return wrapValue(values.NewRationalFromBigInt(num, denom))
+}
+
+// NewComplex creates a Scheme complex number from a Go complex128.
+func NewComplex(v complex128) Value {
+	return wrapValue(values.NewComplex(v))
+}
+
+// NewComplexFromParts creates a Scheme complex number from real and imaginary parts.
+func NewComplexFromParts(realPart, imagPart float64) Value {
+	return wrapValue(values.NewComplexFromParts(realPart, imagPart))
+}
+
+// NewVector creates a Scheme vector from values.
+func NewVector(vals ...Value) Value {
+	unwrapped := make([]values.Value, len(vals))
+	for i, v := range vals {
+		unwrapped[i] = unwrapValue(v)
+	}
+	return wrapValue(values.NewVector(unwrapped...))
+}
+
 // NewList creates a Scheme list from values.
 func NewList(vals ...Value) Value {
 	if len(vals) == 0 {
