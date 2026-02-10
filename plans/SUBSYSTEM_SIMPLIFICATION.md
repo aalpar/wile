@@ -723,48 +723,19 @@ make lint
 
 ---
 
-## Phase 9: Deprecate `globalSymbolInterns` (Low Risk, Medium Impact)
+## Phase 9: Delete `globalSymbolInterns` ✅ DONE
 
 ### Problem
 
-`values/symbol_intern.go` maintains a **process-global** symbol interning table:
+`values/symbol_intern.go` maintained a **process-global** symbol interning table that contradicted the per-VM isolation invariant established in `TopLevelEnvironment`.
 
-```go
-var globalSymbolInterns = make(map[Symbol]*Symbol)    // line 24
-var globalSymbolInternsMu sync.RWMutex                // line 25
-```
+### Investigation Result
 
-This contradicts the per-VM isolation invariant established in `TopLevelEnvironment`:
+Audit found **zero production callers** of `values.InternSymbol()`. The migration to per-VM interning via `TopLevelEnvironment.InternSymbol()` was already 100% complete. All 35+ production interning calls go through `env.InternSymbol()`. The global map and mutex were pure dead state, called only by 5 self-tests.
 
-```
-Process-global:   values.InternSymbol("foo") == values.InternSymbol("foo")  ← always
-Per-VM:           vm1.InternSymbol("foo") != vm2.InternSymbol("foo")        ← intentional
-```
+### Resolution
 
-The code comments already mark this as deprecated ("Use TopLevelEnvironment.InternSymbol() for per-instance symbol interning"). However, `values.InternSymbol()` is still called from production code.
-
-### Investigation Required
-
-Before removing, verify:
-1. Which production code still calls `values.InternSymbol()` (the process-global version)
-2. Whether those call sites have access to a `TopLevelEnvironment` to intern against
-3. Whether `ResetSymbolInterns()` is used only in tests
-
-### Design
-
-If all production callers have access to an environment:
-1. Replace `values.InternSymbol(s)` calls with `env.InternSymbol(s)` at each site
-2. Move `InternSymbol` to test-only or delete
-3. Move `ResetSymbolInterns` to test helper
-4. Delete `globalSymbolInterns` and `globalSymbolInternsMu`
-
-If some callers genuinely lack an environment (e.g., embedding API), document the isolation caveat: symbols interned via the process-global table are `eq?`-equal across all VM instances.
-
-### Impact
-
-- Process-global mutable state eliminated
-- Per-VM isolation invariant enforced at the type level (no global escape hatch)
-- `values` package becomes stateless (no mutable globals)
+Deleted `values/symbol_intern.go` (88 lines) and its 5 self-tests from `values/symbol_test.go`. Process-global mutable state eliminated from the `values` package.
 
 ---
 
@@ -778,12 +749,10 @@ Phase 2 (AsList)             ─── ✅ DONE (commit b99e98a)
 Phase 3 (ErrMachineHalt)     ─── ✅ DONE (commit b99e98a)
 Phase 4 (syntax-case)        ─── ✅ DONE (commit f5fd749)
 Phase 5 (Env Delegation)     ─── ✅ DONE (commit f5fd749)
-Phase 6 (VM State Struct)    ─── ✅ DONE
+Phase 6 (VM State Struct)    ─── ✅ DONE (commit 61682c2)
 Phase 7 (CallContext env)    ─── ✅ DONE (commit f5fd749)
-Phase 8 (Global Binding Dup) ─── ✅ DONE
-Phase 9 (globalSymbolInterns) ── low risk, medium impact, investigation needed
+Phase 8 (Global Binding Dup) ─── ✅ DONE (commit 61682c2)
+Phase 9 (globalSymbolInterns) ── ✅ DONE
 ```
 
-Phase 6 investigation is complete — the save/restore asymmetry means the `vmState` extraction simplifies declarations but does NOT collapse `Restore`/`PopContinuation` to single assignments. The impact is reduced from the original estimate but still positive.
-
-Phase 9 requires investigation before implementation — need to audit all `values.InternSymbol()` callers.
+All phases complete.
