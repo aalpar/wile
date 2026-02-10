@@ -14,10 +14,6 @@
 
 package values
 
-import (
-	"strings"
-)
-
 var (
 	_ Value     = (*ByteVector)(nil)
 	_ Indexable = (*ByteVector)(nil)
@@ -162,17 +158,7 @@ func (p *ByteVector) EqualTo(v Value) bool {
 
 // SchemeString returns the Scheme representation of the bytevector.
 func (p *ByteVector) SchemeString() string {
-	q := &strings.Builder{}
-	q.WriteString("#u8(")
-	if len(*p) > 0 {
-		q.WriteString(" ")
-		q.WriteString((*p)[0].SchemeString())
-		for _, v := range (*p)[1:] {
-			q.WriteString(" ")
-			q.WriteString(v.SchemeString())
-		}
-		q.WriteString(" ")
-	}
-	q.WriteString(")")
-	return q.String()
+	return formatIndexable("#u8(", len(*p), func(i int) Value {
+		return (*p)[i]
+	})
 }
