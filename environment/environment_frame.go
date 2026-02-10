@@ -546,23 +546,6 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 	return nil
 }
 
-// CreateGlobalBinding creates a new global binding in the current global environment.
-// The key is interned before use (consistent with
-// GlobalEnvironmentFrame.CreateGlobalBinding).
-// It returns the GlobalIndex of the new binding and a boolean indicating whether
-// the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
-	key = p.InternSymbol(key)
-	_, ok := p.global.keys[*key]
-	if ok {
-		return NewGlobalIndex(key), false
-	}
-	i := len(p.global.bindings)
-	p.global.keys[*key] = i
-	p.global.SetBindings(append(p.global.Bindings(), NewBinding(values.Void, bt)))
-	return NewGlobalIndex(key), true
-}
-
 // MaybeCreateOwnGlobalBinding creates a new global binding in the current
 // global environment if it does not already exist.
 // The key is interned before use (consistent with

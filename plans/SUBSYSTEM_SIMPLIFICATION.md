@@ -382,11 +382,11 @@ There is also a semantic discrepancy: `GlobalEnvironmentFrame.GetGlobalIndex` in
 
 ---
 
-## Phase 6: VM State Struct Extraction (Medium Risk, High Impact)
+## Phase 6: VM State Struct Extraction ✅ DONE
 
 ### Problem
 
-8 fields are duplicated between `MachineContext` and `MachineContinuation`:
+8 fields are declared in both `MachineContext` (19 fields total) and `MachineContinuation` (10 fields total):
 
 ```
 ┌──────────────────┬─────────────────┬──────────────────────┐
@@ -403,13 +403,46 @@ There is also a semantic discrepancy: `GlobalEnvironmentFrame.GetGlobalIndex` in
 └──────────────────┴─────────────────┴──────────────────────┘
 ```
 
-`Restore` and `PopContinuation` manually copy each field. If a field is added to one but not the other, restoration silently breaks.
+### Investigation Results
 
-### Design
+The investigation reveals that **declaration overlap ≠ copy overlap**. The save/restore methods handle different subsets of these 8 fields:
 
-Extract shared "VM execution state" into an embedded struct:
+```
+┌──────────────┬────────────────┬─────────────┬──────────────────┐
+│ Field        │ SaveCont saves │ Restore     │ PopContinuation  │
+├──────────────┼────────────────┼─────────────┼──────────────────┤
+│ env          │ ✓              │ ✓           │ ✓                │
+│ template     │ ✓              │ ✓           │ ✓                │
+│ value        │ ✓              │ ✗           │ ✓                │
+│ evals        │ ✓              │ ✓ (Copy)    │ ✓ (no copy)      │
+│ pc           │ ✓ (+offset)    │ ✓           │ ✓                │
+│ threadID     │ ✓              │ ✗           │ ✗                │
+│ windingStack │ ✗              │ ✗           │ ✗                │
+│ promptTag    │ ✗              │ ✗           │ ✗                │
+└──────────────┴────────────────┴─────────────┴──────────────────┘
+```
+
+Key findings:
+
+1. **`value` is NOT restored by `Restore()`** — intentional. For `call/cc` re-invocation, the value register is set by the caller (the argument passed to the escape closure). `PopContinuation()` DOES restore `value` (normal function return semantics).
+
+2. **`evals` deep-copy differs**: `Restore()` calls `evals.Copy()` (continuations can be re-invoked, so the stack must be isolated). `PopContinuation()` does direct assignment (single-use consumption).
+
+3. **`threadID` is saved but never restored** — it's a context property. The continuation remembers which thread created it (for cross-thread continuation safety checks), but restoring a continuation doesn't change the current thread.
+
+4. **`windingStack` and `promptTag` are NEVER touched** by `SaveContinuation`, `Restore`, or `PopContinuation`. They exist on `MachineContinuation` for separate lifecycle management (set directly during delimited continuation operations via `MachineContinuation.Copy()` and `DeepCopy()`).
+
+### Revised Design
+
+The save/restore asymmetry means a simple `p.vmState = cont.vmState` would be incorrect — it would restore fields that shouldn't be restored (`value` in `Restore`, `threadID` in both). The `vmState` extraction is still valuable for **structural documentation** (which fields are shared) but cannot simplify `Restore`/`PopContinuation` to a single assignment.
+
+A more honest extraction:
 
 ```go
+// vmState holds the execution state shared between MachineContext and
+// MachineContinuation. Fields in this struct exist in both types but are
+// NOT uniformly copied — see the per-method field tables in the doc comments
+// for Restore, PopContinuation, and SaveContinuation.
 type vmState struct {
     env          *environment.EnvironmentFrame
     template     *NativeTemplate
@@ -420,53 +453,20 @@ type vmState struct {
     promptTag    *PromptTag
     threadID     uint64
 }
-
-type MachineContext struct {
-    vmState
-    ctx              context.Context
-    cont             *MachineContinuation
-    expanderCtx      *ExpanderContext
-    exceptionHandler *ExceptionHandler
-    debugger         *Debugger
-    parentMC         *MachineContext
-    pendingEscape    *MachineContinuation
-    escapeCont       *MachineContinuation
-    counters         VMCounters
-    thread           *values.Thread
-    syntaxCase       *syntaxCaseState  // from Phase 4
-}
-
-type MachineContinuation struct {
-    vmState
-    parent        *MachineContinuation
-    promptHandler *MachineClosure
-}
 ```
 
-`Restore` becomes a struct assignment with a deep-copy of `evals`:
+`Restore` and `PopContinuation` remain explicit about which fields they handle — the struct extraction doesn't collapse them to a single assignment, but it does:
 
-```go
-func (p *MachineContext) Restore(cont *MachineContinuation) {
-    p.counters.ContinuationsRestored++
-    p.vmState = cont.vmState
-    p.evals = cont.evals.Copy()
-    p.cont = cont.parent
-}
-```
-
-### Investigation Required
-
-Before implementing, verify:
-1. Whether `PopContinuation` really does the same thing as `Restore` minus the `evals.Copy()` — the current code restores `value` in `PopContinuation` but not in `Restore`, which is a semantic difference
-2. Whether `SaveContinuation` and `NewMachineContinuationFromMachineContext` are consistent in which fields they snapshot
-3. How `windingStack` field on `MachineContinuation` is used — it may need separate handling during save/restore
+- Make `MachineContinuation` a 3-field struct (`vmState` + `parent` + `promptHandler`)
+- Make adding a new shared field impossible to forget in one type
+- Document the shared-field set explicitly in one place
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
 | `machine/vm_state.go` | New file: `vmState` struct |
-| `machine/machine_context.go` | Embed `vmState`, simplify `Restore`/`PopContinuation`/`SaveContinuation` |
+| `machine/machine_context.go` | Embed `vmState`; `Restore`/`PopContinuation` remain explicit per-field |
 | `machine/machine_continuation.go` | Embed `vmState`, simplify constructors and `Copy`/`DeepCopy` |
 
 ### Verification
@@ -478,13 +478,14 @@ make lint
 
 ### Risk
 
-Medium — `Restore` vs `PopContinuation` have intentionally different semantics (Copy vs no-copy for evals). The struct extraction must preserve this distinction. The `windingStack` field on `MachineContinuation` may have different lifecycle semantics than on `MachineContext`.
+Medium — embedding changes field access from `p.env` to `p.vmState.env` (though Go's embedding makes `p.env` still work). The main risk is accessor methods and tests that reference fields by name in struct literals — these will need updating to use the embedded form.
 
 ### Impact
 
-- Makes save/restore contract compiler-enforced
-- Adding a new field to `vmState` automatically includes it in save/restore
-- Eliminates the "forgot to copy field X" bug class
+- Shared-field set documented structurally (not just by convention)
+- `MachineContinuation` reduced from 10 named fields to 3 (`vmState`, `parent`, `promptHandler`)
+- New shared fields automatically appear in both types
+- Does NOT simplify `Restore`/`PopContinuation` to single assignments (the per-field asymmetry is real and must be preserved)
 
 ---
 
@@ -669,18 +670,120 @@ Do not reintroduce a dispatch table. If the repetition becomes painful (e.g., ad
 
 ---
 
+## Phase 8: CreateGlobalBinding / MaybeCreateOwnGlobalBinding Deduplication ✅ DONE
+
+### Problem
+
+`EnvironmentFrame` has two methods with identical bodies:
+
+```go
+// environment/environment_frame.go:554-564
+func (p *EnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool)
+
+// environment/environment_frame.go:572-582
+func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool)
+```
+
+Both: intern the key, check `global.keys`, return existing index if found, create and append a new binding if not. Byte-for-byte identical implementations.
+
+The naming suggests an intended distinction that never materialized:
+- `CreateGlobalBinding` — "always create" (but it doesn't — returns false if exists)
+- `MaybeCreateOwnGlobalBinding` — "create if not exists, this frame only" (identical behavior)
+
+### Call Sites
+
+| Method | Count | Locations |
+|--------|-------|-----------|
+| `CreateGlobalBinding` | 3 | `compile_time_continuation.go`, `compile_validated.go` (×2) |
+| `MaybeCreateOwnGlobalBinding` | 15 | `engine.go` (×2), `registry/apply.go` (×3), `library.go` (×2), `compile_time_continuation.go` (×3), `extensions/io/register.go`, `phase_registry.go`, `compile_define_for_syntax.go`, `expander_time_continuation.go` (×2) |
+
+### Design
+
+Keep `MaybeCreateOwnGlobalBinding` (more descriptive: "Maybe" = idempotent, "Own" = no parent walk). Delete `CreateGlobalBinding`. Update 3 call sites.
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `environment/environment_frame.go` | Delete `CreateGlobalBinding` |
+| `machine/compile_time_continuation.go` | Rename call site |
+| `machine/compile_validated.go` | Rename 2 call sites |
+
+### Verification
+
+```bash
+go test ./environment/... ./machine/...
+make lint
+```
+
+### Impact
+
+- 1 redundant method eliminated
+- API surface reduced — callers no longer need to choose between identical methods
+
+---
+
+## Phase 9: Deprecate `globalSymbolInterns` (Low Risk, Medium Impact)
+
+### Problem
+
+`values/symbol_intern.go` maintains a **process-global** symbol interning table:
+
+```go
+var globalSymbolInterns = make(map[Symbol]*Symbol)    // line 24
+var globalSymbolInternsMu sync.RWMutex                // line 25
+```
+
+This contradicts the per-VM isolation invariant established in `TopLevelEnvironment`:
+
+```
+Process-global:   values.InternSymbol("foo") == values.InternSymbol("foo")  ← always
+Per-VM:           vm1.InternSymbol("foo") != vm2.InternSymbol("foo")        ← intentional
+```
+
+The code comments already mark this as deprecated ("Use TopLevelEnvironment.InternSymbol() for per-instance symbol interning"). However, `values.InternSymbol()` is still called from production code.
+
+### Investigation Required
+
+Before removing, verify:
+1. Which production code still calls `values.InternSymbol()` (the process-global version)
+2. Whether those call sites have access to a `TopLevelEnvironment` to intern against
+3. Whether `ResetSymbolInterns()` is used only in tests
+
+### Design
+
+If all production callers have access to an environment:
+1. Replace `values.InternSymbol(s)` calls with `env.InternSymbol(s)` at each site
+2. Move `InternSymbol` to test-only or delete
+3. Move `ResetSymbolInterns` to test helper
+4. Delete `globalSymbolInterns` and `globalSymbolInternsMu`
+
+If some callers genuinely lack an environment (e.g., embedding API), document the isolation caveat: symbols interned via the process-global table are `eq?`-equal across all VM instances.
+
+### Impact
+
+- Process-global mutable state eliminated
+- Per-VM isolation invariant enforced at the type level (no global escape hatch)
+- `values` package becomes stateless (no mutable globals)
+
+---
+
 ## Execution Order
 
 Phases are independent and can be executed in any order. Recommended sequence by risk/impact:
 
 ```
-Phase 1 (Port Base)        ─── ✅ DONE (commit b99e98a)
-Phase 2 (AsList)           ─── ✅ DONE (commit b99e98a)
-Phase 3 (ErrMachineHalt)   ─── ✅ DONE (commit b99e98a)
-Phase 4 (syntax-case)      ─── ✅ DONE (moved globals to MachineContext.syntaxCase)
-Phase 5 (Env Delegation)   ─── ✅ DONE (interning gap closed, GetLocalIndex/MaybeCreateLocalBinding delegated, GetIndex deleted)
-Phase 6 (VM State Struct)  ─── medium risk, high impact, investigation needed
-Phase 7 (CallContext env)  ─── ✅ DONE (env field removed from CompileTimeCallContext)
+Phase 1 (Port Base)          ─── ✅ DONE (commit b99e98a)
+Phase 2 (AsList)             ─── ✅ DONE (commit b99e98a)
+Phase 3 (ErrMachineHalt)     ─── ✅ DONE (commit b99e98a)
+Phase 4 (syntax-case)        ─── ✅ DONE (commit f5fd749)
+Phase 5 (Env Delegation)     ─── ✅ DONE (commit f5fd749)
+Phase 6 (VM State Struct)    ─── ✅ DONE
+Phase 7 (CallContext env)    ─── ✅ DONE (commit f5fd749)
+Phase 8 (Global Binding Dup) ─── ✅ DONE
+Phase 9 (globalSymbolInterns) ── low risk, medium impact, investigation needed
 ```
 
-Phase 6 requires investigation before implementation. The "Investigation Required" section describes what to verify.
+Phase 6 investigation is complete — the save/restore asymmetry means the `vmState` extraction simplifies declarations but does NOT collapse `Restore`/`PopContinuation` to single assignments. The impact is reduced from the original estimate but still positive.
+
+Phase 9 requires investigation before implementation — need to audit all `values.InternSymbol()` callers.

@@ -60,23 +60,16 @@ func (p *ErrContinuationEscape) Error() string {
 // It holds the current environment, values, evaluation stack, continuation, and program counter.
 // It is created from a MachineContinuation and can be modified during execution.
 type MachineContext struct {
-	ctx              context.Context
-	env              *environment.EnvironmentFrame
-	value            MultipleValues
-	evals            *Stack               // evaluation stack, holds intermediate values during execution
+	ctx context.Context
+	vmState
 	cont             *MachineContinuation // current continuation
-	template         *NativeTemplate
-	pc               int
 	expanderCtx      *ExpanderContext     // set during macro transformer execution for syntax-local-* access
 	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
 	debugger         *Debugger            // optional debugger for breakpoints and stepping
-	windingStack     WindingStack         // R7RS dynamic-wind extent tracking
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
 	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
-	promptTag        *PromptTag           // prompt tag for this context (set by call-with-continuation-prompt)
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
-	threadID         uint64               // SRFI-18 thread identity: 0 = primordial thread
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 }
@@ -86,13 +79,15 @@ type MachineContext struct {
 // For callers that don't need cancellation, pass context.Background().
 func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineContext {
 	q := &MachineContext{
-		ctx:      ctx,
-		env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
-		template: cont.template, // not needed to copy, templates are immutable
-		cont:     cont.parent,
-		value:    cont.value, // must not copy the values, they are passed between contexts
-		evals:    cont.evals, // must copy the eval stack
-		pc:       cont.pc,
+		ctx: ctx,
+		vmState: vmState{
+			env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
+			template: cont.template, // not needed to copy, templates are immutable
+			value:    cont.value,    // must not copy the values, they are passed between contexts
+			evals:    cont.evals,    // must copy the eval stack
+			pc:       cont.pc,
+		},
+		cont: cont.parent,
 	}
 	return q
 }
@@ -459,18 +454,15 @@ func (p *MachineContext) Run() error {
 func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	return &MachineContext{
-		ctx:         p.ctx,
-		template:    nil,
-		pc:          0,
-		env:         p.env.TopLevel(), // share global environment chain
-		value:       nil,
-		evals:       NewStack(),
-		cont:        nil,          // fresh call stack - isolated from parent
-		expanderCtx: nil,          // sub-contexts don't inherit expander context by default
-		parentMC:    p,            // track parent for call/cc continuation capture
-		escapeCont:  p.escapeCont, // inherit escape continuation for nested call/cc
-		threadID:    p.threadID,   // inherit SRFI-18 thread identity
-		thread:      p.thread,     // inherit SRFI-18 thread object
+		ctx: p.ctx,
+		vmState: vmState{
+			env:      p.env.TopLevel(), // share global environment chain
+			evals:    NewStack(),
+			threadID: p.threadID, // inherit SRFI-18 thread identity
+		},
+		parentMC:   p,            // track parent for call/cc continuation capture
+		escapeCont: p.escapeCont, // inherit escape continuation for nested call/cc
+		thread:     p.thread,     // inherit SRFI-18 thread object
 	}
 }
 

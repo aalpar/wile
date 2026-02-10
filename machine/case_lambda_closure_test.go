@@ -173,8 +173,10 @@ func TestOperationMakeCaseLambdaClosure(t *testing.T) {
 
 	// Create machine context with closures on stack
 	mc := &MachineContext{
-		evals: NewStack(cls1, cls2),
-		env:   env,
+		vmState: vmState{
+			evals: NewStack(cls1, cls2),
+			env:   env,
+		},
 	}
 
 	op := NewOperationMakeCaseLambdaClosure(2)
@@ -195,8 +197,10 @@ func TestOperationMakeCaseLambdaClosure_Error(t *testing.T) {
 
 	// Create machine context with non-closure on stack
 	mc := &MachineContext{
-		evals: NewStack(values.NewInteger(42), values.NewInteger(99)),
-		env:   env,
+		vmState: vmState{
+			evals: NewStack(values.NewInteger(42), values.NewInteger(99)),
+			env:   env,
+		},
 	}
 
 	op := NewOperationMakeCaseLambdaClosure(2)

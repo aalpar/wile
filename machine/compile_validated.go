@@ -160,7 +160,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes)
 		return sym
 	}
-	gi, created := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	if created && symbolScopes == nil {
 		return sym
 	}
@@ -232,7 +232,7 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol) error {
 		// Global context (top-level): store to global environment.
 		// Global indices are stored in the literals pool since they're runtime values.
 		// The operation loads the index from literals and stores the value there.
-		gi, _ := p.env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+		gi, _ := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
 	}
