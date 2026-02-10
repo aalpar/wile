@@ -222,7 +222,7 @@ result, err = engine.EvalMultiple(ctx, `
 ### Compile Once, Run Many Times
 
 ```go
-compiled, err := engine.Compile("(+ x 1)")
+compiled, err := engine.Compile(ctx, "(+ x 1)")
 result, err := engine.Run(ctx, compiled)
 ```
 
@@ -265,16 +265,18 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 | Constructor | Creates |
 |---|---|
 | `wile.NewInteger(n)` | Exact integer |
+| `wile.NewBigInteger(n)` | Exact arbitrary-precision integer (`*big.Int`) |
 | `wile.NewFloat(f)` | Inexact real |
-| `wile.NewRational(num, den)` | Exact rational |
-| `wile.NewComplex(re, im)` | Complex number |
+| `wile.NewBigFloat(f)` | Inexact arbitrary-precision float (`*big.Float`) |
 | `wile.NewString(s)` | String |
 | `wile.NewSymbol(s)` | Symbol |
 | `wile.NewBoolean(b)` | `#t` / `#f` |
+| `wile.True` / `wile.False` | Boolean constants |
 | `wile.NewList(vals...)` | Proper list |
-| `wile.NewVector(vals...)` | Vector |
 | `wile.Null` | Empty list `'()` |
 | `wile.Void` | Void value |
+
+Additional constructors for rationals, complex numbers, vectors, and big-number variants are available in the `values` package.
 
 ### Engine Options
 
@@ -341,6 +343,8 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 | `internal/parser/` | Scheme parser |
 | `internal/tokenizer/` | Lexer |
 | `internal/validate/` | Syntax validation |
+| `internal/forms/` | Compiled form definitions |
+| `internal/schemeutil/` | Scheme utility functions |
 | `internal/repl/` | Interactive REPL with debugger |
 | `internal/bootstrap/` | Environment initialization |
 | `internal/extensions/` | Extension packages (io, files, math, threads, etc.) |
