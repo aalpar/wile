@@ -366,7 +366,7 @@ func (p *CompileTimeContinuation) bindSymbolWithScopes(name *values.Symbol, scop
 	if p.env.LocalEnvironment() != nil {
 		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
 	} else {
-		gi, created := p.env.CreateGlobalBinding(name, environment.BindingTypeVariable)
+		gi, created := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
 		if !created {
 			binding := p.env.GetGlobalBinding(gi)
 			if binding != nil && scopes != nil {

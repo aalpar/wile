@@ -36,8 +36,7 @@ func TestOperationBrk(t *testing.T) {
 	}
 
 	mc := &MachineContext{
-		env: env,
-		pc:  0,
+		vmState: vmState{env: env},
 	}
 
 	op := NewOperationBrk(fn)
@@ -58,8 +57,7 @@ func TestOperationBrk_WithError(t *testing.T) {
 	}
 
 	mc := &MachineContext{
-		env: env,
-		pc:  0,
+		vmState: vmState{env: env},
 	}
 
 	op := NewOperationBrk(fn)
@@ -107,9 +105,10 @@ func TestOperationLoadLiteralInteger(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	mc := &MachineContext{
-		env:   env,
-		pc:    0,
-		value: MultipleValues{values.NewInteger(999)},
+		vmState: vmState{
+			env:   env,
+			value: MultipleValues{values.NewInteger(999)},
+		},
 	}
 
 	op := NewOperationLoadLiteralInteger(42)

@@ -199,7 +199,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 	env := NewTopLevelEnvironmentFrame()
 
 	tv0 := values.NewSymbol("testVar0")
-	gi, ok := env.CreateGlobalBinding(tv0, BindingTypeVariable)
+	gi, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
 
 	_, ok = env.EnsureLocalBinding(tv0, BindingTypeVariable)
@@ -415,7 +415,7 @@ func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
 	env := NewTopLevelEnvironmentFrame()
 
 	sym := env.InternSymbol(values.NewSymbol("test-global"))
-	gi, _ := env.CreateGlobalBinding(sym, BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
 
 	// SetGlobalBindingByIndex takes an int and a binding
 	newBinding := NewBinding(values.NewInteger(99), BindingTypeVariable)
@@ -470,7 +470,7 @@ func TestEnvironmentFrame_EqualTo(t *testing.T) {
 
 	// After adding different bindings, they should not be equal
 	sym := env1.InternSymbol(values.NewSymbol("test"))
-	env1.CreateGlobalBinding(sym, BindingTypeVariable)
+	env1.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
 	qt.Assert(t, env1.EqualTo(env2), qt.IsFalse)
 
 	// Non-EnvironmentFrame comparison

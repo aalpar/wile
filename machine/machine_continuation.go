@@ -23,27 +23,21 @@ import (
 )
 
 type MachineContinuation struct {
+	vmState
 	parent        *MachineContinuation
-	env           *environment.EnvironmentFrame
-	template      *NativeTemplate
-	value         MultipleValues
-	evals         *Stack
-	pc            int
-	windingStack  WindingStack    // Captured dynamic extent for R7RS dynamic-wind
-	promptTag     *PromptTag      // Non-nil marks this frame as a continuation prompt
 	promptHandler *MachineClosure // Handler invoked on abort to this prompt
-	threadID      uint64          // SRFI-18: thread that captured this continuation (0 = primordial)
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
 func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineContinuation {
 	q := &MachineContinuation{
-		parent:   parent,
-		env:      env,
-		template: tpl,
-		value:    NewMultipleValues(),
-		evals:    NewStack(),
-		pc:       0,
+		vmState: vmState{
+			env:      env,
+			template: tpl,
+			value:    NewMultipleValues(),
+			evals:    NewStack(),
+		},
+		parent: parent,
 	}
 	return q
 }
@@ -52,13 +46,15 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 // The new continuation inherits the environment, template, and evaluation stack from the machine context.
 func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *MachineContinuation {
 	q := &MachineContinuation{
-		parent:   mc.cont,
-		env:      mc.env,
-		template: mc.template,
-		value:    mc.value,
-		evals:    mc.evals,
-		pc:       mc.pc + off,
-		threadID: mc.threadID,
+		vmState: vmState{
+			env:      mc.env,
+			template: mc.template,
+			value:    mc.value,
+			evals:    mc.evals,
+			pc:       mc.pc + off,
+			threadID: mc.threadID,
+		},
+		parent: mc.cont,
 	}
 	return q
 }
@@ -104,16 +100,18 @@ func (p *MachineContinuation) CallDepth() int {
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := &MachineContinuation{
+		vmState: vmState{
+			env:          p.env,
+			template:     p.template,
+			value:        slices.Clone(p.value),
+			evals:        p.evals.Copy(),
+			pc:           p.pc,
+			windingStack: p.windingStack.Copy(),
+			promptTag:    p.promptTag,
+			threadID:     p.threadID,
+		},
 		parent:        p.parent,
-		env:           p.env,
-		template:      p.template,
-		value:         slices.Clone(p.value),
-		evals:         p.evals.Copy(),
-		pc:            p.pc,
-		windingStack:  p.windingStack.Copy(),
-		promptTag:     p.promptTag,
 		promptHandler: p.promptHandler,
-		threadID:      p.threadID,
 	}
 	return q
 }

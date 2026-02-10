@@ -248,7 +248,7 @@ env := environment.NewTopLevelEnvironmentFrame()
 
 // Create a global binding
 sym := values.NewSymbol("foo")
-gi, created := env.CreateGlobalBinding(sym, environment.BindingTypeVariable)
+gi, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 if created {
     env.SetOwnGlobalValue(gi, values.NewInteger(42))
 }

@@ -160,22 +160,25 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 	// Different parent
 	parent := NewMachineContinuation(nil, nil, env)
 	cont5 := &MachineContinuation{
-		parent:   parent,
-		env:      cont1.env,
-		template: cont1.template,
-		evals:    cont1.evals,
-		pc:       cont1.pc,
+		vmState: vmState{
+			env:      cont1.env,
+			template: cont1.template,
+			evals:    cont1.evals,
+			pc:       cont1.pc,
+		},
+		parent: parent,
 	}
 	qt.Assert(t, cont1.EqualTo(cont5), qt.IsFalse)
 
 	// Different template
 	tpl2 := NewNativeTemplate(3, 0, false)
 	cont6 := &MachineContinuation{
-		parent:   nil,
-		env:      cont1.env,
-		template: tpl2,
-		evals:    cont1.evals,
-		pc:       cont1.pc,
+		vmState: vmState{
+			env:      cont1.env,
+			template: tpl2,
+			evals:    cont1.evals,
+			pc:       cont1.pc,
+		},
 	}
 	qt.Assert(t, cont1.EqualTo(cont6), qt.IsFalse)
 }

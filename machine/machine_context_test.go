@@ -34,12 +34,14 @@ func TestNewMachineContext(t *testing.T) {
 
 	// Create a continuation with specific state
 	cont := &MachineContinuation{
-		parent:   parentCont,
-		env:      env,
-		template: tpl,
-		value:    NewMultipleValues(values.NewInteger(42)),
-		evals:    NewStack(),
-		pc:       5,
+		vmState: vmState{
+			env:      env,
+			template: tpl,
+			value:    NewMultipleValues(values.NewInteger(42)),
+			evals:    NewStack(),
+			pc:       5,
+		},
+		parent: parentCont,
 	}
 	cont.evals.Push(values.NewInteger(1))
 	cont.evals.Push(values.NewInteger(2))
@@ -227,11 +229,13 @@ func TestMachineContext_Restore(t *testing.T) {
 	// Create a continuation with different state
 	parent := NewMachineContinuation(nil, nil, env2)
 	cont2 := &MachineContinuation{
-		parent:   parent,
-		env:      env2,
-		template: tpl2,
-		evals:    NewStack(),
-		pc:       10,
+		vmState: vmState{
+			env:      env2,
+			template: tpl2,
+			evals:    NewStack(),
+			pc:       10,
+		},
+		parent: parent,
 	}
 	cont2.evals.Push(values.NewInteger(42))
 

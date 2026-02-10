@@ -265,8 +265,8 @@ func (p *OperationSyntaxTemplateExpand) IsVoid() bool {
 	return false
 }
 
-// OperationStoreSyntaxCaseInput stores the value register into the global
-// currentSyntaxCaseInput for use by OperationSyntaxCaseMatch.
+// OperationStoreSyntaxCaseInput stores the value register into the per-context
+// syntaxCaseState for use by OperationSyntaxCaseMatch.
 type OperationStoreSyntaxCaseInput struct{}
 
 func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
