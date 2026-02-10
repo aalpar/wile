@@ -289,7 +289,7 @@ var zeroFieldOps = []ZeroFieldOp{
     {"Pop", "mc.value = []values.Value{mc.evals.Pop()}\nmc.pc++"},
     {"PopAll", "mc.value = mc.evals.PopAll()\nmc.pc++"},
     {"Push", "mc.evals.Push(mc.value[0])\nmc.pc++"},
-    {"Brk", "return mc, ErrMachineHalt"},
+    {"Brk", "return mc, errHalt"},
     {"Pull", "mc.value = mc.evals.values[len(mc.evals.values)-1:]\nmc.pc++"},
     {"Drop", "mc.evals.values = mc.evals.values[:len(mc.evals.values)-1]\nmc.pc++"},
 }

@@ -465,9 +465,7 @@ cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
 mc := NewMachineContext(context.Background(), cont)
 err = mc.Run()
 if err != nil {
-    if !errors.Is(err, ErrMachineHalt) {
-        return values.WrapForeignErrorf(err, "[form]: evaluation failed")
-    }
+    return values.WrapForeignErrorf(err, "[form]: evaluation failed")
 }
 ```
 
@@ -535,9 +533,7 @@ func (p *CompileTimeContinuation) ExecuteAtCompileTime(
 
     err = mc.Run()
     if err != nil {
-        if !errors.Is(err, ErrMachineHalt) {
-            return nil, values.WrapForeignErrorf(err, "%s: evaluation failed", errPrefix)
-        }
+        return nil, values.WrapForeignErrorf(err, "%s: evaluation failed", errPrefix)
     }
 
     return &CompileTimeExecuteResult{Value: mc.GetValue(), MC: mc}, nil
