@@ -7,7 +7,7 @@ Code Quality
 ### Public API Value Constructors
 
 - [x] Add tests for `wile.NewRational`, `wile.NewComplex`, `wile.NewVector`, and the other numeric constructors (`NewBigInteger*`, `NewBigFloat*`) to verify round-tripping through the `wrapValue`/`unwrapValue` layer
-- [ ] `NewVector` allocates a temporary `[]values.Value` to unwrap arguments — consider whether this matters for large vectors or if it's fine as-is
+- [x] `NewVector` allocates a temporary `[]values.Value` to unwrap arguments — acceptable for expected use cases
 
 ---
 
