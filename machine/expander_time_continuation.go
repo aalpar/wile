@@ -40,7 +40,6 @@ package machine
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -1314,7 +1313,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 	}
 
 	err = mc.Run()
-	if err != nil && !errors.Is(err, ErrMachineHalt) {
+	if err != nil {
 		return nil, err
 	}
 	// Check if the transformer produced a result
@@ -1411,7 +1410,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 	}
 
 	err = mc.Run()
-	if err != nil && !errors.Is(err, ErrMachineHalt) {
+	if err != nil {
 		return nil, false, err
 	}
 

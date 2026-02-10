@@ -29,9 +29,8 @@ var _ io.ByteWriter = (*ByteVectorOutputPort)(nil)
 
 // ByteVectorOutputPort represents a Scheme output port writing to memory.
 type ByteVectorOutputPort struct {
-	wrt    *bufio.Writer
-	clsr   io.Closer
-	closed bool
+	portBase
+	wrt *bufio.Writer
 }
 
 // NewByteVectorOutputPort creates a new in-memory bytevector output port.
@@ -52,38 +51,35 @@ func NewByteVectorOutputPortFromWriter(wrt io.Writer) *ByteVectorOutputPort {
 }
 
 func (p *ByteVectorOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.wrt.Flush()
 }
 
+// Close flushes buffered data and closes the underlying stream.
 func (p *ByteVectorOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	flushErr := p.Flush()
-	if p.clsr != nil {
-		closeErr := p.clsr.Close()
-		if closeErr != nil {
-			return closeErr
-		}
+	flushErr := p.wrt.Flush()
+	closeErr := p.portBase.Close()
+	if closeErr != nil {
+		return closeErr
 	}
 	return flushErr
 }
 
-func (p *ByteVectorOutputPort) IsClosed() bool {
-	return p.closed
-}
-
 func (p *ByteVectorOutputPort) Write(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.wrt.Write(bs)
 }
 
 func (p *ByteVectorOutputPort) WriteByte(b byte) error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.wrt.WriteByte(b)
 }

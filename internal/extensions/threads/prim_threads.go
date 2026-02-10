@@ -19,7 +19,6 @@ package threads
 
 import (
 	"context"
-	"errors"
 	"runtime"
 	"time"
 
@@ -84,7 +83,7 @@ func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
 	thread := mc.Thread()
 	if thread == nil {
 		// Return primordial thread placeholder
-		mc.SetValue(values.NewSymbol("primordial"))
+		mc.SetValue(values.SymbolPrimordial)
 	} else {
 		mc.SetValue(thread)
 	}
@@ -133,10 +132,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		// Run the thunk
 		err = sub.Run()
 		if err != nil {
-			// Ignore machine halt, it's normal
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return nil, err
-			}
+			return nil, err
 		}
 
 		return sub.GetValue(), nil

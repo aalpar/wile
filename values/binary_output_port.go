@@ -30,9 +30,8 @@ var _ io.Closer = (*BinaryOutputPort)(nil)
 
 // BinaryOutputPort represents a Scheme binary output port.
 type BinaryOutputPort struct {
-	wrt    *bufio.Writer
-	clsr   io.Closer
-	closed bool
+	portBase
+	wrt *bufio.Writer
 }
 
 // NewBinaryOutputPort creates a new binary output port wrapping the given buf.
@@ -52,38 +51,39 @@ func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
 
 // Write writes bytes to the port.
 func (p *BinaryOutputPort) Write(bs []byte) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.wrt.Write(bs)
 }
 
 // WriteByte writes a single byte to the port.
 func (p *BinaryOutputPort) WriteByte(b byte) error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.wrt.WriteByte(b)
 }
 
 // Flush flushes the port's buffer.
 func (p *BinaryOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.wrt.Flush()
 }
 
+// Close flushes buffered data and closes the underlying stream.
 func (p *BinaryOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	if p.clsr != nil {
-		return p.clsr.Close()
+	flushErr := p.wrt.Flush()
+	closeErr := p.portBase.Close()
+	if closeErr != nil {
+		return closeErr
 	}
-	return nil
-}
-
-func (p *BinaryOutputPort) IsClosed() bool {
-	return p.closed
+	return flushErr
 }
 
 // Datum returns the underlying io.Writer.

@@ -234,11 +234,8 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 		Failf(err2, "Cannot compile expression")
 	}
 	mv, err2 := runtime.Run(ctx, tpl, env)
-	// Print result for:
-	// - Normal completion (err2 == nil) - when inTail=false at top-level
-	// - ErrMachineHalt - when inTail=true at top-level (RestoreContinuation returns ErrMachineHalt)
-	// Don't print void results
-	if err2 == nil || errors.Is(err2, machine.ErrMachineHalt) {
+	// Print result for normal completion; don't print void results
+	if err2 == nil {
 		if !mv.IsVoid() {
 			Printf("%s\n", mv.SchemeString())
 		}

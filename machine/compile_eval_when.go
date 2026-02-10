@@ -16,7 +16,6 @@ package machine
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -208,9 +207,7 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 		mc := NewMachineContext(ctx, cont)
 		err = mc.Run()
 		if err != nil {
-			if !errors.Is(err, ErrMachineHalt) {
-				return values.WrapForeignErrorf(err, "eval-when: evaluation failed")
-			}
+			return values.WrapForeignErrorf(err, "eval-when: evaluation failed")
 		}
 		return nil
 	})

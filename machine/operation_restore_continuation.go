@@ -28,7 +28,7 @@ func NewOperationRestoreContinuation() *OperationRestoreContinuation {
 
 func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	if mc.cont == nil {
-		return nil, ErrMachineHalt
+		return nil, errHalt
 	}
 	mc.Restore(mc.cont)
 	return mc, nil

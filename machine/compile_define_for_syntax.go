@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"errors"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -116,9 +114,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	mc := NewMachineContext(ctctx.ctx, cont)
 	err = mc.Run()
 	if err != nil {
-		if !errors.Is(err, ErrMachineHalt) {
-			return values.WrapForeignErrorf(err, "define-for-syntax: evaluation failed")
-		}
+		return values.WrapForeignErrorf(err, "define-for-syntax: evaluation failed")
 	}
 
 	// Get the result

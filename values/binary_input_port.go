@@ -29,9 +29,8 @@ var _ io.Closer = (*BinaryInputPort)(nil)
 
 // BinaryInputPort represents a Scheme binary input port.
 type BinaryInputPort struct {
-	rdr    *bufio.Reader
-	clsr   io.Closer
-	closed bool
+	portBase
+	rdr *bufio.Reader
 }
 
 // NewBinaryInputPort creates a new binary input port wrapping the given rdr.
@@ -50,36 +49,27 @@ func NewBinaryInputPortFromReader(reader io.Reader) *BinaryInputPort {
 }
 
 func (p *BinaryInputPort) ReadByte() (byte, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.rdr.ReadByte()
 }
 
 func (p *BinaryInputPort) UnreadByte() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.rdr.UnreadByte()
 }
 
 func (p *BinaryInputPort) Read(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.rdr.Read(bs)
-}
-
-func (p *BinaryInputPort) Close() error {
-	defer func() { p.closed = true }()
-	if p.clsr != nil {
-		return p.clsr.Close()
-	}
-	return nil
-}
-
-func (p *BinaryInputPort) IsClosed() bool {
-	return p.closed
 }
 
 // Datum returns the underlying io.Reader.

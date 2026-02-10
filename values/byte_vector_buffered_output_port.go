@@ -30,8 +30,8 @@ var _ io.ByteWriter = (*ByteVectorBufferdOutputPort)(nil)
 
 // ByteVectorBufferdOutputPort represents a Scheme output port writing to memory.
 type ByteVectorBufferdOutputPort struct {
-	buf    *bytes.Buffer
-	closed bool
+	portBase
+	buf *bytes.Buffer
 }
 
 // NewByteVectorBufferdOutputPort creates a new in-memory bytevector output port.
@@ -50,31 +50,25 @@ func NewByteVectorBufferdOutputPortFromBuffer(buf *bytes.Buffer) *ByteVectorBuff
 }
 
 func (p *ByteVectorBufferdOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
-func (p *ByteVectorBufferdOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	return nil
-}
-
-func (p *ByteVectorBufferdOutputPort) IsClosed() bool {
-	return p.closed
-}
-
 func (p *ByteVectorBufferdOutputPort) Write(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.Write(bs)
 }
 
 func (p *ByteVectorBufferdOutputPort) WriteByte(b byte) error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.buf.WriteByte(b)
 }

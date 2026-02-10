@@ -131,7 +131,7 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	}
 
 	_, err = Run(ctx, tpl, env)
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	if err != nil {
 		return values.WrapForeignErrorf(err, "runtime error in %s", filename)
 	}
 

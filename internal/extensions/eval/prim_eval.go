@@ -67,13 +67,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	sub := machine.NewMachineContext(ctx, cont)
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	mc.SetValue(sub.GetValue())
@@ -133,13 +127,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		sub := machine.NewMachineContext(ctx, cont)
 		err = sub.Run()
 		if err != nil {
-			var escapeErr *machine.ErrContinuationEscape
-			if errors.As(err, &escapeErr) {
-				return err
-			}
-			if !errors.Is(err, machine.ErrMachineHalt) {
-				return values.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
-			}
+			return values.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
 		}
 
 		lastValue = sub.GetValue()

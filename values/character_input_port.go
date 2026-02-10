@@ -30,9 +30,8 @@ var _ io.RuneScanner = (*CharacterInputPort)(nil)
 
 // CharacterInputPort represents a Scheme textual input port.
 type CharacterInputPort struct {
-	rdr    *bufio.Reader
-	clsr   io.Closer
-	closed bool
+	portBase
+	rdr *bufio.Reader
 }
 
 // NewCharacterInputPort creates a new character input port from an io.RuneReader.
@@ -51,35 +50,26 @@ func NewCharacterInputPortFromReader(rdr io.Reader) *CharacterInputPort {
 	return q
 }
 
-func (p *CharacterInputPort) Close() error {
-	defer func() { p.closed = true }()
-	if p.clsr != nil {
-		return p.clsr.Close()
-	}
-	return nil
-}
-
-func (p *CharacterInputPort) IsClosed() bool {
-	return p.closed
-}
-
 func (p *CharacterInputPort) ReadRune() (rune, int, error) {
-	if p.closed {
-		return 0, 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, 0, err
 	}
 	return p.rdr.ReadRune()
 }
 
 func (p *CharacterInputPort) Read(bs []byte) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.rdr.Read(bs)
 }
 
 func (p *CharacterInputPort) UnreadRune() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.rdr.UnreadRune()
 }

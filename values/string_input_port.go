@@ -29,8 +29,8 @@ var _ io.RuneScanner = (*StringInputPort)(nil)
 
 // StringInputPort represents a Scheme string output port backed by a buffer.
 type StringInputPort struct {
-	buf    *bytes.Buffer
-	closed bool
+	portBase
+	buf *bytes.Buffer
 }
 
 // NewStringInputPort creates a new string output port.
@@ -50,42 +50,37 @@ func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
 
 // Read reads data from the port into bs.
 func (p *StringInputPort) Read(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.Read(bs)
 }
 
 // ReadRune reads a rune from the port.
 func (p *StringInputPort) ReadRune() (r rune, size int, err error) {
-	if p.closed {
-		return 0, 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, 0, err
 	}
 	return p.buf.ReadRune()
 }
 
 // UnreadRune unreads the last rune read from the port.
 func (p *StringInputPort) UnreadRune() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.buf.UnreadRune()
 }
 
 func (p *StringInputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return nil
-}
-
-func (p *StringInputPort) Close() error {
-	defer func() { p.closed = true }()
-	return nil
-}
-
-func (p *StringInputPort) IsClosed() bool {
-	return p.closed
 }
 
 // Datum returns the underlying buffer.

@@ -29,9 +29,8 @@ var _ io.ByteScanner = (*ByteVectorInputPort)(nil)
 
 // ByteVectorInputPort represents a Scheme input port reading from a byte slice.
 type ByteVectorInputPort struct {
-	rdr    *bufio.Reader
-	clsr   io.Closer
-	closed bool
+	portBase
+	rdr *bufio.Reader
 }
 
 // NewByteVectorInputPort creates a new input port reading from the given byte slice.
@@ -50,39 +49,29 @@ func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 }
 
 func (p *ByteVectorInputPort) Read(bs []byte) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.rdr.Read(bs)
 }
 
 // ReadByte reads and returns the next byte from the port.
 func (p *ByteVectorInputPort) ReadByte() (byte, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.rdr.ReadByte()
 }
 
 // UnreadByte unreads the last byte read, allowing it to be read again.
 func (p *ByteVectorInputPort) UnreadByte() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.rdr.UnreadByte()
-}
-
-// Close closes the port.
-func (p *ByteVectorInputPort) Close() error {
-	defer func() { p.closed = true }()
-	if p.clsr != nil {
-		return p.clsr.Close()
-	}
-	return nil
-}
-
-func (p *ByteVectorInputPort) IsClosed() bool {
-	return p.closed
 }
 
 // Datum returns the underlying bytes.Reader.

@@ -33,8 +33,8 @@ var _ io.ByteReader = (*ByteVectorInputOutputPort)(nil)
 
 // ByteVectorInputOutputPort represents a Scheme output port writing to memory.
 type ByteVectorInputOutputPort struct {
-	buf    *bytes.Buffer
-	closed bool
+	portBase
+	buf *bytes.Buffer
 }
 
 // NewByteVectorInputOutputPortFromBuffer creates a new in-memory bytevector output port.
@@ -48,53 +48,50 @@ func NewByteVectorInputOutputPort() *ByteVectorInputOutputPort {
 }
 
 func (p *ByteVectorInputOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
-func (p *ByteVectorInputOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	return nil
-}
-
-func (p *ByteVectorInputOutputPort) IsClosed() bool {
-	return p.closed
-}
-
 func (p *ByteVectorInputOutputPort) Write(bs []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err = p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.Write(bs)
 }
 
 func (p *ByteVectorInputOutputPort) Read(bs []byte) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.Read(bs)
 }
 
 func (p *ByteVectorInputOutputPort) WriteByte(b byte) error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.buf.WriteByte(b)
 }
 
 func (p *ByteVectorInputOutputPort) ReadByte() (byte, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.buf.ReadByte()
 }
 
 // UnreadByte unreads the last byte read, allowing it to be read again.
 func (p *ByteVectorInputOutputPort) UnreadByte() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.buf.UnreadByte()
 }

@@ -135,9 +135,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 				}
 				runErr := handlerSub.Run()
 				if runErr != nil {
-					if !errors.Is(runErr, machine.ErrMachineHalt) {
-						return runErr
-					}
+					return runErr
 				}
 				mc.SetValues(handlerSub.GetValues()...)
 				return nil
@@ -150,9 +148,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 			}
 			return nil
 		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	mc.SetValues(sub.GetValues()...)
@@ -245,13 +241,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 		if errors.As(err, &escapeErr) {
 			return err
 		}
-		var abortErr *machine.ErrPromptAbort
-		if errors.As(err, &abortErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	// Abort to the prompt with the proc's result.

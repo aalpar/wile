@@ -80,14 +80,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub.Run()
 	if err != nil {
-		// Propagate continuation escapes
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 	mc.SetValues(sub.GetValues()...)
 	return nil
@@ -171,9 +164,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 			escapeErr.Handled = true
 			return escapeErr
 		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	mc.SetValue(sub.GetValue())
@@ -252,13 +243,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	// 2. Push frame onto winding stack (we're now in this dynamic extent)
@@ -294,25 +279,12 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub3.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	// 6. Handle thunk's result/error
 	if thunkErr != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(thunkErr, &escapeErr) {
-			// Propagate the escape (after thunk was already called)
-			return thunkErr
-		}
-		if !errors.Is(thunkErr, machine.ErrMachineHalt) {
-			return thunkErr
-		}
+		return thunkErr
 	}
 
 	mc.SetValues(thunkResult...)
@@ -372,13 +344,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	// Get all values returned by producer
@@ -392,13 +358,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	err = sub2.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	// Return what consumer returned

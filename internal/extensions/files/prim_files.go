@@ -16,7 +16,6 @@ package files
 
 import (
 	"context"
-	"errors"
 	"os"
 
 	extio "github.com/aalpar/wile/internal/extensions/io"
@@ -149,13 +148,7 @@ func callWithFile(
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	mc.SetValue(sub.GetValue())
@@ -183,13 +176,7 @@ func runThunk(ctx context.Context, mc *machine.MachineContext, thunk *machine.Ma
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 
 	mc.SetValue(sub.GetValue())

@@ -266,7 +266,7 @@ func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, a
 	}
 
 	err = sub.Run()
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(sub.GetValue()), nil
@@ -284,7 +284,7 @@ func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClos
 	}
 
 	err = sub.Run()
-	if err != nil && !errors.Is(err, machine.ErrMachineHalt) {
+	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(sub.GetValue()), nil
@@ -425,9 +425,7 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 	mc := machine.NewMachineContext(ctx, cont)
 	err = mc.Run()
 	if err != nil {
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return err
-		}
+		return err
 	}
 	return nil
 }

@@ -29,9 +29,8 @@ var _ io.StringWriter = (*CharacterOutputPort)(nil)
 
 // CharacterOutputPort represents a Scheme textual output port.
 type CharacterOutputPort struct {
-	wrt    *bufio.Writer
-	clsr   io.Closer
-	closed bool
+	portBase
+	wrt *bufio.Writer
 }
 
 // NewCharacterOutputPort creates a new character input port from an io.Reader.
@@ -50,47 +49,45 @@ func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
 	return q
 }
 
+// Close flushes buffered data and closes the underlying stream.
 func (p *CharacterOutputPort) Close() error {
-	defer func() { p.closed = true }()
-	flushErr := p.Flush()
-	if p.clsr != nil {
-		closeErr := p.clsr.Close()
-		if closeErr != nil {
-			return closeErr
-		}
+	flushErr := p.wrt.Flush()
+	closeErr := p.portBase.Close()
+	if closeErr != nil {
+		return closeErr
 	}
 	return flushErr
 }
 
-func (p *CharacterOutputPort) IsClosed() bool {
-	return p.closed
-}
-
 func (p *CharacterOutputPort) Flush() error {
-	if p.closed {
-		return ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return err
 	}
 	return p.wrt.Flush()
 }
 
 func (p *CharacterOutputPort) Write(bs []byte) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.wrt.Write(bs)
 }
 
 func (p *CharacterOutputPort) WriteString(s string) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.wrt.WriteString(s)
 }
 
 // WriteRune writes a single rune to the port's buf.
 func (p *CharacterOutputPort) WriteRune(rn rune) (int, error) {
-	if p.closed {
-		return 0, ErrPortClosed
+	err := p.guardClosed()
+	if err != nil {
+		return 0, err
 	}
 	return p.wrt.WriteRune(rn)
 }

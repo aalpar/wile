@@ -18,7 +18,6 @@ package all
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/schemeutil"
@@ -300,13 +299,7 @@ func executeThunk(mc *machine.MachineContext, thunk values.Value) (values.Value,
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return nil, err
-		}
-		if !errors.Is(err, machine.ErrMachineHalt) {
-			return nil, err
-		}
+		return nil, err
 	}
 	return sub.GetValue(), nil
 }

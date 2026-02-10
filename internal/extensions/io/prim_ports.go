@@ -17,7 +17,6 @@ package io
 import (
 	"bytes"
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
@@ -233,13 +232,7 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 
 	// Handle any errors from running the procedure
 	if runErr != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(runErr, &escapeErr) {
-			return runErr
-		}
-		if !errors.Is(runErr, machine.ErrMachineHalt) {
-			return runErr
-		}
+		return runErr
 	}
 
 	// Return the result of the procedure
