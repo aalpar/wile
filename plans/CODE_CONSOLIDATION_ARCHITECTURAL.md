@@ -7,33 +7,63 @@
 ## Operation Code Generation
 
 **Risk: HIGH**
-**Estimated savings: ~2,000-3,000 bytes**
-**Files affected: 20+ operation files**
+**Estimated savings: ~1,500-2,000 bytes**
+**Files affected: 29 operation files**
 **Status: Not started**
 
 ### Problem
 
-36 operation files follow repetitive patterns. Example categories:
+29 operation files share boilerplate for type definition, constructor, `SchemeString`, `IsVoid`, and `EqualTo`. Only `Apply` is unique per operation. The `EqualTo` migration (Phase 6) already reduced each `EqualTo` to a one-liner, but the remaining per-file boilerplate is still ~20 lines.
 
-**Zero-field operations** (6 files, ~270 lines total):
-- `operation_pop.go`, `operation_pop_all.go`, `operation_push.go`
-- `operation_brk.go`, `operation_pull.go`, `operation_drop.go`
-
-Each has identical boilerplate:
+**Current zero-field operation** (e.g., `operation_pop.go`):
 ```go
-type OperationXxx struct{}
-func NewOperationXxx() *OperationXxx { return &OperationXxx{} }
-func (p *OperationXxx) SchemeString() string { return "#<machine-operation-xxx>" }
-func (p *OperationXxx) IsVoid() bool { return p == nil }
-func (p *OperationXxx) EqualTo(o values.Value) bool { /* boilerplate */ }
-func (p *OperationXxx) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) { /* unique */ }
+type OperationPop struct{}
+
+func NewOperationPop() *OperationPop {
+	return &OperationPop{}
+}
+
+func (*OperationPop) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+	// ... unique logic ...
+}
+
+func (p *OperationPop) SchemeString() string {
+	return "#<machine-operation-pop>"
+}
+
+func (p *OperationPop) IsVoid() bool {
+	return p == nil
+}
+
+func (p *OperationPop) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationPop)
+	return sameType(p, v, ok)
+}
 ```
 
-**Single-field operations** (8+ files, ~400 lines total):
-- `operation_branch_offset_immediate.go`
-- `operation_branch_on_false_offset_immediate.go`
-- `operation_load_literal_integer.go`
-- etc.
+**Current single-field operation** (e.g., `operation_branch_offset_immediate.go`):
+```go
+type OperationBranchOffsetImmediate struct {
+	Offset int
+}
+
+func NewOperationBranchOffsetImmediate(offset int) *OperationBranchOffsetImmediate {
+	return &OperationBranchOffsetImmediate{Offset: offset}
+}
+
+func (p *OperationBranchOffsetImmediate) SchemeString() string {
+	return fmt.Sprintf("#<machine-operation-branch-offset-immediate %d>", p.Offset)
+}
+
+func (p *OperationBranchOffsetImmediate) IsVoid() bool {
+	return p == nil
+}
+
+func (p *OperationBranchOffsetImmediate) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationBranchOffsetImmediate)
+	return fieldMatches(p, v, ok, func(op *OperationBranchOffsetImmediate) int { return op.Offset })
+}
+```
 
 ### Proposed Solution: Code Generation
 
@@ -48,22 +78,25 @@ type zeroFieldOperation[T any] struct{}
 
 func (p *zeroFieldOperation[T]) IsVoid() bool { return p == nil }
 func (p *zeroFieldOperation[T]) EqualTo(o values.Value) bool {
-    return sameType[*T](o)
+    v, ok := o.(*T)
+    return sameType(p, v, ok)
 }
 ```
 
-This saves less code (~100 lines) but carries lower risk.
+This saves less code (~60 lines) but carries lower risk.
 
 ### Impact Analysis
 
-| Category | Files | Lines Removed | Generated Lines |
-|----------|-------|---------------|-----------------|
-| Zero-field | 6 | 273 | 180 (in one file) |
-| Single-field (simple) | 5 | 255 | 150 (in one file) |
-| Branch variants | 3 | 161 | 90 (parameterized) |
-| **Total** | **14** | **689** | **420** |
+Boilerplate per operation (excluding Apply, copyright, imports):
 
-**Net savings**: ~270 lines (~2,700 bytes)
+| Category | Count | Boilerplate/file | Total boilerplate |
+|----------|-------|------------------|-------------------|
+| Zero-field | ~6 | ~14 lines | ~84 lines |
+| Single-field | ~8 | ~17 lines | ~136 lines |
+| Complex (multi-field, closures) | ~15 | varies | not candidates |
+| **Candidates total** | **~14** | | **~220 lines** |
+
+**Net savings with codegen**: ~220 lines boilerplate removed, ~120 lines generator added = ~100 lines net (~1,000 bytes)
 
 ### Risks and Mitigations
 
@@ -79,5 +112,5 @@ This saves less code (~100 lines) but carries lower risk.
 
 | File | What's There |
 |------|-------------|
-| `machine/operation_helpers.go` | `sameType[T]`, `fieldMatches[T, Op]` |
+| `machine/operation_helpers.go` | `sameType`, `fieldMatches`, `fieldMethodMatches`, `sliceMatches` |
 | `registry/helpers/args.go` | `RequireArg[T]`, `RequireIndex`, `ParseOptionalStartEnd`, `ParseSubrange` |
