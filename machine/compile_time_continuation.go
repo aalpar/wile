@@ -496,10 +496,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
-		operationSaveContinuationIndex = p.template.operations.Len()
-		p.AppendOperations(
-			NewOperationSaveContinuationOffsetImmediate(0),
-		)
+		operationSaveContinuationIndex = p.emitPatchableSaveContinuation()
 	}
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
@@ -521,9 +518,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 	)
 
 	if !ctctx.inTail {
-		// Patch the SaveContinuation offset for non-tail calls
-		l := p.template.operations.Len()
-		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
+		p.patchSaveContinuationOffset(operationSaveContinuationIndex)
 	}
 	return nil
 }
@@ -1184,6 +1179,24 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 // automatically gets the innermost source context.
 func (p *CompileTimeContinuation) AppendOperations(ops ...Operation) {
 	p.template.appendOperationsWithSource(p.currentSource(), ops...)
+}
+
+// emitPatchableSaveContinuation emits a SaveContinuation with a placeholder
+// offset of 0. Returns the operation index for later patching via
+// patchSaveContinuationOffset.
+func (p *CompileTimeContinuation) emitPatchableSaveContinuation() int {
+	idx := p.template.operations.Len()
+	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
+	return idx
+}
+
+// patchSaveContinuationOffset patches a previously emitted SaveContinuation
+// placeholder with the correct relative offset from the placeholder to the
+// current position.
+func (p *CompileTimeContinuation) patchSaveContinuationOffset(idx int) {
+	p.template.operations[idx] = NewOperationSaveContinuationOffsetImmediate(
+		p.template.operations.Len() - idx,
+	)
 }
 
 func (p *CompileTimeContinuation) pushSource(src *syntax.SourceContext) {

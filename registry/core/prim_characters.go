@@ -53,27 +53,23 @@ func PrimIntegerToChar(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimCharEqVariadic implements the variadic char=? primitive.
-func PrimCharEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char=?", func(a, b rune) bool { return a == b })
+// charCompareSpecs defines the five R7RS §6.6 character comparison predicates.
+// Each entry pairs a primitive name with its comparison function.
+var charCompareSpecs = []struct {
+	name string
+	cmp  func(rune, rune) bool
+}{
+	{"char=?", func(a, b rune) bool { return a == b }},
+	{"char<?", func(a, b rune) bool { return a < b }},
+	{"char>?", func(a, b rune) bool { return a > b }},
+	{"char<=?", func(a, b rune) bool { return a <= b }},
+	{"char>=?", func(a, b rune) bool { return a >= b }},
 }
 
-// PrimCharLtVariadic implements the variadic char<? primitive.
-func PrimCharLtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char<?", func(a, b rune) bool { return a < b })
-}
-
-// PrimCharGtVariadic implements the variadic char>? primitive.
-func PrimCharGtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char>?", func(a, b rune) bool { return a > b })
-}
-
-// PrimCharLeVariadic implements the variadic char<=? primitive.
-func PrimCharLeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char<=?", func(a, b rune) bool { return a <= b })
-}
-
-// PrimCharGeVariadic implements the variadic char>=? primitive.
-func PrimCharGeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char>=?", func(a, b rune) bool { return a >= b })
+// makeCharComparePrimitive returns a ForeignFunction that performs a variadic
+// character comparison using the given comparator.
+func makeCharComparePrimitive(name string, cmp func(rune, rune) bool) machine.ForeignFunction {
+	return func(_ context.Context, mc *machine.MachineContext) error {
+		return helpers.CharCompareVariadic(mc, name, cmp)
+	}
 }

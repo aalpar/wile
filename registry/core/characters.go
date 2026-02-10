@@ -26,14 +26,12 @@ func addCharacters(r *registry.Registry) error {
 		{"integer->char", 1, false, PrimIntegerToChar},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
-	// Character comparison
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char=?", 2, true, PrimCharEqVariadic},
-		{"char<?", 2, true, PrimCharLtVariadic},
-		{"char>?", 2, true, PrimCharGtVariadic},
-		{"char<=?", 2, true, PrimCharLeVariadic},
-		{"char>=?", 2, true, PrimCharGeVariadic},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	// Character comparison (generated from charCompareSpecs table)
+	charCmpPrims := make([]registry.PrimitiveSpec, len(charCompareSpecs))
+	for i, spec := range charCompareSpecs {
+		charCmpPrims[i] = registry.PrimitiveSpec{spec.name, 2, true, makeCharComparePrimitive(spec.name, spec.cmp)}
+	}
+	r.AddPrimitives(charCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
 }

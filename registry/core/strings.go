@@ -48,14 +48,12 @@ func addStrings(r *registry.Registry) error {
 		{"string-copy", 2, true, PrimStringCopy},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
-	// String comparison
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string=?", 2, true, PrimStringEqVariadic},
-		{"string<?", 2, true, PrimStringLtVariadic},
-		{"string>?", 2, true, PrimStringGtVariadic},
-		{"string<=?", 2, true, PrimStringLeVariadic},
-		{"string>=?", 2, true, PrimStringGeVariadic},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	// String comparison (generated from stringCompareSpecs table)
+	stringCmpPrims := make([]registry.PrimitiveSpec, len(stringCompareSpecs))
+	for i, spec := range stringCompareSpecs {
+		stringCmpPrims[i] = registry.PrimitiveSpec{spec.name, 2, true, makeStringComparePrimitive(spec.name, spec.cmp)}
+	}
+	r.AddPrimitives(stringCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
 }

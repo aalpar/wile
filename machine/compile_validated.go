@@ -534,15 +534,7 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 					return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate parameter %q in case-lambda clause", param.Key)
 				}
 				// Preserve hygiene scopes for macro-introduced parameters.
-				if len(paramScopes) > 0 {
-					bindings := lenv.Bindings()
-					if len(bindings) > 0 {
-						binding := bindings[len(bindings)-1]
-						if binding != nil {
-							binding.SetScopes(paramScopes)
-						}
-					}
-				}
+				setScopesOnLastBinding(paramScopes, lenv)
 				tpl.parameterCount++
 			}
 
@@ -689,8 +681,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
-		operationSaveContinuationIndex = p.template.operations.Len()
-		p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
+		operationSaveContinuationIndex = p.emitPatchableSaveContinuation()
 	}
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
@@ -717,9 +708,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	)
 
 	if !ctctx.inTail {
-		// Patch the SaveContinuation offset for non-tail calls
-		l := p.template.operations.Len()
-		p.template.operations[operationSaveContinuationIndex] = NewOperationSaveContinuationOffsetImmediate(l - operationSaveContinuationIndex)
+		p.patchSaveContinuationOffset(operationSaveContinuationIndex)
 	}
 
 	return nil
@@ -803,13 +792,10 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 	// Get before into value register (at depth 2)
 	p.AppendOperations(NewOperationPeekK(2))
 	// Save continuation to return here after call
-	beforeCallReturnIndex := p.template.operations.Len()
-	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
+	beforeCallReturnIndex := p.emitPatchableSaveContinuation()
 	// Apply with 0 args (stack is fresh after SaveContinuation)
 	p.AppendOperations(NewOperationApply())
-	// Patch the return offset
-	afterBeforeIndex := p.template.operations.Len()
-	p.template.operations[beforeCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterBeforeIndex - beforeCallReturnIndex)
+	p.patchSaveContinuationOffset(beforeCallReturnIndex)
 	// after_before: Stack is restored to [before, thunk, after]
 
 	// Phase 3: Push winding frame
@@ -818,14 +804,9 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 	// Phase 4: Call thunk
 	// Get thunk into value register (at depth 1)
 	p.AppendOperations(NewOperationPeekK(1))
-	// Save continuation
-	thunkCallReturnIndex := p.template.operations.Len()
-	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
-	// Apply
+	thunkCallReturnIndex := p.emitPatchableSaveContinuation()
 	p.AppendOperations(NewOperationApply())
-	// Patch the return offset
-	afterThunkIndex := p.template.operations.Len()
-	p.template.operations[thunkCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterThunkIndex - thunkCallReturnIndex)
+	p.patchSaveContinuationOffset(thunkCallReturnIndex)
 	// after_thunk: Stack is restored to [before, thunk, after]
 	// Thunk's result is in value register
 
@@ -839,14 +820,9 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 	// Phase 6: Call after thunk
 	// Get after into value register (at depth 1 because result is at top)
 	p.AppendOperations(NewOperationPeekK(1))
-	// Save continuation
-	afterCallReturnIndex := p.template.operations.Len()
-	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0)) // placeholder
-	// Apply
+	afterCallReturnIndex := p.emitPatchableSaveContinuation()
 	p.AppendOperations(NewOperationApply())
-	// Patch the return offset
-	afterAfterIndex := p.template.operations.Len()
-	p.template.operations[afterCallReturnIndex] = NewOperationSaveContinuationOffsetImmediate(afterAfterIndex - afterCallReturnIndex)
+	p.patchSaveContinuationOffset(afterCallReturnIndex)
 	// after_after: Stack is restored to [before, thunk, after, result]
 
 	// Phase 7: Return thunk result

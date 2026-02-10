@@ -307,27 +307,23 @@ func PrimStringCopy(_ context.Context, mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimStringEqVariadic implements the variadic string=? primitive.
-func PrimStringEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string=?", func(a, b string) bool { return a == b })
+// stringCompareSpecs defines the five R7RS §6.7 string comparison predicates.
+// Each entry pairs a primitive name with its comparison function.
+var stringCompareSpecs = []struct {
+	name string
+	cmp  func(string, string) bool
+}{
+	{"string=?", func(a, b string) bool { return a == b }},
+	{"string<?", func(a, b string) bool { return a < b }},
+	{"string>?", func(a, b string) bool { return a > b }},
+	{"string<=?", func(a, b string) bool { return a <= b }},
+	{"string>=?", func(a, b string) bool { return a >= b }},
 }
 
-// PrimStringLtVariadic implements the variadic string<? primitive.
-func PrimStringLtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string<?", func(a, b string) bool { return a < b })
-}
-
-// PrimStringGtVariadic implements the variadic string>? primitive.
-func PrimStringGtVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string>?", func(a, b string) bool { return a > b })
-}
-
-// PrimStringLeVariadic implements the variadic string<=? primitive.
-func PrimStringLeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string<=?", func(a, b string) bool { return a <= b })
-}
-
-// PrimStringGeVariadic implements the variadic string>=? primitive.
-func PrimStringGeVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string>=?", func(a, b string) bool { return a >= b })
+// makeStringComparePrimitive returns a ForeignFunction that performs a variadic
+// string comparison using the given comparator.
+func makeStringComparePrimitive(name string, cmp func(string, string) bool) machine.ForeignFunction {
+	return func(_ context.Context, mc *machine.MachineContext) error {
+		return helpers.StringCompareVariadic(mc, name, cmp)
+	}
 }
