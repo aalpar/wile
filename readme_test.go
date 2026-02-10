@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestREADMEGoSnippetsCompile extracts Go code blocks from README.md,
@@ -56,7 +57,8 @@ func TestREADMEGoSnippetsCompile(t *testing.T) {
 		t.Fatalf("write main.go: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
 	// Resolve transitive dependencies before building.
 	tidyCmd := exec.CommandContext(ctx, "go", "mod", "tidy")
@@ -77,7 +79,8 @@ func TestREADMEGoSnippetsCompile(t *testing.T) {
 }
 
 // goCodeBlockRe matches fenced ```go code blocks in Markdown.
-var goCodeBlockRe = regexp.MustCompile("(?s)```go\\n(.*?)\\n```")
+// The \r? allows matching both LF and CRLF line endings.
+var goCodeBlockRe = regexp.MustCompile("(?s)```go\\r?\\n(.*?)\\r?\\n```")
 
 // importLineRe matches standalone import "pkg" lines.
 var importLineRe = regexp.MustCompile(`^\s*import\s+"([^"]+)"`)
@@ -97,7 +100,7 @@ func extractGoCodeBlocks(readme string) []string {
 func writeREADMETestGoMod(t *testing.T, dir, repoRoot string) {
 	t.Helper()
 	content := fmt.Sprintf(
-		"module readme_check\n\ngo 1.23\n\nrequire github.com/aalpar/wile v0.0.0\n\nreplace github.com/aalpar/wile => %s\n",
+		"module readme_check\n\ngo 1.23\n\nrequire github.com/aalpar/wile v0.0.0\n\nreplace github.com/aalpar/wile => %q\n",
 		repoRoot,
 	)
 	err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(content), 0o644)
@@ -207,6 +210,11 @@ func assembleREADMESource(blocks []string) string {
 
 // readmeTopLevelVars returns variable names declared with := at brace
 // depth 0 in the block. Variables inside closures (depth > 0) are excluded.
+//
+// Limitation: brace counting uses strings.Count, which does not skip braces
+// inside string literals or comments. This is sufficient for the current
+// README snippets but would need a proper tokenizer if future examples
+// contain braces in strings (e.g., fmt.Sprintf("{%s}")).
 func readmeTopLevelVars(block string) []string {
 	braceDepth := 0
 	seen := map[string]bool{}

@@ -235,7 +235,8 @@ func TestValueConstructors_RoundTrip(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			engine.Define("x", tc.val)
+			err = engine.Define("x", tc.val)
+			c.Assert(err, qt.IsNil)
 			result, err := engine.Eval(ctx, tc.code)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.wantStr)
