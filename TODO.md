@@ -37,24 +37,22 @@ Code Quality
 - [x] `operation_test.go:~240` — `OperationRestoreContinuation` test shows `CallDepth()=0` because no real call is active. Same improvement needed.
 - [x] `compile_time_continuation_test.go:~509` — `mc.Run()` should return `ErrMachineHalt` but currently does not. Investigate and fix the assertion.
 
-### Collection/Indexable/Tuple Method Duplication
+### Indexable Method Duplication
 
-Refactor duplicated methods across value types implementing `Collection`, `Indexable`, and `Tuple`.
+Investigated all items. Most are already resolved, semantically different, or too trivial to abstract.
 
-**100% duplicates (extract immediately):**
-- [ ] `Vector.AsList()` / `ByteVector.AsList()` — 20 lines identical. Extract `indexableToList(len int, get func(int) Value) Tuple`.
-- [ ] `Vector.SchemeString()` / `ByteVector.SchemeString()` — identical except prefix (`"#("` vs `"#u8("`). Extract `formatIndexable(prefix string, len int, get func(int) Value) string`.
+**Extracted:**
+- [x] `Vector.SchemeString()` / `ByteVector.SchemeString()` — extracted `formatIndexable()` helper in `values/utils.go`.
 
-**~95% duplicates (parameterize):**
-- [ ] `Vector.EqualTo()` / `ByteVector.EqualTo()` — same structure; only element comparison differs.
-- [ ] `Vector.Get()` / `ByteVector.Get()` — trivial, but signals missing shared abstraction.
+**Closed (no action):**
+- [x] `Vector.AsList()` / `ByteVector.AsList()` — already simplified in SUBSYSTEM_SIMPLIFICATION Phase 2; both delegate to `List()`.
+- [x] `Vector.EqualTo()` / `ByteVector.EqualTo()` — semantic difference: Vector uses recursive `EqualTo()`, ByteVector compares `uint8` directly. Cannot safely unify.
+- [x] `Vector.Get()` / `ByteVector.Get()` — trivial one-liner (`return (*p)[i]`), no extraction benefit.
+- [x] `IsVoid()` across types — single-line `return p == nil`; abstracting adds indirection for zero cognitive benefit.
+- [x] `EqualTo()` preambles — type-specific assertions prevent clean unification.
+- [x] `ForEach()` Pair vs ArrayList — different data structures (linked list vs array).
 
-**Pattern duplication (structural):**
-- [ ] `IsVoid()` across Vector, ByteVector, Pair, ArrayList — all `p == nil`.
-- [ ] `EqualTo()` preambles across 5 types — type assertion + nil handling + length check.
-- [ ] `ForEach()` in Pair vs ArrayList — loop + callback + error handling.
-
-**Locations:** `values/vector.go`, `values/byte_vector.go`, `values/pair.go`, `values/array_list.go`, `values/empty_list.go`
+**Locations:** `values/utils.go`, `values/vector.go`, `values/byte_vector.go`
 
 ---
 

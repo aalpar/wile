@@ -15,10 +15,6 @@
 // Package values provides Scheme runtime value types.
 package values
 
-import (
-	"strings"
-)
-
 var (
 	_ Value     = (*Vector)(nil)
 	_ Indexable = (*Vector)(nil)
@@ -116,18 +112,7 @@ func (p *Vector) AsList() Tuple {
 // Format: #( element1 element2 ... ) with elements separated by spaces.
 // Empty vectors are represented as #().
 func (p *Vector) SchemeString() string {
-	q := &strings.Builder{}
-	q.WriteString("#(")
-	if len(*p) > 0 {
-		q.WriteString(" ")
-		v := (*p)[0]
-		q.WriteString(v.SchemeString())
-		for _, v = range (*p)[1:] {
-			q.WriteString(" ")
-			q.WriteString(v.SchemeString())
-		}
-		q.WriteString(" ")
-	}
-	q.WriteString(")")
-	return q.String()
+	return formatIndexable("#(", len(*p), func(i int) Value {
+		return (*p)[i]
+	})
 }

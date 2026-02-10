@@ -19,6 +19,7 @@ import (
 	"encoding/base32"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,25 @@ import (
 const (
 	byteCnt = 128 / 8
 )
+
+// formatIndexable builds the Scheme external representation for a
+// fixed-size indexable collection.  Format: prefix elem1 elem2 ... )
+// with elements separated by spaces.
+func formatIndexable(prefix string, length int, get func(int) Value) string {
+	q := &strings.Builder{}
+	q.WriteString(prefix)
+	if length > 0 {
+		q.WriteString(" ")
+		q.WriteString(get(0).SchemeString())
+		for i := 1; i < length; i++ {
+			q.WriteString(" ")
+			q.WriteString(get(i).SchemeString())
+		}
+		q.WriteString(" ")
+	}
+	q.WriteString(")")
+	return q.String()
+}
 
 // List constructs a proper list from the given values.
 // Returns EmptyList if no arguments are provided.
