@@ -35,13 +35,12 @@ func PrimList(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakeList implements the Scheme make-list primitive.
 func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
-	kVal := mc.Arg(0)
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-list")
+	if err != nil {
+		return err
+	}
 	restVal := mc.Arg(1)
 
-	k, ok := kVal.(*values.Integer)
-	if !ok {
-		return values.NewForeignError("make-list: expected an integer for k")
-	}
 	count := int(k.Value)
 	if count < 0 {
 		return values.NewForeignError("make-list: k must be non-negative")
@@ -247,14 +246,12 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
-	listVal := mc.Arg(0)
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAList, "list-set!")
+	if err != nil {
+		return err
+	}
 	idxVal := mc.Arg(1)
 	val := mc.Arg(2)
-
-	p, ok := listVal.(*values.Pair)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "list-set!: expected a list but got %T", listVal)
-	}
 
 	idx, ok := values.ExactInteger(idxVal)
 	if !ok {

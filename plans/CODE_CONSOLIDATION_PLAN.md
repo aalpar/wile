@@ -61,9 +61,9 @@ make test
 
 ---
 
-## Phase 2: Type Extraction Migration — `RequireArg[T]` Adoption ⚠️ IN PROGRESS
+## Phase 2: Type Extraction Migration — `RequireArg[T]` Adoption ✅ COMPLETE
 
-**Savings**: ~800 lines (~2,400 bytes remaining)
+**Savings**: ~18 lines of boilerplate across 13 convertible sites
 **Risk**: LOW
 
 ### Current State
@@ -72,53 +72,59 @@ make test
 
 ```go
 func RequireArg[T any](mc *machine.MachineContext, index int, sentinel error, name string) (T, error)
+func RequireType[T any](v values.Value, sentinel error, name string) (T, error)
 ```
 
-**Adoption**: 54 call sites use `RequireArg[T]` across 9 files. ~200 type-assertion-then-error patterns remain unconverted in production code.
+**Adoption**: 54 call sites already use `RequireArg[T]` / `RequireType[T]`.
 
-### Remaining Work
+### Triage of Remaining Assertions
 
-Migrate remaining type-assertion patterns. The original plan proposed per-type `ExtractString`, `ExtractVector`, etc. — this is now unnecessary since `RequireArg[T]` is a single generic function that covers all types.
+The original estimate of "~200 remaining sites" overcounted by conflating three structurally
+different patterns that happen to use Go type assertions:
 
-### Pattern
+| Category | Count | `RequireArg[T]` fit? | Reason |
+|----------|------:|:-------------------:|--------|
+| **Direct extractions** — `mc.Arg(n).(T)` + error on failure | ~13 | **YES** | Exact same partial function `Value ⇀ T` |
+| **Predicate assertions** — `_, ok := v.(T)` for boolean result | ~14 | NO | No error; false is a valid result |
+| **Loop-interior assertions** — `pr, ok = next.(*Pair)` in traversal | ~12 | NO | Not from `mc.Arg(n)`; reassignment in loop |
+| **Optional-arg extraction** — `rest.(Tuple)` then `tuple.Car().(T)` | ~8 | NO | Nested inside `if !IsEmptyList` blocks |
+| **`values.ExactInteger` calls** — returns `(int64, bool)` | ~6 | NO | Different return shape; semantic query not type assertion |
 
-**Before** (4 lines per site):
-```go
-o := mc.Arg(0)
-s, ok := o.(*values.String)
-if !ok {
-    return values.WrapForeignErrorf(values.ErrNotAString, "string-length: expected a string but got %T", o)
-}
-```
+**Why the non-convertible sites should stay as-is:**
 
-**After** (3 lines per site):
-```go
-s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-length")
-if err != nil {
-    return err
-}
-```
+- **Predicate assertions** implement total functions `Value → Bool`. `RequireArg[T]` implements
+  partial functions `Value ⇀ T`. Conflating them would require a second helper (`TryArg[T]`
+  returning `(T, bool)`) for no meaningful gain — the existing code is already 2 lines.
+- **Loop-interior assertions** operate on intermediate values during list traversal, not on
+  `mc.Arg(n)`. `RequireArg` requires a `MachineContext` + arg index, which doesn't exist here.
+- **Optional-arg extraction** is always nested inside `if !values.IsEmptyList(rest)` guards.
+  The Tuple assertion is part of the optional-argument protocol, not standalone extraction.
+- **`values.ExactInteger`** returns `(int64, bool)` — a projection that extracts the int64
+  from any Number type that happens to be an exact integer. Different algebra from `RequireArg[T]`.
 
-### Files with Remaining Assertions (Production Code)
+### Convertible Sites (all converted)
 
-| File | Pointer assertions (`*values.X`) | Interface assertions (`values.X`) | Total |
-|------|----------------------------------|-----------------------------------|-------|
-| `registry/core/prim_lists.go` | 8 | 12 | 20 |
-| `registry/core/prim_predicates.go` | 8 | 10 | 18 |
-| `registry/core/prim_strings.go` | 4 | 4 | 8 |
-| `registry/core/prim_arithmetic.go` | 8 | 0 | 8 |
-| `registry/core/prim_vectors.go` | 1 | 5 | 6 |
-| `registry/core/prim_pairs.go` | 2 | 3 | 5 |
-| `registry/core/prim_byte_vectors.go` | 3 | 3 | 6 |
-| `registry/core/prim_characters.go` | 2 | 0 | 2 |
-| `registry/core/prim_equality.go` | 1 | 2 | 3 |
-| `registry/core/prim_prompt.go` | 1 | 2 | 3 |
-| `registry/core/prim_control.go` | 0 | 3 | 3 |
-| `registry/core/prim_hashtables.go` | 1 | 1 | 2 |
-| `registry/core/prim_parameters.go` | 1 | 0 | 1 |
-| `registry/core/prim_boxes.go` | 1 | 0 | 1 |
+| File | Function | Arg | Type | Sentinel | Status |
+|------|----------|-----|------|----------|--------|
+| `prim_characters.go` | `PrimCharToInteger` | 0 | `*values.Character` | `ErrNotACharacter` | ✅ |
+| `prim_characters.go` | `PrimIntegerToChar` | 0 | `*values.Integer` | `ErrNotANumber` | ✅ |
+| `prim_pairs.go` | `PrimCar` | 0 | `values.Tuple` | `ErrNotAPair` | ✅ |
+| `prim_pairs.go` | `PrimCdr` | 0 | `values.Tuple` | `ErrNotAPair` | ✅ |
+| `prim_pairs.go` | `PrimSetCar` | 0 | `*values.Pair` | `ErrNotAPair` | ✅ |
+| `prim_pairs.go` | `PrimSetCdr` | 0 | `*values.Pair` | `ErrNotAPair` | ✅ |
+| `prim_predicates.go` | `PrimExactQ` | 0 | `values.Number` | `ErrNotANumber` | ✅ |
+| `prim_predicates.go` | `PrimInexactQ` | 0 | `values.Number` | `ErrNotANumber` | ✅ |
+| `prim_predicates.go` | `PrimZeroQ` | 0 | `values.Number` | `ErrNotANumber` | ✅ |
+| `prim_predicates.go` | `PrimPositiveQ` | 0 | `values.RealNumber` | `ErrNotANumber` | ✅ |
+| `prim_predicates.go` | `PrimNegativeQ` | 0 | `values.RealNumber` | `ErrNotANumber` | ✅ |
+| `prim_lists.go` | `PrimMakeList` | 0 | `*values.Integer` | `ErrNotAnInteger` | ✅ |
+| `prim_lists.go` | `PrimListSet` | 0 | `*values.Pair` | `ErrNotAList` | ✅ |
 
-**Note**: Some assertions in `prim_predicates.go` and `prim_control.go` are interface assertions (e.g., `values.Number`, `values.RealNumber`) that may not fit the `RequireArg[T]` pattern cleanly. Evaluate case by case.
+### Also Fixed: Error Wrapping Inconsistency
+
+`PrimMakeList` previously used `values.NewForeignError(...)` (no sentinel) for integer
+type mismatch. Now uses `RequireArg[*values.Integer]` which wraps `ErrNotAnInteger`,
+making `errors.Is(err, ErrNotAnInteger)` work consistently.
 
 ### Verification
 
@@ -349,7 +355,7 @@ Already documented as a separate initiative in `plans/TOKENIZER_CONSOLIDATION_PL
 | Phase | Description | Savings | Risk | Status |
 |-------|-------------|---------|------|--------|
 | 1 | Remove duplicate math helpers | 250 bytes | LOW | **✅ COMPLETE** |
-| 2 | `RequireArg[T]` migration | 2,400 bytes | LOW | **54/260 sites done** |
+| 2 | `RequireArg[T]` migration | ~18 lines | LOW | **✅ COMPLETE** (67/67 convertible; see triage for non-convertible) |
 | 3 | Index bounds checking | 100 bytes | LOW | Not started |
 | 4 | Optional start/end parser | 650 bytes | LOW | **✅ COMPLETE** |
 | 5 | Compile-time execution helper | 400 bytes | MEDIUM | Not started |
