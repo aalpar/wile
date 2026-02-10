@@ -185,31 +185,8 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 		if exprVal == nil {
 			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil expression")
 		}
-
-		stxVal := exprVal
-		// Expand the expression (it may contain macros)
-		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "eval-when: expansion failed")
-		}
-
-		// Compile the expression to a temporary template
-		tmpTpl := NewNativeTemplate(0, 0, false)
-		tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
-
-		err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "eval-when: compilation failed")
-		}
-
-		// Execute the compiled code at compile time
-		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-		mc := NewMachineContext(ctx, cont)
-		err = mc.Run()
-		if err != nil {
-			return values.WrapForeignErrorf(err, "eval-when: evaluation failed")
-		}
-		return nil
+		_, err := p.expandCompileExecute(ctx, ctctx, exprVal, expandEnv, expander, "eval-when")
+		return err
 	})
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval-when: error processing body expressions")

@@ -58,30 +58,9 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 
 	// Process each expression
 	current := exprPair
-	v, err := current.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, stxVal syntax.SyntaxValue) error {
-		// Expand the expression (it may contain macros)
-		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "begin-for-syntax: expansion failed")
-		}
-
-		// Compile the expression to a temporary template
-		tmpTpl := NewNativeTemplate(0, 0, false)
-		tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
-
-		err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
-		if err != nil {
-			return values.WrapForeignErrorf(err, "begin-for-syntax: compilation failed")
-		}
-
-		// Execute the compiled code at compile time
-		cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-		mc := NewMachineContext(ctctx.ctx, cont)
-		err = mc.Run()
-		if err != nil {
-			return values.WrapForeignErrorf(err, "begin-for-syntax: evaluation failed")
-		}
-		return nil
+	v, err := current.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
+		_, err := p.expandCompileExecute(ctctx.ctx, ctctx, stxVal, expandEnv, expander, "begin-for-syntax")
+		return err
 	})
 	if err != nil {
 		return values.WrapForeignErrorf(err, "begin-for-syntax: error processing expressions")
