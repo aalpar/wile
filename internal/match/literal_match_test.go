@@ -25,57 +25,6 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// --- literalScopesMatch tests ---
-
-func TestLiteralScopesMatch(t *testing.T) {
-	c := qt.New(t)
-
-	c.Run("both nil returns false", func(c *qt.C) {
-		c.Assert(literalScopesMatch(nil, nil), qt.IsFalse)
-	})
-
-	c.Run("input nil returns false", func(c *qt.C) {
-		pattern := syntax.NewSyntaxSymbol("x", nil)
-		c.Assert(literalScopesMatch(nil, pattern), qt.IsFalse)
-	})
-
-	c.Run("pattern nil returns false", func(c *qt.C) {
-		input := syntax.NewSyntaxSymbol("x", nil)
-		c.Assert(literalScopesMatch(input, nil), qt.IsFalse)
-	})
-
-	c.Run("both no scopes matches", func(c *qt.C) {
-		input := syntax.NewSyntaxSymbol("x", nil)
-		pattern := syntax.NewSyntaxSymbol("x", nil)
-		c.Assert(literalScopesMatch(input, pattern), qt.IsTrue)
-	})
-
-	c.Run("input has rebinding scope pattern does not", func(c *qt.C) {
-		rebindScope := syntax.NewRebindingScope()
-		inputCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{rebindScope}}
-		input := syntax.NewSyntaxSymbol("=>", inputCtx)
-		pattern := syntax.NewSyntaxSymbol("=>", nil)
-		c.Assert(literalScopesMatch(input, pattern), qt.IsFalse)
-	})
-
-	c.Run("both have same rebinding scope matches", func(c *qt.C) {
-		rebindScope := syntax.NewRebindingScope()
-		inputCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{rebindScope}}
-		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{rebindScope}}
-		input := syntax.NewSyntaxSymbol("=>", inputCtx)
-		pattern := syntax.NewSyntaxSymbol("=>", patternCtx)
-		c.Assert(literalScopesMatch(input, pattern), qt.IsTrue)
-	})
-
-	c.Run("non-rebinding scopes ignored", func(c *qt.C) {
-		normalScope := syntax.NewScope()
-		inputCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{normalScope}}
-		input := syntax.NewSyntaxSymbol("x", inputCtx)
-		pattern := syntax.NewSyntaxSymbol("x", nil)
-		c.Assert(literalScopesMatch(input, pattern), qt.IsTrue)
-	})
-}
-
 // --- filterRebindingScopes tests ---
 
 func TestFilterRebindingScopes(t *testing.T) {
@@ -136,48 +85,6 @@ func TestByteCodeString(t *testing.T) {
 	c.Run("SkipIfTailCount", func(c *qt.C) {
 		bc := ByteCodeSkipIfTailCount{Offset: 5, Count: 2}
 		c.Assert(bc.String(), qt.Equals, "SkipIfTailCount(5, count=2)")
-	})
-}
-
-// --- ExpandPreservingSyntax tests ---
-
-func TestExpandPreservingSyntax(t *testing.T) {
-	c := qt.New(t)
-
-	c.Run("simple variable substitution preserves syntax", func(c *qt.C) {
-		// Hand-build bytecode: CaptureCar(a), Done
-		codes := []SyntaxCommand{
-			ByteCodeCaptureCar{Binding: "a"},
-			ByteCodeDone{},
-		}
-		vars := map[string]struct{}{"a": {}}
-		m := NewMatcher(vars, codes)
-		target := testSyntaxList(testSyntaxInt(42))
-		err := m.MatchSyntax(context.Background(), target)
-		c.Assert(err, qt.IsNil)
-
-		template := values.NewCons(values.NewSymbol("a"), values.EmptyList)
-		result, err := m.ExpandPreservingSyntax(template)
-		c.Assert(err, qt.IsNil)
-		c.Assert(result, qt.IsNotNil)
-		pr, ok := result.(*values.Pair)
-		c.Assert(ok, qt.IsTrue)
-		// Car should be syntax-wrapped (SyntaxObject with Integer inside)
-		_, isSyntax := pr[0].(syntax.SyntaxValue)
-		c.Assert(isSyntax, qt.IsTrue)
-	})
-
-	c.Run("no capture context returns error", func(c *qt.C) {
-		codes := []SyntaxCommand{
-			ByteCodeCaptureCar{Binding: "a"},
-			ByteCodeDone{},
-		}
-		vars := map[string]struct{}{"a": {}}
-		m := NewMatcher(vars, codes)
-		// Don't call Match — no capture context
-		_, err := m.ExpandPreservingSyntax(values.NewSymbol("a"))
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(err.Error(), qt.Matches, ".*capture context.*")
 	})
 }
 

@@ -1,24 +1,32 @@
 # Plan: Refactor Match Package to Pure SyntaxValue Operations
 
-**Status**: Substantially complete — core refactoring done in commit `1c30313` (2026-01-27)
-**Branch**: fix/scm-conformance-e (originally fix/scm-conformance-scopes)
+**Status**: Complete
 
 ## Overview
 
-The match package was refactored from a two-layer architecture (raw `values.Value` matcher + `syntaxMap` bridge) to operate directly on `syntax.SyntaxValue`. Phases 1-3 (parallel syntax types, bytecode instruction refactoring, matcher unification) are complete. Phases 4-5 below are remaining cleanup.
+The match package was refactored from a two-layer architecture (raw `values.Value` matcher + `syntaxMap` bridge) to operate directly on `syntax.SyntaxValue`. All five phases are complete.
 
-## Remaining Work
+## Completed Work
 
-### Phase 4: Unify Expansion (Medium Risk) - PARTIAL
-- [ ] Remove `expandValue()`, keep only `expandSyntaxValue()` (renamed to `expand()`)
-- [ ] Remove remaining `valueToSyntaxWithOrigin()` and `syntaxToValue()` functions
+### Phase 1-3: Core Refactoring — Done (commit `1c30313`, 2026-01-27)
+Parallel syntax types, bytecode instruction refactoring, matcher unification.
 
-### Phase 5: Cleanup (Low Risk) - PENDING
-- [ ] Remove deprecated functions
-- [ ] Update documentation and CLAUDE.md files
-- [ ] Update consumer files in machine package
+### Phase 4: Unify Expansion — Done
+- [x] Removed `expandValue()` — only `expandSyntaxValue()` remains
+- [x] Removed `valueToSyntaxWithOrigin()` — already gone by Phase 3
+- [x] `syntaxToValue()` remains — still needed by pattern compiler (`SyntaxCompiler.Compile`)
 
-**Note**: The core refactoring (Phases 1-3) was completed as part of the nested let-syntax hygiene fix. Phases 4-5 are cleanup/polish that can be done opportunistically.
+### Phase 5: Cleanup — Done
+- [x] Removed legacy `Matcher.Match(*values.Pair)` — entire values-based VM loop deleted
+- [x] Removed legacy `Matcher.Expand()` / `ExpandPreservingSyntax()` and all supporting functions
+- [x] Removed dead `valueToSyntax()`, `literalScopesMatch()` (standalone)
+- [x] Removed `countRemainingElements()` (values.Pair version)
+- [x] Removed `valuePathEntry` / `valueStack` from Matcher struct
+- [x] Converted legacy tests to syntax-native API, deleted `expand_test.go`
+- [x] Updated CLAUDE.md documentation
+
+### Remaining (not in scope)
+- Pattern compiler (`SyntaxCompiler.Compile`) still accepts `*values.Pair`. Converting it to operate on `*syntax.SyntaxPair` directly would eliminate the last `syntaxToValue()` call but is a separate, larger refactoring.
 
 ## Key Implementation Details
 

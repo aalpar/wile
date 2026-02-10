@@ -1,76 +1,17 @@
 TODO
 ----
 
-Code Quality
-------------
-
-### Sentinel Value Types
-
-- [x] Consider using distinct types for EmptyList and Void instead of sentinel values in `SyntaxPair` (`internal/syntax/syntax_pair.go`) and `ArrayList` (`values/array_list.go`). Already done: `emptyListType` and `voidType` are distinct types. Stale `== EmptyList` comparisons cleaned up.
-
-### ArrayList Special-Case Logic
-
-- [x] Clean up `ArrayList.Cons` / `Append` logic (`values/array_list.go`). Normalized `ArrayListEmptyList` from `[nil, nil]` to `[EmptyList]`. Replaced manual encoding checks in `AppendList` with `IsEmptyList()` helper.
-- [x] Clean up `ArrayList.IsList` (`values/array_list.go`). Removed redundant two-nil encoding branches. `IsList` and `IsEmptyList` now have single clear checks.
-
-### ByteVector Overflow Handling
-
-- [x] Integer-to-byte conversion paths such as `NewByteVectorFromIntegers` and the `#u8(...)` parser (`values/byte_vector.go`) silently truncate values that overflow `uint8`. Add explicit overflow checks or document the truncation semantics.
-
-### Environment Naming
-
-- [x] `LocalEnvironmentFrame.CreateLocalBinding` (`environment/local_environment_frame.go`) is actually a "get-or-create" (returns existing binding if key already exists). Rename to `EnsureLocalBinding` or `GetOrCreateLocalBinding` to match its semantics.
-
-### MachineContext.Apply
-
-- [x] Add unit tests for `MachineContext.Apply` (`machine/machine_context.go`).
-- [x] Make `MachineContext.Apply` symmetric with `MachineClosure` apply dispatch. Asymmetry is by design: closures run in VM loop (bytecode handles continuation restoration), while Parameters and ComposableContinuation return immediately via `returnImmediate()`.
-- [x] `MachineContext.Apply` accepts variadic parameters but has no mechanism for returning multiple values. Mechanism exists: `Apply` sets up the call, `Run()` executes it, `GetValues()` retrieves multiple return values.
-
-### CompileTimeContinuation Environment
-
-- [x] `CompileTimeContinuation.env` (`machine/compile_time_continuation.go`) stores full environment bindings. Full env is justified: symbol resolution, macro detection, scope chain, and compile-phase bindings all require the complete environment. Splitting to key-only adds complexity without benefit.
-
-### Test Improvements
-
-- [x] `operation_test.go:~212` — `OperationApply` test reports `pc=0` because the test does not set up a real function call. Improve test to use a real closure invocation so the PC reflects actual behavior.
-- [x] `operation_test.go:~240` — `OperationRestoreContinuation` test shows `CallDepth()=0` because no real call is active. Same improvement needed.
-- [x] `compile_time_continuation_test.go:~509` — `mc.Run()` should return `ErrMachineHalt` but currently does not. Investigate and fix the assertion.
-
-### Indexable Method Duplication
-
-Investigated all items. Most are already resolved, semantically different, or too trivial to abstract.
-
-**Extracted:**
-- [x] `Vector.SchemeString()` / `ByteVector.SchemeString()` — extracted `formatIndexable()` helper in `values/utils.go`.
-
-**Closed (no action):**
-- [x] `Vector.AsList()` / `ByteVector.AsList()` — already simplified in SUBSYSTEM_SIMPLIFICATION Phase 2; both delegate to `List()`.
-- [x] `Vector.EqualTo()` / `ByteVector.EqualTo()` — semantic difference: Vector uses recursive `EqualTo()`, ByteVector compares `uint8` directly. Cannot safely unify.
-- [x] `Vector.Get()` / `ByteVector.Get()` — trivial one-liner (`return (*p)[i]`), no extraction benefit.
-- [x] `IsVoid()` across types — single-line `return p == nil`; abstracting adds indirection for zero cognitive benefit.
-- [x] `EqualTo()` preambles — type-specific assertions prevent clean unification.
-- [x] `ForEach()` Pair vs ArrayList — different data structures (linked list vs array).
-
-**Locations:** `values/utils.go`, `values/vector.go`, `values/byte_vector.go`
-
----
-
 Future Extensions
 -----------------
 
 ### Go FFI
 
-- [x] **Phase 1: `RegisterFunc`** — Register Go functions with natural signatures via reflection. Supports `int64`, `int`, `float64`, `string`, `bool`, `[]byte`, `Value`, `context.Context`, variadic params, and `(T, error)` returns. Reflection happens once at registration; runtime uses pre-computed converters. PR #139.
-- [x] **Phase 2: Composite types** — `[]T` ↔ proper Scheme lists, `map[K]V` ↔ hashtables, structs ↔ alists, `func(A) B` ← Scheme procedures as Go callbacks via `reflect.MakeFunc`. Recursive converters built at registration time. Parameters callable as 0-arg (get) or 1-arg (set) callbacks. Map key types restricted to string/int64/int/bool (float64 excluded: NaN breaks lookup invariants). PR #140.
 - [ ] Phase 3: Plugin support (dynamic extension loading via registry pattern)
 
 ---
 
 ### Runtime Source Location Tracking
 
-- [x] **Per-operation source tracking** (2026-02-08) — Per-operation source attribution via `sourceRefs []uint16` indexing into deduplicated `sourceTable`. O(1) lookup. PR #137.
-- [x] **Error handling integration** (2026-02-08) — `ErrExceptionEscape` carries `Source` and `StackTrace`. Public API: `EvalWithSource`, `CompileWithSource`. PR #138.
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
 
 ---

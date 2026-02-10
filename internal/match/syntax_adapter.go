@@ -707,13 +707,8 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 //   - Source location information (file, line, column)
 //   - Scope sets (used for hygiene)
 //
-// The pattern matching VM operates on these raw values because:
-//  1. Pattern matching is structural - it doesn't care about source locations
-//  2. The unhygienic core doesn't need scope information
-//  3. Raw values are simpler and faster to traverse
-//
-// After expansion, valueToSyntax re-wraps the result, and the hygiene layer
-// adds intro scopes to the new syntax objects.
+// Used by CompileSyntaxPatternWithLiterals to convert syntax patterns to
+// raw values.Pair for the pattern compiler, which operates on values.Pair.
 func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 	if stx == nil {
 		return nil
@@ -774,64 +769,6 @@ func syntaxToValue(stx syntax.SyntaxValue) values.Value {
 		// If it's already a value, return as-is
 		val := stx
 		return val
-	}
-}
-
-// valueToSyntax wraps raw values back into syntax objects.
-//
-// This is the inverse of syntaxToValue, similar to R7RS datum->syntax.
-// It reconstructs syntax objects from the expanded template, preserving:
-//   - Source context from the original template (for error reporting)
-//   - Structure of the expanded form
-//
-// Note: The scopes are NOT preserved during this conversion. Instead,
-// the hygiene layer (in operation_syntax_rules_transform.go) adds a fresh
-// "intro scope" to all syntax objects after expansion. This is the key to
-// Flatt's "sets of scopes" hygiene model.
-//
-// The templateStx parameter provides the source context (file, line, etc.)
-// that will be attached to the new syntax objects.
-func valueToSyntax(val values.Value, templateStx syntax.SyntaxValue) syntax.SyntaxValue {
-	if val == nil {
-		return nil
-	}
-
-	// Get source context from template if available
-	var srcCtx *syntax.SourceContext
-	if templateStx != nil {
-		srcCtx = templateStx.SourceContext()
-	}
-
-	switch v := val.(type) {
-	case *values.Pair:
-		// Recursively wrap car and cdr
-		car := valueToSyntax(v.Car(), templateStx)
-
-		// nil cdr: improper construction; EmptyList: proper list terminator
-		var cdr syntax.SyntaxValue
-		if v.Cdr() == nil || values.IsEmptyList(v.Cdr()) {
-			cdr = syntax.NewSyntaxEmptyList(srcCtx)
-		} else {
-			cdr = valueToSyntax(v.Cdr(), templateStx)
-		}
-
-		return syntax.NewSyntaxCons(car, cdr, srcCtx)
-
-	case syntax.SyntaxValue:
-		return v
-
-	case values.Tuple:
-		if v.IsEmptyList() {
-			return syntax.NewSyntaxEmptyList(srcCtx)
-		}
-		return syntax.NewSyntaxObject(val, srcCtx)
-
-	case *values.Symbol:
-		return syntax.NewSyntaxSymbol(v.Key, srcCtx)
-
-	default:
-		// For any other value type, wrap in generic syntax object
-		return syntax.NewSyntaxObject(val, srcCtx)
 	}
 }
 
@@ -975,19 +912,6 @@ func (p *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.Syn
 
 	// For the input to match the pattern literal, the input must not have
 	// any rebinding scopes that the pattern doesn't have.
-	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
-}
-
-// literalScopesMatch is the standalone version for backward compatibility.
-// It only checks rebinding scopes, not actual bindings.
-func literalScopesMatch(input, pattern *syntax.SyntaxSymbol) bool { //nolint:unused
-	if input == nil || pattern == nil {
-		return false
-	}
-
-	inputRebindingScopes := filterRebindingScopes(input.Scopes())
-	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
-
 	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
 }
 
