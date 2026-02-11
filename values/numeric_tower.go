@@ -106,4 +106,3 @@ func ExactnessOf(n Number) Exactness {
 	}
 	panic(ErrNotANumber)
 }
-
