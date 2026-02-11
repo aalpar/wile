@@ -38,7 +38,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// expr is (name expr) or ((name args...) body...) - the args after 'define-for-syntax'
-	argsPair, err := formArgs(expr, "define-for-syntax")
+	argsPair, err := formArgs(expr, "define-for-syntax", "name and expression")
 	if err != nil {
 		return err
 	}

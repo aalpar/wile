@@ -31,7 +31,7 @@ import (
 func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped).
 	// So expr = (((pattern expr) ...) body ...)
-	argsPair, err := formArgs(expr, "with-syntax")
+	argsPair, err := formArgs(expr, "with-syntax", "bindings and body")
 	if err != nil {
 		return err
 	}

@@ -16,10 +16,12 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -37,6 +39,7 @@ func TestCompileSyntaxCase_Error_NoArgs(t *testing.T) {
 	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case")
+	c.Assert(errors.Is(err, values.ErrInvalidSyntax), qt.IsTrue)
 }
 
 func TestCompileSyntaxCase_Error_NoLiterals(t *testing.T) {

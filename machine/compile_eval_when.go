@@ -78,7 +78,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	}
 
 	// expr is ((phase ...) body ...) - the args after 'eval-when'
-	argsPair, err := formArgs(expr, "eval-when")
+	argsPair, err := formArgs(expr, "eval-when", "phase list and body")
 	if err != nil {
 		return err
 	}

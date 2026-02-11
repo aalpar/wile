@@ -45,7 +45,7 @@ import (
 func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
 	// So expr = (input-expr (literals) clause ...)
-	argsPair, err := formArgs(expr, "syntax-case")
+	argsPair, err := formArgs(expr, "syntax-case", "expression and clauses")
 	if err != nil {
 		return err
 	}

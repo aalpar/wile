@@ -56,12 +56,13 @@ func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.Environmen
 
 // formArgs extracts the argument list from a compiled form's expression.
 // expr is the CDR of the form (keyword already stripped by the dispatcher).
-// Returns the arguments as a non-empty SyntaxPair, or an error if expr is
-// not a SyntaxPair or is the empty list.
-func formArgs(expr syntax.SyntaxValue, formName string) (*syntax.SyntaxPair, error) {
+// usage describes what the form expects (e.g. "bindings and body") for error
+// messages. Returns the arguments as a non-empty SyntaxPair, or an error if
+// expr is not a SyntaxPair or is the empty list.
+func formArgs(expr syntax.SyntaxValue, formName, usage string) (*syntax.SyntaxPair, error) {
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected arguments", formName)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected %s", formName, usage)
 	}
 	return argsPair, nil
 }
@@ -69,7 +70,7 @@ func formArgs(expr syntax.SyntaxValue, formName string) (*syntax.SyntaxPair, err
 // formSingleArg extracts exactly one argument from a compiled form's expression.
 // Returns an error if the form does not have exactly one argument.
 func formSingleArg(expr syntax.SyntaxValue, formName string) (syntax.SyntaxValue, error) {
-	argsPair, err := formArgs(expr, formName)
+	argsPair, err := formArgs(expr, formName, "exactly one argument")
 	if err != nil {
 		return nil, err
 	}
