@@ -1023,8 +1023,6 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	return result, nil
 }
 
-// isDefineSyntaxSyntax checks if a syntax value is a define-syntax form.
-
 // compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
 // in the expand environment.
 //
