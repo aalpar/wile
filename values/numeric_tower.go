@@ -106,13 +106,3 @@ func ExactnessOf(n Number) Exactness {
 	}
 	panic(ErrNotANumber)
 }
-
-// ResultExactness computes the exactness of a binary operation result.
-//
-// R7RS §6.2.2: exact op exact = exact, otherwise inexact.
-func ResultExactness(a, b Number) Exactness {
-	if ExactnessOf(a) == Inexact || ExactnessOf(b) == Inexact {
-		return Inexact
-	}
-	return Exact
-}

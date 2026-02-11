@@ -22,10 +22,9 @@ func Simplify(n Number) Number
 
 // Exactness
 func ExactnessOf(n Number) Exactness
-func ResultExactness(a, b Number) Exactness
 ```
 
-**Deleted (2026-02-05):** `NumericRank`, `Rank`, `Promote`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. These were unused infrastructure with a latent exactness bug for complex numbers.
+**Deleted (2026-02-05):** `NumericRank`, `Rank`, `Promote`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. These were unused infrastructure with a latent exactness bug for complex numbers. `ResultExactness` was also removed — unused in production code (only called from tests and docs).
 
 ### Details
 

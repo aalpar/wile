@@ -20,6 +20,23 @@ Future Extensions
 
 ---
 
+### Authorization Framework
+
+Fine-grained access control for embedded engines running untrusted code. Kubernetes-style verb+resource model with a single `Authorizer` interface method, extensible by extensions without interface changes.
+
+See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | `security/` package — interface, context propagation, constants | Not started |
+| 2 | Built-in authorizers (FilesystemRoot, ReadOnly, DenyAll, Composite) | Not started |
+| 3 | Engine integration (`WithAuthorizer` option, ctx wrapping) | Not started |
+| 4 | Gate runtime primitives (files, system, eval extensions) | Not started |
+| 5 | Gate compile-time code loading (include, library import) | Not started |
+| 6 | Integration tests | Not started |
+
+---
+
 ### Runtime Source Location Tracking
 
 - [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)

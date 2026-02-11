@@ -467,7 +467,7 @@ func TestFloatToExactConversions(t *testing.T) {
 	c.Assert(exactLarge.IsExact(), qt.IsTrue)
 }
 
-// TestNumericTowerUtilities covers Simplify, ExactnessOf, and ResultExactness.
+// TestNumericTowerUtilities covers Simplify and ExactnessOf.
 func TestNumericTowerUtilities(t *testing.T) {
 	c := qt.New(t)
 
@@ -478,11 +478,6 @@ func TestNumericTowerUtilities(t *testing.T) {
 	c.Assert(ExactnessOf(NewBigIntegerFromInt64(1)), qt.Equals, Exact)
 	c.Assert(ExactnessOf(NewBigFloatFromFloat64(1.0)), qt.Equals, Inexact)
 	c.Assert(ExactnessOf(NewComplexFromParts(1.0, 0.0)), qt.Equals, Inexact)
-
-	// ResultExactness
-	c.Assert(ResultExactness(NewInteger(1), NewInteger(2)), qt.Equals, Exact)
-	c.Assert(ResultExactness(NewInteger(1), NewFloat(2.0)), qt.Equals, Inexact)
-	c.Assert(ResultExactness(NewFloat(1.0), NewFloat(2.0)), qt.Equals, Inexact)
 
 	// Simplify
 	bigInt := NewBigIntegerFromInt64(42)

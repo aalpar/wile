@@ -32,7 +32,6 @@ func Simplify(n Number) Number
 
 // Exactness classification
 func ExactnessOf(n Number) Exactness        // Returns Exact or Inexact
-func ResultExactness(a, b Number) Exactness // exact op exact = exact
 ```
 
 ### Exactness Type
