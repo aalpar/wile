@@ -38,7 +38,7 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 	bufferSize := 0
 	// Parse optional buffer-size from rest list
 	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(*values.Pair)
+		restList, ok := restVal.(values.Tuple)
 		if ok {
 			n, ok := restList.Car().(*values.Integer)
 			if ok {
@@ -287,7 +287,7 @@ func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
 	name := ""
 	// Parse optional name from rest list
 	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(*values.Pair)
+		restList, ok := restVal.(values.Tuple)
 		if ok {
 			nameVal := restList.Car()
 			if s, ok := nameVal.(*values.String); ok {

@@ -401,7 +401,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 			return nil, values.WrapForeignErrorf(err, "%s: failed to expand body expression", formName)
 		}
 		expandedExprs = append(expandedExprs, expandedExpr)
-		if isExpandedDefineForm(expandedExpr) {
+		if isSyntaxFormWithKeyword(expandedExpr, "define") {
 			hasDefine = true
 		}
 		cdr := current.SyntaxCdr()
@@ -430,18 +430,18 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	return beginExpr, nil
 }
 
-// isExpandedDefineForm returns true if the expression is a define form.
-func isExpandedDefineForm(expr syntax.SyntaxValue) bool {
+// isSyntaxFormWithKeyword checks if expr is a syntax pair whose car is
+// a syntax symbol with the given keyword.
+func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return false
 	}
-	car := pair.SyntaxCar()
-	sym, ok := car.(*syntax.SyntaxSymbol)
+	sym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	if !ok {
 		return false
 	}
-	return sym.Sym.Key == "define"
+	return sym.Sym.Key == keyword
 }
 
 // expandWithBindingScope implements the (with-binding-scope (id ...) body) form.
@@ -1010,7 +1010,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		}
 
 		// If define-syntax, compile it now for subsequent forms
-		if isDefineSyntaxSyntax(expanded) {
+		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
 			pair := expanded.(*syntax.SyntaxPair)
 			err = compileDefineSyntaxFromSyntax(ctx, p.env, pair)
 			if err != nil {
@@ -1024,18 +1024,6 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 }
 
 // isDefineSyntaxSyntax checks if a syntax value is a define-syntax form.
-func isDefineSyntaxSyntax(expr syntax.SyntaxValue) bool {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return false
-	}
-	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
-	if !ok {
-		return false
-	}
-	sym, ok := carSym.Unwrap().(*values.Symbol)
-	return ok && sym.Key == "define-syntax"
-}
 
 // compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
 // in the expand environment.

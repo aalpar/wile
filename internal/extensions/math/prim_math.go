@@ -91,7 +91,7 @@ func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 	if values.IsEmptyList(rest) {
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
 	} else {
-		baseArg, ok := rest.(*values.Pair)
+		baseArg, ok := rest.(values.Tuple)
 		if !ok {
 			return values.NewForeignError("log: expected a list for rest arguments")
 		}
@@ -175,7 +175,7 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 		if err != nil {
 			return values.WrapForeignErrorf(err, "atan: %v", err)
 		}
-		xArg, ok := rest.(*values.Pair)
+		xArg, ok := rest.(values.Tuple)
 		if !ok {
 			return values.NewForeignError("atan: expected a list for rest arguments")
 		}
@@ -1215,8 +1215,8 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 	radix := 10
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
+		pr, ok := rest.(values.Tuple)
+		if ok && !pr.IsEmptyList() {
 			r, ok := pr.Car().(*values.Integer)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
@@ -1277,8 +1277,8 @@ func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
 	}
 	radix := 10
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
+		pr, ok := rest.(values.Tuple)
+		if ok && !pr.IsEmptyList() {
 			r, ok := pr.Car().(*values.Integer)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())

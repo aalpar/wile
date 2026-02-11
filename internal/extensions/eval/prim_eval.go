@@ -220,7 +220,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
-	args, ok := argsVal.(*values.Pair)
+	args, ok := argsVal.(values.Tuple)
 	if !ok {
 		return values.NewForeignErrorf("environment: expected list of import specs, got %T", argsVal)
 	}

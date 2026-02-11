@@ -58,7 +58,7 @@ func parseOptionalName(rest values.Value) string {
 	if values.IsEmptyList(rest) {
 		return ""
 	}
-	restList, ok := rest.(*values.Pair)
+	restList, ok := rest.(values.Tuple)
 	if !ok {
 		return ""
 	}
@@ -263,7 +263,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(*values.Pair)
+		restList, ok := restVal.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "thread-join!: invalid rest argument")
 		}
@@ -278,7 +278,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 		// Parse timeout-val (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			rest2List, ok := rest2.(*values.Pair)
+			rest2List, ok := rest2.(values.Tuple)
 			if ok {
 				timeoutVal = rest2List.Car()
 			}
@@ -399,7 +399,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(*values.Pair)
+		restList, ok := restVal.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "mutex-lock!: invalid rest argument")
 		}
@@ -414,7 +414,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 		// Parse thread (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			rest2List, ok := rest2.(*values.Pair)
+			rest2List, ok := rest2.(values.Tuple)
 			if ok {
 				threadArg := rest2List.Car()
 				if t, ok := threadArg.(*values.Thread); ok {
@@ -464,7 +464,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse optional arguments from rest list
 	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(*values.Pair)
+		restList, ok := restVal.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "mutex-unlock!: invalid rest argument")
 		}
@@ -480,7 +480,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 		// Parse timeout (second optional arg)
 		rest2 := restList.Cdr()
 		if !values.IsEmptyList(rest2) {
-			rest2List, ok := rest2.(*values.Pair)
+			rest2List, ok := rest2.(values.Tuple)
 			if ok {
 				var err error
 				timeout, err = parseTimeout(rest2List.Car(), "mutex-unlock!")

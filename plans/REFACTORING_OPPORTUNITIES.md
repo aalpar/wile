@@ -8,7 +8,7 @@ For larger structural reductions (numeric tower, port base types, operation boil
 
 ## 1. Form-Checking Predicates
 
-**Status**: Ready to implement
+**Status**: Complete
 **Impact**: ~20 lines reduced, enables further unification
 **Risk**: Low
 
@@ -313,7 +313,7 @@ cd go && make build && go test ./machine/... -count=1
 
 **Recommended sequence** (smallest to largest scope):
 
-1. **#1 Form-Checking Predicates** — Single file, 20 lines, trivial
+1. ~~**#1 Form-Checking Predicates** — Single file, 20 lines, trivial~~ ✓
 2. **#3 Form Argument Extraction** — 6 files, 50 lines, straightforward
 3. **#2 CxR Primitives** — 2 files, 300 lines, mechanical but large
 

@@ -225,18 +225,18 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 	if values.IsEmptyList(o) {
 		return values.NewForeignError("list-ref: index out of bounds for empty list")
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "list-ref: expected a pair but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "list-ref: expected a list but got %T", o)
 	}
 	for i := int64(0); i < idx; i++ {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
 			return values.NewForeignError("list-ref: index out of bounds")
 		}
-		pr, ok = next.(*values.Pair)
+		pr, ok = next.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "list-ref: expected a pair but got %T", next)
+			return values.WrapForeignErrorf(values.ErrNotAList, "list-ref: expected a list but got %T", next)
 		}
 	}
 	mc.SetValue(pr.Car())
@@ -294,9 +294,9 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(o)
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "list-tail: expected a pair but got %T", o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "list-tail: expected a list but got %T", o)
 	}
 	for i := int64(0); i < idx; i++ {
 		next := pr.Cdr()
@@ -307,13 +307,13 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 			}
 			return values.NewForeignError("list-tail: index out of bounds")
 		}
-		pr, ok = next.(*values.Pair)
+		pr, ok = next.(values.Tuple)
 		if !ok {
 			if i == idx-1 {
 				mc.SetValue(next)
 				return nil
 			}
-			return values.WrapForeignErrorf(values.ErrNotAPair, "list-tail: expected a pair but got %T", next)
+			return values.WrapForeignErrorf(values.ErrNotAList, "list-tail: expected a list but got %T", next)
 		}
 	}
 	mc.SetValue(pr)

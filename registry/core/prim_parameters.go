@@ -38,8 +38,8 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Check for optional converter in rest args
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(*values.Pair)
-		if ok && !values.IsEmptyList(pr) {
+		pr, ok := rest.(values.Tuple)
+		if ok && !pr.IsEmptyList() {
 			// Validate converter is a procedure
 			converterCls, ok = pr.Car().(*machine.MachineClosure)
 			if !ok {
