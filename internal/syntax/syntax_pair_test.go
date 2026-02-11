@@ -90,7 +90,7 @@ func TestSyntaxPair_IsList(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: SyntaxEmptyList, out: true},
+		{in: NewSyntaxEmptyList(nil), out: true},
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), out: true},
 		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxEmptyList(nil), nil), out: true},
 		// List with nested cons as first element: ((10) 20) - proper list

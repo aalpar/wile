@@ -121,6 +121,8 @@ func IsSyntaxEmptyList(v SyntaxValue) bool {
 		return false
 	}
 	switch sv := v.(type) {
+	case syntaxEmptyListType:
+		return true
 	case *SyntaxPair:
 		return sv.IsEmptyList()
 	case *SyntaxObject:
