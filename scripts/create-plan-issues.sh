@@ -8,6 +8,9 @@
 
 set -e
 
+# Change to repository root (parent of scripts directory where this script lives)
+cd "$(dirname "$0")/.."
+
 # Parse arguments
 DRY_RUN=false
 if [ "$1" = "--dry-run" ]; then
@@ -123,7 +126,7 @@ get_summary() {
     local plan_name="$1"
     # Try to extract from TODO.md table
     # This is a simplified extraction - you might need to enhance this
-    grep -i "$(basename "$plan_name" .md)" /Users/aalpar/projects/wile/TODO.md | \
+    grep -i "$(basename "$plan_name" .md)" TODO.md | \
         head -1 | \
         sed 's/^|[^|]*|[^|]*|[^|]*|//' | \
         sed 's/|$//' | \
