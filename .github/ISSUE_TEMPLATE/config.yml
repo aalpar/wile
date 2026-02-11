@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Ask a Question
+    url: https://github.com/aalpar/wile/discussions
+    about: For questions, use GitHub Discussions
+  - name: 📖 Documentation
+    url: https://github.com/aalpar/wile#documentation
+    about: Check the docs before opening an issue
+  - name: 🤝 Contributing Guide
+    url: https://github.com/aalpar/wile/blob/master/CONTRIBUTING.md
+    about: Learn how to contribute to Wile

@@ -420,6 +420,21 @@ This prevents unintended variable capture in macros:
 - [R7RS Scheme](https://small.r7rs.org/) — Language specification
 - [SRFI-18](https://srfi.schemers.org/srfi-18/) — Multithreading
 
+## Contributing
+
+Wile welcomes contributions! We're actively looking for help with:
+
+- **Documentation** — Examples, guides, tutorials
+- **Standard library** — R7RS-small features, SRFI implementations
+- **Test coverage** — Improving test coverage across packages
+- **Performance** — Allocation reduction, targeted optimizations
+- **Tooling** — REPL improvements, debugging tools, IDE integration
+
+**Get started:**
+- Browse [issues labeled `good-first-issue`](https://github.com/aalpar/wile/labels/good-first-issue)
+- Check [help wanted](https://github.com/aalpar/wile/labels/help-wanted) for high-priority items
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and workflow
+
 ## License
 
 This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.

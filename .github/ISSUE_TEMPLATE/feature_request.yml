@@ -1,0 +1,91 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe what you'd like to see.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description of the feature.
+      placeholder: "Add SRFI-1 list library procedures"
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this feature needed? What problem does it solve?
+      placeholder: "SRFI-1 provides essential list utilities (filter, fold, take, drop) that are standard in most Schemes."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: How should this work? Include example API or Scheme code if applicable.
+      placeholder: |
+        ```scheme
+        (filter odd? '(1 2 3 4 5))
+        ;; => (1 3 5)
+
+        (fold + 0 '(1 2 3 4))
+        ;; => 10
+        ```
+      render: scheme
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What area does this feature belong to?
+      options:
+        - Standard Library (R7RS, SRFI)
+        - Embedding API (Go)
+        - Performance
+        - Tooling (REPL, debugging)
+        - Documentation
+        - Architecture
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: r7rs-srfi
+    attributes:
+      label: R7RS / SRFI Reference
+      description: Is this specified by R7RS or a SRFI?
+      options:
+        - "R7RS-small (required for compliance)"
+        - "SRFI (specify number in description)"
+        - "Racket-compatible extension"
+        - "Original feature"
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches or workarounds you've thought about.
+      placeholder: "Could implement in pure Scheme as a library, but native implementation would be faster."
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Links to specifications, related issues, or other relevant information.
+      placeholder: "SRFI-1 spec: https://srfi.schemers.org/srfi-1/srfi-1.html"
+    validations:
+      required: false
