@@ -1,0 +1,95 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of what the bug is.
+      placeholder: "Example: (car '()) should raise an error but returns #<void>"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal Scheme code or steps to reproduce the issue.
+      placeholder: |
+        ```scheme
+        (car '())
+        ;; Expected: Error
+        ;; Actual: #<void>
+        ```
+      render: scheme
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: "Should raise an error: 'car: contract violation'"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened.
+      placeholder: "Returns #<void> without error"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: r7rs-conformance
+    attributes:
+      label: R7RS Conformance
+      description: Is this a deviation from R7RS specification?
+      options:
+        - "Yes - violates R7RS"
+        - "No - implementation-specific behavior"
+        - "Unsure"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Wile Version
+      description: Output of `./dist/scheme --version`
+      placeholder: "v0.1.0"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - macOS ARM64
+        - macOS Intel
+        - Linux ARM64
+        - Linux Intel
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context, stack traces, or relevant information.
+      placeholder: "Happens when loading large files, works fine with small inputs"
+    validations:
+      required: false
