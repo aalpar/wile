@@ -187,7 +187,7 @@ cd go && go test ./registry/core/... -count=1
 
 ## 3. Compile-Time Form Argument Extraction
 
-**Status**: Ready to implement
+**Status**: Complete
 **Impact**: ~50 lines reduced across 6 files
 **Risk**: Low
 
@@ -314,7 +314,7 @@ cd go && make build && go test ./machine/... -count=1
 **Recommended sequence** (smallest to largest scope):
 
 1. ~~**#1 Form-Checking Predicates** — Single file, 20 lines, trivial~~ ✓
-2. **#3 Form Argument Extraction** — 6 files, 50 lines, straightforward
+2. ~~**#3 Form Argument Extraction** — 6 files, 50 lines, straightforward~~ ✓
 3. **#2 CxR Primitives** — 2 files, 300 lines, mechanical but large
 
 Each refactoring is independent and can be done separately.

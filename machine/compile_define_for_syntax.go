@@ -38,9 +38,9 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// expr is (name expr) or ((name args...) body...) - the args after 'define-for-syntax'
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-for-syntax: expected name and expression")
+	argsPair, err := formArgs(expr, "define-for-syntax")
+	if err != nil {
+		return err
 	}
 
 	// Get the first element - either a symbol (simple define) or a pair (function define)

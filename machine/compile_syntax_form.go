@@ -32,18 +32,9 @@ import (
 func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
 	// So expr = (template)
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || argsPair.IsEmptyList() {
-		return values.NewForeignError("syntax: expected exactly one argument")
-	}
-
-	// Get the template (CAR of the args list)
-	template := argsPair.SyntaxCar()
-
-	// Check no extra arguments (CDR should be empty list)
-	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || !rest.IsEmptyList() {
-		return values.NewForeignError("syntax: expected exactly one argument")
+	template, err := formSingleArg(expr, "syntax")
+	if err != nil {
+		return err
 	}
 
 	// Check if template contains ellipsis - if so, use runtime expansion

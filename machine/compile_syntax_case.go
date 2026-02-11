@@ -45,9 +45,9 @@ import (
 func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
 	// So expr = (input-expr (literals) clause ...)
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || argsPair.IsEmptyList() {
-		return values.NewForeignError("syntax-case: expected expression and clauses")
+	argsPair, err := formArgs(expr, "syntax-case")
+	if err != nil {
+		return err
 	}
 
 	// Get the input expression (CAR of args)
@@ -82,7 +82,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Compile the input expression (leaves value in value register)
-	err := p.CompileExpression(ctctx.NotInTail(), inputExpr)
+	err = p.CompileExpression(ctctx.NotInTail(), inputExpr)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "syntax-case: error compiling input expression")
 	}
