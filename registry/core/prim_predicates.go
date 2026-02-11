@@ -182,26 +182,18 @@ func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimExactQ implements the exact? predicate.
 //
 // R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
-func PrimExactQ(_ context.Context, mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "exact?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsExact()))
-	return nil
-}
+var PrimExactQ = helpers.MakeNumericPredicate[values.Number](
+	"exact?", values.ErrNotANumber, values.Number.IsExact,
+)
 
 // PrimInexactQ implements the inexact? predicate.
 //
 // R7RS §6.2.6: Returns #t if the number is inexact, #f otherwise.
-func PrimInexactQ(_ context.Context, mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "inexact?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(schemeutil.BoolToBoolean(!n.IsExact()))
-	return nil
-}
+var PrimInexactQ = helpers.MakeNumericPredicate[values.Number](
+	"inexact?", values.ErrNotANumber, func(n values.Number) bool {
+		return !n.IsExact()
+	},
+)
 
 // PrimExactIntegerQ implements the exact-integer? predicate.
 //
@@ -218,38 +210,23 @@ func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimZeroQ implements the zero? predicate.
 // Returns #t if the number is zero, #f otherwise.
-func PrimZeroQ(_ context.Context, mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "zero?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsZero()))
-	return nil
-}
+var PrimZeroQ = helpers.MakeNumericPredicate[values.Number](
+	"zero?", values.ErrNotANumber, values.Number.IsZero,
+)
 
 // PrimPositiveQ implements the positive? predicate.
 //
 // R7RS §6.2.6: Returns #t if the real number is positive.
-func PrimPositiveQ(_ context.Context, mc *machine.MachineContext) error {
-	r, err := helpers.RequireArg[values.RealNumber](mc, 0, values.ErrNotANumber, "positive?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(schemeutil.BoolToBoolean(r.IsPositive()))
-	return nil
-}
+var PrimPositiveQ = helpers.MakeNumericPredicate[values.RealNumber](
+	"positive?", values.ErrNotANumber, values.RealNumber.IsPositive,
+)
 
 // PrimNegativeQ implements the negative? predicate.
 //
 // R7RS §6.2.6: Returns #t if the real number is negative.
-func PrimNegativeQ(_ context.Context, mc *machine.MachineContext) error {
-	r, err := helpers.RequireArg[values.RealNumber](mc, 0, values.ErrNotANumber, "negative?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(schemeutil.BoolToBoolean(r.IsNegative()))
-	return nil
-}
+var PrimNegativeQ = helpers.MakeNumericPredicate[values.RealNumber](
+	"negative?", values.ErrNotANumber, values.RealNumber.IsNegative,
+)
 
 // parityCheck is a helper for implementing parity predicates (odd? and even?).
 // It accepts the predicate name, a test for regular integers, and a test for big integers.
