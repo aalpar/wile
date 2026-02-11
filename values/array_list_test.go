@@ -334,7 +334,9 @@ func TestArrayList_Cdr(t *testing.T) {
 }
 
 func TestArrayList_ForEach(t *testing.T) {
-	a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
+	// ArrayList: [1, 2, EmptyList] - proper list (1 2)
+	// ForEach should visit elements 1 and 2, NOT the EmptyList terminator
+	a := NewArrayList(NewInteger(1), NewInteger(2), EmptyList)
 	count := 0
 	sum := int64(0)
 	a.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error { //nolint:errcheck
@@ -345,8 +347,108 @@ func TestArrayList_ForEach(t *testing.T) {
 		}
 		return nil
 	})
-	qt.Assert(t, count, qt.Equals, 3)
-	qt.Assert(t, sum, qt.Equals, int64(6))
+	qt.Assert(t, count, qt.Equals, 2)
+	qt.Assert(t, sum, qt.Equals, int64(3))
+}
+
+// TestArrayList_ForEach_TupleContract verifies ArrayList.ForEach matches Pair.ForEach
+// semantics per the Tuple interface contract (issue #172).
+func TestArrayList_ForEach_TupleContract(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("proper list - terminator not visited", func(t *testing.T) {
+		// ArrayList: [5, 10, EmptyList]
+		list := NewArrayList(NewInteger(5), NewInteger(10), EmptyList)
+
+		visited := []Value{}
+		tail, err := list.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			visited = append(visited, v)
+			return nil
+		})
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(len(visited), qt.Equals, 2, qt.Commentf("should visit 2 elements, not 3"))
+		c.Assert(visited[0], SchemeEquals, NewInteger(5))
+		c.Assert(visited[1], SchemeEquals, NewInteger(10))
+		c.Assert(tail, SchemeEquals, EmptyList, qt.Commentf("should return EmptyList as tail"))
+	})
+
+	t.Run("improper list - terminator not visited", func(t *testing.T) {
+		// ArrayList: [5, 10, 999] (improper, 999 is the cdr)
+		improperCdr := NewInteger(999)
+		list := NewArrayList(NewInteger(5), NewInteger(10), improperCdr)
+
+		visited := []Value{}
+		tail, err := list.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			visited = append(visited, v)
+			return nil
+		})
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(len(visited), qt.Equals, 2, qt.Commentf("should visit 2 elements, not 3"))
+		c.Assert(visited[0], SchemeEquals, NewInteger(5))
+		c.Assert(visited[1], SchemeEquals, NewInteger(10))
+		c.Assert(tail, SchemeEquals, improperCdr, qt.Commentf("should return improper cdr as tail"))
+	})
+
+	t.Run("single element list", func(t *testing.T) {
+		// ArrayList: [42, EmptyList]
+		list := NewArrayList(NewInteger(42), EmptyList)
+
+		visited := []Value{}
+		tail, err := list.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			visited = append(visited, v)
+			return nil
+		})
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(len(visited), qt.Equals, 1)
+		c.Assert(visited[0], SchemeEquals, NewInteger(42))
+		c.Assert(tail, SchemeEquals, EmptyList)
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		// ArrayList: [EmptyList] (just the terminator)
+		list := NewArrayList(EmptyList)
+
+		visited := []Value{}
+		tail, err := list.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			visited = append(visited, v)
+			return nil
+		})
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(len(visited), qt.Equals, 0, qt.Commentf("empty list should not visit any elements"))
+		c.Assert(tail, SchemeEquals, EmptyList)
+	})
+
+	t.Run("matches Pair.ForEach semantics", func(t *testing.T) {
+		// Create equivalent Pair and ArrayList for (5 10)
+		pair := List(NewInteger(5), NewInteger(10))
+		arraylist := NewArrayList(NewInteger(5), NewInteger(10), EmptyList)
+
+		// Collect elements from Pair
+		pairElements := []Value{}
+		pairTail, pairErr := pair.(*Pair).ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			pairElements = append(pairElements, v)
+			return nil
+		})
+
+		// Collect elements from ArrayList
+		arraylistElements := []Value{}
+		arraylistTail, arraylistErr := arraylist.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
+			arraylistElements = append(arraylistElements, v)
+			return nil
+		})
+
+		// Both should have identical results
+		c.Assert(pairErr, qt.IsNil)
+		c.Assert(arraylistErr, qt.IsNil)
+		c.Assert(len(arraylistElements), qt.Equals, len(pairElements), qt.Commentf("should visit same number of elements"))
+		c.Assert(arraylistElements[0], SchemeEquals, pairElements[0])
+		c.Assert(arraylistElements[1], SchemeEquals, pairElements[1])
+		c.Assert(arraylistTail, SchemeEquals, pairTail, qt.Commentf("should return same tail"))
+	})
 }
 
 func TestArrayList_AsVector(t *testing.T) {
