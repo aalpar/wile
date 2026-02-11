@@ -31,9 +31,9 @@ import (
 func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (already has keyword stripped).
 	// So expr = (((pattern expr) ...) body ...)
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || argsPair.IsEmptyList() {
-		return values.NewForeignError("with-syntax: expected bindings and body")
+	argsPair, err := formArgs(expr, "with-syntax", "bindings and body")
+	if err != nil {
+		return err
 	}
 
 	// Get the bindings list (CAR of args)
