@@ -36,21 +36,21 @@ func NumericFoldVariadic(
 		mc.SetValue(identity)
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 	o = pr.Car()
 	nbr, ok := o.(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
 	}
-	pr, ok = pr.Cdr().(*values.Pair)
+	rest, ok := pr.Cdr().(values.Tuple)
 	if !ok {
 		mc.SetValue(nbr)
 		return nil
 	}
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
@@ -86,9 +86,9 @@ func NumericFoldWithFirst(
 		mc.SetValue(unaryOp(nbr0))
 		return nil
 	}
-	pr, ok := o1.(*values.Pair)
+	pr, ok := o1.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, o1)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o1)
 	}
 	o2 := pr.Car()
 	nbr2, ok := o2.(values.Number)
@@ -96,12 +96,12 @@ func NumericFoldWithFirst(
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o2)
 	}
 	acc := binOp(nbr0, nbr2)
-	pr, ok = pr.Cdr().(*values.Pair)
+	rest, ok := pr.Cdr().(values.Tuple)
 	if !ok {
 		mc.SetValue(acc)
 		return nil
 	}
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)

@@ -103,9 +103,9 @@ func IntegerFold(
 		mc.SetValue(values.NewInteger(identity))
 		return nil
 	}
-	pr, ok := o.(*values.Pair)
+	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a list but got %T", name, o)
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 
 	// First pass: check types and detect if we need big.Int path
@@ -134,7 +134,11 @@ func IntegerFold(
 		default:
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
 		}
-		next, ok := current.Cdr().(*values.Pair)
+		cdr := current.Cdr()
+		if values.IsEmptyList(cdr) {
+			break
+		}
+		next, ok := cdr.(values.Tuple)
 		if !ok {
 			break
 		}
@@ -155,7 +159,7 @@ func IntegerFold(
 	if result < 0 {
 		result = -result
 	}
-	rest, ok := pr.Cdr().(*values.Pair)
+	restTuple, ok := pr.Cdr().(values.Tuple)
 	if !ok {
 		if hasInexact {
 			mc.SetValue(values.NewFloat(float64(result)))
@@ -164,7 +168,7 @@ func IntegerFold(
 		}
 		return nil
 	}
-	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	v, err := restTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		val, inexact, err := extractIntegerArg(next, name)
 		if err != nil {
 			return err
@@ -203,7 +207,7 @@ func integerFoldBig(
 	mc *machine.MachineContext,
 	op FoldOp,
 	_ int64,
-	pr *values.Pair,
+	pr values.Tuple,
 	hasInexact bool,
 ) error {
 	name := opName(op)
@@ -222,7 +226,7 @@ func integerFoldBig(
 	}
 	result.Abs(result)
 
-	rest, ok := pr.Cdr().(*values.Pair)
+	restTuple, ok := pr.Cdr().(values.Tuple)
 	if !ok {
 		if hasInexact {
 			f, _ := new(big.Float).SetInt(result).Float64()
@@ -233,7 +237,7 @@ func integerFoldBig(
 		return nil
 	}
 
-	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	v, err := restTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		var val *big.Int
 		switch n := next.(type) {
 		case *values.Integer:
