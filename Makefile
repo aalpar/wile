@@ -108,7 +108,7 @@ readme-check:
 #   make test
 .PHONY: test
 test: build
-	$(GO_TEST) -v ./...
+	$(GO_TEST) ./...
 
 # Run all benchmarks with memory allocation statistics.
 #   make bench
@@ -227,7 +227,7 @@ coverhtml:
 .PHONY: covercheck
 covercheck:
 	@mkdir -p ./build
-	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./... || true
+	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 
 # Run golangci-lint on all packages.
