@@ -44,15 +44,15 @@ func (syntaxEmptyListType) IsVoid() bool {
 	return false
 }
 
-// EqualTo returns true if the other value is also the empty syntax list.
+// EqualTo performs type comparison only, matching Chez Scheme/Racket behavior.
+// Two syntax objects are equal? only if they are the same type of syntax object.
+// For value comparison of syntax objects, use syntax->datum first.
+// R7RS: (equal? (syntax ()) '()) => #f
 func (syntaxEmptyListType) EqualTo(v values.Value) bool {
-	// Check if v is a SyntaxValue first
-	sv, ok := v.(SyntaxValue)
-	if ok {
-		return IsSyntaxEmptyList(sv)
-	}
-	// Also check if it's the values.EmptyList
-	return values.IsEmptyList(v)
+	// Syntax objects use identity comparison
+	// Only another syntaxEmptyListType is equal
+	_, ok := v.(syntaxEmptyListType)
+	return ok
 }
 
 // Length returns 0.
