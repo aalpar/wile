@@ -207,21 +207,28 @@ func (p *ArrayList) IsVoid() bool {
 	return false
 }
 
-// ForEach iterates over every element in the slice, including the terminator.
-// The callback receives the index, whether the element is non-terminal
-// (i < len-1), and the element value. Returns EmptyList on success.
+// ForEach iterates over elements in the list (all except the terminator).
+// The callback receives the index, whether there are more elements after this one,
+// and the element value. Returns the tail (the terminator) — EmptyList for proper
+// lists, any other value for improper lists.
+//
+// This matches Pair.ForEach semantics: the final cdr is returned, not visited.
 func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return EmptyList, nil
 	}
 	l := len(*p)
-	for i, v := range *p {
-		err := fn(ctx, i, i < l-1, v)
+	if l == 0 {
+		return EmptyList, nil
+	}
+	tail := (*p)[l-1]
+	for i := 0; i < l-1; i++ {
+		err := fn(ctx, i, i < l-2, (*p)[i])
 		if err != nil {
-			return EmptyList, err
+			return nil, err
 		}
 	}
-	return EmptyList, nil
+	return tail, nil
 }
 
 // AsList converts this ArrayList to a Pair (cons cell) chain. Returns nil if
