@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -21,8 +22,15 @@ func TestSchemeTestSuite(t *testing.T) {
 	schemePath := "../dist/scheme"
 	_, err := os.Stat(schemePath)
 	if os.IsNotExist(err) {
-		// Try platform-specific paths
+		// Detect host platform and try that first, then fall back to other platforms
+		// This prevents using a darwin binary on linux when both exist (e.g., after make build-all)
+		hostOS := runtime.GOOS
+		hostArch := runtime.GOARCH
+
+		// Try host platform first, then all others
+		hostPath := "../dist/" + hostOS + "/" + hostArch + "/scheme"
 		candidates := []string{
+			hostPath,
 			"../dist/darwin/arm64/scheme",
 			"../dist/darwin/amd64/scheme",
 			"../dist/linux/arm64/scheme",
