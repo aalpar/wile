@@ -75,7 +75,7 @@ Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuat
 
 ## VII. Optional Range Argument Parsing
 
-> **Cross-reference**: Described in detail in `CODE_CONSOLIDATION_PLAN.md` Phase 4 (`ParseOptionalRange` helper).
+> **Cross-reference**: Described in detail in `CODE_CONSOLIDATION_ARCHITECTURAL.md` Phase 4 (`ParseOptionalRange` helper).
 
 7 primitives parse optional `[start [end]]` with identical ~20-line boilerplate: `vector->list`, `vector-copy`, `vector-fill!`, `bytevector-copy`, `bytevector-copy!`, `string->list`, `string-copy`.
 
