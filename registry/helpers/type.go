@@ -31,3 +31,24 @@ func MakeTypePredicate(check func(values.Value) bool) func(context.Context, *mac
 		return nil
 	}
 }
+
+// MakeNumericPredicate creates a numeric predicate primitive that extracts
+// arg 0 via RequireArg[T] and applies a boolean test. Unlike MakeTypePredicate,
+// this returns an error if the argument doesn't satisfy the type constraint
+// (e.g., "exact? requires a number").
+//
+// T is typically values.Number or values.RealNumber.
+func MakeNumericPredicate[T any](
+	name string,
+	sentinel error,
+	test func(T) bool,
+) func(context.Context, *machine.MachineContext) error {
+	return func(_ context.Context, mc *machine.MachineContext) error {
+		n, err := RequireArg[T](mc, 0, sentinel, name)
+		if err != nil {
+			return err
+		}
+		mc.SetValue(schemeutil.BoolToBoolean(test(n)))
+		return nil
+	}
+}

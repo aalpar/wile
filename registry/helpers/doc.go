@@ -35,6 +35,7 @@
 //   - [ToComplex128], [ToFloat64]: convert Scheme numbers to Go types
 //   - [ComplexOrFloat]: return Float if imaginary part is zero
 //   - [MakeTypePredicate]: factory for type predicate primitives
+//   - [MakeNumericPredicate]: factory for numeric predicates (exact?, zero?, etc.)
 //
 // # Sequence Accessors
 //
