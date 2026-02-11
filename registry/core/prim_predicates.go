@@ -118,12 +118,16 @@ func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimListQ implements the list? predicate.
 // Returns #t if the argument is a proper list, #f otherwise.
+// R7RS: list? operates on runtime values, not syntax objects.
+// (list? #'()) => #f, (list? '()) => #t
 func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	if values.IsEmptyList(o) {
+	// Check for values.EmptyList specifically (not syntax empty list)
+	if o == values.EmptyList {
 		mc.SetValue(values.TrueValue)
 		return nil
 	}
+	// Check for *values.Pair only (not syntax pairs)
 	pr, ok := o.(*values.Pair)
 	if !ok {
 		mc.SetValue(values.FalseValue)
