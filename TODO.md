@@ -3,13 +3,10 @@ TODO
 
 ### Summary
 
-Items are ordered by priority: P0 (test coverage), P1 (core features), P2 (developer experience), P3 (extended features), P4 (nice to have), P5 (internal refactoring).
+Items are ordered by priority: P1 (core features), P2 (developer experience), P3 (extended features), P4 (nice to have), P5 (internal refactoring).
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| **P0** | **machine/ test coverage** | **Testing** | **Reference** | **Improve coverage from 72.7% across 74 files. `plans/MACHINE_COVERAGE_PLAN.md`** |
-| **P0** | **compile_validated coverage** | **Testing** | **Reference** | **Improve coverage for `compile_validated.go`. `plans/COMPILE_VALIDATED_COVERAGE.md`** |
-| **P0** | **Quasisyntax coverage** | **Testing** | **Reference** | **Test coverage for quasisyntax compilation (currently 0%). `plans/QUASISYNTAX_COVERAGE_PLAN.md`** |
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
 | **P1** | **Go FFI Phase 3 — Plugin support** | **Embedding** | **Not started** | **Dynamic extension loading via registry** |
 | **P1** | **Authorization Framework (6 phases)** | **Security** | **Not started** | **K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md`** |
