@@ -109,6 +109,23 @@ readme-check:
 .PHONY: test
 test: build
 	$(GO_TEST) ./...
+	@$(MAKE) test-scheme
+
+# Run Scheme-level test suite.
+# Override SCHEME to test against different implementations:
+#   make test-scheme                                    # Use Wile (default)
+#   make test-scheme SCHEME=chez-scheme                 # Test with Chez Scheme
+#   make test-scheme SCHEME=./old-dist/scheme           # Test with old Wile version
+#   make test-scheme SCHEME=/usr/local/bin/chibi-scheme # Test with Chibi-Scheme
+.PHONY: test-scheme
+test-scheme:
+	@echo ""
+	@echo "Running Scheme tests..."
+	@if [ -z "$(SCHEME)" ]; then \
+		SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./test/run-all.sh; \
+	else \
+		SCHEME=$(SCHEME) ./test/run-all.sh; \
+	fi
 
 # Run all benchmarks with memory allocation statistics.
 #   make bench

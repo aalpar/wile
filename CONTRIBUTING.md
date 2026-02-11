@@ -73,10 +73,66 @@ Follow the coding conventions in `CLAUDE.local.md`:
 
 ### 3. Write Tests
 
+#### Go Tests
+
 - **Table-driven tests are mandatory** — see `CLAUDE.local.md` § "Test Structure"
 - Test files follow `foo.go` → `foo_test.go` convention
 - Use `qt` (quicktest) for assertions
 - Run tests with: `go test -v ./package/...`
+
+#### Scheme Tests
+
+Wile uses `(chibi test)` for Scheme-level unit tests. Tests are automatically discovered by pattern matching.
+
+**File naming and location:**
+
+| Type | Location | Example |
+|------|----------|---------|
+| Library tests | `lib/<library>/test/<module>-test.scm` | `lib/srfi/1/test/fold-test.scm` |
+| Core tests | `test/scheme/<feature>-test.scm` | `test/scheme/numeric-tower-test.scm` |
+| Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` |
+
+**Test template:**
+
+```scheme
+(import (scheme base)
+        (chibi test)
+        (srfi 1))  ; Module under test
+
+(test-begin "module-name")
+
+(test-group "basic operations"
+  (test '(1 2 3) (append '(1) '(2 3)))
+  (test '() (append '() '())))
+
+(test-group "edge cases"
+  (test-error (car '()))
+  (test-assert (null? '())))
+
+(test-end)
+```
+
+**Running Scheme tests:**
+
+```bash
+make test              # Run all tests (Go + Scheme)
+make test-scheme       # Run only Scheme tests
+./test/run-all.sh      # Run Scheme tests directly
+```
+
+**Testing against different Scheme implementations:**
+
+The Scheme test suite can run against any R7RS-compatible Scheme implementation:
+
+```bash
+make test-scheme SCHEME=chez-scheme        # Test with Chez Scheme
+make test-scheme SCHEME=chibi-scheme       # Test with Chibi-Scheme
+make test-scheme SCHEME=./old-dist/scheme  # Compare with old Wile version
+```
+
+This is useful for verifying R7RS conformance and compatibility.
+
+See `test/README.md` for full documentation.
 
 ### 4. Code Quality
 
