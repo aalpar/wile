@@ -3,38 +3,40 @@ TODO
 
 ### Summary
 
-| Item | Category | Status | Notes |
-|------|----------|--------|-------|
-| Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. See `plans/AUTHORIZATION_FRAMEWORK.md` |
-| Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
-| Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
-| Reflection primitives | Runtime | Not started | Expose bound symbols, arity, types to Scheme |
-| POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
-| Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
-| Unit testing library | Standard library | Not started | Test cases, assertions, runners |
-| Logging library | Standard library | Not started | Levels, structured output, handlers |
-| Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
-| Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
-| Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
-| Debugger / DAP integration | Tooling | Not started | Debug Adapter Protocol |
-| Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
-| External extensions | Architecture | Proposed | Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md` |
-| Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
-| TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning. `plans/TOP_LEVEL_ENVIRONMENT.md` |
-| Load-path stack | Feature | Planned | Relative path resolution for `load`, `include`, `import`. `plans/LOAD_PATH_STACK.md` |
-| Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
-| EmptyList/Void refactoring | Refactoring | Reference | Refactor EmptyList from `*Pair` singleton to its own type. `plans/EMPTY_LIST_VOID_REFACTORING.md` |
-| Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages. `plans/SUBSYSTEM_SIMPLIFICATION.md` |
-| Algebraic reductions | Refactoring | Partial | Collapse redundant operation patterns. Port/Binding done; Numeric/Equality pending. `plans/ALGEBRAIC_REDUCTIONS.md` |
-| Code consolidation (codegen) | Refactoring | Reference | Operation boilerplate generation. Optional, high risk. `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` |
-| Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
-| Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
-| Systematic debug logging | Tooling | Reference | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
-| Scheme examples & benchmarks | Documentation | Planned | Showcase examples demonstrating all Wile features. `plans/SCHEME_EXAMPLES.md` |
-| machine/ test coverage | Testing | Reference | Improve coverage from 72.7% across 74 files. `plans/MACHINE_COVERAGE_PLAN.md` |
-| compile_validated coverage | Testing | Reference | Improve coverage for `compile_validated.go`. `plans/COMPILE_VALIDATED_COVERAGE.md` |
-| Quasisyntax coverage | Testing | Reference | Test coverage for quasisyntax compilation (currently 0%). `plans/QUASISYNTAX_COVERAGE_PLAN.md` |
+Items are ordered by priority: P0 (test coverage), P1 (core features), P2 (developer experience), P3 (extended features), P4 (nice to have), P5 (internal refactoring).
+
+| Priority | Item | Category | Status | Notes |
+|----------|------|----------|--------|-------|
+| **P0** | **machine/ test coverage** | **Testing** | **Reference** | **Improve coverage from 72.7% across 74 files. `plans/MACHINE_COVERAGE_PLAN.md`** |
+| **P0** | **compile_validated coverage** | **Testing** | **Reference** | **Improve coverage for `compile_validated.go`. `plans/COMPILE_VALIDATED_COVERAGE.md`** |
+| **P0** | **Quasisyntax coverage** | **Testing** | **Reference** | **Test coverage for quasisyntax compilation (currently 0%). `plans/QUASISYNTAX_COVERAGE_PLAN.md`** |
+| **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
+| **P1** | **Go FFI Phase 3 — Plugin support** | **Embedding** | **Not started** | **Dynamic extension loading via registry** |
+| **P1** | **Authorization Framework (6 phases)** | **Security** | **Not started** | **K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md`** |
+| **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`. `plans/LOAD_PATH_STACK.md`** |
+| P2 | Scheme examples & benchmarks | Documentation | Planned | Showcase examples demonstrating all Wile features. `plans/SCHEME_EXAMPLES.md` |
+| P2 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
+| P2 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
+| P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P3 | Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
+| P3 | Unit testing library | Standard library | Not started | Test cases, assertions, runners |
+| P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
+| P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning. `plans/TOP_LEVEL_ENVIRONMENT.md` |
+| P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
+| P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
+| P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
+| P4 | Debugger / DAP integration | Tooling | Not started | Debug Adapter Protocol |
+| P4 | Reflection primitives | Runtime | Not started | Expose bound symbols, arity, types to Scheme |
+| P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
+| P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
+| P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
+| P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
+| P5 | EmptyList/Void refactoring | Refactoring | Reference | Refactor EmptyList from `*Pair` singleton to its own type. `plans/EMPTY_LIST_VOID_REFACTORING.md` |
+| P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages. `plans/SUBSYSTEM_SIMPLIFICATION.md` |
+| P5 | Algebraic reductions | Refactoring | Partial | Collapse redundant operation patterns. Port/Binding done; Numeric/Equality pending. `plans/ALGEBRAIC_REDUCTIONS.md` |
+| P5 | Code consolidation (codegen) | Refactoring | Reference | Operation boilerplate generation. Optional, high risk. `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` |
+| P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
+| P5 | Systematic debug logging | Tooling | Reference | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 
 ---
 

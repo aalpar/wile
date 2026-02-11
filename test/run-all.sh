@@ -39,7 +39,7 @@ PASSED=0
 
 for file in $TEST_FILES; do
     echo "▶ $file"
-    if "$SCHEME" -f "$file"; then
+    if "$SCHEME" --quiet -f "$file"; then
         PASSED=$((PASSED + 1))
     else
         FAILED=$((FAILED + 1))

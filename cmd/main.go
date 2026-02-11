@@ -180,14 +180,15 @@ func main() {
 					// Run last file (print results) and exit in non-interactive mode
 					fin = bufio.NewReader(fd)
 					runFile(ctx, env, fin, fn)
-					return
 				}
 			}(filename, descriptor)
 		}
 	}
-	// interactive REPL using the repl package
-	setupSignals(opts.Quiet)
-	runREPL(ctx, env)
+	// Only enter REPL if no files were provided OR interactive mode was requested
+	if len(opts.File) == 0 || opts.Interactive {
+		setupSignals(opts.Quiet)
+		runREPL(ctx, env)
+	}
 }
 
 // runFile processes a Scheme file, exiting on errors.
@@ -253,7 +254,7 @@ func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
 	}
 }
 
-func Printf(fmtstr string, args ...interface{}) {
+func Printf(fmtstr string, args ...any) {
 	_, err := fmt.Fprintf(os.Stdout, fmtstr, args...)
 	if err != nil {
 		os.Exit(EX_IOERR)
