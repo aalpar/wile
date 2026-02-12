@@ -56,7 +56,7 @@ git checkout -b feature/descriptive-name
 
 ### 2. Make Your Changes
 
-Follow the coding conventions in `CLAUDE.local.md`:
+Follow the coding conventions in `CODING_STYLE.md`:
 
 **Critical Rules:**
 - **Run `make lint` before committing** — must pass with 0 issues
@@ -75,7 +75,7 @@ Follow the coding conventions in `CLAUDE.local.md`:
 
 #### Go Tests
 
-- **Table-driven tests are mandatory** — see `CLAUDE.local.md` § "Test Structure"
+- **Table-driven tests are mandatory** — see `CODING_STYLE.md` § "Test Structure"
 - Test files follow `foo.go` → `foo_test.go` convention
 - Use `qt` (quicktest) for assertions
 - Run tests with: `go test -v ./package/...`
@@ -225,7 +225,6 @@ string → Tokenizer → Parser → SyntaxValue
 
 ### Essential Reading
 
-- **`CLAUDE.local.md`** — Comprehensive development guide (conventions, architecture, workflow)
 - **`CODING_STYLE.md`** — Style guide
 - **`PRIMITIVES.md`** — Complete primitives reference
 - **`plans/`** — Design documents for major features
