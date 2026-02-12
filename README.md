@@ -81,12 +81,12 @@ ls examples/
 
 ## Key Features in Action
 
-**Exact Arithmetic** — No floating-point approximations
+**Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
 
 ```scheme
 (/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
 (* 1/3 3)            ; ⇒ 1 (exact)
-(sqrt -1)            ; ⇒ 0.0+1.0i (inexact complex)
+(make-rectangular 0 1) ; ⇒ 0+1i (exact complex)
 (expt 2 1000)        ; ⇒ 10715086071862673209484250490...
 ```
 
