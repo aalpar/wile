@@ -44,6 +44,28 @@ Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuat
 
 `machine/compile_time_continuation.go`, `machine/expander_time_continuation.go`
 
+### Investigation Notes (2026-02-11)
+
+**Status**: Duplication confirmed to still exist, but serves different purposes in each context.
+
+**Compiler** (compile_time_continuation.go:115-169): Checks the **reference symbol's scopes** to select lookup method:
+- `if len(symbolScopes) == 0`: Uses non-scope-aware lookup (`GetLocalIndex`, `GetGlobalIndex`)
+- `else`: Uses scope-aware lookup (`GetLocalIndexWithScopes`, `GetBindingWithScopes`)
+
+Purpose: Pre-lookup dispatch optimization — avoids scope checking overhead for symbols without scopes.
+
+**Expander** (expander_time_continuation.go:88-94): Checks the **binding's scopes** after lookup:
+- `if len(bindingScopes) == 0`: Binding matches any use (top-level bindings)
+- `else`: Checks `ScopesMatch(useScopes, bindingScopes)` subset relationship
+
+Purpose: Post-lookup compatibility check — determines if a variable binding shadows a macro.
+
+**Semantic Difference**: Both implement Flatt's hygiene rule (`bindingScopes ⊆ useScopes`), but at different points:
+- Compiler: performance optimization (which lookup method to call)
+- Expander: correctness check (does this binding match this reference)
+
+**Consolidation Difficulty**: The shared logic is the scope-checking condition itself, but the surrounding context differs (bytecode generation vs macro shadowing). Extracting the common pattern would require careful abstraction to preserve both performance and correctness semantics.
+
 ---
 
 ## IX. Scope Propagation Asymmetry
