@@ -26,8 +26,10 @@ var (
 	_ values.Tuple = (*SyntaxPair)(nil)
 	_ SyntaxTuple  = (*SyntaxPair)(nil)
 
-	// SyntaxEmptyList is the empty list sentinel value.
-	SyntaxEmptyList = &SyntaxPair{Values: [2]SyntaxValue{}}
+	// SyntaxEmptyList is the empty list singleton.
+	// It implements SyntaxTuple but is not *SyntaxPair, enforcing type safety
+	// parallel to values.EmptyList.
+	SyntaxEmptyList SyntaxTuple = syntaxEmptyListType{sourceContext: nil}
 )
 
 // SyntaxPair wraps a Scheme pair (cons cell) with source context.

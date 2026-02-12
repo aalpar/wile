@@ -45,7 +45,7 @@ import (
 
 // syntaxPathEntry tracks position in the input syntax tree during matching.
 type syntaxPathEntry struct {
-	pr *syntax.SyntaxPair
+	pr syntax.SyntaxTuple
 }
 
 // DefaultEllipsis is the standard R7RS ellipsis identifier.
@@ -431,9 +431,12 @@ func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
 
 // countRemainingSyntaxElements counts the number of elements from the current position
 // to the end of the syntax list. Used by ByteCodeSkipIfTailCount for ellipsis-in-middle.
-func countRemainingSyntaxElements(pr *syntax.SyntaxPair) int {
+func countRemainingSyntaxElements(pr syntax.SyntaxTuple) int {
 	count := 0
-	current := pr
+	current, ok := pr.(*syntax.SyntaxPair)
+	if !ok {
+		return 0
+	}
 	for current != nil && !syntax.IsSyntaxEmptyList(current) && !current.IsVoid() {
 		count++
 		cdr := current.SyntaxCdr()
