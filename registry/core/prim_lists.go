@@ -529,7 +529,7 @@ func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
-	pr, ok := obj.(*values.Pair)
+	pr, ok := obj.(values.Tuple)
 	if !ok {
 		// Not a list, return as-is per R7RS
 		mc.SetValue(obj)
@@ -537,10 +537,10 @@ func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Copy the spine of the list
-	var head, tail *values.Pair
+	var head, tail values.Tuple
 	current := values.Value(pr)
 	for {
-		p, ok := current.(*values.Pair)
+		p, ok := current.(values.Tuple)
 		if !ok {
 			// Improper list ending - append the final cdr
 			if tail != nil {

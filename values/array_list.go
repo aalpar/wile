@@ -155,10 +155,31 @@ func (p *ArrayList) Car() Value {
 }
 
 // Cdr returns a new ArrayList sharing the underlying storage from index 1
-// onward (sub-slice, no copy). The terminator is preserved.
+// onward (sub-slice, no copy). The terminator is preserved. For single-element
+// results, returns the element directly to match Pair behavior for improper lists.
 func (p *ArrayList) Cdr() Value {
+	if len(*p) <= 1 {
+		return EmptyList
+	}
 	q := (*p)[1:]
+	// If the result is a single element, return it directly.
+	// This handles both proper lists ending in EmptyList and improper list terminators.
+	if len(q) == 1 {
+		return q[0]
+	}
 	return &q
+}
+
+// SetCar sets the first element. Panics if the receiver is nil or the slice is empty.
+func (p *ArrayList) SetCar(v Value) {
+	(*p)[0] = v
+}
+
+// SetCdr sets the rest of the list after the first element and truncates
+// to length 2. Panics if the receiver is nil or the slice is empty.
+func (p *ArrayList) SetCdr(v Value) {
+	(*p)[1] = v
+	*p = (*p)[:2]
 }
 
 // IsList returns true if the last element is EmptyList (proper list).

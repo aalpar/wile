@@ -83,3 +83,13 @@ func (emptyListType) Car() Value {
 func (emptyListType) Cdr() Value {
 	panic(ErrNotAPair)
 }
+
+// SetCar panics with ErrNotAPair. R7RS: (car '()) is an error.
+func (emptyListType) SetCar(Value) {
+	panic(ErrNotAPair)
+}
+
+// SetCdr panics with ErrNotAPair. R7RS: (cdr '()) is an error.
+func (emptyListType) SetCdr(Value) {
+	panic(ErrNotAPair)
+}
