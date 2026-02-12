@@ -148,7 +148,7 @@ Located in `internal/extensions/`:
 |-----------|--------|-------|
 | **Infrastructure** | ✅ Complete | `test/` directory, runners, CI integration |
 | **Test framework** | ✅ Complete | `(chibi test)` |
-| **Test discovery** | ✅ Complete | Auto-finds `*-test.scm` files |
+| **Test discovery** | ✅ Complete | Auto-finds `*-test.scm` in `test/` and `lib/` |
 | **Cross-impl testing** | ✅ Complete | `compare-schemes.sh` |
 | **Test content** | ⚠️ Minimal | Only 1 smoke test, needs comprehensive tests |
 

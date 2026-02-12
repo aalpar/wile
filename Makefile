@@ -65,7 +65,7 @@ $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
 	$(eval TARGET_OS := $(word 1,$(OS_ARCH)))
 	$(eval TARGET_ARCH := $(word 2,$(OS_ARCH)))
 	@mkdir -p $(DIST_DIR)/$*
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/scheme
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64: $(DIST_DIR)/darwin/arm64/$(MY_BIN)

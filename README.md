@@ -58,7 +58,7 @@ Anthropic's Claude Code was used to help document, fill out the primitive librar
 
 ```bash
 # Install as a command-line tool
-go install github.com/aalpar/wile/cmd@latest
+go install github.com/aalpar/wile/cmd/scheme@latest
 
 # Or download a prebuilt binary from releases
 # https://github.com/aalpar/wile/releases
@@ -86,7 +86,7 @@ ls examples/
 ```scheme
 (/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
 (* 1/3 3)            ; ⇒ 1 (exact)
-(sqrt -1)            ; ⇒ 0+1i (exact complex)
+(sqrt -1)            ; ⇒ 0.0+1.0i (inexact complex)
 (expt 2 1000)        ; ⇒ 10715086071862673209484250490...
 ```
 

@@ -5,7 +5,7 @@
 #   ./test/run-all.sh
 #   SCHEME=/path/to/scheme ./test/run-all.sh
 #
-# Discovers all *-test.scm and *_test.scm files and executes them.
+# Discovers all *-test.scm files and executes them.
 
 set -e
 
@@ -22,11 +22,11 @@ if [ ! -x "$SCHEME" ]; then
 fi
 
 # Discover all test files
-TEST_FILES=$(find test lib -name '*-test.scm' -o -name '*_test.scm' 2>/dev/null | sort)
+TEST_FILES=$(find test lib -name '*-test.scm' 2>/dev/null | sort)
 
 if [ -z "$TEST_FILES" ]; then
     echo "No test files found"
-    echo "Test files should match pattern: *-test.scm or *_test.scm"
+    echo "Test files should match pattern: *-test.scm"
     exit 0
 fi
 
