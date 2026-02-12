@@ -84,7 +84,7 @@ func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 // equalPairKey identifies a pair of compound values being compared.
 // Go compares interface values in arrays by type and pointer for pointer types,
 // so [2]any{pairA, pairB} works as a map key without unsafe.
-type equalPairKey [2]any
+type equalPairKey [2]Value
 
 // EqualTo compares two values for structural equality.
 // Handles nil and void values specially: nil equals nil, void equals void.
@@ -132,7 +132,7 @@ func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 
 // compareIndexable is a generic helper for comparing indexable collections with
 // cycle detection. Used by vectorEqualToDeep and arrayListEqualToDeep.
-func compareIndexable[T any](
+func compareIndexable[T Value](
 	a, b T,
 	length func(T) int,
 	getElement func(T, int) Value,
@@ -140,8 +140,8 @@ func compareIndexable[T any](
 	visited map[equalPairKey]bool,
 ) bool {
 	// Use type-erased pointers as map keys
-	aPtr := any(a)
-	bPtr := any(b)
+	aPtr := a
+	bPtr := b
 
 	if length(a) != length(b) {
 		return false
