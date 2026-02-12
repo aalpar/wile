@@ -209,21 +209,24 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	return nil
 }
 
-func findFile(_ *CompileTimeContinuation, _ CompileTimeCallContext, path string) (fs.File, string, error) {
+func findFile(p *CompileTimeContinuation, _ CompileTimeCallContext, path string) (fs.File, string, error) {
+	stack := p.env.LoadPathStack()
 	includePath := os.Getenv(SchemeIncludePathEnv)
-	if includePath == "" {
-		return nil, "", values.WrapForeignErrorf(values.ErrInvalidSyntax, "environment variable %q not set", SchemeIncludePathEnv)
+	var fallbackDirs []string
+	if includePath != "" {
+		fallbackDirs = filepath.SplitList(includePath)
 	}
-	includePaths := filepath.SplitList(includePath)
-	for i := range includePaths {
-		fn := filepath.Join(includePaths[i], path)
-		f, err := os.Open(fn)
-		// return the first found file
-		if err == nil {
-			return f, fn, nil
-		}
+
+	absPath, err := environment.ResolveFile(stack, path, fallbackDirs)
+	if err != nil {
+		return nil, "", err
 	}
-	return nil, "", nil
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		return nil, "", err
+	}
+	return f, absPath, nil
 }
 
 // CompileInclude compiles an include expression.
@@ -257,12 +260,16 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Find and open the file
 			file, filePath, err := findFile(p, ctctx, fn.Value)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "include: failed to find file %q", fn.Value)
-			}
-			if file == nil {
-				return values.NewForeignErrorf("include: file not found: %q", fn.Value)
+				return values.WrapForeignErrorf(err, "include")
 			}
 			defer file.Close() //nolint:errcheck
+
+			// Push to stack after successful open, pop on exit
+			stack := p.env.LoadPathStack()
+			if stack != nil {
+				stack.Push(filePath)
+				defer stack.Pop()
+			}
 
 			// Create parser for the file
 			reader := bufio.NewReader(file)

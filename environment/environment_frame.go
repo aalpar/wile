@@ -222,6 +222,15 @@ func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
 	p.TopLevel().global.SetLibraryRegistry(registry)
 }
 
+// LoadPathStack returns the load path stack for tracking files currently
+// being loaded, or nil if this frame has no TopLevelEnvironment.
+func (p *EnvironmentFrame) LoadPathStack() *LoadPathStack {
+	if p.topLevel == nil {
+		return nil
+	}
+	return p.topLevel.LoadPathStack()
+}
+
 // LocalEnvironment returns the local environment frame.
 func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return p.local
