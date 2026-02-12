@@ -38,33 +38,19 @@ All 7 numeric type files in `values/` + `values/numeric_tower.go`.
 
 ## VI. Scope-Aware Symbol Resolution
 
-Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuation.go`) both duplicate scope-aware binding resolution with the same if-no-scopes/else-with-scopes branch. The binding lookup unification (now complete) may have reduced this, but the compiler/expander duplication likely remains.
+**Status**: Deferred — duplication serves distinct architectural purposes
+
+Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuation.go`) both duplicate scope-aware binding resolution with the same if-no-scopes/else-with-scopes branch. Investigation confirmed the duplication exists but serves different purposes: the compiler uses it for pre-lookup dispatch optimization (choose fast vs slow lookup), while the expander uses it for post-lookup correctness checking (does this binding shadow a macro?). Both implement Flatt's hygiene rule (`bindingScopes ⊆ useScopes`) but at different pipeline stages for different concerns (performance vs correctness).
+
+Consolidation would require careful abstraction to preserve both semantic clarity and performance. Deferred pending a clearer approach or additional motivation from other refactoring work.
 
 ### Files
 
 `machine/compile_time_continuation.go`, `machine/expander_time_continuation.go`
 
-### Investigation Notes (2026-02-11)
+### See Also
 
-**Status**: Duplication confirmed to still exist, but serves different purposes in each context.
-
-**Compiler** (compile_time_continuation.go:115-169): Checks the **reference symbol's scopes** to select lookup method:
-- `if len(symbolScopes) == 0`: Uses non-scope-aware lookup (`GetLocalIndex`, `GetGlobalIndex`)
-- `else`: Uses scope-aware lookup (`GetLocalIndexWithScopes`, `GetBindingWithScopes`)
-
-Purpose: Pre-lookup dispatch optimization — avoids scope checking overhead for symbols without scopes.
-
-**Expander** (expander_time_continuation.go:88-94): Checks the **binding's scopes** after lookup:
-- `if len(bindingScopes) == 0`: Binding matches any use (top-level bindings)
-- `else`: Checks `ScopesMatch(useScopes, bindingScopes)` subset relationship
-
-Purpose: Post-lookup compatibility check — determines if a variable binding shadows a macro.
-
-**Semantic Difference**: Both implement Flatt's hygiene rule (`bindingScopes ⊆ useScopes`), but at different points:
-- Compiler: performance optimization (which lookup method to call)
-- Expander: correctness check (does this binding match this reference)
-
-**Consolidation Difficulty**: The shared logic is the scope-checking condition itself, but the surrounding context differs (bytecode generation vs macro shadowing). Extracting the common pattern would require careful abstraction to preserve both performance and correctness semantics.
+`plans/SCOPE_AWARE_RESOLUTION_INVESTIGATION.md` — detailed investigation findings, semantic analysis, deferral rationale
 
 ---
 
@@ -82,15 +68,15 @@ Purpose: Post-lookup compatibility check — determines if a variable binding sh
 
 Ordered by risk — start from the bottom (safe leaf reductions), work up.
 
-| # | Reduction | Risk |
-|---|-----------|------|
-| IV | Syntax interface boilerplate | Low-Medium |
-| IX | Scope propagation | Low-Medium |
-| VI | Scope-aware symbol resolution | Medium |
-| V | Operation base type | Medium |
-| I | Numeric tower dispatch | High |
+| # | Reduction | Risk | Status |
+|---|-----------|------|--------|
+| VI | Scope-aware symbol resolution | Medium | Deferred |
+| V | Operation base type | Medium | Open |
+| I | Numeric tower dispatch | High | Deferred |
 
 ## Implementation Notes
+
+**Deferred items**: Items I (numeric tower) and VI (scope-aware resolution) are deferred. Both involve structural duplication where the repeated pattern serves distinct purposes in different contexts. Consolidation would require careful abstraction to avoid obscuring semantic differences or regressing performance. See dedicated plan files for detailed analysis.
 
 **Independence**: All remaining reductions are independent.
 

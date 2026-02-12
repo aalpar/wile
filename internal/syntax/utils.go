@@ -67,7 +67,7 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 		if v != nil {
 			esc := v.SourceContext()
 			if esc != nil {
-				curr.syntaxBase.sourceContext = esc
+				curr.sourceContext = esc
 			}
 		}
 	}
