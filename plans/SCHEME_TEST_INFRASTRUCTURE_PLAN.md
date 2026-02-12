@@ -1,6 +1,24 @@
 # Scheme-Level Test Infrastructure Plan
 
-## Problem Statement
+**Status**: ⚠️ **INFRASTRUCTURE COMPLETE, TESTS PENDING** (2026-02-11)
+
+The test infrastructure exists in `test/` with automated discovery, `(chibi test)` framework, and CI integration. However, only 1 smoke test exists. Test content creation is deferred to future work.
+
+**What Exists**:
+- `test/` directory with README, runner scripts, Go integration
+- Test discovery (`run-all.sh` finds `*-test.scm` files)
+- Cross-implementation testing (`compare-schemes.sh`)
+- CI integration (`make test-scheme`)
+- Smoke test passing (test/scheme/smoke-test.scm)
+
+**What's Missing**:
+- Comprehensive test files (numeric tower, macros, continuations, etc.)
+- Regression tests
+- Library-specific tests
+
+---
+
+## Problem Statement (Original)
 
 Wile currently lacks a designated location and convention for Scheme-level unit tests. Testing is scattered across:
 - `scm/` — Ad-hoc manual debugging tests (not automated)
