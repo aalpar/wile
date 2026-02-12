@@ -30,7 +30,7 @@ Items are ordered by priority: P1 (core features), P2 (developer experience), P3
 | P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
 | P5 | EmptyList/Void refactoring | Refactoring | Reference | Refactor EmptyList from `*Pair` singleton to its own type. `plans/EMPTY_LIST_VOID_REFACTORING.md` |
 | P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages. `plans/SUBSYSTEM_SIMPLIFICATION.md` |
-| P5 | Algebraic reductions | Refactoring | Partial | Low-risk items complete (II, VII, VIII, X). Item VI investigated (duplication confirmed, consolidation deferred). Remaining: 4 items (IV, IX, V, I). `plans/ALGEBRAIC_REDUCTIONS.md` |
+| P5 | Algebraic reductions | Refactoring | Partial | Items II, IV, VII, VIII, IX, X complete. Items I, VI deferred (see investigation docs). Remaining: V. `plans/ALGEBRAIC_REDUCTIONS.md` |
 | P5 | Code consolidation (codegen) | Refactoring | Reference | Operation boilerplate generation. Optional, high risk. `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 | P5 | Systematic debug logging | Tooling | Reference | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
