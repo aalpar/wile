@@ -80,6 +80,6 @@ Ordered by risk — start from the bottom (safe leaf reductions), work up.
 
 **Independence**: All remaining reductions are independent.
 
-**Risk ordering**: Start with Low-Medium risk items (IV, IX), then Medium risk (V, VI), then High risk (I).
+**Risk ordering**: Start with Medium risk items (V, VI), then High risk (I).
 
 **Testing**: Every reduction must pass `go test ./... -count=1`. The numeric tower reduction should additionally run the R7RS numeric test suite to verify exactness preservation and tower promotion semantics.
