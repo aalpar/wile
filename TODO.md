@@ -1,22 +1,32 @@
 TODO
 ----
 
+**Last Updated**: 2026-02-12
+
+### Current Project Status
+
+**Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
+**Extensions**: 9 extension packages (io, files, math, system, threads, eval, exceptions, gointerop, all)
+**Examples**: 70+ examples across all categories, Gabriel benchmarks, Schelog
+**Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
+**Libraries**: (chibi test), (chibi optional), (srfi 1) complete
+
 ### Summary
 
-Items are ordered by priority: P1 (core features), P2 (developer experience), P3 (extended features), P4 (nice to have), P5 (internal refactoring).
+Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers), P3 (advanced use cases), P4 (future/nice-to-have), P5 (internal refactoring).
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
+| **P1** | **Scheme examples & benchmarks** | **Documentation** | **✅ Complete** | **70+ examples, Gabriel benchmark suite (19 benchmarks), Schelog. See `plans/EXAMPLES_STATUS.md`** |
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| **P1** | **Go FFI Phase 3 — Plugin support** | **Embedding** | **Not started** | **Dynamic extension loading via registry** |
-| **P1** | **Authorization Framework (6 phases)** | **Security** | **Not started** | **K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md`** |
 | **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`. `plans/LOAD_PATH_STACK.md`** |
-| P2 | Scheme examples & benchmarks | Documentation | Planned | Showcase examples demonstrating all Wile features. `plans/SCHEME_EXAMPLES.md` |
-| P2 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
-| P2 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
+| P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
+| P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
+| P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P3 | Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
-| P3 | Unit testing library | Standard library | Not started | Test cases, assertions, runners |
+| P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
 | P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning. `plans/TOP_LEVEL_ENVIRONMENT.md` |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
@@ -40,15 +50,32 @@ Items are ordered by priority: P1 (core features), P2 (developer experience), P3
 Future Extensions
 -----------------
 
-### Go FFI
+### Scheme Examples & Benchmarks (P1) — ✅ COMPLETE
+
+**Status**: Complete (2026-02-11). Examples exceed original plan by 90%.
+
+**What Exists**:
+- 70+ examples across all categories (basics, numeric-tower, macros, control, concurrency, data-structures, io, applications)
+- Gabriel benchmark suite (19 benchmarks: tak, fib, ackermann, sieve, nqueens, etc.)
+- Schelog logic programming system (~15 files)
+- Go embedding examples (basic.go, source-tracking/)
+- Comprehensive examples/README.md with learning paths
+
+See `plans/EXAMPLES_STATUS.md` for detailed audit.
+
+---
+
+### Go FFI (P2)
 
 - [ ] Phase 3: Plugin support (dynamic extension loading via registry pattern)
 
 ---
 
-### Authorization Framework
+### Authorization Framework (P3)
 
 Fine-grained access control for embedded engines running untrusted code. Kubernetes-style verb+resource model with a single `Authorizer` interface method, extensible by extensions without interface changes.
+
+**Note**: This addresses a speculative use case. No current users have requested sandboxing. Prioritize after achieving broader adoption (10+ active users embedding Wile).
 
 See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 
@@ -85,11 +112,20 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 - [ ] File system operations beyond R7RS (permissions, symlinks, stat)
 - [ ] Signal handling
 
-**Unit Testing Library**
-- [ ] Test case definition (test, test-case, test-suite)
-- [ ] Assertions (check-equal?, check-true, check-false, check-exn)
-- [ ] Test runners with reporting
-- [ ] Setup/teardown fixtures
+**Unit Testing Library** — ⚠️ Partial
+
+**What Exists**:
+- ✅ `(chibi test)` framework in `lib/chibi/test.scm`
+- ✅ Test infrastructure: `test/` directory with runner scripts
+- ✅ Automated test discovery (`*-test.scm` files)
+- ✅ CI integration (`make test-scheme`)
+- ✅ Cross-implementation testing support
+
+**What's Missing**:
+- [ ] Comprehensive test content (only 1 smoke test exists)
+- [ ] Regression test files (`test/regression/`)
+- [ ] Library-specific tests (`lib/*/test/`)
+- [ ] Full coverage of R7RS features
 
 **Logging Library**
 - [ ] Log levels (debug, info, warn, error, fatal)
