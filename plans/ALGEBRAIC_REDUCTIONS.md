@@ -10,6 +10,14 @@ See also `REFACTORING_OPPORTUNITIES.md` for previously identified reductions (fo
 
 - **Port Base Type** — `values/port_base.go` now provides `portBase` with `closed`, `clsr`, `Close()`, `IsClosed()`, `guardClosed()`. All 10 port types embed it.
 - **Binding Lookup Duplication** — `environment/environment_frame.go` now has `resolveLocal()` and `resolveGlobal()` as shared walk functions. `GetBinding`, `GetBindingWithScopes`, `GetLocalIndex` are thin wrappers. `GetLocalIndexWithScopes` has its own walk (Flatt's collect-then-maximize algorithm requires cross-frame candidate accumulation).
+- **Optional Range Argument Parsing (VII)** — Already complete. `helpers.ParseSubrange` exists and is used by all 7 primitives: `vector->list`, `vector-copy`, `vector-fill!`, `bytevector-copy`, `bytevector-copy!`, `string->list`, `string-copy`.
+- **Chain Equality Predicates (VIII)** — `helpers.ChainEquality()` consolidates variadic chain comparison. `PrimBooleanEq` and `PrimSymbolEq` now use shared helper. Reduced ~30 lines of duplication per primitive to ~10 lines each.
+- **Structural Equality Cycle Detection (II)** — `compareIndexable[T]()` generic helper in `values/utils.go` consolidates cycle detection between `vectorEqualToDeep` and `arrayListEqualToDeep`. `pairEqualToDeep` kept separate for improper list handling.
+- **Bootstrap Environment Initialization (X)** — `initializeEnvironment()` helper in `internal/bootstrap/environment_tiny.go` consolidates common sequence (registry creation, extension loading, compiler/expander registration, bootstrap macro loading) for both `NewTopLevelEnvironmentFrameTiny` and `NewLibraryEnvironmentFrame`.
+
+## Intentionally Not Consolidated
+
+- **ForEach / SyntaxForEach (III)** — Different return types (`values.Value` vs `SyntaxValue`) make consolidation more complex than the duplication it eliminates. Go's type system constraints outweigh benefits; code is clearer as-is.
 
 ---
 
@@ -20,26 +28,6 @@ See also `REFACTORING_OPPORTUNITIES.md` for previously identified reductions (fo
 ### Files
 
 All 7 numeric type files in `values/` + `values/numeric_tower.go`.
-
----
-
-## II. Structural Equality Cycle Detection
-
-Three cycle-detecting equality functions in `values/utils.go` (`pairEqualToDeep`, `vectorEqualToDeep`, `arrayListEqualToDeep`) share similar visited-set / cycle-guard logic. Vectors and array lists could share element-wise comparison, though `arrayListEqualToDeep` has extra void-checking logic that `vectorEqualToDeep` lacks. Pairs need special handling for improper lists.
-
-### Files
-
-`values/utils.go`
-
----
-
-## III. ForEach / SyntaxForEach
-
-`internal/syntax/syntax_pair.go`: `ForEach` and `SyntaxForEach` duplicate the same list-spine iteration. Similarly `Append` and `SyntaxAppend`. Only callback type differs.
-
-### Files
-
-`internal/syntax/syntax_pair.go`
 
 ---
 
@@ -73,24 +61,6 @@ Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuat
 
 ---
 
-## VII. Optional Range Argument Parsing
-
-> **Cross-reference**: Described in detail in `CODE_CONSOLIDATION_ARCHITECTURAL.md` Phase 4 (`ParseOptionalRange` helper).
-
-7 primitives parse optional `[start [end]]` with identical ~20-line boilerplate: `vector->list`, `vector-copy`, `vector-fill!`, `bytevector-copy`, `bytevector-copy!`, `string->list`, `string-copy`.
-
----
-
-## VIII. Chain Equality Predicates
-
-`boolean=?` and `symbol=?` in `registry/core/prim_equality.go` implement identical variadic chain comparison (validate type → loop → short-circuit).
-
-### Files
-
-`registry/core/prim_equality.go`
-
----
-
 ## IX. Scope Propagation Asymmetry
 
 `SyntaxPair.AddScope` (interface dispatch) and `FlipScope` in `scope_utils.go` (concrete type switch) both recursively traverse syntax trees. Same traversal, different per-node operation.
@@ -101,27 +71,12 @@ Compiler (`compile_time_continuation.go`) and expander (`expander_time_continuat
 
 ---
 
-## X. Bootstrap Environment Initialization
-
-`internal/bootstrap/` contains `NewTopLevelEnvironmentFrameTiny()` and `NewLibraryEnvironmentFrame()` which share sequential initialization steps (registry creation, extension loading, compiler/expander registration, bootstrap macro loading). Only the initial environment creation differs.
-
-### Files
-
-`internal/bootstrap/`
-
----
-
 ## Priority Lattice
 
 Ordered by risk — start from the bottom (safe leaf reductions), work up.
 
 | # | Reduction | Risk |
 |---|-----------|------|
-| VII | Optional range parsing | Low |
-| VIII | Chain equality | Low |
-| II | Equality cycle detection | Low |
-| III | ForEach/SyntaxForEach | Low |
-| X | Bootstrap initialization | Low |
 | IV | Syntax interface boilerplate | Low-Medium |
 | IX | Scope propagation | Low-Medium |
 | VI | Scope-aware symbol resolution | Medium |
@@ -130,8 +85,8 @@ Ordered by risk — start from the bottom (safe leaf reductions), work up.
 
 ## Implementation Notes
 
-**Independence**: Most reductions are independent. VI may benefit from the completed binding lookup unification.
+**Independence**: Remaining reductions are independent. VI may benefit from the completed binding lookup unification.
 
-**Risk ordering**: Start with leaf reductions (VII, VIII, II) that touch few files and have obvious correctness. The numeric tower (I) is highest-value but highest-risk — it changes core arithmetic dispatch.
+**Risk ordering**: All low-risk items (II, VII, VIII, X) are complete. Item III intentionally not consolidated. Remaining items start at Low-Medium risk.
 
 **Testing**: Every reduction must pass `go test ./... -count=1`. The numeric tower reduction should additionally run the R7RS numeric test suite to verify exactness preservation and tower promotion semantics.
