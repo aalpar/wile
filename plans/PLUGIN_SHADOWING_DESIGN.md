@@ -335,11 +335,11 @@ Use macros to rewrite symbol references.
 
 ```
 tests/shadowing/
-├── basic_override_test.scm         # Simple shadowing
-├── nested_override_test.scm        # Override in child env
-├── r6rs_compat_test.scm           # R6RS error compatibility
-├── override_precedence_test.scm    # Multiple overrides
-└── performance_test.scm            # Benchmark lookup overhead
+├── basic_override-test.scm         # Simple shadowing
+├── nested_override-test.scm        # Override in child env
+├── r6rs_compat-test.scm           # R6RS error compatibility
+├── override_precedence-test.scm    # Multiple overrides
+└── performance-test.scm            # Benchmark lookup overhead
 ```
 
 ## Documentation Requirements

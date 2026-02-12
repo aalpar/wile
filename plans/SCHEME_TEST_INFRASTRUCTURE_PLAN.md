@@ -1,6 +1,24 @@
 # Scheme-Level Test Infrastructure Plan
 
-## Problem Statement
+**Status**: ⚠️ **INFRASTRUCTURE COMPLETE, TESTS PENDING** (2026-02-11)
+
+The test infrastructure exists in `test/` with automated discovery, `(chibi test)` framework, and CI integration. However, only 1 smoke test exists. Test content creation is deferred to future work.
+
+**What Exists**:
+- `test/` directory with README, runner scripts, Go integration
+- Test discovery (`run-all.sh` finds `*-test.scm` files)
+- Cross-implementation testing (`compare-schemes.sh`)
+- CI integration (`make test-scheme`)
+- Smoke test passing (test/scheme/smoke-test.scm)
+
+**What's Missing**:
+- Comprehensive test files (numeric tower, macros, continuations, etc.)
+- Regression tests
+- Library-specific tests
+
+---
+
+## Problem Statement (Original)
 
 Wile currently lacks a designated location and convention for Scheme-level unit tests. Testing is scattered across:
 - `scm/` — Ad-hoc manual debugging tests (not automated)
@@ -14,7 +32,7 @@ Wile currently lacks a designated location and convention for Scheme-level unit 
 
 1. **Follow Go conventions** — Tests colocated with code where practical
 2. **Use `(chibi test)`** — Leverage existing test framework, don't invent new one
-3. **Automated discovery** — Test runner finds and executes all `*_test.scm` files
+3. **Automated discovery** — Test runner finds and executes all `*-test.scm` files
 4. **CI integration** — Tests run as part of `make test`
 5. **Self-documenting** — Test file names and locations make purpose obvious
 
@@ -27,18 +45,18 @@ lib/
 ├── srfi/
 │   ├── 1/
 │   │   ├── constructors.scm
-│   │   ├── constructors_test.scm
+│   │   ├── constructors-test.scm
 │   │   ├── fold.scm
-│   │   └── fold_test.scm
+│   │   └── fold-test.scm
 │   └── 18/
 │       ├── threads.scm
-│       └── threads_test.scm
+│       └── threads-test.scm
 ├── chibi/
 │   ├── test.scm
 │   └── diff.scm
 └── wile/                          # New: Wile-specific libraries
     ├── helpers.scm
-    └── helpers_test.scm
+    └── helpers-test.scm
 ```
 
 **Pros**: Tests next to implementation, easy to find, matches Go idioms
@@ -92,11 +110,11 @@ test/
 
 | Location | Pattern | Example |
 |----------|---------|---------|
-| Library tests | `<module>-test.scm` or `<file>_test.scm` | `fold-test.scm`, `constructors_test.scm` |
+| Library tests | `<module>-test.scm` or `<file>-test.scm` | `fold-test.scm`, `constructors-test.scm` |
 | Core tests | `<feature>-test.scm` | `numeric-tower-test.scm` |
 | Regression tests | `issue-<num>-<slug>.scm` | `issue-123-continuation-escape.scm` |
 
-**Rule**: All test files must be discoverable by glob pattern `**/*-test.scm` or `**/*_test.scm`.
+**Rule**: All test files must be discoverable by glob pattern `**/*-test.scm` or `**/*-test.scm`.
 
 ## Test File Template
 
@@ -140,7 +158,7 @@ test/
 ;;;   ./test/run-all.scm
 ;;;   scheme -f test/run-all.scm
 ;;;
-;;; Discovers all *-test.scm and *_test.scm files and executes them.
+;;; Discovers all *-test.scm and *-test.scm files and executes them.
 
 (import (scheme base)
         (scheme file)
@@ -188,7 +206,7 @@ if [ ! -x "$SCHEME" ]; then
 fi
 
 # Discover all test files
-TEST_FILES=$(find test lib -name '*-test.scm' -o -name '*_test.scm' | sort)
+TEST_FILES=$(find test lib -name '*-test.scm' -o -name '*-test.scm' | sort)
 
 if [ -z "$TEST_FILES" ]; then
     echo "No test files found"
@@ -337,7 +355,7 @@ Example:
 
 ### Test Discovery
 
-All files matching `*-test.scm` or `*_test.scm` are automatically discovered and run.
+All files matching `*-test.scm` or `*-test.scm` are automatically discovered and run.
 ```
 
 ### `test/README.md`

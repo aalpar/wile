@@ -54,6 +54,80 @@ Anthropic's Claude Code was used to help document, fill out the primitive librar
 - **Pure Go** — No CGo, no C dependencies, works with `go get`
 - **Go embedding API** — Clean API for evaluating Scheme from Go and registering Go functions as primitives
 
+## Quick Start
+
+```bash
+# Install as a command-line tool
+go install github.com/aalpar/wile/cmd/scheme@latest
+
+# Or download a prebuilt binary from releases
+# https://github.com/aalpar/wile/releases
+
+# Run the REPL
+scheme
+
+# Try an example
+scheme --file examples/basics/hello.scm
+
+# See all examples
+ls examples/
+```
+
+**Explore**:
+- [**70+ Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — 19 canonical Scheme benchmarks for performance testing
+- [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
+- [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
+
+## Key Features in Action
+
+**Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
+
+```scheme
+(/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
+(* 1/3 3)            ; ⇒ 1 (exact)
+(make-rectangular 0 1) ; ⇒ 0+1i (exact complex)
+(expt 2 1000)        ; ⇒ 10715086071862673209484250490...
+```
+
+**Hygienic Macros** — Build DSLs without variable capture
+
+```scheme
+(load "examples/macros/state-machine.scm")
+
+(define-state-machine traffic-light
+  (states: red yellow green)
+  (initial: red)
+  (transitions:
+   (red -> green)
+   (green -> yellow)
+   (yellow -> red)))
+```
+
+**Go-Native Concurrency** — Goroutines and channels from Scheme
+
+```scheme
+(let ((ch (make-channel)))
+  (thread-start!
+   (make-thread
+    (lambda () (channel-send ch 42))))
+  (channel-receive ch))  ; ⇒ 42
+```
+
+**First-Class Continuations** — Non-local control flow
+
+```scheme
+;; Early return
+(call/cc (lambda (return)
+  (for-each (lambda (x)
+              (if (negative? x)
+                  (return x)))
+            '(1 2 -3 4))
+  'not-found))  ; ⇒ -3
+
+;; See examples/control/ for generators, coroutines, and backtracking
+```
+
 ## Installation
 
 Requires Go 1.23 or later.

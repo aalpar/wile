@@ -69,7 +69,7 @@ go test ./test         # Runs TestSchemeTestSuite
 
 ## Writing Tests
 
-All test files must match the pattern `*-test.scm` or `*_test.scm` for automatic discovery.
+All test files must match the pattern `*-test.scm` for automatic discovery.
 
 ### File Naming
 
@@ -122,7 +122,7 @@ The `(chibi test)` framework provides:
 
 ## Test Discovery
 
-The `run-all.sh` script discovers all test files by searching for `*-test.scm` and `*_test.scm` in:
+The `run-all.sh` script discovers all test files by searching for `*-test.scm` in:
 - `test/` directory (recursive)
 - `lib/` directory (recursive)
 

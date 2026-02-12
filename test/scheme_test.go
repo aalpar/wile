@@ -13,7 +13,7 @@ import (
 
 // TestSchemeTestSuite runs all Scheme-level unit tests.
 // Tests are discovered by the run-all.sh script, which finds all
-// *-test.scm and *_test.scm files in test/ and lib/ directories.
+// *-test.scm files in test/ and lib/ directories.
 func TestSchemeTestSuite(t *testing.T) {
 	c := qt.New(t)
 
