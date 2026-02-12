@@ -175,3 +175,55 @@ func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 	sym2 := topLevel.InternSymbol(values.NewSymbol("inherited"))
 	c.Assert(sym1, qt.Equals, sym2)
 }
+
+func TestTopLevelEnvironment_ChildSharesLoadPathStack(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewTopLevelEnvironment()
+	child := parent.NewChildTopLevelEnvironment()
+
+	// Verify both have non-nil stacks
+	c.Assert(parent.LoadPathStack(), qt.Not(qt.IsNil))
+	c.Assert(child.LoadPathStack(), qt.Not(qt.IsNil))
+
+	// Verify they share the same stack (per-VM design)
+	c.Assert(child.LoadPathStack(), qt.Equals, parent.LoadPathStack())
+
+	// Push to parent, verify child sees it
+	parent.LoadPathStack().Push("/parent/file.scm")
+	c.Assert(child.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
+	c.Assert(child.LoadPathStack().Depth(), qt.Equals, 1)
+
+	// Push to child, verify parent sees it
+	child.LoadPathStack().Push("/child/file.scm")
+	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/child/file.scm")
+	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 2)
+
+	// Pop from child, verify parent sees it
+	child.LoadPathStack().Pop()
+	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
+	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 1)
+
+	// Verify CurrentDir works through delegation
+	c.Assert(child.LoadPathStack().CurrentDir(), qt.Equals, "/parent")
+}
+
+func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
+	c := qt.New(t)
+
+	root := NewTopLevelEnvironment()
+	child1 := root.NewChildTopLevelEnvironment()
+	child2 := child1.NewChildTopLevelEnvironment()
+
+	// All three should share the same stack
+	c.Assert(child1.LoadPathStack(), qt.Equals, root.LoadPathStack())
+	c.Assert(child2.LoadPathStack(), qt.Equals, root.LoadPathStack())
+
+	// Push to deepest child
+	child2.LoadPathStack().Push("/deep/file.scm")
+
+	// All should see it
+	c.Assert(root.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
+	c.Assert(child1.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
+	c.Assert(child2.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
+}

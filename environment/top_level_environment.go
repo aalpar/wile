@@ -55,6 +55,11 @@ type TopLevelEnvironment struct {
 	syntaxInterns   map[values.Value]syntax.SyntaxValue
 	syntaxInternsMu sync.RWMutex
 
+	// loadPathStack tracks files currently being loaded for relative path
+	// resolution. Only exists on the root TopLevelEnvironment (nil in children).
+	// Children access via LoadPathStack() which delegates to parent.
+	loadPathStack *LoadPathStack
+
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
 
@@ -73,6 +78,7 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 	q := &TopLevelEnvironment{
 		symbolInterns: make(map[values.Symbol]*values.Symbol),
 		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
+		loadPathStack: NewLoadPathStack(),
 	}
 
 	// Create the runtime (phase 0) environment frame
@@ -213,6 +219,16 @@ func (p *TopLevelEnvironment) LibraryRegistry() any {
 // The registry should be a *machine.LibraryRegistry.
 func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 	p.libraryRegistry = registry
+}
+
+// LoadPathStack returns the load path stack for tracking files currently
+// being loaded. Delegates to parent when non-nil, ensuring child environments
+// share the same stack as the root TopLevelEnvironment.
+func (p *TopLevelEnvironment) LoadPathStack() *LoadPathStack {
+	if p.parent != nil {
+		return p.parent.LoadPathStack()
+	}
+	return p.loadPathStack
 }
 
 // NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose symbol

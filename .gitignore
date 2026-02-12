@@ -31,8 +31,7 @@ Thumbs.db
 # Anthropic files
 .claude/
 *.local.md
-CLAUDE.*
-.mcp.json
+*.mcp.json
 .serena/
 REVIEW.md
 

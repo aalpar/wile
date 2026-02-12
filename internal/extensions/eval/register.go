@@ -34,6 +34,9 @@ func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{"eval", 2, false, PrimEval},
 		{"load", 1, false, PrimLoad},
+		{"current-load-path", 0, false, PrimCurrentLoadPath},
+		{"current-load-directory", 0, false, PrimCurrentLoadDirectory},
+		{"current-load-depth", 0, false, PrimCurrentLoadDepth},
 		{"interaction-environment", 0, false, PrimInteractionEnvironment},
 		{"scheme-report-environment", 1, false, PrimSchemeReportEnvironment},
 		{"null-environment", 1, false, PrimNullEnvironment},

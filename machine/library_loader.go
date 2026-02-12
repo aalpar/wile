@@ -79,11 +79,16 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	registry.StartLoading(name)
 	defer registry.FinishLoading(name)
 
-	// Find the library file
-	filePath, err := registry.FindLibraryFile(name)
+	// Try unified resolver first
+	stack := env.LoadPathStack()
+	filePath, err := environment.ResolveFile(stack, name.ToFilePath(), registry.GetSearchPaths())
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err,
-			"could not find library %s", name.SchemeString())
+		// ResolveFile didn't find it — fall back to FindLibraryFile
+		filePath, err = registry.FindLibraryFile(name)
+		if err != nil {
+			return nil, values.WrapForeignErrorf(err,
+				"could not find library %s", name.SchemeString())
+		}
 	}
 
 	// Load the library from file
@@ -111,6 +116,13 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, values.WrapForeignErrorf(err, "could not open file")
 	}
 	defer file.Close() //nolint:errcheck
+
+	// Push to stack after successful open, pop on exit
+	stack := callerEnv.LoadPathStack()
+	if stack != nil {
+		stack.Push(filePath)
+		defer stack.Pop()
+	}
 
 	// Create a fresh environment for the library
 	// This isolates the library's bindings from the caller's environment,
