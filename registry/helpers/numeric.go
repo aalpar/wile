@@ -166,6 +166,46 @@ func NumericChainCompare(
 	return nil
 }
 
+// isNonRealComplex returns true if n is a complex number with non-zero imaginary part.
+// R7RS §6.2.6: ordering comparisons (<, >, <=, >=) require real arguments.
+func isNonRealComplex(n values.Number) bool {
+	switch v := n.(type) {
+	case *values.Complex:
+		return !v.IsReal()
+	case *values.BigComplex:
+		return !v.IsReal()
+	default:
+		return false
+	}
+}
+
+// NumericChainCompareReal is a helper for ordering comparison primitives (<, >, <=, >=).
+// It wraps NumericChainCompare with complex-number rejection: any non-real complex
+// argument causes an immediate error rather than a boolean #f result.
+//
+// The fails callback should return true when the comparison fails (i.e. the pair
+// does not satisfy the ordering relation), false when it succeeds.
+func NumericChainCompareReal(
+	mc *machine.MachineContext,
+	name string,
+	fails func(prev, curr values.Number) bool,
+) error {
+	var complexErr error
+	err := NumericChainCompare(mc, name, func(prev, curr values.Number) bool {
+		if isNonRealComplex(prev) || isNonRealComplex(curr) {
+			complexErr = values.WrapForeignErrorf(
+				values.ErrNotANumber, "%s: requires real arguments", name,
+			)
+			return true
+		}
+		return fails(prev, curr)
+	})
+	if complexErr != nil {
+		return complexErr
+	}
+	return err
+}
+
 // NumericExtremum is a helper for min/max primitives.
 // First arg at index 0, rest at index 1. Returns the extremum value
 // where isBetter returns true if candidate should replace current.

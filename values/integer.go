@@ -236,7 +236,10 @@ func (p *Integer) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Multiply(o Number) Number {
 	if o.IsZero() {
-		return o
+		return multiplyResultForZero(o, p)
+	}
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *Integer:
@@ -466,13 +469,15 @@ func (p *Integer) IsVoid() bool {
 //
 // R7RS §6.2.6: The = procedure compares numerical values for equality.
 // This implements structural equality for the Integer type specifically.
-// Handles comparison with both Integer and BigInteger types.
+// Handles comparison with Integer, BigInteger, and Rational types for symmetry.
 func (p *Integer) EqualTo(v Value) bool {
 	switch other := v.(type) {
 	case *Integer:
 		return p.Value == other.Value
 	case *BigInteger:
 		return other.BigInt().Cmp(p.bigInt()) == 0
+	case *Rational:
+		return other.value.Cmp(new(big.Rat).SetInt64(p.Value)) == 0
 	}
 	return false
 }

@@ -194,10 +194,10 @@ func (p *BigInteger) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
-		return NewBigIntegerFromInt64(0)
+		return multiplyResultForZero(o, p)
 	}
-	if p.IsZero() {
-		return p
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *BigInteger:
@@ -418,17 +418,16 @@ func (p *BigInteger) IsVoid() bool {
 // R7RS §6.2.6: The = procedure compares numerical values for equality.
 // BigInteger also compares equal to Integer when values match.
 func (p *BigInteger) EqualTo(o Value) bool {
-	v, ok := o.(*BigInteger)
-	if !ok {
-		// Also check if equal to regular Integer
-		i, ok := o.(*Integer)
-		if ok {
-			return p.value.Cmp(i.bigInt()) == 0
+	switch other := o.(type) {
+	case *BigInteger:
+		if other == nil || p == nil {
+			return p == other
 		}
-		return false
+		return p.value.Cmp(other.value) == 0
+	case *Integer:
+		return p.value.Cmp(other.bigInt()) == 0
+	case *Rational:
+		return other.value.Cmp(new(big.Rat).SetInt(p.BigInt())) == 0
 	}
-	if v == nil || p == nil {
-		return p == v
-	}
-	return p.value.Cmp(v.value) == 0
+	return false
 }

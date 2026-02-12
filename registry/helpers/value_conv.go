@@ -16,6 +16,7 @@ package helpers
 
 import (
 	"math"
+	"math/big"
 
 	"github.com/aalpar/wile/values"
 )
@@ -75,5 +76,29 @@ func ToFloat64(v values.Value) (float64, error) {
 		return f, nil
 	default:
 		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a real number but got %T", v)
+	}
+}
+
+// ExtractReal extracts a float64 from a real number, tracking exactness.
+// Returns the float64 value, whether the input was exact, and any error.
+//
+// R7RS §6.2.6: Division procedures work on all real numbers.
+func ExtractReal(v values.Value, name string) (float64, bool, error) {
+	switch n := v.(type) {
+	case *values.Integer:
+		return float64(n.Value), true, nil
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
+		return f, true, nil
+	case *values.Float:
+		return n.Value, false, nil
+	case *values.Rational:
+		f, _ := n.Rat().Float64()
+		return f, true, nil
+	case *values.BigFloat:
+		f, _ := n.BigFloatValue().Float64()
+		return f, false, nil
+	default:
+		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
 	}
 }

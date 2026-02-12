@@ -79,7 +79,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAPromptTag, "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
 func PrimAbortCurrentContinuation(_ context.Context, mc *machine.MachineContext) error {
-	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, values.ErrNotAProcedure, "abort-current-continuation")
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, values.ErrNotAPromptTag, "abort-current-continuation")
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAProcedure, "call-with-composable-continuation")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAPromptTag, "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	// Find the prompt in the continuation chain or on the context itself.
 	prompt, found := mc.FindPrompt(tag)
 	if !found {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
+		return values.WrapForeignErrorf(values.ErrNotAPromptTag, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
 	}
 
 	// Slice the continuation chain from mc.cont to the prompt.

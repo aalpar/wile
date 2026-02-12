@@ -146,10 +146,10 @@ func (p *BigFloat) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Multiply(o Number) Number {
 	if o.IsZero() {
-		return NewBigFloatFromFloat64(0)
+		return multiplyResultForZero(o, p)
 	}
-	if p.IsZero() {
-		return p
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *BigFloat:

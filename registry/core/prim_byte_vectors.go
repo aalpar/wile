@@ -135,11 +135,7 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "bytevector-copy")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "bytevector-copy")
+	start, end, err := helpers.ParseSubrange(rest, len(*bv), "bytevector-copy")
 	if err != nil {
 		return err
 	}
@@ -167,15 +163,11 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 	}
 	rest := mc.Arg(3)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*fromBv)), "bytevector-copy!")
+	start, end, err := helpers.ParseSubrange(rest, len(*fromBv), "bytevector-copy!")
 	if err != nil {
 		return err
 	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*fromBv)), "bytevector-copy!")
-	if err != nil {
-		return err
-	}
-	if atIdx.Value < 0 || atIdx.Value+(end-start) > int64(len(*toBv)) {
+	if atIdx.Value < 0 || atIdx.Value+int64(end-start) > int64(len(*toBv)) {
 		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
 
@@ -226,11 +218,7 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "utf8->string")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "utf8->string")
+	start, end, err := helpers.ParseSubrange(rest, len(*bv), "utf8->string")
 	if err != nil {
 		return err
 	}
@@ -254,11 +242,7 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	s := str.Value
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(s)), "string->utf8")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(s)), "string->utf8")
+	start, end, err := helpers.ParseSubrange(rest, len(s), "string->utf8")
 	if err != nil {
 		return err
 	}

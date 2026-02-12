@@ -105,6 +105,7 @@ var (
 	ErrInvalidFormat         = NewStaticError("invalid number format")
 	ErrUnknownOpCode         = NewStaticError("unknown op code")
 	ErrNotAMatch             = NewStaticError("not a match")
+	ErrNotAPromptTag         = NewStaticError("not a prompt tag")
 	ErrTypeConversion        = NewStaticError("type conversion failed")
 	ErrIndexOutOfRange       = NewStaticError("index out of range")
 )
