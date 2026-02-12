@@ -66,6 +66,10 @@ func (p *Pair) SetCdr(v Value) {
 // IsList checks if the Pair represents a proper list.
 // Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
 // Returns false for circular lists per R7RS §6.4.
+//
+// Implementation note: This method must use *Pair (not Tuple) for cycle
+// detection because it requires pointer identity comparison (slow == fast).
+// Interfaces cannot be compared by pointer identity.
 func (p *Pair) IsList() bool {
 	if IsVoid(p) {
 		return false
@@ -74,6 +78,7 @@ func (p *Pair) IsList() bool {
 	fast := p
 	for {
 		// Fast pointer advances two steps
+		// Type assertion to *Pair required for pointer identity comparison
 		next, ok := fast.Cdr().(*Pair)
 		if !ok {
 			return IsEmptyList(fast.Cdr())
@@ -114,6 +119,8 @@ func (p *Pair) Append(vs Value) Value {
 	q := p
 	for !IsVoid(q) && !IsEmptyList(q.Cdr()) {
 		ok := false
+		// Type assertion to *Pair required because we need to mutate q[1] directly
+		// via pointer. Tuple interface doesn't expose mutable internal structure.
 		q, ok = q.Cdr().(*Pair)
 		if !ok {
 			break
@@ -160,6 +167,8 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Type assertion to *Pair required for iterating through linked structure.
+		// We need access to the next *Pair pointer, not just Tuple methods.
 		pr0, ok := pr[1].(*Pair)
 		if !ok {
 			return pr[1], nil
@@ -184,6 +193,11 @@ func Must(v Value, err error) {
 }
 
 // EqualTo checks if the Pair is equal to another Value o.
+//
+// Implementation note: This method requires *Pair (not Tuple) because:
+// 1. It uses pointer identity comparison (p == v) for early exit
+// 2. It needs type-specific equality (Pair vs ArrayList are not equal even if structurally identical)
+// 3. R7RS equal? distinguishes between representation types
 func (p *Pair) EqualTo(o Value) bool {
 	v, ok := o.(*Pair)
 	if !ok {
@@ -210,6 +224,8 @@ func (p *Pair) EqualTo(o Value) bool {
 		if p0[1] == v0[1] {
 			return true
 		}
+		// Type assertions to *Pair required for iterative list traversal
+		// with pointer identity comparison for cycle detection.
 		pv0, _ := p0[1].(*Pair)
 		vv0, _ := v0[1].(*Pair)
 		if pv0 == nil || vv0 == nil {
