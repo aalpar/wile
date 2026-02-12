@@ -37,8 +37,6 @@ Items are ordered by priority: P1 (core features), P2 (developer experience), P3
 
 ---
 
----
-
 Future Extensions
 -----------------
 
