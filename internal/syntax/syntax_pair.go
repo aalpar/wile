@@ -50,27 +50,17 @@ func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
 		return p
 	}
 
-	// Recursively add scope to car and cdr (scopes only matter on symbols)
-	var newCar, newCdr SyntaxValue
-	if p.Values[0] != nil {
-		if adder, ok := p.Values[0].(interface{ AddScope(*Scope) SyntaxValue }); ok {
-			newCar = adder.AddScope(scope)
-		} else {
-			newCar = p.Values[0]
+	// Use the generic mapSyntaxTree traversal to add scope to all nested nodes.
+	// mapSyntaxTree handles pair recursion internally and calls the function only on leaf nodes (symbols, etc.).
+	return mapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
+		// Try to call AddScope on nodes that support it (symbols, etc.)
+		adder, ok := node.(interface{ AddScope(*Scope) SyntaxValue })
+		if ok {
+			return adder.AddScope(scope)
 		}
-	}
-	if p.Values[1] != nil {
-		if adder, ok := p.Values[1].(interface{ AddScope(*Scope) SyntaxValue }); ok {
-			newCdr = adder.AddScope(scope)
-		} else {
-			newCdr = p.Values[1]
-		}
-	}
-
-	return &SyntaxPair{
-		Values:        [2]SyntaxValue{newCar, newCdr},
-		sourceContext: p.sourceContext, // scopes only matter on symbols, not pairs
-	}
+		// Nodes that don't support AddScope are returned unchanged
+		return node
+	})
 }
 
 // NewSyntaxEmptyList creates a syntax empty list with the given source context.

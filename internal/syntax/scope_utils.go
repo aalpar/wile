@@ -81,6 +81,50 @@ func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
 	return AddScopeToSet(scopes, target)
 }
 
+// mapSyntaxTree recursively transforms a syntax tree.
+// The function fn is applied to each node bottom-up: children are transformed first,
+// then the parent is constructed with the transformed children.
+//
+// For pairs, this means:
+// 1. Recursively transform car and cdr
+// 2. Create new pair with transformed children
+// 3. fn is NOT called on the pair itself (only on leaf nodes like symbols)
+//
+// This is the shared traversal logic used by both AddScope and FlipScope.
+func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
+	if stx == nil {
+		return nil
+	}
+
+	switch s := stx.(type) {
+	case *SyntaxPair:
+		if IsSyntaxEmptyList(s) {
+			return s
+		}
+
+		// Recursively transform car and cdr
+		var newCar, newCdr SyntaxValue
+		if s.Values[0] != nil {
+			newCar = mapSyntaxTree(s.Values[0], fn)
+		}
+		if s.Values[1] != nil {
+			newCdr = mapSyntaxTree(s.Values[1], fn)
+		}
+
+		// Return new pair with transformed children (pair itself unchanged)
+		return NewSyntaxCons(newCar, newCdr, s.SourceContext())
+
+	case *SyntaxSymbol:
+		// Apply transformation to symbols
+		return fn(s)
+
+	default:
+		// Other types (SyntaxObject, SyntaxVector, etc.) - check if they support the transformation
+		// This handles types that might implement the transformation interface
+		return fn(stx)
+	}
+}
+
 // FlipScope toggles the presence of a scope on a syntax object.
 // Returns a new syntax object with the scope flipped.
 // This is used by syntax-local-introduce to make introduced identifiers
@@ -90,44 +134,15 @@ func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 		return stx
 	}
 
-	switch s := stx.(type) {
-	case *SyntaxSymbol:
-		return flipScopeOnSymbol(s, scope)
-	case *SyntaxPair:
-		return flipScopeOnPair(s, scope)
-	default:
-		// SyntaxObject and other types don't store meaningful scopes
-		return stx
-	}
-}
-
-// flipScopeOnPair recursively flips a scope on a SyntaxPair.
-func flipScopeOnPair(pair *SyntaxPair, scope *Scope) *SyntaxPair {
-	if pair == nil || IsSyntaxEmptyList(pair) {
-		return pair
-	}
-
-	// Recursively flip on car
-	var newCar SyntaxValue
-	car := pair.Car()
-	if car != nil {
-		carStx, ok := car.(SyntaxValue)
-		if ok {
-			newCar = FlipScope(carStx, scope)
+	return mapSyntaxTree(stx, func(node SyntaxValue) SyntaxValue {
+		switch s := node.(type) {
+		case *SyntaxSymbol:
+			return flipScopeOnSymbol(s, scope)
+		default:
+			// SyntaxObject and other types don't store meaningful scopes
+			return node
 		}
-	}
-
-	// Recursively flip on cdr
-	var newCdr SyntaxValue
-	cdr := pair.Cdr()
-	if cdr != nil {
-		cdrStx, ok := cdr.(SyntaxValue)
-		if ok {
-			newCdr = FlipScope(cdrStx, scope)
-		}
-	}
-
-	return NewSyntaxCons(newCar, newCdr, pair.SourceContext())
+	})
 }
 
 // flipScopeOnSymbol flips a scope on a SyntaxSymbol.
