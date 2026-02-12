@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-11
+
+### Added
+
+- Add `NewRational`, `NewComplex`, `NewVector` value constructors to public embedding API
+- Add Scheme-level test infrastructure (`scheme-test` executable built from `tests/run-tests.scm`)
+
+### Changed
+
+- Rename `CreateLocalBinding` to `EnsureLocalBinding` on `EnvironmentFrame` and `LocalEnvironmentFrame` — the method has get-or-create semantics (returns existing binding if key exists), and the new name reflects actual behavior (breaking API change for embedders)
+
+### Fixed
+
+- Fix `(list? syntax-obj)` returning `#t` instead of `#f` for syntax objects (R7RS: syntax objects are not lists)
+- Fix `EqualTo` comparison for empty syntax lists (previously compared unequal to themselves)
+- Fix `ArrayList.ForEach` violating `Tuple` interface contract (previously mutated during iteration)
+- Fix 32 missing R7RS library exports across `scheme/char`, `scheme/complex`, `scheme/inexact`, and `scheme/lazy`
+- Fix bytevector parser and `NewByteVectorFromIntegers` accepting out-of-range integers (now rejects values outside 0-255)
+- Fix flaky `TestMutexAbandoned` test by replacing timing-based synchronization with polling loop
+
 ## [1.1.0] - 2026-02-08
 
 ### Added
@@ -106,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
+[1.2.0]: https://github.com/aalpar/wile/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aalpar/wile/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/aalpar/wile/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/aalpar/wile/compare/v1.0.2...v1.0.3
