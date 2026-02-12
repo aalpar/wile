@@ -89,6 +89,10 @@ examples:
 	$(GO_BUILD) -o /dev/null ./examples/embedding/
 	$(GO_BUILD) -o /dev/null ./examples/embedding/source-tracking/
 
+# run extensive builds and tests
+.PHONY: all
+all: lint test covercheck readme-check build-all
+
 # Compile tests for all packages without running them.
 # Useful for verifying that tests compile after refactoring.
 #   make buildtest
