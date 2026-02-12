@@ -6,21 +6,6 @@ See also `REFACTORING_OPPORTUNITIES.md` for previously identified reductions (fo
 
 ---
 
-## Completed
-
-- **Port Base Type** — `values/port_base.go` now provides `portBase` with `closed`, `clsr`, `Close()`, `IsClosed()`, `guardClosed()`. All 10 port types embed it.
-- **Binding Lookup Duplication** — `environment/environment_frame.go` now has `resolveLocal()` and `resolveGlobal()` as shared walk functions. `GetBinding`, `GetBindingWithScopes`, `GetLocalIndex` are thin wrappers. `GetLocalIndexWithScopes` has its own walk (Flatt's collect-then-maximize algorithm requires cross-frame candidate accumulation).
-- **Optional Range Argument Parsing (VII)** — Already complete. `helpers.ParseSubrange` exists and is used by all 7 primitives: `vector->list`, `vector-copy`, `vector-fill!`, `bytevector-copy`, `bytevector-copy!`, `string->list`, `string-copy`.
-- **Chain Equality Predicates (VIII)** — `helpers.ChainEquality()` consolidates variadic chain comparison. `PrimBooleanEq` and `PrimSymbolEq` now use shared helper. Reduced ~30 lines of duplication per primitive to ~10 lines each.
-- **Structural Equality Cycle Detection (II)** — `compareIndexable[T]()` generic helper in `values/utils.go` consolidates cycle detection between `vectorEqualToDeep` and `arrayListEqualToDeep`. `pairEqualToDeep` kept separate for improper list handling.
-- **Bootstrap Environment Initialization (X)** — `initializeEnvironment()` helper in `internal/bootstrap/environment_tiny.go` consolidates common sequence (registry creation, extension loading, compiler/expander registration, bootstrap macro loading) for both `NewTopLevelEnvironmentFrameTiny` and `NewLibraryEnvironmentFrame`.
-
-## Intentionally Not Consolidated
-
-- **ForEach / SyntaxForEach (III)** — Different return types (`values.Value` vs `SyntaxValue`) make consolidation more complex than the duplication it eliminates. Go's type system constraints outweigh benefits; code is clearer as-is.
-
----
-
 ## I. Numeric Tower Dispatch
 
 7 numeric types × 5 arithmetic methods = 35 type switches with 7 cases each. `numeric_tower.go` has `Simplify` and `ExactnessOf` — but no unified dispatch (`BinaryOp`, `Promote` do not exist). A tower-based dispatch would need to be built from scratch. Each type reimplements its own full cross-type dispatch.
@@ -85,8 +70,8 @@ Ordered by risk — start from the bottom (safe leaf reductions), work up.
 
 ## Implementation Notes
 
-**Independence**: Remaining reductions are independent. VI may benefit from the completed binding lookup unification.
+**Independence**: All remaining reductions are independent.
 
-**Risk ordering**: All low-risk items (II, VII, VIII, X) are complete. Item III intentionally not consolidated. Remaining items start at Low-Medium risk.
+**Risk ordering**: Start with Low-Medium risk items (IV, IX), then Medium risk (V, VI), then High risk (I).
 
 **Testing**: Every reduction must pass `go test ./... -count=1`. The numeric tower reduction should additionally run the R7RS numeric test suite to verify exactness preservation and tower promotion semantics.
