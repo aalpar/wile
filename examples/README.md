@@ -33,6 +33,11 @@ Full numeric tower with exact/inexact distinction, rationals, complex, and arbit
 
 | File | Description |
 |------|-------------|
+| [exactness.scm](numeric-tower/exactness.scm) | Exact vs inexact arithmetic, contagion rules, conversions |
+| [rationals.scm](numeric-tower/rationals.scm) | Rational arithmetic, Egyptian fractions, continued fractions |
+| [complex.scm](numeric-tower/complex.scm) | Complex numbers, polar/rectangular forms, Mandelbrot set |
+| [big-numbers.scm](numeric-tower/big-numbers.scm) | Arbitrary precision - BigInteger, large exact computations |
+| [mixed-arithmetic.scm](numeric-tower/mixed-arithmetic.scm) | Cross-type operations, type promotion, exactness contagion |
 | [symbolic-diff.scm](numeric-tower/symbolic-diff.scm) | Symbolic differentiation using exact arithmetic |
 
 **Key Feature**: Wile implements the full R7RS numeric tower including exact rationals, complex numbers, and automatic exactness preservation. Operations like `(/ 1 3)` produce exact rationals, not floating-point approximations.
@@ -43,6 +48,9 @@ Hygienic macro system using "sets of scopes" (Flatt 2016) — the same model as 
 
 | File | Description |
 |------|-------------|
+| [simple-macros.scm](macros/simple-macros.scm) | Basic syntax-rules patterns - when, or, let*, repeat, swap |
+| [hygiene.scm](macros/hygiene.scm) | Variable capture prevention, scope isolation demonstrations |
+| [anaphoric.scm](macros/anaphoric.scm) | Controlled hygiene breaking - aif, awhen, acond patterns |
 | [state-machine.scm](macros/state-machine.scm) | DSL for state machines via macros |
 
 **Key Feature**: Wile's macro system prevents variable capture automatically while allowing intentional hygiene-breaking when needed. Macros expand in a separate phase and can generate code that itself uses macros.
@@ -53,6 +61,9 @@ First-class continuations, exceptions, and control operators.
 
 | File | Description |
 |------|-------------|
+| [continuations.scm](control/continuations.scm) | call/cc fundamentals - early return, backtracking, generators |
+| [dynamic-wind.scm](control/dynamic-wind.scm) | Resource cleanup with before/after guards, continuation-safe |
+| [exceptions.scm](control/exceptions.scm) | guard, raise, with-exception-handler, error objects |
 | [amb.scm](control/amb.scm) | Non-deterministic computation with backtracking |
 | [coroutines.scm](control/coroutines.scm) | Cooperative multitasking via continuations |
 | [generators.scm](control/generators.scm) | Generators using call/cc |
@@ -65,6 +76,9 @@ Records, lazy evaluation, and functional data structures.
 
 | File | Description |
 |------|-------------|
+| [records.scm](data-structures/records.scm) | define-record-type, constructors, accessors, predicates |
+| [association-lists.scm](data-structures/association-lists.scm) | Alist patterns - assoc, updates, merging, caching |
+| [vectors.scm](data-structures/vectors.scm) | Random access, mutation, matrices, circular buffers |
 | [lazy-streams.scm](data-structures/lazy-streams.scm) | Infinite streams with delay/force |
 | [unification.scm](data-structures/unification.scm) | Unification algorithm for pattern matching |
 

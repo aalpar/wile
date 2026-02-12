@@ -12,9 +12,9 @@
   (mutex-lock! output-mutex)
   (for-each display args)
   (mutex-unlock! output-mutex))
+
 ;; Shared counter without synchronization (race condition)
-(safe-print "Race condition example (no mutex):")
-#\newline
+(safe-print "Race condition example (no mutex):\n")
 
 (define counter 0)
 
@@ -38,15 +38,10 @@
 (thread-join! t2)
 (thread-join! t3)
 
-(safe-print "Expected: 3000, Got: ")
-(safe-print counter)
-(safe-print " (may differ due to race condition)")
-#\newline
-#\newline
+(safe-print "Expected: 3000, Got: " counter " (may differ due to race condition)\n\n")
 
 ;; Shared counter with mutex protection
-(safe-print "Protected counter (with mutex):")
-#\newline
+(safe-print "Protected counter (with mutex):\n")
 
 (set! counter 0)
 (define counter-mutex (make-mutex))
@@ -70,15 +65,10 @@
 (thread-join! m2)
 (thread-join! m3)
 
-(safe-print "Expected: 3000, Got: ")
-(safe-print counter)
-(safe-print " (should match)")
-#\newline
-#\newline
+(safe-print "Expected: 3000, Got: " counter " (should match)\n\n")
 
 ;; Bank account with mutex
-(safe-print "Bank account with synchronization:")
-#\newline
+(safe-print "Bank account with synchronization:\n")
 
 (define (make-safe-account initial-balance)
   (let ((balance initial-balance)
@@ -96,8 +86,7 @@
                        (set! balance (- balance amount))
                        balance)
                      (begin
-                       (safe-print "Insufficient funds")
-                       #\newline
+                       (safe-print "Insufficient funds\n")
                        balance)))
                 ((eq? operation 'balance)
                  balance)
@@ -117,9 +106,7 @@
         (thread-sleep! 0.01)
         (loop (+ i 1))))))
 
-(safe-print "Initial balance: ")
-(safe-print (account 'balance 0))
-#\newline
+(safe-print "Initial balance: " (account 'balance 0) "\n")
 
 (define deposit-thread
   (thread-start! (make-thread (make-transaction account 'deposit 10 10))))
@@ -130,15 +117,10 @@
 (thread-join! deposit-thread)
 (thread-join! withdraw-thread)
 
-(safe-print "Final balance: ")
-(safe-print (account 'balance 0))
-(safe-print " (expected: 1050)")
-#\newline
-#\newline
+(safe-print "Final balance: " (account 'balance 0) " (expected: 1050)\n\n")
 
 ;; Mutex with timeout
-(safe-print "Mutex with timeout:")
-#\newline
+(safe-print "Mutex with timeout:\n")
 
 (define timeout-mutex (make-mutex))
 
@@ -149,18 +131,14 @@
   (thread-start!
     (make-thread
       (lambda ()
-        (safe-print "Trying to lock mutex...")
-        #\newline
+        (safe-print "Trying to lock mutex...\n")
         ;; Try to lock with timeout
         (let ((locked (mutex-lock! timeout-mutex 0.5)))
           (if locked
               (begin
-                (safe-print "Acquired mutex")
-                #\newline
+                (safe-print "Acquired mutex\n")
                 (mutex-unlock! timeout-mutex))
-              (begin
-                (safe-print "Timeout: could not acquire mutex")
-                #\newline)))))))
+              (safe-print "Timeout: could not acquire mutex\n")))))))
 
 ;; Wait for timeout thread
 (thread-sleep! 0.1)
@@ -170,5 +148,4 @@
 
 (thread-join! timeout-thread)
 
-(safe-print "Mutex examples complete!")
-#\newline
+(safe-print "Mutex examples complete!\n")

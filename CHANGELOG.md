@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
 - Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
 
+### Fixed
+
+- Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines, causing all output to run together)
+- Fix compilation error in `examples/data-structures/association-lists.scm` (undefined `sort` procedure; added insertion sort implementation)
+
 ## [1.2.0] - 2026-02-11
 
 ### Added
