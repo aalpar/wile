@@ -52,3 +52,50 @@ func MakeNumericPredicate[T any](
 		return nil
 	}
 }
+
+// ChainEquality implements variadic chain equality comparison for primitives
+// like boolean=? and symbol=?.
+//
+// The function takes:
+//   - mc: Machine context with first arg at index 0, rest at index 1
+//   - name: Primitive name for error messages
+//   - typeCheck: Validates each argument is the correct type
+//   - equals: Compares two values for equality
+//
+// Returns #t if all arguments pass type check and are equal to the first,
+// #f on first inequality. Short-circuits and returns error on type mismatch.
+func ChainEquality(
+	mc *machine.MachineContext,
+	name string,
+	typeCheck func(values.Value) error,
+	equals func(values.Value, values.Value) bool,
+) error {
+	first := mc.Arg(0)
+	rest := mc.Arg(1)
+
+	err := typeCheck(first)
+	if err != nil {
+		return err
+	}
+
+	current := rest
+	for !values.IsEmptyList(current) {
+		tuple, ok := current.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+		}
+		arg := tuple.Car()
+		err := typeCheck(arg)
+		if err != nil {
+			return err
+		}
+		if !equals(first, arg) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		current = tuple.Cdr()
+	}
+
+	mc.SetValue(values.TrueValue)
+	return nil
+}
