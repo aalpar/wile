@@ -75,10 +75,25 @@ func NewSyntaxNil(sctx *SourceContext) *SyntaxPair {
 	return NewSyntaxEmptyList(sctx)
 }
 
+// syntaxBase provides common SourceContext() implementation for syntax types.
+// This embedded struct eliminates boilerplate SourceContext() methods across 9 syntax types.
+//
+// Note: IsVoid() and UnwrapAll() cannot be provided here:
+//   - IsVoid() requires nil receiver checks, which don't work with embedding
+//   - UnwrapAll() needs access to the outer type (self), not the embedded struct
+type syntaxBase struct {
+	sourceContext *SourceContext
+}
+
+// SourceContext returns the source context.
+func (b *syntaxBase) SourceContext() *SourceContext {
+	return b.sourceContext
+}
+
 // SyntaxObject wraps a non-compound Scheme value with source context.
 type SyntaxObject struct {
-	datum         values.Value
-	sourceContext *SourceContext
+	datum values.Value
+	syntaxBase
 }
 
 // NewSyntaxObject creates a new SyntaxObject wrapping the given value and source context.
@@ -91,8 +106,10 @@ func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 		panic(values.NewForeignErrorf("cannot wrap a %T in another SyntaxObject", v))
 	}
 	q := &SyntaxObject{
-		datum:         v,
-		sourceContext: sctx,
+		datum: v,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 	return q
 }
@@ -120,11 +137,6 @@ func (p *SyntaxObject) IsPair() bool {
 // IsEmptyList returns true if the wrapped datum is the empty list.
 func (p *SyntaxObject) IsEmptyList() bool {
 	return values.IsEmptyList(p.Datum())
-}
-
-// SourceContext returns the source context of the syntax object.
-func (p *SyntaxObject) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 // IsVoid returns true if the syntax object is nil.

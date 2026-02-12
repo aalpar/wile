@@ -27,9 +27,9 @@ var (
 
 // SyntaxDatumLabelAssignment represents a datum label assignment (#n=datum).
 type SyntaxDatumLabelAssignment struct {
-	Label         int
-	Value         values.Value
-	sourceContext *SourceContext
+	Label int
+	Value values.Value
+	syntaxBase
 }
 
 // AddScope returns the assignment unchanged (labels don't participate in hygiene).
@@ -37,17 +37,14 @@ func (p *SyntaxDatumLabelAssignment) AddScope(_ *Scope) SyntaxValue {
 	return p
 }
 
-// SourceContext returns the source context of the assignment.
-func (p *SyntaxDatumLabelAssignment) SourceContext() *SourceContext {
-	return p.sourceContext
-}
-
 // NewSyntaxDatumLabelAssignment creates a new datum label assignment.
 func NewSyntaxDatumLabelAssignment(label int, value values.Value, sctx *SourceContext) *SyntaxDatumLabelAssignment {
 	return &SyntaxDatumLabelAssignment{
-		Label:         label,
-		Value:         value,
-		sourceContext: sctx,
+		Label: label,
+		Value: value,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 }
 

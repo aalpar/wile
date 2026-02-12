@@ -38,8 +38,10 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 			}
 		}
 		return &SyntaxPair{
-			Values:        [2]SyntaxValue{os[0], NewSyntaxEmptyList(sc)},
-			sourceContext: elemSc,
+			Values: [2]SyntaxValue{os[0], NewSyntaxEmptyList(sc)},
+			syntaxBase: syntaxBase{
+				sourceContext: elemSc,
+			},
 		}
 	}
 	// Use first element's source context for the head pair
@@ -51,8 +53,10 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 		}
 	}
 	q := &SyntaxPair{
-		Values:        [2]SyntaxValue{os[0], &SyntaxPair{}},
-		sourceContext: headSc,
+		Values: [2]SyntaxValue{os[0], &SyntaxPair{}},
+		syntaxBase: syntaxBase{
+			sourceContext: headSc,
+		},
 	}
 	curr := q
 	for _, v := range os[1:] {

@@ -130,6 +130,47 @@ func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 	}
 }
 
+// compareIndexable is a generic helper for comparing indexable collections with
+// cycle detection. Used by vectorEqualToDeep and arrayListEqualToDeep.
+func compareIndexable[T any](
+	a, b T,
+	length func(T) int,
+	getElement func(T, int) Value,
+	checkVoid func(T, int) bool,
+	visited map[equalPairKey]bool,
+) bool {
+	// Use type-erased pointers as map keys
+	aPtr := any(a)
+	bPtr := any(b)
+
+	if length(a) != length(b) {
+		return false
+	}
+	key := equalPairKey{aPtr, bPtr}
+	if visited[key] {
+		return true
+	}
+	visited[key] = true
+
+	for i := 0; i < length(a); i++ {
+		// Handle void elements if applicable
+		if checkVoid != nil {
+			aVoid := checkVoid(a, i)
+			bVoid := checkVoid(b, i)
+			if aVoid || bVoid {
+				if aVoid && bVoid {
+					continue
+				}
+				return false
+			}
+		}
+		if !equalToDeep(getElement(a, i), getElement(b, i), visited) {
+			return false
+		}
+	}
+	return true
+}
+
 // pairEqualToDeep compares two Pairs with cycle detection.
 // Mirrors the iterative structure of Pair.EqualTo but records visited
 // pointer pairs and recurses elements via equalToDeep.
@@ -176,20 +217,13 @@ func vectorEqualToDeep(p, other *Vector, visited map[equalPairKey]bool) bool {
 	if p == nil || other == nil {
 		return p == other
 	}
-	if len(*p) != len(*other) {
-		return false
-	}
-	key := equalPairKey{p, other}
-	if visited[key] {
-		return true
-	}
-	visited[key] = true
-	for i := range *p {
-		if !equalToDeep((*p)[i], (*other)[i], visited) {
-			return false
-		}
-	}
-	return true
+	return compareIndexable(
+		p, other,
+		func(v *Vector) int { return len(*v) },
+		func(v *Vector, i int) Value { return (*v)[i] },
+		nil, // Vectors don't have void elements
+		visited,
+	)
 }
 
 // arrayListEqualToDeep compares two ArrayLists with cycle detection.
@@ -197,26 +231,13 @@ func arrayListEqualToDeep(p, v *ArrayList, visited map[equalPairKey]bool) bool {
 	if p == nil || v == nil {
 		return p == v
 	}
-	if len(*p) != len(*v) {
-		return false
-	}
-	key := equalPairKey{p, v}
-	if visited[key] {
-		return true
-	}
-	visited[key] = true
-	for i := range *p {
-		if IsVoid((*p)[i]) || IsVoid((*v)[i]) {
-			if IsVoid((*p)[i]) && IsVoid((*v)[i]) {
-				continue
-			}
-			return false
-		}
-		if !equalToDeep((*p)[i], (*v)[i], visited) {
-			return false
-		}
-	}
-	return true
+	return compareIndexable(
+		p, v,
+		func(a *ArrayList) int { return len(*a) },
+		func(a *ArrayList, i int) Value { return (*a)[i] },
+		func(a *ArrayList, i int) bool { return IsVoid((*a)[i]) },
+		visited,
+	)
 }
 
 // NewTemporaryVariableName generates a unique symbol for use as a temporary variable.

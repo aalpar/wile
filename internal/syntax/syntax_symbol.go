@@ -34,8 +34,8 @@ type SymbolInterner interface {
 
 // SyntaxSymbol wraps a Scheme symbol with source context and hygiene scopes.
 type SyntaxSymbol struct {
-	Sym           *values.Symbol
-	sourceContext *SourceContext
+	Sym *values.Symbol
+	syntaxBase
 	// ResolvedBinding holds a pre-resolved binding for free identifiers in macro templates.
 	// This is set during macro expansion for identifiers that should resolve to bindings
 	// in the macro's definition environment rather than the use-site environment.
@@ -53,8 +53,10 @@ func NewSyntaxSymbol(key string, sctx *SourceContext) *SyntaxSymbol {
 // NewSyntaxSymbolForSymbol creates a new syntax symbol from an existing symbol.
 func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
-		Sym:           sym,
-		sourceContext: sctx,
+		Sym: sym,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 	return q
 }
@@ -62,8 +64,10 @@ func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSy
 // NewSyntaxSymbolForSyntaxSymbol creates a new syntax symbol with a different source context.
 func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
-		Sym:           sym.Sym,
-		sourceContext: sctx,
+		Sym: sym.Sym,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 	return q
 }
@@ -83,8 +87,10 @@ func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *Syn
 // distinguished during variable resolution (see ScopesMatch in scope_utils.go).
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 	return &SyntaxSymbol{
-		Sym:             p.Sym,
-		sourceContext:   p.sourceContext.WithScope(scope),
+		Sym: p.Sym,
+		syntaxBase: syntaxBase{
+			sourceContext: p.sourceContext.WithScope(scope),
+		},
 		ResolvedBinding: p.ResolvedBinding, // Preserve resolved binding
 	}
 }
@@ -94,8 +100,10 @@ func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 // definition-site bindings, enabling proper resolution across library boundaries.
 func (p *SyntaxSymbol) WithResolvedBinding(binding any) *SyntaxSymbol {
 	return &SyntaxSymbol{
-		Sym:             p.Sym,
-		sourceContext:   p.sourceContext,
+		Sym: p.Sym,
+		syntaxBase: syntaxBase{
+			sourceContext: p.sourceContext,
+		},
 		ResolvedBinding: binding,
 	}
 }
@@ -126,11 +134,6 @@ func (p *SyntaxSymbol) Unwrap() values.Value {
 		return values.Void
 	}
 	return p.Sym
-}
-
-// SourceContext returns the source context of the symbol.
-func (p *SyntaxSymbol) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 // IsVoid returns true if the syntax symbol is nil.

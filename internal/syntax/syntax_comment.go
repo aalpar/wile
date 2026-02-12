@@ -25,26 +25,23 @@ var (
 
 // SyntaxComment represents a source comment (line or block) with source location.
 type SyntaxComment struct {
-	Text          string
-	sourceContext *SourceContext
+	Text string
+	syntaxBase
 }
 
 // NewSyntaxComment creates a new syntax comment with the given text and source context.
 func NewSyntaxComment(text string, sctx *SourceContext) *SyntaxComment {
 	return &SyntaxComment{
-		Text:          text,
-		sourceContext: sctx,
+		Text: text,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 }
 
 // AddScope returns the comment unchanged (comments don't participate in hygiene).
 func (p *SyntaxComment) AddScope(scope *Scope) SyntaxValue {
 	return p
-}
-
-// SourceContext returns the source context of the comment.
-func (p *SyntaxComment) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 func (p *SyntaxComment) Unwrap() values.Value {

@@ -28,8 +28,8 @@ var (
 
 // SyntaxVector wraps a Scheme vector with source context.
 type SyntaxVector struct {
-	Values        []SyntaxValue
-	sourceContext *SourceContext
+	Values []SyntaxValue
+	syntaxBase
 }
 
 // AddScope returns the vector unchanged as vectors do not track scopes.
@@ -40,15 +40,12 @@ func (p *SyntaxVector) AddScope(_ *Scope) SyntaxValue {
 // NewSyntaxVector creates a new syntax vector with the given source context and elements.
 func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 	q := &SyntaxVector{
-		Values:        vs,
-		sourceContext: sc,
+		Values: vs,
+		syntaxBase: syntaxBase{
+			sourceContext: sc,
+		},
 	}
 	return q
-}
-
-// SourceContext returns the source context for this syntax vector.
-func (p *SyntaxVector) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 // UnwrapAll recursively unwraps all elements to produce a plain values.Vector.
