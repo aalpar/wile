@@ -27,7 +27,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 		if err == nil {
 			return path, nil
 		}
-		return "", values.NewForeignErrorf("file %q not found (absolute path)", path)
+		return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found (absolute path)", path)
 	}
 
 	var searched []string
@@ -68,7 +68,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 
 	// Not found - report all searched paths
 	if len(searched) == 0 {
-		return "", values.NewForeignErrorf("file %q not found (no search paths available)", path)
+		return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found (no search paths available)", path)
 	}
 
 	searchedList := strings.Join(searched, ", ")
@@ -77,5 +77,5 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 		hint = " (load from a file context or set search paths)"
 	}
 
-	return "", values.NewForeignErrorf("file %q not found; searched: %s%s", path, searchedList, hint)
+	return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found; searched: %s%s", path, searchedList, hint)
 }
