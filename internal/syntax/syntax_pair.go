@@ -32,8 +32,8 @@ var (
 
 // SyntaxPair wraps a Scheme pair (cons cell) with source context.
 type SyntaxPair struct {
-	Values        [2]SyntaxValue
-	sourceContext *SourceContext
+	Values [2]SyntaxValue
+	syntaxBase
 }
 
 // AddScope recursively propagates a scope to all nested symbols.
@@ -66,8 +66,10 @@ func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
 // NewSyntaxEmptyList creates a syntax empty list with the given source context.
 func NewSyntaxEmptyList(sctx *SourceContext) *SyntaxPair {
 	q := &SyntaxPair{
-		Values:        [2]SyntaxValue{nil, nil},
-		sourceContext: sctx,
+		Values: [2]SyntaxValue{nil, nil},
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 	return q
 }
@@ -75,8 +77,10 @@ func NewSyntaxEmptyList(sctx *SourceContext) *SyntaxPair {
 // NewSyntaxCons creates a new syntax pair (cons cell).
 func NewSyntaxCons(v0, v1 SyntaxValue, sctx *SourceContext) *SyntaxPair {
 	q := &SyntaxPair{
-		Values:        [2]SyntaxValue{v0, v1},
-		sourceContext: sctx,
+		Values: [2]SyntaxValue{v0, v1},
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 	return q
 }
@@ -119,11 +123,6 @@ func (p *SyntaxPair) Car() values.Value {
 // Cdr returns the cdr of the pair.
 func (p *SyntaxPair) Cdr() values.Value {
 	return p.Values[1]
-}
-
-// SourceContext returns the source context of the pair.
-func (p *SyntaxPair) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 // UnwrapAll recursively unwraps the pair and returns a regular Scheme pair.

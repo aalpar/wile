@@ -25,18 +25,13 @@ var (
 
 // SyntaxDirective represents a reader directive (#!fold-case, etc.).
 type SyntaxDirective struct {
-	Name          string
-	sourceContext *SourceContext
+	Name string
+	syntaxBase
 }
 
 // AddScope returns the directive unchanged (directives don't participate in hygiene).
 func (p *SyntaxDirective) AddScope(_ *Scope) SyntaxValue {
 	return p
-}
-
-// SourceContext returns the source context of the directive.
-func (p *SyntaxDirective) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 func (p *SyntaxDirective) Unwrap() values.Value {
@@ -51,8 +46,10 @@ func (p *SyntaxDirective) UnwrapAll() values.Value {
 // NewSyntaxDirective creates a new reader directive with the given name.
 func NewSyntaxDirective(name string, sctx *SourceContext) *SyntaxDirective {
 	return &SyntaxDirective{
-		Name:          name,
-		sourceContext: sctx,
+		Name: name,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 }
 

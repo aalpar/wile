@@ -164,8 +164,10 @@ func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
 		Origin: sctx.Origin,
 	}
 	return &SyntaxSymbol{
-		Sym:             sym.Sym,
-		sourceContext:   newSctx,
+		Sym: sym.Sym,
+		syntaxBase: syntaxBase{
+			sourceContext: newSctx,
+		},
 		ResolvedBinding: sym.ResolvedBinding,
 	}
 }

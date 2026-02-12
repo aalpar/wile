@@ -27,18 +27,13 @@ var (
 
 // SyntaxDatumLabel represents a datum label reference (#n#).
 type SyntaxDatumLabel struct {
-	Label         int
-	sourceContext *SourceContext
+	Label int
+	syntaxBase
 }
 
 // AddScope returns the label unchanged (labels don't participate in hygiene).
 func (p *SyntaxDatumLabel) AddScope(_ *Scope) SyntaxValue {
 	return p
-}
-
-// SourceContext returns the source context of the label.
-func (p *SyntaxDatumLabel) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 func (p *SyntaxDatumLabel) Unwrap() values.Value {
@@ -53,8 +48,10 @@ func (p *SyntaxDatumLabel) UnwrapAll() values.Value {
 // NewSyntaxDatumLabel creates a new datum label reference with the given number.
 func NewSyntaxDatumLabel(label int, sctx *SourceContext) *SyntaxDatumLabel {
 	return &SyntaxDatumLabel{
-		Label:         label,
-		sourceContext: sctx,
+		Label: label,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 }
 

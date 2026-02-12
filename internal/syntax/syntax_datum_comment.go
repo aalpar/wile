@@ -27,28 +27,25 @@ var (
 
 // SyntaxDatumComment represents a datum comment (#;datum).
 type SyntaxDatumComment struct {
-	Label         string
-	Value         SyntaxValue
-	sourceContext *SourceContext
+	Label string
+	Value SyntaxValue
+	syntaxBase
 }
 
 // NewSyntaxDatumComment creates a new datum comment.
 func NewSyntaxDatumComment(label string, value SyntaxValue, sctx *SourceContext) *SyntaxDatumComment {
 	return &SyntaxDatumComment{
-		Label:         label,
-		Value:         value,
-		sourceContext: sctx,
+		Label: label,
+		Value: value,
+		syntaxBase: syntaxBase{
+			sourceContext: sctx,
+		},
 	}
 }
 
 // AddScope returns the comment unchanged (comments don't participate in hygiene).
 func (p *SyntaxDatumComment) AddScope(_ *Scope) SyntaxValue {
 	return p
-}
-
-// SourceContext returns the source context of the comment.
-func (p *SyntaxDatumComment) SourceContext() *SourceContext {
-	return p.sourceContext
 }
 
 // IsVoid returns true if the comment is nil.
