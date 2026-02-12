@@ -28,30 +28,6 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// extractReal extracts a float64 from a real number for division operations.
-// Returns the float64 value, whether the input was exact, and any error.
-//
-// R7RS §6.2.6: Division procedures work on all real numbers.
-func extractReal(v values.Value, name string) (float64, bool, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return float64(n.Value), true, nil
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
-		return f, true, nil
-	case *values.Float:
-		return n.Value, false, nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return f, true, nil
-	case *values.BigFloat:
-		f, _ := n.BigFloatValue().Float64()
-		return f, false, nil
-	default:
-		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
-	}
-}
-
 // ensureInexactDecimal ensures a float string has a decimal point, even in
 // scientific notation. "5e-324" becomes "5.0e-324", "1" becomes "1.0".
 func ensureInexactDecimal(s string) string {
@@ -487,11 +463,11 @@ func PrimFloorDiv(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "floor/")
+	n0, exact0, err := helpers.ExtractReal(o0, "floor/")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "floor/")
+	n1, exact1, err := helpers.ExtractReal(o1, "floor/")
 	if err != nil {
 		return err
 	}
@@ -518,11 +494,11 @@ func PrimFloorQuotient(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "floor-quotient")
+	n0, exact0, err := helpers.ExtractReal(o0, "floor-quotient")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "floor-quotient")
+	n1, exact1, err := helpers.ExtractReal(o1, "floor-quotient")
 	if err != nil {
 		return err
 	}
@@ -548,11 +524,11 @@ func PrimFloorRemainder(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "floor-remainder")
+	n0, exact0, err := helpers.ExtractReal(o0, "floor-remainder")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "floor-remainder")
+	n1, exact1, err := helpers.ExtractReal(o1, "floor-remainder")
 	if err != nil {
 		return err
 	}
@@ -580,11 +556,11 @@ func PrimTruncateDiv(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "truncate/")
+	n0, exact0, err := helpers.ExtractReal(o0, "truncate/")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "truncate/")
+	n1, exact1, err := helpers.ExtractReal(o1, "truncate/")
 	if err != nil {
 		return err
 	}
@@ -611,11 +587,11 @@ func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "truncate-quotient")
+	n0, exact0, err := helpers.ExtractReal(o0, "truncate-quotient")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "truncate-quotient")
+	n1, exact1, err := helpers.ExtractReal(o1, "truncate-quotient")
 	if err != nil {
 		return err
 	}
@@ -641,11 +617,11 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
-	n0, exact0, err := extractReal(o0, "truncate-remainder")
+	n0, exact0, err := helpers.ExtractReal(o0, "truncate-remainder")
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := extractReal(o1, "truncate-remainder")
+	n1, exact1, err := helpers.ExtractReal(o1, "truncate-remainder")
 	if err != nil {
 		return err
 	}

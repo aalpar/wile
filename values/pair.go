@@ -184,6 +184,7 @@ func Must(v Value, err error) {
 }
 
 // EqualTo checks if the Pair is equal to another Value o.
+// Delegates to the cycle-aware pairEqualToDeep to handle circular lists.
 func (p *Pair) EqualTo(o Value) bool {
 	v, ok := o.(*Pair)
 	if !ok {
@@ -192,32 +193,7 @@ func (p *Pair) EqualTo(o Value) bool {
 	if p == v {
 		return true
 	}
-	p0 := p
-	v0 := v
-	for {
-		if !EqualTo(p0[0], v0[0]) {
-			return false
-		}
-		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
-		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
-		// and a non-nil cdr are not.
-		if IsVoid(p0[1]) || IsVoid(v0[1]) {
-			if IsVoid(p0[1]) && IsVoid(v0[1]) {
-				return true
-			}
-			return p0[1] == v0[1]
-		}
-		if p0[1] == v0[1] {
-			return true
-		}
-		pv0, _ := p0[1].(*Pair)
-		vv0, _ := v0[1].(*Pair)
-		if pv0 == nil || vv0 == nil {
-			return p0[1].EqualTo(v0[1])
-		}
-		p0 = pv0
-		v0 = vv0
-	}
+	return pairEqualToDeep(p, v, make(map[equalPairKey]bool))
 }
 
 // IsVoid checks if the Pair is void (nil).

@@ -116,7 +116,7 @@ func TestOperationLoadLiteralInteger(t *testing.T) {
 
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, newMc.pc, qt.Equals, 1)
-	qt.Assert(t, newMc.value, qt.IsNil)
+	qt.Assert(t, newMc.value, qt.DeepEquals, MultipleValues{values.NewInteger(42)})
 }
 
 func TestOperationLoadLiteralInteger_SchemeString(t *testing.T) {

@@ -180,7 +180,10 @@ func (p *Rational) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Multiply(o Number) Number {
 	if o.IsZero() {
-		return o
+		return multiplyResultForZero(o, p)
+	}
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *Rational:
@@ -389,10 +392,16 @@ func (p *Rational) IsVoid() bool {
 }
 
 // EqualTo returns true if the rationals have equal values.
+// Handles comparison with Integer and BigInteger for symmetry with
+// whole-valued rationals (e.g., 5/1 == 5).
 func (p *Rational) EqualTo(v Value) bool {
-	other, ok := v.(*Rational)
-	if ok {
+	switch other := v.(type) {
+	case *Rational:
 		return p.value.Cmp(other.value) == 0
+	case *Integer:
+		return p.value.Cmp(new(big.Rat).SetInt64(other.Value)) == 0
+	case *BigInteger:
+		return p.value.Cmp(new(big.Rat).SetInt(other.BigInt())) == 0
 	}
 	return false
 }

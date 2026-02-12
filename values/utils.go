@@ -106,6 +106,12 @@ func EqualTo(a, b Value) bool {
 // equalToDeep dispatches compound types to cycle-aware helpers,
 // and delegates everything else to a.EqualTo(b).
 func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.IsVoid() || b.IsVoid() {
+		return a.IsVoid() == b.IsVoid()
+	}
 	switch pa := a.(type) {
 	case *Pair:
 		pb, ok := b.(*Pair)

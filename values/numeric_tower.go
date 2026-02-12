@@ -18,6 +18,23 @@ import (
 	"math/big"
 )
 
+// multiplyResultForZero returns the correct result when one operand is zero
+// in a multiplication, following R7RS §6.2.2 and Chez Scheme behavior.
+//
+// R7RS permits (* 0 x) to return exact 0 even when x is inexact.
+// Rule: if either operand is exact, return exact zero (Integer 0).
+// If both operands are inexact, return the zero operand unchanged.
+//
+// Callers must ensure `other` is finite before calling this function.
+// IEEE 754 requires 0 * inf = NaN and 0 * NaN = NaN, so the exact-zero
+// rule does not apply when the non-zero operand is infinite or NaN.
+func multiplyResultForZero(zero, other Number) Number {
+	if zero.IsExact() || other.IsExact() {
+		return NewInteger(0)
+	}
+	return zero
+}
+
 // floatToExact converts a float64 to its exact Number representation.
 // Returns Integer or BigInteger if the float is integral, Rational otherwise.
 func floatToExact(f float64) Number {

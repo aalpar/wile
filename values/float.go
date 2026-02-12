@@ -129,8 +129,11 @@ func (p *Float) Subtract(o Number) Number {
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Float) Multiply(o Number) Number {
-	if o.IsZero() {
-		return o
+	if o.IsZero() && p.IsFinite() {
+		return multiplyResultForZero(o, p)
+	}
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *Integer:
@@ -335,10 +338,14 @@ func (p *Float) IsVoid() bool {
 }
 
 // EqualTo returns true if both floats have the same value.
+// Handles comparison with both Float and BigFloat types for symmetry.
 func (p *Float) EqualTo(v Value) bool {
-	other, ok := v.(*Float)
-	if ok {
+	switch other := v.(type) {
+	case *Float:
 		return p.Value == other.Value
+	case *BigFloat:
+		vf := new(big.Float).SetFloat64(p.Value)
+		return vf.Cmp(other.BigFloatValue()) == 0
 	}
 	return false
 }

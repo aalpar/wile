@@ -161,53 +161,22 @@ func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
 	})
 }
 
-// isNonRealComplex returns true if n is a complex number with non-zero imaginary part.
-// R7RS §6.2.6: ordering comparisons (<, >, <=, >=) require real arguments.
-func isNonRealComplex(n values.Number) bool {
-	switch v := n.(type) {
-	case *values.Complex:
-		return !v.IsReal()
-	case *values.BigComplex:
-		return !v.IsReal()
-	default:
-		return false
-	}
-}
-
 // PrimNumLt implements the < primitive.
 //
 // R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumLt(_ context.Context, mc *machine.MachineContext) error {
-	var complexErr error
-	err := helpers.NumericChainCompare(mc, "<", func(prev, curr values.Number) bool {
-		if isNonRealComplex(prev) || isNonRealComplex(curr) {
-			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, "<: requires real arguments")
-			return true
-		}
+	return helpers.NumericChainCompareReal(mc, "<", func(prev, curr values.Number) bool {
 		return !prev.LessThan(curr)
 	})
-	if complexErr != nil {
-		return complexErr
-	}
-	return err
 }
 
 // PrimNumGt implements the > primitive.
 //
 // R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
-	var complexErr error
-	err := helpers.NumericChainCompare(mc, ">", func(prev, curr values.Number) bool {
-		if isNonRealComplex(prev) || isNonRealComplex(curr) {
-			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, ">: requires real arguments")
-			return true
-		}
+	return helpers.NumericChainCompareReal(mc, ">", func(prev, curr values.Number) bool {
 		return !curr.LessThan(prev)
 	})
-	if complexErr != nil {
-		return complexErr
-	}
-	return err
 }
 
 // PrimNumLe implements the <= primitive.
@@ -215,22 +184,13 @@ func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nondecreasing.
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
-	var complexErr error
-	err := helpers.NumericChainCompare(mc, "<=", func(prev, curr values.Number) bool {
-		if isNonRealComplex(prev) || isNonRealComplex(curr) {
-			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, "<=: requires real arguments")
-			return true
-		}
+	return helpers.NumericChainCompareReal(mc, "<=", func(prev, curr values.Number) bool {
 		// NaN fails all comparisons per IEEE 754
 		if prev.IsNaN() || curr.IsNaN() {
-			return true // fails the comparison
+			return true
 		}
 		return curr.LessThan(prev)
 	})
-	if complexErr != nil {
-		return complexErr
-	}
-	return err
 }
 
 // PrimNumGe implements the >= primitive.
@@ -238,22 +198,13 @@ func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nonincreasing.
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
-	var complexErr error
-	err := helpers.NumericChainCompare(mc, ">=", func(prev, curr values.Number) bool {
-		if isNonRealComplex(prev) || isNonRealComplex(curr) {
-			complexErr = values.WrapForeignErrorf(values.ErrNotANumber, ">=: requires real arguments")
-			return true
-		}
+	return helpers.NumericChainCompareReal(mc, ">=", func(prev, curr values.Number) bool {
 		// NaN fails all comparisons per IEEE 754
 		if prev.IsNaN() || curr.IsNaN() {
-			return true // fails the comparison
+			return true
 		}
 		return prev.LessThan(curr)
 	})
-	if complexErr != nil {
-		return complexErr
-	}
-	return err
 }
 
 // PrimAbs implements the abs primitive.
@@ -281,36 +232,6 @@ func PrimMax(_ context.Context, mc *machine.MachineContext) error {
 	})
 }
 
-// extractInteger extracts an integer value from Integer, BigInteger, or Float (if integral).
-// Returns (int64Value, bigIntValue, isInexact, error).
-// If bigIntValue is non-nil, use that; otherwise use int64Value.
-func extractInteger(v values.Value, name string) (int64, *big.Int, bool, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return n.Value, nil, false, nil
-	case *values.BigInteger:
-		return 0, n.BigInt(), false, nil
-	case *values.Float:
-		// Check if it's an integer value
-		if math.IsInf(n.Value, 0) || math.IsNaN(n.Value) {
-			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
-		}
-		if math.Floor(n.Value) != n.Value {
-			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
-		}
-		// Check if it fits in int64
-		if n.Value >= -9223372036854775808 && n.Value <= 9223372036854775807 {
-			return int64(n.Value), nil, true, nil
-		}
-		// Large float needs BigInt
-		bf := new(big.Float).SetFloat64(n.Value)
-		bi, _ := bf.Int(nil)
-		return 0, bi, true, nil
-	default:
-		return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, v)
-	}
-}
-
 // integerDivisionOp is a helper for integer division operations (quotient, remainder, modulo).
 // It handles both regular integers and big integers, preserving exactness.
 func integerDivisionOp(
@@ -323,11 +244,11 @@ func integerDivisionOp(
 	o1 := mc.Arg(1)
 
 	// Extract integer values, tracking inexactness
-	v0, big0, inexact0, err := extractInteger(o0, name)
+	v0, big0, inexact0, err := helpers.ExtractInteger(o0, name)
 	if err != nil {
 		return err
 	}
-	v1, big1, inexact1, err := extractInteger(o1, name)
+	v1, big1, inexact1, err := helpers.ExtractInteger(o1, name)
 	if err != nil {
 		return err
 	}

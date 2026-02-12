@@ -353,9 +353,10 @@ func TestBigInteger_ZeroOptimizations(t *testing.T) {
 	sum2 := zero.Add(bi)
 	c.Assert(sum2, SchemeEquals, bi)
 
-	// Multiply by zero
+	// Multiply by zero — returns exact zero (may be Integer due to R7RS exact-zero rule)
 	prod := bi.Multiply(zero)
-	c.Assert(prod.(*BigInteger).IsZero(), qt.IsTrue)
+	c.Assert(prod.IsZero(), qt.IsTrue)
+	c.Assert(prod.IsExact(), qt.IsTrue)
 }
 
 func TestBigFloat_ZeroOptimizations(t *testing.T) {

@@ -284,6 +284,38 @@ func integerFoldBig(
 	return nil
 }
 
+// ExtractInteger extracts an integer value from Integer, BigInteger, or Float (if integral).
+// Returns (int64Value, bigIntValue, isInexact, error).
+// If bigIntValue is non-nil, use that; otherwise use int64Value.
+//
+// R7RS §6.2.6: Integer operations accept exact and inexact integer arguments.
+func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) {
+	switch n := v.(type) {
+	case *values.Integer:
+		return n.Value, nil, false, nil
+	case *values.BigInteger:
+		return 0, n.BigInt(), false, nil
+	case *values.Float:
+		// Check if it's an integer value
+		if math.IsInf(n.Value, 0) || math.IsNaN(n.Value) {
+			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+		}
+		if math.Floor(n.Value) != n.Value {
+			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+		}
+		// Check if it fits in int64
+		if n.Value >= -9223372036854775808 && n.Value <= 9223372036854775807 {
+			return int64(n.Value), nil, true, nil
+		}
+		// Large float needs BigInt
+		bf := new(big.Float).SetFloat64(n.Value)
+		bi, _ := bf.Int(nil)
+		return 0, bi, true, nil
+	default:
+		return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+	}
+}
+
 // FloorDivide performs floor division, returning quotient and remainder.
 func FloorDivide(n0, n1 int64) (q, r int64) {
 	q = n0 / n1

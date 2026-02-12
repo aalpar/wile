@@ -78,7 +78,7 @@ const (
 	MessageCannotParseNumber                     = "cannot parse number"
 	MessageCodePointExceedsUnicodeMaximum        = "character code point exceeds Unicode maximum (0x10FFFF)"
 	MessageCodePointIsSurrogate                  = "character code point is a surrogate (0xD800-0xDFFF)"
-	MessageInvalidHexEscape                      = "character code point is a surrogate (0xD800-0xDFFF)"
+	MessageInvalidHexEscape                      = "invalid hex escape"
 	MessageInvalidCharacterHexEscape             = "invalid character hex escape"
 	MessageInvalidCharacterMnemonic              = "invalid character mnemonic"
 	MessageUnterminatedExtendedSymbol            = "unterminated extended symbol"
@@ -97,13 +97,13 @@ func init() {
 	for i := 0; i < len(digs); i++ {
 		digs[i] = -1
 	}
-	for i := '0'; i < '9'; i++ {
-		digs['0'] = int(i - '0')
+	for i := '0'; i <= '9'; i++ {
+		digs[i] = int(i - '0')
 	}
-	for i := 'a'; i < 'f'; i++ {
+	for i := 'a'; i <= 'f'; i++ {
 		digs[i] = int(i-'a') + 10
 	}
-	for i := 'A'; i < 'F'; i++ {
+	for i := 'A'; i <= 'F'; i++ {
 		digs[i] = int(i-'A') + 10
 	}
 }

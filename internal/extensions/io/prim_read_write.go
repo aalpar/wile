@@ -51,6 +51,70 @@ func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.Out
 	return p, nil
 }
 
+// getOptionalInputPort extracts an optional input port from a variadic argument list.
+// If the list is empty, returns the current input port.
+// Otherwise, extracts and validates the port from the list's car.
+func getOptionalInputPort(mc *machine.MachineContext, argIndex int) (values.TextualReader, error) {
+	o := mc.Arg(argIndex)
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
+	}
+	if !tuple.IsList() {
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
+	}
+	if tuple.IsEmptyList() {
+		return GetCurrentInputPort(), nil
+	}
+	p, ok := tuple.Car().(values.TextualReader)
+	if !ok {
+		return nil, values.WrapForeignErrorf(values.ErrNotAnInputPort, "expected an input port but got %T", tuple.Car())
+	}
+	return p, nil
+}
+
+// getRequiredBinaryInputPort extracts a required binary input port from a variadic argument list.
+// Returns an error if the list is empty (no default port for binary I/O).
+// Also returns the validated tuple for callers that need to extract further arguments.
+func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReader, values.Tuple, error) {
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
+	}
+	if !tuple.IsList() {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, tuple.SchemeString())
+	}
+	if tuple.IsEmptyList() {
+		return nil, nil, values.NewForeignError(name + ": no binary input port specified")
+	}
+	p, ok := tuple.Car().(values.BinaryReader)
+	if !ok {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAnInputPort, "%s: expected a binary input port but got %T", name, tuple.Car())
+	}
+	return p, tuple, nil
+}
+
+// getRequiredBinaryOutputPort extracts a required binary output port from a variadic argument list.
+// Returns an error if the list is empty (no default port for binary I/O).
+// Also returns the validated tuple for callers that need to extract further arguments.
+func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWriter, values.Tuple, error) {
+	tuple, ok := o.(values.Tuple)
+	if !ok {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
+	}
+	if !tuple.IsList() {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, tuple.SchemeString())
+	}
+	if tuple.IsEmptyList() {
+		return nil, nil, values.NewForeignError(name + ": no binary output port specified")
+	}
+	p, ok := tuple.Car().(values.BinaryWriter)
+	if !ok {
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAnOutputPort, "%s: expected a binary output port but got %T", name, tuple.Car())
+	}
+	return p, tuple, nil
+}
+
 // extractOptionalPositions extracts optional start and end positions from a tuple.
 // The tuple is expected to contain [start [end]] as integers.
 // Returns the extracted start and end values, or the provided defaults if not present.
@@ -94,25 +158,9 @@ func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64
 // Reads from the current input port if no port is specified.
 // R7RS §6.13.2: read uses datum labels to handle circular and shared structures.
 func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-
-	// Get the port to read from
-	var port values.TextualReader
-	if tuple.IsEmptyList() {
-		port = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "expected an input port but got %T", tuple.Car())
-		}
-		port = p
+	port, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	prss, ok := Parsers[port]
@@ -142,25 +190,9 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 // Reads a single token from port.
 // Reads from the current input port if no port is specified.
 func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-
-	// Get the port to read from
-	var port values.TextualReader
-	if tuple.IsEmptyList() {
-		port = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "expected an input port but got %T", tuple.Car())
-		}
-		port = p
+	port, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	tknz, ok := Tokenizers[port]
@@ -187,25 +219,9 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 // Reads datum with source information.
 // Reads from the current input port if no port is specified.
 func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-
-	// Get the port to read from
-	var port values.TextualReader
-	if tuple.IsEmptyList() {
-		port = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "expected an input port but got %T", tuple.Car())
-		}
-		port = p
+	port, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	// Get or create a parser if one does not exist
@@ -313,25 +329,11 @@ func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
 func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
+	writer, err := getOptionalOutputPort(mc, 0)
+	if err != nil {
+		return err
 	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %s", tuple.SchemeString())
-	}
-	var writer values.OutputPort
-	if tuple.IsEmptyList() {
-		writer = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "expected an output port but got %T", tuple.Car())
-		}
-		writer = p
-	}
-	_, err := writer.Write([]byte("\n"))
+	_, err = writer.Write([]byte("\n"))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error writing newline to output port")
 	}
@@ -349,25 +351,11 @@ func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
 // (write-simple obj) or (write-simple obj port)
 func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	o := mc.Arg(1)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-simple: expected a list but got %T", o)
+	writer, err := getOptionalOutputPort(mc, 1)
+	if err != nil {
+		return err
 	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-simple: expected a list but got %s", tuple.SchemeString())
-	}
-	var writer values.OutputPort
-	if tuple.IsEmptyList() {
-		writer = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-simple: expected an output port but got %T", tuple.Car())
-		}
-		writer = p
-	}
-	_, err := writer.Write([]byte(obj.SchemeString()))
+	_, err = writer.Write([]byte(obj.SchemeString()))
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-simple: error writing to output port")
 	}
@@ -408,24 +396,9 @@ func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.2: (read-char [port])
 // Reads and returns a single character from the input port.
 func PrimReadChar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-char: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-char: expected a list but got %s", tuple.SchemeString())
-	}
-
-	var reader values.TextualReader
-	if tuple.IsEmptyList() {
-		reader = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-char: expected an input port but got %T", tuple.Car())
-		}
-		reader = p
+	reader, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	r, _, err := reader.ReadRune()
@@ -444,24 +417,9 @@ func PrimReadChar(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.2: (peek-char [port])
 // Reads and returns a single character from the input port without consuming it.
 func PrimPeekChar(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "peek-char: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "peek-char: expected a list but got %s", tuple.SchemeString())
-	}
-
-	var reader values.TextualReader
-	if tuple.IsEmptyList() {
-		reader = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "peek-char: expected an input port but got %T", tuple.Car())
-		}
-		reader = p
+	reader, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	r, _, err := reader.ReadRune()
@@ -485,24 +443,9 @@ func PrimPeekChar(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.2: (read-line [port])
 // Reads a line of text from the input port, not including the line ending.
 func PrimReadLine(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-line: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-line: expected a list but got %s", tuple.SchemeString())
-	}
-
-	var reader values.TextualReader
-	if tuple.IsEmptyList() {
-		reader = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-line: expected an input port but got %T", tuple.Car())
-		}
-		reader = p
+	reader, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
 	var line []rune
@@ -551,8 +494,6 @@ func PrimCharReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
 func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.Arg(1)
-
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-string")
 	if err != nil {
 		return err
@@ -561,24 +502,9 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("read-string: k must be non-negative")
 	}
 
-	// Get the port from rest arguments
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-string: expected a list but got %T", rest)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-string: expected a list but got %s", tuple.SchemeString())
-	}
-
-	var reader values.TextualReader
-	if tuple.IsEmptyList() {
-		reader = GetCurrentInputPort()
-	} else {
-		p, ok := tuple.Car().(values.TextualReader)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-string: expected an input port but got %T", tuple.Car())
-		}
-		reader = p
+	reader, err := getOptionalInputPort(mc, 1)
+	if err != nil {
+		return err
 	}
 
 	// Read up to k characters
@@ -687,7 +613,6 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 // Writes byte to the given binary output port and returns an unspecified value.
 func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 	byteVal := mc.Arg(0)
-	rest := mc.Arg(1)
 
 	// Validate byte argument (must be exact integer 0-255)
 	var b byte
@@ -701,27 +626,11 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "write-u8: expected an exact integer but got %T", byteVal)
 	}
 
-	// Get the port from rest arguments
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-u8: expected a list but got %T", rest)
+	p, _, err := getRequiredBinaryOutputPort(mc.Arg(1), "write-u8")
+	if err != nil {
+		return err
 	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-u8: expected a list but got %s", tuple.SchemeString())
-	}
-
-	// WriteByte to the appropriate port
-	if tuple.IsEmptyList() {
-		// Default to current output port - but write-u8 requires a binary port
-		return values.NewForeignError("write-u8: no binary output port specified")
-	}
-
-	port := tuple.Car()
-	p, ok := port.(values.BinaryWriter)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-u8: expected a binary output port but got %T", port)
-	}
-	err := p.WriteByte(b)
+	err = p.WriteByte(b)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-u8: error writing byte")
 	}
@@ -735,23 +644,9 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 // Reads the next byte from the given binary input port and returns it as an exact integer.
 // Returns eof-object at end of file.
 func PrimReadU8(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-u8: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-u8: expected a list but got %s", tuple.SchemeString())
-	}
-
-	if tuple.IsEmptyList() {
-		return values.NewForeignError("read-u8: no binary input port specified")
-	}
-
-	port := tuple.Car()
-	p, ok := port.(values.BinaryReader)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-u8: expected a binary input port but got %T", port)
+	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "read-u8")
+	if err != nil {
+		return err
 	}
 	b, err := p.ReadByte()
 	if errors.Is(err, io.EOF) {
@@ -770,23 +665,9 @@ func PrimReadU8(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (peek-u8 [port])
 // Like read-u8, but does not consume the byte from the port.
 func PrimPeekU8(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "peek-u8: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "peek-u8: expected a list but got %s", tuple.SchemeString())
-	}
-
-	if tuple.IsEmptyList() {
-		return values.NewForeignError("peek-u8: no binary input port specified")
-	}
-
-	port := tuple.Car()
-	p, ok := port.(values.BinaryReader)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "peek-u8: expected a binary input port but got %T", port)
+	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "peek-u8")
+	if err != nil {
+		return err
 	}
 	b, err := p.ReadByte()
 	if errors.Is(err, io.EOF) {
@@ -821,8 +702,6 @@ func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
 func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.Arg(1)
-
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-bytevector")
 	if err != nil {
 		return err
@@ -831,23 +710,9 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("read-bytevector: k must be non-negative")
 	}
 
-	// Get the port from rest arguments
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector: expected a list but got %T", rest)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector: expected a list but got %s", tuple.SchemeString())
-	}
-
-	if tuple.IsEmptyList() {
-		return values.NewForeignError("read-bytevector: no binary input port specified")
-	}
-
-	port := tuple.Car()
-	p, ok := port.(values.BinaryReader)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-bytevector: expected a binary input port but got %T", port)
+	p, _, err := getRequiredBinaryInputPort(mc.Arg(1), "read-bytevector")
+	if err != nil {
+		return err
 	}
 
 	// Read up to k bytes
@@ -876,27 +741,15 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 // Reads bytes from port into an existing bytevector.
 // Returns the number of bytes read, or eof-object if no bytes available.
 func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.Arg(1)
-
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "read-bytevector!")
 	if err != nil {
 		return err
 	}
 
-	// Parse optional arguments: [port [start [end]]]
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: expected a list but got %T", rest)
+	p, tuple, err := getRequiredBinaryInputPort(mc.Arg(1), "read-bytevector!")
+	if err != nil {
+		return err
 	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "read-bytevector!: expected a list but got %s", tuple.SchemeString())
-	}
-
-	if tuple.IsEmptyList() {
-		return values.NewForeignError("read-bytevector!: no binary input port specified")
-	}
-
-	port := tuple.Car()
 
 	// Extract optional start/end arguments
 	start, end, err := extractOptionalPositions(tuple, 0, int64(len(*bv)), "read-bytevector!")
@@ -911,12 +764,6 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	}
 	if end < start || end > bvLen {
 		return values.NewForeignError("read-bytevector!: end index out of bounds")
-	}
-
-	// Read into temporary buffer
-	p, ok2 := port.(values.BinaryReader)
-	if !ok2 {
-		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "read-bytevector!: expected a binary input port but got %T", port)
 	}
 
 	buf := make([]byte, end-start)
@@ -943,8 +790,6 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 // R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
 // Writes the bytes of bytevector to port.
 func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
-	rest := mc.Arg(1)
-
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "write-bytevector")
 	if err != nil {
 		return err
@@ -952,20 +797,10 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 	bvLen := int64(len(*bv))
 
-	// Parse optional arguments: [port [start [end]]]
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: expected a list but got %T", rest)
+	p, tuple, err := getRequiredBinaryOutputPort(mc.Arg(1), "write-bytevector")
+	if err != nil {
+		return err
 	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "write-bytevector: expected a list but got %s", tuple.SchemeString())
-	}
-
-	if tuple.IsEmptyList() {
-		return values.NewForeignError("write-bytevector: no binary output port specified")
-	}
-
-	port := tuple.Car()
 
 	// Extract optional start/end arguments
 	start, end, err := extractOptionalPositions(tuple, 0, bvLen, "write-bytevector")
@@ -981,11 +816,6 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("write-bytevector: end index out of bounds")
 	}
 
-	// Write bytes to the appropriate port
-	p, ok2 := port.(values.BinaryWriter)
-	if !ok2 {
-		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "write-bytevector: expected a binary output port but got %T", port)
-	}
 	data := bv.AsBytes(int(start), int(end))
 	_, err = p.Write(data)
 	if err != nil {
@@ -1000,27 +830,12 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (flush-output-port [port])
 // Flushes any buffered output to the underlying output device.
 func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	tuple, ok := o.(values.Tuple)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "flush-output-port: expected a list but got %T", o)
-	}
-	if !tuple.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "flush-output-port: expected a list but got %s", tuple.SchemeString())
+	port, err := getOptionalOutputPort(mc, 0)
+	if err != nil {
+		return err
 	}
 
-	var port values.OutputPort
-	if tuple.IsEmptyList() {
-		port = GetCurrentOutputPort()
-	} else {
-		p, ok := tuple.Car().(values.OutputPort)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "flush-output-port: expected an output port but got %T", tuple.Car())
-		}
-		port = p
-	}
-
-	err := port.Flush()
+	err = port.Flush()
 	if err != nil {
 		return values.WrapForeignErrorf(err, "flush-output-port: error flushing port")
 	}
