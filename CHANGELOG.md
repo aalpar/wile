@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add Gabriel benchmark suite with 16 canonical benchmarks (tak, takl, ctak, cpstak, fib, triangl, sum, sumfp, diviter, divrec, deriv, ackermann, sieve, nqueens, primes, peval) comparable across Scheme implementations
+- Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
+- Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
+- Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
+
 ## [1.2.0] - 2026-02-11
 
 ### Added

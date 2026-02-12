@@ -56,6 +56,8 @@ endif
 
 .PHONY: build
 build: $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
+	@ln -sf $(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(DIST_DIR)/$(MY_BIN)
+	@echo "Created symlink: $(DIST_DIR)/$(MY_BIN) -> $(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)"
 
 # Generic build rule for any OS/arch combination
 $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
@@ -152,6 +154,30 @@ bench-schelog: build
 	else \
 		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
 	fi
+
+# Run canonical Gabriel benchmark suite (16 benchmarks).
+# These benchmarks are comparable across Scheme implementations.
+# Saves timestamped CSV results to examples/benchmarks/canonical-results-*.csv.
+#   make bench-gabriel
+.PHONY: bench-gabriel
+bench-gabriel: build
+	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-canonical.sh
+
+# Run all Scheme benchmarks (canonical + non-canonical).
+# Includes 21 total benchmarks, some of which are Wile-specific.
+#   make bench-gabriel-all
+.PHONY: bench-gabriel-all
+bench-gabriel-all: build
+	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-all.sh
+
+# Compare Wile against other Scheme implementations.
+# Requires other Schemes installed (chez, racket, chibi, guile).
+# Saves comparison results to examples/benchmarks/comparison-*.csv.
+#   make bench-gabriel-compare
+#   make bench-gabriel-compare BENCHMARKS="tak fib ack deriv"
+.PHONY: bench-gabriel-compare
+bench-gabriel-compare: build
+	@cd examples/benchmarks && ./compare-schemes.sh
 
 PROFILE_DIR=$(GO_BUILD_DIR)/profiles
 

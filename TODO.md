@@ -3,18 +3,18 @@ TODO
 
 ### Summary
 
-Items are ordered by priority: P1 (core features), P2 (developer experience), P3 (extended features), P4 (nice to have), P5 (internal refactoring).
+Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers), P3 (advanced use cases), P4 (future/nice-to-have), P5 (internal refactoring).
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
+| **P1** | **Scheme examples & benchmarks** | **Documentation** | **Planned** | **Showcase examples demonstrating all Wile features. `plans/SCHEME_EXAMPLES.md`** |
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| **P1** | **Go FFI Phase 3 — Plugin support** | **Embedding** | **Not started** | **Dynamic extension loading via registry** |
-| **P1** | **Authorization Framework (6 phases)** | **Security** | **Not started** | **K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md`** |
 | **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`. `plans/LOAD_PATH_STACK.md`** |
-| P2 | Scheme examples & benchmarks | Documentation | Planned | Showcase examples demonstrating all Wile features. `plans/SCHEME_EXAMPLES.md` |
-| P2 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
-| P2 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
+| P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
+| P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
+| P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P3 | Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
 | P3 | Unit testing library | Standard library | Not started | Test cases, assertions, runners |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
@@ -40,15 +40,30 @@ Items are ordered by priority: P1 (core features), P2 (developer experience), P3
 Future Extensions
 -----------------
 
-### Go FFI
+### Scheme Examples & Benchmarks (P1)
+
+Showcase examples that demonstrate Wile's capabilities and use cases:
+- Configuration DSL showcasing hygienic macros
+- Embedded scripting in Go applications
+- Logic programming with schelog
+- Macro system demonstrations
+- Performance comparisons with other Schemes
+
+See `plans/SCHEME_EXAMPLES.md` for full plan.
+
+---
+
+### Go FFI (P2)
 
 - [ ] Phase 3: Plugin support (dynamic extension loading via registry pattern)
 
 ---
 
-### Authorization Framework
+### Authorization Framework (P3)
 
 Fine-grained access control for embedded engines running untrusted code. Kubernetes-style verb+resource model with a single `Authorizer` interface method, extensible by extensions without interface changes.
+
+**Note**: This addresses a speculative use case. No current users have requested sandboxing. Prioritize after achieving broader adoption (10+ active users embedding Wile).
 
 See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 
