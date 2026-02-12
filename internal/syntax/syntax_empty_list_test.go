@@ -74,7 +74,7 @@ func TestSyntaxEmptyList_EqualTo(t *testing.T) {
 func TestSyntaxEmptyList_SchemeString(t *testing.T) {
 	c := qt.New(t)
 	empty := syntaxEmptyListType{}
-	c.Assert(empty.SchemeString(), qt.Equals, "()")
+	c.Assert(empty.SchemeString(), qt.Equals, "#'()")
 }
 
 func TestSyntaxEmptyList_IsEmptyList(t *testing.T) {

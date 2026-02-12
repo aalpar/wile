@@ -34,9 +34,9 @@ var (
 	_ SyntaxTuple  = syntaxEmptyListType{}
 )
 
-// SchemeString returns "()" for the empty list.
+// SchemeString returns "#'()" for the syntax empty list, matching other SyntaxValue implementations.
 func (syntaxEmptyListType) SchemeString() string {
-	return "()"
+	return "#'()"
 }
 
 // IsVoid returns false. The empty list is a valid first-class value, not void.
@@ -149,11 +149,6 @@ func (syntaxEmptyListType) UnwrapAll() values.Value {
 // Empty lists have no symbols to propagate scopes to, but we preserve
 // the scope in the source context for consistency.
 func (p syntaxEmptyListType) AddScope(scope *Scope) SyntaxValue {
-	if p.sourceContext == nil {
-		return syntaxEmptyListType{
-			sourceContext: NewSourceContext("", "", SourceIndexes{}, SourceIndexes{}).WithScope(scope),
-		}
-	}
 	return syntaxEmptyListType{
 		sourceContext: p.sourceContext.WithScope(scope),
 	}
