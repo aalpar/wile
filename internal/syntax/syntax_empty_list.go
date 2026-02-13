@@ -105,16 +105,6 @@ func (syntaxEmptyListType) SyntaxCdr() SyntaxValue {
 	panic(values.ErrNotAPair)
 }
 
-// SetSyntaxCar panics - empty list is immutable.
-func (syntaxEmptyListType) SetSyntaxCar(_ SyntaxValue) {
-	panic(values.ErrNotAPair)
-}
-
-// SetSyntaxCdr panics - empty list is immutable.
-func (syntaxEmptyListType) SetSyntaxCdr(_ SyntaxValue) {
-	panic(values.ErrNotAPair)
-}
-
 // SyntaxForEach is a no-op on the empty list.
 func (p syntaxEmptyListType) SyntaxForEach(_ context.Context, _ SyntaxForEachFunc) (SyntaxValue, error) {
 	return p, nil

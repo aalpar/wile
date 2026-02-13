@@ -49,6 +49,10 @@ func formatIndexable(prefix string, length int, get func(int) Value) string {
 // List constructs a proper list from the given values.
 // Returns EmptyList if no arguments are provided.
 // The resulting list has the values in the same order as the arguments.
+//
+// Implementation note: Returns Tuple interface but constructs *Pair internally.
+// Type assertion to *Pair is required during construction for efficient iterative
+// building of the linked structure. Callers receive the Tuple interface.
 func List(os ...Value) Tuple {
 	l := len(os)
 	switch l {
@@ -60,6 +64,7 @@ func List(os ...Value) Tuple {
 	q := NewCons(os[0], NewCons(nil, nil))
 	curr := q
 	for _, v := range os[1:] {
+		// Type assertion required: iteratively building *Pair chain, need next pointer
 		curr = curr.Cdr().(*Pair)
 		curr.SetCar(v)
 		curr.SetCdr(NewCons(nil, nil))
@@ -104,6 +109,10 @@ func EqualTo(a, b Value) bool {
 
 // equalToDeep dispatches compound types to cycle-aware helpers,
 // and delegates everything else to a.EqualTo(b).
+//
+// Implementation note: Cannot use Tuple interface here because R7RS equal?
+// requires type-specific equality. A *Pair and *ArrayList with identical
+// elements must return false. Each concrete type needs its own case.
 func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -113,6 +122,7 @@ func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 	}
 	switch pa := a.(type) {
 	case *Pair:
+		// Must check concrete *Pair type, not Tuple interface
 		pb, ok := b.(*Pair)
 		if !ok {
 			return false
@@ -125,6 +135,7 @@ func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 		}
 		return vectorEqualToDeep(pa, pb, visited)
 	case *ArrayList:
+		// Must check concrete *ArrayList type, not Tuple interface
 		pb, ok := b.(*ArrayList)
 		if !ok {
 			return false
@@ -179,6 +190,11 @@ func compareIndexable[T Value](
 // pairEqualToDeep compares two Pairs with cycle detection.
 // Mirrors the iterative structure of Pair.EqualTo but records visited
 // pointer pairs and recurses elements via equalToDeep.
+//
+// Implementation note: Must use *Pair (not Tuple) for three reasons:
+// 1. Cycle detection via pointer identity comparison (p == v, p0 == v0)
+// 2. Map keys require concrete type (equalPairKey uses [2]Value with *Pair pointers)
+// 3. Type-specific equality (Pair vs ArrayList must not be considered equal)
 func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 	if p == v {
 		return true
@@ -207,6 +223,8 @@ func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 		if p0.Cdr() == v0.Cdr() {
 			return true
 		}
+		// Type assertions to *Pair required for iterative traversal with pointer
+		// identity comparison for cycle detection.
 		pv0, _ := p0.Cdr().(*Pair)
 		vv0, _ := v0.Cdr().(*Pair)
 		if pv0 == nil || vv0 == nil {
@@ -276,11 +294,9 @@ func IsList(v Value) bool {
 	if IsEmptyList(v) {
 		return true
 	}
-	switch pr := v.(type) {
-	case *ArrayList:
-		return pr.IsList()
-	case *Pair:
-		return pr.IsList()
+	tuple, ok := v.(Tuple)
+	if ok {
+		return tuple.IsList()
 	}
 	return false
 }

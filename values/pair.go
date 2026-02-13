@@ -66,6 +66,10 @@ func (p *Pair) SetCdr(v Value) {
 // IsList checks if the Pair represents a proper list.
 // Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
 // Returns false for circular lists per R7RS §6.4.
+//
+// Implementation note: This method must use *Pair (not Tuple) for cycle
+// detection because it requires pointer identity comparison (slow == fast).
+// Interfaces cannot be compared by pointer identity.
 func (p *Pair) IsList() bool {
 	if IsVoid(p) {
 		return false
@@ -74,6 +78,7 @@ func (p *Pair) IsList() bool {
 	fast := p
 	for {
 		// Fast pointer advances two steps
+		// Type assertion to *Pair required for pointer identity comparison
 		next, ok := fast.Cdr().(*Pair)
 		if !ok {
 			return IsEmptyList(fast.Cdr())
@@ -183,6 +188,8 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Type assertion to *Pair required for iterating through linked structure.
+		// We need access to the next *Pair pointer, not just Tuple methods.
 		pr0, ok := pr[1].(*Pair)
 		if !ok {
 			return pr[1], nil

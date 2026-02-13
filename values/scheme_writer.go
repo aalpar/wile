@@ -39,15 +39,23 @@ const (
 // SchemeWriter provides cycle-aware writing of Scheme values.
 // It detects shared and circular structures and outputs them using
 // datum labels (#n= for definitions and #n# for references) per R7RS §2.4.
+//
+// Implementation note: Uses maps with concrete *Pair and *Vector keys (not Tuple/Indexable
+// interfaces) because:
+// 1. Go map keys must be comparable types - interfaces are not suitable
+// 2. Cycle/sharing detection requires pointer identity tracking
+// 3. Each concrete type needs separate tracking for proper label assignment
 type SchemeWriter struct {
 	// seenPairs maps pair pointers to their assigned label numbers.
 	// A value of -1 means the object has been seen but not yet labeled.
+	// Must use *Pair (not Tuple) because Go map keys must be concrete comparable types.
 	seenPairs map[*Pair]int
 	// seenVectors maps vector pointers to their assigned label numbers.
 	seenVectors map[*Vector]int
 	// nextLabel is the next datum label number to assign.
 	nextLabel int
 	// needsLabelPair tracks which pairs need labels (referenced more than once).
+	// Must use *Pair (not Tuple) for map key comparability.
 	needsLabelPair map[*Pair]bool
 	// needsLabelVector tracks which vectors need labels.
 	needsLabelVector map[*Vector]bool
@@ -217,6 +225,11 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 }
 
 // writePair writes a pair with cycle detection.
+//
+// Implementation note: Must accept *Pair (not Tuple) because:
+// 1. It needs map lookup with concrete pointer (seenPairs, needsLabelPair)
+// 2. Pointer identity is used for tracking shared/circular structure
+// 3. ArrayList would need a separate writeTuple method with its own tracking
 func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 	if pr == nil {
 		sb.WriteString("#<void>")
@@ -246,6 +259,11 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 }
 
 // writePairContents writes the contents of a list (without outer parens).
+//
+// Implementation note: Must accept *Pair and check for *Pair in the loop because:
+// 1. Need to check if cdr is in seenPairs/needsLabelPair maps (requires *Pair)
+// 2. Pointer identity tracking for back-references
+// 3. Cannot use Tuple because we need access to concrete pointer for map lookup
 func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 	first := true
 	curr := pr
@@ -265,7 +283,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 			break
 		}
 
-		// Check if cdr is a pair
+		// Check if cdr is a pair - type assertion required for map lookups below
 		nextPair, ok := cdr.(*Pair)
 		if !ok {
 			// Improper list

@@ -127,14 +127,14 @@ func (p *ArrayList) AppendList(o Value) *ArrayList {
 			*q = (*q)[:len(*q)-1]
 			*q = append(*q, (*vs)...)
 		}
-	case *Pair:
+	case Tuple:
 		v0 := vs
 		for {
 			if v0.IsVoid() {
 				panic(ErrNotAList)
 			}
 			*q = append(*q, v0.Car())
-			next, ok := v0.Cdr().(*Pair)
+			next, ok := v0.Cdr().(Tuple)
 			if !ok {
 				break
 			}
@@ -155,9 +155,18 @@ func (p *ArrayList) Car() Value {
 }
 
 // Cdr returns a new ArrayList sharing the underlying storage from index 1
-// onward (sub-slice, no copy). The terminator is preserved.
+// onward (sub-slice, no copy). The terminator is preserved. For single-element
+// results, returns the element directly to match Pair behavior for improper lists.
 func (p *ArrayList) Cdr() Value {
+	if len(*p) <= 1 {
+		return EmptyList
+	}
 	q := (*p)[1:]
+	// If the result is a single element, return it directly.
+	// This handles both proper lists ending in EmptyList and improper list terminators.
+	if len(q) == 1 {
+		return q[0]
+	}
 	return &q
 }
 
@@ -234,6 +243,9 @@ func (p *ArrayList) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) 
 // AsList converts this ArrayList to a Pair (cons cell) chain. Returns nil if
 // void. The terminator element becomes the CDR of the final Pair — EmptyList
 // for proper lists, any other value for improper lists.
+//
+// Implementation note: Must return *Pair (not Tuple) because callers expect
+// a linked-list representation where each node can be mutated independently.
 func (p *ArrayList) AsList() Value {
 	if IsVoid(p) {
 		return nil
@@ -244,6 +256,8 @@ func (p *ArrayList) AsList() Value {
 	for i := 0; i < l-2; i++ {
 		current.SetCar((*p)[i])
 		current.SetCdr(NewCons(nil, EmptyList))
+		// Type assertion to *Pair required: we're building a linked list and
+		// need the next node pointer for continued iteration.
 		current = current.Cdr().(*Pair)
 	}
 	current.SetCar((*p)[l-2])
@@ -258,6 +272,10 @@ func (p *ArrayList) AsList() Value {
 // EqualTo returns true if the other value is an *ArrayList with the same
 // length and element-wise structural equality (via Value.EqualTo).
 // Void elements are compared by void-ness, not identity.
+//
+// Implementation note: This method requires type assertion to *ArrayList (not Tuple)
+// because R7RS equal? distinguishes between different list representations. An
+// ArrayList and a Pair with identical elements are not equal?.
 func (p *ArrayList) EqualTo(o Value) bool {
 	if p == nil || o == nil {
 		return p == o

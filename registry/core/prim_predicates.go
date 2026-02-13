@@ -127,13 +127,15 @@ func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.TrueValue)
 		return nil
 	}
-	// Check for *values.Pair only (not syntax pairs)
-	pr, ok := o.(*values.Pair)
-	if !ok {
+	// Check runtime list types only (not syntax pairs).
+	switch t := o.(type) {
+	case *values.Pair:
+		mc.SetValue(schemeutil.BoolToBoolean(t.IsList()))
+	case *values.ArrayList:
+		mc.SetValue(schemeutil.BoolToBoolean(t.IsList()))
+	default:
 		mc.SetValue(values.FalseValue)
-		return nil
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(pr.IsList()))
 	return nil
 }
 

@@ -573,22 +573,6 @@ func TestSyntaxPair_SyntaxCar_SyntaxCdr(t *testing.T) {
 	qt.Assert(t, pair.Cdr(), qt.Equals, cdr)
 }
 
-func TestSyntaxPair_SetSyntaxCar_SetSyntaxCdr(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	car := NewSyntaxObject(values.NewInteger(1), sctx)
-	cdr := NewSyntaxEmptyList(sctx)
-	pair := NewSyntaxCons(car, cdr, sctx)
-
-	newCar := NewSyntaxObject(values.NewInteger(10), sctx)
-	cdr2 := NewSyntaxObject(values.NewInteger(20), sctx)
-
-	pair.SetSyntaxCar(newCar)
-	qt.Assert(t, pair.SyntaxCar(), qt.Equals, newCar)
-
-	pair.SetSyntaxCdr(cdr2)
-	qt.Assert(t, pair.Cdr(), qt.Equals, cdr2)
-}
-
 func TestSyntaxPair_Append_NonList(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	car := NewSyntaxObject(values.NewInteger(1), sctx)
