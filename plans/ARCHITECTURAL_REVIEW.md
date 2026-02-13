@@ -203,17 +203,21 @@ The prefix-checking `if` block was dead code — `signPos = i; break` executed r
 
 ### M10. `read-bytevector` drops partial read at EOF
 
-**File:** `internal/extensions/io/prim_read_write.go:720-727`
-**Status:** Open
+**File:** `internal/extensions/io/prim_read_write.go:720-753, 755-803`
+**Status:** ✅ Fixed
 
-When `Read` returns `n > 0` AND `err == io.EOF` (valid per Go's io.Reader contract), the code treats it as an error instead of returning the successfully read bytes.
+When `Read` returns `n > 0` AND `err == io.EOF` (valid per Go's io.Reader contract), the code treated it as an error instead of returning the successfully read bytes. This violated R7RS §6.13.3: "reads the next k bytes, or as many as are available before the end of file, whichever is fewer."
+
+**Fix:** Reordered error handling in both `PrimReadBytevector` and `PrimReadBytevectorBang` to follow Go's io.Reader contract: process `n > 0` bytes first, only examine errors when `n == 0`. When bytes are available, return them regardless of EOF status. Added comprehensive tests (19 success cases + 10 error cases) covering partial reads, successive reads, empty ports, and edge cases. All existing R7RS integration tests continue to pass.
 
 ### M11. `read-string` / `read-bytevector` unbounded allocation from user input
 
-**File:** `internal/extensions/io/prim_read_write.go:496-530`
-**Status:** Open
+**File:** `internal/extensions/io/prim_read_write.go:527, 735`
+**Status:** ✅ Fixed
 
-`make([]rune, 0, k.Value)` with no upper bound. `(read-string 999999999999)` causes OOM.
+`make([]rune, 0, k.Value)` and `make([]byte, k.Value)` with no upper bound allowed denial-of-service via OOM. `(read-string 999999999999)` would cause OOM crash.
+
+**Fix:** Added 100 MB allocation limit for both primitives. `read-string` checks `k.Value * 4 > MaxReadStringBytes` (4 bytes per rune worst case), allowing ~26M characters. `read-bytevector` checks `k.Value > MaxReadBytevectorBytes`, allowing 100M bytes. Requests exceeding limits fail fast with clear error messages specifying requested size and maximum. Added 15 test cases covering below-limit success, at-limit boundary, and above-limit errors with informative messages. R7RS compliant per §3.1 (implementation-defined limits).
 
 ---
 

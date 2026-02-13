@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix `read-string` and `read-bytevector` unbounded allocation vulnerability allowing denial-of-service via out-of-memory crashes — added 100 MB per-call allocation limit with clear error messages when exceeded (prevents `(read-string 999999999999 port)` from crashing the process)
+- Fix `read-bytevector` and `read-bytevector!` dropping partial reads at EOF instead of returning available bytes, violating R7RS §6.13.3 and Go's `io.Reader` contract (when Read returns `(n > 0, io.EOF)`, the n bytes must be processed before examining the error)
 - Fix `string->utf8` using byte indices instead of character indices for start/end parameters, causing incorrect UTF-8 encoding and invalid byte sequences for non-ASCII strings (R7RS §6.9 specifies character positions)
 - Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines, causing all output to run together)
 - Fix compilation error in `examples/data-structures/association-lists.scm` (undefined `sort` procedure; added insertion sort implementation)
