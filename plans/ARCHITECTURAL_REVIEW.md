@@ -104,9 +104,11 @@ This uses `parameterize`, which expands to `dynamic-wind`, providing:
 ### T5. `nextScopeID` counter is not atomic
 
 **File:** `internal/syntax/syntax_value.go:44-51`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Plain `uint64` incremented non-atomically. Data race under concurrent macro expansion.
+
+**Fix:** Replaced non-atomic `nextScopeID++` with `atomic.AddUint64(&nextScopeID, 1)` in both `NewScope()` and `NewRebindingScope()`. The atomic increment returns the new value which is directly used for the scope ID. This ensures thread-safe scope creation during concurrent macro expansion.
 
 ---
 

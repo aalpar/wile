@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/values"
 )
@@ -46,15 +47,15 @@ var nextScopeID uint64
 // NewScope creates a new scope with unique identity for hygiene tracking.
 // By default, scopes are not rebinding scopes.
 func NewScope() *Scope {
-	nextScopeID++
-	return &Scope{id: nextScopeID, IsRebinding: false}
+	id := atomic.AddUint64(&nextScopeID, 1)
+	return &Scope{id: id, IsRebinding: false}
 }
 
 // NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
 // Used by let-syntax and letrec-syntax to mark scopes that could shadow literals.
 func NewRebindingScope() *Scope {
-	nextScopeID++
-	return &Scope{id: nextScopeID, IsRebinding: true}
+	id := atomic.AddUint64(&nextScopeID, 1)
+	return &Scope{id: id, IsRebinding: true}
 }
 
 // ID returns the unique identifier for this scope.
