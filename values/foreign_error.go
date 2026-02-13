@@ -110,6 +110,22 @@ var (
 	ErrTypeConversion        = NewStaticError("type conversion failed")
 	ErrIndexOutOfRange       = NewStaticError("index out of range")
 	ErrImmutableString       = NewStaticError("cannot mutate immutable string")
+
+	// FFI errors
+	ErrFFICallbackError         = NewStaticError("FFI callback error")
+	ErrCallbackResultConversion = NewStaticError("callback result conversion failed")
+	ErrHashtableInsertionFailed = NewStaticError("hashtable insertion failed")
+
+	// Environment errors (keep as panics but use sentinels)
+	ErrMissingTopLevelEnvironment = NewStaticError("missing TopLevelEnvironment")
+	ErrMissingPhaseRegistry       = NewStaticError("missing PhaseRegistry")
+	ErrNilParentEnvironment       = NewStaticError("nil parent environment")
+
+	// Syntax errors
+	ErrCannotDoubleSyntaxWrap = NewStaticError("cannot wrap syntax value in SyntaxObject")
+
+	// Utility errors (keep as panic)
+	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.

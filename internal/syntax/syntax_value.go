@@ -102,9 +102,17 @@ type SyntaxObject struct {
 func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 	switch v.(type) {
 	case *SyntaxObject, *SyntaxVector, *SyntaxPair, *SyntaxSymbol: // prevent double-wrapping
-		panic(values.NewForeignErrorf("cannot wrap a %T in another SyntaxObject", v))
+		panic(values.WrapForeignErrorf(
+			values.ErrCannotDoubleSyntaxWrap,
+			"cannot wrap a %T in another SyntaxObject",
+			v,
+		))
 	case *values.Vector, *values.Pair, *values.Symbol: // special types for these - SyntaxVector, SyntaxPair, SyntaxSymbol
-		panic(values.NewForeignErrorf("cannot wrap a %T in another SyntaxObject", v))
+		panic(values.WrapForeignErrorf(
+			values.ErrCannotDoubleSyntaxWrap,
+			"cannot wrap a %T in another SyntaxObject",
+			v,
+		))
 	}
 	q := &SyntaxObject{
 		datum: v,

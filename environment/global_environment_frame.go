@@ -291,7 +291,10 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 	if p.topLevel == nil {
-		panic("InternSymbol called on GlobalEnvironmentFrame without TopLevelEnvironment")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"InternSymbol called on GlobalEnvironmentFrame without TopLevelEnvironment",
+		))
 	}
 	return p.topLevel.InternSymbol(q)
 }
@@ -303,7 +306,10 @@ func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
 	if p.topLevel == nil {
-		panic("InternSyntax called on GlobalEnvironmentFrame without TopLevelEnvironment")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"InternSyntax called on GlobalEnvironmentFrame without TopLevelEnvironment",
+		))
 	}
 	return p.topLevel.InternSyntax(k, v)
 }
@@ -315,7 +321,10 @@ func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxVal
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
 	if p.topLevel == nil {
-		panic("LibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"LibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
+		))
 	}
 	return p.topLevel.LibraryRegistry()
 }
@@ -326,7 +335,10 @@ func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) SetLibraryRegistry(registry any) {
 	if p.topLevel == nil {
-		panic("SetLibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"SetLibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
+		))
 	}
 	p.topLevel.SetLibraryRegistry(registry)
 }
