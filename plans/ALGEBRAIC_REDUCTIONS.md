@@ -2,8 +2,6 @@
 
 Structural simplifications: multiple expressions of the same underlying operation collapsed into one.
 
-See also `REFACTORING_OPPORTUNITIES.md` for previously identified reductions (form-checking predicates, CxR factory, compile-time argument extraction, eval-at-compile-time, type assertion helpers).
-
 ---
 
 ## IV. Syntax Interface Boilerplate

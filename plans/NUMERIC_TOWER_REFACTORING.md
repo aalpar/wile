@@ -2,7 +2,7 @@
 
 **Status**: Deferred — intentional architecture, not recommended for runtime indirection
 
-Consolidated from `ALGEBRAIC_REDUCTIONS.md` (Section I) and `SUBSYSTEM_SIMPLIFICATION.md`.
+Consolidated from `ALGEBRAIC_REDUCTIONS.md` (Section I) and `SUBSYSTEM_SIMPLIFICATION.md` (deleted — completed).
 
 ---
 

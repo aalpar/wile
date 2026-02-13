@@ -64,23 +64,6 @@ Adding a fourth port-closure mechanism (e.g., finalizer-based cleanup, port time
 
 ---
 
-### [Priority: High] — Complex Number Type Matching Bug
-
-**Where**: Documented in `values/CLAUDE.local.md:82-89` and `CLAUDE.md` Gotchas section
-
-**What**: Type switches use concrete types (`case *values.BigComplex:`) instead of interface (`case values.ComplexNumber:`), causing `*Complex` to not match when code expects all complex numbers.
-
-**Why it matters**:
-- **Silent failures**: Operations on `Complex` values fall through to default case or panic
-- **Test gap**: If tests don't cover both `Complex` and `BigComplex` in predicates, the bug remains latent
-- **Already documented but not fixed**: The architectural review identified this (L17) but it survived into recent commits
-
-**Suggested fix**: Audit all type switches involving numeric types; replace concrete checks with interface checks where semantically appropriate.
-
-**Effort**: S (4-6 hours for search + fix + test verification)
-
----
-
 ### [Priority: Medium] — Error Construction Pattern Inconsistency
 
 **Where**: `registry/core/prim_arithmetic.go:274`, `prim_read_write.go:97`, `values/*.go` error returns
@@ -210,7 +193,7 @@ func (p Stack) PeekK(i int) values.Value {
 
 ## Top 3 Priorities (Recommended Action Order)
 
-1. **Numeric tower type-switch explosion** (High) — Blocks adding new numeric types; fix creates a forcing function to consolidate promotion logic and improve test coverage.
+1. **Numeric tower type-switch explosion** (High) — Deferred indefinitely (see `ARCHITECTURAL_REVIEW_REFACTORING.md` §2.1). Direct dispatch is intentional architecture.
 
 2. **Parser/tokenizer cache eviction fragility** (High) — Acknowledged memory leak risk; fixing now (before async I/O or port pooling) prevents entrenched patterns.
 
@@ -246,7 +229,7 @@ func (p Stack) PeekK(i int) values.Value {
 
 The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (623 wrapped errors vs 46 bare errors). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%) and incomplete context propagation (425 `context.TODO()` uses). These aren't blocking features today but create risk as the codebase scales.
+**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%). Context propagation was resolved in PR #216.
 
 **Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (44 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
 
@@ -265,20 +248,6 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 **Suggested fix**: Create `registry/helpers/*_test.go` files with table-driven tests for each exported function covering: identity cases, single-element cases, exactness contagion, NaN propagation, infinity handling, cross-type comparisons, and overflow promotion.
 
 **Effort**: M (2-3 days to achieve 80%+ coverage)
-
----
-
-### [Priority: High] — Context Propagation: 425 Uses of `context.TODO()` Instead of Real Contexts
-
-**Where**: 47 files across all packages (highest concentration in `internal/parser`, `internal/validate`, `registry/helpers`)
-
-**What**: `context.TODO()` appears 425 times, indicating incomplete context propagation through the pipeline. The pipeline stages (tokenize → parse → expand → validate → compile → run) each use `context.TODO()` for operations that should receive cancellation signals and deadlines from the top-level `Engine.Eval(ctx, ...)` call.
-
-**Why it matters**: Users calling `Engine.Eval(ctx, code)` with a context that has a timeout or cancellation expect it to be honored throughout compilation and execution. Currently, cancellation only works during VM execution (`machine.Run`), not during parsing, expansion, or compilation. A long-running macro expansion or complex parse cannot be interrupted. This also breaks observability—distributed tracing contexts passed to `Eval` don't propagate through the pipeline.
-
-**Suggested fix**: Thread `context.Context` through tokenizer/parser/expander/compiler entry points. Change `Parser.Parse()` → `Parser.ParseContext(ctx)`, `Expander.Expand(...)` → `Expander.ExpandContext(ctx, ...)`, etc. Check `ctx.Err()` at loop boundaries in parser/expander.
-
-**Effort**: L (1-2 weeks, touches 47 files, requires API changes and testing)
 
 ---
 
@@ -434,13 +403,11 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-## Top 3 Priorities (Recommended Action Order)
+## Top 2 Priorities (Recommended Action Order)
 
 1. **Helpers package test coverage** — Fix first because it's a shared dependency for all arithmetic/comparison primitives. A bug here has the widest blast radius. Coverage can be added incrementally without API changes.
 
 2. **I/O extension test coverage** — Fix second because I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic. Tests require subprocess/file mocking but don't change APIs.
-
-3. **Context propagation** — Fix third because it requires API changes across all pipeline stages (tokenizer, parser, expander, compiler). Do this after test coverage improvements so the refactor is validated by tests. The payoff is cancellation support and observability, which aren't critical for current workloads but become essential at scale.
 
 ---
 
@@ -454,7 +421,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | Foreign functions (primitives) | 505 |
 | Error wrapping sites | 623 |
 | Bare errors (fmt.Errorf/errors.New) | 46 |
-| context.TODO() uses | 425 |
+| context.TODO() uses | ~~425~~ 4 production, ~404 tests |
 | TODO/FIXME comments | 507 |
 | Overall test coverage | 85.3% (root), 85-93% (core packages) |
 

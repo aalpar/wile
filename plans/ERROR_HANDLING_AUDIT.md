@@ -1,51 +1,45 @@
 # Error Creation Audit — Non-Wrap Patterns
 
-**Status:** Audit reference document
+**Status:** Audit reference document (updated 2026-02-13)
 
 ## Summary
 
-Catalogs error creation sites not using the two-layer convention (sentinel + `WrapForeignErrorf`). Total: ~81 violations.
+Catalogs error creation sites not using the two-layer convention (sentinel + `WrapForeignErrorf`).
+
+**Resolved:** `NewForeignErrorf` violations (~75 sites across 13 files) eliminated by panic-to-error refactoring (PR #212, #215). `fmt.Errorf` in production reduced from 6 to 2 (both are panic-recovery wrappers in `scheme_equals.go` and `syntax_equals.go` — acceptable).
+
+**Remaining:** 24 bare `NewForeignError` (no sentinel) across 7 files in `registry/core/`.
 
 ## Open Design Question
 
 Should `WrapForeignErrorf` track both the sentinel and a "root cause" error (via `errors` multi-error)? Currently wrapping with `%v` loses valuable information from the original error. Consider either multi-error or a separate root-cause field on `ForeignError`.
 
-## Violation Counts
+## Remaining Violations
 
-| Category | Count | Files |
-|----------|-------|-------|
-| `fmt.Errorf` in production | 6 | values/utils.go, values/thread.go, internal/syntax/syntax_equals.go, machine/operation_foreign_function_call.go |
-| `values.NewForeignErrorf` | ~75 | 13 files (see below) |
-| Bare sentinel returns (need wrapping) | 5 | Various |
-| Bare sentinel returns (acceptable — control flow) | 5 | `ErrStopIteration` usage |
+### Bare `NewForeignError` Without Sentinels (24 sites)
 
-## By Priority
+| File | Instances |
+|------|-----------|
+| `registry/core/prim_lists.go` | 8 |
+| `registry/core/prim_syntax.go` | 5 |
+| `registry/core/prim_byte_vectors.go` | 4 |
+| `registry/core/prim_pairs.go` | 3 |
+| `registry/core/prim_vectors.go` | 2 |
+| `registry/core/prim_parameters.go` | 1 |
+| `registry/core/prim_strings.go` | 1 |
 
-### HIGH (User-Facing Errors)
+These use bare `NewForeignError()` without a sentinel, violating the project convention. Creates opaque errors that callers can't match with `errors.Is()`.
 
-| File | Instances | Error Category |
-|------|-----------|----------------|
-| `machine/compile_syntax_rules.go` | 17 | syntax-rules validation |
-| `machine/expander_time_continuation.go` | 16 | let-syntax/letrec-syntax validation |
-| `machine/compile_time_continuation.go` | 15 | core compiler errors |
-| `machine/library_loader.go` | 9 | library loading |
+**Fix:** Add appropriate sentinels (likely `ErrOutOfRange` or `ErrInvalidArgument`) and wrap with `WrapForeignErrorf`.
 
-### MEDIUM (Internal Errors)
+### `fmt.Errorf` in Production (2 sites — acceptable)
 
-| File | Instances | Error Category |
-|------|-----------|----------------|
-| `machine/import_set_datum.go` | 4 | import parsing |
-| `machine/compile_validated.go` | 2 | internal compiler |
-| `registry/core/prim_hashtables.go` | 1 | runtime primitive |
+| File | Notes |
+|------|-------|
+| `values/scheme_equals.go:40` | Panic recovery wrapper |
+| `internal/syntax/syntax_equals.go:40` | Panic recovery wrapper |
 
-### LOW (Edge Cases)
-
-| File | Instances | Notes |
-|------|-----------|-------|
-| `machine/operation_make_closure.go` | 2 | Bare sentinels, rare VM errors |
-| `registry/helpers/numeric.go` | 1 | Bare sentinel |
-| `values/thread.go` | 1 | Panic path |
-| `machine/operation_foreign_function_call.go` | 1 | Panic recovery |
+These wrap recovered panics in `defer`/`recover` blocks. Using `fmt.Errorf` here is acceptable since the panic value is unknown and may not be a `ForeignError`.
 
 ### ACCEPTABLE (No Change Needed)
 
