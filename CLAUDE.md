@@ -626,7 +626,8 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `plans/PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
 | `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` | Operation code generation (optional, HIGH risk) | Reference |
-| `plans/ALGEBRAIC_REDUCTIONS.md` | Structural simplifications (numeric tower, ports, ops) | Reference |
+| `plans/ALGEBRAIC_REDUCTIONS.md` | Structural simplifications (syntax, ops, scopes) | Reference |
+| `plans/NUMERIC_TOWER_REFACTORING.md` | Numeric tower dispatch refactoring | Deferred |
 | ~~`plans/REFACTORING_OPPORTUNITIES.md`~~ | ~~Smaller refactoring opportunities catalog~~ | Complete (deleted) |
 | `plans/EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system | Proposed |
 | `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` | Plugin architecture design | Proposed |

@@ -6,16 +6,6 @@ See also `REFACTORING_OPPORTUNITIES.md` for previously identified reductions (fo
 
 ---
 
-## I. Numeric Tower Dispatch
-
-7 numeric types × 5 arithmetic methods = 35 type switches with 7 cases each. `numeric_tower.go` has `Simplify` and `ExactnessOf` — but no unified dispatch (`BinaryOp`, `Promote` do not exist). A tower-based dispatch would need to be built from scratch. Each type reimplements its own full cross-type dispatch.
-
-### Files
-
-All 7 numeric type files in `values/` + `values/numeric_tower.go`.
-
----
-
 ## IV. Syntax Interface Boilerplate
 
 8 syntax types repeat identical `SourceContext()`, `IsVoid()`, `UnwrapAll()`. Extract `syntaxBase` embedded struct. (`IsVoid` can't be defaulted via embedding due to nil receiver semantics.)
@@ -72,14 +62,13 @@ Ordered by risk — start from the bottom (safe leaf reductions), work up.
 |---|-----------|------|--------|
 | VI | Scope-aware symbol resolution | Medium | Deferred |
 | V | Operation base type | Medium | Open |
-| I | Numeric tower dispatch | High | Deferred |
+
+Numeric tower dispatch is tracked separately in `plans/NUMERIC_TOWER_REFACTORING.md`.
 
 ## Implementation Notes
 
-**Deferred items**: Items I (numeric tower) and VI (scope-aware resolution) are deferred. Both involve structural duplication where the repeated pattern serves distinct purposes in different contexts. Consolidation would require careful abstraction to avoid obscuring semantic differences or regressing performance. See dedicated plan files for detailed analysis.
+**Deferred items**: Item VI (scope-aware resolution) is deferred. It involves structural duplication where the repeated pattern serves distinct purposes in different contexts. Consolidation would require careful abstraction to avoid obscuring semantic differences or regressing performance. See dedicated plan files for detailed analysis.
 
 **Independence**: All remaining reductions are independent.
 
-**Risk ordering**: Start with Medium risk items (V, VI), then High risk (I).
-
-**Testing**: Every reduction must pass `go test ./... -count=1`. The numeric tower reduction should additionally run the R7RS numeric test suite to verify exactness preservation and tower promotion semantics.
+**Testing**: Every reduction must pass `go test ./... -count=1`.
