@@ -26,10 +26,6 @@ Consolidation would require careful abstraction to preserve both semantic clarit
 
 `machine/compile_time_continuation.go`, `machine/expander_time_continuation.go`
 
-### See Also
-
-`plans/SCOPE_AWARE_RESOLUTION_INVESTIGATION.md` — detailed investigation findings, semantic analysis, deferral rationale
-
 ---
 
 ## Priority Lattice
@@ -41,11 +37,11 @@ Ordered by risk — start from the bottom (safe leaf reductions), work up.
 | VI | Scope-aware symbol resolution | Medium | Deferred |
 | V | Operation base type | Medium | Open |
 
-Numeric tower dispatch is tracked separately in `plans/NUMERIC_TOWER_REFACTORING.md`.
+Numeric tower dispatch is deferred indefinitely (direct dispatch is intentional architecture; see `ARCHITECTURAL_REVIEW_REFACTORING.md` §2.1).
 
 ## Implementation Notes
 
-**Deferred items**: Item VI (scope-aware resolution) is deferred. It involves structural duplication where the repeated pattern serves distinct purposes in different contexts. Consolidation would require careful abstraction to avoid obscuring semantic differences or regressing performance. See dedicated plan files for detailed analysis.
+**Deferred items**: Item VI (scope-aware resolution) is deferred. It involves structural duplication where the repeated pattern serves distinct purposes in different contexts. Consolidation would require careful abstraction to avoid obscuring semantic differences or regressing performance.
 
 **Independence**: All remaining reductions are independent.
 

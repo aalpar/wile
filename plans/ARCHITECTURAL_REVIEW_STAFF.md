@@ -112,30 +112,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-### [Priority: Medium] — Stack.PeekK Unsafe Bounds Check
-
-**Where**: `machine/stack.go:88-92`
-
-**What**: `PeekK(i int)` accesses `p[l-(i+1)]` without checking `i < l`. Out-of-bounds access panics rather than returning an error.
-
-```go
-func (p Stack) PeekK(i int) values.Value {
-    l := len(p)
-    v := (p)[l-(i+1)]  // Panics if i >= l
-    return v
-}
-```
-
-**Why it matters**:
-- **Debuggability**: Panic stack traces are less informative than wrapped errors
-- **Consistency**: `Pop()` explicitly checks for underflow and panics with `ErrStackUnderflow`; `PeekK` should do the same
-- **Call-site burden**: Every caller must validate `i` or accept panic risk
-
-**Suggested fix**: Add bounds check: `if i < 0 || i >= l { panic(values.ErrStackUnderflow) }`. Keeps panic semantics (VM invariant violation) but improves error message.
-
-**Effort**: S (30 minutes for fix + test)
-
----
 
 ### [Priority: Medium] — extractOptionalPositions Likely Duplicated
 
