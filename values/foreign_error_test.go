@@ -80,28 +80,91 @@ func TestNewForeignReadErrorf(t *testing.T) {
 	c.Assert(err.Error(), qt.Matches, ".*parse error at 42.*")
 }
 
-func TestForeignFileError_Unwrap(t *testing.T) {
+func TestForeignFileError_ErrorsIs_Cause(t *testing.T) {
 	c := qt.New(t)
 	cause := fmt.Errorf("permission denied")
 	err := WrapForeignFileError(cause, "open-input-file", "/etc/shadow")
 	c.Assert(errors.Is(err, cause), qt.IsTrue)
 }
 
-func TestForeignReadError_Unwrap(t *testing.T) {
+func TestForeignReadError_ErrorsIs_Cause(t *testing.T) {
 	c := qt.New(t)
 	cause := fmt.Errorf("unexpected )")
 	err := WrapForeignReadErrorf(cause, "read error")
 	c.Assert(errors.Is(err, cause), qt.IsTrue)
 }
 
-func TestForeignFileError_Unwrap_Nil(t *testing.T) {
+func TestForeignError_Is(t *testing.T) {
 	c := qt.New(t)
-	var err *ForeignFileError
-	c.Assert(err.Unwrap(), qt.IsNil)
+	sentinel := NewStaticError("test sentinel")
+	cause := fmt.Errorf("root cause")
+
+	tcs := []struct {
+		name   string
+		err    *ForeignError
+		target error
+		want   bool
+	}{
+		{"sentinel match", WrapForeignErrorf(sentinel, "msg"), sentinel, true},
+		{"cause match", WrapForeignErrorWithCause(sentinel, cause, "msg"), cause, true},
+		{"sentinel via cause constructor", WrapForeignErrorWithCause(sentinel, cause, "msg"), sentinel, true},
+		{"no match", WrapForeignErrorf(sentinel, "msg"), fmt.Errorf("other"), false},
+		{"nil sentinel and cause", NewForeignError("msg"), sentinel, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(errors.Is(tc.err, tc.target), qt.Equals, tc.want)
+		})
+	}
 }
 
-func TestForeignReadError_Unwrap_Nil(t *testing.T) {
+func TestForeignError_As(t *testing.T) {
 	c := qt.New(t)
-	var err *ForeignReadError
-	c.Assert(err.Unwrap(), qt.IsNil)
+
+	// ForeignFileError detected through embedded ForeignError
+	fileErr := WrapForeignFileError(fmt.Errorf("no such file"), "open", "/tmp/x")
+	wrapped := fmt.Errorf("outer: %w", fileErr)
+	var target *ForeignFileError
+	c.Assert(errors.As(wrapped, &target), qt.IsTrue)
+	c.Assert(target.Filename, qt.Equals, "/tmp/x")
+
+	// ForeignReadError not detected through ForeignFileError
+	var readTarget *ForeignReadError
+	c.Assert(errors.As(wrapped, &readTarget), qt.IsFalse)
+}
+
+func TestForeignError_Cause(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		err  *ForeignError
+		want error
+	}{
+		{"with cause", WrapForeignErrorWithCause(ErrNotANumber, fmt.Errorf("root"), "msg"), fmt.Errorf("root")},
+		{"without cause", WrapForeignErrorf(ErrNotANumber, "msg"), nil},
+		{"nil receiver", nil, nil},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.err.Cause()
+			if tc.want == nil {
+				c.Assert(got, qt.IsNil)
+			} else {
+				c.Assert(got.Error(), qt.Equals, tc.want.Error())
+			}
+		})
+	}
+}
+
+func TestWrapForeignErrorWithCause(t *testing.T) {
+	c := qt.New(t)
+	sentinel := NewStaticError("test sentinel")
+	cause := fmt.Errorf("disk full")
+
+	err := WrapForeignErrorWithCause(sentinel, cause, "write failed: %s", "/tmp/out")
+	c.Assert(errors.Is(err, sentinel), qt.IsTrue)
+	c.Assert(errors.Is(err, cause), qt.IsTrue)
+	c.Assert(err.Cause(), qt.Equals, cause)
+	c.Assert(err.Error(), qt.Matches, ".*write failed.*test sentinel.*")
 }

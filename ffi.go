@@ -16,7 +16,6 @@ package wile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -594,8 +593,8 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 // If the Go func type includes an error return, the error is returned normally.
 // Otherwise, the error is panicked (standard Go pattern for unrecoverable callback failures).
 func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) []reflect.Value {
-	wrapped := values.WrapForeignErrorf(
-		errors.Join(values.ErrFFICallbackError, err),
+	wrapped := values.WrapForeignErrorWithCause(
+		values.ErrFFICallbackError, err,
 		"callback invocation failed",
 	)
 	if hasErrorReturn {
@@ -628,8 +627,8 @@ func callbackSuccessResult(
 	if resultConv != nil {
 		converted, convErr := resultConv(ctx, mc, schemeResult)
 		if convErr != nil {
-			wrapped := values.WrapForeignErrorf(
-				errors.Join(values.ErrCallbackResultConversion, convErr),
+			wrapped := values.WrapForeignErrorWithCause(
+				values.ErrCallbackResultConversion, convErr,
 				"callback result conversion failed",
 			)
 			if hasErrorReturn {
@@ -825,8 +824,8 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 			schemeVal := valConv(iter.Value())
 			setErr := ht.Set(schemeKey, schemeVal)
 			if setErr != nil {
-				panic(values.WrapForeignErrorf(
-					errors.Join(values.ErrHashtableInsertionFailed, setErr),
+				panic(values.WrapForeignErrorWithCause(
+					values.ErrHashtableInsertionFailed, setErr,
 					"RegisterFunc %q: map return conversion failed inserting key %v",
 					name, iter.Key(),
 				))

@@ -16,7 +16,6 @@ package values
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -238,7 +237,7 @@ func (p *Thread) Start() error {
 				p.state = ThreadTerminated
 				switch v := r.(type) {
 				case error:
-					p.exception = WrapForeignErrorf(errors.Join(ErrThreadPanic, v), "thread %q: panic recovery", p.name)
+					p.exception = WrapForeignErrorWithCause(ErrThreadPanic, v, "thread %q: panic recovery", p.name)
 				default:
 					p.exception = WrapForeignErrorf(ErrThreadPanic, "thread %q: panic recovery: %v", p.name, r)
 				}
