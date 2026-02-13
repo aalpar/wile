@@ -186,9 +186,11 @@ Timed wait spawns a goroutine with `p.cond.Wait()` that cannot be cancelled afte
 ### M8. Dead code in `parseComplex` sign-splitting
 
 **File:** `internal/parser/parser.go:1478-1485`
-**Status:** Open
+**Status:** ✅ Fixed
 
-The prefix-checking `if` block is dead code — `signPos = i; break` executes regardless of the condition. The heuristic for finding the real/imaginary separator has no effect.
+The prefix-checking `if` block was dead code — `signPos = i; break` executed regardless of the condition. The heuristic for finding the real/imaginary separator had no effect.
+
+**Fix:** Removed unconditional fallback (lines 1486-1487), replaced with `continue` to make validation functional. Also fixed the validation condition to check for `rest == "+" || rest == "-"` instead of checking for `"+i"` and `"-i"` which cannot match after the trailing `"i"` is trimmed. The validation now correctly skips over signs that aren't followed by valid imaginary part syntax.
 
 ### M9. `string-ci` ordering uses `strings.ToLower` instead of Unicode case folding
 
