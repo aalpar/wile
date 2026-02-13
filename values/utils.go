@@ -16,22 +16,15 @@ package values
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base32"
 	"fmt"
-	"math/rand"
 	"strings"
-	"sync"
-	"time"
 )
 
 // byteCnt is the number of bytes used for generating temporary variable names.
 const (
 	byteCnt = 128 / 8
-)
-
-var (
-	tempVarRand     *rand.Rand
-	tempVarRandOnce sync.Once
 )
 
 // formatIndexable builds the Scheme external representation for a
@@ -254,27 +247,17 @@ func arrayListEqualToDeep(p, v *ArrayList, visited map[equalPairKey]bool) bool {
 
 // NewTemporaryVariableName generates a unique symbol for use as a temporary variable.
 // The symbol name has the format "__T_<base32-encoded-random-bytes>".
-// Uses 128 bits of randomness to ensure uniqueness.
+// Uses 128 bits of cryptographic randomness to ensure uniqueness.
+// Thread-safe: uses crypto/rand which is safe for concurrent use.
 // Panics if random number generation fails.
 func NewTemporaryVariableName() *Symbol {
-	tempVarRandOnce.Do(func() {
-		tempVarRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-	})
-
 	bs := make([]byte, byteCnt)
-	n, err := tempVarRand.Read(bs)
+	_, err := rand.Read(bs)
 	if err != nil {
 		panic(WrapForeignErrorf(
 			ErrRandomGenerationFailed,
 			"error reading random stream: %v",
 			err,
-		))
-	}
-	if n != byteCnt {
-		panic(WrapForeignErrorf(
-			ErrRandomGenerationFailed,
-			"short read from random stream: expected %d, got %d",
-			byteCnt, n,
 		))
 	}
 	q := NewSymbol(

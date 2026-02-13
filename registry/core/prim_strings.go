@@ -270,7 +270,8 @@ func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewString(string(runes[startIdx.Value:endIdx.Value])))
+	// R7RS §6.7: substring is equivalent to string-copy, returns mutable string.
+	mc.SetValue(values.NewMutableString(string(runes[startIdx.Value:endIdx.Value])))
 	return nil
 }
 

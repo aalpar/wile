@@ -135,7 +135,8 @@ func PrimGetOutputString(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(&values.String{Value: p.String()})
+	// R7RS §6.13.3: get-output-string returns a newly allocated mutable string.
+	mc.SetValue(values.NewMutableString(p.String()))
 	return nil
 }
 

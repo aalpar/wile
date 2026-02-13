@@ -39,16 +39,18 @@ type String struct {
 	immutable bool
 }
 
-// NewString returns a String value. Short strings (up to 64 bytes)
-// are automatically interned and return the same pointer for the same value.
-// Interned strings are immutable per R7RS §6.7.
+// NewString returns an immutable String value.
+// Short strings (up to 64 bytes) are automatically interned and return
+// the same pointer for the same value.
+// R7RS §6.7: Literal strings and strings from symbol->string are immutable.
+// Use NewMutableString for runtime-allocated strings that may be mutated.
 func NewString(str string) *String {
 	if len(str) <= stringInternMaxLen {
 		s := InternString(str)
 		s.immutable = true
 		return s
 	}
-	return &String{Value: str, immutable: false}
+	return &String{Value: str, immutable: true}
 }
 
 // NewMutableString returns a newly allocated String that is not interned.

@@ -102,11 +102,10 @@ func InitState() {
 func ResetState() {
 	stateMu.Lock()
 	stateInitialized = false
-	stateMu.Unlock()
-
 	currentInputPortParam = nil
 	currentOutputPortParam = nil
 	currentErrorPortParam = nil
+	stateMu.Unlock()
 
 	cacheMu.Lock()
 	Tokenizers = nil
