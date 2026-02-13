@@ -549,7 +549,7 @@ func TestParser_Read(t *testing.T) {
 			sexpect: syntax.NewSyntaxComment("#| multi\nline\ncomment |#",
 				syntax.NewSourceContext("#| multi\nline\ncomment |#", "",
 					syntax.NewSourceIndexes(0, 0, 0),
-					syntax.NewSourceIndexes(26, 10, 2),
+					syntax.NewSourceIndexes(24, 10, 2), // Fixed: 24 bytes (was 26 due to double-counting newlines)
 				),
 			),
 		},

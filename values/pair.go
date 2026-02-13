@@ -101,6 +101,10 @@ func (p *Pair) IsList() bool {
 
 // Append appends the given Value vs to the end of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
+//
+// R7RS §6.4: The resulting list is always newly allocated, except that it shares
+// structure with the last argument. This implementation copies the spine of p
+// and sets the last cdr to vs.
 func (p *Pair) Append(vs Value) Value {
 	if !p.IsList() {
 		panic(ErrNotAList)
@@ -111,22 +115,44 @@ func (p *Pair) Append(vs Value) Value {
 	if IsVoid(p) {
 		return vs
 	}
+
+	// Copy the spine of p and append vs
+	// R7RS §6.4: all arguments except the last must be newly allocated
+	var head, tail *Pair
 	q := p
-	for !IsVoid(q) && !IsEmptyList(q.Cdr()) {
-		ok := false
-		q, ok = q.Cdr().(*Pair)
-		if !ok {
+	for !IsEmptyList(q) {
+		if !q.IsList() {
+			panic(ErrNotAList)
+		}
+		newPair := NewCons(q.Car(), EmptyList)
+		if head == nil {
+			head = newPair
+			tail = newPair
+		} else {
+			tail[1] = newPair
+			tail = newPair
+		}
+
+		cdr := q.Cdr()
+		if IsEmptyList(cdr) {
 			break
 		}
+		var ok bool
+		q, ok = cdr.(*Pair)
+		if !ok {
+			panic(ErrNotAList)
+		}
 	}
-	if q.IsVoid() {
-		panic(ErrNotAList)
+
+	// Attach vs to the last copied pair
+	if tail != nil {
+		tail[1] = vs
 	}
-	q[1] = vs
-	return p
+
+	return head
 }
 
-// Len returns the length of the list represented by the Pair.
+// Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
 func (p *Pair) Length() int {
 	q := 0

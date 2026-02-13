@@ -77,6 +77,67 @@ func TestExact_Complex(t *testing.T) {
 	})
 }
 
+// TestExact_ComplexFractionalParts tests H4 regression:
+// (exact <complex>) must convert fractional parts to Rational, not truncate to Integer.
+//
+// Architectural Review H4: toExactPart converts BigFloat to integer by
+// truncation instead of Rational. (exact 1.5+0i) produces 1 instead of 3/2.
+func TestExact_ComplexFractionalParts(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		// Fractional real part should become Rational 3/2, not Integer 1
+		{
+			name:     "fractional real preserves fraction",
+			code:     "(= (real-part (exact 1.5+0i)) 3/2)",
+			expected: values.TrueValue,
+		},
+		{
+			name:     "fractional imag preserves fraction",
+			code:     "(= (imag-part (exact 0+2.5i)) 5/2)",
+			expected: values.TrueValue,
+		},
+		{
+			name:     "both fractional parts preserve fractions",
+			code:     "(and (= (real-part (exact 1.5+2.5i)) 3/2) (= (imag-part (exact 1.5+2.5i)) 5/2))",
+			expected: values.TrueValue,
+		},
+		// Integer-valued floats should simplify to integers
+		{
+			name:     "integer-valued real simplifies",
+			code:     "(integer? (real-part (exact 3.0+2.5i)))",
+			expected: values.TrueValue,
+		},
+		{
+			name:     "integer-valued imag simplifies",
+			code:     "(integer? (imag-part (exact 1.5+4.0i)))",
+			expected: values.TrueValue,
+		},
+		// Verify exactness is preserved
+		{
+			name:     "exact complex with fractional parts is exact",
+			code:     "(exact? (exact 1.5+2.5i))",
+			expected: values.TrueValue,
+		},
+		{
+			name:     "real part of exact complex is exact",
+			code:     "(exact? (real-part (exact 1.5+2.5i)))",
+			expected: values.TrueValue,
+		},
+		{
+			name:     "imag part of exact complex is exact",
+			code:     "(exact? (imag-part (exact 1.5+2.5i)))",
+			expected: values.TrueValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestExactErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "exact on non-number string", code: `(exact "hello")`},

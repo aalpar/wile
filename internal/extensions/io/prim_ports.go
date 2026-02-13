@@ -248,7 +248,9 @@ func closePort(o values.Value) error {
 	if ok {
 		err = p.Close()
 	}
+	cacheMu.Lock()
 	delete(Tokenizers, o)
 	delete(Parsers, o)
+	cacheMu.Unlock()
 	return err
 }

@@ -100,11 +100,12 @@ func TestRealPredicate(t *testing.T) {
 			out:  values.FalseValue,
 		},
 		{
-			// Complex uses float64 parts which are always inexact, so real? returns #f
-			// even when the imaginary part is 0.0 (inexact zero is not "exactly" zero)
+			// R7RS §6.2.6: real? returns #t for complex numbers with zero imaginary part,
+			// regardless of exactness (tests mathematical reality, not exactness)
+			// H6 fix: now correctly handles *values.Complex via ComplexNumber interface
 			name: "real? on complex number with zero imaginary part",
 			prog: values.List(values.NewSymbol("real?"), values.NewComplexFromParts(2.0, 0.0)),
-			out:  values.FalseValue,
+			out:  values.TrueValue,
 		},
 		{
 			name: "real? on string",

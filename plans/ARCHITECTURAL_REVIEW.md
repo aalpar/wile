@@ -8,68 +8,50 @@
 
 ## HIGH — Correctness Bugs
 
-### H1. `Pair.Append` mutates the receiver instead of copying
-
-**File:** `values/pair.go:104-127`
-**Status:** Open
-
-`Append` walks to the last pair and sets `q[1] = vs`, destructively modifying the original list. R7RS section 6.4 says all arguments except the last must be newly allocated. `(define x '(1 2)) (append x '(3))` silently mutates `x`.
-
-### H2. `Float.ToExact()` nil-pointer panic on Inf/NaN
-
-**File:** `values/numeric_tower.go:41`
-**Status:** Open
-
-`big.Rat.SetFloat64()` returns nil for infinity and NaN. The next line calls `r.IsInt()` on nil. R7RS says `(exact +inf.0)` should raise an error, not crash Go.
-
-### H3. `Integer.Add`/`Subtract` zero short-circuit breaks exactness contagion
-
-**File:** `values/integer.go:170-175` (and all 7 numeric types)
-**Status:** Open
-
-`(+ 0 0.0)` returns exact `0` instead of inexact `0.0`. The zero-optimization returns `p` when `o.IsZero()` without checking exactness. R7RS section 6.2.2 requires inexact contagion: an exact+inexact operation must return inexact.
-
 ### H4. `BigComplex.ToExact()` truncates BigFloat parts to BigInteger
 
 **File:** `values/big_complex.go:571-586`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `toExactPart` converts BigFloat to integer by truncation instead of Rational. `(exact 1.5+0i)` produces `1` instead of `3/2`. The non-complex `BigFloat.ToExact()` correctly produces Rational.
 
-### H5. `string->utf8` uses byte indices instead of character indices
-
-**File:** `registry/core/prim_byte_vectors.go:247-258`
-**Status:** Open
-
-`len(s)` is byte length, `s[start:end]` is byte slicing. R7RS section 6.9 specifies character indices. Multi-byte UTF-8 strings produce wrong results.
+**Fix:** Replaced `v.value.Int(nil)` truncation with proper conversion via `big.Rat`. Now converts BigFloat → big.Rat → (Rational | BigInteger) depending on whether the result is an integer. Added comprehensive test `TestBigComplex_ToExactFractionalParts` covering all fractional part combinations.
 
 ### H6. `real?` missing `*values.Complex` case
 
 **File:** `registry/core/prim_predicates.go:158-170`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `Complex` does not implement `RealNumber`, so `(real? 3.0+0.0i)` returns `#f`. BigComplex IS handled. R7RS section 6.2.6 says it should return `#t`.
+
+**Fix:** Added `case values.ComplexNumber:` that calls `v.IsReal()` to check if imaginary part is zero. This handles both `*values.Complex` and `*values.BigComplex` uniformly via the `ComplexNumber` interface. Added comprehensive regression test `TestRealQ_ComplexRegression` covering both complex types with zero and non-zero imaginary parts.
 
 ### H7. `generate-temporaries` panics on non-list argument
 
 **File:** `registry/core/prim_syntax.go:130`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Unchecked type assertion `arg.(values.Tuple).Length()`. Non-list input causes Go panic instead of Scheme error.
+
+**Fix:** Added type check before assertion, returns `ErrNotAList` with context.
 
 ### H8. `SourceIndexes.NewLine()`/`Tab()` double-count byte position
 
 **File:** `internal/syntax/source_indexes.go:66-71`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `readNextRune` calls `Inc(n)` to advance the index, then `NewLine()`/`Tab()` increment it again. Every newline and tab adds an extra phantom byte to the position tracker. All source locations after the first newline in any file are wrong. This affects every error message in the system.
+
+**Fix:** Removed `p.index++` from both `NewLine()` and `Tab()` methods. These methods now only update column and line tracking, since the index has already been advanced by `Inc(n)` in `readNextRune()`. Updated tests to reflect correct behavior. Added comprehensive position tracking tests in tokenizer package to prevent regression.
 
 ### H9. String hex escape `\xHHHH;` missing surrogate and max validation
 
 **File:** `internal/tokenizer/tokenizer.go:595`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Character literal hex `#\xHHHH` validates against U+10FFFF and surrogate range. String hex escape `"\xHHHH;"` does not. `"\xD800;"` produces an invalid Unicode code point.
+
+**Fix:** Added Unicode code point validation to `readHexEscapeToken()` matching the validation in character hex escapes. Now validates that code points are ≤ U+10FFFF and not in the surrogate range (U+D800-U+DFFF). Added comprehensive test `TestStringHexEscape_H9_Validation` with 38 test cases covering valid code points (ASCII, multi-byte, boundaries, maximum), surrogate errors, and maximum exceeded errors.
 
 ---
 
@@ -78,16 +60,20 @@ Character literal hex `#\xHHHH` validates against U+10FFFF and surrogate range. 
 ### T1. Global mutable I/O state without synchronization
 
 **File:** `internal/extensions/io/state.go:29-54`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `Tokenizers` and `Parsers` maps are package-level globals with no locks. `closePort` does `delete()` without synchronization. Concurrent I/O from SRFI-18 threads will crash with Go's concurrent map panic.
+
+**Fix:** Added `sync.RWMutex cacheMu` to protect all map access. Map reads/writes/deletes in `PrimRead`, `PrimReadToken`, `PrimReadSyntax`, and `closePort` are now synchronized. Used full Lock (not RLock) for check-then-write patterns to prevent TOCTOU races. Also added `sync.Mutex stateMu` to protect `InitState`/`ResetState` from concurrent initialization races.
 
 ### T2. `GlobalEnvironmentFrame` bindings unprotected
 
 **File:** `environment/global_environment_frame.go`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `keys` map and `bindings` slice have no synchronization. `(define x ...)` from one thread + variable lookup from another = data race. `append` on `bindings` can cause corruption.
+
+**Fix:** Added `sync.RWMutex mu` to `GlobalEnvironmentFrame` to protect all map and slice access. All methods (`CreateGlobalBinding`, `GetGlobalIndex`, `GetOwnGlobalBinding`, `SetOwnGlobalValue`, `Copy`, `EqualTo`, `Bindings`, `SetBindings`, `Keys`) now use appropriate locking (RLock for reads, Lock for writes). Updated `EnvironmentFrame` methods (`SetOwnGlobalValue`, `MaybeCreateOwnGlobalBinding`, `resolveGlobal`, `SetGlobalBindingByIndex`) to either delegate to protected `GlobalEnvironmentFrame` methods or acquire locks when accessing fields directly. `EqualTo` uses consistent lock ordering (lower pointer address first) to prevent deadlock. Created comprehensive concurrency test `TestConcurrentGlobalAccess_T2` with 7 test scenarios covering concurrent creates, lookups, updates, mixed operations, copies, equality checks, and parent-chain resolution.
 
 ### T3. `with-input-from-file`/`with-output-to-file` race on global port state
 

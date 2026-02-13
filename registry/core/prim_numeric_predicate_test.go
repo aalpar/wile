@@ -418,6 +418,43 @@ func TestNumericGreaterThanOrEqual(t *testing.T) {
 	}
 }
 
+// TestRealQ_ComplexRegression tests H6 fix: real? with inexact Complex (float parts).
+// Bug: case *values.BigComplex matched only BigComplex, not *values.Complex.
+// Fix: case values.ComplexNumber matches both implementations.
+func TestRealQ_ComplexRegression(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		// H6: *values.Complex with zero imaginary part should be real
+		{"real? on 3.0+0.0i", `(real? 3.0+0.0i)`, values.TrueValue},
+		{"real? on 1.5+0.0i", `(real? 1.5+0.0i)`, values.TrueValue},
+		{"real? on 0.0+0.0i", `(real? 0.0+0.0i)`, values.TrueValue},
+		{"real? on -2.7+0.0i", `(real? -2.7+0.0i)`, values.TrueValue},
+
+		// *values.Complex with non-zero imaginary part should NOT be real
+		{"real? on 3.0+1.0i", `(real? 3.0+1.0i)`, values.FalseValue},
+		{"real? on 0.0+1.0i", `(real? 0.0+1.0i)`, values.FalseValue},
+		{"real? on 1.5+0.5i", `(real? 1.5+0.5i)`, values.FalseValue},
+
+		// BigComplex with zero imaginary (exact parts) should be real
+		{"real? on 3+0i", `(real? 3+0i)`, values.TrueValue},
+		{"real? on 1/2+0i", `(real? 1/2+0i)`, values.TrueValue},
+
+		// BigComplex with non-zero imaginary should NOT be real
+		{"real? on 3+1i", `(real? 3+1i)`, values.FalseValue},
+		{"real? on 1/2+1/3i", `(real? 1/2+1/3i)`, values.FalseValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, qt.Equals, tc.out)
+		})
+	}
+}
+
 // TestComparison_NonRealComplex tests that ordering comparisons reject non-real complex numbers.
 // R7RS §6.2.6: <, >, <=, >= require real arguments.
 func TestComparison_NonRealComplex(t *testing.T) {

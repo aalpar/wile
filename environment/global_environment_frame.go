@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sync"
+	"unsafe"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -75,7 +77,13 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 //
 // Note: Symbol and syntax interning are delegated to TopLevelEnvironment,
 // ensuring R7RS symbol identity works correctly across all phases.
+//
+// Thread safety: All access to keys and bindings is protected by mu.
+// Fixes T2 from architectural review.
 type GlobalEnvironmentFrame struct {
+	// mu protects concurrent access to keys and bindings maps.
+	// Use RLock for reads, Lock for writes and check-then-write patterns.
+	mu sync.RWMutex
 	// symbol to binding index lookup map
 	keys     map[values.Symbol]int
 	bindings []*Binding
@@ -94,10 +102,15 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 
 // Copy creates a deep copy of the global environment frame.
 // Note that topLevel is shared (not copied) between original and copy.
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
 		return (*GlobalEnvironmentFrame)(nil)
 	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	q := &GlobalEnvironmentFrame{
 		topLevel: p.topLevel, // Shared, not copied
 	}
@@ -112,27 +125,44 @@ func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	return q
 }
 
-// Bindings returns the slice of bindings in this global environment.
+// Bindings returns a copy of the bindings slice.
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) Bindings() []*Binding {
-	return p.bindings
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return slices.Clone(p.bindings)
 }
 
 // SetBindings replaces the bindings slice in this global environment.
+// Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) SetBindings(vs []*Binding) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.bindings = vs
 }
 
-// Keys returns the symbol-to-index mapping for this global environment.
+// Keys returns a copy of the symbol-to-index mapping.
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol]int {
-	return p.keys
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	result := make(map[values.Symbol]int, len(p.keys))
+	maps.Copy(result, p.keys)
+	return result
 }
 
 // CreateGlobalBinding creates a new global binding with the given key and type.
 // The key is interned before use. Returns the GlobalIndex and whether a new
 // binding was created (false if the binding already existed).
+// Thread-safe: uses full Lock to prevent TOCTOU races.
 func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
 	r := p
 	key = p.InternSymbol(key)
+
+	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	_, ok := r.keys[*key]
 	if ok {
 		q := NewGlobalIndex(key)
@@ -141,17 +171,22 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 	i := len(p.bindings)
 	p.keys[*key] = i
 	// append the new binding at index i
-	p.SetBindings(append(p.Bindings(), NewBinding(values.Void, bt)))
+	p.bindings = append(p.bindings, NewBinding(values.Void, bt))
 	q := NewGlobalIndex(key)
 	return q, true
 }
 
 // GetGlobalIndex returns the GlobalIndex for the given symbol.
 // Returns nil if the symbol is not bound in this global environment.
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	ge := p
 	key = p.InternSymbol(key)
+
+	p.mu.RLock()
 	_, ok := ge.keys[*key]
+	p.mu.RUnlock()
+
 	if !ok {
 		return nil
 	}
@@ -162,26 +197,38 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
 // Unlike EnvironmentFrame.GetGlobalBinding, this does NOT traverse the parent chain.
 // Returns nil if the binding does not exist in this frame.
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	ge := p
 	key := p.InternSymbol(gi.Index)
+
+	p.mu.RLock()
 	i, ok := ge.keys[*key]
 	if !ok {
+		p.mu.RUnlock()
 		return nil
 	}
 	bd := ge.bindings[i]
+	p.mu.RUnlock()
+
 	return bd
 }
 
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // Returns an error if the binding does not exist.
+// Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
 	ge := p
+
+	p.mu.Lock()
 	i, ok := ge.keys[*gi.Index]
 	if !ok {
+		p.mu.Unlock()
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such global binding %q", gi.Index)
 	}
 	ge.bindings[i].value = v
+	p.mu.Unlock()
+
 	return nil
 }
 
@@ -197,6 +244,7 @@ func (p *GlobalEnvironmentFrame) SchemeString() string {
 
 // EqualTo returns true if this global environment equals the given value.
 // Two global environments are equal if they have the same bindings.
+// Thread-safe: uses RLock for read-only access on both frames.
 func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 	if p == nil || o == nil {
 		return p == nil && o == nil
@@ -208,6 +256,19 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 	if p == v {
 		return true
 	}
+
+	// Lock both frames in a consistent order to prevent deadlock
+	// (lower pointer address first)
+	first, second := p, v
+	if uintptr(unsafe.Pointer(p)) > uintptr(unsafe.Pointer(v)) {
+		first, second = v, p
+	}
+
+	first.mu.RLock()
+	defer first.mu.RUnlock()
+	second.mu.RLock()
+	defer second.mu.RUnlock()
+
 	if len(p.bindings) != len(v.bindings) {
 		return false
 	}

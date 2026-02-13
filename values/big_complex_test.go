@@ -186,6 +186,152 @@ func TestBigComplex_Exactness(t *testing.T) {
 	c.Assert(exactFromInexact.(*BigComplex).IsExact(), qt.IsTrue)
 }
 
+// TestBigComplex_ToExactFractionalParts tests H4 regression:
+// BigComplex.ToExact() must convert fractional BigFloat parts to Rational,
+// not truncate to BigInteger.
+//
+// Architectural Review H4: toExactPart converts BigFloat to integer by
+// truncation instead of Rational. (exact 1.5+0i) produces 1 instead of 3/2.
+func TestBigComplex_ToExactFractionalParts(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name             string
+		real             float64
+		imag             float64
+		simplifiesToReal bool   // If true, result should be a Number (not BigComplex)
+		wantRealType     string // "Rational", "BigInteger", or "Integer"
+		wantRealValue    float64
+		wantImagType     string
+		wantImagValue    float64
+	}{
+		{
+			name:             "fractional real, zero imag - simplifies to real",
+			real:             1.5,
+			imag:             0.0,
+			simplifiesToReal: true,
+			wantRealType:     "Rational",
+			wantRealValue:    1.5,
+		},
+		{
+			name:             "zero real, fractional imag - stays complex",
+			real:             0.0,
+			imag:             2.5,
+			simplifiesToReal: false,
+			wantRealType:     "zero",
+			wantRealValue:    0.0,
+			wantImagType:     "Rational",
+			wantImagValue:    2.5,
+		},
+		{
+			name:             "both parts fractional",
+			real:             1.5,
+			imag:             2.5,
+			simplifiesToReal: false,
+			wantRealType:     "Rational",
+			wantRealValue:    1.5,
+			wantImagType:     "Rational",
+			wantImagValue:    2.5,
+		},
+		{
+			name:             "integer-valued float and fractional",
+			real:             3.0,
+			imag:             2.5,
+			simplifiesToReal: false,
+			wantRealType:     "Integer", // 3.0 simplifies to integer
+			wantRealValue:    3.0,
+			wantImagType:     "Rational",
+			wantImagValue:    2.5,
+		},
+		{
+			name:             "fractional real, integer-valued imag",
+			real:             1.5,
+			imag:             4.0,
+			simplifiesToReal: false,
+			wantRealType:     "Rational",
+			wantRealValue:    1.5,
+			wantImagType:     "Integer",
+			wantImagValue:    4.0,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			bc := NewBigComplexFromBigFloats(
+				NewBigFloatFromFloat64(tc.real),
+				NewBigFloatFromFloat64(tc.imag),
+			)
+			exact := bc.ToExact()
+			c.Assert(exact.IsExact(), qt.IsTrue)
+
+			// If result simplifies to real (imag == 0), check the real value directly
+			if tc.simplifiesToReal {
+				switch tc.wantRealType {
+				case "Rational":
+					rat, ok := exact.(*Rational)
+					c.Assert(ok, qt.IsTrue, qt.Commentf("Result should be Rational, got %T: %v", exact, exact.SchemeString()))
+					c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
+				case "Integer":
+					switch v := exact.(type) {
+					case *Integer:
+						c.Assert(float64(v.Value), qt.Equals, tc.wantRealValue)
+					case *BigInteger:
+						c.Assert(float64(v.Int64()), qt.Equals, tc.wantRealValue)
+					default:
+						t.Fatalf("Result should be Integer or BigInteger, got %T: %v", exact, exact.SchemeString())
+					}
+				}
+				return
+			}
+
+			// Otherwise, result should be BigComplex
+			bcExact, ok := exact.(*BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("Result should be BigComplex, got %T: %v", exact, exact.SchemeString()))
+
+			// Check real part
+			realPart := bcExact.Real()
+			switch tc.wantRealType {
+			case "zero":
+				c.Assert(realPart.IsZero(), qt.IsTrue, qt.Commentf("Real part should be zero"))
+			case "Rational":
+				rat, ok := realPart.(*Rational)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("Real part should be Rational, got %T: %v", realPart, realPart.SchemeString()))
+				c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
+			case "Integer":
+				// Could be Integer or BigInteger depending on value
+				switch v := realPart.(type) {
+				case *Integer:
+					c.Assert(float64(v.Value), qt.Equals, tc.wantRealValue)
+				case *BigInteger:
+					c.Assert(float64(v.Int64()), qt.Equals, tc.wantRealValue)
+				default:
+					t.Fatalf("Real part should be Integer or BigInteger, got %T: %v", realPart, realPart.SchemeString())
+				}
+			}
+
+			// Check imaginary part
+			imagPart := bcExact.Imag()
+			switch tc.wantImagType {
+			case "zero":
+				c.Assert(imagPart.IsZero(), qt.IsTrue, qt.Commentf("Imaginary part should be zero"))
+			case "Rational":
+				rat, ok := imagPart.(*Rational)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("Imaginary part should be Rational, got %T: %v", imagPart, imagPart.SchemeString()))
+				c.Assert(rat.Float64(), qt.Equals, tc.wantImagValue)
+			case "Integer":
+				switch v := imagPart.(type) {
+				case *Integer:
+					c.Assert(float64(v.Value), qt.Equals, tc.wantImagValue)
+				case *BigInteger:
+					c.Assert(float64(v.Int64()), qt.Equals, tc.wantImagValue)
+				default:
+					t.Fatalf("Imaginary part should be Integer or BigInteger, got %T: %v", imagPart, imagPart.SchemeString())
+				}
+			}
+		})
+	}
+}
+
 func TestBigComplex_Simplification(t *testing.T) {
 	c := qt.New(t)
 
@@ -343,13 +489,13 @@ func TestBigComplex_ZeroOptimizations(t *testing.T) {
 	)
 	zero := NewBigIntegerFromInt64(0)
 
-	// Add zero returns self
+	// Add zero returns equal value (not necessarily same pointer)
 	result := bc.Add(zero)
-	c.Assert(result, qt.Equals, bc)
+	c.Assert(result, SchemeEquals, bc)
 
-	// Subtract zero returns self
+	// Subtract zero returns equal value (not necessarily same pointer)
 	result = bc.Subtract(zero)
-	c.Assert(result, qt.Equals, bc)
+	c.Assert(result, SchemeEquals, bc)
 
 	// Multiply by zero returns zero
 	result = bc.Multiply(zero)

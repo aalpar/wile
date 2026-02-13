@@ -68,11 +68,14 @@ func (p *Float) toBigComplex() *BigComplex {
 
 // Add returns the sum of two numbers.
 //
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value + float64(v.Value))
@@ -96,11 +99,14 @@ func (p *Float) Add(o Number) Number {
 
 // Subtract returns the difference of two numbers.
 //
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value - float64(v.Value))

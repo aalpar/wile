@@ -163,16 +163,22 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
+	// Get or create parser under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
+	cacheMu.Unlock()
+
 	syn, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
+			cacheMu.Lock()
 			delete(Parsers, port)
+			cacheMu.Unlock()
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -195,16 +201,21 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
+	// Get or create tokenizer under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	tknz, ok := Tokenizers[port]
-	// Create a new tokenizer if none exists for the port
 	if !ok || tknz == nil {
 		tknz = tokenizer.NewTokenizer(port, false)
 		Tokenizers[port] = tknz
 	}
+	cacheMu.Unlock()
+
 	q, err := tknz.Next()
 	if errors.Is(err, io.EOF) {
 		// Port is exhausted; evict the cached tokenizer.
+		cacheMu.Lock()
 		delete(Tokenizers, port)
+		cacheMu.Unlock()
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -224,17 +235,22 @@ func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Get or create a parser if one does not exist
+	// Get or create parser under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
+	cacheMu.Unlock()
+
 	q, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
+			cacheMu.Lock()
 			delete(Parsers, port)
+			cacheMu.Unlock()
 			mc.SetValue(values.EOFObject)
 			return nil
 		}

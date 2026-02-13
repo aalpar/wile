@@ -15,6 +15,8 @@
 package values
 
 import (
+	"errors"
+	"math"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -185,4 +187,86 @@ func TestFloat_LessThan(t *testing.T) {
 
 	c1 := NewComplex(complex(7, 0))
 	qt.Assert(t, f1.LessThan(c1), qt.IsTrue)
+}
+
+func TestFloat_ToExact(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name  string
+		input float64
+		want  Value
+	}{
+		{
+			name:  "integer value",
+			input: 5.0,
+			want:  NewInteger(5),
+		},
+		{
+			name:  "rational value",
+			input: 2.5,
+			want:  NewRational(5, 2),
+		},
+		{
+			name:  "negative integer",
+			input: -3.0,
+			want:  NewInteger(-3),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			f := NewFloat(tc.input)
+			result := f.ToExact()
+			c.Assert(result, SchemeEquals, tc.want)
+		})
+	}
+}
+
+func TestFloat_ToExact_NonFinite(t *testing.T) {
+	// Test that ToExact raises an error for infinity and NaN
+	// instead of panicking.
+	// R7RS: (exact +inf.0) should signal an error.
+	tcs := []struct {
+		name  string
+		input float64
+	}{
+		{
+			name:  "positive infinity",
+			input: math.Inf(1),
+		},
+		{
+			name:  "negative infinity",
+			input: math.Inf(-1),
+		},
+		{
+			name:  "NaN",
+			input: math.NaN(),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			// This test will panic before the fix is applied.
+			// After the fix, ToExact should return an error (via panic with ForeignError).
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic for non-finite float")
+				}
+				// Verify it's a ForeignError wrapping ErrExactnessConversion
+				fe, ok := r.(*ForeignError)
+				if !ok {
+					t.Fatalf("expected ForeignError, got %T: %v", r, r)
+				}
+				if !errors.Is(fe, ErrExactnessConversion) {
+					t.Fatalf("expected error wrapping ErrExactnessConversion, got: %v", fe)
+				}
+			}()
+
+			f := NewFloat(tc.input)
+			// This should panic with a ForeignError
+			_ = f.ToExact()
+		})
+	}
 }

@@ -129,11 +129,8 @@ func (p *Complex) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Complex) Multiply(o Number) Number {
-	if o.IsZero() && p.IsFinite() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	if o.IsZero() {
+		return o
 	}
 	switch v := o.(type) {
 	case *Complex:

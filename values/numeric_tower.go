@@ -37,8 +37,16 @@ func multiplyResultForZero(zero, other Number) Number {
 
 // floatToExact converts a float64 to its exact Number representation.
 // Returns Integer or BigInteger if the float is integral, Rational otherwise.
+//
+// R7RS §6.2.6: (exact z) returns an exact representation of z.
+// R7RS says (exact +inf.0) and (exact +nan.0) should raise an error.
 func floatToExact(f float64) Number {
+	// big.Rat.SetFloat64 returns nil for infinity and NaN (non-finite values).
+	// R7RS requires raising an error for (exact +inf.0) and (exact +nan.0).
 	r := new(big.Rat).SetFloat64(f)
+	if r == nil {
+		panic(WrapForeignErrorf(ErrExactnessConversion, "cannot convert non-finite float to exact"))
+	}
 	if r.IsInt() {
 		num := r.Num()
 		if num.IsInt64() {
