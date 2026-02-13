@@ -474,7 +474,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ctx context.Context, _
 	// which is ((id ...) body)
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return nil, values.NewForeignError("with-binding-scope: expected (with-binding-scope (id ...) body)")
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-binding-scope: expected (with-binding-scope (id ...) body)")
 	}
 
 	// Get the identifier list - these are the identifiers being bound
@@ -484,7 +484,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ctx context.Context, _
 	cdr := pair.SyntaxCdr()
 	bodyPair, ok := cdr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return nil, values.NewForeignError("with-binding-scope: missing body")
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-binding-scope: missing body")
 	}
 	body := bodyPair.SyntaxCar()
 

@@ -1122,12 +1122,12 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 
 // CompileUnquote errors - unquote outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquote(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.NewForeignError("unquote: not in quasiquote context")
+	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unquote: not in quasiquote context")
 }
 
 // CompileUnquoteSplicing errors - unquote-splicing outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquoteSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.NewForeignError("unquote-splicing: not in quasiquote context")
+	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unquote-splicing: not in quasiquote context")
 }
 
 // CompileExpression compiles a general expression.
@@ -1143,7 +1143,7 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// of special forms (R7RS §4.2.2)
 	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
-		return values.NewForeignError(result.Error())
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s", result.Error())
 	}
 	// Compile the validated form
 	return p.compileValidated(ctctx, result.Expr)

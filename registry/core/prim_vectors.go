@@ -31,7 +31,7 @@ func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 	if size.Value < 0 {
-		return values.NewForeignError("make-vector: size must be non-negative")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-vector: size must be non-negative")
 	}
 	var fill values.Value = values.FalseValue
 	if !values.IsEmptyList(rest) {
@@ -147,7 +147,7 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 
 	// Parse from vector and optional start/end from rest list
 	if values.IsEmptyList(rest) {
-		return values.NewForeignError("vector-copy!: missing from argument")
+		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "vector-copy!: missing from argument")
 	}
 	tuple, ok := rest.(values.Tuple)
 	if !ok {

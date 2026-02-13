@@ -34,7 +34,7 @@ func NewOperationPopEnv() *OperationPopEnv {
 func (p *OperationPopEnv) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
 	parent := mctx.env.Parent()
 	if parent == nil {
-		return nil, values.NewForeignError("PopEnv: cannot pop top-level environment")
+		return nil, values.WrapForeignErrorf(values.ErrNilParentEnvironment, "PopEnv: cannot pop top-level environment")
 	}
 	mctx.env = parent
 	mctx.pc++

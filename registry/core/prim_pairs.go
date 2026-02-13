@@ -41,7 +41,7 @@ func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	if v.IsEmptyList() {
-		return values.NewForeignError("car: cannot take car of empty list")
+		return values.WrapForeignErrorf(values.ErrNotAPair, "car: cannot take car of empty list")
 	}
 	mc.SetValue(v.Car())
 	return nil
@@ -57,7 +57,7 @@ func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	if v.IsEmptyList() {
-		return values.NewForeignError("cdr: cannot take cdr of empty list")
+		return values.WrapForeignErrorf(values.ErrNotAPair, "cdr: cannot take cdr of empty list")
 	}
 	mc.SetValue(v.Cdr())
 	return nil
@@ -101,7 +101,7 @@ func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, v)
 		}
 		if p.IsEmptyList() {
-			return nil, values.NewForeignError(name + ": cannot take car/cdr of empty list")
+			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: cannot take car/cdr of empty list", name)
 		}
 		if ops[i] == 'a' {
 			v = p.Car()

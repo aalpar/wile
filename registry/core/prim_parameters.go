@@ -43,7 +43,7 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 			// Validate converter is a procedure
 			converterCls, ok = pr.Car().(*machine.MachineClosure)
 			if !ok {
-				return values.NewForeignError("make-parameter: converter must be a procedure")
+				return values.WrapForeignErrorf(values.ErrNotAProcedure, "make-parameter: converter must be a procedure")
 			}
 
 			// Apply converter to initial value

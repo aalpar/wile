@@ -40,13 +40,13 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	bindingsList := argsPair.SyntaxCar()
 	bindingsPair, ok := bindingsList.(*syntax.SyntaxPair)
 	if !ok {
-		return values.NewForeignError("with-syntax: bindings must be a list")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: bindings must be a list")
 	}
 
 	// Get the body (CDR of args)
 	bodyList, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || bodyList.IsEmptyList() {
-		return values.NewForeignError("with-syntax: expected body expressions")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: expected body expressions")
 	}
 
 	// Transform to syntax-case form
@@ -67,7 +67,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		binding := current.SyntaxCar()
 		bindingPair, ok := binding.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
-			return values.NewForeignError("with-syntax: each binding must be (pattern expr)")
+			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)")
 		}
 
 		// Get pattern (first element)
@@ -77,7 +77,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		// Get expr (second element)
 		rest, ok := bindingPair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok || rest.IsEmptyList() {
-			return values.NewForeignError("with-syntax: each binding must be (pattern expr)")
+			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)")
 		}
 		expr = rest.SyntaxCar()
 		exprs = append(exprs, expr)
@@ -123,7 +123,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 // compileWithSyntaxBody compiles the body of with-syntax when there are no bindings.
 func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallContext, bodyList *syntax.SyntaxPair) error {
 	if bodyList.IsEmptyList() {
-		return values.NewForeignError("with-syntax: expected body expressions")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: expected body expressions")
 	}
 
 	// Compile each body expression, the last one in tail position

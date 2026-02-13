@@ -120,7 +120,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		// Get closure
 		cls, ok := thunk.(*machine.MachineClosure)
 		if !ok {
-			return nil, values.NewForeignError("make-thread: thunk must be a procedure")
+			return nil, values.WrapForeignErrorf(values.ErrNotAProcedure, "make-thread: thunk must be a procedure")
 		}
 
 		// Create a new machine context for this thread using captured parent state.

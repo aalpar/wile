@@ -74,7 +74,7 @@ func PrimDatumToSyntax(_ context.Context, mc *machine.MachineContext) error {
 	} else if templateStx, ok := templateArg.(syntax.SyntaxValue); ok {
 		sctx = templateStx.SourceContext()
 	} else {
-		return values.NewForeignError("datum->syntax: template-id must be an identifier, syntax object, or #f")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "datum->syntax: template-id must be an identifier, syntax object, or #f")
 	}
 
 	// Convert datum to syntax
@@ -153,11 +153,11 @@ func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) er
 
 	id0, ok0 := o0.(*syntax.SyntaxSymbol)
 	if !ok0 {
-		return values.NewForeignError("bound-identifier=?: argument 1 is not an identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "bound-identifier=?: argument 1 is not an identifier")
 	}
 	id1, ok1 := o1.(*syntax.SyntaxSymbol)
 	if !ok1 {
-		return values.NewForeignError("bound-identifier=?: argument 2 is not an identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "bound-identifier=?: argument 2 is not an identifier")
 	}
 
 	// Same name?
@@ -183,11 +183,11 @@ func PrimFreeIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) err
 
 	id0, ok0 := o0.(*syntax.SyntaxSymbol)
 	if !ok0 {
-		return values.NewForeignError("free-identifier=?: argument 1 is not an identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "free-identifier=?: argument 1 is not an identifier")
 	}
 	id1, ok1 := o1.(*syntax.SyntaxSymbol)
 	if !ok1 {
-		return values.NewForeignError("free-identifier=?: argument 2 is not an identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "free-identifier=?: argument 2 is not an identifier")
 	}
 
 	env := mc.EnvironmentFrame()

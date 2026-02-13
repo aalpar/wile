@@ -135,6 +135,7 @@ var (
 	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
 	ErrHashtableKeyNotFound    = NewStaticError("hashtable key not found")
 	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
+	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
