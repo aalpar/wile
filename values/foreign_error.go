@@ -45,7 +45,7 @@ var (
 	ErrNotAReal                    = NewStaticError("not a real number")
 	ErrNotAComplex                 = NewStaticError("not a complex number")
 	ErrNotAFloatingPoint           = NewStaticError("not a floating-point number")
-	ErrNotACexactInteger           = NewStaticError("not a C-exact integer")
+	ErrNotAExactInteger            = NewStaticError("not a C-exact integer")
 	ErrDivisionByZero              = NewStaticError("division by zero")
 	ErrNotAList                    = NewStaticError("not a list")
 	ErrNotACloseParen              = NewStaticError("not a close parenthesis")
