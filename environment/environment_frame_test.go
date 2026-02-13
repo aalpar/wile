@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -539,4 +540,54 @@ func TestEnvironmentFrame_EqualTo_NilAndDifferent(t *testing.T) {
 
 	// Different type
 	qt.Assert(t, env2.EqualTo(values.NewInteger(42)), qt.IsFalse)
+}
+
+func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
+	tcs := []struct {
+		name     string
+		trigger  func()
+		sentinel error
+	}{
+		{
+			"nil parent panics with ErrNilParentEnvironment",
+			func() {
+				NewEnvironmentFrameWithParent(nil, nil)
+			},
+			values.ErrNilParentEnvironment,
+		},
+		{
+			"AtPhase without PhaseRegistry panics with ErrMissingPhaseRegistry",
+			func() {
+				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.AtPhase(0)
+			},
+			values.ErrMissingPhaseRegistry,
+		},
+		{
+			"InternSyntax without TopLevel panics with ErrMissingTopLevelEnvironment",
+			func() {
+				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.InternSyntax(values.NewInteger(1), nil)
+			},
+			values.ErrMissingTopLevelEnvironment,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic")
+				}
+				err, ok := r.(error)
+				if !ok {
+					t.Fatalf("panic value is not error: %T", r)
+				}
+				if !errors.Is(err, tc.sentinel) {
+					t.Errorf("expected sentinel %v, got: %v", tc.sentinel, err)
+				}
+			}()
+			tc.trigger()
+		})
+	}
 }

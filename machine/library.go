@@ -349,7 +349,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			}
 		}
 		if libBinding == nil {
-			return values.NewForeignErrorf("library %s exports %q but binding not found",
+			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "library %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
 		}
 

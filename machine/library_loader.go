@@ -58,11 +58,11 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// Get the library registry from the environment
 	registryAny := env.LibraryRegistry()
 	if registryAny == nil {
-		return nil, values.NewForeignErrorf("load-library: no library registry configured")
+		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "load-library: no library registry configured")
 	}
 	registry, ok := registryAny.(*LibraryRegistry)
 	if !ok {
-		return nil, values.NewForeignErrorf("load-library: invalid library registry type")
+		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "load-library: invalid library registry type")
 	}
 
 	// Already loaded?
@@ -128,7 +128,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// This isolates the library's bindings from the caller's environment,
 	// but shares the TopLevelEnvironment for symbol interning.
 	if LibraryEnvFactory == nil {
-		return nil, values.NewForeignErrorf("LibraryEnvFactory not configured")
+		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
 	}
 	libEnv, err := LibraryEnvFactory(ctx, callerEnv)
 	if err != nil {
@@ -147,7 +147,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	stx, err := p.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, values.NewForeignErrorf("library file is empty")
+			return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "library file is empty")
 		}
 		return nil, values.WrapForeignErrorf(err, "could not parse library file")
 	}
@@ -155,18 +155,18 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// Verify it's a define-library form
 	pair, ok := stx.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.NewForeignErrorf("expected define-library form, got %T", stx)
+		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library form, got %T", stx)
 	}
 
 	carStx := pair.SyntaxCar()
 	carSym, ok := carStx.(*syntax.SyntaxSymbol)
 	if !ok {
-		return nil, values.NewForeignErrorf("expected define-library, got %T", carStx)
+		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library, got %T", carStx)
 	}
 
 	symName := carSym.Sym.Key
 	if symName != "define-library" && symName != "library" {
-		return nil, values.NewForeignErrorf("expected define-library, got %s", symName)
+		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
 	}
 
 	// Compile and execute the library
@@ -206,12 +206,12 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	}
 
 	if compiledLib == nil {
-		return nil, values.NewForeignErrorf("library was not produced by compilation")
+		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "library was not produced by compilation")
 	}
 
 	// Verify the library name matches what was expected
 	if compiledLib.Name.Key() != expectedName.Key() {
-		return nil, values.NewForeignErrorf("library name mismatch: expected %s, got %s",
+		return nil, values.WrapForeignErrorf(values.ErrLibraryNameMismatch, "library name mismatch: expected %s, got %s",
 			expectedName.SchemeString(), compiledLib.Name.SchemeString())
 	}
 

@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -214,7 +215,8 @@ func TestCompileValidated_UnknownExprType(t *testing.T) {
 	mock := &mockValidatedExpr{}
 	err := ctc.compileValidated(ctctx, mock)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err, qt.ErrorMatches, `unknown validated expression type: \*machine\.mockValidatedExpr`)
+	c.Assert(err, qt.ErrorMatches, `unknown validated expression type: \*machine\.mockValidatedExpr: invalid argument`)
+	c.Assert(errors.Is(err, values.ErrInvalidArgument), qt.IsTrue)
 }
 
 // mockValidatedExpr implements validate.ValidatedExpr for testing the

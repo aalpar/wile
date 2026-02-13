@@ -254,7 +254,11 @@ func NewTemporaryVariableName() *Symbol {
 	bs := make([]byte, byteCnt)
 	_, err := rand.Read(bs)
 	if err != nil {
-		panic(fmt.Errorf("%w: error reading random stream", err))
+		panic(WrapForeignErrorf(
+			ErrRandomGenerationFailed,
+			"error reading random stream: %v",
+			err,
+		))
 	}
 	q := NewSymbol(
 		fmt.Sprintf("__T_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bs)),

@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"errors"
 	"math"
 	"testing"
 
@@ -1223,6 +1224,32 @@ func TestDivisionByZero_ReturnsError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
+		})
+	}
+}
+
+// TestQuotientDivisionByZeroSentinel verifies that quotient/remainder/modulo
+// division-by-zero errors use the ErrDivisionByZero sentinel and are
+// matchable with errors.Is().
+func TestQuotientDivisionByZeroSentinel(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"quotient by zero", `(quotient 10 0)`},
+		{"quotient biginteger by zero", `(quotient (expt 2 100) 0)`},
+		{"remainder by zero", `(remainder 10 0)`},
+		{"remainder biginteger by zero", `(remainder (expt 2 100) 0)`},
+		{"modulo by zero", `(modulo 10 0)`},
+		{"modulo biginteger by zero", `(modulo (expt 2 100) 0)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*division by zero.*`)
 		})
 	}
 }

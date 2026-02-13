@@ -15,6 +15,7 @@
 package values
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 )
@@ -110,6 +111,33 @@ var (
 	ErrTypeConversion        = NewStaticError("type conversion failed")
 	ErrIndexOutOfRange       = NewStaticError("index out of range")
 	ErrImmutableString       = NewStaticError("cannot mutate immutable string")
+
+	// FFI errors
+	ErrFFICallbackError         = NewStaticError("FFI callback error")
+	ErrCallbackResultConversion = NewStaticError("callback result conversion failed")
+	ErrHashtableInsertionFailed = NewStaticError("hashtable insertion failed")
+
+	// Environment errors (keep as panics but use sentinels)
+	ErrMissingTopLevelEnvironment = NewStaticError("missing TopLevelEnvironment")
+	ErrMissingPhaseRegistry       = NewStaticError("missing PhaseRegistry")
+	ErrNilParentEnvironment       = NewStaticError("nil parent environment")
+
+	// Panic recovery errors
+	ErrThreadPanic   = NewStaticError("thread panic")
+	ErrPanicRecovery = NewStaticError("panic recovery")
+
+	// Syntax errors
+	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
+	ErrNoMatchingClause        = NewStaticError("no matching clause")
+	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
+	ErrLibraryConfiguration    = NewStaticError("library configuration error")
+	ErrLibraryFormMalformed    = NewStaticError("malformed library form")
+	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
+	ErrHashtableKeyNotFound    = NewStaticError("hashtable key not found")
+	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
+
+	// Utility errors (keep as panic)
+	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.
@@ -135,7 +163,8 @@ func (p *StaticError) Error() string {
 // foreign to Scheme). It wraps an optional underlying error with a message
 // and captures a stack trace at the point of creation.
 type ForeignError struct {
-	err     error
+	err     error // sentinel for errors.Is matching
+	cause   error // root cause from underlying operation
 	message string
 	stack   []uintptr // stack trace
 }
@@ -179,18 +208,65 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	}
 }
 
-func (p *ForeignError) Unwrap() error {
+// WrapForeignErrorWithCause wraps a sentinel and a root cause into a single
+// ForeignError. The sentinel is matched by errors.Is for programmatic
+// dispatch; the cause preserves the underlying failure for diagnostics.
+func WrapForeignErrorWithCause(sentinel, cause error, msg string, vs ...any) *ForeignError {
+	pcs := [50]uintptr{}
+	n := runtime.Callers(1, pcs[:])
+	return &ForeignError{
+		err:     sentinel,
+		cause:   cause,
+		message: fmt.Sprintf(msg, vs...),
+		stack:   pcs[:n],
+	}
+}
+
+// Is reports whether target matches the sentinel or the cause.
+// This replaces Unwrap and gives ForeignError precise two-chain semantics:
+// the sentinel identifies the error category, the cause preserves the
+// root failure from the underlying operation.
+func (p *ForeignError) Is(target error) bool {
+	if p.err != nil && errors.Is(p.err, target) {
+		return true
+	}
+	if p.cause != nil && errors.Is(p.cause, target) {
+		return true
+	}
+	return false
+}
+
+// As checks whether the sentinel or cause can be assigned to target.
+func (p *ForeignError) As(target any) bool {
+	if p.err != nil && errors.As(p.err, target) {
+		return true
+	}
+	if p.cause != nil && errors.As(p.cause, target) {
+		return true
+	}
+	return false
+}
+
+// Cause returns the root cause error, if any. Useful for debugging/logging
+// when you need the underlying failure directly.
+func (p *ForeignError) Cause() error {
 	if p == nil {
 		return nil
 	}
-	return p.err
+	return p.cause
 }
 
 func (p *ForeignError) Error() string {
-	if p.err != nil {
+	switch {
+	case p.err != nil && p.cause != nil:
+		return fmt.Sprintf("%s: %s: %s", p.message, p.err.Error(), p.cause.Error())
+	case p.err != nil:
 		return fmt.Sprintf("%s: %s", p.message, p.err.Error())
+	case p.cause != nil:
+		return fmt.Sprintf("%s: %s", p.message, p.cause.Error())
+	default:
+		return p.message
 	}
-	return p.message
 }
 
 // ForeignFileError represents an error from a file system operation.
@@ -199,13 +275,6 @@ type ForeignFileError struct {
 	*ForeignError
 	Filename string // the file path that caused the error
 	Op       string // the operation (e.g., "open-input-file", "delete-file")
-}
-
-func (p *ForeignFileError) Unwrap() error {
-	if p == nil || p.ForeignError == nil {
-		return nil
-	}
-	return p.ForeignError.Unwrap()
 }
 
 // WrapForeignFileError wraps an OS error with file context.
@@ -222,13 +291,6 @@ func WrapForeignFileError(err error, op string, filename string) *ForeignFileErr
 // R7RS §6.11: detected by read-error? predicate.
 type ForeignReadError struct {
 	*ForeignError
-}
-
-func (p *ForeignReadError) Unwrap() error {
-	if p == nil || p.ForeignError == nil {
-		return nil
-	}
-	return p.ForeignError.Unwrap()
 }
 
 // WrapForeignReadErrorf wraps an error as a read error.

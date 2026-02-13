@@ -87,6 +87,9 @@ func (p *Stack) PopAll() []values.Value {
 // `K` is zero-based, so PeekK(0) returns the top value. `K` is used for methods that need a numeric index.
 func (p Stack) PeekK(i int) values.Value {
 	l := len(p)
+	if i < 0 || i >= l {
+		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PeekK: index %d out of range for stack of length %d", i, l))
+	}
 	v := (p)[l-(i+1)]
 	return v
 }

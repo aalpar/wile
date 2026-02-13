@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1026,6 +1027,36 @@ func TestRegisterFuncCallbackExceptionToError(t *testing.T) {
 
 	// Scheme exception should become a Go error.
 	evalExpectError(t, engine, `(try-callback (lambda (x) (error "boom" x)) 5)`)
+}
+
+func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
+	engine := newEngine(t)
+
+	// Register a function where the Go callback has an error return.
+	// When the Scheme procedure raises an exception, the FFI layer wraps
+	// it with ErrFFICallbackError and returns it via the error slot.
+	regErr := engine.RegisterFunc("sentinel-callback",
+		func(f func(int64) (int64, error), n int64) (int64, error) {
+			return f(n)
+		})
+	if regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	// Trigger a runtime error in the callback via division by zero.
+	ctx := context.Background()
+	_, evalErr := engine.Eval(ctx, `(sentinel-callback (lambda (x) (/ x 0)) 5)`)
+	if evalErr == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// The FFI sentinel should be in the error chain.
+	if !errors.Is(evalErr, values.ErrFFICallbackError) {
+		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
+	}
+	// The error message should contain the original error's context.
+	if !strings.Contains(evalErr.Error(), "division by zero") {
+		t.Errorf("expected error to contain original error context, got: %v", evalErr)
+	}
 }
 
 // --- Parameter as callback ---

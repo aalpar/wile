@@ -134,14 +134,3 @@ The thread/mutex state symbols are the most actionable — they should be packag
 **If Go's minimum version advances to 1.24 for unrelated reasons**, reconsider `maphash.Comparable` specifically for `Symbol.HashCode()` (strings don't heap-escape). The other `Hashable` types (Integer, Byte, Boolean, Character) would still be better served by `hashUint64` to avoid heap allocation.
 
 ---
-
-## Deferred: Numeric Tower Dispatch (Not Recommended)
-
-The 332 type-switch branches across 7 numeric types are **intentional** architecture. The previous `Tower*` dispatch layer was removed because it added indirection without benefit. The N x N dispatch is the explicit design choice — directness over DRY.
-
-Do not reintroduce a dispatch table. If the repetition becomes painful (e.g., adding an 8th numeric type), consider codegen from a specification table rather than runtime indirection.
-
----
-
-
----

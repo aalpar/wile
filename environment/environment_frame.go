@@ -135,7 +135,10 @@ func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 // Panics if parent is nil - use NewTopLevelEnvironmentFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
-		panic("NewEnvironmentFrameWithParent called with nil parent - use NewTopLevelEnvironmentFrame() instead")
+		panic(values.WrapForeignErrorf(
+			values.ErrNilParentEnvironment,
+			"NewEnvironmentFrameWithParent called with nil parent - use NewTopLevelEnvironmentFrame() instead",
+		))
 	}
 	q := &EnvironmentFrame{
 		parent:     parent,
@@ -171,7 +174,10 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
-		panic("AtPhase called on environment without PhaseRegistry - use NewTopLevelEnvironment()")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingPhaseRegistry,
+			"AtPhase called on environment without PhaseRegistry - use NewTopLevelEnvironment()",
+		))
 	}
 	return topLevel.phases.GetOrCreate(phase)
 }
@@ -700,7 +706,10 @@ func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 // Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
 	if p.topLevel == nil {
-		panic("InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
+		))
 	}
 	return p.topLevel.InternSyntax(k, v)
 }
