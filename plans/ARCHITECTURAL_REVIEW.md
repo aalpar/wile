@@ -78,9 +78,21 @@ Character literal hex `#\xHHHH` validates against U+10FFFF and surrogate range. 
 ### T3. `with-input-from-file`/`with-output-to-file` race on global port state
 
 **File:** `internal/extensions/files/prim_files.go:190-246`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Save/restore of global port parameters is not thread-safe. Should use `parameterize` semantics.
+
+**Fix:** Converted `with-input-from-file` and `with-output-to-file` from Go primitives to Scheme macros in `with_file_macros.scm`. They now expand to:
+```scheme
+(call-with-input-file filename
+  (lambda (port)
+    (parameterize ((current-input-port port))
+      (thunk))))
+```
+This uses `parameterize`, which expands to `dynamic-wind`, providing:
+- **Continuation safety**: Parameter changes are tracked on the winding stack, integrating properly with `call/cc`
+- **Dynamic extent semantics**: Before/after thunks ensure parameters are restored even when continuations escape
+- **Code reuse**: Leverages existing `call-with-input-file` and parameter infrastructure
 
 ### T4. `PrimMakeThread` captures parent `MachineContext` across goroutine boundary
 

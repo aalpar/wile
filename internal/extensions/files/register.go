@@ -18,14 +18,25 @@
 package files
 
 import (
+	_ "embed"
+
 	"github.com/aalpar/wile/registry"
 )
+
+// withFileMacroSource contains with-input-from-file and with-output-to-file macros.
+// These are implemented as macros using parameterize to ensure proper integration
+// with the continuation system (fixes T3 from architectural review).
+//
+// Source: go/internal/extensions/files/with_file_macros.scm (embedded at compile-time)
+//
+//go:embed with_file_macros.scm
+var withFileMacroSource string
 
 // Extension is the file I/O extension.
 var Extension = registry.NewExtension("files", AddToRegistry)
 
 // Builder aggregates all file registration functions.
-var Builder = registry.NewRegistryBuilder(addPrimitives)
+var Builder = registry.NewRegistryBuilder(addPrimitives, addMacros)
 
 // AddToRegistry registers all file primitives.
 var AddToRegistry = Builder.AddToRegistry
@@ -40,8 +51,12 @@ func addPrimitives(r *registry.Registry) error {
 		{"delete-file", 1, false, PrimDeleteFile},
 		{"call-with-input-file", 2, false, PrimCallWithInputFile},
 		{"call-with-output-file", 2, false, PrimCallWithOutputFile},
-		{"with-input-from-file", 2, false, PrimWithInputFromFile},
-		{"with-output-to-file", 2, false, PrimWithOutputToFile},
+		// with-input-from-file and with-output-to-file are now macros (see addMacros)
 	}, registry.PhaseRuntime)
+	return nil
+}
+
+func addMacros(r *registry.Registry) error {
+	r.AddMacroSource(withFileMacroSource)
 	return nil
 }

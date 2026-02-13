@@ -18,7 +18,6 @@ import (
 	"context"
 	"os"
 
-	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -167,80 +166,6 @@ func PrimCallWithOutputFile(ctx context.Context, mc *machine.MachineContext) err
 		func(f *os.File) values.Value { return values.NewCharacterOutputPortFromWriter(f) })
 }
 
-// runThunk runs a thunk in a sub-context and returns the result.
-func runThunk(ctx context.Context, mc *machine.MachineContext, thunk *machine.MachineClosure) error { //nolint:unparam
-	sub := mc.NewSubContext()
-	_, err := sub.Apply(thunk)
-	if err != nil {
-		return err
-	}
-	err = sub.Run()
-	if err != nil {
-		return err
-	}
-
-	mc.SetValue(sub.GetValue())
-	return nil
-}
-
-// PrimWithInputFromFile implements the with-input-from-file primitive (R7RS).
-// Opens a file for reading, temporarily sets it as current-input-port,
-// calls the thunk, then restores the previous port and closes the file.
-// (with-input-from-file string thunk)
-func PrimWithInputFromFile(ctx context.Context, mc *machine.MachineContext) error {
-	filename, err := helpers.RequireType[*values.String](mc.Arg(0), values.ErrNotAString, "with-input-from-file")
-	if err != nil {
-		return err
-	}
-
-	thunk, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, "with-input-from-file")
-	if err != nil {
-		return err
-	}
-
-	// Open the file
-	file, err := os.Open(filename.Value)
-	if err != nil {
-		return values.WrapForeignFileError(err, "with-input-from-file", filename.Value)
-	}
-	defer file.Close() //nolint:errcheck
-
-	// Save current port and set new one
-	savedPort := extio.GetCurrentInputPort()
-	newPort := values.NewCharacterInputPortFromReader(file)
-	extio.SetCurrentInputPort(newPort)
-	defer extio.SetCurrentInputPort(savedPort)
-
-	return runThunk(ctx, mc, thunk)
-}
-
-// PrimWithOutputToFile implements the with-output-to-file primitive (R7RS).
-// Opens a file for writing, temporarily sets it as current-output-port,
-// calls the thunk, then restores the previous port and closes the file.
-// (with-output-to-file string thunk)
-func PrimWithOutputToFile(ctx context.Context, mc *machine.MachineContext) error {
-	filename, err := helpers.RequireType[*values.String](mc.Arg(0), values.ErrNotAString, "with-output-to-file")
-	if err != nil {
-		return err
-	}
-
-	thunk, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, "with-output-to-file")
-	if err != nil {
-		return err
-	}
-
-	// Open the file for writing (create or truncate)
-	file, err := os.Create(filename.Value)
-	if err != nil {
-		return values.WrapForeignFileError(err, "with-output-to-file", filename.Value)
-	}
-	defer file.Close() //nolint:errcheck
-
-	// Save current port and set new one
-	savedPort := extio.GetCurrentOutputPort()
-	newPort := values.NewCharacterOutputPortFromWriter(file)
-	extio.SetCurrentOutputPort(newPort)
-	defer extio.SetCurrentOutputPort(savedPort)
-
-	return runThunk(ctx, mc, thunk)
-}
+// PrimWithInputFromFile and PrimWithOutputToFile have been moved to
+// with_file_macros.scm as macros using parameterize. This ensures proper
+// integration with the continuation system (fixes T3 from architectural review).
