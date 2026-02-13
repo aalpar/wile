@@ -128,9 +128,15 @@ Validation uses `GetBindingWithScopes` but the actual local index lookup uses `G
 ### M2. Winding stack aliasing in `RestoreWithWindingFrom` and `UnwindTo`
 
 **File:** `machine/machine_context.go:703-742, 632-653`
-**Status:** Open
+**Status:** ✅ Fixed
 
-`p.windingStack = sourceStack[:commonDepth]` shares backing array. Subsequent `append` in `RewindTo` can corrupt the original stack. Same issue in `UnwindTo` where sub-context gets a shared slice. Fix: use cap-limited slices `[:n:n]`.
+`p.windingStack = sourceStack[:commonDepth]` shares backing array. Subsequent `append` in `RewindTo` can corrupt the original stack. Same issue in `UnwindTo` where sub-context gets a shared slice.
+
+**Fix:** Changed all winding stack slice operations to use three-index slice syntax `[:n:n]` to cap capacity and prevent backing array sharing. This ensures that any subsequent `append()` allocates a new array instead of writing to shared memory. Fixed four locations:
+- `UnwindTo()` lines 685, 698
+- `RestoreWithWindingFrom()` lines 760, 773
+
+Added regression test `TestWindingStackAliasingBug_M2` that captures a continuation with nested dynamic-wind frames and verifies no corruption during unwind/rewind.
 
 ### M3. `NewSubContext` does not inherit exception handlers
 

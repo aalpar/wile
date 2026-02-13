@@ -682,7 +682,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 		frame := p.windingStack[i]
 		if frame.After != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = p.windingStack[:i] // Set stack to this level
+			sub.windingStack = p.windingStack[:i:i] // Set stack to this level (cap to prevent aliasing)
 			_, err := sub.Apply(frame.After)
 			if err != nil {
 				return err
@@ -695,7 +695,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 		}
 	}
 	// Update current winding stack to common ancestor
-	p.windingStack = p.windingStack[:commonDepth]
+	p.windingStack = p.windingStack[:commonDepth:commonDepth]
 	return nil
 }
 
@@ -757,7 +757,7 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 		frame := sourceStack[i]
 		if frame.After != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = sourceStack[:i]
+			sub.windingStack = sourceStack[:i:i]
 			_, err := sub.Apply(frame.After)
 			if err != nil {
 				return err
@@ -770,7 +770,7 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	}
 
 	// Update context's winding stack to common ancestor
-	p.windingStack = sourceStack[:commonDepth]
+	p.windingStack = sourceStack[:commonDepth:commonDepth]
 
 	// Rewind: run before thunks for frames being entered (to target)
 	err := p.RewindTo(targetStack, commonDepth)

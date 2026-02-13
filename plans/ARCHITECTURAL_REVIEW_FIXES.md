@@ -7,11 +7,12 @@
 - `a05315c` — "fix: eliminate cross-goroutine MachineContext access in thread creation (T4)"
 - `cdb3427` — "fix: make nextScopeID counter atomic (T5)"
 - `d25ec80` — "fix: use scope-aware lookup in set! for hygienic macro correctness (M1)"
+- `c16fba7` — "fix: use cap-limited slices in winding stack to prevent backing array aliasing (M2)"
 
-**Scope:** Fixes for 10 HIGH priority bugs plus 1 MEDIUM priority bug from architectural code review:
+**Scope:** Fixes for 10 HIGH priority bugs plus 2 MEDIUM priority bugs from architectural code review:
 - 7 HIGH correctness bugs (H1-H7)
 - 3 HIGH thread safety issues (T3, T4, T5)
-- 1 MEDIUM correctness issue (M1)
+- 2 MEDIUM correctness issues (M1, M2)
 
 This document explains the actual implementation of fixes for HIGH and MEDIUM priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS/SRFI specification involved, and regression tests added.
 
@@ -1558,6 +1559,94 @@ A regression test was not added because:
 4. All existing tests pass, confirming no regressions
 
 If this bug had been discovered via a failing test case, that test would be preserved. Since it was found via code inspection during the architectural review, the existing test coverage is sufficient.
+
+---
+
+## M2. Winding stack aliasing in `RestoreWithWindingFrom` and `UnwindTo`
+
+**File:** `machine/machine_context.go:685, 698, 760, 773`
+**Batch:** 2 (Correctness requiring design thought)
+**Commit:** `c16fba7` (2026-02-12)
+
+### Problem
+
+The continuation system uses `windingStack` (a Go slice of `*DynamicWindFrame`) to track active dynamic-wind frames. When unwinding or rewinding during continuation restoration, the code creates sub-slices using two-index syntax:
+
+```go
+sub.windingStack = p.windingStack[:i]              // line 685 UnwindTo
+p.windingStack = p.windingStack[:commonDepth]       // line 698 UnwindTo
+sub.windingStack = sourceStack[:i]                  // line 760 RestoreWithWindingFrom
+p.windingStack = sourceStack[:commonDepth]          // line 773 RestoreWithWindingFrom
+```
+
+Two-index slices share backing arrays with the original slice, including the full capacity. Later code calls `append()`:
+
+```go
+p.windingStack = append(p.windingStack, frame)     // line 721 RewindTo
+```
+
+If `cap > len`, `append()` writes to the shared backing array without allocating, corrupting all slices that reference that array.
+
+### Corruption Scenario
+
+```
+1. UnwindTo() creates sub.windingStack = p.windingStack[:3]
+   → len=3, cap=8 (shares backing array with parent)
+2. UnwindTo() sets p.windingStack = p.windingStack[:1]
+   → len=1, cap=8 (still shares same backing array)
+3. RestoreWithWindingFrom() calls RewindTo()
+4. RewindTo() calls append(p.windingStack, frame)
+   → Writes to index 1 of shared array
+   → Corrupts original sourceStack if it was the source
+   → Corrupts any sub-context slices still referenced
+```
+
+**R7RS Impact:** R7RS continuations can be invoked multiple times (§6.10). If the winding stack is corrupted during unwinding, subsequent invocations execute the wrong before/after thunks, breaking the dynamic-wind guarantee.
+
+### The Fix
+
+Use Go's three-index slice syntax `slice[:n:n]` to cap the capacity:
+
+```go
+// Before:
+sub.windingStack = p.windingStack[:i]
+p.windingStack = sourceStack[:commonDepth]
+
+// After:
+sub.windingStack = p.windingStack[:i:i]          // cap = len = i
+p.windingStack = sourceStack[:commonDepth:commonDepth]  // cap = len = commonDepth
+```
+
+When `cap == len`, any `append()` **must** allocate a new backing array, preventing writes from affecting other slices.
+
+**Changed locations:**
+| File | Line | Before | After |
+|------|------|--------|-------|
+| `machine/machine_context.go` | 685 | `p.windingStack[:i]` | `p.windingStack[:i:i]` |
+| `machine/machine_context.go` | 698 | `p.windingStack[:commonDepth]` | `p.windingStack[:commonDepth:commonDepth]` |
+| `machine/machine_context.go` | 760 | `sourceStack[:i]` | `sourceStack[:i:i]` |
+| `machine/machine_context.go` | 773 | `sourceStack[:commonDepth]` | `sourceStack[:commonDepth:commonDepth]` |
+
+### Test Coverage
+
+Added `TestWindingStackAliasingBug_M2` in `continuation_winding_coverage_test.go` that:
+1. Captures a continuation with 3 nested dynamic-wind frames
+2. Invokes it, triggering unwind/rewind with append operations
+3. Verifies before/after thunks execute in correct order (no corruption)
+
+This test would fail without the fix because the rewind's `append()` would corrupt the original stack.
+
+### Performance Impact
+
+**None.** Three-index slices have the same cost as two-index slices for the slice operation itself. Allocation only happens when `append()` is called, which is the point where we need isolation anyway. The fix prevents a correctness bug without adding overhead to the success path.
+
+### R7RS Specification
+
+**R7RS §6.10 (Control features):**
+
+> The `dynamic-wind` procedure accepts three arguments, all of which should be thunks: *before*, *thunk*, and *after*. It applies *thunk* and returns the value(s) returned by *thunk*. In addition, it ensures that *before* is invoked when control enters the dynamic extent of *thunk* (including when control re-enters by invoking a captured continuation), and *after* is invoked when control leaves that extent (including when control leaves by invoking a captured continuation).
+
+The winding stack corruption would cause *before* and *after* thunks to be invoked incorrectly on continuation re-entry, violating this guarantee.
 
 ---
 
