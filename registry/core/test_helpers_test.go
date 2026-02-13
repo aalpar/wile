@@ -47,7 +47,7 @@ func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
-	err := ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(sctx, prog))
+	err := ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
 	if err != nil {
 		return nil, err
 	}

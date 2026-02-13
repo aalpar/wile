@@ -152,7 +152,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 // newEngine creates a Wile engine with the I/O extension loaded.
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)

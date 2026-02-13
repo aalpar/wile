@@ -24,7 +24,7 @@ import (
 
 // validateDefine validates both forms:
 // (define name expr) and (define (name params...) body...)
-func validateDefine(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateDefine(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -46,11 +46,11 @@ func validateDefine(_ context.Context, env *environment.EnvironmentFrame, pair *
 	switch s := second.(type) {
 	case *syntax.SyntaxSymbol:
 		// (define name expr) - simple variable definition
-		return validateDefineVariable(context.TODO(), env, source, s, elements, result)
+		return validateDefineVariable(ctx, env, source, s, elements, result)
 
 	case *syntax.SyntaxPair:
 		// (define (name params...) body...) - function definition
-		return validateDefineFunction(context.TODO(), env, source, s, elements, result)
+		return validateDefineFunction(ctx, env, source, s, elements, result)
 
 	default:
 		result.addErrorf(source, "define", "expected symbol or list after define, got %T", second)

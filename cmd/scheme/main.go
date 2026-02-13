@@ -141,20 +141,21 @@ func main() {
 		opts.File = append(opts.File, args[0])
 	}
 
-	env, err0 := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	env, err0 := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
 	if err0 != nil {
 		Failf(err0, "Cannot create top-level environment")
 	}
 
 	// Initialize library registry with search paths and attach to environment
-	registry := initLibraryRegistry(context.TODO())
+	registry := initLibraryRegistry(ctx)
 	env.SetLibraryRegistry(registry)
 
 	// Set up the library environment factory (avoids import cycle)
 	// Use NewLibraryEnvironmentFrame which shares the TopLevelEnvironment for symbol identity
 	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
-	// read evaluate loop
-	ctx := context.Background()
 	// Load files if any
 	if len(opts.File) > 0 {
 		for i, filename := range opts.File {
@@ -199,10 +200,10 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.Rune
 
 	// Collect all expressions from the file
 	var exprs []syntax.SyntaxValue
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(ctx)
 	for err == nil {
 		exprs = append(exprs, stx)
-		stx, err = p.ReadSyntax(context.TODO())
+		stx, err = p.ReadSyntax(ctx)
 	}
 	if !errors.Is(err, io.EOF) {
 		Failf(err)

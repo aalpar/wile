@@ -31,7 +31,7 @@ import (
 
 func newTestEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
 	)
 	qt.Assert(t, err, qt.IsNil)

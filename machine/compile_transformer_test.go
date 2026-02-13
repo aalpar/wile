@@ -39,7 +39,7 @@ func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
 			values.NewInteger(42),
 		),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(sctx, transformer)
+	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx)
 	qt.Assert(t, err, qt.IsNil)
@@ -56,7 +56,7 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 		values.List(values.NewSymbol("stx")),
 		values.List(values.NewSymbol("quote"), values.NewInteger(42)),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(sctx, transformer)
+	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx)
 	qt.Assert(t, err, qt.IsNil)
@@ -72,7 +72,7 @@ func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
 		values.NewSymbol("unsupported-keyword"),
 		values.NewInteger(42),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(sctx, transformer)
+	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -85,7 +85,7 @@ func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Just a symbol, not a pair
-	transformerStx := schemeutil.DatumToSyntaxValue(sctx, values.NewSymbol("not-a-list"))
+	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("not-a-list"))
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -116,7 +116,7 @@ func TestProceduralMacroExpandTimePath(t *testing.T) {
 			values.List(values.NewSymbol("quote"), values.NewInteger(42)),
 		),
 	)
-	defineSyntaxStx := schemeutil.DatumToSyntaxValue(sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
+	defineSyntaxStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
 
 	// Use the expand-time path to compile the define-syntax
 	err := compileDefineSyntaxFromSyntax(context.Background(), env, defineSyntaxStx)

@@ -26,7 +26,7 @@ import (
 )
 
 func makeSyntax(v values.Value) syntax.SyntaxValue {
-	return schemeutil.DatumToSyntaxValue(syntax.NewZeroValueSourceContext(), v)
+	return schemeutil.DatumToSyntaxValue(context.Background(), syntax.NewZeroValueSourceContext(), v)
 }
 
 // validationTestCase is the common struct for table-driven validation tests

@@ -168,7 +168,7 @@ func IntegerFold(
 		}
 		return nil
 	}
-	v, err := restTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	v, err := restTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		val, inexact, err := extractIntegerArg(next, name)
 		if err != nil {
 			return err
@@ -237,7 +237,7 @@ func integerFoldBig(
 		return nil
 	}
 
-	v, err := restTuple.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	v, err := restTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, next values.Value) error {
 		var val *big.Int
 		switch n := next.(type) {
 		case *values.Integer:

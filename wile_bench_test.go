@@ -21,7 +21,7 @@ import (
 
 // BenchmarkEvalSimple benchmarks end-to-end simple expression evaluation
 func BenchmarkEvalSimple(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(+ 1 2)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -31,7 +31,7 @@ func BenchmarkEvalSimple(b *testing.B) {
 
 // BenchmarkEvalArithmetic benchmarks nested arithmetic
 func BenchmarkEvalArithmetic(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(+ (* 2 3) (- 10 5))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -41,7 +41,7 @@ func BenchmarkEvalArithmetic(b *testing.B) {
 
 // BenchmarkEvalLambda benchmarks lambda creation and application
 func BenchmarkEvalLambda(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "((lambda (x) (+ x 1)) 42)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -51,7 +51,7 @@ func BenchmarkEvalLambda(b *testing.B) {
 
 // BenchmarkEvalList benchmarks list operations
 func BenchmarkEvalList(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(length (list 1 2 3 4 5))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -61,7 +61,7 @@ func BenchmarkEvalList(b *testing.B) {
 
 // BenchmarkEvalFibonacci benchmarks recursive Fibonacci
 func BenchmarkEvalFibonacci(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	_, _ = engine.Eval(context.TODO(), "(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -71,7 +71,7 @@ func BenchmarkEvalFibonacci(b *testing.B) {
 
 // BenchmarkEvalTailRecursion benchmarks tail recursion
 func BenchmarkEvalTailRecursion(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	_, _ = engine.Eval(context.TODO(), "(define (sum n acc) (if (<= n 0) acc (sum (- n 1) (+ acc n))))")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -81,7 +81,7 @@ func BenchmarkEvalTailRecursion(b *testing.B) {
 
 // BenchmarkCompile benchmarks compilation without execution
 func BenchmarkCompile(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(lambda (x y) (+ x y))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -91,7 +91,7 @@ func BenchmarkCompile(b *testing.B) {
 
 // BenchmarkEvalMacro benchmarks macro expansion and execution
 func BenchmarkEvalMacro(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	_, _ = engine.Eval(context.TODO(), `
 		(define-syntax when
 			(syntax-rules ()
@@ -106,7 +106,7 @@ func BenchmarkEvalMacro(b *testing.B) {
 
 // BenchmarkEvalLet benchmarks let binding
 func BenchmarkEvalLet(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(let ((x 10) (y 20)) (+ x y))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -116,7 +116,7 @@ func BenchmarkEvalLet(b *testing.B) {
 
 // BenchmarkEvalCond benchmarks cond expressions
 func BenchmarkEvalCond(b *testing.B) {
-	engine, _ := NewEngine()
+	engine, _ := NewEngine(context.Background())
 	code := "(cond ((< 5 3) 'less) ((> 5 3) 'greater) (else 'equal))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -135,7 +135,7 @@ func BenchmarkZebraPuzzle(b *testing.B) {
 	// include resolves paths via SCHEME_INCLUDE_PATH.
 	b.Setenv("SCHEME_INCLUDE_PATH", ".")
 
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	if err != nil {
 		b.Fatal(err)
 	}

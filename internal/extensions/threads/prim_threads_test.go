@@ -29,7 +29,7 @@ import (
 // newEngine creates a Wile engine with the threads extension loaded.
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extthreads.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
@@ -40,7 +40,7 @@ func newEngine(t *testing.T) *wile.Engine {
 // Needed for tests that use guard, with-exception-handler, etc.
 func newEngineWithExceptions(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extthreads.Extension),
 		wile.WithExtension(extexceptions.Extension),
 	)

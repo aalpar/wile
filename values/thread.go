@@ -203,8 +203,11 @@ func (p *Thread) StateSymbol() *Symbol {
 	}
 }
 
-// Start begins execution of the thread
-func (p *Thread) Start() error {
+// Start begins execution of the thread.
+// The parentCtx is used as the parent for the thread's cancellable context,
+// enabling cancellation propagation from the engine/caller while allowing
+// independent termination via thread-terminate!.
+func (p *Thread) Start(parentCtx context.Context) error {
 	p.mu.Lock()
 	if p.state != ThreadNew {
 		p.mu.Unlock()
@@ -216,7 +219,7 @@ func (p *Thread) Start() error {
 	}
 
 	p.state = ThreadRunnable
-	p.ctx, p.cancel = context.WithCancel(context.Background())
+	p.ctx, p.cancel = context.WithCancel(parentCtx)
 	p.mu.Unlock()
 
 	go func() {

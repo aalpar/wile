@@ -126,6 +126,9 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 		// Create a new machine context for this thread using captured parent state.
 		// This is safe to call from a different goroutine because it doesn't access
 		// the parent MachineContext fields.
+		// Use the thread's own cancellable context (from Thread.Start) so that
+		// thread-terminate! can stop the VM loop via context cancellation.
+		params.Ctx = ctx
 		sub := machine.NewThreadSubContext(params, thread)
 		thread.CleanupFunc = func() {
 			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
@@ -191,13 +194,13 @@ func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error 
 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
-func PrimThreadStart(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadStart(ctx context.Context, mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-start!")
 	if err != nil {
 		return err
 	}
 
-	err = thread.Start()
+	err = thread.Start(ctx)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "thread-start!")
 	}

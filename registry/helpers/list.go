@@ -34,7 +34,7 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 	var elems values.Vector
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		elems = append(elems, v)
 		return nil
 	})
@@ -95,7 +95,7 @@ func AssocLookup(
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, alist)
 	}
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)

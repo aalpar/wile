@@ -31,7 +31,7 @@ import (
 // newEngine creates a Wile engine with core + system extensions.
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extsystem.Extension),
 	)
 	qt.Assert(t, err, qt.IsNil)
@@ -59,7 +59,7 @@ func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 func runExitSubprocess(t *testing.T, testName, schemeExpr string, expectedCode int) {
 	t.Helper()
 	if os.Getenv("WILE_TEST_EXIT_SUBPROCESS") == "1" {
-		engine, _ := wile.NewEngine(wile.WithExtension(extsystem.Extension))
+		engine, _ := wile.NewEngine(context.Background(), wile.WithExtension(extsystem.Extension))
 		_, _ = engine.Eval(context.Background(), schemeExpr)
 		return
 	}

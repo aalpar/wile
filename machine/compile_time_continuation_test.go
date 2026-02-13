@@ -36,7 +36,7 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.template.operations, qt.HasLen, 5)
@@ -80,7 +80,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -135,7 +135,7 @@ func TestCompileContext_CompileDefine(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -166,7 +166,7 @@ func TestCompileContext_CompileQuote(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -195,7 +195,7 @@ func TestCompileContext_CompileQuasiquote(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -392,7 +392,7 @@ func TestCompileContext_CompileIf(t *testing.T) {
 		values.NewString("false"))
 	sctx := syntax.NewZeroValueSourceContext()
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -426,7 +426,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 
 	// top-level closure with no parameters (thunk)
 	prog := values.List(values.NewSymbol("set!"), symX, values.NewString("true"))
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -468,7 +468,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 		values.List(symX, values.NewString("bindSymbolWithScopes")))
 	sctx := syntax.NewZeroValueSourceContext()
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -517,7 +517,7 @@ func TestCompileContext_CompileBegin_1(t *testing.T) {
 	prog := values.List(values.NewSymbol("begin"), values.NewString("true"), values.NewString("false"))
 	sctx := syntax.NewZeroValueSourceContext()
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -544,7 +544,7 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 	prog := values.List(values.NewSymbol("meta"), values.NewString("first"), values.NewString("second"))
 	sctx := syntax.NewZeroValueSourceContext()
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
@@ -710,7 +710,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 				values.List(values.NewSymbol("-"), values.NewSymbol("n"), values.NewInteger(1)))))
 
 	// Compile and run the define
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, defineProg), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, defineProg), env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -719,7 +719,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Now call (loop 100)
 	maxCallDepth = 0 // Reset
 	callProg := values.List(values.NewSymbol("loop"), values.NewInteger(100))
-	cont2, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, callProg), env)
+	cont2, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, callProg), env)
 	qt.Assert(t, err, qt.IsNil)
 	mc2 := NewMachineContext(context.Background(), cont2)
 	err = mc2.Run()
@@ -746,7 +746,7 @@ func TestCompileContext_CompileCaseLambda(t *testing.T) {
 		values.List(values.List(values.NewSymbol("x")), values.NewSymbol("x")),
 		values.List(values.List(values.NewSymbol("x"), values.NewSymbol("y")), values.NewSymbol("y")))
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Run compilation to create case-lambda closure
@@ -781,7 +781,7 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 			values.List(values.List(values.NewSymbol("x"), values.NewSymbol("y")), values.NewSymbol("y"))),
 		values.NewInteger(42))
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := NewMachineContext(context.Background(), cont)
@@ -897,13 +897,13 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
 	ectx := context.Background()
 	econt := NewExpanderTimeContinuation(env)
-	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(sctx, quoteProg))
+	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNotNil)
 
 	// Test quasiquote expansion
 	qqProg := values.List(values.NewSymbol("quasiquote"), values.List(values.NewSymbol("a"), values.NewSymbol("b")))
-	expanded2, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(sctx, qqProg))
+	expanded2, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, qqProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded2, qt.IsNotNil)
 }
@@ -917,7 +917,7 @@ func TestCompileSymbolUnboundError(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := values.NewSymbol("undefined-symbol")
 
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, expr), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, expr), env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "no such binding")
 }
@@ -934,7 +934,7 @@ func TestCompileLambdaDuplicateParamError(t *testing.T) {
 		values.NewSymbol("x"),
 	)
 
-	_, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "duplicate")
 }
@@ -951,7 +951,7 @@ func TestCompileLambdaInvalidParamError(t *testing.T) {
 		values.NewInteger(42),
 	)
 
-	_, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -978,7 +978,7 @@ func TestCompileNestedQuasiquote(t *testing.T) {
 		),
 	)
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, cont, qt.IsNotNil)
 }
@@ -1134,7 +1134,7 @@ func TestCompileUnquoteError(t *testing.T) {
 
 	// Try to compile bare unquote - should error
 	prog := values.List(values.NewSymbol("unquote"), values.NewSymbol("x"))
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -1148,7 +1148,7 @@ func TestCompileUnquoteSplicingError(t *testing.T) {
 
 	// Try to compile bare unquote-splicing - should error
 	prog := values.List(values.NewSymbol("unquote-splicing"), values.NewSymbol("x"))
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 

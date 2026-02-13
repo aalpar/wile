@@ -15,6 +15,7 @@
 package schemeutil
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -171,18 +172,18 @@ func (p *DatumToSyntaxValueSuite) Init(_ *qt.C) {
 }
 
 func (p *DatumToSyntaxValueSuite) TestVoid(c *qt.C) {
-	result := DatumToSyntaxValue(p.sctx, values.Void)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, values.Void)
 	c.Assert(result, qt.Equals, syntax.SyntaxVoid)
 }
 
 func (p *DatumToSyntaxValueSuite) TestEmptyList(c *qt.C) {
-	result := DatumToSyntaxValue(p.sctx, values.EmptyList)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, values.EmptyList)
 	c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue)
 }
 
 func (p *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 	sym := values.NewSymbol("foo")
-	result := DatumToSyntaxValue(p.sctx, sym)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, sym)
 	synSym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(synSym.Sym.Key, qt.Equals, "foo")
@@ -190,7 +191,7 @@ func (p *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {
 	list := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
-	result := DatumToSyntaxValue(p.sctx, list)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, list)
 
 	// Convert back to datum and compare
 	datum := SyntaxValueToDatum(result)
@@ -199,7 +200,7 @@ func (p *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestImproperList(c *qt.C) {
 	pair := values.NewCons(values.NewInteger(1), values.NewInteger(2))
-	result := DatumToSyntaxValue(p.sctx, pair)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, pair)
 
 	// Convert back to datum and compare
 	datum := SyntaxValueToDatum(result)
@@ -210,7 +211,7 @@ func (p *DatumToSyntaxValueSuite) TestImproperListLonger(c *qt.C) {
 	// (1 2 . 3)
 	pair := values.NewCons(values.NewInteger(1),
 		values.NewCons(values.NewInteger(2), values.NewInteger(3)))
-	result := DatumToSyntaxValue(p.sctx, pair)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, pair)
 
 	// Convert back to datum and compare
 	datum := SyntaxValueToDatum(result)
@@ -219,7 +220,7 @@ func (p *DatumToSyntaxValueSuite) TestImproperListLonger(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestVector(c *qt.C) {
 	vec := values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
-	result := DatumToSyntaxValue(p.sctx, vec)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, vec)
 
 	synVec, ok := result.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue)
@@ -232,7 +233,7 @@ func (p *DatumToSyntaxValueSuite) TestVector(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 	box := values.NewBox(values.NewInteger(42))
-	result := DatumToSyntaxValue(p.sctx, box)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, box)
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
@@ -245,13 +246,13 @@ func (p *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestAlreadySyntax(c *qt.C) {
 	original := syntax.NewSyntaxSymbol("foo", p.sctx)
-	result := DatumToSyntaxValue(p.sctx, original)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
 	c.Assert(result, qt.Equals, original)
 }
 
 func (p *DatumToSyntaxValueSuite) TestInteger(c *qt.C) {
 	num := values.NewInteger(42)
-	result := DatumToSyntaxValue(p.sctx, num)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, num)
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
@@ -263,7 +264,7 @@ func (p *DatumToSyntaxValueSuite) TestNestedList(c *qt.C) {
 	list := values.List(
 		values.List(values.NewInteger(1), values.NewInteger(2)),
 		values.List(values.NewInteger(3), values.NewInteger(4)))
-	result := DatumToSyntaxValue(p.sctx, list)
+	result := DatumToSyntaxValue(context.Background(), p.sctx, list)
 
 	// Convert back to datum and compare
 	datum := SyntaxValueToDatum(result)
@@ -289,7 +290,7 @@ func (p *RoundTripSuite) TestProperList(c *qt.C) {
 		values.NewSymbol("x"),
 		values.NewInteger(42))
 
-	syntaxVal := DatumToSyntaxValue(p.sctx, original)
+	syntaxVal := DatumToSyntaxValue(context.Background(), p.sctx, original)
 	result := SyntaxValueToDatum(syntaxVal)
 	c.Assert(result, values.SchemeEquals, original)
 }
@@ -301,7 +302,7 @@ func (p *RoundTripSuite) TestComplexStructure(c *qt.C) {
 		values.List(values.NewSymbol("x"), values.NewSymbol("y")),
 		values.List(values.NewSymbol("+"), values.NewSymbol("x"), values.NewSymbol("y")))
 
-	syntaxVal := DatumToSyntaxValue(p.sctx, original)
+	syntaxVal := DatumToSyntaxValue(context.Background(), p.sctx, original)
 	result := SyntaxValueToDatum(syntaxVal)
 	c.Assert(result, values.SchemeEquals, original)
 }

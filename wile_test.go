@@ -217,7 +217,7 @@ func TestNewVector(t *testing.T) {
 
 func TestValueConstructors_RoundTrip(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 	ctx := context.Background()
 
@@ -264,14 +264,14 @@ func TestValue_Internal(t *testing.T) {
 
 func TestEngine_Environment(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine.Environment(), qt.IsNotNil)
 }
 
 func TestEngine_TopLevelEnvironment(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine.TopLevelEnvironment(), qt.IsNotNil)
 }
@@ -306,7 +306,7 @@ func TestError_Unwrap(t *testing.T) {
 
 func TestCompiledCode_String(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	compiled, err := engine.Compile(context.Background(), "(+ 1 2)")
@@ -320,7 +320,7 @@ func TestWithRegistry(t *testing.T) {
 	c := qt.New(t)
 	reg := registry.NewRegistry()
 	// Engine with empty registry — should still create
-	engine, err := NewEngine(WithRegistry(reg))
+	engine, err := NewEngine(context.Background(), WithRegistry(reg))
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine, qt.IsNotNil)
 }
@@ -330,7 +330,7 @@ func TestWithRegistry(t *testing.T) {
 func TestWithExtensions(t *testing.T) {
 	c := qt.New(t)
 	// WithExtensions with no extensions should work fine
-	engine, err := NewEngine(WithExtensions())
+	engine, err := NewEngine(context.Background(), WithExtensions())
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine, qt.IsNotNil)
 }
@@ -339,7 +339,7 @@ func TestWithExtensions(t *testing.T) {
 
 func TestCall_Lambda(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -356,7 +356,7 @@ func TestCall_Lambda(t *testing.T) {
 
 func TestCall_CaseLambda(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -384,7 +384,7 @@ func TestCall_CaseLambda(t *testing.T) {
 
 func TestCall_Parameter(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -412,7 +412,7 @@ func TestCall_Parameter(t *testing.T) {
 
 func TestCall_ParameterWithConverter(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -441,7 +441,7 @@ func TestCall_ParameterWithConverter(t *testing.T) {
 
 func TestCall_NotAProcedure(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -454,7 +454,7 @@ func TestCall_NotAProcedure(t *testing.T) {
 
 func TestCall_ParameterTooManyArgs(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -472,7 +472,7 @@ func TestCall_ParameterTooManyArgs(t *testing.T) {
 
 func TestCall_ComposableContinuation(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -503,7 +503,7 @@ func TestCall_ComposableContinuation(t *testing.T) {
 
 func TestCompilationError(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -537,7 +537,7 @@ func TestCompilationError_Unwrap(t *testing.T) {
 
 func TestRuntimeError_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -550,7 +550,7 @@ func TestRuntimeError_DivisionByZero(t *testing.T) {
 
 func TestRuntimeError_SchemeRaise(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -634,7 +634,7 @@ func TestIsBoolean(t *testing.T) {
 
 func TestIsProcedure(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -684,7 +684,7 @@ func TestToSlice(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("proper list", func(t *testing.T) {
-		sl, ok := ToSlice(NewList(NewInteger(1), NewInteger(2), NewInteger(3)))
+		sl, ok := ToSlice(context.Background(), NewList(NewInteger(1), NewInteger(2), NewInteger(3)))
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(len(sl), qt.Equals, 3)
 		c.Assert(sl[0].SchemeString(), qt.Equals, "1")
@@ -692,13 +692,13 @@ func TestToSlice(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		sl, ok := ToSlice(Null)
+		sl, ok := ToSlice(context.Background(), Null)
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(len(sl), qt.Equals, 0)
 	})
 
 	t.Run("not a list", func(t *testing.T) {
-		_, ok := ToSlice(NewInteger(5))
+		_, ok := ToSlice(context.Background(), NewInteger(5))
 		c.Assert(ok, qt.IsFalse)
 	})
 }
@@ -758,7 +758,7 @@ func TestToGoBool(t *testing.T) {
 
 func TestEval_ContextCancellation(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -771,7 +771,7 @@ func TestEval_ContextCancellation(t *testing.T) {
 
 func TestEval_AlreadyCancelledContext(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -784,7 +784,7 @@ func TestEval_AlreadyCancelledContext(t *testing.T) {
 
 func TestEval_CancelDuringComputation(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -800,7 +800,7 @@ func TestEval_CancelDuringComputation(t *testing.T) {
 
 func TestEval_CancelNestedCalls(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine()
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

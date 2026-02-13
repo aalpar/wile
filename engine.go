@@ -40,7 +40,7 @@ type Engine struct {
 // NewEngine creates a new Wile engine.
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
-func NewEngine(opts ...EngineOption) (*Engine, error) {
+func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := &engineConfig{
 		registry: nil,
 	}
@@ -71,7 +71,6 @@ func NewEngine(opts ...EngineOption) (*Engine, error) {
 	env := topLevel.Runtime()
 
 	// Apply registry
-	ctx := context.Background()
 	err := reg.Apply(ctx, env)
 	if err != nil {
 		return nil, err

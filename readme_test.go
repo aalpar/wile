@@ -166,12 +166,12 @@ func assembleREADMESource(blocks []string) string {
 
 		// Preamble: provide engine and ctx if the block doesn't create them.
 		var preambleVars []string
-		if !strings.Contains(block, "wile.NewEngine()") {
-			src.WriteString("\tengine, _ := wile.NewEngine()\n")
-			preambleVars = append(preambleVars, "engine")
-		}
 		src.WriteString("\tctx := context.Background()\n")
 		preambleVars = append(preambleVars, "ctx")
+		if !strings.Contains(block, "wile.NewEngine(") {
+			src.WriteString("\tengine, _ := wile.NewEngine(ctx)\n")
+			preambleVars = append(preambleVars, "engine")
+		}
 		src.WriteString("\n")
 
 		// Write the block body.

@@ -28,7 +28,7 @@ import (
 // newEngine creates a Wile engine with core + exceptions extensions.
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extexceptions.Extension),
 	)
 	qt.Assert(t, err, qt.IsNil)

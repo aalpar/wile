@@ -34,14 +34,14 @@ import (
 )
 
 func main() {
-	engine, err := wile.NewEngine(
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx,
 		wile.WithExtension(exceptions.Extension),
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	ctx := context.Background()
 
 	// -----------------------------------------------------------------------
 	// 1. EvalWithSource: error messages include the source name

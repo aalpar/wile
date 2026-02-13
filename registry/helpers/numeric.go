@@ -50,7 +50,7 @@ func NumericFoldVariadic(
 		mc.SetValue(nbr)
 		return nil
 	}
-	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
@@ -101,7 +101,7 @@ func NumericFoldWithFirst(
 		mc.SetValue(acc)
 		return nil
 	}
-	v, err := rest.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
@@ -141,7 +141,7 @@ func NumericChainCompare(
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)
@@ -241,7 +241,7 @@ func NumericExtremum(
 	}
 
 	foundNaN := false
-	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)

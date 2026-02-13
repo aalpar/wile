@@ -27,7 +27,7 @@ import (
 // RunSchemeCode parses and runs Scheme source code string using the default Engine.
 func RunSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func RunSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
 func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		return nil, err
 	}

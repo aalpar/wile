@@ -158,7 +158,7 @@ func TestQuasisyntaxIntegration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			engine, err := wile.NewEngine()
+			engine, err := wile.NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			// Wrap in syntax->datum to unwrap the syntax object
@@ -202,7 +202,7 @@ func TestQuasisyntaxErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			engine, err := wile.NewEngine()
+			engine, err := wile.NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			_, err = engine.Eval(context.Background(), tt.code)
@@ -215,7 +215,7 @@ func TestQuasisyntaxErrors(t *testing.T) {
 // TestQuasisyntaxWithMacros tests quasisyntax in macro contexts
 func TestQuasisyntaxWithMacros(t *testing.T) {
 	c := qt.New(t)
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Define a macro that uses quasisyntax
@@ -242,7 +242,7 @@ func TestQuasisyntaxWithMacros(t *testing.T) {
 // TestQuasisyntaxHygiene tests that quasisyntax preserves hygiene
 func TestQuasisyntaxHygiene(t *testing.T) {
 	c := qt.New(t)
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Define a macro that introduces a binding using quasisyntax
@@ -264,7 +264,7 @@ func TestQuasisyntaxHygiene(t *testing.T) {
 // TestQuasisyntaxRecursive tests recursive macro expansion with quasisyntax
 func TestQuasisyntaxRecursive(t *testing.T) {
 	c := qt.New(t)
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Define a recursive macro using quasisyntax

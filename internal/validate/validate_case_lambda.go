@@ -23,7 +23,7 @@ import (
 
 // validateCaseLambda validates (case-lambda [clause] ...)
 // Each clause is (params body...) like a lambda without the 'lambda' keyword
-func validateCaseLambda(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateCaseLambda(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source := pair.SourceContext()
 
 	// Collect all elements into a slice
@@ -41,7 +41,7 @@ func validateCaseLambda(_ context.Context, env *environment.EnvironmentFrame, pa
 
 	var clauses []*ValidatedCaseLambdaClause
 	for i := 1; i < len(elements); i++ {
-		clause := validateCaseLambdaClause(context.TODO(), env, elements[i], result)
+		clause := validateCaseLambdaClause(ctx, env, elements[i], result)
 		if clause != nil {
 			clauses = append(clauses, clause)
 		}
