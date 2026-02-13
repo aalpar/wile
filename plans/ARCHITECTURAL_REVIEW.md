@@ -168,9 +168,11 @@ Large BigIntegers converted to float64 before comparison. Two distinct BigIntege
 ### M6. String interning allows mutation of shared strings
 
 **File:** `values/string.go:42-46`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `NewString` interns short strings. `string-set!` on an interned string corrupts all references and the intern cache. No immutability flag exists. Related: L8, L9.
+
+**Fix:** Added `immutable bool` field to `String` struct. Interned strings (`NewString` for strings ≤64 bytes) and strings from `symbol->string` are marked immutable by construction. All mutation methods (`SetChar`, `Fill`, `Set`, `SetValue`) now check the flag and return `ErrImmutableString` on mutation attempts. Updated `Indexable` interface to return errors from `Set()`. Updated all string-returning primitives to use `NewMutableString()` per R7RS §6.7 requirement that procedures return newly allocated (mutable) strings. This makes Wile compliant with R7RS §6.7 which forbids mutating literal strings and `symbol->string` results. Tests added to verify immutability enforcement and mutable string operations.
 
 ### M7. `ConditionVariable.Wait` goroutine leak on timeout
 
