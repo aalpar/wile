@@ -31,7 +31,7 @@ import (
 // newTestEngine creates a Wile engine with core + io + files extensions for testing.
 func newTestEngine(t *testing.T) *wile.Engine {
 	t.Helper()
-	engine, err := wile.NewEngine(
+	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extio.Extension),
 		wile.WithExtension(extfiles.Extension),
 	)

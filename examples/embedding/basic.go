@@ -27,13 +27,13 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// 1. Create an engine with default (core) primitives.
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	ctx := context.Background()
 
 	// 2. Evaluate a simple expression.
 	result, err := engine.Eval(ctx, "(+ 1 2 3)")

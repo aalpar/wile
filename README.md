@@ -373,7 +373,7 @@ Wile provides a public API for embedding Scheme in Go programs via the `wile` pa
 import "github.com/aalpar/wile"
 
 // Create an engine
-engine, err := wile.NewEngine()
+engine, err := wile.NewEngine(ctx)
 if err != nil {
     log.Fatal(err)
 }

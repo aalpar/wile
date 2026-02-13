@@ -26,7 +26,7 @@ import (
 )
 
 func makeSyntaxFromValue(v values.Value) syntax.SyntaxValue {
-	return schemeutil.DatumToSyntaxValue(syntax.NewZeroValueSourceContext(), v)
+	return schemeutil.DatumToSyntaxValue(context.Background(), syntax.NewZeroValueSourceContext(), v)
 }
 
 // ValidatedIf getters

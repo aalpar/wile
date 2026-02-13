@@ -91,7 +91,7 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 // the provided SourceContext for source location and scope tracking.
 // Recursively wraps pairs, vectors, and boxed values. If the input is already
 // a SyntaxValue, it is returned unchanged.
-func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.SyntaxValue {
+func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value) syntax.SyntaxValue {
 	if values.IsVoid(o) {
 		return syntax.SyntaxVoid
 	}
@@ -107,30 +107,30 @@ func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.Synta
 		tuple1, ok := v.Cdr().(values.Tuple)
 		if !ok {
 			// If the cdr is not a Tuple, we have an improper list - wrap both car and cdr
-			return syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, v.Cdr()), sctx)
+			return syntax.NewSyntaxCons(DatumToSyntaxValue(ctx, sctx, v.Car()), DatumToSyntaxValue(ctx, sctx, v.Cdr()), sctx)
 		}
 		var v0 values.Value
 		var tuple *syntax.SyntaxPair
-		tuple0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
+		tuple0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(ctx, sctx, v.Car()), DatumToSyntaxValue(ctx, sctx, values.EmptyList), sctx)
 		tuple = tuple0stx
-		v0, _ = tuple1.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v1 values.Value) error {
+		v0, _ = tuple1.ForEach(ctx, func(_ context.Context, _ int, _ bool, v1 values.Value) error {
 			tuple.SetCdr(
 				syntax.NewSyntaxCons(
-					DatumToSyntaxValue(sctx, v1),
-					DatumToSyntaxValue(sctx, values.EmptyList),
+					DatumToSyntaxValue(ctx, sctx, v1),
+					DatumToSyntaxValue(ctx, sctx, values.EmptyList),
 					sctx))
 			tuple = tuple.Cdr().(*syntax.SyntaxPair)
 			return nil
 		})
-		tuple.SetCdr(DatumToSyntaxValue(sctx, v0))
+		tuple.SetCdr(DatumToSyntaxValue(ctx, sctx, v0))
 		return tuple0stx
 	case *values.Box:
-		bx0 := values.NewBox(DatumToSyntaxValue(sctx, v.Unbox()))
+		bx0 := values.NewBox(DatumToSyntaxValue(ctx, sctx, v.Unbox()))
 		return syntax.NewSyntaxObject(bx0, sctx)
 	case *values.Vector:
 		vt0 := syntax.NewSyntaxVector(sctx)
 		for i := range *v {
-			vt0.Values = append(vt0.Values, DatumToSyntaxValue(sctx, (*v)[i]))
+			vt0.Values = append(vt0.Values, DatumToSyntaxValue(ctx, sctx, (*v)[i]))
 		}
 		return vt0
 	case syntax.SyntaxValue:

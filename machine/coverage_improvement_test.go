@@ -111,7 +111,7 @@ func TestCompileUnquote(t *testing.T) {
 
 	// (unquote x) - should error
 	prog := values.List(values.NewSymbol("unquote"), values.NewSymbol("x"))
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "unquote")
 }
@@ -126,7 +126,7 @@ func TestCompileUnquoteSplicing(t *testing.T) {
 
 	// (unquote-splicing x) - should error
 	prog := values.List(values.NewSymbol("unquote-splicing"), values.NewSymbol("x"))
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "unquote-splicing")
 }
@@ -139,7 +139,7 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 
 	sctx := syntax.NewZeroValueSourceContext()
-	expr := schemeutil.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
+	expr := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("x"))
 
 	err := ctc.CompileUnquote(ctctx, expr)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -154,7 +154,7 @@ func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 
 	sctx := syntax.NewZeroValueSourceContext()
-	expr := schemeutil.DatumToSyntaxValue(sctx, values.NewSymbol("x"))
+	expr := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("x"))
 
 	err := ctc.CompileUnquoteSplicing(ctctx, expr)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -367,7 +367,7 @@ func TestCompileCondExpand(t *testing.T) {
 		values.List(values.NewSymbol("r7rs"), values.NewInteger(42)),
 		values.List(values.NewSymbol("else"), values.NewInteger(99)))
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, cont, qt.IsNotNil)
 }
@@ -397,7 +397,7 @@ func TestCompileInclude(t *testing.T) {
 		values.NewSymbol("include"),
 		values.NewString("test.scm"))
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, cont, qt.IsNotNil)
 }
@@ -427,7 +427,7 @@ func TestCompileIncludeCi(t *testing.T) {
 		values.NewSymbol("include-ci"),
 		values.NewString("test.scm"))
 
-	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, cont, qt.IsNotNil)
 }
@@ -459,7 +459,7 @@ func TestCompileIncludeError(t *testing.T) {
 		values.NewSymbol("include"),
 		values.NewString("nonexistent-file-12345.scm"))
 
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "include")
 }
@@ -499,7 +499,7 @@ func TestCompileIncludeReadError(t *testing.T) {
 		values.NewString("bad.scm"))
 
 	// Use newTopLevelThunk which handles both expansion and compilation
-	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(sctx, prog), env)
+	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	// This should eventually error when include tries to read the malformed file
 	// Note: The actual error behavior may depend on parser error handling
 	if err != nil {

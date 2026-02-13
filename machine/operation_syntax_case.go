@@ -280,7 +280,7 @@ func (p *OperationStoreSyntaxCaseInput) Apply(ctx context.Context, mctx *Machine
 	if stx, ok := val.(syntax.SyntaxValue); ok {
 		sc.input = stx
 	} else {
-		sc.input = schemeutil.DatumToSyntaxValue(nil, val)
+		sc.input = schemeutil.DatumToSyntaxValue(ctx, nil, val)
 	}
 	mctx.pc++
 	return mctx, nil

@@ -70,7 +70,7 @@ func TestThreadState_String(t *testing.T) {
 
 func TestThread_StartNoRunFunc(t *testing.T) {
 	th := NewThread(NewSymbol("thunk"), "test")
-	err := th.Start()
+	err := th.Start(context.Background())
 	qt.Assert(t, err, qt.Not(qt.IsNil))
 	qt.Assert(t, strings.Contains(err.Error(), "no run function"), qt.IsTrue)
 }
@@ -80,11 +80,11 @@ func TestThread_StartAlreadyStarted(t *testing.T) {
 	th.RunFunc = func(_ context.Context, _ Value) (Value, error) {
 		return nil, nil
 	}
-	err := th.Start()
+	err := th.Start(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	<-th.Done()
 
-	err = th.Start()
+	err = th.Start(context.Background())
 	qt.Assert(t, errors.Is(err, ErrThreadAlreadyStarted), qt.IsTrue)
 }
 

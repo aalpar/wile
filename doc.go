@@ -16,7 +16,7 @@
 //
 // Basic usage:
 //
-//	engine, err := wile.NewEngine()
+//	engine, err := wile.NewEngine(ctx)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -25,14 +25,14 @@
 //
 // With extensions:
 //
-//	engine, err := wile.NewEngine(
+//	engine, err := wile.NewEngine(ctx,
 //	    wile.WithExtension(io.Extension),
 //	    wile.WithExtension(system.Extension),
 //	)
 //
 // Custom primitives:
 //
-//	engine, _ := wile.NewEngine()
+//	engine, _ := wile.NewEngine(ctx)
 //	engine.RegisterPrimitive(wile.PrimitiveSpec{
 //	    Name:       "my-func",
 //	    ParamCount: 1,

@@ -25,7 +25,7 @@ import (
 )
 
 func ExampleNewEngine() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func ExampleNewEngine() {
 }
 
 func ExampleEngine_EvalMultiple() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func ExampleEngine_EvalMultiple() {
 }
 
 func ExampleEngine_Compile() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func ExampleEngine_Compile() {
 }
 
 func ExampleEngine_Define() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func ExampleEngine_Define() {
 }
 
 func ExampleEngine_RegisterPrimitive() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func ExampleEngine_RegisterPrimitive() {
 }
 
 func ExampleEngine_Call() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func ExampleEngine_Call() {
 }
 
 func ExampleEngine_RegisterFunc() {
-	engine, err := wile.NewEngine()
+	engine, err := wile.NewEngine(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func ExampleEngine_RegisterFunc() {
 }
 
 func ExampleNewEngine_withExtension() {
-	_, err := wile.NewEngine(
+	_, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(io.Extension),
 	)
 	if err != nil {

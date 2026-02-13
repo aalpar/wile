@@ -96,13 +96,13 @@ func Cdr(v Value) (Value, bool) {
 
 // ToSlice converts a proper list to a Go slice.
 // Returns (slice, true) on success, or (nil, false) if v is not a proper list.
-func ToSlice(v Value) ([]Value, bool) {
+func ToSlice(ctx context.Context, v Value) ([]Value, bool) {
 	inner := unwrapValue(v)
 	if !values.IsList(inner) {
 		return nil, false
 	}
 	var result []Value
-	_, err := values.ForEach(context.Background(), inner, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	_, err := values.ForEach(ctx, inner, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		result = append(result, wrapValue(elem))
 		return nil
 	})

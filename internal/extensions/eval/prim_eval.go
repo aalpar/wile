@@ -46,7 +46,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Convert datum to syntax value
 	sctx := syntax.NewZeroValueSourceContext()
-	stx := schemeutil.DatumToSyntaxValue(sctx, expr)
+	stx := schemeutil.DatumToSyntaxValue(ctx, sctx, expr)
 
 	// Expand the expression
 	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
@@ -430,7 +430,7 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	} else {
 		// Convert datum to syntax value
 		sctx := syntax.NewZeroValueSourceContext()
-		syntaxVal = schemeutil.DatumToSyntaxValue(sctx, expr)
+		syntaxVal = schemeutil.DatumToSyntaxValue(ctx, sctx, expr)
 	}
 
 	// Get the environment for expansion and compilation
