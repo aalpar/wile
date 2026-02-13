@@ -4,11 +4,12 @@
 **Primary Commits:**
 - `5c6e556` — "fix: address architectural review findings across numeric tower, tokenizer, and VM" (H1-H6)
 - `eed16c3` — "fix: convert with-input-from-file and with-output-to-file to parameterize-based macros (T3)"
+- `a05315c` — "fix: eliminate cross-goroutine MachineContext access in thread creation (T4)"
 - `cdb3427` — "fix: make nextScopeID counter atomic (T5)"
 
-**Scope:** Fixes for HIGH priority bugs from architectural code review: correctness bugs (H1-H7) and thread safety issues (T3, T5)
+**Scope:** Fixes for 10 HIGH priority bugs from architectural code review: 7 correctness bugs (H1-H7) and 3 thread safety issues (T3, T4, T5)
 
-This document explains the actual implementation of fixes for HIGH-priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS specification involved, and regression tests added.
+This document explains the actual implementation of fixes for HIGH-priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS/SRFI specification involved, and regression tests added.
 
 ---
 
@@ -1329,14 +1330,15 @@ atomic.AddUint64(&nextScopeID, 1)  // 1 CPU instruction (LOCK XADD), thread-safe
 | H6 | `registry/core/prim_predicates.go` | Missing type | Interface match | ~1 | 11 cases |
 | H7 | `registry/core/prim_syntax.go` | Unchecked type assertion | Two-value assertion + check | ~5 | 8 cases |
 | T3 | `internal/extensions/files/` | Port state race | Go primitives → Scheme macros | +27/-82 | 3 tests |
+| T4 | `machine/`, `threads/` | Cross-goroutine MC access | Capture-then-construct pattern | ~60 | Existing |
 | T5 | `internal/syntax/syntax_value.go` | Non-atomic counter | Use `atomic.AddUint64` | ~3 | Existing |
 
 **Total Impact:**
-- **9 HIGH-priority bugs** fixed (7 correctness, 2 thread safety)
-- **~200 lines** of production code changed
+- **10 HIGH-priority bugs** fixed (7 correctness, 3 thread safety)
+- **~260 lines** of production code changed
 - **87 new regression tests** added across 6 test files
 - **2 plan documents** (`STRING_UTF8_CHARACTER_INDEXING_FIX.md`, `ARCHITECTURAL_REVIEW_FIXES.md`)
-- **3 commits** (`5c6e556` for H1-H6, `eed16c3` for T3, `cdb3427` for T5)
+- **4 commits** (`5c6e556` for H1-H6, `eed16c3` for T3, `a05315c` for T4, `cdb3427` for T5)
 
 ---
 
