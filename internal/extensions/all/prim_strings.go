@@ -19,7 +19,7 @@ package all
 
 import (
 	"context"
-	"strings"
+	"sync"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -28,6 +28,23 @@ import (
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 )
+
+var (
+	// caseFolderOnce ensures the case folder is initialized exactly once
+	caseFolderOnce sync.Once
+	// caseFolder is the Unicode case folder for string-ci comparisons
+	caseFolder cases.Caser
+)
+
+// getCaseFolded returns the case-folded version of a string.
+// Uses lazy initialization of the case folder via sync.Once.
+// R7RS §6.7: Case-insensitive comparisons should use case folding.
+func getCaseFolded(s string) string {
+	caseFolderOnce.Do(func() {
+		caseFolder = cases.Fold()
+	})
+	return caseFolder.String(s)
+}
 
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
@@ -329,34 +346,36 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringCiEqVariadic implements the variadic string-ci=? primitive.
 func PrimStringCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci=?", strings.EqualFold)
+	return helpers.StringCompareVariadic(mc, "string-ci=?", func(a, b string) bool {
+		return getCaseFolded(a) == getCaseFolded(b)
+	})
 }
 
 // PrimStringCiLtVariadic implements the variadic string-ci<? primitive.
 func PrimStringCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
-		return strings.ToLower(a) < strings.ToLower(b)
+		return getCaseFolded(a) < getCaseFolded(b)
 	})
 }
 
 // PrimStringCiGtVariadic implements the variadic string-ci>? primitive.
 func PrimStringCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci>?", func(a, b string) bool {
-		return strings.ToLower(a) > strings.ToLower(b)
+		return getCaseFolded(a) > getCaseFolded(b)
 	})
 }
 
 // PrimStringCiLeVariadic implements the variadic string-ci<=? primitive.
 func PrimStringCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci<=?", func(a, b string) bool {
-		return strings.ToLower(a) <= strings.ToLower(b)
+		return getCaseFolded(a) <= getCaseFolded(b)
 	})
 }
 
 // PrimStringCiGeVariadic implements the variadic string-ci>=? primitive.
 func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci>=?", func(a, b string) bool {
-		return strings.ToLower(a) >= strings.ToLower(b)
+		return getCaseFolded(a) >= getCaseFolded(b)
 	})
 }
 

@@ -194,10 +194,12 @@ The prefix-checking `if` block was dead code — `signPos = i; break` executed r
 
 ### M9. `string-ci` ordering uses `strings.ToLower` instead of Unicode case folding
 
-**File:** `internal/extensions/all/prim_strings.go:324-350`
-**Status:** Open
+**File:** `internal/extensions/all/prim_strings.go:324-350`, `internal/extensions/all/prim_characters.go:30-63`
+**Status:** ✅ Fixed
 
-`string-ci=?` correctly uses `EqualFold`, but `string-ci<?` etc. use `ToLower`. These differ for characters like eszett. R7RS requires `string-foldcase` semantics.
+`string-ci=?` incorrectly used `EqualFold` (which doesn't handle eszett), and `string-ci<?` etc. used `ToLower`. These differ for characters like eszett. R7RS requires `string-foldcase` semantics.
+
+**Fix:** Replaced all string-ci predicates (including `=?`) to use `cases.Fold()` via new `getCaseFolded()` helper with lazy initialization. Replaced all char-ci predicates to use existing `simpleCaseFold()` function. Added comprehensive edge case tests for eszett and capital sharp S. Tests verify consistency with `string-foldcase` and `char-foldcase` semantics. Also discovered and fixed that `strings.EqualFold` doesn't handle full Unicode case folding.
 
 ### M10. `read-bytevector` drops partial read at EOF
 

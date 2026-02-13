@@ -423,3 +423,62 @@ func TestDigitValue(t *testing.T) {
 		})
 	}
 }
+
+func TestCharCiOrderingEdgeCases(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Test capital sharp S (ẞ U+1E9E) which folds to lowercase sharp s (ß U+00DF)
+	t.Run("capital sharp S", func(t *testing.T) {
+		tcs := []struct {
+			name string
+			code string
+			want values.Value
+		}{
+			{"ẞ equals ß", `(char-ci=? #\ẞ #\ß)`, values.TrueValue},
+			{"ẞ not less than ß", `(char-ci<? #\ẞ #\ß)`, values.FalseValue},
+			{"ẞ not greater than ß", `(char-ci>? #\ẞ #\ß)`, values.FalseValue},
+			{"ẞ <= ß", `(char-ci<=? #\ẞ #\ß)`, values.TrueValue},
+			{"ẞ >= ß", `(char-ci>=? #\ẞ #\ß)`, values.TrueValue},
+		}
+		for _, tc := range tcs {
+			t.Run(tc.name, func(t *testing.T) {
+				result := eval(t, engine, tc.code)
+				c.Assert(result.Internal(), qt.Equals, tc.want)
+			})
+		}
+	})
+
+	t.Run("consistency with char-foldcase", func(t *testing.T) {
+		// R7RS: char-ci comparisons should use char-foldcase semantics
+		tcs := []struct {
+			name string
+			code string
+		}{
+			{
+				"A vs a",
+				`(eq? (char-ci<? #\A #\a)
+				      (char<? (char-foldcase #\A)
+				             (char-foldcase #\a)))`,
+			},
+			{
+				"Z vs z",
+				`(eq? (char-ci<? #\Z #\z)
+				      (char<? (char-foldcase #\Z)
+				             (char-foldcase #\z)))`,
+			},
+			{
+				"ẞ vs ß",
+				`(eq? (char-ci<? #\ẞ #\ß)
+				      (char<? (char-foldcase #\ẞ)
+				             (char-foldcase #\ß)))`,
+			},
+		}
+		for _, tc := range tcs {
+			t.Run(tc.name, func(t *testing.T) {
+				result := eval(t, engine, tc.code)
+				c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+			})
+		}
+	})
+}

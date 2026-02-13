@@ -15,6 +15,7 @@
 package all_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -477,4 +478,93 @@ func TestStringForEach(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
 		})
 	}
+}
+
+func TestStringCiOrderingEdgeCases(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Test German eszett case folding
+	// ß (U+00DF) and ẞ (U+1E9E) both fold to "ss"
+	// So ß, ẞ, SS, and ss should all be equal under case-insensitive comparison
+	t.Run("eszett equality", func(t *testing.T) {
+		tcs := []struct {
+			name string
+			code string
+		}{
+			{"lowercase eszett = uppercase SS", `(string-ci=? "ß" "SS")`},
+			{"capital eszett = uppercase SS", `(string-ci=? "ẞ" "SS")`},
+			{"lowercase eszett = lowercase ss", `(string-ci=? "ß" "ss")`},
+			{"capital eszett = lowercase ss", `(string-ci=? "ẞ" "ss")`},
+		}
+		for _, tc := range tcs {
+			t.Run(tc.name, func(t *testing.T) {
+				result := eval(t, engine, tc.code)
+				c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+			})
+		}
+	})
+
+	t.Run("eszett ordering", func(t *testing.T) {
+		// After case folding: ß → "ss", ẞ → "ss", SS → "ss"
+		// So these should NOT have any ordering relationship (all equal)
+		tcs := []struct {
+			name string
+			code string
+			want values.Value
+		}{
+			{"ß not less than SS", `(string-ci<? "ß" "SS")`, values.FalseValue},
+			{"ß not greater than SS", `(string-ci>? "ß" "SS")`, values.FalseValue},
+			{"ß less than or equal to SS", `(string-ci<=? "ß" "SS")`, values.TrueValue},
+			{"ß greater than or equal to SS", `(string-ci>=? "ß" "SS")`, values.TrueValue},
+
+			// But ß should be less than "st" (since "ss" < "st")
+			{"ß less than st", `(string-ci<? "ß" "ST")`, values.TrueValue},
+			{"ß less than st lowercase", `(string-ci<? "ß" "st")`, values.TrueValue},
+
+			// And greater than "sr" (since "ss" > "sr")
+			{"ß greater than sr", `(string-ci>? "ß" "SR")`, values.TrueValue},
+			{"ß greater than sr lowercase", `(string-ci>? "ß" "sr")`, values.TrueValue},
+		}
+		for _, tc := range tcs {
+			t.Run(tc.name, func(t *testing.T) {
+				result := eval(t, engine, tc.code)
+				c.Assert(result.Internal(), qt.Equals, tc.want)
+			})
+		}
+	})
+
+	t.Run("consistency with string-foldcase", func(t *testing.T) {
+		// R7RS §6.7: (string-ci<? s1 s2) should be equivalent to
+		// (string<? (string-foldcase s1) (string-foldcase s2))
+		tcs := []struct {
+			s1, s2 string
+		}{
+			{"ß", "SS"},
+			{"ẞ", "ss"},
+			{"Hello", "WORLD"},
+			{"abc", "ABC"},
+		}
+		for _, tc := range tcs {
+			t.Run(tc.s1+" vs "+tc.s2, func(t *testing.T) {
+				// Test that string-ci<? gives same result as comparing folded strings
+				code := fmt.Sprintf(`(eq? (string-ci<? "%s" "%s")
+				                          (string<? (string-foldcase "%s")
+				                                   (string-foldcase "%s")))`,
+					tc.s1, tc.s2, tc.s1, tc.s2)
+				result := eval(t, engine, code)
+				c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+
+				// Same for other ordering predicates
+				for _, op := range []string{">?", "<=?", ">=?"} {
+					code := fmt.Sprintf(`(eq? (string-ci%s "%s" "%s")
+					                          (string%s (string-foldcase "%s")
+					                                   (string-foldcase "%s")))`,
+						op, tc.s1, tc.s2, op, tc.s1, tc.s2)
+					result := eval(t, engine, code)
+					c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+				}
+			})
+		}
+	})
 }

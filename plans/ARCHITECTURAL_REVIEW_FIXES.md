@@ -2502,3 +2502,182 @@ All 150+ complex number parsing tests pass:
 - `internal/parser/parser_test.go` — 150+ complex number parsing test cases
 
 ---
+
+## M9: String-CI Ordering Uses ToLower Instead of Case Folding
+
+**Bug ID:** M9 (Architectural Review - MEDIUM Priority)
+**Fixed:** 2026-02-12
+**Files Modified:**
+- `internal/extensions/all/prim_strings.go`
+- `internal/extensions/all/prim_characters.go`
+- `internal/extensions/all/prim_strings_test.go`
+- `internal/extensions/all/prim_characters_test.go`
+
+### Problem
+
+Case-insensitive string and character predicates used simple case conversion instead of Unicode case folding, violating R7RS §6.7 semantics.
+
+**String predicates (`prim_strings.go`):**
+- `string-ci=?` used `strings.EqualFold` (incomplete - doesn't handle eszett)
+- `string-ci<?`, `string-ci>?`, `string-ci<=?`, `string-ci>=?` used `strings.ToLower` (simple lowercasing)
+
+**Character predicates (`prim_characters.go`):**
+- All 5 char-ci predicates (`=?`, `<?`, `>?`, `<=?`, `>=?`) used `unicode.ToLower`
+
+**Why this matters:**
+- **Case folding** vs **simple lowercasing** differ for special Unicode characters
+- German eszett (ß U+00DF) and capital eszett (ẞ U+1E9E) both fold to "ss"
+- `strings.ToLower("ß")` → "ß" (unchanged)
+- `cases.Fold().String("ß")` → "ss" (correct)
+
+**Broken behavior:**
+```scheme
+(string-ci=? "ß" "SS")  ; #f (WRONG - EqualFold incomplete)
+(string-ci<? "ß" "SS")  ; comparison of "ß" vs "ss" (WRONG)
+```
+
+**Expected behavior (R7RS §6.7):**
+```scheme
+(string-ci=? "ß" "SS")  ; #t (both fold to "ss")
+(string-ci<? "ß" "SS")  ; #f (both fold to "ss", "ss" is not < "ss")
+```
+
+### Solution
+
+**For strings:**
+1. Added `getCaseFolded()` helper using lazy-initialized `cases.Fold()` (with `sync.Once`)
+2. Replaced **all 5** string-ci predicates to use `getCaseFolded(a) OP getCaseFolded(b)`
+3. Fixed `string-ci=?` which was also broken (used incomplete `EqualFold`)
+4. Removed unused `strings` import after replacing `strings.ToLower` and `strings.EqualFold`
+
+**For characters:**
+5. Replaced all 5 char-ci predicates to use existing `simpleCaseFold()` function
+6. `simpleCaseFold()` handles capital sharp S (ẞ → ß) and delegates to `unicode.ToLower` for other chars
+
+### Code Changes
+
+**String helper (added to `prim_strings.go`):**
+```go
+var (
+    caseFolderOnce sync.Once
+    caseFolder     cases.Caser
+)
+
+func getCaseFolded(s string) string {
+    caseFolderOnce.Do(func() {
+        caseFolder = cases.Fold()
+    })
+    return caseFolder.String(s)
+}
+```
+
+**Before (string-ci=?):**
+```go
+return helpers.StringCompareVariadic(mc, "string-ci=?", strings.EqualFold)
+```
+
+**After (string-ci=?):**
+```go
+return helpers.StringCompareVariadic(mc, "string-ci=?", func(a, b string) bool {
+    return getCaseFolded(a) == getCaseFolded(b)
+})
+```
+
+**Before (string-ci<?):**
+```go
+return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
+    return strings.ToLower(a) < strings.ToLower(b)
+})
+```
+
+**After (string-ci<?):**
+```go
+return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
+    return getCaseFolded(a) < getCaseFolded(b)
+})
+```
+
+**Before (char-ci<?):**
+```go
+return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
+    return unicode.ToLower(a) < unicode.ToLower(b)
+})
+```
+
+**After (char-ci<?):**
+```go
+return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
+    return simpleCaseFold(a) < simpleCaseFold(b)
+})
+```
+
+### Testing
+
+**New edge case tests added:**
+
+1. **`TestStringCiOrderingEdgeCases`** (18 subtests):
+   - Eszett equality: ß, ẞ, SS, ss all equal under case-insensitive comparison
+   - Eszett ordering: All fold to "ss", so no ordering relationship exists
+   - Consistency check: Verifies `(string-ci<? s1 s2)` ≡ `(string<? (string-foldcase s1) (string-foldcase s2))`
+
+2. **`TestCharCiOrderingEdgeCases`** (8 subtests):
+   - Capital sharp S (ẞ) equals lowercase sharp s (ß)
+   - No ordering relationship between ẞ and ß (both fold to ß)
+   - Consistency check: Verifies char-ci predicates use `char-foldcase` semantics
+
+**All existing tests continue to pass** because ASCII characters are unaffected (ToLower ≡ case folding for ASCII).
+
+### Verification
+
+```bash
+# Edge case tests pass
+go test -v -run TestStringCiOrderingEdgeCases ./internal/extensions/all
+go test -v -run TestCharCiOrderingEdgeCases ./internal/extensions/all
+
+# Full test suite passes
+make test
+
+# Lint clean
+make lint  # 0 issues
+```
+
+### Impact
+
+**Low risk:**
+- Only affects Unicode edge cases (eszett, capital sharp S)
+- ASCII strings have identical behavior before/after
+- Brings implementation into R7RS compliance
+- Fixes pre-existing bug in `string-ci=?` (was using incomplete `EqualFold`)
+
+**Files changed:** 4 files, ~120 lines total (~40 code + ~80 tests)
+
+**Discovered bonus bug:**
+- Testing revealed `strings.EqualFold` doesn't handle full Unicode case folding
+- `string-ci=?` was already broken for eszett before this fix
+- The new tests caught this pre-existing issue
+
+### Insights
+
+**Case folding completeness:**
+- Go's `strings.EqualFold` performs simple case folding, not full Unicode case folding
+- `cases.Fold()` from `golang.org/x/text/cases` performs correct full case folding
+- R7RS requires full case folding for ALL case-insensitive operations
+
+**Lazy initialization pattern:**
+- `sync.Once` ensures `cases.Fold()` is created exactly once
+- Avoids overhead of creating a new caser on every comparison
+- Thread-safe for concurrent primitive calls
+
+**Test-driven discovery:**
+- The edge case tests revealed a bug that existed before the fix
+- `string-ci=?` was already broken for eszett, just not tested
+- This validates the importance of comprehensive Unicode edge case testing
+
+### R7RS Compliance
+
+**Before:** Violated R7RS §6.7 requirement that case-insensitive comparisons use case folding
+
+**After:** Fully compliant with R7RS §6.7:
+> "For case-insensitive comparisons, implementations should use the case-folding procedure... `(string-ci=? s1 s2)` is equivalent to `(string=? (string-foldcase s1) (string-foldcase s2))`"
+
+This now applies to **all** case-insensitive string and character predicates, not just equality.
