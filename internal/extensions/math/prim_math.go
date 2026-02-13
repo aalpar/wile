@@ -345,6 +345,20 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
 		}
 	default:
+		// L17: Handle BigInteger ^ exact non-negative integer for exact result
+		baseBI, ok := baseNum.(*values.BigInteger)
+		if ok {
+			expInt, isInt := values.ExactInteger(expNum)
+			if isInt && expInt >= 0 {
+				// Use big.Int.Exp for exact integer exponentiation
+				result := new(big.Int).Exp(baseBI.BigInt(), big.NewInt(expInt), nil)
+				simplified := values.Simplify(values.NewBigInteger(result))
+				mc.SetValue(simplified)
+				return nil
+			}
+			// Fall through to float path for negative/fractional exponents
+		}
+
 		var bf float64
 		switch v := baseNum.(type) {
 		case *values.Integer:
@@ -693,6 +707,16 @@ func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
 		num := r.Num()
 		f, _ := new(big.Float).SetInt(num).Float64()
 		mc.SetValue(values.NewFloat(f))
+	case *values.BigFloat:
+		// L18: Handle BigFloat from Rational.ToInexact()
+		// R7RS §6.2.6: inexact input → inexact output
+		r, _ := v.BigFloatValue().Rat(nil)
+		if r == nil {
+			return values.NewForeignError("numerator: cannot get numerator of infinity or NaN")
+		}
+		num := r.Num()
+		f := new(big.Float).SetInt(num)
+		mc.SetValue(values.NewBigFloat(f))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "numerator: expected a rational number but got %T", o)
 	}
@@ -721,6 +745,16 @@ func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
 		denom := r.Denom()
 		f, _ := new(big.Float).SetInt(denom).Float64()
 		mc.SetValue(values.NewFloat(f))
+	case *values.BigFloat:
+		// L18: Handle BigFloat from Rational.ToInexact()
+		// R7RS §6.2.6: inexact input → inexact output
+		r, _ := v.BigFloatValue().Rat(nil)
+		if r == nil {
+			return values.NewForeignError("denominator: cannot get denominator of infinity or NaN")
+		}
+		denom := r.Denom()
+		f := new(big.Float).SetInt(denom)
+		mc.SetValue(values.NewBigFloat(f))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "denominator: expected a rational number but got %T", o)
 	}

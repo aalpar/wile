@@ -298,11 +298,13 @@ func (p *Rational) ToExact() Number {
 	return p
 }
 
-// ToInexact converts this Rational to an inexact Float.
+// ToInexact converts this Rational to an inexact BigFloat.
 //
 // R7RS §6.2.6: inexact returns an inexact representation of its argument.
+// L18: Use big.Float.SetRat to preserve precision for large rationals.
 func (p *Rational) ToInexact() Number {
-	return NewFloat(p.Float64())
+	f := new(big.Float).SetRat(p.value)
+	return NewBigFloat(f)
 }
 
 // IsPositive returns true if this rational is positive.
