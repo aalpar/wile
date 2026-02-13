@@ -140,10 +140,12 @@ Added regression test `TestWindingStackAliasingBug_M2` that captures a continuat
 
 ### M3. `NewSubContext` does not inherit exception handlers
 
-**File:** `machine/machine_context.go:454-467`
-**Status:** Open
+**File:** `machine/machine_context.go:454-467, 469-501`
+**Status:** ✅ Fixed
 
-Sub-contexts used for `map`, `for-each`, `dynamic-wind` thunks don't see enclosing `with-exception-handler`. R7RS says exception handlers have dynamic extent.
+Sub-contexts used for `apply`, `call-with-values`, `dynamic-wind` thunks don't see enclosing `with-exception-handler`. R7RS says exception handlers have dynamic extent.
+
+**Fix:** Added `exceptionHandler: p.exceptionHandler` to `NewSubContext()` to automatically inherit the parent's exception handler chain. Updated `SubContextParams` and `NewSubContextFromParams` to include exception handler for cross-goroutine sub-context creation (thread spawning). Removed 3 manual `SetExceptionHandler` calls from `prim_exceptions.go` (now redundant). Added unit tests for exception handler inheritance and Scheme integration tests for `apply`, `call-with-values`, and `dynamic-wind`.
 
 ### M4. `SyntaxVector.AddScope` does not propagate scopes to elements
 

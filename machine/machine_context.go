@@ -460,19 +460,21 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 			evals:    NewStack(),
 			threadID: p.threadID, // inherit SRFI-18 thread identity
 		},
-		parentMC:   p,            // track parent for call/cc continuation capture
-		escapeCont: p.escapeCont, // inherit escape continuation for nested call/cc
-		thread:     p.thread,     // inherit SRFI-18 thread object
+		parentMC:         p,                  // track parent for call/cc continuation capture
+		escapeCont:       p.escapeCont,       // inherit escape continuation for nested call/cc
+		thread:           p.thread,           // inherit SRFI-18 thread object
+		exceptionHandler: p.exceptionHandler, // inherit exception handler chain (R7RS §6.11 dynamic extent)
 	}
 }
 
 // SubContextParams holds the parent state needed to create a thread's sub-context.
 // This is used to avoid race conditions when creating sub-contexts across goroutine boundaries.
 type SubContextParams struct {
-	Ctx        context.Context
-	Env        *environment.EnvironmentFrame
-	ParentMC   *MachineContext
-	EscapeCont *MachineContinuation
+	Ctx              context.Context
+	Env              *environment.EnvironmentFrame
+	ParentMC         *MachineContext
+	EscapeCont       *MachineContinuation
+	ExceptionHandler *ExceptionHandler
 }
 
 // CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
@@ -483,10 +485,11 @@ type SubContextParams struct {
 // to NewThreadSubContext in the child goroutine.
 func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 	return SubContextParams{
-		Ctx:        p.ctx,
-		Env:        p.env.TopLevel(),
-		ParentMC:   p,
-		EscapeCont: p.escapeCont,
+		Ctx:              p.ctx,
+		Env:              p.env.TopLevel(),
+		ParentMC:         p,
+		EscapeCont:       p.escapeCont,
+		ExceptionHandler: p.exceptionHandler,
 	}
 }
 
@@ -505,8 +508,9 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 			evals: NewStack(),
 			// threadID will be set by SetThread below
 		},
-		parentMC:   params.ParentMC,
-		escapeCont: params.EscapeCont,
+		parentMC:         params.ParentMC,
+		escapeCont:       params.EscapeCont,
+		exceptionHandler: params.ExceptionHandler,
 		// thread will be set by SetThread below
 	}
 	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()

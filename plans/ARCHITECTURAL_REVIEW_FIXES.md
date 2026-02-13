@@ -1650,6 +1650,102 @@ The winding stack corruption would cause *before* and *after* thunks to be invok
 
 ---
 
+## M3. `NewSubContext` Does Not Inherit Exception Handlers
+
+**File:** `machine/machine_context.go:454-467, 469-501`
+**Batch:** 2 (Correctness requiring design thought)
+**Commit:** TBD
+**Commit Message:** "fix: inherit exception handlers in NewSubContext for R7RS dynamic extent semantics (M3)"
+
+### Problem
+
+Sub-contexts are used throughout the codebase (37 call sites) for executing Scheme closures from Go primitives: `apply`, `call-with-values`, `dynamic-wind` thunks, parameter converters, prompt body/handler execution, etc. Per R7RS §6.11, exception handlers have **dynamic extent**, meaning they must be visible to all code executed within their scope, including code in sub-contexts.
+
+**Current behavior:** `NewSubContext()` creates a fresh sub-context but does NOT inherit the `exceptionHandler` field, so sub-contexts can't see exception handlers installed in the parent.
+
+**Manual workarounds:** Only 3 call sites (all in `prim_exceptions.go`) manually call `SetExceptionHandler(mc.ExceptionHandler())` after creating the sub-context. The other 22 production call sites don't, meaning exceptions raised in those contexts won't be caught by surrounding handlers.
+
+**Impact:** Violates R7RS §6.11 requirement that exception handlers have dynamic extent. User code like:
+
+```scheme
+(with-exception-handler handler
+  (lambda ()
+    (apply proc '(3 4))))  ; handler won't catch exceptions from proc
+```
+
+### The Fix
+
+Make `NewSubContext()` and `NewSubContextFromParams()` (for thread creation) automatically inherit the exception handler chain. This is correct for all 37 call sites:
+- Matches how other context fields are inherited (`threadID`, `thread`, `escapeCont`)
+- No semantic changes for code that doesn't use exception handlers
+- Simplifies implementation (removes 3 manual `SetExceptionHandler` calls)
+
+**Changed locations:**
+
+| File | Line | Change |
+|------|------|--------|
+| `machine/machine_context.go` | 467 | Added `exceptionHandler: p.exceptionHandler` to `NewSubContext()` |
+| `machine/machine_context.go` | 475 | Added `ExceptionHandler *ExceptionHandler` field to `SubContextParams` |
+| `machine/machine_context.go` | 490 | Capture `ExceptionHandler` in `CaptureSubContextParams()` |
+| `machine/machine_context.go` | 510 | Set `exceptionHandler` in `NewThreadSubContext()` |
+| `prim_exceptions.go` | 39 | Removed redundant `SetExceptionHandler` from `PrimWithExceptionHandler` |
+| `prim_exceptions.go` | 73 | Removed redundant `SetExceptionHandler` from `callExceptionHandler` |
+| `prim_exceptions.go` | 112 | Removed redundant `SetExceptionHandler` from `resumeFromContinuation` |
+
+### Why This Works
+
+Exception handlers form an immutable linked list (`ExceptionHandler` with `parent *ExceptionHandler`). Inheriting is a simple pointer copy—thread-safe and O(1):
+
+```go
+func (p *MachineContext) NewSubContext() *MachineContext {
+    // ... other fields ...
+    exceptionHandler: p.exceptionHandler,  // ← inherit chain head pointer
+}
+```
+
+**Key property:** Sub-contexts get their own copy of the chain head pointer. Push/pop on the parent after sub-context creation does NOT affect the sub-context (it has its own copy of the pointer to the chain head).
+
+### Test Coverage
+
+**Unit tests** (`machine/machine_context_test.go`):
+- `TestNewSubContext_InheritsExceptionHandler`: verifies single handler inheritance
+- `TestNewSubContext_InheritsNestedHandlers`: verifies nested handler chain inheritance
+- `TestNewSubContext_NoExceptionHandler`: verifies nil handler case
+- `TestNewThreadSubContext_InheritsExceptionHandler`: verifies thread sub-context inheritance via `SubContextParams`
+
+**Integration tests** (`internal/extensions/exceptions/prim_exceptions_test.go`):
+- `TestExceptionHandlerInheritanceInApply`: handler catches exception in `apply` sub-context
+- `TestExceptionHandlerInheritanceInCallWithValues`: handler catches exception in `call-with-values` producer and consumer sub-contexts
+- `TestExceptionHandlerInheritanceInDynamicWind`: handler catches exception in `dynamic-wind` before and after thunks
+
+**Manual test:** `test_m3.scm` verifies all 5 scenarios produce expected output.
+
+### Call Sites Affected (37 total)
+
+All 37 `NewSubContext()` call sites benefit from automatic inheritance:
+- **Control flow**: `apply`, `call/cc`, `call-with-values` (3 primitives)
+- **Dynamic-wind**: before/after thunk execution (4 call sites in `machine_context.go`)
+- **Parameters**: converter application (2 call sites in `parameter.go`)
+- **Prompts**: body and handler execution (3 call sites in delimited continuation code)
+- **I/O**: port procedure execution (2 call sites)
+- **Exception handling**: handler and resumption (3 call sites, previously manually set, now automatic)
+- **Other**: promise forcing, gointerop callbacks (2 call sites)
+- **Tests**: 12 call sites
+
+None are harmed—exception handlers form an immutable chain, so inheritance is always safe.
+
+### R7RS Specification
+
+**R7RS §6.11 (Exceptions):**
+
+> `(with-exception-handler handler thunk)`
+>
+> Returns the results of invoking `thunk`. The `handler` is installed as the current exception handler **in the dynamic extent** of the invocation of `thunk`.
+
+"Dynamic extent" means the handler must be visible to all code called by the thunk, including via sub-contexts. The fix ensures this property holds.
+
+---
+
 ## Commit Details
 
 ### H1-H6: Correctness Bugs
