@@ -96,7 +96,7 @@ func AssocLookup(
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, alist)
 	}
 	v, err := pr.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
-		entry, ok := elem.(*values.Pair)
+		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)
 		}

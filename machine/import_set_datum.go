@@ -27,13 +27,13 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 	if values.IsEmptyList(expr) {
 		return LibraryName{}, values.WrapForeignErrorf(values.ErrInvalidArgument, "library name cannot be empty")
 	}
-	pair, ok := expr.(*values.Pair)
+	tuple, ok := expr.(values.Tuple)
 	if !ok {
-		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAPair, "library name must be a list")
+		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAList, "library name must be a list")
 	}
 
 	var parts []string
-	_, err := pair.ForEach(ctx, func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
+	_, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
 		sym, ok := partExpr.(*values.Symbol)
 		if ok {
 			parts = append(parts, sym.Key)
@@ -70,30 +70,30 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	if values.IsEmptyList(expr) {
 		return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "import set cannot be empty")
 	}
-	pair, ok := expr.(*values.Pair)
+	tuple, ok := expr.(values.Tuple)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "import set must be a list")
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "import set must be a list")
 	}
 
 	// Check if first element is a modifier keyword
-	car := pair.Car()
+	car := tuple.Car()
 	carSym, ok := car.(*values.Symbol)
 	if ok {
 		switch carSym.Key {
 		case "only":
-			return parseImportSetOnlyFromDatum(ctx, pair)
+			return parseImportSetOnlyFromDatum(ctx, tuple)
 		case "except":
-			return parseImportSetExceptFromDatum(ctx, pair)
+			return parseImportSetExceptFromDatum(ctx, tuple)
 		case "prefix":
-			return parseImportSetPrefixFromDatum(ctx, pair)
+			return parseImportSetPrefixFromDatum(ctx, tuple)
 		case "rename":
-			return parseImportSetRenameFromDatum(ctx, pair)
+			return parseImportSetRenameFromDatum(ctx, tuple)
 		case "for-syntax":
-			return parseImportSetForSyntaxFromDatum(ctx, pair)
+			return parseImportSetForSyntaxFromDatum(ctx, tuple)
 		case "for-template":
-			return parseImportSetForTemplateFromDatum(ctx, pair)
+			return parseImportSetForTemplateFromDatum(ctx, tuple)
 		case "for-meta":
-			return parseImportSetForMetaFromDatum(ctx, pair)
+			return parseImportSetForMetaFromDatum(ctx, tuple)
 		}
 	}
 
@@ -235,23 +235,22 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 	}
 
 	_, err = renamesTuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
-		// Each rename element must be a structural pair (old new), not just a Tuple
-		renamePair, ok := renamePairVal.(*values.Pair)
+		renameTuple, ok := renamePairVal.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
+			return values.WrapForeignErrorf(values.ErrNotAList, "rename: expected (old new) pair")
 		}
 
-		oldSym, ok := renamePair.Car().(*values.Symbol)
+		oldSym, ok := renameTuple.Car().(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "rename: old name must be symbol")
 		}
 
-		newPair, ok := renamePair.Cdr().(*values.Pair)
+		newTuple, ok := renameTuple.Cdr().(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected new name")
+			return values.WrapForeignErrorf(values.ErrNotAList, "rename: expected new name")
 		}
 
-		newSym, ok := newPair.Car().(*values.Symbol)
+		newSym, ok := newTuple.Car().(*values.Symbol)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotASymbol, "rename: new name must be symbol")
 		}

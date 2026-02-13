@@ -436,18 +436,18 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 		}
 		result := reflect.New(structType).Elem()
 		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
-			pair, ok := elem.(*values.Pair)
+			entry, ok := elem.(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(
 					values.ErrTypeConversion,
 					"%s: argument %d: expected alist pair, got %s", name, pos, elem.SchemeString(),
 				)
 			}
-			sym, ok := pair.Car().(*values.Symbol)
+			sym, ok := entry.Car().(*values.Symbol)
 			if !ok {
 				return values.WrapForeignErrorf(
 					values.ErrTypeConversion,
-					"%s: argument %d: alist key must be a symbol, got %s", name, pos, pair.Car().SchemeString(),
+					"%s: argument %d: alist key must be a symbol, got %s", name, pos, entry.Car().SchemeString(),
 				)
 			}
 			fi, found := fieldMap[sym.Key]
@@ -455,7 +455,7 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 				// Extra keys are silently ignored.
 				return nil
 			}
-			converted, convErr := fi.conv(innerCtx, mc, pair.Cdr())
+			converted, convErr := fi.conv(innerCtx, mc, entry.Cdr())
 			if convErr != nil {
 				return convErr
 			}
