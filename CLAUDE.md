@@ -82,7 +82,7 @@ After any Go code changes, run `make lint` (or at minimum `goimports -w` on chan
 
 ### Error Handling (summary)
 
-Two-layer convention: **sentinel + wrap**. Use `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` at return sites. Never use bare `errors.New` or `fmt.Errorf` in production code. Always use `errors.Is`/`errors.As`, never `==`/`!=`. See `values/CLAUDE.md` for full detail and examples.
+Two-layer convention: **sentinel + wrap**. Use `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` at return sites. Never use bare `errors.New` or `fmt.Errorf` in production code. Always use `errors.Is`/`errors.As`, never `==`/`!=`.
 
 ### Type Switches: Interfaces vs Concrete Types
 

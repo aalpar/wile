@@ -373,21 +373,21 @@ func TestStackPeekKPanics(t *testing.T) {
 	// Negative index should panic
 	qt.Assert(t, func() {
 		s.PeekK(-1)
-	}, qt.PanicMatches, "stack underflow.*")
+	}, qt.PanicMatches, ".*stack underflow.*")
 
 	// Index equal to length should panic
 	qt.Assert(t, func() {
 		s.PeekK(3)
-	}, qt.PanicMatches, "stack underflow.*")
+	}, qt.PanicMatches, ".*stack underflow.*")
 
 	// Index greater than length should panic
 	qt.Assert(t, func() {
 		s.PeekK(100)
-	}, qt.PanicMatches, "stack underflow.*")
+	}, qt.PanicMatches, ".*stack underflow.*")
 
 	// Empty stack should panic for any index
 	empty := NewStack()
 	qt.Assert(t, func() {
 		empty.PeekK(0)
-	}, qt.PanicMatches, "stack underflow.*")
+	}, qt.PanicMatches, ".*stack underflow.*")
 }

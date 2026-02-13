@@ -88,7 +88,7 @@ func (p *Stack) PopAll() []values.Value {
 func (p Stack) PeekK(i int) values.Value {
 	l := len(p)
 	if i < 0 || i >= l {
-		panic(values.ErrStackUnderflow)
+		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PeekK: index %d out of range for stack of length %d", i, l))
 	}
 	v := (p)[l-(i+1)]
 	return v
