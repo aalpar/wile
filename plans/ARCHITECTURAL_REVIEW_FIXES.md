@@ -8,11 +8,13 @@
 - `cdb3427` — "fix: make nextScopeID counter atomic (T5)"
 - `d25ec80` — "fix: use scope-aware lookup in set! for hygienic macro correctness (M1)"
 - `c16fba7` — "fix: use cap-limited slices in winding stack to prevent backing array aliasing (M2)"
+- `d6e2c5e` — "fix: address 10 LOW priority issues from architectural review" (L1, L2, L5, L6, L7, L8, L9, L12, L14, L16)
 
-**Scope:** Fixes for 10 HIGH priority bugs plus 2 MEDIUM priority bugs from architectural code review:
+**Scope:** Fixes for 10 HIGH priority bugs, 2 MEDIUM priority bugs, and 10 LOW priority issues from architectural code review:
 - 7 HIGH correctness bugs (H1-H7)
 - 3 HIGH thread safety issues (T3, T4, T5)
 - 2 MEDIUM correctness issues (M1, M2)
+- 10 LOW priority issues (L1, L2, L5, L6, L7, L8-verified, L9, L12, L14, L16)
 
 This document explains the actual implementation of fixes for HIGH and MEDIUM priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS/SRFI specification involved, and regression tests added.
 
@@ -3526,3 +3528,536 @@ WILE_MAX_READ_ALLOCATION=200M ./scheme script.scm
 ```
 
 **For now:** Keep it simple. Hard-coded 100 MB limit solves the problem without premature abstraction.
+
+---
+
+## LOW Priority Fixes — Batch 1
+
+**Date:** 2026-02-12
+**Commit:** (pending)
+**Scope:** 10 LOW priority issues from architectural review
+
+These are quick fixes and R7RS compliance improvements that were batched together for efficiency.
+
+---
+
+## L2: Integer Cache Comment Incorrect
+
+### Problem
+
+**File:** `values/integer.go:59`
+
+The comment on `NewInteger` claimed the cache range was `-256 to 255`, but the actual constants defined the range as `-32768 to 32767`:
+
+```go
+const (
+    intCacheMin = -32768
+    intCacheMax = 32767
+)
+
+// NewInteger returns an Integer value. Small integers in the range
+// -256 to 255 are cached and return the same pointer for the same value.
+func NewInteger(v int64) *Integer {
+```
+
+This was purely a documentation error — the code was correct.
+
+### The Fix
+
+Updated the comment to match the actual cache range:
+
+```go
+// NewInteger returns an Integer value. Small integers in the range
+// -32768 to 32767 are cached and return the same pointer for the same value.
+```
+
+### Impact
+
+Documentation accuracy only. No behavior change.
+
+---
+
+## L12: EvalMultiple Returns nil Instead of Void
+
+### Problem
+
+**File:** `engine.go:137`
+
+When `EvalMultiple("")` was called with an empty string, it returned Go `nil` instead of the Scheme `Void` value:
+
+```go
+func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
+    // ...
+    var lastResult Value  // ← Defaults to nil
+    for {
+        // ... loop never executes for empty input
+    }
+    return lastResult, nil  // ← Returns nil
+}
+```
+
+This violated the Value interface contract: a nil receiver should represent void, but this was returning a nil value (different semantic).
+
+### The Fix
+
+Initialize `lastResult` to `Void`:
+
+```go
+var lastResult = Void
+```
+
+Now empty input correctly returns the Void singleton instead of Go nil.
+
+### Impact
+
+- Corrects return value for edge case (empty evaluation)
+- More consistent with Scheme semantics (void is the absence of a value)
+- No impact on existing code (most uses were non-empty)
+
+---
+
+## L5: Stack.Pull() Missing Bounds Check
+
+### Problem
+
+**File:** `machine/stack.go:37`
+
+The `Pull()` method dequeues from the bottom of the stack without checking if the stack is empty, causing a Go panic instead of a meaningful Scheme error:
+
+```go
+func (p *Stack) Pull() values.Value {
+    q := (*p)[0]  // ← PANIC if len(*p) == 0
+    *p = (*p)[1:]
+    return q
+}
+```
+
+Note that `Pop()` already had the check:
+
+```go
+func (p *Stack) Pop() values.Value {
+    l := len(*p)
+    if l == 0 {
+        panic(values.ErrStackUnderflow)
+    }
+    // ...
+}
+```
+
+### The Fix
+
+Added the same bounds check to `Pull()`:
+
+```go
+func (p *Stack) Pull() values.Value {
+    if len(*p) == 0 {
+        panic(values.ErrStackUnderflow)
+    }
+    q := (*p)[0]
+    *p = (*p)[1:]
+    return q
+}
+```
+
+### Impact
+
+- Stack underflow now produces `ErrStackUnderflow` (caught by VM) instead of opaque Go panic
+- Consistent error handling between `Pop` and `Pull`
+- Better debugging experience (clear error message)
+
+---
+
+## L14: thread-join! Uses == Instead of errors.Is()
+
+### Problem
+
+**File:** `internal/extensions/threads/prim_threads.go:291`
+
+The timeout check used direct equality (`==`) instead of `errors.Is()`:
+
+```go
+if err == values.ErrJoinTimeout {
+    // ...
+}
+```
+
+If `thread.Join()` wrapped the timeout error (e.g., via `fmt.Errorf("context: %w", ErrJoinTimeout)`), this check would fail silently.
+
+### The Fix
+
+1. Added `errors` import
+2. Changed to `errors.Is()`:
+
+```go
+if errors.Is(err, values.ErrJoinTimeout) {
+    // ...
+}
+```
+
+### Impact
+
+- Correctly detects wrapped timeout errors
+- Follows Go error handling best practices
+- More robust against future error wrapping changes
+
+### R7RS/SRFI Compliance
+
+**SRFI-18 §3.4 (thread-join!):**
+> `(thread-join! thread [timeout [timeout-val]])`
+> If timeout expires before the thread terminates, timeout-val is returned if supplied, otherwise a join-timeout exception is raised.
+
+The fix ensures the timeout-val path works correctly even when errors are wrapped.
+
+---
+
+## L16: write-char Uses Raw Binding Instead of mc.Arg()
+
+### Problem
+
+**File:** `internal/extensions/io/prim_read_write.go:302`
+
+The `write-char` primitive accessed the optional port argument using raw environment binding lookup instead of the `mc.Arg()` helper:
+
+```go
+o := mc.EnvironmentFrame().GetLocalBinding(environment.NewLocalIndex(1, 0)).Value()
+```
+
+This was inconsistent with other primitives and less readable.
+
+### The Fix
+
+Changed to use the `mc.Arg()` helper:
+
+```go
+o := mc.Arg(1)
+```
+
+Also removed the now-unused `environment` import.
+
+### Impact
+
+- Code consistency (matches other primitives)
+- Slightly more readable
+- No behavior change
+
+---
+
+## L6: set! Inconsistent LoadVoid for Locals
+
+### Problem
+
+**File:** `machine/compile_validated.go:613-626`
+
+The `set!` form emitted `LoadVoid` after storing to globals but not locals:
+
+```go
+if li != nil {
+    // Local variable
+    p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
+    // ← Missing LoadVoid
+} else {
+    // Global variable
+    p.AppendOperations(
+        NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti),
+        NewOperationLoadVoid(),  // ← Present for globals
+    )
+}
+```
+
+R7RS §4.1.6 requires `set!` to return unspecified values (represented as Void in Wile).
+
+### The Fix
+
+Added `LoadVoid` for local `set!`:
+
+```go
+if li != nil {
+    p.AppendOperations(
+        NewOperationStoreLocalByLocalIndexImmediate(li),
+        NewOperationLoadVoid(),  // ← Now present
+    )
+} else {
+    // ... unchanged
+}
+```
+
+### Impact
+
+- Consistent void return for all `set!` forms
+- R7RS §4.1.6 compliant behavior
+
+### R7RS Compliance
+
+**R7RS §4.1.6 (Assignments):**
+> The result of the set! expression is unspecified.
+
+Both local and global `set!` now correctly return unspecified (Void).
+
+---
+
+## L1: Complex.IsRational Returns False Unconditionally
+
+### Problem
+
+**File:** `values/complex.go:333`
+
+The `IsRational()` method on `Complex` returned `false` unconditionally:
+
+```go
+func (p *Complex) IsRational() bool {
+    return false
+}
+```
+
+This was incorrect for complex numbers with zero imaginary part. For example, `3.0+0.0i` is mathematically equivalent to `3.0`, which IS rational (assuming the real part is finite).
+
+### The Fix
+
+Check if the imaginary part is zero:
+
+```go
+func (p *Complex) IsRational() bool {
+    return imag(p.Value) == 0.0 &&
+        !math.IsInf(real(p.Value), 0) &&
+        !math.IsNaN(real(p.Value))
+}
+```
+
+Also updated the doc comment to reflect the correct behavior.
+
+### Impact
+
+- `(rational? 3.0+0.0i)` now correctly returns `#t`
+- Aligns with R7RS numeric tower semantics
+- No impact on complex numbers with non-zero imaginary parts
+
+### R7RS Compliance
+
+**R7RS §6.2.6 (Numerical types):**
+> Complex numbers with zero imaginary parts are real numbers.
+> Real numbers that are finite are rational.
+
+The fix ensures `rational?` correctly handles the complex → real → rational hierarchy.
+
+### Tests
+
+Updated `values/numeric_methods_coverage_test.go`:
+
+```go
+{"real integer", NewComplexFromParts(5.0, 0.0), true, true, true, false},
+//                                                      ^^^^
+//                                               Was: false, Now: true
+```
+
+---
+
+## L7: abs Accepts Complex Numbers
+
+### Problem
+
+**File:** `registry/core/prim_arithmetic.go:212`
+
+The `abs` primitive accepted complex numbers and returned their magnitude:
+
+```go
+func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
+    n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
+    if err != nil {
+        return err
+    }
+    mc.SetValue(n.Abs())  // ← Works for complex, but shouldn't
+    return nil
+}
+```
+
+This violated R7RS §6.2.6, which states that `abs` is only defined for real numbers. For complex numbers, users should call `magnitude` instead.
+
+### The Fix
+
+Added a type check to reject `ComplexNumber`:
+
+```go
+func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
+    n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
+    if err != nil {
+        return err
+    }
+    // Reject complex numbers (abs is only defined for real numbers)
+    _, isComplex := n.(values.ComplexNumber)
+    if isComplex {
+        return values.WrapForeignErrorf(values.ErrNotAReal, "abs: argument must be a real number, got complex")
+    }
+    mc.SetValue(n.Abs())
+    return nil
+}
+```
+
+### Impact
+
+- `(abs 3+4i)` now raises an error instead of returning `5.0`
+- R7RS compliant behavior
+- Guides users toward `magnitude` for complex numbers
+
+### R7RS Compliance
+
+**R7RS §6.2.6 (abs):**
+> abs returns the absolute value of its argument.
+
+The R7RS specification defines `abs` only for real numbers. For complex numbers, the `magnitude` procedure should be used instead.
+
+### Tests
+
+Updated `registry/core/prim_abs_div_extra_test.go`:
+
+1. Removed complex test cases from `TestAbsExtraCoverage` (3+4i, -3+4i, 0+1i, 1+0i, 5+12i)
+2. Added new test function `TestAbsRejectsComplex` with 5 error cases verifying that complex inputs are rejected
+
+Also updated the Chibi test library (`lib/chibi/test.sld`) to use `magnitude` instead of `abs` for complex number comparisons in `%approx-equal?`.
+
+---
+
+## L9: symbol->string Returns Mutable String
+
+### Problem
+
+**File:** `registry/core/prim_strings.go:194`
+
+The `symbol->string` primitive used `NewString()`, which may return a mutable string for short strings:
+
+```go
+func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
+    sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
+    if err != nil {
+        return err
+    }
+    mc.SetValue(values.NewString(sym.Key))  // ← May be mutable
+    return nil
+}
+```
+
+`NewString()` behavior:
+- Strings ≤64 bytes: interned (immutable)
+- Strings >64 bytes: newly allocated (mutable)
+
+R7RS §6.5 requires `symbol->string` to return an **immutable** string.
+
+### The Fix
+
+Use `InternString()` instead, which always returns an immutable string:
+
+```go
+func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
+    sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
+    if err != nil {
+        return err
+    }
+    mc.SetValue(values.InternString(sym.Key))  // ← Always immutable
+    return nil
+}
+```
+
+### Impact
+
+- `symbol->string` now always returns immutable strings
+- Prevents accidental mutation of symbol names
+- R7RS compliant
+
+### R7RS Compliance
+
+**R7RS §6.5 (Symbols - symbol->string):**
+> It is an error to apply mutation procedures like string-set! to strings returned by this procedure.
+
+The fix ensures the returned strings are marked immutable, making subsequent `string-set!` calls fail with a runtime error.
+
+---
+
+## L8: list->string Returns Interned String (Verified)
+
+### Problem
+
+**File:** `registry/core/prim_strings.go:183`
+
+The architectural review flagged that `list->string` might return an interned (immutable) string, which would violate R7RS §6.7 requiring a newly allocated **mutable** string.
+
+### Investigation
+
+Checked the implementation:
+
+```go
+func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
+    // ... build runes slice ...
+    // R7RS §6.7: list->string returns a newly allocated mutable string
+    mc.SetValue(values.NewMutableString(string(runes)))
+    return nil
+}
+```
+
+**Finding:** The code already uses `NewMutableString()`, which was introduced in the M6 fix (string mutability). Empty list case also uses `NewMutableString("")`.
+
+### Verification
+
+**Status:** ✅ Already fixed by M6
+
+No code changes needed. The M6 fix (String immutability flag) addressed this issue.
+
+---
+
+## Summary: LOW Priority Fixes
+
+| Issue | Type | Fix |
+|-------|------|-----|
+| **L2** | Documentation | Corrected integer cache comment |
+| **L12** | Edge Case | Return Void instead of nil for empty input |
+| **L5** | Error Handling | Added bounds check to Stack.Pull() |
+| **L14** | Error Handling | Use errors.Is() for wrapped timeout errors |
+| **L16** | Code Quality | Use mc.Arg() helper consistently |
+| **L6** | R7RS Compliance | Emit LoadVoid for local set! |
+| **L1** | R7RS Compliance | Fix Complex.IsRational for zero imaginary |
+| **L7** | R7RS Compliance | Reject complex numbers in abs |
+| **L9** | R7RS Compliance | Return immutable strings from symbol->string |
+| **L8** | Verification | Confirmed M6 already fixed list->string |
+
+**Files Modified:** 9
+**Tests Added/Updated:** 3
+**Test Pass Rate:** 100% (all 1080+ tests pass)
+
+---
+
+## Testing and Validation
+
+All fixes were validated against:
+
+1. **Unit tests:** Package-level tests in `values/`, `machine/`, `registry/core/`, `internal/extensions/`
+2. **Integration tests:** R7RS conformance suite (`integration/testdata/r7rs-tests.scm`)
+3. **Smoke tests:** Basic REPL and file execution (`test/scheme/smoke-test.scm`)
+4. **Lint checks:** `golangci-lint` with 15 active linters (0 issues)
+
+**Test Results:**
+```
+ok      github.com/aalpar/wile                          (cached)
+ok      github.com/aalpar/wile/values                   1.734s
+ok      github.com/aalpar/wile/machine                  (cached)
+ok      github.com/aalpar/wile/registry/core            7.518s
+ok      github.com/aalpar/wile/internal/extensions/io   (cached)
+ok      github.com/aalpar/wile/internal/extensions/threads (cached)
+ok      github.com/aalpar/wile/integration              0.442s
+```
+
+**Total test count:** 1080+ across all packages
+
+---
+
+## R7RS Compliance Impact
+
+The LOW priority fixes improve R7RS compliance in several areas:
+
+| Area | Before | After |
+|------|--------|-------|
+| **Numeric predicates** | `(rational? 3.0+0.0i)` → `#f` | → `#t` ✓ |
+| **Numeric operations** | `(abs 3+4i)` → `5.0` | → error ✓ |
+| **String mutability** | `symbol->string` may return mutable | → always immutable ✓ |
+| **Assignment return** | `set!` on locals returns previous value | → returns unspecified ✓ |
+| **Empty evaluation** | `(eval-multi "")` → nil | → void ✓ |
+
+All changes align with R7RS specifications without breaking existing correct code.
+

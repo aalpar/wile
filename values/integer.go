@@ -56,7 +56,7 @@ type Integer struct {
 }
 
 // NewInteger returns an Integer value. Small integers in the range
-// -256 to 255 are cached and return the same pointer for the same value.
+// -32768 to 32767 are cached and return the same pointer for the same value.
 func NewInteger(v int64) *Integer {
 	if v >= intCacheMin && v <= intCacheMax {
 		return intCache[v-intCacheMin]

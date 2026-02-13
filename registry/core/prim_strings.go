@@ -193,13 +193,14 @@ func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSymbolToString implements the symbol->string primitive.
-// Converts a symbol to a string.
+// Converts a symbol to an immutable string.
+// R7RS §6.5: The string returned by symbol->string is immutable.
 func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
 	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewString(sym.Key))
+	mc.SetValue(values.InternString(sym.Key))
 	return nil
 }
 

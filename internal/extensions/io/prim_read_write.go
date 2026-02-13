@@ -20,7 +20,6 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
@@ -299,7 +298,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	o := mc.EnvironmentFrame().GetLocalBinding(environment.NewLocalIndex(1, 0)).Value()
+	o := mc.Arg(1)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)

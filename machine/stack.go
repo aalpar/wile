@@ -35,6 +35,9 @@ func (p *Stack) Push(v values.Value) {
 
 // Pull removes and returns the bottom value from the stack.
 func (p *Stack) Pull() values.Value {
+	if len(*p) == 0 {
+		panic(values.ErrStackUnderflow)
+	}
 	q := (*p)[0]
 	*p = (*p)[1:]
 	return q

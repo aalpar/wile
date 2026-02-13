@@ -19,6 +19,7 @@ package threads
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"time"
 
@@ -293,7 +294,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 	result, err := thread.Join(timeout)
 	if err != nil {
 		// Check for timeout
-		if err == values.ErrJoinTimeout {
+		if errors.Is(err, values.ErrJoinTimeout) {
 			if timeoutVal != nil {
 				mc.SetValue(timeoutVal)
 				return nil

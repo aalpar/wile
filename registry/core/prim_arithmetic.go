@@ -208,11 +208,16 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAbs implements the abs primitive.
-// R7RS §6.2.6: For a complex number, abs returns its magnitude.
+// R7RS §6.2.6: abs is only defined for real numbers.
 func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
 	if err != nil {
 		return err
+	}
+	// Reject complex numbers (abs is only defined for real numbers)
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
+		return values.WrapForeignErrorf(values.ErrNotAReal, "abs: argument must be a real number, got complex")
 	}
 	mc.SetValue(n.Abs())
 	return nil

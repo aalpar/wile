@@ -611,7 +611,10 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	}
 
 	if li != nil {
-		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
+		p.AppendOperations(
+			NewOperationStoreLocalByLocalIndexImmediate(li),
+			NewOperationLoadVoid(),
+		)
 	} else {
 		// Must be global
 		gi := p.env.GetGlobalIndex(sym)
