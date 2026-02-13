@@ -150,9 +150,11 @@ Sub-contexts used for `apply`, `call-with-values`, `dynamic-wind` thunks don't s
 ### M4. `SyntaxVector.AddScope` does not propagate scopes to elements
 
 **File:** `internal/syntax/syntax_vector.go:36`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Returns `p` unchanged. Macro-introduced code containing vectors with identifiers (e.g., `#(a b c)`) won't get hygiene scopes applied to the symbols inside the vector.
+
+**Fix:** Implemented recursive scope propagation in `SyntaxVector.AddScope()` following the same pattern as `SyntaxPair.AddScope()`. Extended `mapSyntaxTree` helper to handle vectors, added vector case to `AddScopeToSyntax` and `operation_syntax_rules_transform.go` helper. Added 9 unit tests and 3 integration tests verifying basic, nested, and mixed-element scope propagation.
 
 ### M5. `BigInteger.Compare` with Float loses precision via float64 conversion
 

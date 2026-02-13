@@ -118,8 +118,35 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		// Apply transformation to symbols
 		return fn(s)
 
+	case *SyntaxVector:
+		if s == nil || len(s.Values) == 0 {
+			return s
+		}
+
+		// Recursively transform each element
+		newValues := make([]SyntaxValue, len(s.Values))
+		changed := false
+		for i, elem := range s.Values {
+			if elem != nil {
+				newValues[i] = mapSyntaxTree(elem, fn)
+				if newValues[i] != elem {
+					changed = true
+				}
+			} else {
+				newValues[i] = nil
+			}
+		}
+
+		// Return original if nothing changed (optimization)
+		if !changed {
+			return s
+		}
+
+		// Return new vector with transformed elements
+		return NewSyntaxVector(s.SourceContext(), newValues...)
+
 	default:
-		// Other types (SyntaxObject, SyntaxVector, etc.) - check if they support the transformation
+		// Other types (SyntaxObject, etc.) - check if they support the transformation
 		// This handles types that might implement the transformation interface
 		return fn(stx)
 	}
@@ -187,6 +214,8 @@ func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 	case *SyntaxSymbol:
 		return s.AddScope(scope)
 	case *SyntaxPair:
+		return s.AddScope(scope)
+	case *SyntaxVector:
 		return s.AddScope(scope)
 	default:
 		// SyntaxObject and other types don't need scopes

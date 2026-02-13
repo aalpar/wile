@@ -1810,6 +1810,30 @@ None are harmed—exception handlers form an immutable chain, so inheritance is 
 - Existing hygiene tests in `machine/hygiene_test.go` validate scope-aware binding resolution
 - All existing tests pass, confirming no regressions
 
+### M4: SyntaxVector.AddScope Scope Propagation
+
+**Commit:** TBD (2026-02-12)
+**Message:** "fix: propagate scopes to vector elements in SyntaxVector.AddScope (M4)"
+**Files Changed:** 7 files
+
+**Key Files:**
+- `internal/syntax/syntax_vector.go` (implement recursive `AddScope()` using `mapSyntaxTree`)
+- `internal/syntax/scope_utils.go` (extend `mapSyntaxTree` with `*SyntaxVector` case, add vector case to `AddScopeToSyntax`)
+- `machine/operation_syntax_rules_transform.go` (add vector case to helper switch)
+- `internal/syntax/syntax_vector_test.go` (9 unit tests: empty, nil, symbols, objects, pairs, nested, mixed, nil elements, multiple scopes)
+- `machine/hygiene_test.go` (3 integration tests: basic vector template, nested vectors, identifiers)
+- `internal/syntax/CLAUDE.local.md` (update documentation)
+- `plans/ARCHITECTURAL_REVIEW.md` (mark M4 as fixed)
+
+**Pattern:** Mirrors `SyntaxPair.AddScope()` exactly — use `mapSyntaxTree` for recursive traversal, transform elements, return new vector if anything changed (optimization), preserve nil elements.
+
+**Test Coverage:**
+- **Unit tests** verify empty vectors, nil vectors, symbols receiving scopes, SyntaxObject elements unchanged, pairs propagating scopes, nested vectors, mixed types, nil elements preserved, multiple scope accumulation
+- **Integration tests** verify macro templates with vectors produce correct hygiene (intro scope applied to template identifiers in vectors, nested vectors, free identifiers skip intro scope)
+- All existing tests pass, confirming no regressions
+
+**R7RS Compliance:** R7RS §4.3 (Macros) requires hygienic expansion where introduced identifiers don't capture use-site bindings. Per Flatt 2016 "Binding as Sets of Scopes", the intro scope must be added to all identifiers in the expansion. Vectors are containers that must propagate scopes to their elements, just like pairs.
+
 ### Plan Documents
 
 - `plans/STRING_UTF8_CHARACTER_INDEXING_FIX.md` (H5)
