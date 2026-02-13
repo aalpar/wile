@@ -537,7 +537,7 @@ func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Copy the spine of the list
-	var head, tail values.Tuple
+	var head, tail *values.Pair
 	current := values.Value(pr)
 	for {
 		p, ok := current.(values.Tuple)

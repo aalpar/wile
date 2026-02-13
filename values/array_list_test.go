@@ -491,87 +491,6 @@ func TestArrayList_Append_Single(t *testing.T) {
 	qt.Assert(t, (*resultList)[2], SchemeEquals, NewInteger(3))
 }
 
-func TestArrayList_SetCar(t *testing.T) {
-	c := qt.New(t)
-
-	t.Run("proper list", func(t *testing.T) {
-		// (1 2 3) -> (10 2 3)
-		a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3), EmptyList)
-		a.SetCar(NewInteger(10))
-		c.Assert(a.Car(), SchemeEquals, NewInteger(10))
-		c.Assert(len(*a), qt.Equals, 4)
-		c.Assert((*a)[0], SchemeEquals, NewInteger(10))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(2))
-		c.Assert((*a)[2], SchemeEquals, NewInteger(3))
-		c.Assert((*a)[3], SchemeEquals, EmptyList)
-	})
-
-	t.Run("improper list", func(t *testing.T) {
-		// (1 . 2) -> (10 . 2)
-		a := NewArrayList(NewInteger(1), NewInteger(2))
-		a.SetCar(NewInteger(10))
-		c.Assert(a.Car(), SchemeEquals, NewInteger(10))
-		c.Assert(len(*a), qt.Equals, 2)
-		c.Assert((*a)[0], SchemeEquals, NewInteger(10))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(2))
-	})
-
-	t.Run("single element", func(t *testing.T) {
-		// (1) -> (10)
-		a := NewArrayList(NewInteger(1))
-		a.SetCar(NewInteger(10))
-		c.Assert(a.Car(), SchemeEquals, NewInteger(10))
-		c.Assert(len(*a), qt.Equals, 1)
-		c.Assert((*a)[0], SchemeEquals, NewInteger(10))
-	})
-}
-
-func TestArrayList_SetCdr(t *testing.T) {
-	c := qt.New(t)
-
-	t.Run("proper list truncates to length 2", func(t *testing.T) {
-		// (1 2 3) -> (1 . 99)
-		a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3), EmptyList)
-		a.SetCdr(NewInteger(99))
-		c.Assert(a.Car(), SchemeEquals, NewInteger(1))
-		c.Assert(a.Cdr(), SchemeEquals, NewInteger(99), qt.Commentf("Cdr should return improper terminator directly"))
-		c.Assert(len(*a), qt.Equals, 2, qt.Commentf("SetCdr should truncate to length 2"))
-		c.Assert((*a)[0], SchemeEquals, NewInteger(1))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(99))
-	})
-
-	t.Run("improper list", func(t *testing.T) {
-		// (1 . 2) -> (1 . 99)
-		a := NewArrayList(NewInteger(1), NewInteger(2))
-		a.SetCdr(NewInteger(99))
-		c.Assert(a.Car(), SchemeEquals, NewInteger(1))
-		c.Assert(a.Cdr(), SchemeEquals, NewInteger(99), qt.Commentf("Cdr should return improper terminator directly"))
-		c.Assert(len(*a), qt.Equals, 2)
-		c.Assert((*a)[0], SchemeEquals, NewInteger(1))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(99))
-	})
-
-	t.Run("three element list", func(t *testing.T) {
-		// (1 2 3) -> (1 . new-cdr)
-		a := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3))
-		originalLen := len(*a)
-		c.Assert(originalLen, qt.Equals, 3)
-
-		a.SetCdr(NewInteger(99))
-		c.Assert(len(*a), qt.Equals, 2, qt.Commentf("SetCdr should truncate from %d to 2", originalLen))
-		c.Assert((*a)[0], SchemeEquals, NewInteger(1))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(99))
-	})
-
-	t.Run("SetCdr preserves first element", func(t *testing.T) {
-		// Verify SetCdr doesn't affect element [0]
-		a := NewArrayList(NewInteger(100), NewInteger(200), NewInteger(300), EmptyList)
-		a.SetCdr(NewInteger(999))
-		c.Assert((*a)[0], SchemeEquals, NewInteger(100), qt.Commentf("SetCdr should not modify first element"))
-		c.Assert((*a)[1], SchemeEquals, NewInteger(999))
-	})
-}
-
 // TestArrayList_PairEquivalence verifies that Pair and ArrayList are indistinguishable
 // when using Car(), Cdr(), SetCar(), and SetCdr() operations.
 func TestArrayList_PairEquivalence(t *testing.T) {
@@ -602,35 +521,6 @@ func TestArrayList_PairEquivalence(t *testing.T) {
 		c.Assert(pair.Cdr(), SchemeEquals, NewInteger(2))
 		c.Assert(arraylist.Cdr(), SchemeEquals, NewInteger(2))
 		c.Assert(pair.Cdr(), SchemeEquals, arraylist.Cdr(), qt.Commentf("Pair and ArrayList Cdr must return identical values for improper lists"))
-	})
-
-	t.Run("SetCdr creates improper list identically", func(t *testing.T) {
-		// Start with (1 2 3), SetCdr to create (1 . 99)
-		pair := NewCons(NewInteger(1), NewCons(NewInteger(2), NewCons(NewInteger(3), EmptyList)))
-		arraylist := NewArrayList(NewInteger(1), NewInteger(2), NewInteger(3), EmptyList)
-
-		pair.SetCdr(NewInteger(99))
-		arraylist.SetCdr(NewInteger(99))
-
-		// Both should now be (1 . 99)
-		c.Assert(pair.Car(), SchemeEquals, arraylist.Car())
-		c.Assert(pair.Cdr(), SchemeEquals, NewInteger(99))
-		c.Assert(arraylist.Cdr(), SchemeEquals, NewInteger(99))
-		c.Assert(pair.Cdr(), SchemeEquals, arraylist.Cdr())
-	})
-
-	t.Run("SetCar on improper list", func(t *testing.T) {
-		pair := NewCons(NewInteger(1), NewInteger(2))
-		arraylist := NewArrayList(NewInteger(1), NewInteger(2))
-
-		pair.SetCar(NewInteger(10))
-		arraylist.SetCar(NewInteger(10))
-
-		// Both should now be (10 . 2)
-		c.Assert(pair.Car(), SchemeEquals, NewInteger(10))
-		c.Assert(arraylist.Car(), SchemeEquals, NewInteger(10))
-		c.Assert(pair.Car(), SchemeEquals, arraylist.Car())
-		c.Assert(pair.Cdr(), SchemeEquals, arraylist.Cdr())
 	})
 
 	t.Run("single element proper list (42)", func(t *testing.T) {

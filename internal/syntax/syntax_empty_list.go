@@ -95,16 +95,6 @@ func (syntaxEmptyListType) Cdr() values.Value {
 	panic(values.ErrNotAPair)
 }
 
-// SetCar panics with ErrNotAPair. R7RS: (set-car! '() ...) is an error.
-func (syntaxEmptyListType) SetCar(values.Value) {
-	panic(values.ErrNotAPair)
-}
-
-// SetCdr panics with ErrNotAPair. R7RS: (set-cdr! '() ...) is an error.
-func (syntaxEmptyListType) SetCdr(values.Value) {
-	panic(values.ErrNotAPair)
-}
-
 // SyntaxCar panics with ErrNotAPair.
 func (syntaxEmptyListType) SyntaxCar() SyntaxValue {
 	panic(values.ErrNotAPair)
@@ -112,16 +102,6 @@ func (syntaxEmptyListType) SyntaxCar() SyntaxValue {
 
 // SyntaxCdr panics with ErrNotAPair.
 func (syntaxEmptyListType) SyntaxCdr() SyntaxValue {
-	panic(values.ErrNotAPair)
-}
-
-// SetSyntaxCar panics - empty list is immutable.
-func (syntaxEmptyListType) SetSyntaxCar(_ SyntaxValue) {
-	panic(values.ErrNotAPair)
-}
-
-// SetSyntaxCdr panics - empty list is immutable.
-func (syntaxEmptyListType) SetSyntaxCdr(_ SyntaxValue) {
 	panic(values.ErrNotAPair)
 }
 

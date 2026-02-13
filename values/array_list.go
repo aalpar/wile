@@ -170,18 +170,6 @@ func (p *ArrayList) Cdr() Value {
 	return &q
 }
 
-// SetCar sets the first element. Panics if the receiver is nil or the slice is empty.
-func (p *ArrayList) SetCar(v Value) {
-	(*p)[0] = v
-}
-
-// SetCdr sets the rest of the list after the first element and truncates
-// to length 2. Panics if the receiver is nil or the slice is empty.
-func (p *ArrayList) SetCdr(v Value) {
-	(*p)[1] = v
-	*p = (*p)[:2]
-}
-
 // IsList returns true if the last element is EmptyList (proper list).
 // Returns false for nil, empty slices, and improper lists.
 func (p *ArrayList) IsList() bool {

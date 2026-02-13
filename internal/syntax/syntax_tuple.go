@@ -29,8 +29,6 @@ type SyntaxTuple interface {
 	SyntaxValue
 	SyntaxCar() SyntaxValue
 	SyntaxCdr() SyntaxValue
-	SetSyntaxCar(SyntaxValue)
-	SetSyntaxCdr(SyntaxValue)
 	AsSyntaxVector() *SyntaxVector
 	SyntaxAppend(value SyntaxValue) SyntaxValue
 	SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error)

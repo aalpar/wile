@@ -128,10 +128,6 @@ type Tuple interface {
 	Car() Value
 	// Cdr returns the rest of the list after the first element (R7RS §6.4).
 	Cdr() Value
-	// SetCar sets the first element of the pair (R7RS §6.4).
-	SetCar(Value)
-	// SetCdr sets the rest of the list after the first element (R7RS §6.4).
-	SetCdr(Value)
 	// ForEach calls fn for each element in order. Returns the tail value
 	// (EmptyList for proper lists, the improper cdr otherwise).
 	ForEach(ctx context.Context, fn ForEachFunc) (Value, error)
