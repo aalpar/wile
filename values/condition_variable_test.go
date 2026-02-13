@@ -15,8 +15,10 @@
 package values
 
 import (
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -79,4 +81,149 @@ func TestConditionVariable_SchemeString(t *testing.T) {
 
 	var nilCV *ConditionVariable
 	qt.Assert(t, nilCV.SchemeString(), qt.Equals, "#<condition-variable:void>")
+}
+
+func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
+	c := qt.New(t)
+
+	// Measure baseline goroutine count
+	runtime.GC()
+	time.Sleep(100 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	cv := NewConditionVariable("leak-test")
+	timeout := 10 * time.Millisecond
+
+	// Run 100 timeouts (old code would leak 100 goroutines)
+	for i := 0; i < 100; i++ {
+		signaled := cv.Wait(nil, &timeout)
+		c.Assert(signaled, qt.IsFalse)
+	}
+
+	// Give goroutines time to exit
+	runtime.GC()
+	time.Sleep(100 * time.Millisecond)
+
+	final := runtime.NumGoroutine()
+	// Allow small variance (±2) for test framework overhead
+	c.Assert(final <= baseline+2, qt.IsTrue,
+		qt.Commentf("goroutine leak detected: baseline=%d final=%d", baseline, final))
+}
+
+func TestConditionVariable_Wait_SignalBeforeTimeout(t *testing.T) {
+	c := qt.New(t)
+	cv := NewConditionVariable("signal-test")
+	timeout := 1 * time.Second
+
+	// Signal after 50ms
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cv.Signal()
+	}()
+
+	start := time.Now()
+	signaled := cv.Wait(nil, &timeout)
+	elapsed := time.Since(start)
+
+	c.Assert(signaled, qt.IsTrue)
+	c.Assert(elapsed < 500*time.Millisecond, qt.IsTrue,
+		qt.Commentf("should wake quickly, took %v", elapsed))
+}
+
+func TestConditionVariable_Wait_Timeout(t *testing.T) {
+	c := qt.New(t)
+	cv := NewConditionVariable("timeout-test")
+	timeout := 50 * time.Millisecond
+
+	start := time.Now()
+	signaled := cv.Wait(nil, &timeout)
+	elapsed := time.Since(start)
+
+	c.Assert(signaled, qt.IsFalse)
+	c.Assert(elapsed >= timeout, qt.IsTrue)
+	c.Assert(elapsed < timeout*2, qt.IsTrue,
+		qt.Commentf("timeout should be accurate, elapsed=%v", elapsed))
+}
+
+func TestConditionVariable_Wait_BroadcastBeforeTimeout(t *testing.T) {
+	c := qt.New(t)
+	cv := NewConditionVariable("broadcast-test")
+	timeout := 1 * time.Second
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cv.Broadcast()
+	}()
+
+	start := time.Now()
+	signaled := cv.Wait(nil, &timeout)
+	elapsed := time.Since(start)
+
+	c.Assert(signaled, qt.IsTrue)
+	c.Assert(elapsed < 500*time.Millisecond, qt.IsTrue)
+}
+
+func TestConditionVariable_Wait_NilTimeout(t *testing.T) {
+	c := qt.New(t)
+	cv := NewConditionVariable("nil-timeout-test")
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cv.Signal()
+	}()
+
+	signaled := cv.Wait(nil, nil)
+	c.Assert(signaled, qt.IsTrue)
+}
+
+func TestConditionVariable_Wait_RaceCondition(t *testing.T) {
+	cv := NewConditionVariable("race-test")
+	timeout := 50 * time.Millisecond
+
+	// Signal at ~timeout boundary (creates race)
+	go func() {
+		time.Sleep(45 * time.Millisecond)
+		cv.Signal()
+	}()
+
+	// Either true or false is acceptable (depends on scheduler)
+	signaled := cv.Wait(nil, &timeout)
+	// No assertion on value — just verify no panic/leak
+	_ = signaled
+}
+
+func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
+	c := qt.New(t)
+	cv := NewConditionVariable("concurrent-test")
+	timeout := 100 * time.Millisecond
+
+	const numWaiters = 50
+	results := make(chan bool, numWaiters)
+
+	// Start 50 waiters
+	for i := 0; i < numWaiters; i++ {
+		go func() {
+			signaled := cv.Wait(nil, &timeout)
+			results <- signaled
+		}()
+	}
+
+	// Broadcast after 50ms (should wake all)
+	time.Sleep(50 * time.Millisecond)
+	cv.Broadcast()
+
+	// Collect results
+	signaled := 0
+	timedout := 0
+	for i := 0; i < numWaiters; i++ {
+		if <-results {
+			signaled++
+		} else {
+			timedout++
+		}
+	}
+
+	// Most should be signaled (allow some variance for scheduler)
+	c.Assert(signaled > numWaiters/2, qt.IsTrue,
+		qt.Commentf("signaled=%d timedout=%d", signaled, timedout))
 }
