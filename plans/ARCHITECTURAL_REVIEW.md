@@ -159,9 +159,11 @@ Returns `p` unchanged. Macro-introduced code containing vectors with identifiers
 ### M5. `BigInteger.Compare` with Float loses precision via float64 conversion
 
 **File:** `values/big_integer.go:377-384`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Large BigIntegers converted to float64 before comparison. Two distinct BigIntegers can compare equal to the same Float. Should convert Float to BigFloat instead.
+
+**Fix:** Changed `Compare()` and arithmetic methods (`Add`, `Subtract`, `Multiply`, `Divide`) to promote both operands to BigFloat instead of demoting BigInteger to float64. This preserves precision for integers beyond the float64 mantissa limit (2^53) while maintaining R7RS exactness contagion (exact + inexact → inexact). Updated numeric tower tests to expect BigFloat results instead of Float. Added comprehensive precision tests covering boundary cases (2^53±1), negative values, and arithmetic operations.
 
 ### M6. String interning allows mutation of shared strings
 

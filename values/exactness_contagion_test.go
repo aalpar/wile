@@ -57,9 +57,10 @@ func TestExactnessContagionAddition(t *testing.T) {
 		// Integer (exact) + Integer (exact) → Integer (exact)
 		{"Integer 0 + Integer 0", NewInteger(0), NewInteger(0), "Integer", true},
 
-		// BigInteger (exact) + Float (inexact) → Float (inexact)
-		{"BigInteger 0 + Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "Float", false},
-		{"Float 0.0 + BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "Float", false},
+		// BigInteger (exact) + Float (inexact) → BigFloat (inexact)
+		// Changed: precision preservation via BigFloat instead of Float
+		{"BigInteger 0 + Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "BigFloat", false},
+		{"Float 0.0 + BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// BigInteger (exact) + BigFloat (inexact) → BigFloat (inexact)
 		{"BigInteger 0 + BigFloat 0.0", NewBigIntegerFromInt64(0), NewBigFloatFromFloat64(0.0), "BigFloat", false},
@@ -127,9 +128,10 @@ func TestExactnessContagionSubtraction(t *testing.T) {
 		// Integer (exact) - Integer (exact) → Integer (exact)
 		{"Integer 0 - Integer 0", NewInteger(0), NewInteger(0), "Integer", true},
 
-		// BigInteger (exact) - Float (inexact) → Float (inexact)
-		{"BigInteger 0 - Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "Float", false},
-		{"Float 0.0 - BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "Float", false},
+		// BigInteger (exact) - Float (inexact) → BigFloat (inexact)
+		// Changed: precision preservation via BigFloat instead of Float
+		{"BigInteger 0 - Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "BigFloat", false},
+		{"Float 0.0 - BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// BigInteger (exact) - BigFloat (inexact) → BigFloat (inexact)
 		{"BigInteger 0 - BigFloat 0.0", NewBigIntegerFromInt64(0), NewBigFloatFromFloat64(0.0), "BigFloat", false},

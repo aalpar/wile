@@ -1838,3 +1838,215 @@ None are harmed—exception handlers form an immutable chain, so inheritance is 
 
 - `plans/STRING_UTF8_CHARACTER_INDEXING_FIX.md` (H5)
 - `plans/ARCHITECTURAL_REVIEW_FIXES.md` (this document)
+
+## M5: BigInteger.Compare Precision Loss with Float
+
+**File:** `values/big_integer.go:374-381, 389-395`  
+**Batch:** 2 (Correctness requiring design thought)  
+**Commit:** TBD (2026-02-12)  
+**Commit Message:** "fix: BigInteger.Compare and arithmetic preserve precision via BigFloat promotion (M5)"
+
+### Problem
+
+The `BigInteger.Compare()` method converted BigInteger to float64 before comparing with Float values, causing precision loss for integers larger than 2^53 (IEEE 754 mantissa precision limit). This could cause two distinct BigIntegers to incorrectly compare as equal to the same Float.
+
+**Example Failure:**
+```scheme
+(< 9007199254740993 9007199254740992.0)  ; 2^53+1 vs 2^53.0
+; Expected: #f (BigInteger is larger)
+; Got: #t (WRONG — both converted to same float64!)
+```
+
+**Root Cause:**
+The `float64Val()` helper (line 95-97) converts BigInteger → float64 via `math/big.Float.Float64()`, which truncates integers with more than 53 significant bits. The old comparison code then used this truncated value:
+
+```go
+// OLD CODE (WRONG)
+case *Float:
+    f := p.float64Val()  // ❌ Precision loss for >53-bit integers!
+    if f < v.Value {
+        return -1
+    } else if f > v.Value {
+        return 1
+    }
+    return 0
+```
+
+**Affected Methods:** 9 methods in BigInteger used `float64Val()`:
+- `Compare` (Float case, Complex case) — PRIMARY BUG
+- `Add`, `Subtract`, `Multiply`, `Divide` with Float — precision loss in arithmetic
+- `ToInexact` — documented but acceptable
+- `LessThan` (Complex case) — via Compare
+
+### The Fix
+
+#### 1. Fixed Compare() - Float and Complex Cases
+
+Changed to promote both operands to BigFloat (preserving precision) instead of demoting BigInteger to float64:
+
+```go
+// FIXED CODE (Compare with Float)
+case *Float:
+    // Convert both to BigFloat to preserve precision.
+    // Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+    self := p.bigFloat()
+    other := v.bigFloat()
+    return self.Cmp(other)
+
+// FIXED CODE (Compare with Complex)
+case *Complex:
+    // Compare real parts at BigFloat precision.
+    self := p.bigFloat()
+    realPart := NewFloat(real(v.Value)).bigFloat()
+    return self.Cmp(realPart)
+```
+
+**Pattern:** Mirrors `Float.Compare()` and `Integer.Compare()` — always promote to the higher-precision type (BigFloat).
+
+#### 2. Fixed Arithmetic Methods (Add, Subtract, Multiply, Divide)
+
+Changed all four arithmetic methods to return BigFloat (inexact) instead of Float to preserve precision while maintaining R7RS exactness contagion:
+
+```go
+// FIXED CODE (Add with Float)
+case *Float:
+    // Promote to BigFloat for precision-preserving arithmetic.
+    // Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
+    self := p.bigFloat()
+    other := v.bigFloat()
+    result := new(big.Float).Add(self, other)
+    return NewBigFloat(result)  // Note: NO Simplify() — must stay inexact
+```
+
+**Key Decision:** Do NOT call `Simplify()` on the result. BigFloat(0.0) must stay inexact (not become Integer(0)), otherwise we violate R7RS §6.2.2 exactness contagion (exact + inexact → inexact).
+
+**Complex Case:** For Complex type (which uses float64 parts), we must continue using float64 conversion since Complex itself is limited to float64 precision. This is acceptable because Complex is already inexact.
+
+#### 3. Documented ToInexact() Precision Loss
+
+Updated the `ToInexact()` documentation to clearly state the precision loss:
+
+```go
+// ToInexact converts this exact BigInteger to an inexact Float.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of its argument.
+//
+// PRECISION NOTE: For BigIntegers with more than 53 significant bits,
+// precision is lost when converting to float64 (IEEE 754 binary64 has
+// only 53 bits of mantissa precision). This is compliant with R7RS
+// which allows inexact to be approximate.
+func (p *BigInteger) ToInexact() Number {
+    f := p.float64Val()
+    return NewFloat(f)
+}
+```
+
+### Test Coverage
+
+**New test file:** `values/big_integer_precision_test.go` — 5 comprehensive test functions:
+
+1. **TestBigIntegerCompareFloatPrecision** (7 cases):
+   - 2^53+1 > 2^53.0 (boundary test)
+   - 2^53 == 2^53.0 (exact comparison)
+   - 2^53-1 < 2^53.0 (boundary test)
+   - 2^54 > 2^53.0 (large integer)
+   - Negative values: -(2^53+1) < -(2^53)
+   - Small values: 42 == 42.0
+   - Zero: 0 == 0.0
+   - Also tests reverse comparisons (Float.Compare(BigInteger))
+
+2. **TestBigIntegerCompareComplexPrecision** (4 cases):
+   - 2^53+1 > complex(2^53, 0)
+   - 2^53 == complex(2^53, 0)
+   - Small values: 42 == complex(42, 0)
+   - Real part comparison: 100 < complex(200, 50i)
+
+3. **TestBigIntegerArithmeticFloatPrecision** (4 subtests):
+   - Add: 2^54 + 1.0 → BigFloat
+   - Subtract: 2^54 - 1.0 → BigFloat
+   - Multiply: 2^54 * 2.0 → BigFloat
+   - Divide: 2^54 / 2.0 → BigFloat
+
+4. **TestBigIntegerLessThanFloat** (4 cases):
+   - Verifies LessThan uses the fixed Compare
+   - Tests boundary conditions and small values
+
+5. **TestBigIntegerEqualToFloat** (3 cases):
+   - Verifies EqualTo doesn't incorrectly compare across exact/inexact
+
+**Updated existing tests:**
+
+| File | Changes |
+|------|---------|
+| `big_number_test.go:151-157` | Updated `TestBigInteger_MixedArithmetic` to expect BigFloat |
+| `exactness_contagion_test.go:60-62,131-133` | Changed BigInteger+Float expected type from Float to BigFloat |
+| `numeric_tower_coverage_test.go:308,463` | Changed BigInteger+Float and BigInteger/Float expected types to BigFloat |
+| `numeric_lattice_test.go:414,625-641` | Changed expected type and updated precision loss test to "precision preserved" |
+| `numeric_lattice_test.go:304-332` | Added BigInteger+Float to known divergences (lattice predicts Float, actual is BigFloat) |
+
+### Semantic Change: BigInteger + Float → BigFloat (Not Float)
+
+This fix changes the numeric tower result type for BigInteger arithmetic with Float:
+
+**Old behavior:** BigInteger + Float → Float (precision loss)  
+**New behavior:** BigInteger + Float → BigFloat (precision preserved)
+
+**R7RS Compliance:** Both behaviors are R7RS-compliant for exactness contagion (exact + inexact → inexact). The change is that the inexact result is now BigFloat instead of Float, which preserves more precision.
+
+**Impact on lattice model:** The theoretical numeric lattice predicts that BigInteger + Float should return Float (join of {BigInteger,Real} and {Float,Real} classes). Our implementation intentionally diverges for precision preservation. This is documented in the known divergences section of the lattice test.
+
+**Breaking change assessment:** Code that relied on `(type? value)` predicates for result types will see different types (BigFloat instead of Float). However, numerically the results are equivalent for small integers, and more accurate for large integers. This is a bug fix, not a breaking change — code relying on the old truncation behavior was already buggy.
+
+### R7RS Specification
+
+**R7RS §6.2.2 (Exactness):**
+> Implementations are encouraged to represent exact numbers with as much precision as is practical.
+
+Our fix improves precision by using BigFloat (arbitrary precision) instead of Float (53-bit mantissa).
+
+**R7RS §6.2.6 (Numerical operations):**
+> The general rule is that operations on exact operands produce exact results, and operations on inexact operands produce inexact results.
+
+BigFloat is inexact (satisfies the rule), but has higher precision than Float.
+
+### Why BigFloat, Not Rational?
+
+Converting Float to Rational would also preserve precision, but:
+- `Float.bigFloat()` already exists and is used by `Float.Compare()`
+- `BigFloat.Cmp()` is efficient and well-tested
+- Rational conversion is more complex (requires denominator calculation)
+- BigFloat is the natural inexact representation in the tower
+
+### Pattern Consistency
+
+After this fix, all numeric types follow the same cross-type comparison pattern:
+- Convert both operands to the higher-precision type
+- Use that type's native comparison method
+- Return -1/0/1 result per Go convention
+
+Similarly, arithmetic operations now preserve precision by promoting to BigFloat when needed, while maintaining exactness contagion semantics.
+
+### Files Changed
+
+**Modified files (7 files):**
+1. `values/big_integer.go` — Fix Compare (2 cases) and arithmetic (4 methods), document ToInexact
+2. `values/big_number_test.go` — Update mixed arithmetic test
+3. `values/exactness_contagion_test.go` — Update expected types (2 test cases)
+4. `values/numeric_tower_coverage_test.go` — Update expected types (2 entries)
+5. `values/numeric_lattice_test.go` — Update expected type and add known divergence
+6. `plans/ARCHITECTURAL_REVIEW.md` — Mark M5 as fixed
+7. `plans/ARCHITECTURAL_REVIEW_FIXES.md` — Document M5 fix
+
+**New files (1 file):**
+1. `values/big_integer_precision_test.go` — 5 test functions, 22 test cases total
+
+### References
+
+- R7RS §6.2.2 (Exactness preservation semantics)
+- R7RS §6.2.6 (Numerical operations)
+- IEEE 754 binary64 — float64 has 53-bit mantissa precision limit
+- `math/big` package documentation — BigFloat preserves arbitrary precision
+- `ARCHITECTURAL_REVIEW.md:159-164` — original M5 bug report
+
+---
+
