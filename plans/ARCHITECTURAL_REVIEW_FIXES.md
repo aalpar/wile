@@ -6,10 +6,14 @@
 - `eed16c3` — "fix: convert with-input-from-file and with-output-to-file to parameterize-based macros (T3)"
 - `a05315c` — "fix: eliminate cross-goroutine MachineContext access in thread creation (T4)"
 - `cdb3427` — "fix: make nextScopeID counter atomic (T5)"
+- `d25ec80` — "fix: use scope-aware lookup in set! for hygienic macro correctness (M1)"
 
-**Scope:** Fixes for 10 HIGH priority bugs from architectural code review: 7 correctness bugs (H1-H7) and 3 thread safety issues (T3, T4, T5)
+**Scope:** Fixes for 10 HIGH priority bugs plus 1 MEDIUM priority bug from architectural code review:
+- 7 HIGH correctness bugs (H1-H7)
+- 3 HIGH thread safety issues (T3, T4, T5)
+- 1 MEDIUM correctness issue (M1)
 
-This document explains the actual implementation of fixes for HIGH-priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS/SRFI specification involved, and regression tests added.
+This document explains the actual implementation of fixes for HIGH and MEDIUM priority bugs identified in `ARCHITECTURAL_REVIEW.md`. For each bug, we document: the problem, the fix, the R7RS/SRFI specification involved, and regression tests added.
 
 ---
 
@@ -1605,6 +1609,21 @@ If this bug had been discovered via a failing test case, that test would be pres
 **Test Coverage:**
 - Existing syntax package tests validate correctness
 - Race detector (`go test -race`) validates thread safety
+
+### M1: Scope-Aware set! Lookup
+
+**Commit:** `d25ec80` (2026-02-12)
+**Message:** "fix: use scope-aware lookup in set! for hygienic macro correctness (M1)"
+**Files Changed:** 3 files, 133 insertions(+), 3 deletions(-)
+
+**Key Files:**
+- `machine/compile_validated.go` (branch on `len(symbolScopes)`, use `GetLocalIndexWithScopes` when scopes present)
+- `plans/ARCHITECTURAL_REVIEW.md` (mark M1 as fixed)
+- `plans/ARCHITECTURAL_REVIEW_FIXES.md` (document M1 fix)
+
+**Test Coverage:**
+- Existing hygiene tests in `machine/hygiene_test.go` validate scope-aware binding resolution
+- All existing tests pass, confirming no regressions
 
 ### Plan Documents
 
