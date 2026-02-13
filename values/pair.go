@@ -121,9 +121,6 @@ func (p *Pair) Append(vs Value) Value {
 	var head, tail *Pair
 	q := p
 	for !IsEmptyList(q) {
-		if !q.IsList() {
-			panic(ErrNotAList)
-		}
 		newPair := NewCons(q.Car(), EmptyList)
 		if head == nil {
 			head = newPair
