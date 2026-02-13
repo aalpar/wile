@@ -16,6 +16,7 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -872,7 +873,23 @@ func makeStructRetConverter(name string, t reflect.Type) (retConverter, error) {
 // makeWrapper generates the ForeignFunction closure that bridges between
 // the VM calling convention and the Go function.
 func (s *ffiSpec) makeWrapper() ForeignFunction {
-	return func(ctx context.Context, mc *MachineContext) error {
+	return func(ctx context.Context, mc *MachineContext) (returnErr error) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			}
+			err, ok := r.(error)
+			if ok {
+				var fe *values.ForeignError
+				if errors.As(err, &fe) {
+					returnErr = err
+					return
+				}
+			}
+			panic(r)
+		}()
+
 		var args []reflect.Value
 
 		// Forward context if needed.

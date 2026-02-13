@@ -690,7 +690,10 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 // Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 	if p.topLevel == nil {
-		panic("InternSymbol called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()")
+		panic(values.WrapForeignErrorf(
+			values.ErrMissingTopLevelEnvironment,
+			"InternSymbol called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
+		))
 	}
 	return p.topLevel.InternSymbol(q)
 }
