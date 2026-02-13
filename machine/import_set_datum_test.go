@@ -556,7 +556,7 @@ func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to parse empty list as import set
-	qt.Assert(t, err.Error(), qt.Contains, "not a pair")
+	qt.Assert(t, err.Error(), qt.Contains, "not a list")
 }
 
 func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
@@ -606,5 +606,5 @@ func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
 	// Error comes from trying to parse empty list as import set
-	qt.Assert(t, err.Error(), qt.Contains, "not a pair")
+	qt.Assert(t, err.Error(), qt.Contains, "not a list")
 }
