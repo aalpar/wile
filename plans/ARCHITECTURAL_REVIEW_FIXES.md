@@ -2050,3 +2050,142 @@ Similarly, arithmetic operations now preserve precision by promoting to BigFloat
 
 ---
 
+
+## M6: String Interning Mutation Bug
+
+**File:** `values/string.go`, `values/values.go`, `registry/core/prim_strings.go`, `internal/extensions/all/prim_strings.go`
+**Batch:** 2 (Correctness requiring design thought)
+**Commit:** `af09216` (2026-02-12)
+**Commit Message:** "fix: prevent string interning mutation bug via immutability tracking (M6)"
+
+### Problem
+
+`NewString()` automatically interns strings ≤ 64 bytes in a global `sync.Map` cache, returning the **same pointer** for identical strings. The mutation methods (`SetChar`, `Fill`, `Set`, `SetValue`) modified strings in-place without checking if they were interned, causing corruption of:
+1. **All references to that string** (multiple variables pointed to the same object)
+2. **The intern cache itself** (the cache entry was mutated)
+
+**Example Failure:**
+```scheme
+(define s1 "x")           ; Gets interned string from cache
+(define s2 "x")           ; Gets SAME object (same pointer)
+(string-set! s1 0 #\y)    ; Mutates the shared object
+; Expected: s1 = "y", s2 = "x"
+; Actual: s1 = "y", s2 = "y" (CORRUPTED!)
+```
+
+**R7RS Violation:** R7RS §6.7 explicitly forbids mutating literal strings and strings returned by `symbol->string`:
+> It is an error to apply mutation procedures like `string-set!` to strings returned by `symbol->string`.
+
+Wile allowed this mutation, causing silent corruption.
+
+### The Fix
+
+#### 1. Added Immutability Tracking
+
+Added a single `immutable bool` field to the `String` struct:
+
+```go
+type String struct {
+    Value     string
+    immutable bool
+}
+```
+
+**Memory overhead:** +1 byte per string (aligned to 8 bytes).
+
+#### 2. Mark Interned Strings Immutable
+
+```go
+func NewString(str string) *String {
+    if len(str) <= stringInternMaxLen {
+        s := InternString(str)
+        s.immutable = true
+        return s
+    }
+    return &String{Value: str, immutable: false}
+}
+```
+
+#### 3. Guard Mutation Methods
+
+All mutation methods check immutability:
+
+```go
+func (p *String) SetChar(k int, char rune) error {
+    if p.immutable {
+        return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+    }
+    // ... mutation logic
+}
+```
+
+#### 4. Updated Indexable Interface
+
+```go
+type Indexable interface {
+    Value
+    Length() int
+    Get(int) Value
+    Set(int, Value) error  // Now returns error
+}
+```
+
+#### 5. Fixed Primitives to Return Mutable Strings
+
+- `list->string`, `string-append`, `string-map`, `string-upcase/downcase/foldcase` — use `NewMutableString()`
+- `symbol->string` — correctly uses `NewString()` (returns immutable)
+- All mutation primitives propagate errors
+
+### Test Coverage
+
+**New tests (12 test cases):**
+- `values/string_test.go` — `TestStringImmutability` (10 sub-tests), `TestStringInternPreserved`
+- `registry/core/prim_string_test.go` — `TestStringSetImmutable` (2 cases), `TestStringSetMutable` (3 cases)
+
+**Updated tests:**
+- `values/byte_vector_test.go` — Changed panic test to error test
+
+### Performance Impact
+
+- **Memory:** +1 byte per String
+- **Runtime:** Single boolean check (~1 CPU cycle)
+- **Negligible overhead**
+
+### R7RS Compliance
+
+**R7RS §6.7:** "It is an error to apply mutation procedures like `string-set!` to strings returned by `symbol->string`."
+
+Wile now correctly signals errors when mutating immutable strings, making it compliant with R7RS §6.7.
+
+### Breaking Change
+
+**Before:**
+```scheme
+(string-set! "hello" 0 #\H)  ; Corrupted intern cache
+```
+
+**After:**
+```scheme
+(string-set! "hello" 0 #\H)  ; ERROR: cannot mutate immutable string
+(string-set! (string-copy "hello") 0 #\H)  ; OK: mutable copy
+```
+
+### Files Changed
+
+**12 files, 231 insertions(+), 30 deletions(-)**
+
+1. `values/string.go` — Immutability tracking
+2. `values/foreign_error.go` — `ErrImmutableString` sentinel
+3. `values/values.go` — `Indexable.Set()` returns error
+4. `values/vector.go`, `values/byte_vector.go` — Match interface
+5. `registry/core/prim_strings.go` — Propagate errors, use `NewMutableString()`
+6. `internal/extensions/all/prim_strings.go` — Propagate errors
+7. `internal/syntax/syntax_value.go`, `registry/core/prim_vectors.go` — Check errors
+8. Test files — Immutability tests
+
+### References
+
+- R7RS §6.7 (Strings)
+- `ARCHITECTURAL_REVIEW.md:168-173` — Original M6 bug report
+
+---
