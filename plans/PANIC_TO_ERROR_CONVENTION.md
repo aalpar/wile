@@ -1,6 +1,6 @@
 # Panic-to-Error Convention Conversion Plan
 
-**Status:** Not started
+**Status:** Complete
 
 ## Summary
 
@@ -36,9 +36,9 @@ Convert 14 panic sites to use the two-layer error convention (sentinel + `WrapFo
 
 | Phase | Description | Risk |
 |-------|-------------|------|
-| 1 | FFI error conversion (3 sites in `ffi.go`) — user-facing, HIGH priority | Breaking: `makeMapRetConverter` signature change (1 internal caller) |
-| 2 | Utility errors (`values/utils.go`) — **deferred**, keep as panic with sentinel | None |
-| 3 | Environment/syntax panic sentinels (9 sites) — no behavior change | None |
+| 1 | FFI error conversion (3 sites in `ffi.go`) — user-facing, HIGH priority | ✅ Complete |
+| 2 | Utility errors (`values/utils.go`) — keep as panic with sentinel | ✅ Complete (already done) |
+| 3 | Environment/syntax panic sentinels (9 sites) — no behavior change | ✅ Complete (8 already done, 1 converted) |
 
 ## Files Modified
 

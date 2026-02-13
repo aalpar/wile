@@ -1059,6 +1059,59 @@ func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
 	}
 }
 
+// --- Callback panic-to-error recovery ---
+
+// TestRegisterFuncCallbackPanicToError verifies that a Scheme error inside a
+// no-error-return callback is recovered as an error (not a process-killing panic).
+// The Go signature func(func(int64) int64, int64) int64 has no error slot,
+// so the FFI layer panics with *ForeignError, which makeWrapper recovers.
+func TestRegisterFuncCallbackPanicToError(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
+		return f(n)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	_, evalErr := engine.Eval(ctx, `(apply-f (lambda (x) (/ x 0)) 5)`)
+	if evalErr == nil {
+		t.Fatal("expected error from callback panic, got nil")
+	}
+	if !errors.Is(evalErr, values.ErrFFICallbackError) {
+		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
+	}
+	if !strings.Contains(evalErr.Error(), "division by zero") {
+		t.Errorf("expected error to mention division by zero, got: %v", evalErr)
+	}
+}
+
+// TestRegisterFuncCallbackResultConversionPanicToError verifies that a result
+// conversion failure in a no-error-return callback is recovered as an error.
+// Passing a lambda that returns a string where int64 is expected triggers the
+// conversion panic path in callbackSuccessResult.
+func TestRegisterFuncCallbackResultConversionPanicToError(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
+		return f(n)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	_, evalErr := engine.Eval(ctx, `(apply-f (lambda (x) "not-a-number") 5)`)
+	if evalErr == nil {
+		t.Fatal("expected error from callback result conversion, got nil")
+	}
+	if !errors.Is(evalErr, values.ErrCallbackResultConversion) {
+		t.Errorf("expected errors.Is(err, ErrCallbackResultConversion) = true, got false\nerror: %v", evalErr)
+	}
+}
+
 // --- Parameter as callback ---
 
 func TestRegisterFuncParameterAsCallback(t *testing.T) {
