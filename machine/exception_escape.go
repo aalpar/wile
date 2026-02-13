@@ -73,3 +73,15 @@ func (p *ErrExceptionEscape) Error() string {
 
 	return b.String()
 }
+
+// Unwrap returns the underlying error when the condition implements the error
+// interface (e.g., *NativeError). This enables errors.Is/errors.As to traverse
+// through ErrExceptionEscape into the wrapped error chain, supporting sentinel
+// matching like errors.Is(err, values.ErrDivisionByZero) from Go callers.
+func (p *ErrExceptionEscape) Unwrap() error {
+	e, ok := p.Condition.(error)
+	if ok {
+		return e
+	}
+	return nil
+}

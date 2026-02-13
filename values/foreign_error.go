@@ -163,8 +163,8 @@ func (p *StaticError) Error() string {
 // foreign to Scheme). It wraps an optional underlying error with a message
 // and captures a stack trace at the point of creation.
 type ForeignError struct {
-	err     error     // sentinel for errors.Is matching
-	cause   error     // root cause from underlying operation
+	err     error // sentinel for errors.Is matching
+	cause   error // root cause from underlying operation
 	message string
 	stack   []uintptr // stack trace
 }

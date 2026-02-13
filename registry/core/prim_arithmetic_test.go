@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"errors"
 	"math"
 	"testing"
 
@@ -1246,6 +1247,7 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
 			qt.Assert(t, err, qt.ErrorMatches, `(?s).*division by zero.*`)
 		})
 	}
