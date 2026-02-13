@@ -593,14 +593,23 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	}
 	p.AppendOperations(NewOperationPush())
 
-	// Use scope-aware binding resolution
+	// Use scope-aware binding resolution for validation
 	binding := p.env.GetBindingWithScopes(sym, symbolScopes)
 	if binding == nil {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
 	// Check if it's a local binding
-	li := p.env.GetLocalIndex(sym)
+	// M1 fix: Use scope-aware lookup when symbol has scopes (matches CompileSymbol pattern)
+	var li *environment.LocalIndex
+	if len(symbolScopes) > 0 {
+		// Symbol has scopes (from macro expansion), use scope-aware lookup
+		li = p.env.GetLocalIndexWithScopes(sym, symbolScopes)
+	} else {
+		// Symbol has no scopes (from user code), use regular lookup
+		li = p.env.GetLocalIndex(sym)
+	}
+
 	if li != nil {
 		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 	} else {

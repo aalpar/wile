@@ -119,9 +119,11 @@ Plain `uint64` incremented non-atomically. Data race under concurrent macro expa
 ### M1. `set!` on locals does not use scope-aware lookup
 
 **File:** `machine/compile_validated.go:597-605`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Validation uses `GetBindingWithScopes` but the actual local index lookup uses `GetLocalIndex` (not scope-aware). In hygienic macro-generated code with shadowed locals, this could store to the wrong binding slot.
+
+**Fix:** Changed `CompileValidatedSetBang` to follow the same pattern as `CompileSymbol` (compile_time_continuation.go:115-170): branch on `len(symbolScopes) > 0`, using `GetLocalIndexWithScopes` for scoped symbols and `GetLocalIndex` for unscoped symbols. This ensures hygiene correctness for macro-generated code with shadowed locals.
 
 ### M2. Winding stack aliasing in `RestoreWithWindingFrom` and `UnwindTo`
 
