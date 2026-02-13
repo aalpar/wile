@@ -480,7 +480,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
 	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
-		entry, ok := elem.(*values.Pair)
+		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
 		}
@@ -529,7 +529,7 @@ func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
-	pr, ok := obj.(*values.Pair)
+	pr, ok := obj.(values.Tuple)
 	if !ok {
 		// Not a list, return as-is per R7RS
 		mc.SetValue(obj)
@@ -540,7 +540,7 @@ func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
 	var head, tail *values.Pair
 	current := values.Value(pr)
 	for {
-		p, ok := current.(*values.Pair)
+		p, ok := current.(values.Tuple)
 		if !ok {
 			// Improper list ending - append the final cdr
 			if tail != nil {

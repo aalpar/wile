@@ -271,7 +271,7 @@ func integerDivisionOp(
 			b1 = big.NewInt(v1)
 		}
 		if b1.Sign() == 0 {
-			return values.NewForeignError(name + ": division by zero")
+			return values.WrapForeignErrorf(values.ErrDivisionByZero, "%s: division by zero", name)
 		}
 		result := bigOp(new(big.Int), b0, b1)
 		if inexact {
@@ -285,7 +285,7 @@ func integerDivisionOp(
 
 	// Regular integer case
 	if v1 == 0 {
-		return values.NewForeignError(name + ": division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "%s: division by zero", name)
 	}
 	result := regularOp(v0, v1)
 	if inexact {

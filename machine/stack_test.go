@@ -364,6 +364,30 @@ func TestStackPeekKBoundary(t *testing.T) {
 	qt.Assert(t, s.PeekK(0), values.SchemeEquals, values.NewInteger(3)) // top
 	qt.Assert(t, s.PeekK(1), values.SchemeEquals, values.NewInteger(2)) // second
 	qt.Assert(t, s.PeekK(2), values.SchemeEquals, values.NewInteger(1)) // third/bottom
+}
 
-	// Note: PeekK panics on out-of-bounds access (not a bounds-checked API)
+// TestStackPeekKPanics tests that Stack.PeekK panics on invalid indices
+func TestStackPeekKPanics(t *testing.T) {
+	s := NewStack(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+
+	// Negative index should panic
+	qt.Assert(t, func() {
+		s.PeekK(-1)
+	}, qt.PanicMatches, "stack underflow.*")
+
+	// Index equal to length should panic
+	qt.Assert(t, func() {
+		s.PeekK(3)
+	}, qt.PanicMatches, "stack underflow.*")
+
+	// Index greater than length should panic
+	qt.Assert(t, func() {
+		s.PeekK(100)
+	}, qt.PanicMatches, "stack underflow.*")
+
+	// Empty stack should panic for any index
+	empty := NewStack()
+	qt.Assert(t, func() {
+		empty.PeekK(0)
+	}, qt.PanicMatches, "stack underflow.*")
 }

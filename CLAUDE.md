@@ -55,6 +55,7 @@ mc.SetValue( BoolToBoolean(<conditional>) )
 named functions, methods, closures (inline, deferred, goroutine, or assigned), and
 function arguments. Every function body MUST start on the line after the opening brace
 and the closing brace MUST be on its own line. No exceptions.
+**NEVER** write code that exclusively accepts `*values.Pair` for read-only operations. Use `values.Tuple` interface instead to support both `*Pair` and `*ArrayList`. Only use `*values.Pair` when mutation (`SetCar`, `SetCdr`) or type-specific predicates (`pair?`) are required.
 
 ## Workflow
 
@@ -253,6 +254,27 @@ case values.ComplexNumber:
 **Common mistake:** Assuming `case values.ComplexNumber:` is already there when the code actually says `case *values.BigComplex:`, then adding a redundant `case *values.Complex:` instead of fixing the root issue.
 
 **Prevention:** When debugging predicates or type-based dispatch, read the existing cases word-for-word before proposing changes.
+
+### Tuple vs *Pair
+
+Use `values.Tuple` for read-only operations, `*values.Pair` only for mutation or type predicates.
+
+| Use Case | Type | Why |
+|----------|------|-----|
+| Traversal, pattern matching, assoc lookup | `values.Tuple` | Generic (works with `*Pair`, `*ArrayList`) |
+| List copying | Input: `Tuple`, Output: `*Pair` | Read generically, write concretely |
+| `list-set!`, `set-car!`, `set-cdr!` | `*values.Pair` | Needs `SetCar`/`SetCdr` |
+| `pair?` predicate | `*values.Pair` | Type-specific per R7RS |
+
+```go
+// Generic read-only
+func process(t values.Tuple) { t.ForEach(ctx, fn) }
+
+// Mutation required
+func listSet(p *values.Pair, i int, v values.Value) { p.SetCar(v) }
+```
+
+Compile-time/macro code uses `*Pair` only (no `ArrayList` at those phases).
 
 ## Test File Naming Conventions
 
