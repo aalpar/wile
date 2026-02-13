@@ -3,7 +3,7 @@ version: 2
 builds:
   - id: scheme
     binary: scheme
-    dir: ./cmd
+    dir: ./cmd/scheme
     env:
       - CGO_ENABLED=0
     goos:

@@ -238,21 +238,21 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	// expr is (<bindings> <body>) - args after keyword
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || argsPair.IsEmptyList() {
-		return nil, values.NewForeignErrorf("%s: expected bindings and body", formName)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings and body", formName)
 	}
 
 	// Get the bindings list
 	bindingsStx := argsPair.SyntaxCar()
 	bindingsPair, ok := bindingsStx.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.NewForeignErrorf("%s: expected bindings list", formName)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings list", formName)
 	}
 
 	// Get the body
 	bodyStx := argsPair.SyntaxCdr()
 	bodyPair, ok := bodyStx.(*syntax.SyntaxPair)
 	if !ok || bodyPair.IsEmptyList() {
-		return nil, values.NewForeignErrorf("%s: expected body expressions", formName)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected body expressions", formName)
 	}
 
 	// Count bindings for local environment allocation
@@ -290,12 +290,12 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 			bindingStx := current.SyntaxCar()
 			bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
 			if !ok || bindingPair.IsEmptyList() {
-				return nil, values.NewForeignErrorf("%s: invalid binding", formName)
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: invalid binding", formName)
 			}
 			keywordStx := bindingPair.SyntaxCar()
 			keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
 			if !ok {
-				return nil, values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+				return nil, values.WrapForeignErrorf(values.ErrNotASymbol, "%s: keyword must be a symbol", formName)
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
 			// Create binding with letScope so free identifier resolution works
@@ -316,14 +316,14 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 		bindingStx := current.SyntaxCar()
 		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
-			return nil, values.NewForeignErrorf("%s: invalid binding", formName)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: invalid binding", formName)
 		}
 
 		// Get keyword
 		keywordStx := bindingPair.SyntaxCar()
 		keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
 		if !ok {
-			return nil, values.NewForeignErrorf("%s: keyword must be a symbol", formName)
+			return nil, values.WrapForeignErrorf(values.ErrNotASymbol, "%s: keyword must be a symbol", formName)
 		}
 		keyword := keywordSym.Unwrap().(*values.Symbol)
 
@@ -331,27 +331,27 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 		transformerCdr := bindingPair.SyntaxCdr()
 		transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
 		if !ok || transformerPair.IsEmptyList() {
-			return nil, values.NewForeignErrorf("%s: missing transformer expression", formName)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: missing transformer expression", formName)
 		}
 		transformerExpr := transformerPair.SyntaxCar()
 
 		// Check if transformer is a syntax-rules form
 		transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
 		if !ok {
-			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+			return nil, values.WrapForeignErrorf(values.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
 		}
 		car := transformerPairExpr.SyntaxCar()
 		if car == nil {
-			return nil, values.NewForeignErrorf("%s: invalid transformer", formName)
+			return nil, values.WrapForeignErrorf(values.ErrUnsupportedTransformer, "%s: invalid transformer", formName)
 		}
 		srSym, ok := car.(*syntax.SyntaxSymbol)
 		if !ok {
-			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+			return nil, values.WrapForeignErrorf(values.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
 		}
 		srSymVal := srSym.Unwrap()
 		srSymbol, ok := srSymVal.(*values.Symbol)
 		if !ok || srSymbol.Key != "syntax-rules" {
-			return nil, values.NewForeignErrorf("%s: only syntax-rules transformers are currently supported", formName)
+			return nil, values.WrapForeignErrorf(values.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
 		}
 
 		// Compile the syntax-rules transformer
@@ -384,7 +384,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	scopedBody := bodyPair.AddScope(letScope)
 	scopedBodyPair, ok := scopedBody.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.NewForeignErrorf("%s: body must be a list", formName)
+		return nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: body must be a list", formName)
 	}
 
 	// Create expander with child expand environment for body expansion
@@ -408,7 +408,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
 			current = nextPair
 		} else if !syntax.IsSyntaxEmptyList(cdr) {
-			return nil, values.NewForeignErrorf("%s: body must be a proper list", formName)
+			return nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: body must be a proper list", formName)
 		} else {
 			break
 		}

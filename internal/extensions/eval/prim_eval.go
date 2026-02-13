@@ -39,7 +39,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	// Get the environment frame from the TopLevelEnvironment
 	topLevelEnv, ok := envSpec.(*environment.TopLevelEnvironment)
 	if !ok {
-		return values.NewForeignErrorf("eval: expected an environment specifier but got %T", envSpec)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
 	}
 
 	env := topLevelEnv.Runtime()
@@ -83,19 +83,35 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Open the file
-	f, err := os.Open(filename.Value)
-	if err != nil {
-		return values.WrapForeignErrorf(err, "load: cannot open file %s", filename.Value)
-	}
-	defer f.Close() //nolint:errcheck
-
 	// Use the current top-level environment
 	env := mc.EnvironmentFrame().TopLevel()
 
-	// Create parser (which creates its own tokenizer internally)
+	// Resolve the file path
+	stack := env.LoadPathStack()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return values.WrapForeignErrorf(err, "load: cannot get current directory")
+	}
+
+	absPath, err := environment.ResolveFile(stack, filename.Value, []string{cwd})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "load")
+	}
+
+	// Open the file
+	f, err := os.Open(absPath)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "load: cannot open file %s", absPath)
+	}
+	defer f.Close() //nolint:errcheck
+
+	// Push to stack after successful open, pop on exit
+	stack.Push(absPath)
+	defer stack.Pop()
+
+	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)
-	p := parser.NewParser(env, true, rdr)
+	p := parser.NewParserWithFile(env, true, rdr, absPath)
 
 	// Read and evaluate each expression
 	var lastValue = values.Void
@@ -134,6 +150,62 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	mc.SetValue(lastValue)
+	return nil
+}
+
+// PrimCurrentLoadPath implements the (current-load-path) primitive.
+// Returns the absolute path of the file currently being loaded, or #f if
+// no file is being loaded (e.g., REPL).
+func PrimCurrentLoadPath(_ context.Context, mc *machine.MachineContext) error {
+	env := mc.EnvironmentFrame().TopLevel()
+	stack := env.LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	current := stack.Current()
+	if current == "" {
+		mc.SetValue(values.FalseValue)
+	} else {
+		mc.SetValue(values.NewString(current))
+	}
+	return nil
+}
+
+// PrimCurrentLoadDirectory implements the (current-load-directory) primitive.
+// Returns the directory of the file currently being loaded, or #f if
+// no file is being loaded (e.g., REPL).
+func PrimCurrentLoadDirectory(_ context.Context, mc *machine.MachineContext) error {
+	env := mc.EnvironmentFrame().TopLevel()
+	stack := env.LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	currentDir := stack.CurrentDir()
+	if currentDir == "" {
+		mc.SetValue(values.FalseValue)
+	} else {
+		mc.SetValue(values.NewString(currentDir))
+	}
+	return nil
+}
+
+// PrimCurrentLoadDepth implements the (current-load-depth) primitive.
+// Returns the current load stack depth (number of nested loads), or #f if
+// no stack exists. Useful for debugging nested load chains.
+func PrimCurrentLoadDepth(_ context.Context, mc *machine.MachineContext) error {
+	env := mc.EnvironmentFrame().TopLevel()
+	stack := env.LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	depth := stack.Depth()
+	mc.SetValue(values.NewInteger(int64(depth)))
 	return nil
 }
 
@@ -222,7 +294,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return values.NewForeignErrorf("environment: expected list of import specs, got %T", argsVal)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
 	}
 
 	// Process each import spec
@@ -421,7 +493,7 @@ func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
 
 	binding := expandEnv.GetBindingWithScopes(sym, syntaxSym.Scopes())
 	if binding == nil {
-		return values.NewForeignErrorf("syntax-local-value: no binding for %s", sym.Key)
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
 	}
 
 	val := binding.Value()

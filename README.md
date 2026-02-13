@@ -3,56 +3,227 @@
 [![CI](https://github.com/aalpar/wile/actions/workflows/ci.yml/badge.svg)](https://github.com/aalpar/wile/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/aalpar/wile.svg)](https://pkg.go.dev/github.com/aalpar/wile)
 
-A R7RS Scheme interpreter/compiler in Go with hygienic macros.
+**R7RS Scheme in pure Go. No CGo, no C toolchain, no cross-compilation pain.**
 
-The name is a play on "scheme" (as in "wiles" - cunning stratagems) and a nod to Wile E. Coyote, the cartoon schemer.
+Full hygienic macros, first-class continuations, and numeric tower. `go get` and it just works.
 
-## Overview
+## Why Wile?
 
-Wile compiles Scheme source code to bytecode and executes it on a stack-based virtual machine. It implements R7RS-style `syntax-rules` and `syntax-case` macros with a "sets of scopes" hygiene model (Flatt 2016).
+**Embedding a Lisp in Go has always required tradeoffs:**
 
-Wile is designed as a Scheme scripting layer that feels native to Go. It provides what Go intentionally lacks — hygienic macros, first-class continuations, symbolic computation — without requiring CGo, a C toolchain, or cross-compilation headaches. Add it with `go get` and it just works.
+| Approach | Problem |
+|----------|---------|
+| Chibi-Scheme, S7 via CGo | Slow builds, broken cross-compilation, platform toolchain pain |
+| Lisp subsets (Zygomys, etc.) | No R7RS compliance, limited ecosystem |
+| Lua via go-lua | Not a Lisp, no macros, different semantics |
+| JavaScript via goja | Heavy runtime, no hygiene, async complexity |
 
-## Background
+**Wile solves this:** Full R7RS Scheme in pure Go. Scheme values are Go heap objects, collected by Go's GC. No custom allocator, no FFI tax, no surprises.
 
-Wile was originally a Lisp interpreter (compiler and VM) used for scripting block-based storage systems (databases, pipelines, search, etc.). It's been recently expanded to the Scheme R7RS standard in the hopes that it will be of use to someone who wants to use Lisp/Scheme in Go.
+## Use Cases
 
-### Why Another Scheme Implementation?
+Wile is designed for embedding Scheme as a scripting layer in Go applications:
 
-Existing Scheme-in-Go implementations are typically toys or subsets. Embedding a production Scheme like Chibi-Scheme or S7 requires CGo, which means slow builds, broken cross-compilation, and platform-specific toolchain pain. Wile is pure Go: Scheme values are Go heap objects collected by Go's GC, so there's no custom allocator to maintain and the GC improves for free with each Go release.
+- **Policy engines** — Express complex authorization rules without hardcoding logic
+- **Configuration DSLs** — User-programmable config with hygiene and safety
+- **Solver frontends** — Define constraints and search spaces in a Lisp
+- **Build tools** — Scriptable build logic with real code, not YAML
+- **Data transformation** — Symbolic computation for ETL pipelines
 
-### Use of AI
+If you need **Go-native scripting with macros, hygiene, and continuations**, Wile is the only pure-Go option.
 
-Anthropic's Claude Code was used to help document, fill out the primitive library, and diagnose bugs. The `CLAUDE.md` file is committed to help others get started.
+## How Wile Compares
 
-## Features
+| Feature | Wile | Chibi/S7 (CGo) | Goja (JS) | Starlark | Lua |
+|---------|------|----------------|-----------|----------|-----|
+| Pure Go | ✓ | ✗ | ✓ | ✓ | ✗ |
+| Hygienic macros | ✓ | ✓ | ✗ | ✗ | ✗ |
+| R7RS compliance | ✓ | ✓ | N/A | N/A | N/A |
+| First-class continuations | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Cross-compilation | ✓ | ✗ | ✓ | ✓ | ✗ |
+| Go GC integration | ✓ | ✗ | ✓ | ✓ | ✗ |
 
-### Core Language
+## Quick Start
 
-- **R7RS-small compliance** — Full conformance with all standard libraries
-- **Hygienic macros** — `syntax-rules` and `syntax-case` with the "sets of scopes" model (Flatt 2016)
-- **First-class continuations** — `call/cc` and `dynamic-wind` with proper semantics
-- **Delimited continuations** — `call-with-continuation-prompt`, `abort-current-continuation`, and composable continuations
-- **Full numeric tower** — Integers, rationals, floats, complex numbers with exact/inexact distinction
-- **Arbitrary precision** — `BigInteger` and `BigFloat` with automatic overflow promotion
-- **Library system** — `define-library`, `import`, `export` with configurable search paths
-- **Records** — `define-record-type` (SRFI-9 style)
-- **Promises** — `delay`, `force`, and lazy evaluation
+```bash
+# Install as a command-line tool
+go install github.com/aalpar/wile/cmd/scheme@latest
 
-### Runtime
+# Or download a prebuilt binary from releases
+# https://github.com/aalpar/wile/releases
 
-- **Bytecode compilation** — Scheme code compiles to an efficient bytecode representation
-- **Stack-based VM** — Proper tail-call optimization
-- **SRFI-18 threading** — Threads, mutexes, and condition variables
-- **Go concurrency interop** — Channels, WaitGroups, RWMutex, Once, Atomic values
-- **Exception handling** — `guard`, `with-exception-handler`, `raise`
+# Run the REPL
+scheme
 
-### Tooling
+# Try an example
+scheme --file examples/basics/hello.scm
 
-- **Interactive REPL** — Readline support with history and multi-line input
-- **Source-level debugger** — Breakpoints, stepping, stack traces
-- **Pure Go** — No CGo, no C dependencies, works with `go get`
-- **Go embedding API** — Clean API for evaluating Scheme from Go and registering Go functions as primitives
+# See all examples
+ls examples/
+```
+
+**Explore**:
+- [**70+ Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — 19 canonical Scheme benchmarks for performance testing
+- [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
+- [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
+
+## Key Features in Action
+
+**Logic Programming** — Full Prolog embedded in Scheme
+
+```scheme
+(load "examples/logic/schelog/schelog.scm")
+
+(%rel (append xs ys zs)
+  ((append () ?ys ?ys))
+  ((append (?x . ?xs) ?ys (?x . ?zs))
+   (append ?xs ?ys ?zs)))
+
+(%which (zs)
+  (append '(1 2) '(3 4) zs))
+;; ⇒ ((zs 1 2 3 4))
+```
+
+*See [examples/logic/schelog/](examples/logic/schelog/) for a self-contained Prolog implementation in Scheme.*
+
+**Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
+
+```scheme
+(/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
+(* 1/3 3)            ; ⇒ 1 (exact)
+(make-rectangular 0 1) ; ⇒ 0+1i (exact complex)
+(expt 2 1000)        ; ⇒ 10715086071862673209484250490...
+```
+
+**Hygienic Macros** — Build DSLs without variable capture
+
+```scheme
+(load "examples/macros/state-machine.scm")
+
+(define-state-machine traffic-light
+  (states: red yellow green)
+  (initial: red)
+  (transitions:
+   (red -> green)
+   (green -> yellow)
+   (yellow -> red)))
+```
+
+**Go-Native Concurrency** — Goroutines and channels from Scheme
+
+```scheme
+(let ((ch (make-channel)))
+  (thread-start!
+   (make-thread
+    (lambda () (channel-send ch 42))))
+  (channel-receive ch))  ; ⇒ 42
+```
+
+**First-Class Continuations** — Non-local control flow
+
+```scheme
+;; Early return
+(call/cc (lambda (return)
+  (for-each (lambda (x)
+              (if (negative? x)
+                  (return x)))
+            '(1 2 -3 4))
+  'not-found))  ; ⇒ -3
+
+;; See examples/control/ for generators, coroutines, and backtracking
+```
+
+## Quick Start
+
+```bash
+# Install as a command-line tool
+go install github.com/aalpar/wile/cmd/scheme@latest
+
+# Or download a prebuilt binary from releases
+# https://github.com/aalpar/wile/releases
+
+# Run the REPL
+scheme
+
+# Try an example
+scheme --file examples/basics/hello.scm
+
+# See all examples
+ls examples/
+```
+
+**Explore**:
+- [**70+ Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — 19 canonical Scheme benchmarks for performance testing
+- [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
+- [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
+
+## Key Features in Action
+
+**Logic Programming** — Full Prolog embedded in Scheme
+
+```scheme
+(load "examples/logic/schelog/schelog.scm")
+
+(%rel (append xs ys zs)
+  ((append () ?ys ?ys))
+  ((append (?x . ?xs) ?ys (?x . ?zs))
+   (append ?xs ?ys ?zs)))
+
+(%which (zs)
+  (append '(1 2) '(3 4) zs))
+;; ⇒ ((zs 1 2 3 4))
+```
+
+*See [examples/logic/schelog/](examples/logic/schelog/) for a complete Prolog implementation in ~500 lines of Scheme.*
+
+**Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
+
+```scheme
+(/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
+(* 1/3 3)            ; ⇒ 1 (exact)
+(make-rectangular 0 1) ; ⇒ 0+1i (exact complex)
+(expt 2 1000)        ; ⇒ 10715086071862673209484250490...
+```
+
+**Hygienic Macros** — Build DSLs without variable capture
+
+```scheme
+(load "examples/macros/state-machine.scm")
+
+(define-state-machine traffic-light
+  (states: red yellow green)
+  (initial: red)
+  (transitions:
+   (red -> green)
+   (green -> yellow)
+   (yellow -> red)))
+```
+
+**Go-Native Concurrency** — Goroutines and channels from Scheme
+
+```scheme
+(let ((ch (make-channel)))
+  (thread-start!
+   (make-thread
+    (lambda () (channel-send ch 42))))
+  (channel-receive ch))  ; ⇒ 42
+```
+
+**First-Class Continuations** — Non-local control flow
+
+```scheme
+;; Early return
+(call/cc (lambda (return)
+  (for-each (lambda (x)
+              (if (negative? x)
+                  (return x)))
+            '(1 2 -3 4))
+  'not-found))  ; ⇒ -3
+
+;; See examples/control/ for generators, coroutines, and backtracking
+```
 
 ## Installation
 

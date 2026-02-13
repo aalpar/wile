@@ -290,3 +290,109 @@ func TestExceptionHandlerWithDynamicWind(t *testing.T) {
 		c.Assert(result.Internal(), qt.IsNotNil)
 	})
 }
+
+// TestExceptionHandlerInheritanceInApply verifies that exception handlers
+// are inherited by sub-contexts used by apply (M3 fix).
+func TestExceptionHandlerInheritanceInApply(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("handler catches exception in apply", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((caught #f))
+			  (with-exception-handler
+			    (lambda (e) (set! caught e) 'handled)
+			    (lambda ()
+			      (apply (lambda (x y)
+			               (if (= x 3)
+			                   (raise-continuable 'error-in-apply)
+			                   (+ x y)))
+			             '(3 4))))
+			  caught)
+		`)
+		// Verify it's the error symbol
+		sym, ok := result.Internal().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("Got type: %T, value: %v", result.Internal(), result.Internal()))
+		c.Assert(sym.Key, qt.Equals, "error-in-apply")
+	})
+}
+
+// TestExceptionHandlerInheritanceInCallWithValues verifies that exception
+// handlers are inherited by sub-contexts used by call-with-values (M3 fix).
+func TestExceptionHandlerInheritanceInCallWithValues(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("handler catches exception in producer", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((caught #f))
+			  (with-exception-handler
+			    (lambda (e) (set! caught e) 'handled)
+			    (lambda ()
+			      (call-with-values
+			        (lambda () (raise-continuable 'producer-error) (values 1 2))
+			        (lambda (a b) (+ a b)))))
+			  caught)
+		`)
+		sym, ok := result.Internal().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("Got type: %T, value: %v", result.Internal(), result.Internal()))
+		c.Assert(sym.Key, qt.Equals, "producer-error")
+	})
+
+	t.Run("handler catches exception in consumer", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((caught #f))
+			  (with-exception-handler
+			    (lambda (e) (set! caught e) 'handled)
+			    (lambda ()
+			      (call-with-values
+			        (lambda () (values 1 2))
+			        (lambda (a b) (raise-continuable 'consumer-error) (+ a b)))))
+			  caught)
+		`)
+		sym, ok := result.Internal().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("Got type: %T, value: %v", result.Internal(), result.Internal()))
+		c.Assert(sym.Key, qt.Equals, "consumer-error")
+	})
+}
+
+// TestExceptionHandlerInheritanceInDynamicWind verifies that exception
+// handlers are inherited by sub-contexts used for dynamic-wind thunks (M3 fix).
+func TestExceptionHandlerInheritanceInDynamicWind(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("handler catches exception in before thunk", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((caught #f))
+			  (with-exception-handler
+			    (lambda (e) (set! caught e) 'handled)
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (raise-continuable 'before-error))
+			        (lambda () 'body)
+			        (lambda () 'after))))
+			  caught)
+		`)
+		sym, ok := result.Internal().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(sym.Key, qt.Equals, "before-error")
+	})
+
+	t.Run("handler catches exception in after thunk", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((caught #f))
+			  (with-exception-handler
+			    (lambda (e) (set! caught e) 'handled)
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () 'before)
+			        (lambda () 'body)
+			        (lambda () (raise-continuable 'after-error)))))
+			  caught)
+		`)
+		sym, ok := result.Internal().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(sym.Key, qt.Equals, "after-error")
+	})
+}

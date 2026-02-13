@@ -87,7 +87,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		// Exhaustiveness check: all ValidatedExpr types should be handled above.
 		// This error indicates a new validated type was added without updating
 		// this switch statement.
-		return values.NewForeignErrorf("unknown validated expression type: %T", expr)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "unknown validated expression type: %T", expr)
 	}
 }
 
@@ -478,7 +478,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 	_, ok := lenv.EnsureLocalBinding(rest, environment.BindingTypeVariable)
 	if !ok {
 		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
-		return values.ErrDuplicateBinding
+		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate rest parameter %q in lambda", rest.Key)
 	}
 
 	// Preserve hygiene scopes for the rest parameter, same as required parameters.
@@ -593,16 +593,28 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	}
 	p.AppendOperations(NewOperationPush())
 
-	// Use scope-aware binding resolution
+	// Use scope-aware binding resolution for validation
 	binding := p.env.GetBindingWithScopes(sym, symbolScopes)
 	if binding == nil {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
 	// Check if it's a local binding
-	li := p.env.GetLocalIndex(sym)
+	// M1 fix: Use scope-aware lookup when symbol has scopes (matches CompileSymbol pattern)
+	var li *environment.LocalIndex
+	if len(symbolScopes) > 0 {
+		// Symbol has scopes (from macro expansion), use scope-aware lookup
+		li = p.env.GetLocalIndexWithScopes(sym, symbolScopes)
+	} else {
+		// Symbol has no scopes (from user code), use regular lookup
+		li = p.env.GetLocalIndex(sym)
+	}
+
 	if li != nil {
-		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
+		p.AppendOperations(
+			NewOperationStoreLocalByLocalIndexImmediate(li),
+			NewOperationLoadVoid(),
+		)
 	} else {
 		// Must be global
 		gi := p.env.GetGlobalIndex(sym)

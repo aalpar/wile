@@ -4,13 +4,62 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-12
 
 ---
 
 ## Summary
 
-No known semantic differences remain. All previously documented issues have been fixed.
+One known limitation exists: non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. This is a conservative safe behavior with minimal practical impact. See details below.
+
+---
+
+## Non-Blocking I/O Detection
+
+**Affected Primitives:** `char-ready?`, `u8-ready?`
+
+**R7RS §6.13.2 Requirement:**
+> Returns `#t` if a character (or byte) is ready on the input port and returns `#f` otherwise. If `char-ready?` returns `#t` then the next `read-char` (or `read-u8`) operation on the given port is guaranteed not to hang.
+
+**Wile Behavior:** Always returns `#t`.
+
+**Rationale:**
+
+Go's `io.Reader` interface does not expose readiness status or non-blocking I/O semantics. Implementing true non-blocking detection would require:
+1. OS-specific syscalls (`select`/`poll` on Unix, overlapped I/O on Windows)
+2. Platform-specific build tags and dependencies (`golang.org/x/sys/unix`, `golang.org/x/sys/windows`)
+3. Handling buffered readers (`bufio.Reader`) where buffered data makes reads non-blocking even when the underlying descriptor would block
+4. Significant complexity in the I/O layer with cross-platform maintenance burden
+
+The conservative behavior (always returning `#t`) is **safe**: it may cause blocking where R7RS code expected non-blocking, but never claims data is available when it isn't (which would violate R7RS guarantees).
+
+**Workaround:**
+
+Use Go channels or goroutines for non-blocking I/O patterns:
+
+```scheme
+;; Instead of polling with char-ready?:
+(if (char-ready? port)
+    (read-char port)
+    'not-ready)
+
+;; Use a thread with timeout:
+(let ((result (make-channel)))
+  (thread-start!
+    (make-thread
+      (lambda ()
+        (channel-send! result (read-char port)))))
+  (channel-receive/timeout result 1000 'timeout))
+```
+
+**Impact:** **LOW** — `char-ready?` and `u8-ready?` are rarely used in modern Scheme code. These predicates were designed for select-style event loops, a pattern largely superseded by async/await and channel-based concurrency. Most I/O in Wile is either:
+- File-based (always ready, blocking is acceptable)
+- Network streams where blocking semantics are expected
+- Interactive REPL input where immediate blocking is desired
+
+**Estimated implementation effort:** 4-8 hours including cross-platform support and testing.
+
+**ROI analysis:** Documentation (15 minutes) provides clear expectations at far better ROI than implementation (4-8 hours) for an exotic edge case.
 
 ---
 

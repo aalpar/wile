@@ -13,6 +13,7 @@
 ;; -----------------------------------------------------------------------
 
 (define *run-queue* '())
+(define *scheduler-loop* #f)
 
 (define (enqueue! thunk)
   (set! *run-queue* (append *run-queue* (list thunk))))
@@ -23,8 +24,12 @@
     next))
 
 (define (scheduler-run)
-  (if (not (null? *run-queue*))
-      ((dequeue!))))
+  (cond
+    ((not (null? *run-queue*))
+     ((dequeue!))
+     (scheduler-run))
+    (*scheduler-loop*
+     (*scheduler-loop* 'done))))
 
 (define (spawn thunk)
   (enqueue! (lambda () (thunk) (scheduler-run))))
@@ -36,7 +41,10 @@
      (scheduler-run))))
 
 (define (scheduler-start)
-  (scheduler-run))
+  (call/cc
+   (lambda (k)
+     (set! *scheduler-loop* k)
+     (scheduler-run))))
 
 ;; -----------------------------------------------------------------------
 ;; Channels — synchronous message passing (CSP-style)

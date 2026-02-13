@@ -15,6 +15,7 @@
 package syntax
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -129,4 +130,39 @@ func (p *SyntaxValueSuite) TestUnwrapAll_Pair(c *qt.C) {
 
 func TestSyntaxValue(t *testing.T) {
 	qtsuite.Run(qt.New(t), &SyntaxValueSuite{})
+}
+
+func TestNewSyntaxObject_DoubleWrapPanicSentinels(t *testing.T) {
+	sctx := NewSourceContext("test", "file.scm", NewSourceIndexes(0, 1, 1), NewSourceIndexes(0, 2, 1))
+
+	tcs := []struct {
+		name  string
+		value values.Value
+	}{
+		{"SyntaxObject", NewSyntaxObject(values.NewInteger(42), sctx)},
+		{"SyntaxSymbol", NewSyntaxSymbol("foo", sctx)},
+		{"SyntaxVector", NewSyntaxVector(sctx)},
+		{"SyntaxPair", NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), sctx), SyntaxEmptyList, sctx)},
+		{"values.Symbol", values.NewSymbol("bar")},
+		{"values.Pair", values.NewCons(values.NewInteger(1), values.EmptyList)},
+		{"values.Vector", values.NewVector()},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic")
+				}
+				err, ok := r.(error)
+				if !ok {
+					t.Fatalf("panic value is not error: %T", r)
+				}
+				if !errors.Is(err, values.ErrCannotDoubleSyntaxWrap) {
+					t.Errorf("expected sentinel ErrCannotDoubleSyntaxWrap, got: %v", err)
+				}
+			}()
+			NewSyntaxObject(tc.value, sctx)
+		})
+	}
 }

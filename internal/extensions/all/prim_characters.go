@@ -30,35 +30,35 @@ import (
 // PrimCharCiEqVariadic implements the variadic char-ci=? primitive.
 func PrimCharCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci=?", func(a, b rune) bool {
-		return unicode.ToLower(a) == unicode.ToLower(b)
+		return simpleCaseFold(a) == simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiLtVariadic implements the variadic char-ci<? primitive.
 func PrimCharCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
-		return unicode.ToLower(a) < unicode.ToLower(b)
+		return simpleCaseFold(a) < simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiGtVariadic implements the variadic char-ci>? primitive.
 func PrimCharCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci>?", func(a, b rune) bool {
-		return unicode.ToLower(a) > unicode.ToLower(b)
+		return simpleCaseFold(a) > simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiLeVariadic implements the variadic char-ci<=? primitive.
 func PrimCharCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci<=?", func(a, b rune) bool {
-		return unicode.ToLower(a) <= unicode.ToLower(b)
+		return simpleCaseFold(a) <= simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiGeVariadic implements the variadic char-ci>=? primitive.
 func PrimCharCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci>=?", func(a, b rune) bool {
-		return unicode.ToLower(a) >= unicode.ToLower(b)
+		return simpleCaseFold(a) >= simpleCaseFold(b)
 	})
 }
 

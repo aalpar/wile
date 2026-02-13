@@ -102,7 +102,7 @@ func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.Envir
 	result := mc.GetValue()
 	closure, ok := result.(*MachineClosure)
 	if !ok {
-		return nil, values.NewForeignErrorf("define-syntax: transformer must evaluate to a procedure, got %T", result)
+		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure, "define-syntax: transformer must evaluate to a procedure, got %T", result)
 	}
 
 	return closure, nil

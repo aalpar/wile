@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -246,4 +247,58 @@ func TestGlobalEnvironmentFrame_NewWithoutTopLevel_Panics(t *testing.T) {
 	qt.Assert(t, func() {
 		env.SetLibraryRegistry(nil)
 	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
+}
+
+func TestGlobalEnvironmentFrame_PanicSentinels(t *testing.T) {
+	tcs := []struct {
+		name    string
+		trigger func()
+	}{
+		{
+			"InternSymbol",
+			func() {
+				env := NewGlobalEnvironmentFrame()
+				env.InternSymbol(values.NewSymbol("test"))
+			},
+		},
+		{
+			"InternSyntax",
+			func() {
+				env := NewGlobalEnvironmentFrame()
+				env.InternSyntax(values.NewInteger(1), nil)
+			},
+		},
+		{
+			"LibraryRegistry",
+			func() {
+				env := NewGlobalEnvironmentFrame()
+				env.LibraryRegistry()
+			},
+		},
+		{
+			"SetLibraryRegistry",
+			func() {
+				env := NewGlobalEnvironmentFrame()
+				env.SetLibraryRegistry(nil)
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic")
+				}
+				err, ok := r.(error)
+				if !ok {
+					t.Fatalf("panic value is not error: %T", r)
+				}
+				if !errors.Is(err, values.ErrMissingTopLevelEnvironment) {
+					t.Errorf("expected sentinel ErrMissingTopLevelEnvironment, got: %v", err)
+				}
+			}()
+			tc.trigger()
+		})
+	}
 }

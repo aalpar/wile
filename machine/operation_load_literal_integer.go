@@ -31,7 +31,7 @@ func NewOperationLoadLiteralInteger(v int64) *OperationLoadLiteralInteger {
 }
 
 func (p *OperationLoadLiteralInteger) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = nil
+	mc.value = MultipleValues{values.NewInteger(p.Value)}
 	mc.pc++
 	return mc, nil
 }

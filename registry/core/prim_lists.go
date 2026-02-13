@@ -480,7 +480,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
 	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
-		entry, ok := elem.(*values.Pair)
+		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
 		}

@@ -308,6 +308,12 @@ func TestLattice_PredictionsVsActual(t *testing.T) {
 		actual  string
 		reason  string
 	}{
+		// BigInteger+Float uses BigFloat for precision preservation (M5 fix)
+		"BigInteger+Float": {
+			lattice: "*values.Float",
+			actual:  "*values.BigFloat",
+			reason:  "Precision preservation: BigInteger+Float promotes to BigFloat (not Float) to avoid precision loss for >53-bit integers",
+		},
 		// Operations involving BigComplex always return BigComplex (preserves structure)
 		"Float+BigComplex": {
 			lattice: "*values.Complex",
@@ -411,7 +417,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigInteger+Integer":    "*values.BigInteger",
 		"BigInteger+BigInteger": "*values.BigInteger",
 		"BigInteger+Rational":   "*values.Rational",
-		"BigInteger+Float":      "*values.Float",
+		"BigInteger+Float":      "*values.BigFloat", // Changed: precision preservation
 		"BigInteger+BigFloat":   "*values.BigFloat",
 		"BigInteger+Complex":    "*values.Complex",
 		"BigInteger+BigComplex": "*values.BigComplex",
@@ -621,8 +627,8 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 		c.Logf("Precision preserved: BigFloat with 256-bit precision kept in BigComplex")
 	})
 
-	// BigInteger + Float can lose precision for large integers
-	c.Run("BigInteger+Float_can_lose_precision", func(c *qt.C) {
+	// BigInteger + Float now preserves precision via BigFloat
+	c.Run("BigInteger+Float_preserves_precision", func(c *qt.C) {
 		// An integer larger than float64 can exactly represent
 		largeInt := new(big.Int)
 		largeInt.SetString("9999999999999999999999999999", 10)
@@ -632,11 +638,11 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 
 		result := bi.Add(fl)
 
-		// Result is Float, which can't exactly represent the large integer
+		// Result is now BigFloat, which preserves the BigInteger's precision
 		actualType := reflect.TypeOf(result).String()
-		c.Assert(actualType, qt.Equals, "*values.Float")
+		c.Assert(actualType, qt.Equals, "*values.BigFloat")
 
-		// This is correct per R7RS (exact + inexact = inexact), but precision is lost
-		c.Logf("BigInteger with ~95 bits of precision reduced to float64 (~53 bits)")
+		// This is correct per R7RS (exact + inexact = inexact) AND preserves precision
+		c.Logf("BigInteger with ~95 bits of precision preserved in BigFloat result")
 	})
 }

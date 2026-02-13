@@ -114,31 +114,47 @@ func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 	}
 
 	// Wait with timeout
+	result := make(chan bool, 1)
+	timedout := make(chan struct{})
 	done := make(chan struct{})
-	signaled := make(chan struct{})
+	timer := time.NewTimer(*timeout)
+	defer timer.Stop()
 
+	// Waiter goroutine
 	go func() {
 		p.mu.Lock()
 		p.cond.Wait()
 		p.mu.Unlock()
-		close(signaled)
+
+		// Try to send result (non-blocking)
+		select {
+		case result <- true:
+			// Success: main goroutine received signal
+		default:
+			// Timeout already fired, channel full
+			// Goroutine exits cleanly
+		}
 	}()
 
+	// Timeout handler goroutine
 	go func() {
 		select {
-		case <-time.After(*timeout):
+		case <-timer.C:
+			// Timeout fired - wake the waiter so it can exit
 			p.mu.Lock()
-			p.cond.Broadcast() // Wake the waiter so it can exit
+			p.cond.Broadcast()
 			p.mu.Unlock()
+			close(timedout)
 		case <-done:
+			// Signaled before timeout - exit cleanly
 		}
 	}()
 
 	select {
-	case <-signaled:
+	case <-result:
 		close(done)
 		return true
-	case <-time.After(*timeout):
+	case <-timedout:
 		close(done)
 		return false
 	}

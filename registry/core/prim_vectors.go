@@ -74,8 +74,7 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 	return helpers.SequenceSet(mc, values.ErrNotAVector, "vector-set!",
 		func(v *values.Vector, idx int, mc *machine.MachineContext) error {
-			v.Set(idx, mc.Arg(2))
-			return nil
+			return v.Set(idx, mc.Arg(2))
 		},
 	)
 }

@@ -106,14 +106,14 @@ func (p *Rational) IsInteger() bool {
 
 // Add returns the sum of two numbers.
 //
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
-	if p.IsZero() {
-		return o
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Rational:
 		result := new(big.Rat).Add(p.value, v.value)
@@ -143,11 +143,14 @@ func (p *Rational) Add(o Number) Number {
 
 // Subtract returns the difference of two numbers.
 //
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Rational:
 		result := new(big.Rat).Sub(p.value, v.value)
@@ -180,7 +183,10 @@ func (p *Rational) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Rational) Multiply(o Number) Number {
 	if o.IsZero() {
-		return o
+		return multiplyResultForZero(o, p)
+	}
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *Rational:
@@ -292,11 +298,13 @@ func (p *Rational) ToExact() Number {
 	return p
 }
 
-// ToInexact converts this Rational to an inexact Float.
+// ToInexact converts this Rational to an inexact BigFloat.
 //
 // R7RS §6.2.6: inexact returns an inexact representation of its argument.
+// L18: Use big.Float.SetRat to preserve precision for large rationals.
 func (p *Rational) ToInexact() Number {
-	return NewFloat(p.Float64())
+	f := new(big.Float).SetRat(p.value)
+	return NewBigFloat(f)
 }
 
 // IsPositive returns true if this rational is positive.
@@ -389,10 +397,16 @@ func (p *Rational) IsVoid() bool {
 }
 
 // EqualTo returns true if the rationals have equal values.
+// Handles comparison with Integer and BigInteger for symmetry with
+// whole-valued rationals (e.g., 5/1 == 5).
 func (p *Rational) EqualTo(v Value) bool {
-	other, ok := v.(*Rational)
-	if ok {
+	switch other := v.(type) {
+	case *Rational:
 		return p.value.Cmp(other.value) == 0
+	case *Integer:
+		return p.value.Cmp(new(big.Rat).SetInt64(other.Value)) == 0
+	case *BigInteger:
+		return p.value.Cmp(new(big.Rat).SetInt(other.BigInt())) == 0
 	}
 	return false
 }

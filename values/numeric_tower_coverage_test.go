@@ -305,7 +305,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"BigInteger+Integer":    "*values.BigInteger",
 		"BigInteger+BigInteger": "*values.BigInteger",
 		"BigInteger+Rational":   "*values.Rational",
-		"BigInteger+Float":      "*values.Float",
+		"BigInteger+Float":      "*values.BigFloat", // Changed: precision preservation
 		"BigInteger+BigFloat":   "*values.BigFloat",
 		"BigInteger+Complex":    "*values.Complex",
 		"BigInteger+BigComplex": "*values.BigComplex",
@@ -460,7 +460,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"BigInteger/Integer":    "*values.Rational",
 		"BigInteger/BigInteger": "*values.Rational",
 		"BigInteger/Rational":   "*values.Rational",
-		"BigInteger/Float":      "*values.Float",
+		"BigInteger/Float":      "*values.BigFloat", // Changed: precision preservation
 		"BigInteger/BigFloat":   "*values.BigFloat",
 		"BigInteger/Complex":    "*values.Complex",
 		"BigInteger/BigComplex": "*values.BigComplex",

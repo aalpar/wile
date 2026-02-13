@@ -4,7 +4,7 @@
 ;;;   ./test/run-all.scm
 ;;;   scheme -f test/run-all.scm
 ;;;
-;;; Discovers all *-test.scm and *_test.scm files and executes them.
+;;; Discovers all *-test.scm files and executes them.
 
 (import (scheme base)
         (scheme write)

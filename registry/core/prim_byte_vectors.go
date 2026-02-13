@@ -135,11 +135,7 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "bytevector-copy")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "bytevector-copy")
+	start, end, err := helpers.ParseSubrange(rest, len(*bv), "bytevector-copy")
 	if err != nil {
 		return err
 	}
@@ -167,15 +163,11 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 	}
 	rest := mc.Arg(3)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*fromBv)), "bytevector-copy!")
+	start, end, err := helpers.ParseSubrange(rest, len(*fromBv), "bytevector-copy!")
 	if err != nil {
 		return err
 	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*fromBv)), "bytevector-copy!")
-	if err != nil {
-		return err
-	}
-	if atIdx.Value < 0 || atIdx.Value+(end-start) > int64(len(*toBv)) {
+	if atIdx.Value < 0 || atIdx.Value+int64(end-start) > int64(len(*toBv)) {
 		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
 
@@ -219,6 +211,10 @@ func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error
 
 // PrimUtf8ToString implements the utf8->string primitive.
 // Converts a UTF-8 encoded bytevector to a string with optional start and end indices.
+//
+// R7RS §6.9: (utf8->string bytevector [start [end]])
+// Decodes the bytes of a bytevector between start and end (byte positions) and
+// returns the corresponding string.
 func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "utf8->string")
 	if err != nil {
@@ -226,11 +222,7 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(*bv)), "utf8->string")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(*bv)), "utf8->string")
+	start, end, err := helpers.ParseSubrange(rest, len(*bv), "utf8->string")
 	if err != nil {
 		return err
 	}
@@ -246,6 +238,10 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringToUtf8 implements the string->utf8 primitive.
 // Converts a string to a UTF-8 encoded bytevector with optional start and end indices.
+//
+// R7RS §6.9: (string->utf8 string [start [end]])
+// Returns a newly allocated bytevector containing the UTF-8 encoding of the
+// characters in string between start and end (character positions, not byte positions).
 func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->utf8")
 	if err != nil {
@@ -253,18 +249,19 @@ func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	s := str.Value
-	start, end, err := helpers.ParseOptionalStartEnd(rest, int64(len(s)), "string->utf8")
-	if err != nil {
-		return err
-	}
-	err = helpers.ValidateStartEnd(start, end, int64(len(s)), "string->utf8")
+	// Convert to runes for CHARACTER-based indexing (R7RS §6.9)
+	runes := []rune(str.Value)
+
+	// Parse indices as CHARACTER positions
+	start, end, err := helpers.ParseSubrange(rest, len(runes), "string->utf8")
 	if err != nil {
 		return err
 	}
 
-	// Convert string to bytevector
-	bytes := []byte(s[start:end])
+	// Extract character range, convert to UTF-8 bytes
+	substring := string(runes[start:end])
+	bytes := []byte(substring)
+
 	bv := make(values.ByteVector, len(bytes))
 	for i, b := range bytes {
 		bv[i] = values.NewByte(b)

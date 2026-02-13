@@ -138,7 +138,7 @@ func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
-	var lastResult Value
+	var lastResult = Void
 	for {
 		stx, err := pr.ReadSyntax(ctx)
 		if err != nil {
@@ -428,4 +428,70 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 		return err
 	}
 	return nil
+}
+
+// LoadPath Stack API
+// These methods provide access to the load path stack for tracking files
+// currently being loaded. The stack enables relative path resolution during
+// load operations.
+
+// WithLoadPath executes fn with absPath pushed onto the load path stack.
+// This is the recommended API for embedders - it guarantees balanced push/pop
+// via defer even if fn panics or returns an error.
+//
+// absPath must be an absolute path (panics if relative).
+//
+// Example:
+//
+//	err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
+//	    return engine.EvalString("(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	})
+func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
+	p.PushLoadPath(absPath)
+	defer p.PopLoadPath()
+	return fn()
+}
+
+// CurrentLoadPath returns the absolute path of the file currently being loaded,
+// or empty string if no file is being loaded.
+func (p *Engine) CurrentLoadPath() string {
+	stack := p.topLevel.LoadPathStack()
+	if stack == nil {
+		return ""
+	}
+	return stack.Current()
+}
+
+// CurrentLoadDirectory returns the directory of the file currently being loaded,
+// or empty string if no file is being loaded.
+func (p *Engine) CurrentLoadDirectory() string {
+	stack := p.topLevel.LoadPathStack()
+	if stack == nil {
+		return ""
+	}
+	return stack.CurrentDir()
+}
+
+// PushLoadPath pushes an absolute path onto the load path stack.
+// Panics if absPath is not absolute.
+//
+// Advanced embedders who need fine-grained control can use Push/Pop directly,
+// but most should use WithLoadPath for automatic cleanup.
+func (p *Engine) PushLoadPath(absPath string) {
+	stack := p.topLevel.LoadPathStack()
+	if stack != nil {
+		stack.Push(absPath)
+	}
+}
+
+// PopLoadPath removes the top path from the load path stack.
+// Does nothing if the stack is empty.
+//
+// Advanced embedders who need fine-grained control can use Push/Pop directly,
+// but most should use WithLoadPath for automatic cleanup.
+func (p *Engine) PopLoadPath() {
+	stack := p.topLevel.LoadPathStack()
+	if stack != nil {
+		stack.Pop()
+	}
 }

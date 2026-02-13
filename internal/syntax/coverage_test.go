@@ -43,8 +43,9 @@ func TestSourceIndexes_Inc(t *testing.T) {
 func TestSourceIndexes_NewLine(t *testing.T) {
 	sidx := NewSourceIndexes(10, 5, 2)
 	result := sidx.NewLine()
-	qt.Assert(t, result, qt.Equals, 11)
-	qt.Assert(t, sidx.Index(), qt.Equals, 11)
+	// NewLine() does not increment index - that's done by Inc(n)
+	qt.Assert(t, result, qt.Equals, 10)
+	qt.Assert(t, sidx.Index(), qt.Equals, 10)
 	qt.Assert(t, sidx.Column(), qt.Equals, 0)
 	qt.Assert(t, sidx.Line(), qt.Equals, 3)
 }

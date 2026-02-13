@@ -200,7 +200,7 @@ func TestComplexPredicates(t *testing.T) {
 		isNaN      bool
 	}{
 		{"standard", NewComplexFromParts(1.0, 2.0), false, false, true, false},
-		{"real integer", NewComplexFromParts(5.0, 0.0), true, false, true, false},
+		{"real integer", NewComplexFromParts(5.0, 0.0), true, true, true, false},
 		{"with inf", NewComplexFromParts(math.Inf(1), 0.0), false, false, false, false},
 		{"with NaN real", NewComplexFromParts(math.NaN(), 0.0), false, false, false, true},
 		{"with NaN imag", NewComplexFromParts(0.0, math.NaN()), false, false, false, true},
@@ -320,9 +320,10 @@ func TestRationalExactness(t *testing.T) {
 	c.Assert(exact, SchemeEquals, r)
 
 	inexact := r.ToInexact()
-	f, ok := inexact.(*Float)
+	// L18: ToInexact now returns BigFloat for precision
+	bf, ok := inexact.(*BigFloat)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(f.Value > 0.33, qt.IsTrue)
+	c.Assert(bf.Float64() > 0.33, qt.IsTrue)
 }
 
 func TestRationalHashCode(t *testing.T) {

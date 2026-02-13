@@ -1478,13 +1478,13 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 			rest := s[i:]
 			if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
 				strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
-				strings.HasPrefix(rest, "+i") || strings.HasPrefix(rest, "-i") ||
+				rest == "+" || rest == "-" ||
 				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/') {
 				signPos = i
 				break
 			}
-			signPos = i
-			break
+			// Not a valid imaginary separator; skip to next sign
+			continue
 		}
 	}
 

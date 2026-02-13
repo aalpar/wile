@@ -101,29 +101,29 @@ func DatumToSyntaxValue(sctx *syntax.SourceContext, o values.Value) syntax.Synta
 	switch v := o.(type) {
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, sctx)
-	case *values.Pair:
-		// If the datum is a Datum, we wrap it in a SyntaxValue with a zero source context.
-		var pr0stx *syntax.SyntaxPair
-		pr1, ok := v.Cdr().(*values.Pair)
+	case values.Tuple:
+		// If the datum is a Tuple (Pair or ArrayList), wrap it in SyntaxValue
+		var tuple0stx *syntax.SyntaxPair
+		tuple1, ok := v.Cdr().(values.Tuple)
 		if !ok {
-			// If the cdr is not a Pair, we create a new Pair with an empty list as the cdr.
+			// If the cdr is not a Tuple, we have an improper list - wrap both car and cdr
 			return syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, v.Cdr()), sctx)
 		}
 		var v0 values.Value
-		var pr *syntax.SyntaxPair
-		pr0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
-		pr = pr0stx
-		v0, _ = pr1.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v1 values.Value) error {
-			pr.SetCdr(
+		var tuple *syntax.SyntaxPair
+		tuple0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(sctx, v.Car()), DatumToSyntaxValue(sctx, values.EmptyList), sctx)
+		tuple = tuple0stx
+		v0, _ = tuple1.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v1 values.Value) error {
+			tuple.SetCdr(
 				syntax.NewSyntaxCons(
 					DatumToSyntaxValue(sctx, v1),
 					DatumToSyntaxValue(sctx, values.EmptyList),
 					sctx))
-			pr = pr.Cdr().(*syntax.SyntaxPair)
+			tuple = tuple.Cdr().(*syntax.SyntaxPair)
 			return nil
 		})
-		pr.SetCdr(DatumToSyntaxValue(sctx, v0))
-		return pr0stx
+		tuple.SetCdr(DatumToSyntaxValue(sctx, v0))
+		return tuple0stx
 	case *values.Box:
 		bx0 := values.NewBox(DatumToSyntaxValue(sctx, v.Unbox()))
 		return syntax.NewSyntaxObject(bx0, sctx)

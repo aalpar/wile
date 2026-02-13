@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add Gabriel benchmark suite with 16 canonical benchmarks (tak, takl, ctak, cpstak, fib, triangl, sum, sumfp, diviter, divrec, deriv, ackermann, sieve, nqueens, primes, peval) comparable across Scheme implementations
+- Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
+- Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
+- Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
+
+### Fixed
+
+- Fix `read-string` and `read-bytevector` unbounded allocation vulnerability allowing denial-of-service via out-of-memory crashes — added 100 MB per-call allocation limit with clear error messages when exceeded (prevents `(read-string 999999999999 port)` from crashing the process)
+- Fix `read-bytevector` and `read-bytevector!` dropping partial reads at EOF instead of returning available bytes, violating R7RS §6.13.3 and Go's `io.Reader` contract (when Read returns `(n > 0, io.EOF)`, the n bytes must be processed before examining the error)
+- Fix `string->utf8` using byte indices instead of character indices for start/end parameters, causing incorrect UTF-8 encoding and invalid byte sequences for non-ASCII strings (R7RS §6.9 specifies character positions)
+- Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines, causing all output to run together)
+- Fix compilation error in `examples/data-structures/association-lists.scm` (undefined `sort` procedure; added insertion sort implementation)
+
 ## [1.2.0] - 2026-02-11
 
 ### Added

@@ -472,3 +472,71 @@ func TestMathErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestL17_ExptBigIntegerPrecision tests L17 fix for large integer exponentiation.
+func TestL17_ExptBigIntegerPrecision(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Large integer exponentiation stays exact
+		{"2^1000 is exact", `(exact? (expt 2 1000))`, values.TrueValue},
+		{"2^100 is exact", `(exact? (expt 2 100))`, values.TrueValue},
+		{"10^50 is exact", `(exact? (expt 10 50))`, values.TrueValue},
+
+		// Verify correctness for small cases
+		{"2^10 = 1024", `(= (expt 2 10) 1024)`, values.TrueValue},
+		{"10^3 = 1000", `(= (expt 10 3) 1000)`, values.TrueValue},
+
+		// Exactness preservation through composition
+		{"(2^500)^2 is exact", `(exact? (expt (expt 2 500) 2))`, values.TrueValue},
+		{"(2^500)^2 = 2^1000", `(= (expt (expt 2 500) 2) (expt 2 1000))`, values.TrueValue},
+
+		// Negative integer exponents return exact rationals
+		{"2^-1 = 1/2", `(= (expt 2 -1) 1/2)`, values.TrueValue},
+		{"2^-1 is exact", `(exact? (expt 2 -1))`, values.TrueValue},
+
+		// Fractional exponents return inexact
+		{"2^0.5 is inexact", `(inexact? (expt 2 0.5))`, values.TrueValue},
+
+		// Large base stays exact
+		{"(10^20)^2 is exact", `(exact? (expt (expt 10 20) 2))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestL18_RationalToInexactPrecision tests L18 fix for rational precision.
+func TestL18_RationalToInexactPrecision(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Large rationals preserve magnitude
+		{"large rational magnitude", `(> (inexact (/ (expt 2 100) 3)) 1e29)`, values.TrueValue},
+		{"very large rational", `(> (inexact (/ (expt 10 50) 7)) 1e48)`, values.TrueValue},
+
+		// Small rationals still work
+		{"1/3 approximation", `(< (abs (- (inexact (/ 1 3)) 0.333333)) 0.001)`, values.TrueValue},
+		{"1/2 exact", `(= (inexact (/ 1 2)) 0.5)`, values.TrueValue},
+
+		// Exactness contagion
+		{"inexact rational is inexact", `(inexact? (inexact (/ 1 3)))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}

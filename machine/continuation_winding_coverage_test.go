@@ -841,3 +841,81 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	err := mc.RunWithEscapeHandling()
 	c.Assert(err, qt.IsNotNil)
 }
+
+// TestWindingStackAliasingBug_M2 verifies that winding stack slicing uses
+// cap-limited slices to prevent append from corrupting shared backing arrays.
+//
+// The test creates a continuation with multiple dynamic-wind frames, invokes
+// it (triggering unwind/rewind), then checks that the winding stack operations
+// maintain correct state without corruption from backing array aliasing.
+//
+// R7RS §6.10: Continuations can be invoked multiple times. If the winding
+// stack is corrupted during unwinding, subsequent invocations execute the
+// wrong before/after thunks, breaking the dynamic-wind guarantee.
+func TestWindingStackAliasingBug_M2(t *testing.T) {
+	c := qt.New(t)
+	env := newFullRuntimeEnv(t)
+
+	// Track before/after thunk invocations to verify no corruption
+	code := `
+		(begin
+		  (define log '())
+		  (define (record! msg) (set! log (cons msg log)))
+		  (define k #f)
+		  (define invoked 0)
+
+		  ; Set up dynamic-wind frames and capture continuation
+		  (dynamic-wind
+		    (lambda () (record! 'before1))
+		    (lambda ()
+		      (dynamic-wind
+		        (lambda () (record! 'before2))
+		        (lambda ()
+		          (dynamic-wind
+		            (lambda () (record! 'before3))
+		            (lambda ()
+		              (if (= invoked 0)
+		                  (call/cc (lambda (cont) (set! k cont))))
+		              (set! invoked (+ invoked 1))
+		              (record! 'body))
+		            (lambda () (record! 'after3))))
+		        (lambda () (record! 'after2))))
+		    (lambda () (record! 'after1)))
+
+		  ; Invoke continuation once to trigger unwind/rewind
+		  ; This tests the winding stack aliasing bug
+		  (if (< invoked 2) (k 'reinvoke))
+
+		  ; Return log for verification
+		  log)
+	`
+
+	mc, err := runSchemeExpr(t, env, code)
+	c.Assert(err, qt.IsNil)
+
+	// Verify the log sequence (reverse order because cons prepends)
+	expected := []string{
+		"after1", "after2", "after3", "body", // Second exit (from k invocation)
+		"before3", "before2", "before1", // Re-entry from continuation invocation
+		"after1", "after2", "after3", "body", // First exit (normal)
+		"before3", "before2", "before1", // Initial entry and execution
+	}
+
+	// Extract log as a list of symbols (returned from the code above)
+	// Convert to Go slice for comparison
+	var logSymbols []string
+	curr := mc.GetValue()
+	for !values.IsEmptyList(curr) {
+		pair, ok := curr.(*values.Pair)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected pair, got %T", curr))
+
+		sym, ok := pair.Car().(*values.Symbol)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol, got %T", pair.Car()))
+		logSymbols = append(logSymbols, sym.Key)
+
+		curr = pair.Cdr()
+	}
+
+	c.Assert(logSymbols, qt.DeepEquals, expected,
+		qt.Commentf("winding stack corruption detected: before/after thunks called in wrong order"))
+}

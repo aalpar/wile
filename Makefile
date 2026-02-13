@@ -56,6 +56,8 @@ endif
 
 .PHONY: build
 build: $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
+	@ln -sf $(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(DIST_DIR)/$(MY_BIN)
+	@echo "Created symlink: $(DIST_DIR)/$(MY_BIN) -> $(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)"
 
 # Generic build rule for any OS/arch combination
 $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
@@ -63,7 +65,7 @@ $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
 	$(eval TARGET_OS := $(word 1,$(OS_ARCH)))
 	$(eval TARGET_ARCH := $(word 2,$(OS_ARCH)))
 	@mkdir -p $(DIST_DIR)/$*
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/scheme
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64: $(DIST_DIR)/darwin/arm64/$(MY_BIN)
@@ -86,6 +88,10 @@ build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-a
 examples:
 	$(GO_BUILD) -o /dev/null ./examples/embedding/
 	$(GO_BUILD) -o /dev/null ./examples/embedding/source-tracking/
+
+# run extensive builds and tests
+.PHONY: all
+all: lint test covercheck readme-check build-all
 
 # Compile tests for all packages without running them.
 # Useful for verifying that tests compile after refactoring.
@@ -152,6 +158,30 @@ bench-schelog: build
 	else \
 		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
 	fi
+
+# Run canonical Gabriel benchmark suite (16 benchmarks).
+# These benchmarks are comparable across Scheme implementations.
+# Saves timestamped CSV results to examples/benchmarks/canonical-results-*.csv.
+#   make bench-gabriel
+.PHONY: bench-gabriel
+bench-gabriel: build
+	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-canonical.sh
+
+# Run all Scheme benchmarks (canonical + non-canonical).
+# Includes 21 total benchmarks, some of which are Wile-specific.
+#   make bench-gabriel-all
+.PHONY: bench-gabriel-all
+bench-gabriel-all: build
+	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-all.sh
+
+# Compare Wile against other Scheme implementations.
+# Requires other Schemes installed (chez, racket, chibi, guile).
+# Saves comparison results to examples/benchmarks/comparison-*.csv.
+#   make bench-gabriel-compare
+#   make bench-gabriel-compare BENCHMARKS="tak fib ack deriv"
+.PHONY: bench-gabriel-compare
+bench-gabriel-compare: build
+	@cd examples/benchmarks && ./compare-schemes.sh
 
 PROFILE_DIR=$(GO_BUILD_DIR)/profiles
 

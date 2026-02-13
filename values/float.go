@@ -68,11 +68,14 @@ func (p *Float) toBigComplex() *BigComplex {
 
 // Add returns the sum of two numbers.
 //
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value + float64(v.Value))
@@ -96,11 +99,14 @@ func (p *Float) Add(o Number) Number {
 
 // Subtract returns the difference of two numbers.
 //
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
+//
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return NewFloat(p.Value - float64(v.Value))
@@ -129,8 +135,11 @@ func (p *Float) Subtract(o Number) Number {
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Float) Multiply(o Number) Number {
-	if o.IsZero() {
-		return o
+	if o.IsZero() && p.IsFinite() {
+		return multiplyResultForZero(o, p)
+	}
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *Integer:
@@ -335,10 +344,14 @@ func (p *Float) IsVoid() bool {
 }
 
 // EqualTo returns true if both floats have the same value.
+// Handles comparison with both Float and BigFloat types for symmetry.
 func (p *Float) EqualTo(v Value) bool {
-	other, ok := v.(*Float)
-	if ok {
+	switch other := v.(type) {
+	case *Float:
 		return p.Value == other.Value
+	case *BigFloat:
+		vf := new(big.Float).SetFloat64(p.Value)
+		return vf.Cmp(other.BigFloatValue()) == 0
 	}
 	return false
 }

@@ -37,6 +37,21 @@ var (
 //
 // R7RS §6.2.3: Implementations may support arbitrarily large exact integers.
 // BigInteger provides this capability using Go's math/big.Int.
+//
+// # Precision Preservation
+//
+// BigInteger operations with Float preserve precision by promoting to BigFloat
+// for comparison and arithmetic. This avoids precision loss from converting
+// large BigIntegers to float64 (which has only 53 bits of mantissa precision).
+//
+// Prior to M5 fix, BigIntegers with >53 significant bits would be truncated
+// when compared with Float, causing incorrect comparison results. For example,
+// comparing 2^53+1 with 2^53.0 would incorrectly report equality after both
+// were converted to the same float64 value.
+//
+// The fix promotes both operands to BigFloat (arbitrary precision), ensuring
+// correct comparisons and arithmetic while preserving R7RS exactness contagion
+// (exact + inexact → inexact).
 type BigInteger struct {
 	value *big.Int
 }
@@ -115,28 +130,30 @@ func (p *BigInteger) toBigComplex() *BigComplex {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
-	if p.IsZero() {
-		return o
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.value)}
 	case *Integer:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.bigInt())}
 	case *Float:
-		// no constructor for big.Float from big.Int, so convert via float64
-		f := p.float64Val()
-		return NewFloat(f + v.Value)
+		// Promote to BigFloat for precision-preserving arithmetic.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
+		self := p.bigFloat()
+		other := v.bigFloat()
+		result := new(big.Float).Add(self, other)
+		return NewBigFloat(result)
 	case *Rational:
 		// Convert BigInteger to Rational and add
 		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Add(pRat, v.Rat()))
 	case *Complex:
+		// For Complex, we must use float64 (Complex type uses float64 parts).
+		// This loses precision for large BigIntegers, but Complex itself is inexact.
 		f := p.float64Val()
-		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) + v.Datum())
 	case *BigFloat:
 		self := p.bigFloat()
@@ -155,23 +172,29 @@ func (p *BigInteger) Add(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *BigInteger:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}
 	case *Integer:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.bigInt())}
 	case *Float:
-		f := p.float64Val()
-		return NewFloat(f - v.Value)
+		// Promote to BigFloat for precision-preserving arithmetic.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
+		self := p.bigFloat()
+		other := v.bigFloat()
+		result := new(big.Float).Sub(self, other)
+		return NewBigFloat(result)
 	case *Rational:
 		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Sub(pRat, v.Rat()))
 	case *Complex:
+		// For Complex, we must use float64 (Complex type uses float64 parts).
+		// This loses precision for large BigIntegers, but Complex itself is inexact.
 		f := p.float64Val()
-		// no constructor for big.Float from big.Int, so convert via float64
 		return NewComplex(complex(f, 0) - v.Datum())
 	case *BigFloat:
 		self := p.bigFloat()
@@ -194,10 +217,10 @@ func (p *BigInteger) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Multiply(o Number) Number {
 	if o.IsZero() {
-		return NewBigIntegerFromInt64(0)
+		return multiplyResultForZero(o, p)
 	}
-	if p.IsZero() {
-		return p
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *BigInteger:
@@ -205,12 +228,19 @@ func (p *BigInteger) Multiply(o Number) Number {
 	case *Integer:
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.bigInt())}
 	case *Float:
-		f := p.float64Val()
-		return NewFloat(f * v.Value)
+		// Promote to BigFloat for precision-preserving arithmetic.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
+		self := p.bigFloat()
+		other := v.bigFloat()
+		result := new(big.Float).Mul(self, other)
+		return NewBigFloat(result)
 	case *Rational:
 		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Mul(pRat, v.Rat()))
 	case *Complex:
+		// For Complex, we must use float64 (Complex type uses float64 parts).
+		// This loses precision for large BigIntegers, but Complex itself is inexact.
 		f := p.float64Val()
 		return NewComplex(complex(f, 0) * v.Datum())
 	case *BigFloat:
@@ -253,12 +283,19 @@ func (p *BigInteger) Divide(o Number) Number {
 		}
 		return NewRationalFromBigInt(p.value, divisor)
 	case *Float:
-		f := p.float64Val()
-		return NewFloat(f / v.Value)
+		// Promote to BigFloat for precision-preserving arithmetic.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
+		self := p.bigFloat()
+		other := v.bigFloat()
+		result := new(big.Float).Quo(self, other)
+		return NewBigFloat(result)
 	case *Rational:
 		pRat := p.bigRat()
 		return NewRationalFromRat(new(big.Rat).Quo(pRat, v.Rat()))
 	case *Complex:
+		// For Complex, we must use float64 (Complex type uses float64 parts).
+		// This loses precision for large BigIntegers, but Complex itself is inexact.
 		f := p.float64Val()
 		return NewComplex(complex(f, 0) / v.Datum())
 	case *BigFloat:
@@ -349,6 +386,11 @@ func (p *BigInteger) ToExact() Number {
 //
 // R7RS §6.2.3: The inexact representation may have limited precision,
 // but the conversion should be as close as practical.
+//
+// PRECISION NOTE: For BigIntegers with more than 53 significant bits,
+// precision is lost when converting to float64 (IEEE 754 binary64 has
+// only 53 bits of mantissa precision). This is compliant with R7RS
+// which allows inexact to be approximate.
 func (p *BigInteger) ToInexact() Number {
 	f := p.float64Val()
 	return NewFloat(f)
@@ -375,13 +417,12 @@ func (p *BigInteger) Compare(o Number) int {
 	case *Integer:
 		return p.value.Cmp(v.bigInt())
 	case *Float:
-		f := p.float64Val()
-		if f < v.Value {
-			return -1
-		} else if f > v.Value {
-			return 1
-		}
-		return 0
+		// Convert both to BigFloat to preserve precision.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		// Pattern matches Float.Compare() and Integer.Compare() with BigFloat.
+		self := p.bigFloat()
+		other := v.bigFloat()
+		return self.Cmp(other)
 	case *BigFloat:
 		self := p.bigFloat()
 		return self.Cmp(v.BigFloatValue())
@@ -389,13 +430,11 @@ func (p *BigInteger) Compare(o Number) int {
 		pRat := p.bigRat()
 		return pRat.Cmp(v.Rat())
 	case *Complex:
-		f := p.float64Val()
-		if f < real(v.Value) {
-			return -1
-		} else if f > real(v.Value) {
-			return 1
-		}
-		return 0
+		// Compare real parts at BigFloat precision.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		self := p.bigFloat()
+		realPart := NewFloat(real(v.Value)).bigFloat()
+		return self.Cmp(realPart)
 	case *BigComplex:
 		self := p.bigFloat()
 		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
@@ -418,17 +457,16 @@ func (p *BigInteger) IsVoid() bool {
 // R7RS §6.2.6: The = procedure compares numerical values for equality.
 // BigInteger also compares equal to Integer when values match.
 func (p *BigInteger) EqualTo(o Value) bool {
-	v, ok := o.(*BigInteger)
-	if !ok {
-		// Also check if equal to regular Integer
-		i, ok := o.(*Integer)
-		if ok {
-			return p.value.Cmp(i.bigInt()) == 0
+	switch other := o.(type) {
+	case *BigInteger:
+		if other == nil || p == nil {
+			return p == other
 		}
-		return false
+		return p.value.Cmp(other.value) == 0
+	case *Integer:
+		return p.value.Cmp(other.bigInt()) == 0
+	case *Rational:
+		return other.value.Cmp(new(big.Rat).SetInt(p.BigInt())) == 0
 	}
-	if v == nil || p == nil {
-		return p == v
-	}
-	return p.value.Cmp(v.value) == 0
+	return false
 }

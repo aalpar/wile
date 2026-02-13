@@ -59,7 +59,8 @@ func TestSourceIndexes_Tab(t *testing.T) {
 	t.Run("from column 0", func(t *testing.T) {
 		sidx := NewSourceIndexes(10, 0, 1)
 		result := sidx.Tab()
-		c.Assert(result, qt.Equals, 11)
+		// Tab() does not increment index - that's done by Inc(n)
+		c.Assert(result, qt.Equals, 10)
 		c.Assert(sidx.Column(), qt.Equals, 8)
 		c.Assert(sidx.Line(), qt.Equals, 1)
 	})
@@ -67,7 +68,7 @@ func TestSourceIndexes_Tab(t *testing.T) {
 	t.Run("from column 3", func(t *testing.T) {
 		sidx := NewSourceIndexes(10, 3, 1)
 		result := sidx.Tab()
-		c.Assert(result, qt.Equals, 11)
+		c.Assert(result, qt.Equals, 10)
 		// 8 - (3 % 8) = 8 - 3 = 5, so column = 3 + 5 = 8
 		c.Assert(sidx.Column(), qt.Equals, 8)
 	})
@@ -75,7 +76,7 @@ func TestSourceIndexes_Tab(t *testing.T) {
 	t.Run("from column 7", func(t *testing.T) {
 		sidx := NewSourceIndexes(10, 7, 1)
 		result := sidx.Tab()
-		c.Assert(result, qt.Equals, 11)
+		c.Assert(result, qt.Equals, 10)
 		// 8 - (7 % 8) = 8 - 7 = 1, so column = 7 + 1 = 8
 		c.Assert(sidx.Column(), qt.Equals, 8)
 	})
@@ -83,7 +84,7 @@ func TestSourceIndexes_Tab(t *testing.T) {
 	t.Run("from column 8", func(t *testing.T) {
 		sidx := NewSourceIndexes(10, 8, 1)
 		result := sidx.Tab()
-		c.Assert(result, qt.Equals, 11)
+		c.Assert(result, qt.Equals, 10)
 		// 8 - (8 % 8) = 8 - 0 = 8, so column = 8 + 8 = 16
 		c.Assert(sidx.Column(), qt.Equals, 16)
 	})

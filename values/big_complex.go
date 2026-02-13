@@ -131,8 +131,12 @@ func promoteToBigComplexPart(n Number) Number {
 }
 
 // addParts adds two BigComplex-compatible parts.
+// Inputs are promoted to BigComplex-compatible types (BigInteger, Rational,
+// or BigFloat) to handle results from multiplyParts that may return Integer
+// via the exact-zero multiplication optimization.
 func addParts(a, b Number) Number {
-	// Parts are BigInteger, Rational, or BigFloat
+	a = promoteToBigComplexPart(a)
+	b = promoteToBigComplexPart(b)
 	switch va := a.(type) {
 	case *BigInteger:
 		switch vb := b.(type) {
@@ -159,7 +163,10 @@ func addParts(a, b Number) Number {
 }
 
 // subtractParts subtracts two BigComplex-compatible parts.
+// Inputs are promoted for the same reason as addParts.
 func subtractParts(a, b Number) Number {
+	a = promoteToBigComplexPart(a)
+	b = promoteToBigComplexPart(b)
 	switch va := a.(type) {
 	case *BigInteger:
 		switch vb := b.(type) {
@@ -250,12 +257,9 @@ func divideParts(a, b Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigComplex) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
-	if p.IsZero() {
-		return o
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *BigComplex:
 		newReal := addParts(p.real, v.real)
@@ -293,9 +297,9 @@ func (p *BigComplex) Add(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigComplex) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *BigComplex:
 		newReal := subtractParts(p.real, v.real)
@@ -333,21 +337,10 @@ func (p *BigComplex) Subtract(o Number) Number {
 // R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
 func (p *BigComplex) Multiply(o Number) Number {
 	if o.IsZero() {
-		// Return zero with appropriate exactness
-		if p.IsExact() {
-			switch v := o.(type) {
-			case *BigInteger, *Integer:
-				return NewBigIntegerFromInt64(0)
-			case *BigComplex:
-				if v.IsExact() {
-					return NewBigIntegerFromInt64(0)
-				}
-			}
-		}
-		return NewBigFloatFromFloat64(0)
+		return multiplyResultForZero(o, p)
 	}
-	if p.IsZero() {
-		return p
+	if p.IsZero() && o.IsFinite() {
+		return multiplyResultForZero(p, o)
 	}
 	switch v := o.(type) {
 	case *BigComplex:
@@ -572,19 +565,27 @@ func (p *BigComplex) ToExact() Number {
 }
 
 // toExactPart converts a BigComplex part to an exact type (BigInteger or Rational).
+//
+// R7RS §6.2.6: exact converts to exact representation, preserving value.
+// For BigFloat, converts via big.Rat (not truncation) to preserve fractional parts.
 func toExactPart(n Number) Number {
 	switch v := n.(type) {
-	case *BigInteger:
+	case *BigInteger, *Rational:
 		return v
-	case *Rational:
-		return v // Already exact
 	case *BigFloat:
-		// Truncate to integer
-		i, _ := v.value.Int(nil)
-		if i == nil {
-			i = big.NewInt(0)
+		// Convert via big.Rat to preserve fractional values
+		// E.g., 1.5 -> 3/2 (not truncated to 1)
+		f, _ := v.value.Float64()
+		r := new(big.Rat).SetFloat64(f)
+		if r == nil {
+			// Non-finite value (should not happen for BigFloat)
+			panic("toExactPart: BigFloat contains non-finite value")
 		}
-		return &BigInteger{value: i}
+		if r.IsInt() {
+			num := r.Num()
+			return NewBigInteger(new(big.Int).Set(num))
+		}
+		return NewRationalFromRat(r)
 	}
 	panic("toExactPart: unexpected type")
 }
@@ -665,7 +666,7 @@ func (p *BigComplex) SchemeString() string {
 	case *BigFloat:
 		isNeg = v.IsNegative()
 	case *Rational:
-		isNeg = v.Rat().Sign() < 0
+		isNeg = v.IsNegative()
 	}
 	if isNeg {
 		return realStr + imagStr + "i"

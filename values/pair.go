@@ -106,6 +106,10 @@ func (p *Pair) IsList() bool {
 
 // Append appends the given Value vs to the end of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
+//
+// R7RS §6.4: The resulting list is always newly allocated, except that it shares
+// structure with the last argument. This implementation copies the spine of p
+// and sets the last cdr to vs.
 func (p *Pair) Append(vs Value) Value {
 	if !p.IsList() {
 		panic(ErrNotAList)
@@ -116,24 +120,41 @@ func (p *Pair) Append(vs Value) Value {
 	if IsVoid(p) {
 		return vs
 	}
+
+	// Copy the spine of p and append vs
+	// R7RS §6.4: all arguments except the last must be newly allocated
+	var head, tail *Pair
 	q := p
-	for !IsVoid(q) && !IsEmptyList(q.Cdr()) {
-		ok := false
-		// Type assertion to *Pair required because we need to mutate q[1] directly
-		// via pointer. Tuple interface doesn't expose mutable internal structure.
-		q, ok = q.Cdr().(*Pair)
-		if !ok {
+	for !IsEmptyList(q) {
+		newPair := NewCons(q.Car(), EmptyList)
+		if head == nil {
+			head = newPair
+			tail = newPair
+		} else {
+			tail[1] = newPair
+			tail = newPair
+		}
+
+		cdr := q.Cdr()
+		if IsEmptyList(cdr) {
 			break
 		}
+		var ok bool
+		q, ok = cdr.(*Pair)
+		if !ok {
+			panic(ErrNotAList)
+		}
 	}
-	if q.IsVoid() {
-		panic(ErrNotAList)
+
+	// Attach vs to the last copied pair
+	if tail != nil {
+		tail[1] = vs
 	}
-	q[1] = vs
-	return p
+
+	return head
 }
 
-// Len returns the length of the list represented by the Pair.
+// Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
 func (p *Pair) Length() int {
 	q := 0
@@ -193,11 +214,7 @@ func Must(v Value, err error) {
 }
 
 // EqualTo checks if the Pair is equal to another Value o.
-//
-// Implementation note: This method requires *Pair (not Tuple) because:
-// 1. It uses pointer identity comparison (p == v) for early exit
-// 2. It needs type-specific equality (Pair vs ArrayList are not equal even if structurally identical)
-// 3. R7RS equal? distinguishes between representation types
+// Delegates to the cycle-aware pairEqualToDeep to handle circular lists.
 func (p *Pair) EqualTo(o Value) bool {
 	v, ok := o.(*Pair)
 	if !ok {
@@ -206,34 +223,7 @@ func (p *Pair) EqualTo(o Value) bool {
 	if p == v {
 		return true
 	}
-	p0 := p
-	v0 := v
-	for {
-		if !EqualTo(p0[0], v0[0]) {
-			return false
-		}
-		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
-		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
-		// and a non-nil cdr are not.
-		if IsVoid(p0[1]) || IsVoid(v0[1]) {
-			if IsVoid(p0[1]) && IsVoid(v0[1]) {
-				return true
-			}
-			return p0[1] == v0[1]
-		}
-		if p0[1] == v0[1] {
-			return true
-		}
-		// Type assertions to *Pair required for iterative list traversal
-		// with pointer identity comparison for cycle detection.
-		pv0, _ := p0[1].(*Pair)
-		vv0, _ := v0[1].(*Pair)
-		if pv0 == nil || vv0 == nil {
-			return p0[1].EqualTo(v0[1])
-		}
-		p0 = pv0
-		v0 = vv0
-	}
+	return pairEqualToDeep(p, v, make(map[equalPairKey]bool))
 }
 
 // IsVoid checks if the Pair is void (nil).

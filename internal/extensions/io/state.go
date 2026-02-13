@@ -16,6 +16,7 @@ package io
 
 import (
 	"os"
+	"sync"
 	"time"
 
 	"github.com/aalpar/wile/internal/parser"
@@ -33,6 +34,10 @@ var (
 	currentOutputPortParam *machine.Parameter
 	// currentErrorPortParam is the parameter holding the current error port.
 	currentErrorPortParam *machine.Parameter
+	// cacheMu protects concurrent access to Tokenizers and Parsers maps.
+	// Use RLock for reads, Lock for writes and deletes.
+	// Fixes T1 from architectural review (thread safety).
+	cacheMu sync.RWMutex
 	// Tokenizers caches tokenizers per input port.
 	//
 	// These are strong references: closing a port does not evict its cache
@@ -45,20 +50,30 @@ var (
 	// To diagnose: run with GODEBUG=gctrace=1 or use runtime/pprof to
 	// inspect heap; look for tokenizer.Tokenizer / parser.Parser objects
 	// retained via this map.
+	//
+	// Thread safety: All access must be protected by cacheMu.
 	Tokenizers map[values.Value]*tokenizer.Tokenizer
 	// Parsers caches parsers per input port.
 	// Same retention caveat as Tokenizers above.
+	//
+	// Thread safety: All access must be protected by cacheMu.
 	Parsers map[values.Value]*parser.Parser
 	// ProgramStartTime is used for current-jiffy to measure elapsed time.
 	ProgramStartTime = time.Now()
-)
 
-// stateInitialized tracks whether InitState has been called.
-var stateInitialized bool
+	// stateMu protects concurrent access to stateInitialized flag and initialization.
+	stateMu sync.Mutex
+	// stateInitialized tracks whether InitState has been called.
+	stateInitialized bool
+)
 
 // InitState initializes the primitives state. Must be called before using I/O primitives.
 // Safe to call multiple times - subsequent calls are no-ops.
+// Thread-safe: protected by stateMu.
 func InitState() {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+
 	if stateInitialized {
 		return
 	}
@@ -83,13 +98,19 @@ func InitState() {
 }
 
 // ResetState resets the primitives state. Used for testing.
+// Thread-safe: protected by stateMu and cacheMu.
 func ResetState() {
+	stateMu.Lock()
 	stateInitialized = false
 	currentInputPortParam = nil
 	currentOutputPortParam = nil
 	currentErrorPortParam = nil
+	stateMu.Unlock()
+
+	cacheMu.Lock()
 	Tokenizers = nil
 	Parsers = nil
+	cacheMu.Unlock()
 }
 
 // GetCurrentInputPort returns the current input port from the parameter.

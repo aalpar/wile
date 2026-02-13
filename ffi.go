@@ -593,18 +593,23 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 // If the Go func type includes an error return, the error is returned normally.
 // Otherwise, the error is panicked (standard Go pattern for unrecoverable callback failures).
 func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) []reflect.Value {
+	wrapped := values.WrapForeignErrorWithCause(
+		values.ErrFFICallbackError, err,
+		"callback invocation failed",
+	)
 	if hasErrorReturn {
 		out := make([]reflect.Value, funcType.NumOut())
 		for i := range out {
 			if i == funcType.NumOut()-1 {
-				out[i] = reflect.ValueOf(&err).Elem()
+				out[i] = reflect.ValueOf(&wrapped).Elem()
 			} else {
 				out[i] = reflect.Zero(funcType.Out(i))
 			}
 		}
 		return out
 	}
-	panic(err)
+	// No error return: panic with wrapped error
+	panic(wrapped)
 }
 
 // callbackSuccessResult builds reflect return values from a successful callback invocation.
@@ -622,17 +627,21 @@ func callbackSuccessResult(
 	if resultConv != nil {
 		converted, convErr := resultConv(ctx, mc, schemeResult)
 		if convErr != nil {
+			wrapped := values.WrapForeignErrorWithCause(
+				values.ErrCallbackResultConversion, convErr,
+				"callback result conversion failed",
+			)
 			if hasErrorReturn {
 				for i := range out {
 					if i == numOut-1 {
-						out[i] = reflect.ValueOf(&convErr).Elem()
+						out[i] = reflect.ValueOf(&wrapped).Elem()
 					} else {
 						out[i] = reflect.Zero(funcType.Out(i))
 					}
 				}
 				return out
 			}
-			panic(convErr)
+			panic(wrapped)
 		}
 		out[0] = converted
 	}
@@ -815,7 +824,11 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 			schemeVal := valConv(iter.Value())
 			setErr := ht.Set(schemeKey, schemeVal)
 			if setErr != nil {
-				panic(fmt.Sprintf("wile: RegisterFunc %q: map return conversion failed: %v", name, setErr))
+				panic(values.WrapForeignErrorWithCause(
+					values.ErrHashtableInsertionFailed, setErr,
+					"RegisterFunc %q: map return conversion failed inserting key %v",
+					name, iter.Key(),
+				))
 			}
 		}
 		return ht
