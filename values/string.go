@@ -33,34 +33,40 @@ const stringInternMaxLen = 64
 var stringInterns sync.Map // map[string]*String
 
 // String represents a Scheme string value.
+// R7RS §6.7: Literal strings and strings from symbol->string are immutable.
 type String struct {
-	Value string
+	Value     string
+	immutable bool
 }
 
 // NewString returns a String value. Short strings (up to 64 bytes)
 // are automatically interned and return the same pointer for the same value.
+// Interned strings are immutable per R7RS §6.7.
 func NewString(str string) *String {
 	if len(str) <= stringInternMaxLen {
-		return InternString(str)
+		s := InternString(str)
+		s.immutable = true
+		return s
 	}
-	return &String{Value: str}
+	return &String{Value: str, immutable: false}
 }
 
 // NewMutableString returns a newly allocated String that is not interned.
 // Use this for strings that may be mutated (e.g., via string-set! or string-fill!).
 // R7RS §6.7: Procedures like string-copy return mutable strings.
 func NewMutableString(str string) *String {
-	return &String{Value: str}
+	return &String{Value: str, immutable: false}
 }
 
 // InternString returns an interned String for the given value.
 // Multiple calls with the same string value return the same pointer.
+// Interned strings are immutable per R7RS §6.7.
 func InternString(str string) *String {
 	existing, ok := stringInterns.Load(str)
 	if ok {
 		return existing.(*String)
 	}
-	newStr := &String{Value: str}
+	newStr := &String{Value: str, immutable: true}
 	actual, _ := stringInterns.LoadOrStore(str, newStr)
 	return actual.(*String)
 }
@@ -98,23 +104,44 @@ func (p *String) String() string {
 	return p.Value
 }
 
+// IsImmutable returns true if the string cannot be mutated.
+// Interned strings and strings returned by symbol->string are immutable.
+// R7RS §6.7: It is an error to apply mutation procedures to literal strings
+// or strings returned by symbol->string.
+func (p *String) IsImmutable() bool {
+	return p.immutable
+}
+
 // SetChar sets the character at index k to the given rune.
-// This modifies the string in place.
+// Returns an error if the string is immutable.
+//
 // R7RS §6.7: (string-set! string k char)
-func (p *String) SetChar(k int, char rune) {
+// R7RS §6.7: "It is an error" to mutate literal strings or strings
+// returned by symbol->string. This implementation signals an error
+// when mutation is attempted on immutable strings.
+func (p *String) SetChar(k int, char rune) error {
+	if p.immutable {
+		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+	}
 	runes := []rune(p.Value)
 	runes[k] = char
 	p.Value = string(runes)
+	return nil
 }
 
 // Fill fills the string (or a portion of it) with the given character.
+// Returns an error if the string is immutable.
 // R7RS §6.7: (string-fill! string fill [start [end]])
-func (p *String) Fill(char rune, start, end int) {
+func (p *String) Fill(char rune, start, end int) error {
+	if p.immutable {
+		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+	}
 	runes := []rune(p.Value)
 	for i := start; i < end; i++ {
 		runes[i] = char
 	}
 	p.Value = string(runes)
+	return nil
 }
 
 // Len returns the length of the string in characters (runes).
@@ -137,10 +164,14 @@ func (p *String) Get(i int) Value {
 }
 
 // Set sets the character at the given rune index from a Character value.
+// Returns an error if the string is immutable.
 //
 // R7RS §6.7: (string-set! string k char) stores char in element k.
-func (p *String) Set(i int, v Value) {
-	p.SetChar(i, v.(*Character).Value)
+func (p *String) Set(i int, v Value) error {
+	if p.immutable {
+		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+	}
+	return p.SetChar(i, v.(*Character).Value)
 }
 
 // Runes returns the string as a slice of runes.
@@ -149,6 +180,11 @@ func (p *String) Runes() []rune {
 }
 
 // SetValue sets the entire string value.
-func (p *String) SetValue(s string) {
+// Returns an error if the string is immutable.
+func (p *String) SetValue(s string) error {
+	if p.immutable {
+		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+	}
 	p.Value = s
+	return nil
 }

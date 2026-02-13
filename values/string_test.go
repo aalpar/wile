@@ -102,3 +102,91 @@ func TestString_InternString(t *testing.T) {
 	// Values should be correct
 	qt.Assert(t, sIntern1.Value, qt.Equals, longStr)
 }
+
+func TestStringImmutability(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("interned strings are immutable", func(t *testing.T) {
+		s := NewString("hello") // ≤64 bytes, gets interned
+		c.Assert(s.IsImmutable(), qt.IsTrue)
+	})
+
+	t.Run("mutable strings are mutable", func(t *testing.T) {
+		s := NewMutableString("hello")
+		c.Assert(s.IsImmutable(), qt.IsFalse)
+	})
+
+	t.Run("SetChar fails on immutable", func(t *testing.T) {
+		s := NewString("x")
+		err := s.SetChar(0, 'y')
+		c.Assert(err, qt.Not(qt.IsNil))
+		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
+	})
+
+	t.Run("SetChar succeeds on mutable", func(t *testing.T) {
+		s := NewMutableString("x")
+		err := s.SetChar(0, 'y')
+		c.Assert(err, qt.IsNil)
+		c.Assert(s.Value, qt.Equals, "y")
+	})
+
+	t.Run("Fill fails on immutable", func(t *testing.T) {
+		s := NewString("hello")
+		err := s.Fill('x', 0, 5)
+		c.Assert(err, qt.Not(qt.IsNil))
+		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
+	})
+
+	t.Run("Fill succeeds on mutable", func(t *testing.T) {
+		s := NewMutableString("hello")
+		err := s.Fill('x', 0, 5)
+		c.Assert(err, qt.IsNil)
+		c.Assert(s.Value, qt.Equals, "xxxxx")
+	})
+
+	t.Run("SetValue fails on immutable", func(t *testing.T) {
+		s := NewString("hello")
+		err := s.SetValue("world")
+		c.Assert(err, qt.Not(qt.IsNil))
+		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
+	})
+
+	t.Run("SetValue succeeds on mutable", func(t *testing.T) {
+		s := NewMutableString("hello")
+		err := s.SetValue("world")
+		c.Assert(err, qt.IsNil)
+		c.Assert(s.Value, qt.Equals, "world")
+	})
+
+	t.Run("Set fails on immutable", func(t *testing.T) {
+		s := NewString("hello")
+		err := s.Set(0, NewCharacter('H'))
+		c.Assert(err, qt.Not(qt.IsNil))
+		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
+	})
+
+	t.Run("Set succeeds on mutable", func(t *testing.T) {
+		s := NewMutableString("hello")
+		err := s.Set(0, NewCharacter('H'))
+		c.Assert(err, qt.IsNil)
+		c.Assert(s.Value, qt.Equals, "Hello")
+	})
+}
+
+func TestStringInternPreserved(t *testing.T) {
+	c := qt.New(t)
+
+	s1 := NewString("test")
+	s2 := NewString("test")
+
+	// Same interned pointer
+	c.Assert(s1 == s2, qt.IsTrue)
+
+	// Cannot mutate
+	err := s1.SetChar(0, 'X')
+	c.Assert(err, qt.Not(qt.IsNil))
+
+	// Both still unchanged
+	c.Assert(s1.Value, qt.Equals, "test")
+	c.Assert(s2.Value, qt.Equals, "test")
+}

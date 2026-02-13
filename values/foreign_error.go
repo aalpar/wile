@@ -109,6 +109,7 @@ var (
 	ErrNotAPromptTag         = NewStaticError("not a prompt tag")
 	ErrTypeConversion        = NewStaticError("type conversion failed")
 	ErrIndexOutOfRange       = NewStaticError("index out of range")
+	ErrImmutableString       = NewStaticError("cannot mutate immutable string")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.

@@ -72,12 +72,16 @@ func (p *ByteVector) Get(i int) Value {
 	return (*p)[i]
 }
 
-func (p *ByteVector) Set(i int, value Value) {
+// Set sets the element at the specified index to the given value.
+// ByteVectors are always mutable, so this never returns an error from immutability.
+// Returns an error if the value is not a Byte.
+func (p *ByteVector) Set(i int, value Value) error {
 	x, ok := value.(*Byte)
 	if !ok {
-		panic(NewForeignErrorf("bytevector element must be a byte: %v", ErrNotAByte))
+		return WrapForeignErrorf(ErrNotAByte, "bytevector element must be a byte")
 	}
 	(*p)[i] = x
+	return nil
 }
 
 // AsList converts the vector to a proper list (linked list of pairs).

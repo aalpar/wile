@@ -102,7 +102,12 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	toRunes := to.Runes()
 	fromRunes := from.Runes()
 	copy(toRunes[at:], fromRunes[start:end])
-	to.SetValue(string(toRunes))
+
+	// SetValue checks immutability
+	err = to.SetValue(string(toRunes))
+	if err != nil {
+		return err
+	}
 
 	mc.SetValue(values.Void)
 	return nil
@@ -162,7 +167,12 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("string-fill!: invalid indices")
 	}
 
-	s.Fill(char.Value, start, end)
+	// Fill checks immutability
+	err = s.Fill(char.Value, start, end)
+	if err != nil {
+		return err
+	}
+
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -242,7 +252,8 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 		result[i] = char.Value
 	}
 
-	mc.SetValue(values.NewString(string(result)))
+	// R7RS §6.7: string-map returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(string(result)))
 	return nil
 }
 
@@ -360,7 +371,8 @@ func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
 	// Use Unicode full case mapping (language-independent)
 	caser := cases.Upper(language.Und)
 	result := caser.String(str.Value)
-	mc.SetValue(values.NewString(result))
+	// R7RS §6.7: string-upcase returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(result))
 	return nil
 }
 
@@ -375,7 +387,8 @@ func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 	// Use Unicode full case mapping (language-independent)
 	caser := cases.Lower(language.Und)
 	result := caser.String(str.Value)
-	mc.SetValue(values.NewString(result))
+	// R7RS §6.7: string-downcase returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(result))
 	return nil
 }
 
@@ -390,6 +403,7 @@ func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
 	// Use Unicode full case folding
 	caser := cases.Fold()
 	result := caser.String(str.Value)
-	mc.SetValue(values.NewString(result))
+	// R7RS §6.7: string-foldcase returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(result))
 	return nil
 }

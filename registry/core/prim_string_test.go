@@ -1608,3 +1608,49 @@ func TestStringToListErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestStringSetImmutable(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{
+			name: "string-set! on literal",
+			code: `(string-set! "hello" 0 #\H)`,
+		},
+		{
+			name: "string-set! on symbol->string",
+			code: `(string-set! (symbol->string 'test) 0 #\x)`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestStringSetMutable(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "string-set! on string-copy",
+			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
+			expected: values.NewString("Hello"),
+		},
+		{
+			name:     "string-set! on make-string",
+			code:     `(let ((s (make-string 5 #\a))) (string-set! s 2 #\x) s)`,
+			expected: values.NewString("aaxaa"),
+		},
+		{
+			name:     "string-set! on list->string",
+			code:     `(let ((s (list->string '(#\h #\i)))) (string-set! s 0 #\H) s)`,
+			expected: values.NewString("Hi"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
