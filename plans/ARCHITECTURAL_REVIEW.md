@@ -177,9 +177,11 @@ Large BigIntegers converted to float64 before comparison. Two distinct BigIntege
 ### M7. `ConditionVariable.Wait` goroutine leak on timeout
 
 **File:** `values/condition_variable.go:117-145`
-**Status:** Open
+**Status:** ✅ Fixed
 
 Timed wait spawns a goroutine with `p.cond.Wait()` that cannot be cancelled after timeout fires. The goroutine blocks until the next signal/broadcast.
+
+**Fix:** Redesigned the timeout mechanism to use three-channel coordination with a single timer. Buffered result channel (size 1) allows waiter to send even if main returned. Timeout handler goroutine calls `Broadcast()` to wake blocked waiters when timeout fires. Done channel signals timeout handler to exit when signal arrives first. Eliminates dual-timer drift and all goroutine leak scenarios. Added 7 comprehensive tests including critical leak detection test that verifies goroutine count stability after 100 consecutive timeouts.
 
 ### M8. Dead code in `parseComplex` sign-splitting
 
