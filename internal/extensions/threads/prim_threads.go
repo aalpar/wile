@@ -109,6 +109,11 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 
 	thread := values.NewThread(thunk, name)
 
+	// Capture parent state BEFORE creating the closure that will run in a different goroutine.
+	// This avoids the data race in T4 from the architectural review, where mc.NewSubContext()
+	// would access parent MachineContext fields from the child goroutine.
+	params := mc.CaptureSubContextParams()
+
 	// Set the run function that will execute the thunk
 	thread.RunFunc = func(ctx context.Context, thunk values.Value) (values.Value, error) {
 		// Get closure
@@ -117,10 +122,10 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 			return nil, values.NewForeignError("make-thread: thunk must be a procedure")
 		}
 
-		// Create a new machine context for this thread.
-		// Sub-contexts have isolated continuation chains, which is appropriate for threads.
-		sub := mc.NewSubContext()
-		sub.SetThread(thread) // Set thread identity on the sub-context
+		// Create a new machine context for this thread using captured parent state.
+		// This is safe to call from a different goroutine because it doesn't access
+		// the parent MachineContext fields.
+		sub := machine.NewThreadSubContext(params, thread)
 		thread.CleanupFunc = func() {
 			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
 		}

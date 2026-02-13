@@ -466,6 +466,53 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	}
 }
 
+// SubContextParams holds the parent state needed to create a thread's sub-context.
+// This is used to avoid race conditions when creating sub-contexts across goroutine boundaries.
+type SubContextParams struct {
+	Ctx        context.Context
+	Env        *environment.EnvironmentFrame
+	ParentMC   *MachineContext
+	EscapeCont *MachineContinuation
+}
+
+// CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
+// This is used by thread creation to avoid race conditions when accessing the parent MachineContext
+// from a child goroutine (T4 from architectural review).
+//
+// Call this in the parent goroutine before creating the child goroutine, then pass the result
+// to NewThreadSubContext in the child goroutine.
+func (p *MachineContext) CaptureSubContextParams() SubContextParams {
+	return SubContextParams{
+		Ctx:        p.ctx,
+		Env:        p.env.TopLevel(),
+		ParentMC:   p,
+		EscapeCont: p.escapeCont,
+	}
+}
+
+// NewThreadSubContext creates a sub-context for a thread using previously captured parent state.
+// Unlike NewSubContext, this doesn't access the parent MachineContext fields, making it safe to call
+// from a different goroutine. The thread parameter should be the new thread object, which provides
+// the thread identity for the new context.
+//
+// This function is specifically designed for SRFI-18 thread creation. For other uses of sub-contexts
+// (like map, for-each, dynamic-wind), use NewSubContext instead.
+func NewThreadSubContext(params SubContextParams, thread *values.Thread) *MachineContext {
+	sub := &MachineContext{
+		ctx: params.Ctx,
+		vmState: vmState{
+			env:   params.Env,
+			evals: NewStack(),
+			// threadID will be set by SetThread below
+		},
+		parentMC:   params.ParentMC,
+		escapeCont: params.EscapeCont,
+		// thread will be set by SetThread below
+	}
+	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()
+	return sub
+}
+
 // SetExpanderContext sets the expander context for this machine context.
 // This is called when invoking macro transformers to enable syntax-local-* primitives.
 func (p *MachineContext) SetExpanderContext(ctx *ExpanderContext) {

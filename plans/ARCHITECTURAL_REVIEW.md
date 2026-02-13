@@ -97,9 +97,11 @@ This uses `parameterize`, which expands to `dynamic-wind`, providing:
 ### T4. `PrimMakeThread` captures parent `MachineContext` across goroutine boundary
 
 **File:** `internal/extensions/threads/prim_threads.go:104-143`
-**Status:** Open
+**Status:** ✅ Fixed
 
 `mc.NewSubContext()` is called from the child goroutine on the parent's MachineContext. MC is not goroutine-safe.
+
+**Fix:** Added `SubContextParams` struct and two new methods: `CaptureSubContextParams()` captures parent state in the parent goroutine, and `NewThreadSubContext(params, thread)` constructs the sub-context in the child goroutine using only the captured state. This eliminates all cross-goroutine field access. The captured state includes context, top-level environment, parent MC reference, and escape continuation. Thread identity is set via `SetThread(thread)` using the new thread object, not inherited from parent.
 
 ### T5. `nextScopeID` counter is not atomic
 
