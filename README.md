@@ -161,6 +161,23 @@ ls examples/
 
 ## Key Features in Action
 
+**Logic Programming** — Full Prolog embedded in Scheme
+
+```scheme
+(load "examples/logic/schelog/schelog.scm")
+
+(%rel (append xs ys zs)
+  ((append () ?ys ?ys))
+  ((append (?x . ?xs) ?ys (?x . ?zs))
+   (append ?xs ?ys ?zs)))
+
+(%which (zs)
+  (append '(1 2) '(3 4) zs))
+;; ⇒ ((zs 1 2 3 4))
+```
+
+*See [examples/logic/schelog/](examples/logic/schelog/) for a complete Prolog implementation in ~500 lines of Scheme.*
+
 **Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
 
 ```scheme

@@ -289,6 +289,174 @@ func (p *SyntaxVectorSuite) TestSyntaxForEach_ErrorStopsIteration(c *qt.C) {
 	c.Assert(seen[1], values.SchemeEquals, v2)
 }
 
+// TestAddScope_EmptyVector verifies empty vectors return unchanged
+func (p *SyntaxVectorSuite) TestAddScope_EmptyVector(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+	emptyVec := NewSyntaxVector(sc)
+	scope := NewScope()
+
+	result := emptyVec.AddScope(scope)
+
+	c.Assert(result, qt.Equals, emptyVec)
+}
+
+// TestAddScope_NilVector verifies nil vector returns as-is
+func (p *SyntaxVectorSuite) TestAddScope_NilVector(c *qt.C) {
+	var nilVec *SyntaxVector
+	scope := NewScope()
+
+	result := nilVec.AddScope(scope)
+
+	c.Assert(result, qt.IsNil)
+}
+
+// TestAddScope_VectorWithSymbols verifies symbols receive scopes
+func (p *SyntaxVectorSuite) TestAddScope_VectorWithSymbols(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym1 := NewSyntaxSymbol("x", sc)
+	sym2 := NewSyntaxSymbol("y", sc)
+	vec := NewSyntaxVector(sc, sym1, sym2)
+	scope := NewScope()
+
+	result := vec.AddScope(scope)
+
+	// Result should be a new vector
+	c.Assert(result, qt.Not(qt.Equals), vec)
+	resultVec := result.(*SyntaxVector)
+	c.Assert(len(resultVec.Values), qt.Equals, 2)
+
+	// Each symbol should have the scope
+	resultSym1 := resultVec.Values[0].(*SyntaxSymbol)
+	resultSym2 := resultVec.Values[1].(*SyntaxSymbol)
+
+	c.Assert(HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
+	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+}
+
+// TestAddScope_VectorWithObjects verifies SyntaxObject elements unchanged
+func (p *SyntaxVectorSuite) TestAddScope_VectorWithObjects(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	num := NewSyntaxObject(values.NewInteger(42), sc)
+	str := NewSyntaxObject(values.NewString("hello"), sc)
+	vec := NewSyntaxVector(sc, num, str)
+	scope := NewScope()
+
+	result := vec.AddScope(scope)
+
+	// Result should be same vector (no changes)
+	c.Assert(result, qt.Equals, vec)
+}
+
+// TestAddScope_VectorWithPair verifies pairs propagate scopes to nested symbols
+func (p *SyntaxVectorSuite) TestAddScope_VectorWithPair(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym1 := NewSyntaxSymbol("a", sc)
+	sym2 := NewSyntaxSymbol("b", sc)
+	pair := NewSyntaxCons(sym1, sym2, sc)
+	vec := NewSyntaxVector(sc, pair)
+	scope := NewScope()
+
+	result := vec.AddScope(scope)
+
+	// Result should be a new vector
+	c.Assert(result, qt.Not(qt.Equals), vec)
+	resultVec := result.(*SyntaxVector)
+
+	// Pair should have scope propagated to its elements
+	resultPair := resultVec.Values[0].(*SyntaxPair)
+	resultSym1 := resultPair.SyntaxCar().(*SyntaxSymbol)
+	resultSym2 := resultPair.SyntaxCdr().(*SyntaxSymbol)
+
+	c.Assert(HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
+	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+}
+
+// TestAddScope_NestedVectors verifies deep nesting propagates scopes correctly
+func (p *SyntaxVectorSuite) TestAddScope_NestedVectors(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym := NewSyntaxSymbol("x", sc)
+	innerVec := NewSyntaxVector(sc, sym)
+	outerVec := NewSyntaxVector(sc, innerVec)
+	scope := NewScope()
+
+	result := outerVec.AddScope(scope)
+
+	// Navigate to deeply nested symbol
+	resultOuter := result.(*SyntaxVector)
+	resultInner := resultOuter.Values[0].(*SyntaxVector)
+	resultSym := resultInner.Values[0].(*SyntaxSymbol)
+
+	c.Assert(HasScope(resultSym.Scopes(), scope), qt.IsTrue)
+}
+
+// TestAddScope_MixedElements verifies mixed types handled correctly
+func (p *SyntaxVectorSuite) TestAddScope_MixedElements(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym := NewSyntaxSymbol("x", sc)
+	num := NewSyntaxObject(values.NewInteger(42), sc)
+	vec := NewSyntaxVector(sc, sym, num)
+	scope := NewScope()
+
+	result := vec.AddScope(scope)
+
+	// Result should be a new vector (symbol changed)
+	c.Assert(result, qt.Not(qt.Equals), vec)
+	resultVec := result.(*SyntaxVector)
+
+	// Symbol should have scope
+	resultSym := resultVec.Values[0].(*SyntaxSymbol)
+	c.Assert(HasScope(resultSym.Scopes(), scope), qt.IsTrue)
+
+	// Number should be unchanged
+	c.Assert(resultVec.Values[1], qt.Equals, num)
+}
+
+// TestAddScope_VectorWithNilElements verifies nil elements preserved
+func (p *SyntaxVectorSuite) TestAddScope_VectorWithNilElements(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym := NewSyntaxSymbol("x", sc)
+	vec := NewSyntaxVector(sc, sym, nil, sym)
+	scope := NewScope()
+
+	result := vec.AddScope(scope)
+
+	resultVec := result.(*SyntaxVector)
+	c.Assert(len(resultVec.Values), qt.Equals, 3)
+	c.Assert(resultVec.Values[1], qt.IsNil)
+
+	// Symbols should have scope
+	resultSym0 := resultVec.Values[0].(*SyntaxSymbol)
+	resultSym2 := resultVec.Values[2].(*SyntaxSymbol)
+	c.Assert(HasScope(resultSym0.Scopes(), scope), qt.IsTrue)
+	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+}
+
+// TestAddScope_MultipleScopes verifies accumulation of multiple scopes
+func (p *SyntaxVectorSuite) TestAddScope_MultipleScopes(c *qt.C) {
+	sc := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{})
+
+	sym := NewSyntaxSymbol("x", sc)
+	vec := NewSyntaxVector(sc, sym)
+	scope1 := NewScope()
+	scope2 := NewScope()
+
+	result1 := vec.AddScope(scope1).(*SyntaxVector)
+	result2 := result1.AddScope(scope2)
+
+	resultVec := result2.(*SyntaxVector)
+	resultSym := resultVec.Values[0].(*SyntaxSymbol)
+
+	// Symbol should have both scopes
+	c.Assert(HasScope(resultSym.Scopes(), scope1), qt.IsTrue)
+	c.Assert(HasScope(resultSym.Scopes(), scope2), qt.IsTrue)
+}
+
 func TestSyntaxVector(t *testing.T) {
 	qtsuite.Run(qt.New(t), &SyntaxVectorSuite{})
 }

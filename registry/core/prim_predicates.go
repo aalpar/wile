@@ -161,7 +161,7 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 	case values.RealNumber:
 		_ = v
 		mc.SetValue(values.TrueValue)
-	case *values.BigComplex:
+	case values.ComplexNumber:
 		mc.SetValue(schemeutil.BoolToBoolean(v.IsReal()))
 	default:
 		mc.SetValue(values.FalseValue)

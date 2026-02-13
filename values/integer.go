@@ -56,7 +56,7 @@ type Integer struct {
 }
 
 // NewInteger returns an Integer value. Small integers in the range
-// -256 to 255 are cached and return the same pointer for the same value.
+// -32768 to 32767 are cached and return the same pointer for the same value.
 func NewInteger(v int64) *Integer {
 	if v >= intCacheMin && v <= intCacheMax {
 		return intCache[v-intCacheMin]
@@ -167,12 +167,9 @@ func negateInt64(v int64) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Add(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
-	if p.IsZero() {
-		return o
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
+	// so the result's exactness MUST match the other operand.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return addInt64(p.Value, v.Value)
@@ -201,9 +198,9 @@ func (p *Integer) Add(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Integer) Subtract(o Number) Number {
-	if o.IsZero() {
-		return p
-	}
+	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
+	// so the result's exactness MUST match the minuend.
+	// No zero short-circuit allowed (unlike multiplication).
 	switch v := o.(type) {
 	case *Integer:
 		return subInt64(p.Value, v.Value)

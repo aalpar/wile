@@ -32,9 +32,31 @@ type SyntaxVector struct {
 	syntaxBase
 }
 
-// AddScope returns the vector unchanged as vectors do not track scopes.
-func (p *SyntaxVector) AddScope(_ *Scope) SyntaxValue {
-	return p
+// AddScope recursively propagates a scope to all nested syntax values.
+//
+// This implements scope propagation for Flatt's "sets of scopes" hygiene.
+// When a macro expands, the intro scope must be added to all identifiers
+// (symbols) in the expansion. This method walks the vector structure and
+// calls AddScope on each element, ultimately reaching the symbols.
+//
+// Only symbols store scopes for hygiene resolution. Vectors just propagate.
+func (p *SyntaxVector) AddScope(scope *Scope) SyntaxValue {
+	// Nil or empty vector has no symbols to propagate to
+	if p == nil || len(p.Values) == 0 {
+		return p
+	}
+
+	// Use the generic mapSyntaxTree traversal to add scope to all nested nodes.
+	// mapSyntaxTree handles vector recursion and calls the function on elements.
+	return mapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
+		// Try to call AddScope on nodes that support it (symbols, pairs, vectors, etc.)
+		adder, ok := node.(interface{ AddScope(*Scope) SyntaxValue })
+		if ok {
+			return adder.AddScope(scope)
+		}
+		// Nodes that don't support AddScope are returned unchanged (SyntaxObject)
+		return node
+	})
 }
 
 // NewSyntaxVector creates a new syntax vector with the given source context and elements.

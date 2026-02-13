@@ -35,8 +35,8 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	mc.PushExceptionHandler(handler)
 
 	// Run thunk in sub-context
+	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
-	sub.SetExceptionHandler(mc.ExceptionHandler())
 
 	_, err := sub.ApplyCallable(thunk)
 	if err != nil {
@@ -69,8 +69,8 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
 func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Value) (values.Value, error) {
+	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
-	sub.SetExceptionHandler(mc.ExceptionHandler())
 
 	_, err := sub.ApplyCallable(handler, condition)
 	if err != nil {
@@ -108,8 +108,8 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 		return value, nil
 	}
 
+	// Exception handler automatically inherited from parent (M3 fix)
 	resumeSub := mc.NewSubContext()
-	resumeSub.SetExceptionHandler(mc.ExceptionHandler())
 	resumeSub.Restore(cont)
 	resumeSub.SetValue(value)
 

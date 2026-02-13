@@ -359,6 +359,8 @@ func addScopeToSyntax(val values.Value, scope *syntax.Scope) values.Value {
 			return s.AddScope(scope)
 		case *syntax.SyntaxPair:
 			return s.AddScope(scope)
+		case *syntax.SyntaxVector:
+			return s.AddScope(scope)
 		default:
 			// Other syntax types (SyntaxObject, etc.) don't need scopes
 			return stx

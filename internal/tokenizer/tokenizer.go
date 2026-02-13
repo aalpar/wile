@@ -604,6 +604,17 @@ func (p *Tokenizer) readHexEscapeToken() {
 		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator, p.tokenStart, p.tokenEnd)
 		return
 	}
+	// H9 FIX: Validate Unicode code point constraints
+	// R7RS §6.7: hex scalar value is any Unicode code point (0 to 0x10FFFF)
+	// except surrogates (0xD800-0xDFFF)
+	if x > 0x10FFFF {
+		p.err = NewTokenizerError(MessageCodePointExceedsUnicodeMaximum, p.tokenStart, p.tokenEnd)
+		return
+	}
+	if x >= 0xD800 && x <= 0xDFFF {
+		p.err = NewTokenizerError(MessageCodePointIsSurrogate, p.tokenStart, p.tokenEnd)
+		return
+	}
 	p.next()
 	if p.err != nil {
 		return

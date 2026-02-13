@@ -82,10 +82,12 @@ func TestByteVector_Set(t *testing.T) {
 	c.Assert(bv.SchemeString(), qt.Equals, "#u8( 10 99 30 )")
 }
 
-func TestByteVector_Set_Panic(t *testing.T) {
+func TestByteVector_Set_Error(t *testing.T) {
 	c := qt.New(t)
 	bv := NewByteVector(NewByte(10))
-	c.Assert(func() { bv.Set(0, NewInteger(42)) }, qt.PanicMatches, ".*bytevector element must be a byte.*")
+	err := bv.Set(0, NewInteger(42))
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err, qt.ErrorMatches, ".*bytevector element must be a byte.*")
 }
 
 func TestByteVector_AsList(t *testing.T) {

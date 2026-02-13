@@ -46,8 +46,10 @@ func (p *Vector) Get(i int) Value {
 }
 
 // Set sets the element at the specified index to the given value.
-func (p *Vector) Set(i int, value Value) {
+// Vectors are always mutable, so this never returns an error.
+func (p *Vector) Set(i int, value Value) error {
 	(*p)[i] = value
+	return nil
 }
 
 // Length returns the number of elements in the vector.

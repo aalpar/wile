@@ -147,6 +147,23 @@ func Test_NewTemporaryVariableName(t *testing.T) {
 	qt.Assert(t, sym1.Key, qt.Not(qt.Equals), sym2.Key)
 }
 
+func Test_NewTemporaryVariableName_Uniqueness(t *testing.T) {
+	c := qt.New(t)
+	seen := make(map[string]bool)
+
+	// Generate 1000 names rapidly to test PRNG initialization and uniqueness
+	for i := 0; i < 1000; i++ {
+		name := NewTemporaryVariableName()
+		if seen[name.Key] {
+			c.Fatalf("duplicate name generated: %s", name.Key)
+		}
+		seen[name.Key] = true
+
+		// Verify format
+		c.Assert(name.Key[:4], qt.Equals, "__T_")
+	}
+}
+
 func Test_IsList(t *testing.T) {
 	tests := []struct {
 		name string

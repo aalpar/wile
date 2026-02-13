@@ -113,13 +113,14 @@
          ((and (zero? a) (zero? b))
           #t)
          ;; One is zero - use absolute difference
+         ;; R7RS: Use magnitude instead of abs for complex number support
          ((or (zero? a) (zero? b))
-          (< (abs (- a b)) epsilon))
+          (< (magnitude (- a b)) epsilon))
          ;; Normal numeric comparison using relative difference
          ;; Compare against the larger absolute value for stability
          (else
-          (let ((max-abs (max (abs a) (abs b))))
-            (< (abs (/ (- a b) max-abs)) epsilon)))))
+          (let ((max-mag (max (magnitude a) (magnitude b))))
+            (< (magnitude (/ (- a b) max-mag)) epsilon)))))
        ((and (pair? a) (pair? b))
         (and (%approx-equal? (car a) (car b) epsilon)
              (%approx-equal? (cdr a) (cdr b) epsilon)))

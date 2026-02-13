@@ -126,8 +126,15 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) error {
 	arg := mc.Arg(0)
 
+	// H7 FIX: Check that argument is a list before type assertion
+	tuple, ok := arg.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList,
+			"generate-temporaries: expected a list but got %T", arg)
+	}
+
 	// Count the length of the list
-	count := arg.(values.Tuple).Length()
+	count := tuple.Length()
 	// Generate fresh identifiers
 	result := values.EmptyList
 	for i := count - 1; i >= 0; i-- {

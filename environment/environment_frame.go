@@ -289,19 +289,27 @@ func scopesCompatible(binding *Binding, scopes []*syntax.Scope) bool {
 // resolveGlobal walks global bindings up the parent chain.
 // The visitor receives the frame and slot index for each matching key.
 // Returns the first non-nil visitor result.
+// Thread-safe: uses RLock for each frame's global keys/bindings access.
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
 	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
 ) any {
 	ge := p
 	for {
+		// Lock this frame's global environment for reading
+		ge.global.mu.RLock()
 		i, ok := ge.global.keys[key]
 		if ok {
+			// Call visitor while holding lock - visitor may access bindings[i]
 			result := visitor(ge.global, i)
+			ge.global.mu.RUnlock()
 			if result != nil {
 				return result
 			}
+		} else {
+			ge.global.mu.RUnlock()
 		}
+
 		if ge.IsTopLevel() {
 			break
 		}
@@ -567,15 +575,8 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 // It returns the GlobalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
-	key = p.InternSymbol(key)
-	_, ok := p.global.keys[*key]
-	if ok {
-		return NewGlobalIndex(key), false
-	}
-	i := len(p.global.bindings)
-	p.global.keys[*key] = i
-	p.global.SetBindings(append(p.global.Bindings(), NewBinding(values.Void, bt)))
-	return NewGlobalIndex(key), true
+	// Delegate to GlobalEnvironmentFrame's thread-safe method
+	return p.global.CreateGlobalBinding(key, bt)
 }
 
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol,
@@ -616,19 +617,17 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // It returns an error if the binding does not exist.
 func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
-	ge := p
-	i, ok := ge.global.keys[*gi.Index]
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such global binding %q", gi.Index)
-	}
-	ge.global.bindings[i].value = v
-	return nil
+	// Delegate to GlobalEnvironmentFrame's thread-safe method
+	return p.global.SetOwnGlobalValue(gi, v)
 }
 
 // SetGlobalBindingByIndex sets the global binding at the given index in the current global environment.
 // It does not search parent environments.
+// Thread-safe: uses full Lock for write access.
 func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
+	p.global.mu.Lock()
 	p.global.bindings[i] = bd
+	p.global.mu.Unlock()
 }
 
 // Copy creates a deep copy of the environment frame.

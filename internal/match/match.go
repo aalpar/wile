@@ -463,9 +463,14 @@ func valueToSyntaxValue(v values.Value) syntax.SyntaxValue {
 		return sv
 	}
 
+	// Check for empty list before Tuple (EmptyList implements Tuple but needs special handling)
+	if values.IsEmptyList(v) {
+		return syntax.SyntaxEmptyList
+	}
+
 	switch t := v.(type) {
-	case *values.Pair:
-		return valuePairToSyntaxPair(t)
+	case values.Tuple:
+		return valueTupleToSyntaxPair(t)
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbolForSymbol(t, nil)
 	default:
@@ -473,15 +478,16 @@ func valueToSyntaxValue(v values.Value) syntax.SyntaxValue {
 	}
 }
 
-// valuePairToSyntaxPair converts a values.Pair to syntax.SyntaxPair recursively.
-// Used by valueToSyntaxValue for nested pair structures.
-func valuePairToSyntaxPair(pr *values.Pair) *syntax.SyntaxPair {
-	if pr == nil || values.IsVoid(pr) {
+// valueTupleToSyntaxPair converts a values.Tuple to syntax.SyntaxPair recursively.
+// Used by valueToSyntaxValue for nested tuple structures.
+// Precondition: tuple is not nil, not void, and not empty list (checked by caller).
+func valueTupleToSyntaxPair(tuple values.Tuple) *syntax.SyntaxPair {
+	if tuple == nil || values.IsVoid(tuple) {
 		return nil
 	}
 
-	car := valueToSyntaxValue(pr.Car())
-	cdr := valueToSyntaxValue(pr.Cdr())
+	car := valueToSyntaxValue(tuple.Car())
+	cdr := valueToSyntaxValue(tuple.Cdr())
 	return syntax.NewSyntaxCons(car, cdr, nil)
 }
 

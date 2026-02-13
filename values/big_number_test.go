@@ -148,9 +148,13 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	sum := bi.Add(NewInteger(50))
 	c.Assert(sum.(*BigInteger).Int64(), qt.Equals, int64(150))
 
-	// Add with Float
+	// Add with Float - now returns BigFloat for precision preservation
 	sumF := bi.Add(NewFloat(0.5))
-	c.Assert(sumF.(*Float).Value, qt.Equals, float64(100.5))
+	// Result must be BigFloat (inexact) to preserve exactness contagion
+	bf, ok := sumF.(*BigFloat)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", sumF))
+	c.Assert(bf.Float64(), qt.Equals, float64(100.5))
+	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
 
 	// Add with Complex
 	sumC := bi.Add(NewComplex(complex(1, 2)))

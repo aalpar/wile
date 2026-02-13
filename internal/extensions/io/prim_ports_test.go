@@ -454,3 +454,206 @@ func TestCallWithPort(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// read-bytevector — R7RS §6.13.3
+// =============================================================================
+
+func TestReadBytevector(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Empty port: should return eof-object
+		{"empty port returns eof",
+			`(eof-object? (read-bytevector 10 (open-input-bytevector #u8())))`,
+			values.TrueValue},
+
+		// Exact k bytes: should return all k bytes
+		{"exact k bytes",
+			`(equal? (read-bytevector 3 (open-input-bytevector #u8(1 2 3))) #u8(1 2 3))`,
+			values.TrueValue},
+
+		// More than k bytes: should return first k bytes
+		{"more than k bytes",
+			`(equal? (read-bytevector 3 (open-input-bytevector #u8(1 2 3 4 5))) #u8(1 2 3))`,
+			values.TrueValue},
+
+		// M10 BUG CASE: Fewer than k bytes with EOF
+		// R7RS §6.13.3: "reads the next k bytes, or as many as are available
+		// before the end of file, whichever is fewer"
+		{"fewer than k bytes at EOF",
+			`(equal? (read-bytevector 10 (open-input-bytevector #u8(1 2))) #u8(1 2))`,
+			values.TrueValue},
+
+		// Zero bytes at EOF
+		{"zero bytes at EOF",
+			`(eof-object? (read-bytevector 5 (open-input-bytevector #u8())))`,
+			values.TrueValue},
+
+		// k = 0 edge case
+		{"k equals zero",
+			`(equal? (read-bytevector 0 (open-input-bytevector #u8(1 2 3))) #u8())`,
+			values.TrueValue},
+
+		// Successive reads: first returns partial, second returns EOF
+		{"successive reads",
+			`(let ((p (open-input-bytevector #u8(1 2))))
+               (let ((bv1 (read-bytevector 10 p))
+                     (bv2 (read-bytevector 10 p)))
+                 (and (equal? bv1 #u8(1 2))
+                      (eof-object? bv2))))`,
+			values.TrueValue},
+
+		// Read full bytevector in one call
+		{"read full bytevector",
+			`(equal? (read-bytevector 5 (open-input-bytevector #u8(10 20 30 40 50))) #u8(10 20 30 40 50))`,
+			values.TrueValue},
+
+		// Single byte read
+		{"read single byte",
+			`(equal? (read-bytevector 1 (open-input-bytevector #u8(99))) #u8(99))`,
+			values.TrueValue},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	// Error cases
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"negative k", `(read-bytevector -1 (open-input-bytevector #u8(1 2)))`},
+		{"non-binary port", `(read-bytevector 5 (open-input-string "hello"))`},
+		{"non-integer k", `(read-bytevector "5" (open-input-bytevector #u8(1)))`},
+		{"non-port", `(read-bytevector 5 42)`},
+	}
+
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// read-bytevector! — R7RS §6.13.3
+// =============================================================================
+
+func TestReadBytevectorBang(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Empty port: should return eof-object
+		{"empty port returns eof",
+			`(let ((bv (bytevector 1 2 3)))
+               (eof-object? (read-bytevector! bv (open-input-bytevector #u8()))))`,
+			values.TrueValue},
+
+		// Full read: fills entire range
+		{"full read",
+			`(let ((bv (bytevector 0 0 0)))
+               (read-bytevector! bv (open-input-bytevector #u8(10 20 30)))
+               (equal? bv #u8(10 20 30)))`,
+			values.TrueValue},
+
+		// M10 BUG CASE: Partial read with EOF
+		// R7RS §6.13.3: "reads the next end − start bytes, or as many as are
+		// available before the end of file, whichever is fewer"
+		{"partial read at EOF returns count",
+			`(let ((bv (bytevector 0 0 0 0 0)))
+               (equal? (read-bytevector! bv (open-input-bytevector #u8(10 20))) 2))`,
+			values.TrueValue},
+
+		// Partial read fills only specified positions
+		{"partial read fills correctly",
+			`(let ((bv (bytevector 1 2 3 4 5)))
+               (read-bytevector! bv (open-input-bytevector #u8(10 20)))
+               (equal? bv #u8(10 20 3 4 5)))`,
+			values.TrueValue},
+
+		// With start/end indices
+		{"with start and end",
+			`(let ((bv (bytevector 1 2 3 4 5)))
+               (read-bytevector! bv (open-input-bytevector #u8(10 20)) 2 4)
+               (equal? bv #u8(1 2 10 20 5)))`,
+			values.TrueValue},
+
+		// Successive reads
+		{"successive reads",
+			`(let ((bv (bytevector 0 0 0 0 0))
+                   (p (open-input-bytevector #u8(1 2))))
+               (let ((n1 (read-bytevector! bv p 0 5))
+                     (n2 (read-bytevector! bv p 0 5)))
+                 (and (equal? n1 2)
+                      (eof-object? n2)
+                      (equal? bv #u8(1 2 0 0 0)))))`,
+			values.TrueValue},
+
+		// Read into middle of bytevector
+		{"read into middle",
+			`(let ((bv (bytevector 99 99 99 99 99)))
+               (read-bytevector! bv (open-input-bytevector #u8(1 2 3)) 1 4)
+               (equal? bv #u8(99 1 2 3 99)))`,
+			values.TrueValue},
+
+		// Read single byte
+		{"read single byte",
+			`(let ((bv (bytevector 0)))
+               (read-bytevector! bv (open-input-bytevector #u8(42)))
+               (equal? bv #u8(42)))`,
+			values.TrueValue},
+
+		// Zero-length read (start == end)
+		{"zero length read",
+			`(let ((bv (bytevector 1 2 3)))
+               (equal? (read-bytevector! bv (open-input-bytevector #u8(10 20)) 1 1) 0))`,
+			values.TrueValue},
+
+		// Partial read returns actual count
+		{"partial read returns correct count",
+			`(let ((bv (bytevector 0 0 0 0 0 0 0 0 0 0)))
+               (equal? (read-bytevector! bv (open-input-bytevector #u8(1 2 3))) 3))`,
+			values.TrueValue},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	// Error cases
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-bytevector", `(read-bytevector! "not-a-bv" (open-input-bytevector #u8(1)))`},
+		{"non-binary port", `(read-bytevector! (bytevector 1 2) (open-input-string "hi"))`},
+		{"start out of bounds", `(read-bytevector! (bytevector 1 2) (open-input-bytevector #u8(1)) 10)`},
+		{"end out of bounds", `(read-bytevector! (bytevector 1 2) (open-input-bytevector #u8(1)) 0 10)`},
+		{"negative start", `(read-bytevector! (bytevector 1 2) (open-input-bytevector #u8(1)) -1)`},
+		{"end less than start", `(read-bytevector! (bytevector 1 2 3) (open-input-bytevector #u8(1)) 2 1)`},
+	}
+
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}

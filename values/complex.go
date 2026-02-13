@@ -129,11 +129,8 @@ func (p *Complex) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Complex) Multiply(o Number) Number {
-	if o.IsZero() && p.IsFinite() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	if o.IsZero() {
+		return o
 	}
 	switch v := o.(type) {
 	case *Complex:
@@ -330,12 +327,14 @@ func (p *Complex) IsInteger() bool {
 		!math.IsNaN(real(p.Value))
 }
 
-// IsRational returns false for Complex numbers.
+// IsRational returns true if the imaginary part is zero and the real part is finite.
 //
-// R7RS §6.2.6: Complex numbers with inexact imaginary parts cannot be
-// exactly zero, so complex values are not rational.
+// R7RS §6.2.6: A complex number with zero imaginary part is rational if its real
+// part is a finite real number.
 func (p *Complex) IsRational() bool {
-	return false
+	return imag(p.Value) == 0.0 &&
+		!math.IsInf(real(p.Value), 0) &&
+		!math.IsNaN(real(p.Value))
 }
 
 // IsFinite returns true if both real and imaginary parts are finite.

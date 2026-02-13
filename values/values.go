@@ -165,7 +165,7 @@ type Indexable interface {
 	Value
 	Length() int
 	Get(int) Value
-	Set(int, Value)
+	Set(int, Value) error
 }
 
 // ---------------------------------------------------------------------------

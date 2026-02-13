@@ -232,6 +232,28 @@ dist/
 
 After any Go code changes, run `make lint` (or at minimum `goimports -w` on changed files) before considering the task complete. Do not report completion with outstanding formatting or import issues.
 
+### Type Switches: Interfaces vs Concrete Types
+
+**When debugging type switch issues, READ the actual case types carefully.** Do not assume.
+
+```go
+// WRONG - only matches BigComplex, not Complex
+case *values.BigComplex:
+    // ...
+
+// CORRECT - matches ALL ComplexNumber implementations
+case values.ComplexNumber:
+    // ...
+```
+
+**The distinction matters:**
+- `case Interface:` matches all types implementing that interface
+- `case *ConcreteType:` matches only that specific pointer type
+
+**Common mistake:** Assuming `case values.ComplexNumber:` is already there when the code actually says `case *values.BigComplex:`, then adding a redundant `case *values.Complex:` instead of fixing the root issue.
+
+**Prevention:** When debugging predicates or type-based dispatch, read the existing cases word-for-word before proposing changes.
+
 ## Test File Naming Conventions
 
 The standard Go convention is that tests for functions in `foo.go` belong in `foo_test.go`. This project follows that convention with legitimate consolidation patterns for large packages:

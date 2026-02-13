@@ -138,7 +138,7 @@ func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
-	var lastResult Value
+	var lastResult = Void
 	for {
 		stx, err := pr.ReadSyntax(ctx)
 		if err != nil {

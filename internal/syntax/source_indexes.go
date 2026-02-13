@@ -62,17 +62,17 @@ func (p *SourceIndexes) Inc(n int) int {
 	return p.index
 }
 
-// NewLine advances to the start of a new line.
+// NewLine updates column and line tracking for a newline character.
+// The index should already have been advanced by Inc(n) before calling this.
 func (p *SourceIndexes) NewLine() int {
-	p.index++
 	p.column = 0
 	p.line++
 	return p.index
 }
 
-// Tab advances the position by n tab stops on the same line.
+// Tab updates column tracking for a tab character (8-column tab stops).
+// The index should already have been advanced by Inc(n) before calling this.
 func (p *SourceIndexes) Tab() int {
-	p.index++
 	p.column += 8 - (p.column % 8)
 	return p.index
 }

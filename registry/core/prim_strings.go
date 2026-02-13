@@ -122,7 +122,13 @@ func PrimStringSet(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	s.SetChar(idx, char.Value)
+
+	// Check immutability and handle error
+	err = s.SetChar(idx, char.Value)
+	if err != nil {
+		return err
+	}
+
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -158,7 +164,8 @@ func PrimStringToList(_ context.Context, mc *machine.MachineContext) error {
 func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
-		mc.SetValue(values.NewString(""))
+		// R7RS §6.7: list->string returns a newly allocated mutable string
+		mc.SetValue(values.NewMutableString(""))
 		return nil
 	}
 	tuple, ok := o.(values.Tuple)
@@ -180,18 +187,20 @@ func PrimListToString(ctx context.Context, mc *machine.MachineContext) error {
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a proper list")
 	}
-	mc.SetValue(values.NewString(string(runes)))
+	// R7RS §6.7: list->string returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(string(runes)))
 	return nil
 }
 
 // PrimSymbolToString implements the symbol->string primitive.
-// Converts a symbol to a string.
+// Converts a symbol to an immutable string.
+// R7RS §6.5: The string returned by symbol->string is immutable.
 func PrimSymbolToString(_ context.Context, mc *machine.MachineContext) error {
 	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewString(sym.Key))
+	mc.SetValue(values.InternString(sym.Key))
 	return nil
 }
 
@@ -236,7 +245,8 @@ func PrimStringAppend(ctx context.Context, mc *machine.MachineContext) error {
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: not a proper list")
 	}
-	mc.SetValue(values.NewString(sb.String()))
+	// R7RS §6.7: string-append returns a newly allocated mutable string
+	mc.SetValue(values.NewMutableString(sb.String()))
 	return nil
 }
 
@@ -260,7 +270,8 @@ func PrimSubstring(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewString(string(runes[startIdx.Value:endIdx.Value])))
+	// R7RS §6.7: substring is equivalent to string-copy, returns mutable string.
+	mc.SetValue(values.NewMutableString(string(runes[startIdx.Value:endIdx.Value])))
 	return nil
 }
 

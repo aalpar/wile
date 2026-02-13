@@ -460,6 +460,87 @@ func TestPair_Append(t *testing.T) {
 	}
 }
 
+func TestPair_Append_DoesNotMutateOriginal(t *testing.T) {
+	c := qt.New(t)
+
+	// Create list (1 2 3)
+	original := List(NewInteger(1), NewInteger(2), NewInteger(3))
+
+	// Append (4 5)
+	toAppend := List(NewInteger(4), NewInteger(5))
+	result := original.(*Pair).Append(toAppend)
+
+	// Verify result is correct
+	expected := List(NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewInteger(5))
+	c.Assert(result, SchemeEquals, expected)
+
+	// Verify original is unchanged
+	originalExpected := List(NewInteger(1), NewInteger(2), NewInteger(3))
+	c.Assert(original, SchemeEquals, originalExpected)
+
+	// Verify they don't share spine by mutating result
+	result.(*Pair).SetCar(NewInteger(99))
+	c.Assert(original.(*Pair).Car(), SchemeEquals, NewInteger(1),
+		qt.Commentf("original should still have 1, not 99"))
+	c.Assert(result.(*Pair).Car(), SchemeEquals, NewInteger(99),
+		qt.Commentf("result should have 99"))
+}
+
+func TestPair_Append_SharesStructureWithLastArgument(t *testing.T) {
+	c := qt.New(t)
+
+	// R7RS §6.4: the last argument shares structure
+	list1 := List(NewInteger(1), NewInteger(2))
+	list2 := List(NewInteger(3), NewInteger(4))
+
+	result := list1.(*Pair).Append(list2)
+
+	// The tail of result should be the same pointer as list2
+	// result is (1 2 3 4), so cdr of cdr should point to list2
+	resultTail := result.(*Pair).Cdr().(*Pair).Cdr()
+	c.Assert(resultTail, qt.Equals, list2,
+		qt.Commentf("last argument should share structure"))
+}
+
+func TestPair_Append_EmptyList(t *testing.T) {
+	c := qt.New(t)
+
+	// Appending empty list should return the original list
+	// but R7RS allows returning p when vs is empty since no mutation occurs
+	original := List(NewInteger(1), NewInteger(2))
+	result := original.(*Pair).Append(EmptyList)
+
+	// Verify result equals original
+	c.Assert(result, SchemeEquals, original)
+
+	// When vs is empty, returning p is allowed (no copy needed)
+	// because there's no mutation risk
+	c.Assert(result, qt.Equals, original,
+		qt.Commentf("when appending empty list, can return original"))
+}
+
+func TestPair_Append_MultipleElements(t *testing.T) {
+	c := qt.New(t)
+
+	// Test appending longer lists
+	list1 := List(NewInteger(1), NewInteger(2), NewInteger(3))
+	list2 := List(NewInteger(4), NewInteger(5), NewInteger(6), NewInteger(7))
+	result := list1.(*Pair).Append(list2)
+
+	expected := List(
+		NewInteger(1), NewInteger(2), NewInteger(3),
+		NewInteger(4), NewInteger(5), NewInteger(6), NewInteger(7),
+	)
+	c.Assert(result, SchemeEquals, expected)
+
+	// Verify original list1 is unchanged
+	c.Assert(list1, SchemeEquals, List(NewInteger(1), NewInteger(2), NewInteger(3)))
+
+	// Verify structure sharing with list2
+	resultTail := result.(*Pair).Cdr().(*Pair).Cdr().(*Pair).Cdr()
+	c.Assert(resultTail, qt.Equals, list2)
+}
+
 func TestPair_Car(t *testing.T) {
 	p := NewCons(NewInteger(42), NewInteger(99))
 	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(42))

@@ -1059,3 +1059,75 @@ func TestApplyCallable_Nil(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "cannot apply nil")
 	c.Assert(errors.Is(err, values.ErrNotAProcedure), qt.IsTrue)
 }
+
+// TestNewSubContext_InheritsExceptionHandler verifies that NewSubContext
+// automatically inherits the parent's exception handler chain (M3 fix).
+func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	handler := values.NewInteger(42)
+	parent.PushExceptionHandler(handler)
+
+	sub := parent.NewSubContext()
+
+	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
+	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
+}
+
+// TestNewSubContext_InheritsNestedHandlers verifies that nested exception
+// handlers form a chain that is correctly inherited by sub-contexts.
+func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	handler1 := values.NewSymbol("outer")
+	handler2 := values.NewSymbol("inner")
+
+	parent.PushExceptionHandler(handler1)
+	parent.PushExceptionHandler(handler2)
+
+	sub := parent.NewSubContext()
+
+	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
+	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler2), qt.IsTrue)
+	c.Assert(sub.ExceptionHandler().Parent(), qt.Not(qt.IsNil))
+	c.Assert(sub.ExceptionHandler().Parent().Handler().EqualTo(handler1), qt.IsTrue)
+}
+
+// TestNewSubContext_NoExceptionHandler verifies that sub-contexts work
+// correctly when the parent has no exception handler installed.
+func TestNewSubContext_NoExceptionHandler(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	sub := parent.NewSubContext()
+
+	c.Assert(sub.ExceptionHandler(), qt.IsNil)
+}
+
+// TestNewThreadSubContext_InheritsExceptionHandler verifies that thread
+// sub-contexts correctly inherit exception handlers via SubContextParams.
+func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	handler := values.NewSymbol("thread-handler")
+	parent.PushExceptionHandler(handler)
+
+	params := parent.CaptureSubContextParams()
+	thunk := values.NewSymbol("thunk-placeholder")
+	thread := values.NewThread(thunk, "test-thread")
+	sub := NewThreadSubContext(params, thread)
+
+	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
+	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
+}

@@ -460,10 +460,61 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 			evals:    NewStack(),
 			threadID: p.threadID, // inherit SRFI-18 thread identity
 		},
-		parentMC:   p,            // track parent for call/cc continuation capture
-		escapeCont: p.escapeCont, // inherit escape continuation for nested call/cc
-		thread:     p.thread,     // inherit SRFI-18 thread object
+		parentMC:         p,                  // track parent for call/cc continuation capture
+		escapeCont:       p.escapeCont,       // inherit escape continuation for nested call/cc
+		thread:           p.thread,           // inherit SRFI-18 thread object
+		exceptionHandler: p.exceptionHandler, // inherit exception handler chain (R7RS §6.11 dynamic extent)
 	}
+}
+
+// SubContextParams holds the parent state needed to create a thread's sub-context.
+// This is used to avoid race conditions when creating sub-contexts across goroutine boundaries.
+type SubContextParams struct {
+	Ctx              context.Context
+	Env              *environment.EnvironmentFrame
+	ParentMC         *MachineContext
+	EscapeCont       *MachineContinuation
+	ExceptionHandler *ExceptionHandler
+}
+
+// CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
+// This is used by thread creation to avoid race conditions when accessing the parent MachineContext
+// from a child goroutine (T4 from architectural review).
+//
+// Call this in the parent goroutine before creating the child goroutine, then pass the result
+// to NewThreadSubContext in the child goroutine.
+func (p *MachineContext) CaptureSubContextParams() SubContextParams {
+	return SubContextParams{
+		Ctx:              p.ctx,
+		Env:              p.env.TopLevel(),
+		ParentMC:         p,
+		EscapeCont:       p.escapeCont,
+		ExceptionHandler: p.exceptionHandler,
+	}
+}
+
+// NewThreadSubContext creates a sub-context for a thread using previously captured parent state.
+// Unlike NewSubContext, this doesn't access the parent MachineContext fields, making it safe to call
+// from a different goroutine. The thread parameter should be the new thread object, which provides
+// the thread identity for the new context.
+//
+// This function is specifically designed for SRFI-18 thread creation. For other uses of sub-contexts
+// (like map, for-each, dynamic-wind), use NewSubContext instead.
+func NewThreadSubContext(params SubContextParams, thread *values.Thread) *MachineContext {
+	sub := &MachineContext{
+		ctx: params.Ctx,
+		vmState: vmState{
+			env:   params.Env,
+			evals: NewStack(),
+			// threadID will be set by SetThread below
+		},
+		parentMC:         params.ParentMC,
+		escapeCont:       params.EscapeCont,
+		exceptionHandler: params.ExceptionHandler,
+		// thread will be set by SetThread below
+	}
+	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()
+	return sub
 }
 
 // SetExpanderContext sets the expander context for this machine context.
@@ -635,7 +686,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 		frame := p.windingStack[i]
 		if frame.After != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = p.windingStack[:i] // Set stack to this level
+			sub.windingStack = p.windingStack[:i:i] // Set stack to this level (cap to prevent aliasing)
 			_, err := sub.Apply(frame.After)
 			if err != nil {
 				return err
@@ -648,7 +699,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 		}
 	}
 	// Update current winding stack to common ancestor
-	p.windingStack = p.windingStack[:commonDepth]
+	p.windingStack = p.windingStack[:commonDepth:commonDepth]
 	return nil
 }
 
@@ -710,7 +761,7 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 		frame := sourceStack[i]
 		if frame.After != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = sourceStack[:i]
+			sub.windingStack = sourceStack[:i:i]
 			_, err := sub.Apply(frame.After)
 			if err != nil {
 				return err
@@ -723,7 +774,7 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	}
 
 	// Update context's winding stack to common ancestor
-	p.windingStack = sourceStack[:commonDepth]
+	p.windingStack = sourceStack[:commonDepth:commonDepth]
 
 	// Rewind: run before thunks for frames being entered (to target)
 	err := p.RewindTo(targetStack, commonDepth)

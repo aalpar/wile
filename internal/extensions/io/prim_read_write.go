@@ -20,13 +20,22 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+)
+
+const (
+	// MaxReadStringBytes is the maximum memory that read-string can allocate
+	// for the character buffer (100 MB). Assumes 4 bytes per rune (worst case).
+	MaxReadStringBytes = 100 * 1024 * 1024 // 100 MB
+
+	// MaxReadBytevectorBytes is the maximum size of bytevector that
+	// read-bytevector can allocate (100 MB).
+	MaxReadBytevectorBytes = 100 * 1024 * 1024 // 100 MB
 )
 
 // getOptionalOutputPort extracts an optional output port from a variadic argument list.
@@ -163,16 +172,22 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
+	// Get or create parser under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
+	cacheMu.Unlock()
+
 	syn, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
+			cacheMu.Lock()
 			delete(Parsers, port)
+			cacheMu.Unlock()
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -195,16 +210,21 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
+	// Get or create tokenizer under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	tknz, ok := Tokenizers[port]
-	// Create a new tokenizer if none exists for the port
 	if !ok || tknz == nil {
 		tknz = tokenizer.NewTokenizer(port, false)
 		Tokenizers[port] = tknz
 	}
+	cacheMu.Unlock()
+
 	q, err := tknz.Next()
 	if errors.Is(err, io.EOF) {
 		// Port is exhausted; evict the cached tokenizer.
+		cacheMu.Lock()
 		delete(Tokenizers, port)
+		cacheMu.Unlock()
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -224,17 +244,22 @@ func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Get or create a parser if one does not exist
+	// Get or create parser under lock to prevent TOCTOU races
+	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
 		Parsers[port] = prss
 	}
+	cacheMu.Unlock()
+
 	q, err := prss.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
+			cacheMu.Lock()
 			delete(Parsers, port)
+			cacheMu.Unlock()
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -273,7 +298,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	o := mc.EnvironmentFrame().GetLocalBinding(environment.NewLocalIndex(1, 0)).Value()
+	o := mc.Arg(1)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list but got %T", o)
@@ -502,6 +527,17 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("read-string: k must be non-negative")
 	}
 
+	// Check allocation limit (assume 4 bytes per rune worst case)
+	const bytesPerRune = 4
+	if k.Value > 0 && k.Value*bytesPerRune > MaxReadStringBytes {
+		return values.NewForeignErrorf(
+			"read-string: requested allocation (%d characters, ~%d MB) exceeds maximum (%d MB)",
+			k.Value,
+			(k.Value*bytesPerRune)/(1024*1024),
+			MaxReadStringBytes/(1024*1024),
+		)
+	}
+
 	reader, err := getOptionalInputPort(mc, 1)
 	if err != nil {
 		return err
@@ -710,6 +746,16 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.NewForeignError("read-bytevector: k must be non-negative")
 	}
 
+	// Check allocation limit
+	if k.Value > MaxReadBytevectorBytes {
+		return values.NewForeignErrorf(
+			"read-bytevector: requested allocation (%d bytes, %d MB) exceeds maximum (%d MB)",
+			k.Value,
+			k.Value/(1024*1024),
+			MaxReadBytevectorBytes/(1024*1024),
+		)
+	}
+
 	p, _, err := getRequiredBinaryInputPort(mc.Arg(1), "read-bytevector")
 	if err != nil {
 		return err
@@ -719,7 +765,21 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 	buf := make([]byte, k.Value)
 	n, err := p.Read(buf)
 
-	if errors.Is(err, io.EOF) && n == 0 {
+	// Per io.Reader contract: process n > 0 bytes before examining errors.
+	// When Read() returns (n > 0, io.EOF), we have successfully read n bytes;
+	// the EOF status is irrelevant since we have data to return.
+	if n > 0 {
+		// Successfully read n bytes; create and return bytevector
+		bv := make(values.ByteVector, n)
+		for i := 0; i < n; i++ {
+			bv[i] = &values.Byte{Value: buf[i]}
+		}
+		mc.SetValue(&bv)
+		return nil
+	}
+
+	// n == 0: no bytes read, check why
+	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -727,12 +787,9 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignReadErrorf(err, "read-bytevector: error reading from port")
 	}
 
-	// Create bytevector from read bytes
-	bv := make(values.ByteVector, n)
-	for i := 0; i < n; i++ {
-		bv[i] = &values.Byte{Value: buf[i]}
-	}
-	mc.SetValue(&bv)
+	// n == 0, err == nil: valid but unusual per io.Reader contract
+	// Return empty bytevector
+	mc.SetValue(&values.ByteVector{})
 	return nil
 }
 
@@ -769,20 +826,30 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	buf := make([]byte, end-start)
 	n, err := p.Read(buf)
 
-	if errors.Is(err, io.EOF) && n == 0 {
+	// Per io.Reader contract: process n > 0 bytes before examining errors.
+	// When Read() returns (n > 0, io.EOF), we have successfully read n bytes;
+	// the EOF status is irrelevant since we have data to return.
+	if n > 0 {
+		// Successfully read n bytes; copy into bytevector and return count
+		for i := 0; i < n; i++ {
+			(*bv)[start+int64(i)] = values.NewByte(buf[i])
+		}
+		mc.SetValue(values.NewInteger(int64(n)))
+		return nil
+	}
+
+	// n == 0: no bytes read, check why
+	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil {
 		return values.WrapForeignReadErrorf(err, "read-bytevector!: error reading from port")
 	}
 
-	// Copy bytes into the bytevector
-	for i := 0; i < n; i++ {
-		(*bv)[start+int64(i)] = values.NewByte(buf[i])
-	}
-
-	mc.SetValue(values.NewInteger(int64(n)))
+	// n == 0, err == nil: valid but unusual per io.Reader contract
+	// Return 0 (zero bytes read)
+	mc.SetValue(values.NewInteger(0))
 	return nil
 }
 
