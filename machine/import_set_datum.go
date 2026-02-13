@@ -25,7 +25,7 @@ import (
 // This is for runtime use by the 'environment' procedure.
 func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryName, error) {
 	if values.IsEmptyList(expr) {
-		return LibraryName{}, values.NewForeignErrorf("library name cannot be empty")
+		return LibraryName{}, values.WrapForeignErrorf(values.ErrInvalidArgument, "library name cannot be empty")
 	}
 	pair, ok := expr.(*values.Pair)
 	if !ok {
@@ -44,13 +44,13 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 			parts = append(parts, fmt.Sprintf("%d", num.Value))
 			return nil
 		}
-		return values.NewForeignErrorf("library name part must be identifier or integer, got %T", partExpr)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "library name part must be identifier or integer, got %T", partExpr)
 	})
 	if err != nil {
 		return LibraryName{}, err
 	}
 	if len(parts) == 0 {
-		return LibraryName{}, values.NewForeignErrorf("library name cannot be empty")
+		return LibraryName{}, values.WrapForeignErrorf(values.ErrInvalidArgument, "library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
 }
@@ -68,7 +68,7 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 //   - (for-meta <n> <import-set>)   : import at phase +n
 func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet, error) {
 	if values.IsEmptyList(expr) {
-		return nil, values.NewForeignErrorf("import set cannot be empty")
+		return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "import set cannot be empty")
 	}
 	pair, ok := expr.(*values.Pair)
 	if !ok {

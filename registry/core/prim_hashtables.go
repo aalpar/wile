@@ -68,7 +68,7 @@ func PrimHashtableRef(_ context.Context, mc *machine.MachineContext) error {
 		return nil
 	}
 
-	return values.NewForeignErrorf("hashtable-ref: key not found: %s", key.SchemeString())
+	return values.WrapForeignErrorf(values.ErrHashtableKeyNotFound, "hashtable-ref: key not found: %s", key.SchemeString())
 }
 
 // PrimHashtableSet implements the hashtable-set! primitive.

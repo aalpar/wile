@@ -39,7 +39,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	// Get the environment frame from the TopLevelEnvironment
 	topLevelEnv, ok := envSpec.(*environment.TopLevelEnvironment)
 	if !ok {
-		return values.NewForeignErrorf("eval: expected an environment specifier but got %T", envSpec)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
 	}
 
 	env := topLevelEnv.Runtime()
@@ -294,7 +294,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return values.NewForeignErrorf("environment: expected list of import specs, got %T", argsVal)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
 	}
 
 	// Process each import spec
@@ -493,7 +493,7 @@ func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
 
 	binding := expandEnv.GetBindingWithScopes(sym, syntaxSym.Scopes())
 	if binding == nil {
-		return values.NewForeignErrorf("syntax-local-value: no binding for %s", sym.Key)
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
 	}
 
 	val := binding.Value()

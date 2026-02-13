@@ -530,7 +530,7 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 	// Check allocation limit (assume 4 bytes per rune worst case)
 	const bytesPerRune = 4
 	if k.Value > 0 && k.Value*bytesPerRune > MaxReadStringBytes {
-		return values.NewForeignErrorf(
+		return values.WrapForeignErrorf(values.ErrAllocationLimitExceeded,
 			"read-string: requested allocation (%d characters, ~%d MB) exceeds maximum (%d MB)",
 			k.Value,
 			(k.Value*bytesPerRune)/(1024*1024),
@@ -748,7 +748,7 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 	// Check allocation limit
 	if k.Value > MaxReadBytevectorBytes {
-		return values.NewForeignErrorf(
+		return values.WrapForeignErrorf(values.ErrAllocationLimitExceeded,
 			"read-bytevector: requested allocation (%d bytes, %d MB) exceeds maximum (%d MB)",
 			k.Value,
 			k.Value/(1024*1024),

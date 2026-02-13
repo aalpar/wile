@@ -30,11 +30,11 @@ func NewOperationMakeClosure() *OperationMakeClosure {
 func (p *OperationMakeClosure) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
 	if !ok {
-		return mc, values.ErrNotALocalEnvironmentFrame
+		return mc, values.WrapForeignErrorf(values.ErrNotALocalEnvironmentFrame, "MakeClosure: expected environment frame on stack")
 	}
 	tpl, ok := mc.evals.Pop().(*NativeTemplate)
 	if !ok {
-		return mc, values.ErrNotAMachineTemplate
+		return mc, values.WrapForeignErrorf(values.ErrNotAMachineTemplate, "MakeClosure: expected native template on stack")
 	}
 	// Create runtime environment with compile-time local structure
 	// but RUNTIME parent chain. This is critical for:

@@ -87,7 +87,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		// Exhaustiveness check: all ValidatedExpr types should be handled above.
 		// This error indicates a new validated type was added without updating
 		// this switch statement.
-		return values.NewForeignErrorf("unknown validated expression type: %T", expr)
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "unknown validated expression type: %T", expr)
 	}
 }
 
@@ -478,7 +478,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 	_, ok := lenv.EnsureLocalBinding(rest, environment.BindingTypeVariable)
 	if !ok {
 		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
-		return values.ErrDuplicateBinding
+		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate rest parameter %q in lambda", rest.Key)
 	}
 
 	// Preserve hygiene scopes for the rest parameter, same as required parameters.

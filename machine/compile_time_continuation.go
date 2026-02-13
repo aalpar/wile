@@ -190,7 +190,7 @@ func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallCo
 	// Not a primitive - caller should treat as procedure call.
 	// Core forms (define, lambda, quote, quasiquote, if, set!, begin) are handled
 	// by compileValidated* methods and never reach here.
-	return false, values.ErrNotAPrimitive
+	return false, values.WrapForeignErrorf(values.ErrNotAPrimitive, "compileSyntaxCompilerCall: no syntax compiler for form")
 }
 
 // CompileMeta compiles a meta expression.
@@ -1381,7 +1381,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 	case "cond-expand":
 		return p.processCondExpand(ctctx, lib, argsExpr)
 	default:
-		return values.NewForeignErrorf("unknown library declaration: %s", keyword)
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unknown library declaration: %s", keyword)
 	}
 }
 
@@ -1523,7 +1523,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 				}
 			}
 			if importedBinding == nil {
-				return values.NewForeignErrorf("import: %s exports %q but binding not found",
+				return values.WrapForeignErrorf(values.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 					importSet.LibraryName.SchemeString(), internalName)
 			}
 
@@ -1867,7 +1867,7 @@ func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName
 		return LibraryName{}, err
 	}
 	if len(parts) == 0 {
-		return LibraryName{}, values.NewForeignErrorf("library name cannot be empty")
+		return LibraryName{}, values.WrapForeignErrorf(values.ErrInvalidSyntax, "library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
 }
@@ -1936,7 +1936,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 //
 // This is only valid within a library definition. At top-level, it's an error.
 func (p *CompileTimeContinuation) CompileExport(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.NewForeignErrorf("export: only valid within define-library")
+	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "export: only valid within define-library")
 }
 
 // CompileDefineSyntax handles (define-syntax keyword transformer-expr).
@@ -2045,7 +2045,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 //	  (else (display "other")))
 func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(expr) {
-		return values.NewForeignErrorf("cond-expand: no clauses")
+		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no clauses")
 	}
 
 	argsPair, ok := expr.(*syntax.SyntaxPair)
@@ -2091,7 +2091,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	}
 
 	if matchedClause == nil {
-		return values.NewForeignErrorf("cond-expand: no matching clause")
+		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no matching clause")
 	}
 
 	// Compile the expressions in the matched clause
@@ -2136,7 +2136,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 // The first clause whose feature requirement is satisfied has its declarations processed.
 func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
-		return values.NewForeignErrorf("cond-expand: no clauses")
+		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no clauses")
 	}
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
@@ -2182,7 +2182,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 	}
 
 	if matchedClause == nil {
-		return values.NewForeignErrorf("cond-expand: no matching clause")
+		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no matching clause")
 	}
 
 	// Process the declarations in the matched clause
@@ -2223,7 +2223,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
-			return nil, values.NewForeignErrorf("empty feature requirement")
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "empty feature requirement")
 		}
 
 		carExpr := v.SyntaxCar()
@@ -2239,7 +2239,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (library <library-name>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, values.NewForeignErrorf("library: expected library name")
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "library: expected library name")
 			}
 			libNameExpr := argsPair.SyntaxCar()
 			libName, err := parseLibraryName(ctx, libNameExpr)
@@ -2268,7 +2268,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (not <req>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, values.NewForeignErrorf("not: expected one requirement")
+				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "not: expected one requirement")
 			}
 			reqExpr := argsPair.SyntaxCar()
 			req, err := parseFeatureRequirement(ctx, reqExpr)
@@ -2278,11 +2278,11 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			return NewNotRequirement(req), nil
 
 		default:
-			return nil, values.NewForeignErrorf("unknown feature requirement keyword: %s", keyword)
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "unknown feature requirement keyword: %s", keyword)
 		}
 
 	default:
-		return nil, values.NewForeignErrorf("invalid feature requirement type: %T", expr)
+		return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "invalid feature requirement type: %T", expr)
 	}
 }
 
@@ -2337,7 +2337,7 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 			return values.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
 		}
 		if file == nil {
-			return values.NewForeignErrorf("include-library-declarations: file not found: %q", fn.Value)
+			return values.WrapForeignErrorf(values.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value)
 		}
 		defer file.Close() //nolint:errcheck
 

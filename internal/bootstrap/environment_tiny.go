@@ -150,7 +150,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 	// Get caller's TopLevelEnvironment
 	callerTopLevel := callerEnv.TopLevelEnv()
 	if callerTopLevel == nil {
-		return nil, values.NewForeignErrorf("caller environment has no TopLevelEnvironment")
+		return nil, values.WrapForeignErrorf(values.ErrMissingTopLevelEnvironment, "caller environment has no TopLevelEnvironment")
 	}
 
 	// Create a new environment that shares the TopLevelEnvironment

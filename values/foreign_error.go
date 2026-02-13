@@ -121,8 +121,19 @@ var (
 	ErrMissingPhaseRegistry       = NewStaticError("missing PhaseRegistry")
 	ErrNilParentEnvironment       = NewStaticError("nil parent environment")
 
+	// Panic recovery errors
+	ErrThreadPanic   = NewStaticError("thread panic")
+	ErrPanicRecovery = NewStaticError("panic recovery")
+
 	// Syntax errors
-	ErrCannotDoubleSyntaxWrap = NewStaticError("cannot wrap syntax value in SyntaxObject")
+	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
+	ErrNoMatchingClause        = NewStaticError("no matching clause")
+	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
+	ErrLibraryConfiguration    = NewStaticError("library configuration error")
+	ErrLibraryFormMalformed    = NewStaticError("malformed library form")
+	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
+	ErrHashtableKeyNotFound    = NewStaticError("hashtable key not found")
+	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
 
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")

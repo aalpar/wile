@@ -17,7 +17,6 @@ package machine
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/aalpar/wile/values"
 )
@@ -76,7 +75,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 		case error:
 			err = v
 		default:
-			err = fmt.Errorf("%v", v)
+			err = values.WrapForeignErrorf(values.ErrPanicRecovery, "foreign function call: %v", v)
 		}
 		rmc = nil
 		rerr = goErrorToSchemeException(mc, err)
