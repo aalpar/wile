@@ -228,7 +228,7 @@ When `Read` returns `n > 0` AND `err == io.EOF` (valid per Go's io.Reader contra
 | L1 | `values/complex.go:333` | `Complex.IsRational` returns false unconditionally | ✅ Fixed |
 | L2 | `values/integer.go:59` | Cache comment says -256..255, actual range is -32768..32767 | ✅ Fixed |
 | L3 | `values/channel.go:253` | `ChannelSelect` busy-spins without `reflect.Select` | Open |
-| L4 | `values/utils.go:253` | `NewTemporaryVariableName` seeds PRNG from `time.Now()` per call | Open |
+| L4 | `values/utils.go:253` | `NewTemporaryVariableName` seeds PRNG from `time.Now()` per call | ✅ Fixed |
 | L5 | `machine/stack.go:37` | `Pull()` has no bounds check (opaque panic vs `ErrStackUnderflow`) | ✅ Fixed |
 | L6 | `machine/compile_validated.go:604` | `set!` emits `LoadVoid` for globals but not locals | ✅ Fixed |
 | L7 | `registry/core/prim_arithmetic.go:212` | `abs` accepts complex (R7RS: real only) | ✅ Fixed |
@@ -237,7 +237,7 @@ When `Read` returns `n > 0` AND `err == io.EOF` (valid per Go's io.Reader contra
 | L10 | `internal/extensions/io/prim_read_write.go:485` | `char-ready?`/`u8-ready?` always return `#t` | Open |
 | L11 | `internal/extensions/eval/prim_eval.go:35` | `eval` doesn't inherit dynamic context | Open |
 | L12 | `engine.go:137` | `EvalMultiple` returns nil (not Void) for empty input | ✅ Fixed |
-| L13 | `internal/extensions/gointerop/prim_gointerop.go:417` | `once-do!` swallows thunk errors silently | Open |
+| L13 | `internal/extensions/gointerop/prim_gointerop.go:417` | `once-do!` swallows thunk errors silently | ✅ Fixed |
 | L14 | `internal/extensions/threads/prim_threads.go:291` | `thread-join!` uses `==` not `errors.Is()` | ✅ Fixed |
 | L15 | `internal/extensions/threads/prim_threads.go:214` | `thread-sleep!` ignores context cancellation | Open |
 | L16 | `internal/extensions/io/prim_read_write.go:271` | `write-char` uses raw local binding instead of `mc.Arg()` | ✅ Fixed |

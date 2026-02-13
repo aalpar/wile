@@ -3535,7 +3535,7 @@ WILE_MAX_READ_ALLOCATION=200M ./scheme script.scm
 
 **Date:** 2026-02-12
 **Commit:** (pending)
-**Scope:** 10 LOW priority issues from architectural review
+**Scope:** 12 LOW priority issues from architectural review (L1, L2, L4, L5, L6, L7, L8, L9, L12, L13, L14, L16)
 
 These are quick fixes and R7RS compliance improvements that were batched together for efficiency.
 
@@ -4002,6 +4002,184 @@ No code changes needed. The M6 fix (String immutability flag) addressed this iss
 
 ---
 
+## L4: NewTemporaryVariableName Seeds PRNG Per Call
+
+### Problem
+
+**File:** `values/utils.go:253`
+
+The `NewTemporaryVariableName` function created a new PRNG instance with a time-based seed on every call:
+
+```go
+func NewTemporaryVariableName() *Symbol {
+    bs := make([]byte, byteCnt)
+    n, err := rand.New(rand.NewSource(time.Now().UnixNano())).Read(bs)
+    // ← New PRNG created and seeded on EVERY call
+    // ...
+}
+```
+
+**Issues:**
+1. **Performance overhead**: Creating a new `rand.Rand` on every call is wasteful
+2. **Reduced randomness quality**: Fast successive calls get the same `UnixNano()` seed (nanosecond resolution is finite), causing collisions
+3. **Non-idiomatic Go**: Standard pattern is to seed once per process using `sync.Once`
+
+### The Fix
+
+Added package-level PRNG with one-time initialization:
+
+```go
+var (
+    tempVarRand     *rand.Rand
+    tempVarRandOnce sync.Once
+)
+
+func NewTemporaryVariableName() *Symbol {
+    tempVarRandOnce.Do(func() {
+        tempVarRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+    })
+
+    bs := make([]byte, byteCnt)
+    n, err := tempVarRand.Read(bs)
+    // ... rest unchanged
+}
+```
+
+**Pattern**: This uses Go's standard `sync.Once` pattern for thread-safe lazy initialization. The PRNG is created exactly once per process, eliminating both the performance overhead and the collision risk.
+
+### Impact
+
+- **Performance**: Eliminated PRNG allocation on every call
+- **Randomness**: Prevents seed collisions from rapid successive calls
+- **Code quality**: Follows idiomatic Go patterns for singleton initialization
+
+### Tests
+
+Added `Test_NewTemporaryVariableName_Uniqueness` in `values/utils_test.go`:
+
+```go
+func Test_NewTemporaryVariableName_Uniqueness(t *testing.T) {
+    c := qt.New(t)
+    seen := make(map[string]bool)
+
+    // Generate 1000 names rapidly to test PRNG initialization and uniqueness
+    for i := 0; i < 1000; i++ {
+        name := NewTemporaryVariableName()
+        if seen[name.Key] {
+            c.Fatalf("duplicate name generated: %s", name.Key)
+        }
+        seen[name.Key] = true
+
+        // Verify format
+        c.Assert(name.Key[:4], qt.Equals, "__T_")
+    }
+}
+```
+
+The test generates 1000 names in rapid succession and verifies all are unique. With the old seed-per-call approach, this would have produced collisions.
+
+---
+
+## L13: once-do! Swallows Thunk Errors
+
+### Problem
+
+**File:** `internal/extensions/gointerop/prim_gointerop.go:417`
+
+The `once-do!` primitive silently swallowed errors from thunk execution inside the `sync.Once.Do` callback:
+
+```go
+executed := once.Do(func() {
+    // Execute the thunk in a sub-context
+    cls, ok := thunk.(*machine.MachineClosure)
+    if !ok {
+        return // Can't execute non-closure
+    }
+
+    sub := mc.NewSubContext()
+    _, err := sub.Apply(cls)
+    if err != nil {
+        return  // ← Error silently dropped!
+    }
+    err = sub.Run()
+    if err != nil {
+        return  // ← Error silently dropped!
+    }
+})
+
+mc.SetValue(schemeutil.BoolToBoolean(executed))
+return nil  // ← Always returns success, even if thunk errored
+```
+
+**Issues:**
+1. Errors from initialization code are lost
+2. No indication to caller that initialization failed
+3. Debugging difficulty — silent failures are hard to diagnose
+
+**Why This Happened:** Go's `sync.Once.Do(func())` callback signature doesn't allow returning errors. The error capture must be done via closure variable.
+
+### The Fix
+
+Capture errors in a closure variable and propagate after `Do` returns:
+
+```go
+var thunkErr error
+executed := once.Do(func() {
+    // Execute the thunk in a sub-context
+    cls, ok := thunk.(*machine.MachineClosure)
+    if !ok {
+        return // Can't execute non-closure
+    }
+
+    sub := mc.NewSubContext()
+    _, err := sub.Apply(cls)
+    if err != nil {
+        thunkErr = err  // ← Capture error
+        return
+    }
+    err = sub.Run()
+    if err != nil {
+        thunkErr = err  // ← Capture error
+        return
+    }
+})
+
+if thunkErr != nil {
+    return thunkErr  // ← Propagate to caller
+}
+
+mc.SetValue(schemeutil.BoolToBoolean(executed))
+return nil
+```
+
+**Pattern**: Since `sync.Once.Do(func())` doesn't support error returns, we use closure variable capture to propagate errors out of the callback. This is the idiomatic Go solution for error handling with `sync.Once`.
+
+### Impact
+
+- **Error visibility**: Initialization failures now propagate to caller
+- **Debugging**: Failed `once-do!` calls now produce clear error messages
+- **Correctness**: Caller can detect and handle initialization failures
+
+### Tests
+
+Added `TestOnceErrorPropagation` in `internal/extensions/gointerop/prim_gointerop_test.go`:
+
+```go
+func TestOnceErrorPropagation(t *testing.T) {
+    engine := newEngine(t)
+
+    // Verify that errors from the thunk are propagated to the caller
+    evalExpectError(t, engine, `
+        (let ((o (make-once)))
+          (once-do! o (lambda () (error "initialization failed"))))
+    `)
+}
+```
+
+The test verifies that `(error "...")` inside the thunk propagates to the caller instead of being silently swallowed.
+
+---
+
 ## Summary: LOW Priority Fixes
 
 | Issue | Type | Fix |
@@ -4016,10 +4194,12 @@ No code changes needed. The M6 fix (String immutability flag) addressed this iss
 | **L7** | R7RS Compliance | Reject complex numbers in abs |
 | **L9** | R7RS Compliance | Return immutable strings from symbol->string |
 | **L8** | Verification | Confirmed M6 already fixed list->string |
+| **L4** | Performance | One-time PRNG initialization with sync.Once |
+| **L13** | Error Handling | Propagate once-do! thunk errors to caller |
 
-**Files Modified:** 9
-**Tests Added/Updated:** 3
-**Test Pass Rate:** 100% (all 1080+ tests pass)
+**Files Modified:** 11
+**Tests Added/Updated:** 5
+**Test Pass Rate:** 100% (all tests pass)
 
 ---
 

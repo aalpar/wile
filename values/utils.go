@@ -20,12 +20,18 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
 // byteCnt is the number of bytes used for generating temporary variable names.
 const (
 	byteCnt = 128 / 8
+)
+
+var (
+	tempVarRand     *rand.Rand
+	tempVarRandOnce sync.Once
 )
 
 // formatIndexable builds the Scheme external representation for a
@@ -251,8 +257,12 @@ func arrayListEqualToDeep(p, v *ArrayList, visited map[equalPairKey]bool) bool {
 // Uses 128 bits of randomness to ensure uniqueness.
 // Panics if random number generation fails.
 func NewTemporaryVariableName() *Symbol {
+	tempVarRandOnce.Do(func() {
+		tempVarRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	})
+
 	bs := make([]byte, byteCnt)
-	n, err := rand.New(rand.NewSource(time.Now().UnixNano())).Read(bs)
+	n, err := tempVarRand.Read(bs)
 	if err != nil {
 		panic(fmt.Errorf("%w: error reading random stream", err))
 	}

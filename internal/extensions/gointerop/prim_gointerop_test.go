@@ -412,6 +412,16 @@ func TestOnce(t *testing.T) {
 	}
 }
 
+func TestOnceErrorPropagation(t *testing.T) {
+	engine := newEngine(t)
+
+	// Verify that errors from the thunk are propagated to the caller
+	evalExpectError(t, engine, `
+		(let ((o (make-once)))
+		  (once-do! o (lambda () (error "initialization failed"))))
+	`)
+}
+
 func TestAtomic(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

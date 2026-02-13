@@ -421,6 +421,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 	}
 	thunk := mc.Arg(1)
 
+	var thunkErr error
 	executed := once.Do(func() {
 		// Execute the thunk in a sub-context
 		cls, ok := thunk.(*machine.MachineClosure)
@@ -431,13 +432,19 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		sub := mc.NewSubContext()
 		_, err := sub.Apply(cls)
 		if err != nil {
+			thunkErr = err
 			return
 		}
 		err = sub.Run()
 		if err != nil {
+			thunkErr = err
 			return
 		}
 	})
+
+	if thunkErr != nil {
+		return thunkErr
+	}
 
 	mc.SetValue(schemeutil.BoolToBoolean(executed))
 	return nil
