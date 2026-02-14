@@ -91,23 +91,6 @@ var (
 	ErrNotALiteral             = values.NewStaticError("not a literal")
 )
 
-var digs [128]int
-
-func init() {
-	for i := 0; i < len(digs); i++ {
-		digs[i] = -1
-	}
-	for i := '0'; i <= '9'; i++ {
-		digs[i] = int(i - '0')
-	}
-	for i := 'a'; i <= 'f'; i++ {
-		digs[i] = int(i-'a') + 10
-	}
-	for i := 'A'; i <= 'F'; i++ {
-		digs[i] = int(i-'A') + 10
-	}
-}
-
 // TokenizerState represents the type of token recognized by the tokenizer.
 // Each state corresponds to a distinct lexical element in Scheme syntax.
 type TokenizerState int
@@ -569,7 +552,7 @@ func (p *Tokenizer) read() {
 		p.radix = 0                                                                      // Reset radix after parsing number
 		p.term()
 		return
-	case isSymbolInitial(p.curr()): // read symbol
+	case isInitial(p.curr()): // read symbol
 		p.state = TokenizerStateSymbol
 		p.value += string(p.curr())
 		p.next()
@@ -585,6 +568,18 @@ func (p *Tokenizer) read() {
 		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingToken, p.tokenStart, p.tokenEnd)
 		return
 	}
+}
+
+// validateCodePoint checks that a Unicode code point is within the valid range
+// (0 to 0x10FFFF) and is not a surrogate (0xD800-0xDFFF), per R7RS §6.7.
+func validateCodePoint(x int64, start, end syntax.SourceIndexes) error {
+	if x > 0x10FFFF {
+		return NewTokenizerError(MessageCodePointExceedsUnicodeMaximum, start, end)
+	}
+	if x >= 0xD800 && x <= 0xDFFF {
+		return NewTokenizerError(MessageCodePointIsSurrogate, start, end)
+	}
+	return nil
 }
 
 func (p *Tokenizer) readHexEscapeToken() {
@@ -604,15 +599,8 @@ func (p *Tokenizer) readHexEscapeToken() {
 		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator, p.tokenStart, p.tokenEnd)
 		return
 	}
-	// H9 FIX: Validate Unicode code point constraints
-	// R7RS §6.7: hex scalar value is any Unicode code point (0 to 0x10FFFF)
-	// except surrogates (0xD800-0xDFFF)
-	if x > 0x10FFFF {
-		p.err = NewTokenizerError(MessageCodePointExceedsUnicodeMaximum, p.tokenStart, p.tokenEnd)
-		return
-	}
-	if x >= 0xD800 && x <= 0xDFFF {
-		p.err = NewTokenizerError(MessageCodePointIsSurrogate, p.tokenStart, p.tokenEnd)
+	if err := validateCodePoint(x, p.tokenStart, p.tokenEnd); err != nil {
+		p.err = err
 		return
 	}
 	p.next()
@@ -657,15 +645,6 @@ func (p *Tokenizer) readEscapeSequence() {
 	p.next()
 }
 
-func (p *Tokenizer) readIntraExtendedToken() {
-	p.readEscapeSequence()
-}
-
-// readIntraStringEscape handles escape sequences within strings.
-func (p *Tokenizer) readIntraStringEscape() {
-	p.readEscapeSequence()
-}
-
 // readString reads a string literal until the closing double-quote.
 // Handles escape sequences via readIntraStringEscape.
 // Builds the processed string content in p.value (without quotes, with escapes converted).
@@ -680,7 +659,7 @@ func (p *Tokenizer) readString() {
 				}
 				return
 			}
-			p.readIntraStringEscape() //nolint:errcheck
+			p.readEscapeSequence() //nolint:errcheck
 			if p.err != nil {
 				return
 			}
@@ -929,11 +908,11 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 		return
 	case p.curr() == 'm' || p.curr() == 'M': // big float #m
 		p.state = TokenizerStateBigFloat
-		p.readBigNum(isExtendedExponentMarkerForRadix)
+		p.readBigNum(isExtendedExponentMarker)
 		return
 	case p.curr() == 'z' || p.curr() == 'Z': // big int #z
 		p.state = TokenizerStateBigIntegerBase10
-		p.readBigNum(isExtendedExponentMarkerForRadix)
+		p.readBigNum(isExtendedExponentMarker)
 		return
 	default:
 		p.state = TokenizerStateMarker
@@ -976,12 +955,8 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape, p.tokenStart, p.tokenEnd)
 			return utf8.RuneError
 		}
-		if x > 0x10FFFF {
-			p.err = NewTokenizerError(MessageCodePointExceedsUnicodeMaximum, p.tokenStart, p.tokenEnd)
-			return utf8.RuneError
-		}
-		if x >= 0xD800 && x <= 0xDFFF {
-			p.err = NewTokenizerError(MessageCodePointIsSurrogate, p.tokenStart, p.tokenEnd)
+		if err := validateCodePoint(x, p.tokenStart, p.tokenEnd); err != nil {
+			p.err = err
 			return utf8.RuneError
 		}
 		return rune(x)
@@ -1115,11 +1090,9 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 		return
 	}
 	// Optional sign
-	if isExplicitSign(p.curr()) {
-		p.next()
-		if p.err != nil {
-			return
-		}
+	p.mayConsumeSign()
+	if p.err != nil {
+		return
 	}
 	// Integer part
 	for p.err == nil && isDigit(10, p.curr()) {
@@ -1145,11 +1118,9 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 		if p.err != nil {
 			return
 		}
-		if isExplicitSign(p.curr()) {
-			p.next()
-			if p.err != nil {
-				return
-			}
+		p.mayConsumeSign()
+		if p.err != nil {
+			return
 		}
 		for p.err == nil && isDigit(10, p.curr()) {
 			p.next()
@@ -1166,8 +1137,7 @@ func (p *Tokenizer) readDiv(r int) {
 		p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
 		return
 	}
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	p.readHashDigits()
+	p.readDigitsAndHash(r)
 }
 
 func (p *Tokenizer) readDecimalFractionWithExponent(r int) {
@@ -1187,8 +1157,7 @@ func (p *Tokenizer) readOptionalDecimalPart(r int, hadHash bool) {
 	if hadHash {
 		p.readHashDigits()
 	} else if isDigit(r, p.curr()) {
-		p.readUnsignedBaseNNumber(r) //nolint:errcheck
-		p.readHashDigits()
+		p.readDigitsAndHash(r)
 	}
 	if p.err != nil {
 		return
@@ -1249,11 +1218,9 @@ func (p *Tokenizer) readSignedNan(r int) {
 		return
 	}
 	p.state = TokenizerStateSignedNan
-	if !isImaginary(p.curr()) {
-		return
+	if p.mayConsumeImaginarySuffix() {
+		p.state = TokenizerStateSignedImaginaryNan
 	}
-	p.state = TokenizerStateSignedImaginaryNan
-	p.next()
 }
 
 func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
@@ -1262,16 +1229,8 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 		return
 	}
 	switch {
-	case isDotSubsequent(p.curr()):
-		p.state = TokenizerStateSymbol
-		p.next()
-		if p.err != nil {
-			return
-		}
-		p.readSymbol() //nolint:errcheck
-		if p.err != nil {
-			return
-		}
+	case p.readDotSubsequentSymbol():
+		// Symbol consumed; falls through to no-op digit/exponent reads below
 	case !isDigit(r, p.curr()):
 		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
 		return
@@ -1279,8 +1238,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 		p.state = TokenizerStateSignedDecimalFraction
 	}
 	// read decimal fractional part
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	p.readHashDigits()
+	p.readDigitsAndHash(r)
 	if p.err != nil {
 		return
 	}
@@ -1289,24 +1247,12 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 	if p.err != nil {
 		return
 	}
-	switch {
-	case isImaginary(p.curr()):
-		p.state = TokenizerStateSignedImaginary
-		p.next()
-		return
-	case isComplexPolar(p.curr()):
-		p.mayReadPolarPart(r)
-		return
-	case isExplicitSign(p.curr()):
-		p.mayReadSignedImaginaryPart(true, r)
-		return
-	}
+	p.readSignedComplexSuffix(r)
 }
 
 func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 	p.state = p.integerStateForRadix(signed)
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	p.readHashDigits()
+	p.readDigitsAndHash(r)
 	if p.err != nil {
 		return
 	}
@@ -1325,7 +1271,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			p.state = TokenizerStateUnsignedRationalFraction
 		}
 		p.readDiv(r) //nolint:errcheck
-	case isExtendedExponentMarkerForRadix(p.curr()):
+	case isExtendedExponentMarker(p.curr()):
 		if signed {
 			p.state = TokenizerStateSignedScientificNotation
 		} else {
@@ -1336,59 +1282,48 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 	if p.err != nil {
 		return
 	}
+	if signed {
+		p.readSignedComplexSuffix(r)
+		return
+	}
 	switch {
 	case isImaginary(p.curr()):
-		if signed {
-			p.state = TokenizerStateSignedImaginary
-		} else {
-			p.state = TokenizerStateUnsignedImaginary
-		}
+		p.state = TokenizerStateUnsignedImaginary
 		p.next()
 	case isExplicitSign(p.curr()):
-		if signed {
-			p.state = TokenizerStateSignedComplex
-			p.mayReadSignedImaginaryPart(true, r) //nolint:errcheck
-		} else {
-			p.state = TokenizerStateUnsignedComplex
-			p.next() // consume sign
+		p.state = TokenizerStateUnsignedComplex
+		p.next() // consume sign
+		if p.err != nil {
+			return
+		}
+		// Check for unit imaginary (+i or -i) - must peek to distinguish from inf.0
+		if p.curr() == 'i' {
+			p.next() // consume 'i'
 			if p.err != nil {
 				return
 			}
-			// Check for unit imaginary (+i or -i) - must peek to distinguish from inf.0
-			if p.curr() == 'i' {
-				p.next() // consume 'i'
+			// If followed by 'n', it might be inf.0i - continue parsing
+			if p.curr() == 'n' {
+				p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
 				if p.err != nil {
 					return
 				}
-				// If followed by 'n', it might be inf.0i - continue parsing
-				if p.curr() == 'n' {
-					p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
-					if p.err != nil {
-						return
-					}
-					if isImaginary(p.curr()) {
-						p.next()
-					}
-				}
-				// Otherwise just unit imaginary, already consumed 'i'
-				return
+				p.mayConsumeImaginarySuffix()
 			}
-			p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
-			if p.err != nil {
-				return
-			}
-			if !isImaginary(p.curr()) {
-				p.err = NewTokenizerError(MessageExpectingImaginary, p.tokenStart, p.tokenEnd)
-				return
-			}
-			p.next()
+			// Otherwise just unit imaginary, already consumed 'i'
+			return
 		}
+		p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
+		if p.err != nil {
+			return
+		}
+		if !isImaginary(p.curr()) {
+			p.err = NewTokenizerError(MessageExpectingImaginary, p.tokenStart, p.tokenEnd)
+			return
+		}
+		p.next()
 	case isComplexPolar(p.curr()):
-		if signed {
-			p.state = TokenizerStateSignedComplexPolar
-		} else {
-			p.state = TokenizerStateUnsignedComplexPolar
-		}
+		p.state = TokenizerStateUnsignedComplexPolar
 		p.mayReadPolarPart(r) //nolint:errcheck
 	}
 }
@@ -1399,12 +1334,7 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 	if p.err != nil {
 		return
 	}
-	if isDotSubsequent(p.curr()) {
-		p.state = TokenizerStateSymbol
-		p.next()
-		for p.err == nil && isSubsequent(p.curr()) {
-			p.next()
-		}
+	if p.readDotSubsequentSymbol() {
 		p.value = p.text
 	}
 	if !isDigit(r, p.curr()) {
@@ -1415,8 +1345,7 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 	if p.err != nil {
 		return
 	}
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	p.readHashDigits()
+	p.readDigitsAndHash(r)
 	if p.err != nil {
 		return
 	}
@@ -1526,35 +1455,27 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		if p.err != nil {
 			return
 		}
-		if isDotSubsequent(p.curr()) {
-			// TODO Sym
-			p.next()
-			if p.err != nil {
-				return
-			}
-			p.readSymbol() //nolint:errcheck
-		} else if !isDigit(r, p.curr()) { // +.10
-			// TODO Peculiar identifier
+		if p.readDotSubsequentSymbol() {
+			// Falls through to no-op digit/exponent reads below
+		} else if !isDigit(r, p.curr()) {
 			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
 			return
 		}
-		p.readUnsignedBaseNNumber(r) //nolint:errcheck
-		p.readHashDigits()
+		p.readDigitsAndHash(r)
 		if p.err != nil {
 			return
 		}
 		p.mayReadExponent(r) //nolint:errcheck
 		return
 	case isDigit(r, p.curr()):
-		p.readUnsignedBaseNNumber(r) //nolint:errcheck
-		p.readHashDigits()
+		p.readDigitsAndHash(r)
 		if p.err != nil {
 			return
 		}
 		switch {
 		case isDot(p.curr()):
 			p.readDecimalFractionWithExponent(r)
-		case isExtendedExponentMarkerForRadix(p.curr()):
+		case isExtendedExponentMarker(p.curr()):
 			p.mayReadExponent(r) // nolint:errcheck
 		case p.curr() == '/':
 			p.readDiv(r) // nolint:errcheck
@@ -1564,7 +1485,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 }
 
 func (p *Tokenizer) mayReadExponent(r int) {
-	if !isExtendedExponentMarkerForRadix(p.curr()) {
+	if !isExtendedExponentMarker(p.curr()) {
 		return
 	}
 	var ok bool
@@ -1581,12 +1502,10 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	// Don't return early on EOF - we need to check for required digits below
 
 	// Optional sign
-	if isExplicitSign(p.curr()) {
-		p.next()
-		if p.err != nil {
-			p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits, p.tokenStart, p.tokenEnd)
-			return
-		}
+	p.mayConsumeSign()
+	if p.err != nil {
+		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits, p.tokenStart, p.tokenEnd)
+		return
 	}
 
 	// R7RS requires at least one digit after exponent marker (and optional sign)
@@ -1604,13 +1523,9 @@ func (p *Tokenizer) mayReadExponent(r int) {
 // The complexState parameter specifies which state to set on success
 // (SignedComplex or UnsignedComplex depending on whether the real part was signed).
 func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
-	// Save position in case we need to backtrack (but we don't support backtracking,
-	// so we commit once we see the sign followed by valid imaginary syntax)
-	if isExplicitSign(p.curr()) {
-		p.next() // consume '+' or '-'
-		if p.err != nil {
-			return
-		}
+	p.mayConsumeSign()
+	if p.err != nil {
+		return
 	}
 
 	// Check for +i or -i (pure imaginary unit) or +inf.0i or -inf.0i
@@ -1628,9 +1543,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		if p.err != nil {
 			return
 		}
-		if isImaginary(p.curr()) {
-			p.next()
-		}
+		p.mayConsumeImaginarySuffix()
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
@@ -1638,9 +1551,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		if p.err != nil {
 			return
 		}
-		if isImaginary(p.curr()) {
-			p.next()
-		}
+		p.mayConsumeImaginarySuffix()
 		return
 	}
 
@@ -1648,8 +1559,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 	if !isDigit(r, p.curr()) {
 		return
 	}
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	p.readHashDigits()
+	p.readDigitsAndHash(r)
 	if p.err != nil {
 		return
 	}
@@ -1668,16 +1578,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		}
 	case p.curr() == '/':
 		// Rational: +3/4i
-		p.next()
-		if p.err != nil {
-			return
-		}
-		if !isDigit(r, p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
-			return
-		}
-		p.readUnsignedBaseNNumber(r) //nolint:errcheck
-		p.readHashDigits()
+		p.readDiv(r)
 		if p.err != nil {
 			return
 		}
@@ -1689,10 +1590,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		}
 	}
 	// Must end with 'i'
-	if !isImaginary(p.curr()) {
-		return
-	}
-	p.next()
+	p.mayConsumeImaginarySuffix()
 }
 
 // mayReadPolarPart reads an optional polar angle part for complex numbers.
@@ -1709,12 +1607,9 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 	}
 
 	// The angle can be a signed or unsigned real number
-	// Check for explicit sign first
-	if isExplicitSign(p.curr()) {
-		p.next() // consume '+' or '-'
-		if p.err != nil {
-			return
-		}
+	p.mayConsumeSign()
+	if p.err != nil {
+		return
 	}
 
 	// Must have digits or a dot followed by digits
@@ -1725,8 +1620,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 			return
 		}
 	case isDigit(r, p.curr()):
-		p.readUnsignedBaseNNumber(r) //nolint:errcheck
-		p.readHashDigits()
+		p.readDigitsAndHash(r)
 		if p.err != nil {
 			return
 		}
@@ -1815,6 +1709,65 @@ func (p *Tokenizer) readHashDigits() {
 	}
 }
 
+// readDigitsAndHash reads a run of digits in the given radix followed by
+// optional '#' placeholders. This is the R7RS §7.1.1 production for digit
+// sequences where hash digit placeholders always follow real digits.
+func (p *Tokenizer) readDigitsAndHash(r int) {
+	p.readUnsignedBaseNNumber(r)
+	p.readHashDigits()
+}
+
+// readDotSubsequentSymbol checks if the current character is a dot-subsequent
+// (making the preceding dot part of a symbol like `...` or `.foo`). If so, it
+// sets the state to Symbol, consumes the rest of the symbol, and returns true.
+// Returns false without side effects if the current character is not a dot-subsequent.
+func (p *Tokenizer) readDotSubsequentSymbol() bool {
+	if !isDotSubsequent(p.curr()) {
+		return false
+	}
+	p.state = TokenizerStateSymbol
+	p.next()
+	if p.err != nil {
+		return true
+	}
+	p.readSymbol()
+	return true
+}
+
+// mayConsumeSign checks if the current character is an explicit sign (+/-)
+// and, if so, consumes it. Callers must check p.err afterward.
+func (p *Tokenizer) mayConsumeSign() {
+	if isExplicitSign(p.curr()) {
+		p.next()
+	}
+}
+
+// readSignedComplexSuffix dispatches on the complex suffix after a signed real
+// number has been read. Handles trailing 'i' (imaginary), explicit sign
+// (rectangular complex), and '@' (polar complex).
+func (p *Tokenizer) readSignedComplexSuffix(r int) {
+	switch {
+	case p.mayConsumeImaginarySuffix():
+		p.state = TokenizerStateSignedImaginary
+	case isExplicitSign(p.curr()):
+		p.state = TokenizerStateSignedComplex
+		p.mayReadSignedImaginaryPart(true, r)
+	case isComplexPolar(p.curr()):
+		p.state = TokenizerStateSignedComplexPolar
+		p.mayReadPolarPart(r)
+	}
+}
+
+// mayConsumeImaginarySuffix checks if the current character is the imaginary
+// marker 'i' and, if so, consumes it. Returns true if 'i' was consumed.
+func (p *Tokenizer) mayConsumeImaginarySuffix() bool {
+	if !isImaginary(p.curr()) {
+		return false
+	}
+	p.next()
+	return true
+}
+
 // readSymbol consumes subsequent characters that are valid in a symbol.
 // Called after the initial character has been read.
 func (p *Tokenizer) readSymbol() {
@@ -1837,7 +1790,7 @@ func (p *Tokenizer) readExtendedSymbol() {
 				}
 				return
 			}
-			p.readIntraExtendedToken()
+			p.readEscapeSequence()
 			continue
 		}
 		p.value += string(p.curr())
@@ -1896,26 +1849,6 @@ func (p *Tokenizer) scanCaseInsensitive(s []byte) int {
 	})
 }
 
-// escape returns the character for common escape sequences.
-// Handles: \0, \a, \b, \t, \n, \r.
-func (p *Tokenizer) escape() rune {
-	switch p.cur {
-	case '0':
-		return 0
-	case 'a':
-		return '\a'
-	case 'b':
-		return '\b'
-	case 't':
-		return '\t'
-	case 'n':
-		return '\n'
-	case 'r':
-		return '\r'
-	}
-	return 0
-}
-
 // scanLineEnding consumes a line ending (\n, \r, or \r\n).
 // Returns true if a line ending was consumed.
 func (p *Tokenizer) scanLineEnding() bool {
@@ -1967,21 +1900,6 @@ func (p *Tokenizer) term() {
 	p.tokenEnd = p.runeStart
 }
 
-// isEOF returns true if the tokenizer has reached end of input.
-func (p *Tokenizer) isEOF() bool {
-	return errors.Is(p.err, io.EOF)
-}
-
-// span returns the accumulated source text for the current token.
-func (p *Tokenizer) span() string {
-	return p.text
-}
-
-// this returns the current rune and any error.
-func (p *Tokenizer) this() rune {
-	return p.cur
-}
-
 // readNextRune reads the next rune from the reader and updates position tracking.
 // Sets p.cur to utf8.RuneError and p.err appropriately on EOF or encoding error.
 func (p *Tokenizer) readNextRune() {
@@ -2015,32 +1933,16 @@ func isUnicodeLetter(c rune) bool {
 	return unicode.IsLetter(c) || unicode.Is(unicode.Nl, c)
 }
 
-// isSymbolInitial returns true if c can start a symbol (letter or special initial).
-func isSymbolInitial(c rune) bool {
-	if isUnicodeLetter(c) {
-		return true
-	}
-	if isSpecialInitial(c) {
-		return true
-	}
-	return false
-}
-
 func isUnicodeDigit(c rune) bool {
 	return unicode.IsDigit(c) || unicode.IsOneOf([]*unicode.RangeTable{unicode.Nd}, c)
 }
 
 // isSymbolSubsequent returns true if c can appear after the first character of a symbol.
 func isSymbolSubsequent(c rune) bool {
-	for isIdentifierInitial(c) || isSpecialSubsequent(c) || isExtendedSubsequent(c) || isUnicodeDigit(c) {
+	for isInitial(c) || isSpecialSubsequent(c) || isExtendedSubsequent(c) || isUnicodeDigit(c) {
 		return true
 	}
 	return false
-}
-
-// isIdentifierInitial returns true if c can start an identifier.
-func isIdentifierInitial(c rune) bool {
-	return isSpecialInitial(c) || isUnicodeLetter(c)
 }
 
 // isVerticalLine returns true if c is the vertical line character (|).
@@ -2129,29 +2031,6 @@ func isNumberInitial(r int, c rune) bool {
 	return false
 }
 
-// digit returns the numeric value of c in the given radix, or -1 if invalid.
-func digit(r int, c rune) int {
-	if c >= utf8.RuneSelf {
-		return -1
-	}
-	switch r {
-	case 2, 8, 10:
-		return int(c - '0')
-	case 16:
-		if c >= '0' && c <= '9' {
-			return int(c - '0')
-		}
-		if c >= 'A' && c <= 'F' {
-			return int(c-'A') + 10
-		}
-		if c >= 'a' && c <= 'f' {
-			return int(c-'a') + 10
-		}
-		// error
-	}
-	return -1
-}
-
 // isMarket returns true if c is a market character (#).
 func isMarker(c rune) bool {
 	return c == '#'
@@ -2201,14 +2080,6 @@ func isImaginary(c rune) bool {
 // R7RS defines 'e' as the standard marker; s/f/d/l are precision extensions.
 func isExtendedExponentMarker(c rune) bool {
 	return c == 'e' || c == 'E' || c == 's' || c == 'S' || c == 'f' || c == 'F' || c == 'd' || c == 'D' || c == 'l' || c == 'L'
-}
-
-// isExtendedExponentMarkerForRadix returns true if c is an exponent marker valid for radix r.
-// Per R7RS, exponent markers are only valid in base-10 decimal numbers.
-// There is no <decimal 2>, <decimal 8>, or <decimal 16> in the grammar.
-func isExtendedExponentMarkerForRadix(c rune) bool {
-	// Exponents only valid in base 10 (r=0 means default decimal)
-	return isExtendedExponentMarker(c)
 }
 
 // exponentMarkerStrength returns true and the strength of the exponent marker if c is valid.

@@ -351,7 +351,7 @@ func TestUnicodeIdentifiers(t *testing.T) {
 			p.read()
 			c.Check(p.err, qt.ErrorIs, tc.err)
 			c.Check(p.state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.span)
+			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
 }
@@ -557,7 +557,7 @@ func TestCombinedRadixExactness(t *testing.T) {
 			p.read()
 			c.Check(p.err, qt.ErrorIs, tc.err)
 			c.Check(p.state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.span)
+			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
 }
@@ -781,7 +781,7 @@ func TestInvalidNumbers(t *testing.T) {
 			p.read()
 			// These should tokenize as partial tokens or different types
 			c.Check(p.state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.span)
+			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
 }
@@ -870,7 +870,7 @@ func TestDelimiterBoundaries(t *testing.T) {
 			p.mark()
 			p.read()
 			c.Check(p.state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.span)
+			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
 }
@@ -960,7 +960,7 @@ func TestSpecialCharacterConstants(t *testing.T) {
 			p.read()
 			c.Check(p.err, qt.ErrorIs, tc.err)
 			c.Check(p.state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.span)
+			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
 }
