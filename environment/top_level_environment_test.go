@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -94,6 +95,72 @@ func TestTopLevelEnvironment_SymbolInternCount(t *testing.T) {
 	// Interning the same symbol again shouldn't increase the count
 	topLevel.InternSymbol(values.NewSymbol("a"))
 	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 2)
+}
+
+func TestInternSymbol_Stress(t *testing.T) {
+	c := qt.New(t)
+
+	topLevel := NewTopLevelEnvironment()
+	const count = 10000
+
+	// Intern 10,000 unique symbols
+	symbols := make([]*values.Symbol, count)
+	for i := 0; i < count; i++ {
+		sym := values.NewSymbol("stress-sym-" + string(rune(i/256+1)) + string(rune(i%256+1)))
+		symbols[i] = topLevel.InternSymbol(sym)
+	}
+	c.Assert(topLevel.SymbolInternCount(), qt.Equals, count)
+
+	// Re-interning all returns same pointers
+	for i := 0; i < count; i++ {
+		again := topLevel.InternSymbol(values.NewSymbol(symbols[i].Datum()))
+		c.Assert(again, qt.Equals, symbols[i],
+			qt.Commentf("re-intern of symbol %d should return same pointer", i))
+	}
+	c.Assert(topLevel.SymbolInternCount(), qt.Equals, count,
+		qt.Commentf("count should not increase after re-interning"))
+}
+
+func TestInternSymbol_Concurrent(t *testing.T) {
+	c := qt.New(t)
+
+	topLevel := NewTopLevelEnvironment()
+	const goroutines = 10
+	const perGoroutine = 1000
+
+	// 100 shared names + 900 unique per goroutine = 100 + 9000 = 9100 total
+	var wg sync.WaitGroup
+	results := make([][perGoroutine]*values.Symbol, goroutines)
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(gIdx int) {
+			defer wg.Done()
+			for i := 0; i < perGoroutine; i++ {
+				var name string
+				if i < 100 {
+					// Shared names across all goroutines
+					name = "shared-" + string(rune(i+1))
+				} else {
+					// Unique per goroutine
+					name = "g" + string(rune(gIdx+1)) + "-" + string(rune(i+1))
+				}
+				results[gIdx][i] = topLevel.InternSymbol(values.NewSymbol(name))
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	// Shared symbols: all goroutines should get the same pointer
+	for i := 0; i < 100; i++ {
+		for g := 1; g < goroutines; g++ {
+			c.Assert(results[g][i], qt.Equals, results[0][i],
+				qt.Commentf("shared symbol %d should be identical across goroutines", i))
+		}
+	}
+
+	// Total count: 100 shared + 900*10 unique = 9100
+	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 9100)
 }
 
 func TestTopLevelEnvironment_Phases(t *testing.T) {
