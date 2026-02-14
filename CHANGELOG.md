@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Add Gabriel benchmark suite with 16 canonical benchmarks (tak, takl, ctak, cpstak, fib, triangl, sum, sumfp, diviter, divrec, deriv, ackermann, sieve, nqueens, primes, peval) comparable across Scheme implementations
+- Add Gabriel benchmark suite with 21 benchmarks (tak, takl, ctak, cpstak, fib, triangl, sum, sumfp, sumloop, diviter, divrec, deriv, destruct, browse, ackermann, sieve, nqueens, primes, peval, puzzle, puzzle-debug) comparable across Scheme implementations
 - Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
 - Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
 - Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
@@ -141,6 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/aalpar/wile/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aalpar/wile/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/aalpar/wile/compare/v1.0.3...v1.0.4

@@ -7,7 +7,7 @@ This document summarizes features and APIs that have been implemented, organized
 ## Numeric Tower
 
 **Location:** `values/numeric_tower.go`
-**Plan:** `plans/NUMERIC_TOWER_REFACTOR_COMPLETE.md`
+**Architecture:** See `docs/dev/NUMERIC_TOWER.md`
 **Status:** Stable (direct dispatch architecture finalized 2026-02-05)
 
 ### Summary
@@ -34,7 +34,7 @@ See [NUMERIC_TOWER.md](NUMERIC_TOWER.md) for full documentation.
 
 ## R7RS Conformance
 
-**Plan:** `plans/R7RS_CONFORMANCE_PLAN.md`
+**Status:** Complete
 **Status:** Complete — full R7RS-small conformance achieved
 
 ### String Operations
@@ -113,7 +113,7 @@ See [NUMERIC_TOWER.md](NUMERIC_TOWER.md) for full documentation.
 
 ## Primitive Unit Tests
 
-**Plan:** `plans/TESTING_PLAN.md`
+**Status:** All phases complete
 **Status:** Complete
 
 All 12 phases implemented across ~90 test files in `registry/core/`.
@@ -244,8 +244,6 @@ go test -v -run "Unicode" ./registry/core/...
 
 ## References
 
-- `plans/NUMERIC_TOWER_REFACTOR.md` - Numeric tower design
-- `plans/TESTING_PLAN.md` - Test implementation plan (complete)
-- `plans/R7RS_CONFORMANCE_PLAN.md` - Conformance status
+- [NUMERIC_TOWER.md](NUMERIC_TOWER.md) - Numeric tower architecture
 - [R7RS_SEMANTIC_DIFFERENCES.md](R7RS_SEMANTIC_DIFFERENCES.md) - Documented differences from R7RS
 - [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) - Implementation choices

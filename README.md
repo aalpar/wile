@@ -63,8 +63,8 @@ ls examples/
 ```
 
 **Explore**:
-- [**70+ Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
-- [**Gabriel Benchmarks**](examples/benchmarks/) — 19 canonical Scheme benchmarks for performance testing
+- [**72 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — 21 Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
 
@@ -154,8 +154,8 @@ ls examples/
 ```
 
 **Explore**:
-- [**70+ Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
-- [**Gabriel Benchmarks**](examples/benchmarks/) — 19 canonical Scheme benchmarks for performance testing
+- [**72 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — 21 Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
 
