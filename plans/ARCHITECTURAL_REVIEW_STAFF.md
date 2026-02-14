@@ -69,21 +69,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-### [Priority: Low] — Helper Function Misplacement
-
-**Where**: `registry/core/prim_arithmetic.go:53-99` (`integerEqualsFloat`, `bigIntegerEqualsFloat`)
-
-**What**: Numeric comparison helpers are in `prim_arithmetic.go` (104 lines into a 650-line file) rather than in `values/` package or `registry/helpers/`. Tightly coupled to `values.Integer` and `values.Float` but far from their definitions.
-
-**Why it matters**:
-- **Discoverability**: Developers working on numeric equality may not find these helpers
-- **Not breaking**: Works fine; just organizational
-- **Consistency**: Other cross-type operations (e.g., `Simplify`) live in `values/numeric_tower.go`
-
-**Suggested fix**: Move to `values/numeric_tower.go` or create `values/numeric_equality.go`. Export if needed by primitives.
-
-**Effort**: S (30 minutes for move + import updates)
-
 ---
 
 ## Top Priority (Recommended Action)

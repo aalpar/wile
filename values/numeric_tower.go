@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 )
 
@@ -130,4 +131,52 @@ func ExactnessOf(n Number) Exactness {
 		return Inexact
 	}
 	panic(ErrNotANumber)
+}
+
+// IntegerEqualsFloat compares an exact integer to an inexact float.
+// Returns true only if the float exactly represents the integer value.
+//
+// R7RS §6.2.5: Numeric equality must not lose precision. An exact integer
+// and an inexact float are equal only if the float exactly represents
+// the integer's value.
+func IntegerEqualsFloat(i *Integer, f *Float) bool {
+	// NaN is not equal to anything
+	if math.IsNaN(f.Value) {
+		return false
+	}
+	// Infinity cannot equal any integer
+	if math.IsInf(f.Value, 0) {
+		return false
+	}
+	// Non-integer floats cannot equal integers
+	if f.Value != math.Trunc(f.Value) {
+		return false
+	}
+	// For integers within float64's exact range (|n| <= 2^53), direct compare
+	const maxExactFloat64Int = int64(1) << 53
+	if i.Value >= -maxExactFloat64Int && i.Value <= maxExactFloat64Int {
+		return float64(i.Value) == f.Value
+	}
+	// For larger integers, convert float to big.Rat and compare exactly
+	r := new(big.Rat).SetFloat64(f.Value)
+	if r == nil || !r.IsInt() {
+		return false
+	}
+	return r.Num().Int64() == i.Value
+}
+
+// BigIntegerEqualsFloat compares a BigInteger to a Float.
+// Returns true only if the float exactly represents the BigInteger value.
+func BigIntegerEqualsFloat(bi *BigInteger, f *Float) bool {
+	if math.IsNaN(f.Value) || math.IsInf(f.Value, 0) {
+		return false
+	}
+	if f.Value != math.Trunc(f.Value) {
+		return false
+	}
+	r := new(big.Rat).SetFloat64(f.Value)
+	if r == nil || !r.IsInt() {
+		return false
+	}
+	return bi.BigInt().Cmp(r.Num()) == 0
 }
