@@ -27,6 +27,7 @@ When investigating R7RS conformance issues:
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
 | `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
+| `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
 
 ### Proposed Designs (Future)
 
