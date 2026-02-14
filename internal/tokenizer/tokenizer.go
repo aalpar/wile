@@ -326,6 +326,14 @@ func (p *Tokenizer) integerStateForRadix(signed bool) TokenizerState {
 	}
 }
 
+// signedState returns the signed or unsigned variant of a token state.
+func signedState(signed bool, s, u TokenizerState) TokenizerState {
+	if signed {
+		return s
+	}
+	return u
+}
+
 // Tokenize is a convenience function that tokenizes a complete string.
 // Returns all tokens and any error (typically io.EOF on success).
 func Tokenize(s string, ci bool) ([]Token, error) {
@@ -1269,25 +1277,13 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 	}
 	switch {
 	case isDot(p.curr()):
-		if signed {
-			p.state = TokenizerStateSignedDecimalFraction
-		} else {
-			p.state = TokenizerStateUnsignedDecimalFraction
-		}
+		p.state = signedState(signed, TokenizerStateSignedDecimalFraction, TokenizerStateUnsignedDecimalFraction)
 		p.readDecimalFractionWithExponent(r)
 	case p.curr() == '/':
-		if signed {
-			p.state = TokenizerStateSignedRationalFraction
-		} else {
-			p.state = TokenizerStateUnsignedRationalFraction
-		}
+		p.state = signedState(signed, TokenizerStateSignedRationalFraction, TokenizerStateUnsignedRationalFraction)
 		p.readDiv(r) //nolint:errcheck
 	case isExtendedExponentMarker(p.curr()):
-		if signed {
-			p.state = TokenizerStateSignedScientificNotation
-		} else {
-			p.state = TokenizerStateUnsignedScientificNotation
-		}
+		p.state = signedState(signed, TokenizerStateSignedScientificNotation, TokenizerStateUnsignedScientificNotation)
 		p.mayReadExponent(r) //nolint:errcheck
 	}
 	if p.err != nil {
