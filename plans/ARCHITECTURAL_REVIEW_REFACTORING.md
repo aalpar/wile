@@ -37,18 +37,6 @@ Completed items have been removed. See git history for the original document.
 
 ---
 
-## Tier 4: Organizational (LOW impact)
-
-### 4.4 Optional Fill Argument Extraction
-
-**Scope:** 3 sites
-**Files:** `registry/core/prim_vectors.go` (PrimMakeVector), `registry/core/prim_byte_vectors.go` (PrimMakeBytevector), `registry/core/prim_strings.go` (PrimMakeString)
-**Effort:** Low
-
-Three `make-*` primitives each independently extract optional fill arguments with slightly different patterns. Could share a helper.
-
----
-
 ## What's Working Well (Preserve)
 
 - **Registration system** — Extension registration is clean, consistent, single source of truth
@@ -67,3 +55,13 @@ Three `make-*` primitives each independently extract optional fill arguments wit
 - **Bare sentinels eliminated** — All `NewForeignError` calls now use sentinels (PR #217)
 - **Test error idioms** — `errors.Is(err, io.EOF)` consistent across test and production code
 - **Optional position parsing** — `helpers.ParseSubrange` consolidates `[start [end]]` extraction
+
+---
+
+## Recommended Execution Order
+
+| Phase | Items | Risk | Lines Saved |
+|-------|-------|------|-------------|
+| ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
+| ~~2 (Larger refactors)~~ | ~~2.3~~, ~~4.1~~, ~~4.2~~ | ~~Low-Medium~~ | ~~DONE~~ |
+| DEFERRED | ~~2.1~~ | — | — |
