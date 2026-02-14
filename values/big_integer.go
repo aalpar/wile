@@ -57,9 +57,10 @@ type BigInteger struct {
 }
 
 // HashCode returns a hash of the big integer value.
-// Uses the canonical string representation.
+// Uses the canonical exact-family hash so that Integer, BigInteger,
+// and Rational produce identical hashes for equal values.
 func (p *BigInteger) HashCode() uint64 {
-	return hashString(0x7, p.value.String())
+	return hashExactNumeric(new(big.Rat).SetInt(p.value))
 }
 
 // NewBigInteger creates a new BigInteger from a big.Int.
