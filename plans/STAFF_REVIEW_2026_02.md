@@ -228,26 +228,9 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ## Prioritized Recommendations
 
-### P0 — Ship-blocking (DONE)
+### P0–P2 — Complete
 
-- [x] **Fix quasiquote panic on improper lists with unquotes** — `compile_time_continuation.go:838`. Fixed in this session. Regression test added.
-
-### P1 — Should fix (DONE)
-
-- [x] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51`. Changed to return `ErrInvalidLoadPath`. Updated all callers: `engine.go` (`PushLoadPath`, `WithLoadPath`), `prim_eval.go` (`PrimLoad`), `compile_time_continuation.go` (`compileIncludeImpl`), `library_loader.go` (`loadLibraryFromFile`).
-- [x] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` (10 sites). Replaced string panics with typed sentinels (`ErrNotANumber`, `ErrExactnessConversion`). Panics remain (by design — numeric tower uses panic/recover at VM boundary) but are now recoverable via `errors.Is`.
-- [x] **Document Engine goroutine-safety** — Added doc comment: Engine is NOT safe for concurrent use; each goroutine needs its own Engine or external synchronization. SRFI-18 threads within a single Engine are safe.
-- [x] **Document CompiledCode binding to Engine** — Added doc comment: must only be run on the same Engine that compiled it; running on a different Engine is undefined behavior.
-- [x] **Add `RuntimeError.IsSchemeException()` method** — `error.go`. Reports whether error originated from Scheme `raise`/`raise-continuable` (i.e., `Condition != nil`).
-
-### P2 — Should improve (DONE)
-
-- [x] **Add Registry query methods** — `FindPrimitive(name, phase)`, `HasPrimitive(name, phase)` added at `registry/registry.go:120-141`
-- [x] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()` — two new subtests: non-nested overlapping scope sets, scopeless-vs-scoped
-- [x] **Structure long FFI docstrings** with Go doc subheadings — `RegisterFunc` restructured with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks`
-- [x] **Add API stability statement** to README — added after Package Structure table
-- [x] **Document RuntimeError.Condition nil semantics** — restructured doc comment with `# Condition`, `# Source and Stack Trace`, `# Cause` sections
-- [x] **Document callback synchronicity requirement** in RegisterFunc — already documented at `ffi.go:69-73`
+All P0, P1, and P2 items resolved. Key commits: `b5c0ece` (P1 panics/docs/API), P0 quasiquote fix, P2 docs/tests/API stability. See git history for details.
 
 ### P3 — Nice to have
 
@@ -256,54 +239,3 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 - [ ] **Extract machine/ subpackages** (operations/, compiler/, expander/) — optional organizational improvement
 - [ ] **Add recursion depth limit** — configurable via Engine, prevents DoS
 - [ ] **Deferred concurrency items**: thread-sleep context cancellation (L15), eval dynamic context (L11), ChannelSelect busy-spin (L3)
-
----
-
-## Changes Made in This Review
-
-### Fix: P1 staff review items — panics, docs, API
-
-**Commit:** `b5c0ece`
-
-**Files changed:**
-- `environment/load_path_stack.go` — `Push` returns `error` instead of panicking
-- `environment/load_path_stack_test.go` — Panic assertions → error assertions
-- `environment/resolve_test.go` — Updated `Push` call sites
-- `environment/top_level_environment_test.go` — Updated `Push` call sites
-- `values/big_complex.go` — 10 string panics → typed sentinel panics (`ErrNotANumber`, `ErrExactnessConversion`)
-- `values/foreign_error.go` — Added `ErrInvalidLoadPath` sentinel
-- `engine.go` — `PushLoadPath` returns error; `WithLoadPath` propagates it; goroutine-safety docs on `Engine`
-- `compiled.go` — Doc comment: `CompiledCode` bound to its Engine
-- `error.go` — Added `RuntimeError.IsSchemeException()` method
-- `internal/extensions/eval/prim_eval.go` — `PrimLoad` propagates `Push` error
-- `machine/compile_time_continuation.go` — `compileIncludeImpl` propagates `Push` error
-- `machine/library_loader.go` — `loadLibraryFromFile` propagates `Push` error
-
-**Summary:** Converted the `LoadPathStack.Push` panic to a proper error return and propagated the new error through all 4 callers. Replaced 10 string panics in BigComplex with typed sentinels (the panics themselves are correct by design — the numeric tower uses panic/recover — but string panics can't be matched with `errors.Is`). Added goroutine-safety documentation to `Engine` and `CompiledCode`. Added `RuntimeError.IsSchemeException()` for embedders to distinguish Scheme exceptions from VM errors.
-
-### Fix: quasiquote panic on improper lists with unquotes
-
-**Files changed:**
-- `machine/compile_time_continuation.go` — 6-line fix replacing 8-line panic block
-- `machine/coverage_fullruntime_test.go` — 35-line regression test
-
-**Bug:** `expandQuasiquoteList` panicked with `ErrNotAList` during the splice-checking phase when encountering an improper (dotted) list containing unquotes (e.g., `` `(a ,b . c) ``). The `SyntaxForEach` returns the dotted tail for improper lists, and line 838 treated any non-empty-list termination as an error — even though the expansion logic below (`expandQuasiquoteImproperList`) already handles improper lists correctly.
-
-**Root cause:** The splice-check phase was stricter than the expansion phase. The quasisyntax version in `compile_quasisyntax.go` correctly ignores improper tails during splice-checking (line 276: "For improper lists, the tail won't be an empty list. That's fine"), but the quasiquote version panicked instead.
-
-**Hidden by optimization:** `compileQuasiquoteDatum` checks `quasiquoteNeedsRuntime` first, and quasiquoted improper lists *without* unquotes take the literal-emission fast path, never reaching `expandQuasiquoteList`. Only improper lists *with* unquotes (which force runtime evaluation) trigger the bug.
-
-**Fix:** Changed `v, err :=` to `_, err :=` (discard unused tail value), replaced nested panic block with `if err != nil && !errors.Is(err, values.ErrStopIteration) { panic(err) }`.
-
-**Test:** Added `TestCoverageQuasiquoteImproperWithUnquote` with two subcases: single unquote before dotted tail, and multiple unquotes before dotted tail.
-
-### Fix: P2 staff review items — docs, tests, API stability
-
-**Files changed:**
-- `error.go` — Restructured `RuntimeError` doc comment with `# Condition`, `# Source and Stack Trace`, `# Cause` subheadings. Documented nil Condition semantics (VM/primitive errors) and Cause opacity.
-- `ffi.go` — Restructured `RegisterFunc` doc comment with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks` subheadings.
-- `README.md` — Added "API Stability" subsection after Package Structure table listing public packages (`wile`, `values`, `registry`) and noting `machine/` and `internal/` are not covered by compatibility guarantees.
-- `environment/environment_coverage_test.go` — Added two new subtests to `TestGetLocalIndexWithScopes_Maximality`: "non-nested overlapping scope sets resolved by count" (verifies scope count trumps position when candidates have disjoint scope subsets) and "scopeless candidate loses to scoped candidate" (verifies a binding with scopes beats a scopeless binding even when the scopeless one is innermost).
-
-**Already documented (no changes needed):**
-- Callback synchronicity requirement already documented at `ffi.go:69-73`.

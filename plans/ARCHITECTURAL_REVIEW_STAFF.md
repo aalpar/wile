@@ -106,7 +106,7 @@ func (p *Integer) EqualTo(v Value) bool {
 
 The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (~772 wrapped errors, ~2 bare errors remaining as panic-recovery wrappers). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%).
+**Primary debt**: Testing gaps in user-facing boundaries (`cmd/scheme` at 9.9%, I/O at 55.2%).
 
 **Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (44 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
 
@@ -284,7 +284,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 | Package | Coverage | Notes |
 |---------|----------|-------|
-| `registry/helpers` | 0.9% | **Critical gap** |
+| `registry/helpers` | 86.7% | Fixed (commit `c20df47`) |
 | `cmd/scheme` | 9.9% | User-facing CLI |
 | `internal/extensions/io` | 55.2% | Bug-prone I/O boundary |
 | `internal/extensions/math` | 68.0% | Complex arithmetic |

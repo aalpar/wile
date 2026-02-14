@@ -17,10 +17,10 @@ LOW priority: 15 of 19 fixed, 1 documented (L10), 4 deferred.
 
 | # | Location | Issue | Status |
 |---|----------|-------|--------|
-| L3 | `values/channel.go:253` | `ChannelSelect` busy-spins without `reflect.Select` | Deferred (extension-only, low usage) |
+| L3 | `values/channel.go:214` | `ChannelSelect` busy-spins without `reflect.Select` | Deferred (extension-only, low usage) |
 | L11 | `internal/extensions/eval/prim_eval.go:35` | `eval` doesn't inherit dynamic context | Deferred (rare use case) |
-| L15 | `internal/extensions/threads/prim_threads.go:214` | `thread-sleep!` ignores context cancellation | Deferred (improves shutdown) |
-| L19 | `internal/tokenizer/tokenizer.go:2280` | `isExtendedExponentMarkerForRadix` ignores radix | Deferred (exotic edge case) |
+| L15 | `internal/extensions/threads/prim_threads.go:223` | `thread-sleep!` ignores context cancellation | Deferred (improves shutdown) |
+| L19 | `internal/tokenizer/tokenizer.go:2294` | `isExtendedExponentMarkerForRadix` ignores radix | Deferred (exotic edge case) |
 
 ### Deferral Criteria
 
