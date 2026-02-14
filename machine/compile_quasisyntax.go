@@ -271,7 +271,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 		return nil
 	})
 	if err != nil {
-		panic(err)
+		panic(values.WrapForeignErrorf(err, "quasisyntax: error scanning list at %s", srcCtx.SchemeString()))
 	}
 	// Note: For improper lists, the tail won't be an empty list.
 	// That's fine - improper lists can't have splices in their tail anyway.

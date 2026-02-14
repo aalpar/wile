@@ -215,6 +215,100 @@ func TestGetBindingWithScopes_GlobalPhase_Coverage(t *testing.T) {
 	c.Assert(binding.Value().SchemeString(), qt.Equals, "42")
 }
 
+// GetLocalIndexWithScopes — maximality algorithm
+
+func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("maximal scope count wins among competing candidates", func(t *testing.T) {
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scope1 := syntax.NewScope()
+		scope2 := syntax.NewScope()
+		scope3 := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		// Build 3-level chain: parentEnv ← middleEnv ← innerEnv
+		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil) // 0 scopes
+
+		middleEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parentEnv)
+		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1}) // 1 scope
+
+		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), middleEnv)
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}) // 2 scopes
+
+		// Reference has all 3 scopes — all bindings match, but inner (2 scopes) is maximal
+		result := innerEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2, scope3})
+		c.Assert(result, qt.IsNotNil)
+		// Inner binding is at depth 0 (the frame we call from)
+		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select innermost binding (depth 0)"))
+	})
+
+	t.Run("same scope count tie-break favors innermost", func(t *testing.T) {
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scopeA := syntax.NewScope()
+		scopeB := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		// Parent: binding with [scopeA] (1 scope)
+		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA})
+
+		// Child: binding with [scopeB] (1 scope)
+		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parentEnv)
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB})
+
+		// Reference has both — both candidates match with scopeCount=1
+		// First candidate collected is depth 0 (child), wins by first-encountered
+		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scopeA, scopeB})
+		c.Assert(result, qt.IsNotNil)
+		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select child binding (depth 0) on tie"))
+	})
+
+	t.Run("perfect match returns immediately", func(t *testing.T) {
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scope1 := syntax.NewScope()
+		scope2 := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2})
+
+		// Reference exactly matches binding scopes — triggers fast path
+		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2})
+		c.Assert(result, qt.IsNotNil)
+		c.Assert(result[1], qt.Equals, 0)
+	})
+
+	t.Run("superset binding rejected", func(t *testing.T) {
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scope1 := syntax.NewScope()
+		scope2 := syntax.NewScope()
+		scope3 := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		// Binding has 3 scopes, but reference only has 2
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2, scope3})
+
+		// Reference is a strict subset of binding scopes — NOT a match
+		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2})
+		c.Assert(result, qt.IsNil)
+	})
+}
+
 // MaybeCreateLocalBinding
 
 func TestMaybeCreateLocalBinding_Existing_Coverage(t *testing.T) {
