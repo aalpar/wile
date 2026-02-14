@@ -125,6 +125,9 @@ func (p OperationBase) SchemeString() string {
 }
 
 // IsVoid returns false; operations are never void.
+// Unlike other values.Value implementations, this does not handle nil
+// receivers — operations are bytecode instructions constructed by the
+// compiler and stored in NativeTemplate slices; they are never nil.
 func (p OperationBase) IsVoid() bool {
 	return false
 }
