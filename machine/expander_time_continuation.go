@@ -66,6 +66,11 @@ func NewExpanderTimeContinuation(env *environment.EnvironmentFrame) *ExpanderTim
 // hasLocalVariableBinding checks if the symbol has a local variable binding
 // in the runtime environment that would shadow any macro definition.
 // R7RS §4.2.2: let bindings shadow outer bindings including macros.
+//
+// Both this path and the compiler's CompileSymbolReference (compile_time_continuation.go)
+// check bindingScopes ⊆ useScopes via syntax.ScopesMatch. This path checks a single
+// binding for shadowing; the compiler uses the environment's maximality algorithm
+// (GetLocalIndexWithScopes) to select the most specific binding for codegen dispatch.
 func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
 	// Only check local bindings - global variables don't shadow macros
 	li := p.env.GetLocalIndex(sym)

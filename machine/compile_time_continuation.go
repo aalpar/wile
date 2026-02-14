@@ -109,7 +109,11 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// fall through to normal resolution
 	}
 
-	// Get the scopes from the syntax symbol for hygiene checking
+	// Get the scopes from the syntax symbol for hygiene checking.
+	// Both this path and the expander's hasLocalVariableBinding (expander_time_continuation.go)
+	// check bindingScopes ⊆ useScopes via syntax.ScopesMatch. This path uses the environment's
+	// maximality algorithm (GetLocalIndexWithScopes) to find the most specific binding for
+	// codegen dispatch; the expander only needs a yes/no shadow check for a single binding.
 	symbolScopes := expr.Scopes()
 
 	// If the symbol has no scopes (e.g., from user code, not from macro expansion),
