@@ -22,6 +22,7 @@ var (
 	_ Value      = (*BigFloat)(nil)
 	_ Number     = (*BigFloat)(nil)
 	_ RealNumber = (*BigFloat)(nil)
+	_ Hashable   = (*BigFloat)(nil)
 )
 
 // DefaultBigFloatPrecision is the default precision for BigFloat values.
@@ -62,6 +63,11 @@ func (p *BigFloat) BigFloatValue() *big.Float {
 func (p *BigFloat) Float64() float64 {
 	f, _ := p.value.Float64()
 	return f
+}
+
+// HashCode returns a hash code for this BigFloat.
+func (p *BigFloat) HashCode() uint64 {
+	return hashString(0x9, p.value.Text('g', -1))
 }
 
 // Add returns the sum of this BigFloat and another number.
