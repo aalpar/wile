@@ -137,24 +137,6 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 ## MEDIUM PRIORITY
 
-### [Priority: Medium] — Duplicate Scope-Aware Lookup Logic in Compiler and Expander
-
-**Where**: `machine/compile_time_continuation.go:115-169` vs `machine/expander_time_continuation.go:88-94`
-
-**What**: Both the compiler and expander implement scope-aware binding resolution, checking whether a symbol's scopes match a binding's scopes per Flatt's hygiene model. The logic is duplicated with different purposes:
-- **Compiler** (lines 115-169): Checks symbol scopes to choose `GetLocalIndex` (fast) vs `GetLocalIndexWithScopes` (slow) for dispatch optimization
-- **Expander** (lines 88-94): Checks binding scopes to determine if a variable shadows a macro (R7RS 4.2.2 correctness requirement)
-
-Both implement `bindingScopes ⊆ useScopes` but serve different purposes (performance vs correctness) and cannot be trivially consolidated.
-
-**Why it matters**: Maintaining two implementations of the same hygiene rule increases the risk of divergence. If the hygiene model changes (e.g., to support custom ellipsis), both sites must be updated identically. The duplication obscures the fact that they implement the same core rule.
-
-**Suggested fix**: Extract a shared `scopesMatch(bindingScopes, useScopes ScopeSet) bool` function in `internal/syntax/scope.go`. Document the two use cases in comments. Both call sites use the same function but for different dispatch decisions.
-
-**Effort**: S (1 day to extract and test the shared function)
-
----
-
 ### [Priority: Medium] — Pattern Matching Adapter Layer: Two Separate Conversions for Syntax ↔ Raw Values
 
 **Where**: `internal/match/syntax_adapter.go:158-263` (two distinct conversion functions)
