@@ -599,7 +599,8 @@ func (p *Tokenizer) readHexEscapeToken() {
 		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator, p.tokenStart, p.tokenEnd)
 		return
 	}
-	if err := validateCodePoint(x, p.tokenStart, p.tokenEnd); err != nil {
+	err := validateCodePoint(x, p.tokenStart, p.tokenEnd)
+	if err != nil {
 		p.err = err
 		return
 	}
@@ -955,7 +956,8 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape, p.tokenStart, p.tokenEnd)
 			return utf8.RuneError
 		}
-		if err := validateCodePoint(x, p.tokenStart, p.tokenEnd); err != nil {
+		err := validateCodePoint(x, p.tokenStart, p.tokenEnd)
+		if err != nil {
 			p.err = err
 			return utf8.RuneError
 		}
@@ -1455,9 +1457,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		if p.err != nil {
 			return
 		}
-		if p.readDotSubsequentSymbol() {
-			// Falls through to no-op digit/exponent reads below
-		} else if !isDigit(r, p.curr()) {
+		if !p.readDotSubsequentSymbol() && !isDigit(r, p.curr()) {
 			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
 			return
 		}
