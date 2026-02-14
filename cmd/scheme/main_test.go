@@ -15,17 +15,175 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/aalpar/wile/internal/bootstrap"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
+
+// Subprocess environment variable names.
+const (
+	// envSubprocess triggers TestMain to decode CLI args and call main().
+	envSubprocess = "WILE_CLI_TEST_SUBPROCESS"
+	// envCLIArgs carries base64(json(args)) for the subprocess.
+	envCLIArgs = "WILE_CLI_TEST_ARGS"
+	// envExitSubprocess triggers per-test subprocess branches (Failf, Printf).
+	envExitSubprocess = "WILE_CLI_EXIT_SUBPROCESS"
+)
+
+// ---------------------------------------------------------------------------
+// Subprocess dispatcher
+// ---------------------------------------------------------------------------
+
+// TestMain intercepts subprocess invocations for CLI integration tests.
+// When envSubprocess is set, it decodes CLI args from envCLIArgs, sets
+// os.Args, and calls main() — exercising the real CLI entry point in an
+// isolated process.
+func TestMain(m *testing.M) {
+	if os.Getenv(envSubprocess) == "1" {
+		encoded := os.Getenv(envCLIArgs)
+		argsJSON, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "subprocess: failed to decode args: %v\n", err)
+			os.Exit(2)
+		}
+		var args []string
+		err = json.Unmarshal(argsJSON, &args)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "subprocess: failed to unmarshal args: %v\n", err)
+			os.Exit(2)
+		}
+		os.Args = args
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure types and helpers
+// ---------------------------------------------------------------------------
+
+// cliResult captures stdout, stderr, and exit code from a subprocess.
+type cliResult struct {
+	stdout   string
+	stderr   string
+	exitCode int
+}
+
+// runCLI spawns a subprocess that calls main() with the given CLI args.
+func runCLI(t *testing.T, args ...string) cliResult {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Encode args as base64(json(["scheme", args...]))
+	fullArgs := append([]string{"scheme"}, args...)
+	argsJSON, err := json.Marshal(fullArgs)
+	if err != nil {
+		t.Fatalf("failed to marshal args: %v", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(argsJSON)
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+	cmd.Env = append(os.Environ(),
+		envSubprocess+"=1",
+		envCLIArgs+"="+encoded,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
+	result := cliResult{
+		stdout:   stdout.String(),
+		stderr:   stderr.String(),
+		exitCode: 0,
+	}
+
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("subprocess timed out after 10s")
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			result.exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("unexpected error running subprocess: %v", err)
+		}
+	}
+
+	return result
+}
+
+// runExitSubprocess spawns a subprocess to run a specific test function.
+// The target test function should check envExitSubprocess == "1" at its top
+// and call the function under test directly.
+func runExitSubprocess(t *testing.T, testName string) cliResult {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+testName+"$")
+	cmd.Env = append(os.Environ(), envExitSubprocess+"=1")
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	result := cliResult{
+		stdout:   stdout.String(),
+		stderr:   stderr.String(),
+		exitCode: 0,
+	}
+
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("subprocess timed out")
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			result.exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	return result
+}
+
+// writeTempScheme writes Scheme source to a temp .scm file and returns its path.
+func writeTempScheme(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.scm")
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("failed to write temp scheme file: %v", err)
+	}
+	return path
+}
+
+// ---------------------------------------------------------------------------
+// Existing unit tests (no subprocess needed)
+// ---------------------------------------------------------------------------
 
 func TestInitLibraryRegistry(t *testing.T) {
 	c := qt.New(t)
@@ -113,111 +271,6 @@ func TestInitLibraryRegistry(t *testing.T) {
 	}
 }
 
-func TestRunFile(t *testing.T) {
-	c := qt.New(t)
-
-	tcs := []struct {
-		name    string
-		content string
-	}{
-		{
-			name:    "single expression",
-			content: "(+ 1 2 3)",
-		},
-		{
-			name:    "multiple expressions",
-			content: "(define x 10)\n(define y 20)\n(+ x y)",
-		},
-		{
-			name:    "void result",
-			content: "(define z 42)",
-		},
-		{
-			name:    "empty file",
-			content: "",
-		},
-		{
-			name:    "comment only",
-			content: "; just a comment\n",
-		},
-		{
-			name:    "begin wrapper with continuations",
-			content: "(define k #f)\n(+ 1 (call/cc (lambda (c) (set! k c) 2)))",
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
-			c.Assert(err, qt.IsNil)
-
-			// Create a temporary file
-			tmpDir := t.TempDir()
-			filename := filepath.Join(tmpDir, "test.scm")
-			err = os.WriteFile(filename, []byte(tc.content), 0644)
-			c.Assert(err, qt.IsNil)
-
-			// Open and run file
-			f, err := os.Open(filename)
-			c.Assert(err, qt.IsNil)
-			defer f.Close()
-
-			// runFile calls Printf/Failf which exit the process
-			// We can't easily test the full function without subprocess testing
-			// But we can verify it compiles and runs without panic for valid input
-			_ = env
-			_ = f
-			_ = filename
-		})
-	}
-}
-
-func TestRunFileErrors(t *testing.T) {
-	c := qt.New(t)
-
-	tcs := []struct {
-		name    string
-		content string
-	}{
-		{
-			name:    "syntax error",
-			content: "(+ 1 2",
-		},
-		{
-			name:    "undefined variable",
-			content: "(+ undefined-var 1)",
-		},
-		{
-			name:    "type error",
-			content: "(+ 'symbol 1)",
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
-			c.Assert(err, qt.IsNil)
-
-			// Create a temporary file
-			tmpDir := t.TempDir()
-			filename := filepath.Join(tmpDir, "test.scm")
-			err = os.WriteFile(filename, []byte(tc.content), 0644)
-			c.Assert(err, qt.IsNil)
-
-			// Open file
-			f, err := os.Open(filename)
-			c.Assert(err, qt.IsNil)
-			defer f.Close()
-
-			// runFile will call Failf which exits the process
-			// We can't easily test this without subprocess execution
-			// For now, just verify the setup works
-			_ = env
-			_ = f
-		})
-	}
-}
-
 func TestLibraryPathPriority(t *testing.T) {
 	c := qt.New(t)
 
@@ -279,4 +332,187 @@ func TestBuildVariables(t *testing.T) {
 	if !strings.Contains(BuildVersion, "v1.0.0") {
 		t.Errorf("BuildVersion assignment failed")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Flag parsing tests
+// ---------------------------------------------------------------------------
+
+func TestMainFlags(t *testing.T) {
+	t.Run("version", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLI(t, "--version")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(
+			strings.Contains(result.stdout, "Wile Scheme"), qt.IsTrue,
+			qt.Commentf("stdout: %q", result.stdout),
+		)
+	})
+
+	t.Run("help", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLI(t, "--help")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(
+			strings.Contains(result.stdout, "Usage:"), qt.IsTrue,
+			qt.Commentf("stdout: %q", result.stdout),
+		)
+	})
+
+	t.Run("invalid flag", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLI(t, "--bogus")
+		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+		c.Assert(result.stderr, qt.Not(qt.Equals), "")
+	})
+
+	t.Run("quiet suppresses log", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "(+ 1 2)")
+		result := runCLI(t, "-q", "-f", path)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stderr, qt.Equals, "")
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: File execution tests
+// ---------------------------------------------------------------------------
+
+func TestRunFile(t *testing.T) {
+	tcs := []struct {
+		name    string
+		content string
+		stdout  string
+	}{
+		{
+			name:    "single expression",
+			content: "(+ 1 2 3)",
+			stdout:  "6\n",
+		},
+		{
+			name:    "multiple expressions",
+			content: "(define x 10)\n(+ x 20)",
+			stdout:  "30\n",
+		},
+		{
+			name:    "void result",
+			content: "(define z 42)",
+			stdout:  "",
+		},
+		{
+			name:    "empty file",
+			content: "",
+			stdout:  "",
+		},
+		{
+			name:    "comment only",
+			content: "; just a comment\n",
+			stdout:  "",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			path := writeTempScheme(t, tc.content)
+			result := runCLI(t, "-q", "-f", path)
+			c.Assert(result.exitCode, qt.Equals, 0)
+			c.Assert(result.stdout, qt.Equals, tc.stdout)
+		})
+	}
+
+	t.Run("positional arg", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "(+ 1 2)")
+		result := runCLI(t, "-q", path)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "3\n")
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Error tests
+// ---------------------------------------------------------------------------
+
+func TestRunFileErrors(t *testing.T) {
+	tcs := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "unterminated string",
+			content: `"unterminated`,
+		},
+		{
+			name:    "undefined variable",
+			content: "(+ undefined-var 1)",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			path := writeTempScheme(t, tc.content)
+			result := runCLI(t, "-q", "-f", path)
+			c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+			c.Assert(
+				strings.Contains(result.stderr, "Error:"), qt.IsTrue,
+				qt.Commentf("stderr: %q", result.stderr),
+			)
+		})
+	}
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLI(t, "-q", "-f", "/no/such/file.scm")
+		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+		c.Assert(
+			strings.Contains(result.stderr, "Error:"), qt.IsTrue,
+			qt.Commentf("stderr: %q", result.stderr),
+		)
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Direct function tests (per-test subprocess branches)
+// ---------------------------------------------------------------------------
+
+func TestFailfNilNoMessage(t *testing.T) {
+	if os.Getenv(envExitSubprocess) == "1" {
+		Failf(nil)
+		return
+	}
+	c := qt.New(t)
+	result := runExitSubprocess(t, "TestFailfNilNoMessage")
+	c.Assert(result.exitCode, qt.Equals, 0)
+	c.Assert(result.stderr, qt.Equals, "")
+}
+
+func TestFailfWithError(t *testing.T) {
+	if os.Getenv(envExitSubprocess) == "1" {
+		Failf(fmt.Errorf("boom"), "ctx")
+		return
+	}
+	c := qt.New(t)
+	result := runExitSubprocess(t, "TestFailfWithError")
+	c.Assert(result.exitCode, qt.Equals, 1)
+	c.Assert(
+		strings.Contains(result.stderr, "Error: boom: ctx"), qt.IsTrue,
+		qt.Commentf("stderr: %q", result.stderr),
+	)
+}
+
+func TestFailfNilWithMessage(t *testing.T) {
+	if os.Getenv(envExitSubprocess) == "1" {
+		Failf(nil, "msg")
+		return
+	}
+	c := qt.New(t)
+	result := runExitSubprocess(t, "TestFailfNilWithMessage")
+	c.Assert(result.exitCode, qt.Equals, 1)
+	c.Assert(
+		strings.Contains(result.stderr, "Error: msg"), qt.IsTrue,
+		qt.Commentf("stderr: %q", result.stderr),
+	)
 }
