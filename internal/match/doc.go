@@ -37,7 +37,7 @@
 // # Template Expansion
 //
 //   - [Matcher.Expand]: expand template with captured bindings
-//   - [SyntaxMatcher.ExpandWithIntroScope]: expand with hygiene scopes
+//   - [SyntaxMatcher.Expand]: expand with hygiene via [ExpandOptions]
 //
 // Reference: R7RS Section 4.3.2 (syntax-rules pattern language).
 package match

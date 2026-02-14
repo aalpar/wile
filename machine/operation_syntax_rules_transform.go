@@ -205,8 +205,13 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 			// - Use-site context is used for newly created syntax objects (better error messages)
 			// - Origin info tracks the macro expansion chain
 			// - Pattern variable syntax enables nested macro hygiene via scope comparison
-			expanded, err := clause.matcher.ExpandWithPatternVarSyntax(
-				clause.template, introScope, freeIdsAny, useSiteCtx, origin, clause.patternVarSyntax)
+			expanded, err := clause.matcher.Expand(clause.template, match.ExpandOptions{
+				IntroScope:       introScope,
+				FreeIds:          freeIdsAny,
+				UseSiteCtx:       useSiteCtx,
+				Origin:           origin,
+				PatternVarSyntax: clause.patternVarSyntax,
+			})
 			if err != nil {
 				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}

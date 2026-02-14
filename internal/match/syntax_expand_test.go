@@ -181,7 +181,7 @@ func TestCapturedValueToSyntax(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			result, err := sm.capturedValueToSyntax(tc.val, nil, nil, nil)
+			result, err := sm.capturedValueToSyntax(tc.val, &ExpandOptions{})
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 
@@ -276,7 +276,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
-			result, err := sm.Expand(tc.template)
+			result, err := sm.Expand(tc.template, ExpandOptions{})
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			tc.checkFn(c, result)
@@ -348,7 +348,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 
 			introScope := syntax.NewScope()
 			template := syntax.NewSyntaxSymbol("tmp", nil)
-			result, err := sm.ExpandWithIntroScope(template, introScope, tc.freeIds)
+			result, err := sm.Expand(template, ExpandOptions{IntroScope: introScope, FreeIds: tc.freeIds})
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			tc.checkFn(c, result, introScope)
@@ -387,7 +387,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("x", nil),
 	)
 
-	result, err := sm.Expand(template)
+	result, err := sm.Expand(template, ExpandOptions{})
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 
@@ -501,7 +501,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 				syntax.NewSyntaxSymbol("...", nil),
 			)
 
-			result, err := sm.Expand(template)
+			result, err := sm.Expand(template, ExpandOptions{})
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, qt.IsNotNil)
 			tc.checkFn(c, result)
@@ -515,7 +515,7 @@ func TestSyntaxExpandNoContext(t *testing.T) {
 	sm := NewSyntaxMatcher(map[string]struct{}{}, []SyntaxCommand{})
 	template := syntax.NewSyntaxSymbol("x", nil)
 
-	_, err := sm.Expand(template)
+	_, err := sm.Expand(template, ExpandOptions{})
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "no capture context")
 }
@@ -552,7 +552,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 
 	introScope := syntax.NewScope()
 	template := syntax.NewSyntaxSymbol("x", nil)
-	result, err := sm.ExpandWithIntroScope(template, introScope, nil)
+	result, err := sm.Expand(template, ExpandOptions{IntroScope: introScope})
 	c.Assert(err, qt.IsNil)
 
 	// The result should be the captured symbol with its ORIGINAL scopes,
@@ -597,7 +597,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 		"x": syntax.NewSyntaxSymbol("x", nil),
 	}
 	template := syntax.NewSyntaxSymbol("x", nil)
-	result, err := sm.ExpandWithPatternVarSyntax(template, nil, nil, nil, nil, patternVarSyntax)
+	result, err := sm.Expand(template, ExpandOptions{PatternVarSyntax: patternVarSyntax})
 	c.Assert(err, qt.IsNil)
 	obj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected substitution, got %T", result))
@@ -641,7 +641,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 		"x": syntax.NewSyntaxSymbol("x", nil), // pattern var has no scopes
 	}
 
-	result, err := sm.ExpandWithPatternVarSyntax(template, nil, nil, nil, nil, patternVarSyntax)
+	result, err := sm.Expand(template, ExpandOptions{PatternVarSyntax: patternVarSyntax})
 	c.Assert(err, qt.IsNil)
 	// Should NOT substitute - return the symbol as-is (with hygiene applied)
 	sym, ok := result.(*syntax.SyntaxSymbol)
@@ -686,7 +686,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 					syntax.NewSyntaxSymbol("...", nil),
 					syntax.NewSyntaxSymbol("...", nil),
 				)
-				result, err := sm.Expand(template)
+				result, err := sm.Expand(template, ExpandOptions{})
 				c.Assert(err, qt.IsNil)
 				// Result should be the literal ... symbol
 				sym, ok := result.(*syntax.SyntaxSymbol)
@@ -706,7 +706,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 					syntax.NewSyntaxSymbol("...", nil),
 					innerTemplate,
 				)
-				result, err := sm.Expand(template)
+				result, err := sm.Expand(template, ExpandOptions{})
 				c.Assert(err, qt.IsNil)
 
 				resultPair, ok := result.(*syntax.SyntaxPair)
@@ -765,7 +765,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("a", nil),
 	)
 
-	result, err := sm.Expand(template)
+	result, err := sm.Expand(template, ExpandOptions{})
 	c.Assert(err, qt.IsNil)
 	vec, ok := result.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxVector, got %T", result))
@@ -807,7 +807,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
-	result, err := sm.ExpandWithPatternVarSyntax(nil, nil, nil, nil, nil, nil)
+	result, err := sm.Expand(nil, ExpandOptions{})
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNil)
 }
