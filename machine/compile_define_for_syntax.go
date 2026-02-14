@@ -30,11 +30,9 @@ import (
 // Unlike define-syntax (which stores macro transformers), define-for-syntax
 // stores regular values with BindingTypeVariable.
 func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	if p.env == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-for-syntax: nil environment")
-	}
-	if p.template == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-for-syntax: nil template")
+	err := p.ensureState("define-for-syntax")
+	if err != nil {
+		return err
 	}
 
 	// expr is (name expr) or ((name args...) body...) - the args after 'define-for-syntax'

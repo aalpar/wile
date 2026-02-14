@@ -31,11 +31,9 @@ import (
 // can use define-for-syntax bindings and runtime primitives. The result
 // of the last expression is discarded (begin-for-syntax is used for side effects).
 func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	if p.env == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "begin-for-syntax: nil environment")
-	}
-	if p.template == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "begin-for-syntax: nil template")
+	err := p.ensureState("begin-for-syntax")
+	if err != nil {
+		return err
 	}
 
 	// expr is (expr ...) - the expressions after 'begin-for-syntax'

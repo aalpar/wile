@@ -60,3 +60,16 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 
 	return mc.GetValue(), nil
 }
+
+// ensureState checks that the compiler has a valid environment and template.
+// Every compile-time form (define-syntax, begin-for-syntax, define-for-syntax,
+// eval-when) must call this before accessing p.env or p.template.
+func (p *CompileTimeContinuation) ensureState(formName string) error {
+	if p.env == nil {
+		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "%s: nil environment", formName)
+	}
+	if p.template == nil {
+		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "%s: nil template", formName)
+	}
+	return nil
+}
