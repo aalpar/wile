@@ -86,10 +86,10 @@ func TestTokenizer_BigInteger(t *testing.T) {
 			p.read()
 			err := p.err
 			state := p.state
-			p.span()
+			p.Text()
 			c.Check(err, qt.ErrorIs, tc.err0)
 			c.Check(state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.scan)
+			c.Check(p.Text(), qt.Equals, tc.scan)
 		})
 	}
 }
@@ -181,10 +181,10 @@ func TestTokenizer_BigFloat(t *testing.T) {
 			p.read()
 			err := p.err
 			state := p.state
-			p.span()
+			p.Text()
 			c.Check(err, qt.ErrorIs, tc.err0)
 			c.Check(state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.scan)
+			c.Check(p.Text(), qt.Equals, tc.scan)
 		})
 	}
 }

@@ -1957,10 +1957,10 @@ func TestTokenizer_read(t *testing.T) {
 			p.read()
 			err := p.err
 			state := p.state
-			p.span()
+			p.Text()
 			c.Check(err, qt.ErrorIs, tc.err0)
 			c.Check(state, qt.Equals, tc.state)
-			c.Check(p.span(), qt.Equals, tc.scan)
+			c.Check(p.Text(), qt.Equals, tc.scan)
 		})
 	}
 }
@@ -2113,28 +2113,6 @@ func TestTokenizer_scanLineEnding(t *testing.T) {
 	}
 }
 
-func TestTokenizer_escape(t *testing.T) {
-	tcs := []struct {
-		input    rune
-		expected rune
-	}{
-		{'0', 0},
-		{'a', '\a'},
-		{'b', '\b'},
-		{'t', '\t'},
-		{'n', '\n'},
-		{'r', '\r'},
-		{'x', 0}, // unknown escape
-	}
-	for _, tc := range tcs {
-		qt.New(t).Run(string(tc.input), func(c *qt.C) {
-			p := &Tokenizer{cur: tc.input}
-			result := p.escape()
-			c.Assert(result, qt.Equals, tc.expected)
-		})
-	}
-}
-
 func TestTokenizer_reset(t *testing.T) {
 	c := qt.New(t)
 	p := NewTokenizer(strings.NewReader("test"), false)
@@ -2146,25 +2124,6 @@ func TestTokenizer_reset(t *testing.T) {
 
 	c.Assert(p.err, qt.IsNil)
 	c.Assert(p.tokenStart, qt.Equals, p.tokenEnd)
-}
-
-func TestTokenizer_isEOF(t *testing.T) {
-	c := qt.New(t)
-
-	// Not at EOF
-	p := NewTokenizer(strings.NewReader("test"), false)
-	c.Assert(p.isEOF(), qt.IsFalse)
-
-	// At EOF
-	p2 := NewTokenizer(strings.NewReader(""), false)
-	c.Assert(p2.isEOF(), qt.IsTrue)
-}
-
-func TestTokenizer_this(t *testing.T) {
-	c := qt.New(t)
-	p := NewTokenizer(strings.NewReader("abc"), false)
-	r := p.this()
-	c.Assert(r, qt.Equals, 'a')
 }
 
 // Additional tokenization edge cases
@@ -2267,41 +2226,6 @@ func TestIsNumberInitial(t *testing.T) {
 	c.Assert(isNumberInitial(8, '7'), qt.IsTrue)
 }
 
-func TestDigit(t *testing.T) {
-	tcs := []struct {
-		radix    int
-		char     rune
-		expected int
-	}{
-		// Radix 2
-		{radix: 2, char: '0', expected: 0},
-		{radix: 2, char: '1', expected: 1},
-		// Radix 8
-		{radix: 8, char: '0', expected: 0},
-		{radix: 8, char: '7', expected: 7},
-		// Radix 10
-		{radix: 10, char: '0', expected: 0},
-		{radix: 10, char: '5', expected: 5},
-		// Radix 16 - digits (c < '9' branch)
-		{radix: 16, char: '0', expected: 0},
-		{radix: 16, char: '8', expected: 8},
-		// Radix 16 - uppercase hex A-E (c < 'F' branch)
-		{radix: 16, char: 'A', expected: 10},
-		{radix: 16, char: 'E', expected: 14},
-		// Radix 16 - lowercase hex a-e (c < 'f' branch)
-		{radix: 16, char: 'a', expected: 10},
-		{radix: 16, char: 'e', expected: 14},
-		// Unicode characters (c >= utf8.RuneSelf returns -1)
-		{radix: 10, char: '©', expected: -1},
-		{radix: 16, char: 'é', expected: -1},
-	}
-	for i, tc := range tcs {
-		qt.New(t).Run(fmt.Sprintf("%d: radix=%d char=%q", i, tc.radix, tc.char), func(c *qt.C) {
-			c.Check(digit(tc.radix, tc.char), qt.Equals, tc.expected)
-		})
-	}
-}
-
 func TestIsLineEnding(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(isLineEnding('\n'), qt.IsTrue)
@@ -2309,11 +2233,11 @@ func TestIsLineEnding(t *testing.T) {
 	c.Assert(isLineEnding(' '), qt.IsFalse)
 }
 
-func TestIsSymbolInitial(t *testing.T) {
+func TestIsInitial(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(isSymbolInitial('a'), qt.IsTrue)
-	c.Assert(isSymbolInitial('!'), qt.IsTrue)
-	c.Assert(isSymbolInitial('1'), qt.IsFalse)
+	c.Assert(isInitial('a'), qt.IsTrue)
+	c.Assert(isInitial('!'), qt.IsTrue)
+	c.Assert(isInitial('1'), qt.IsFalse)
 }
 
 func TestIsSubsequent(t *testing.T) {

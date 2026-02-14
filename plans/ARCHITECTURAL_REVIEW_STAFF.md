@@ -171,6 +171,18 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types — RESOLVED
 
+**Where**: `internal/tokenizer/tokenizer.go`
+
+**Resolution**: Addressed in multiple PRs:
+- PR #230 (`refactor/tokenizer-reader-consolidation`): Extracted `readDelimited` to unify string and extended symbol scanning (~60 lines saved).
+- `refactor/tokenizer-predicate-cleanup`: Consolidated duplicate predicates (`isSymbolInitial`/`isIdentifierInitial` → `isInitial`), fixed `for`→`if` bug (~17 lines saved).
+- `refactor/tokenizer-signed-state-helper`: Extracted `signedState` helper for signed/unsigned state dispatch (~12 lines saved).
+- `refactor/tokenizer-number-parsing-consolidation`: Deleted `scanForImaginaryNumberSpecials`, extracted `readOptionalDecimalPart` (~85 lines saved).
+
+**Total savings**: ~174 lines. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for remaining (deferred) opportunities.
+
+**Effort**: Completed
+
 ---
 
 ## LOW PRIORITY
