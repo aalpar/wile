@@ -55,20 +55,11 @@ Repeated for Read, ReadByte, UnreadByte, ReadRune, UnreadRune, Write, WriteByte,
 
 **Recommended fix:** The `portBase` struct already handles Close/IsClosed. Extending it (or creating a read/write mixin) would eliminate ~400 lines.
 
-### 2.4 Compiler Nil-Guard Duplication in machine/
+### ~~2.4 Compiler Nil-Guard Duplication in machine/~~ — DONE
 
-**Scope:** 13 instances across 4 files, plus duplicated expand-compile-execute pattern in 3 files
-**Files:** `machine/compile_begin_for_syntax.go`, `machine/compile_define_for_syntax.go`, `machine/compile_eval_when.go`, `machine/compile_time_continuation.go`
-**Effort:** Low
-
-Every compile-time form starts with:
-
-```go
-if p.env == nil { return WrapForeignErrorf(ErrUnexpectedNil, "%s: nil environment") }
-if p.template == nil { return WrapForeignErrorf(ErrUnexpectedNil, "%s: nil template") }
-```
-
-**Recommended fix:** Extract `ensureState(ctx string) error` and `executeAtCompileTime(...)` on `CompileTimeContinuation`.
+Extracted `ensureState(formName string) error` on `CompileTimeContinuation` in `compile_helpers.go`.
+Four call sites updated: `CompileBeginForSyntax`, `CompileDefineForSyntax`, `CompileEvalWhen`, `CompileDefineSyntax`.
+The `expandCompileExecute` helper was already extracted previously.
 
 ---
 
@@ -156,6 +147,6 @@ Three different patterns for checking empty list arguments in variadic operation
 
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
-| 1 (Low-risk dedup) | 2.4 | Low | ~100 |
+| ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
 | 2 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
 | DEFERRED | ~~2.1~~ | — | — |

@@ -70,11 +70,9 @@ var evalWhenPhaseTable = map[string]evalWhenBehavior{
 //	(eval-when (expand run)
 //	  (display "both times"))
 func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	if p.env == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil environment")
-	}
-	if p.template == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil template")
+	err := p.ensureState("eval-when")
+	if err != nil {
+		return err
 	}
 
 	// expr is ((phase ...) body ...) - the args after 'eval-when'

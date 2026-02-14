@@ -1968,11 +1968,9 @@ func (p *CompileTimeContinuation) CompileExport(_ CompileTimeCallContext, _ synt
 //
 // Reference: R7RS Section 5.4 (Syntax definitions)
 func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	if p.env == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: nil environment")
-	}
-	if p.template == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: nil template")
+	err := p.ensureState("define-syntax")
+	if err != nil {
+		return err
 	}
 	// expr is (keyword transformer-expr) - the args after 'define-syntax' has been stripped
 	argsPair, ok := expr.(*syntax.SyntaxPair)
