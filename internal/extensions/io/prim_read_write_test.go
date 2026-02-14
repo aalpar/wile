@@ -17,6 +17,8 @@ package io
 import (
 	"bytes"
 	"context"
+	"io"
+	"strings"
 	"sync"
 	"testing"
 
@@ -281,4 +283,1152 @@ func TestReadAllocationLimitErrorMessages(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "exceeds maximum")
 	qt.Assert(t, err.Error(), qt.Contains, "100 MB")
+}
+
+// =============================================================================
+// Phase 1 — 0% functions with most code paths
+// =============================================================================
+
+func TestRead(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"integer",
+			`(equal? (read (open-input-string "42")) 42)`,
+			values.TrueValue},
+		{"symbol",
+			`(equal? (read (open-input-string "hello")) 'hello)`,
+			values.TrueValue},
+		{"list",
+			`(equal? (read (open-input-string "(1 2 3)")) '(1 2 3))`,
+			values.TrueValue},
+		{"string",
+			`(equal? (read (open-input-string "\"abc\"")) "abc")`,
+			values.TrueValue},
+		{"boolean true",
+			`(equal? (read (open-input-string "#t")) #t)`,
+			values.TrueValue},
+		{"boolean false",
+			`(equal? (read (open-input-string "#f")) #f)`,
+			values.TrueValue},
+		{"vector",
+			`(equal? (read (open-input-string "#(1 2 3)")) #(1 2 3))`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (read (open-input-string "")))`,
+			values.TrueValue},
+		{"successive reads",
+			`(let ((p (open-input-string "1 2")))
+			   (let ((a (read p)) (b (read p)))
+			     (and (equal? a 1) (equal? b 2))))`,
+			values.TrueValue},
+		{"successive read then eof",
+			`(let ((p (open-input-string "42")))
+			   (read p)
+			   (eof-object? (read p)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(read (open-input-bytevector #u8(1 2 3)))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWrite(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"integer",
+			`(let ((p (open-output-string)))
+			   (write 42 p)
+			   (equal? (get-output-string p) "42"))`,
+			values.TrueValue},
+		{"quoted string",
+			`(let ((p (open-output-string)))
+			   (write "hello" p)
+			   (equal? (get-output-string p) "\"hello\""))`,
+			values.TrueValue},
+		{"list",
+			`(let ((p (open-output-string)))
+			   (write '(1 2 3) p)
+			   (equal? (get-output-string p) "(1 2 3)"))`,
+			values.TrueValue},
+		{"boolean",
+			`(let ((p (open-output-string)))
+			   (write #t p)
+			   (equal? (get-output-string p) "#t"))`,
+			values.TrueValue},
+		{"character",
+			`(let ((p (open-output-string)))
+			   (write #\A p)
+			   (equal? (get-output-string p) "#\\A"))`,
+			values.TrueValue},
+		{"nested structure",
+			`(let ((p (open-output-string)))
+			   (write '(1 (2 3) 4) p)
+			   (equal? (get-output-string p) "(1 (2 3) 4)"))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port arg", `(write 42 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestDisplay(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"integer",
+			`(let ((p (open-output-string)))
+			   (display 42 p)
+			   (equal? (get-output-string p) "42"))`,
+			values.TrueValue},
+		{"unquoted string",
+			`(let ((p (open-output-string)))
+			   (display "hello" p)
+			   (equal? (get-output-string p) "hello"))`,
+			values.TrueValue},
+		{"bare character",
+			`(let ((p (open-output-string)))
+			   (display #\A p)
+			   (equal? (get-output-string p) "A"))`,
+			values.TrueValue},
+		{"list",
+			`(let ((p (open-output-string)))
+			   (display '(1 2 3) p)
+			   (equal? (get-output-string p) "(1 2 3)"))`,
+			values.TrueValue},
+		{"symbol",
+			`(let ((p (open-output-string)))
+			   (display 'hello p)
+			   (equal? (get-output-string p) "hello"))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port arg", `(display 42 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestNewline(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"newline to port",
+			`(let ((p (open-output-string)))
+			   (newline p)
+			   (equal? (get-output-string p) "\n"))`,
+			values.TrueValue},
+		{"between writes",
+			`(let ((p (open-output-string)))
+			   (display "a" p)
+			   (newline p)
+			   (display "b" p)
+			   (equal? (get-output-string p) "a\nb"))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port arg", `(newline 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestPeekChar(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"peek first char",
+			`(equal? (peek-char (open-input-string "hello")) #\h)`,
+			values.TrueValue},
+		{"peek then read same char",
+			`(let ((p (open-input-string "hello")))
+			   (let ((peeked (peek-char p)) (read-val (read-char p)))
+			     (equal? peeked read-val)))`,
+			values.TrueValue},
+		{"peek twice returns same",
+			`(let ((p (open-input-string "abc")))
+			   (let ((a (peek-char p)) (b (peek-char p)))
+			     (equal? a b)))`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (peek-char (open-input-string "")))`,
+			values.TrueValue},
+		{"peek does not advance",
+			`(let ((p (open-input-string "xy")))
+			   (peek-char p)
+			   (peek-char p)
+			   (equal? (read-char p) #\x))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(peek-char (open-input-bytevector #u8(1 2 3)))`},
+		{"closed port",
+			`(let ((p (open-input-string "hello")))
+			   (close-port p)
+			   (peek-char p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestPeekU8(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"peek first byte",
+			`(equal? (peek-u8 (open-input-bytevector #u8(65 66 67))) 65)`,
+			values.TrueValue},
+		{"peek then read same byte",
+			`(let ((p (open-input-bytevector #u8(42))))
+			   (let ((peeked (peek-u8 p)) (read-val (read-u8 p)))
+			     (equal? peeked read-val)))`,
+			values.TrueValue},
+		{"peek twice returns same",
+			`(let ((p (open-input-bytevector #u8(10 20))))
+			   (let ((a (peek-u8 p)) (b (peek-u8 p)))
+			     (equal? a b)))`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (peek-u8 (open-input-bytevector #u8())))`,
+			values.TrueValue},
+		{"peek does not advance",
+			`(let ((p (open-input-bytevector #u8(99 100))))
+			   (peek-u8 p)
+			   (peek-u8 p)
+			   (equal? (read-u8 p) 99))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"textual port", `(peek-u8 (open-input-string "hello"))`},
+		{"closed port",
+			`(let ((p (open-input-bytevector #u8(1 2 3))))
+			   (close-port p)
+			   (peek-u8 p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// Phase 2 — Remaining 0% functions
+// =============================================================================
+
+func TestWriteSimple(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"integer",
+			`(let ((p (open-output-string)))
+			   (write-simple 42 p)
+			   (equal? (get-output-string p) "42"))`,
+			values.TrueValue},
+		{"quoted string",
+			`(let ((p (open-output-string)))
+			   (write-simple "hello" p)
+			   (equal? (get-output-string p) "\"hello\""))`,
+			values.TrueValue},
+		{"list",
+			`(let ((p (open-output-string)))
+			   (write-simple '(1 2 3) p)
+			   (equal? (get-output-string p) "(1 2 3)"))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port", `(write-simple 42 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteShared(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"integer",
+			`(let ((p (open-output-string)))
+			   (write-shared 42 p)
+			   (equal? (get-output-string p) "42"))`,
+			values.TrueValue},
+		{"list",
+			`(let ((p (open-output-string)))
+			   (write-shared '(1 2 3) p)
+			   (equal? (get-output-string p) "(1 2 3)"))`,
+			values.TrueValue},
+		{"string",
+			`(let ((p (open-output-string)))
+			   (write-shared "abc" p)
+			   (equal? (get-output-string p) "\"abc\""))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port", `(write-shared 42 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestReadToken(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"returns non-eof for integer",
+			`(not (eof-object? (read-token (open-input-string "42"))))`,
+			values.TrueValue},
+		{"returns non-eof for symbol",
+			`(not (eof-object? (read-token (open-input-string "hello"))))`,
+			values.TrueValue},
+		{"empty returns eof",
+			`(eof-object? (read-token (open-input-string "")))`,
+			values.TrueValue},
+		{"successive tokens then eof",
+			`(let ((p (open-input-string "1 2")))
+			   (read-token p)
+			   (read-token p)
+			   (eof-object? (read-token p)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(read-token (open-input-bytevector #u8(1 2 3)))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestReadSyntax(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"reads syntax object",
+			`(let ((s (read-syntax (open-input-string "42"))))
+			   (not (eof-object? s)))`,
+			values.TrueValue},
+		{"empty returns eof",
+			`(eof-object? (read-syntax (open-input-string "")))`,
+			values.TrueValue},
+		{"successive reads",
+			`(let ((p (open-input-string "1 2")))
+			   (let ((a (read-syntax p)) (b (read-syntax p)))
+			     (and (not (eof-object? a)) (not (eof-object? b)))))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(read-syntax (open-input-bytevector #u8(1 2 3)))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestCharReadyQ(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"non-empty port",
+			`(char-ready? (open-input-string "hello"))`,
+			values.TrueValue},
+		{"empty port",
+			`(char-ready? (open-input-string ""))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestU8ReadyQ(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"non-empty port",
+			`(u8-ready? (open-input-bytevector #u8(1 2)))`,
+			values.TrueValue},
+		{"empty port",
+			`(u8-ready? (open-input-bytevector #u8()))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestFlushOutputPort(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"flush string port",
+			`(let ((p (open-output-string)))
+			   (write-string "hello" p)
+			   (flush-output-port p)
+			   (equal? (get-output-string p) "hello"))`,
+			values.TrueValue},
+		{"flush bytevector port",
+			`(let ((p (open-output-bytevector)))
+			   (write-u8 42 p)
+			   (flush-output-port p)
+			   (equal? (get-output-bytevector p) #u8(42)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-port", `(flush-output-port 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// Phase 3 — Improve partial coverage
+// =============================================================================
+
+func TestReadLine(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"simple line",
+			`(equal? (read-line (open-input-string "hello")) "hello")`,
+			values.TrueValue},
+		{"line with newline",
+			`(equal? (read-line (open-input-string "hello\nworld")) "hello")`,
+			values.TrueValue},
+		{"empty line",
+			`(equal? (read-line (open-input-string "\nworld")) "")`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (read-line (open-input-string "")))`,
+			values.TrueValue},
+		{"successive reads",
+			`(let ((p (open-input-string "a\nb\nc")))
+			   (let ((a (read-line p)) (b (read-line p)) (c (read-line p)))
+			     (and (equal? a "a") (equal? b "b") (equal? c "c"))))`,
+			values.TrueValue},
+		{"CRLF line ending",
+			`(equal? (read-line (open-input-string "hello\r\nworld")) "hello")`,
+			values.TrueValue},
+		{"lone CR",
+			`(equal? (read-line (open-input-string "hello\rworld")) "hello")`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(read-line (open-input-bytevector #u8(1 2 3)))`},
+		{"closed port",
+			`(let ((p (open-input-string "hello")))
+			   (close-port p)
+			   (read-line p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestReadChar(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"ASCII",
+			`(equal? (read-char (open-input-string "A")) #\A)`,
+			values.TrueValue},
+		{"unicode",
+			`(equal? (read-char (open-input-string "λ")) #\λ)`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (read-char (open-input-string "")))`,
+			values.TrueValue},
+		{"successive chars",
+			`(let ((p (open-input-string "ab")))
+			   (let ((a (read-char p)) (b (read-char p)))
+			     (and (equal? a #\a) (equal? b #\b))))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"binary port", `(read-char (open-input-bytevector #u8(65)))`},
+		{"closed port",
+			`(let ((p (open-input-string "hello")))
+			   (close-port p)
+			   (read-char p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteChar(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"write char to string port",
+			`(let ((p (open-output-string)))
+			   (write-char #\Z p)
+			   (equal? (get-output-string p) "Z"))`,
+			values.TrueValue},
+		{"write unicode char",
+			`(let ((p (open-output-string)))
+			   (write-char #\λ p)
+			   (equal? (get-output-string p) "λ"))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-character arg", `(write-char 42)`},
+		{"non-port arg", `(write-char #\A 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestReadStringCoverage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"read k from longer string",
+			`(equal? (read-string 3 (open-input-string "hello")) "hel")`,
+			values.TrueValue},
+		{"fewer than k chars",
+			`(equal? (read-string 10 (open-input-string "hi")) "hi")`,
+			values.TrueValue},
+		{"k equals zero returns eof",
+			`(eof-object? (read-string 0 (open-input-string "hello")))`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (read-string 5 (open-input-string "")))`,
+			values.TrueValue},
+		{"successive reads",
+			`(let ((p (open-input-string "abcd")))
+			   (let ((a (read-string 2 p)) (b (read-string 2 p)))
+			     (and (equal? a "ab") (equal? b "cd"))))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"negative k", `(read-string -1 (open-input-string "hello"))`},
+		{"non-integer k", `(read-string "5" (open-input-string "hello"))`},
+		{"binary port", `(read-string 5 (open-input-bytevector #u8(1 2 3)))`},
+		{"closed port",
+			`(let ((p (open-input-string "hello")))
+			   (close-port p)
+			   (read-string 3 p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteStringCoverage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"full string",
+			`(let ((p (open-output-string)))
+			   (write-string "hello" p)
+			   (equal? (get-output-string p) "hello"))`,
+			values.TrueValue},
+		{"with start",
+			`(let ((p (open-output-string)))
+			   (write-string "hello" p 2)
+			   (equal? (get-output-string p) "llo"))`,
+			values.TrueValue},
+		{"with start and end",
+			`(let ((p (open-output-string)))
+			   (write-string "hello" p 1 3)
+			   (equal? (get-output-string p) "el"))`,
+			values.TrueValue},
+		{"empty range",
+			`(let ((p (open-output-string)))
+			   (write-string "hello" p 2 2)
+			   (equal? (get-output-string p) ""))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-string", `(write-string 42 (open-output-string))`},
+		{"non-port second arg", `(write-string "hello" 42)`},
+		{"start greater than end", `(write-string "hello" (open-output-string) 3 1)`},
+		{"start out of bounds", `(write-string "hi" (open-output-string) 10)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteU8Coverage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"byte 0",
+			`(let ((p (open-output-bytevector)))
+			   (write-u8 0 p)
+			   (equal? (get-output-bytevector p) #u8(0)))`,
+			values.TrueValue},
+		{"byte 255",
+			`(let ((p (open-output-bytevector)))
+			   (write-u8 255 p)
+			   (equal? (get-output-bytevector p) #u8(255)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"byte 256", `(write-u8 256 (open-output-bytevector))`},
+		{"byte -1", `(write-u8 -1 (open-output-bytevector))`},
+		{"non-integer", `(write-u8 "x" (open-output-bytevector))`},
+		{"textual port", `(write-u8 65 (open-output-string))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteBytevectorCoverage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"full bytevector",
+			`(let ((p (open-output-bytevector)))
+			   (write-bytevector #u8(1 2 3) p)
+			   (equal? (get-output-bytevector p) #u8(1 2 3)))`,
+			values.TrueValue},
+		{"with start",
+			`(let ((p (open-output-bytevector)))
+			   (write-bytevector #u8(1 2 3 4 5) p 2)
+			   (equal? (get-output-bytevector p) #u8(3 4 5)))`,
+			values.TrueValue},
+		{"with start and end",
+			`(let ((p (open-output-bytevector)))
+			   (write-bytevector #u8(1 2 3 4 5) p 1 3)
+			   (equal? (get-output-bytevector p) #u8(2 3)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"non-bytevector", `(write-bytevector "abc" (open-output-bytevector))`},
+		{"start greater than end", `(write-bytevector #u8(1 2 3) (open-output-bytevector) 2 1)`},
+		{"textual port", `(write-bytevector #u8(1 2 3) (open-output-string))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestReadU8Coverage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"single byte",
+			`(equal? (read-u8 (open-input-bytevector #u8(42))) 42)`,
+			values.TrueValue},
+		{"successive bytes",
+			`(let ((p (open-input-bytevector #u8(10 20))))
+			   (let ((a (read-u8 p)) (b (read-u8 p)))
+			     (and (equal? a 10) (equal? b 20))))`,
+			values.TrueValue},
+		{"empty port returns eof",
+			`(eof-object? (read-u8 (open-input-bytevector #u8())))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"textual port", `(read-u8 (open-input-string "hello"))`},
+		{"closed port",
+			`(let ((p (open-input-bytevector #u8(1 2 3))))
+			   (close-port p)
+			   (read-u8 p))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// Phase 4 — Cache lifecycle
+// =============================================================================
+
+// NOTE: TestParserCacheEviction accesses package-level state (cacheMu, Parsers,
+// Tokenizers) and must NOT use t.Parallel(). Go tests within the same package
+// run sequentially by default, so no additional synchronization is needed
+// beyond the existing cacheMu locking.
+func TestParserCacheEviction(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("read to eof evicts parser", func(t *testing.T) {
+		// Read until EOF triggers parser eviction
+		eval(t, engine, `(let ((p (open-input-string "42")))
+		   (read p)
+		   (read p))`) // second read hits EOF
+
+		// After EOF, the Parsers map should have no lingering entry
+		// for that port. We verify indirectly: a fresh port reuses
+		// the read path without stale state.
+		result := eval(t, engine, `(equal? (read (open-input-string "99")) 99)`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("read-token to eof evicts tokenizer", func(t *testing.T) {
+		eval(t, engine, `(let ((p (open-input-string "hello")))
+		   (read-token p)
+		   (read-token p))`) // second read-token hits EOF
+
+		// Verify a fresh port works after eviction
+		result := eval(t, engine, `(not (eof-object? (read-token (open-input-string "world"))))`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("cache maps empty after eof", func(t *testing.T) {
+		// Snapshot cache sizes before our operation
+		cacheMu.RLock()
+		parsersBefore := len(Parsers)
+		tokenizersBefore := len(Tokenizers)
+		cacheMu.RUnlock()
+
+		// Read to EOF on a port — should add then evict the parser entry
+		eng := newEngine(t)
+		eval(t, eng, `(let ((p (open-input-string "1")))
+		   (read p)
+		   (read p))`)
+
+		// After EOF eviction, cache should be back to pre-test size
+		cacheMu.RLock()
+		parsersAfter := len(Parsers)
+		tokenizersAfter := len(Tokenizers)
+		cacheMu.RUnlock()
+
+		c.Assert(parsersAfter, qt.Equals, parsersBefore)
+		c.Assert(tokenizersAfter, qt.Equals, tokenizersBefore)
+	})
+}
+
+// =============================================================================
+// Default port (no port arg) paths
+// =============================================================================
+
+// TestDefaultOutputPort exercises the "no port arg" code path where
+// write/display/newline/write-char/write-simple/write-shared/flush-output-port
+// fall through to the current output port.
+//
+// NOTE: This test modifies global state (current output port) and must NOT
+// use t.Parallel(). Go tests within the same package run sequentially by
+// default, so no additional synchronization is needed.
+func TestDefaultOutputPort(t *testing.T) {
+	// Redirect the current output port to io.Discard to avoid polluting
+	// test output while still exercising the default port code path.
+	SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+	defer ResetCurrentOutputPort()
+
+	engine := newEngine(t)
+
+	// Each of these calls the function without a port argument,
+	// exercising the IsEmptyList() → GetCurrentOutputPort() branch.
+	codes := []struct {
+		name string
+		code string
+	}{
+		{"write no port", `(write 42)`},
+		{"display no port", `(display 42)`},
+		{"newline no port", `(newline)`},
+		{"write-simple no port", `(write-simple 42)`},
+		{"write-shared no port", `(write-shared 42)`},
+		{"flush-output-port no port", `(flush-output-port)`},
+		{"write-string no port", `(write-string "hi")`},
+		{"write-char no port", `(write-char #\A)`},
+	}
+	for _, tc := range codes {
+		t.Run(tc.name, func(t *testing.T) {
+			eval(t, engine, tc.code)
+		})
+	}
+}
+
+// TestDefaultInputPortCharReady exercises char-ready? with no port arg.
+func TestDefaultInputPortCharReady(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result := eval(t, engine, `(char-ready?)`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+// TestDefaultInputPortRead exercises the "no port arg" path for read-char
+// by redirecting the current input port to a string reader.
+//
+// NOTE: This test modifies global state (current input port) and must NOT
+// use t.Parallel(). Go tests within the same package run sequentially by
+// default, so no additional synchronization is needed.
+func TestDefaultInputPortRead(t *testing.T) {
+	c := qt.New(t)
+
+	port := values.NewCharacterInputPortFromReader(strings.NewReader("hello"))
+	SetCurrentInputPort(port)
+	defer ResetCurrentInputPort()
+
+	engine := newEngine(t)
+	result := eval(t, engine, `(equal? (read-char) #\h)`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+// TestBinaryPortNoArgError verifies that binary I/O functions error
+// when no binary port is provided.
+func TestBinaryPortNoArgError(t *testing.T) {
+	engine := newEngine(t)
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"read-u8 no args", `(read-u8)`},
+		{"peek-u8 no args", `(peek-u8)`},
+		{"write-u8 no port", `(write-u8 42)`},
+		{"write-bytevector no port", `(write-bytevector #u8(1 2 3))`},
+		{"read-bytevector no port", `(read-bytevector 5)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
 }
