@@ -78,13 +78,12 @@ Library file larger than estimated (~1,200 vs ~500) because it includes the full
 parsing family (parseImportSet*, 7 variants), feature requirement parsing, CompileDefineSyntax,
 and CompileCondExpand — all library-system concerns.
 
-### 4.2 Validator Prologue Duplication
+### ~~4.2 Validator Prologue Duplication~~ ✅ COMPLETE
 
-**Scope:** 19 validators
-**Files:** `internal/validate/validate_*.go`
-**Effort:** Low
-
-All 19 validators repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). The list collection step uses a shared `collectList()` helper, but the error-reporting boilerplate (improper-list check + arity guard) is still duplicated. A `validateFormPrologue()` helper would deduplicate.
+Extracted `formPrologue()` helper in `internal/validate/validate.go` encapsulating
+`collectList` + improper-list check + arity guard (exact, minimum, range). 16 of 19
+validators refactored; 2 kept inline (custom error messages): `validateCall`,
+`validateCaseLambdaClause`. 8 dedicated unit tests added. Merged via PR #248 (`0196e7b`).
 
 ### ~~4.3 Bytecode Instruction Files in match/~~ ✅ COMPLETE
 
@@ -94,13 +93,11 @@ Consolidated 13 single-type bytecode files into 4 files by category:
 - `bytecode_capture.go` (CaptureCar, CaptureCdr)
 - `bytecode_control.go` (SkipIfEmpty, SkipIfTailCount, Jump, PushContext, PopContext)
 
-### 4.4 Optional Fill Argument Extraction
+### ~~4.4 Optional Fill Argument Extraction~~ ✅ COMPLETE
 
-**Scope:** 3 sites
-**Files:** `registry/core/prim_vectors.go` (PrimMakeVector), `registry/core/prim_byte_vectors.go` (PrimMakeBytevector), `registry/core/prim_strings.go` (PrimMakeString)
-**Effort:** Low
-
-Three `make-*` primitives each independently extract optional fill arguments with slightly different patterns. Could share a helper.
+Extracted `ParseOptionalArg(rest values.Value) (values.Value, bool)` in `registry/helpers/args.go`.
+Three call sites updated: `PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`. Each retains
+its own type-specific validation; the helper captures the shared rest-arg extraction pattern.
 
 ### 4.5 Empty List Handling Inconsistency
 
@@ -138,5 +135,5 @@ Three different patterns for checking empty list arguments in variadic operation
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
 | ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
-| 2 (Larger refactors) | ~~2.3~~, ~~4.1~~, 4.2 | Low-Medium | ~600 |
+| ~~2 (Larger refactors)~~ | ~~2.3~~, ~~4.1~~, ~~4.2~~ | ~~Low-Medium~~ | ~~DONE~~ |
 | DEFERRED | ~~2.1~~ | — | — |
