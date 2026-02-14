@@ -51,45 +51,24 @@ func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
 
 // Close flushes buffered data and closes the underlying stream.
 func (p *CharacterOutputPort) Close() error {
-	flushErr := p.wrt.Flush()
-	closeErr := p.portBase.Close()
-	if closeErr != nil {
-		return closeErr
-	}
-	return flushErr
+	return flushThenClose(p.wrt, &p.portBase)
 }
 
 func (p *CharacterOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.wrt.Flush()
+	return guardedFlush(&p.portBase, p.wrt)
 }
 
 func (p *CharacterOutputPort) Write(bs []byte) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.wrt.Write(bs)
+	return guardedWrite(&p.portBase, p.wrt, bs)
 }
 
 func (p *CharacterOutputPort) WriteString(s string) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.wrt.WriteString(s)
+	return guardedWriteString(&p.portBase, p.wrt, s)
 }
 
 // WriteRune writes a single rune to the port's buf.
 func (p *CharacterOutputPort) WriteRune(rn rune) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.wrt.WriteRune(rn)
+	return guardedWriteRune(&p.portBase, p.wrt, rn)
 }
 
 // Datum returns the underlying data of the CharacterOutputPort as an io.Writer.

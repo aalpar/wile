@@ -35,25 +35,12 @@ Completed items have been removed. See git history for the original document.
 - Conversion helpers reimplemented per-type rather than centralized
 - Same 7-branch type switch copy-pasted across all arithmetic methods
 
-### 2.3 Port Type Duplication in values/
+### ~~2.3 Port Type Guard-and-Delegate Deduplication~~ ✅ COMPLETE
 
-**Scope:** 9+ port types, ~400 lines
-**Files:** `values/{binary_input_port,binary_output_port,character_input_port,character_output_port,string_input_port,string_output_port,byte_vector_output_port,byte_vector_buffered_output_port,byte_vector_input_port}.go`
-**Effort:** Medium
-
-Every I/O method on every port type follows the exact same guard-and-delegate pattern:
-
-```go
-func (p *PortType) ReadByte() (byte, error) {
-    err := p.guardClosed()
-    if err != nil { return 0, err }
-    return p.rdr.ReadByte()
-}
-```
-
-Repeated for Read, ReadByte, UnreadByte, ReadRune, UnreadRune, Write, WriteByte, Flush across all port types. Additionally, `IsVoid()`, `EqualTo()`, `SchemeString()` are identical across all port types.
-
-**Recommended fix:** The `portBase` struct already handles Close/IsClosed. Extending it (or creating a read/write mixin) would eliminate ~400 lines.
+**Completed.** 43 guard-and-delegate methods across 10 port files refactored to use
+11 typed helper functions in `values/port_helpers.go`. No struct layout, interface,
+or public API changes. Net savings ~76 lines (172 removed from concrete types,
+96 added in helpers). Guard pattern consolidated from 39 sites → 11 definitions.
 
 ### ~~2.4 Compiler Nil-Guard Duplication in machine/~~ — DONE
 
@@ -148,5 +135,5 @@ Three different patterns for checking empty list arguments in variadic operation
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
 | ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
-| 2 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
+| 2 (Larger refactors) | ~~2.3~~, 4.1, 4.2 | Low-Medium | ~600 |
 | DEFERRED | ~~2.1~~ | — | — |

@@ -49,29 +49,17 @@ func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 }
 
 func (p *ByteVectorInputPort) Read(bs []byte) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.rdr.Read(bs)
+	return guardedRead(&p.portBase, p.rdr, bs)
 }
 
 // ReadByte reads and returns the next byte from the port.
 func (p *ByteVectorInputPort) ReadByte() (byte, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.rdr.ReadByte()
+	return guardedReadByte(&p.portBase, p.rdr)
 }
 
 // UnreadByte unreads the last byte read, allowing it to be read again.
 func (p *ByteVectorInputPort) UnreadByte() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.rdr.UnreadByte()
+	return guardedUnreadByte(&p.portBase, p.rdr)
 }
 
 // Datum returns the underlying bytes.Reader.

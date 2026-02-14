@@ -49,39 +49,23 @@ func NewStringOutputPortWithBuffer(buffer *bytes.Buffer) *StringOutputPort {
 }
 
 // WriteString writes a string to the port.
-func (p *StringOutputPort) WriteString(s string) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.WriteString(s)
+func (p *StringOutputPort) WriteString(s string) (int, error) {
+	return guardedWriteString(&p.portBase, p.buf, s)
 }
 
 // Write writes data to the port.
-func (p *StringOutputPort) Write(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.Write(bs)
+func (p *StringOutputPort) Write(bs []byte) (int, error) {
+	return guardedWrite(&p.portBase, p.buf, bs)
 }
 
 // WriteRune writes a single rune to the port's buffer.
 func (p *StringOutputPort) WriteRune(rn rune) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.WriteRune(rn)
+	return guardedWriteRune(&p.portBase, p.buf, rn)
 }
 
 // Flush is a no-op for StringOutputPort.
 func (p *StringOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.guardClosed()
 }
 
 // Datum returns the underlying buffer.
