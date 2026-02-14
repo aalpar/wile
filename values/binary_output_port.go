@@ -51,39 +51,22 @@ func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
 
 // Write writes bytes to the port.
 func (p *BinaryOutputPort) Write(bs []byte) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.wrt.Write(bs)
+	return guardedWrite(&p.portBase, p.wrt, bs)
 }
 
 // WriteByte writes a single byte to the port.
 func (p *BinaryOutputPort) WriteByte(b byte) error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.wrt.WriteByte(b)
+	return guardedWriteByte(&p.portBase, p.wrt, b)
 }
 
 // Flush flushes the port's buffer.
 func (p *BinaryOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.wrt.Flush()
+	return guardedFlush(&p.portBase, p.wrt)
 }
 
 // Close flushes buffered data and closes the underlying stream.
 func (p *BinaryOutputPort) Close() error {
-	flushErr := p.wrt.Flush()
-	closeErr := p.portBase.Close()
-	if closeErr != nil {
-		return closeErr
-	}
-	return flushErr
+	return flushThenClose(p.wrt, &p.portBase)
 }
 
 // Datum returns the underlying io.Writer.

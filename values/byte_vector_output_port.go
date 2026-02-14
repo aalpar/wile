@@ -51,37 +51,20 @@ func NewByteVectorOutputPortFromWriter(wrt io.Writer) *ByteVectorOutputPort {
 }
 
 func (p *ByteVectorOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.wrt.Flush()
+	return guardedFlush(&p.portBase, p.wrt)
 }
 
 // Close flushes buffered data and closes the underlying stream.
 func (p *ByteVectorOutputPort) Close() error {
-	flushErr := p.wrt.Flush()
-	closeErr := p.portBase.Close()
-	if closeErr != nil {
-		return closeErr
-	}
-	return flushErr
+	return flushThenClose(p.wrt, &p.portBase)
 }
 
-func (p *ByteVectorOutputPort) Write(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.wrt.Write(bs)
+func (p *ByteVectorOutputPort) Write(bs []byte) (int, error) {
+	return guardedWrite(&p.portBase, p.wrt, bs)
 }
 
 func (p *ByteVectorOutputPort) WriteByte(b byte) error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.wrt.WriteByte(b)
+	return guardedWriteByte(&p.portBase, p.wrt, b)
 }
 
 // Datum returns the underlying bytes.Buffer.
