@@ -1,6 +1,6 @@
 # Staff Engineer Technical Debt Assessment
 
-**Assessment Date**: 2026-02-13 (updated)
+**Assessment Date**: 2026-02-14 (updated)
 **Scope**: Recently changed files (last 10 commits)
 **Files Analyzed**: 35 files across `values/`, `registry/core/`, `machine/`, `internal/extensions/io/`, `internal/parser/`
 
@@ -10,17 +10,7 @@
 
 The recently changed files reflect a mature codebase with strong architectural discipline (overflow-safe arithmetic, hygiene-aware macros, R7RS compliance). The dominant debt is **structural duplication** in the numeric tower, where a well-designed abstraction (the Number interface) is undermined by 28 hand-rolled type switches. This is the classic "missing abstraction" smell — the lattice model exists conceptually but isn't reified into data.
 
-All HIGH items have been resolved:
-- CLI test coverage: 9.9% → 75% (PR #228)
-- I/O test coverage: 55.2% → 91.1% (PR #225)
-
-All MEDIUM items have been resolved or deferred:
-- Pattern matching adapter: eliminated by syntax-native pattern compiler (PR #226)
-- Operation boilerplate: resolved via OperationBase embedding (PR #229)
-- Tokenizer readers: consolidated (PRs #230, #234, #236)
-- Numeric type switch incompleteness: deferred (see LOW)
-
-Remaining debt is LOW priority (numeric tower deferred, TODO tracking resolved, reflection-based equality acceptable).
+Completed items have been removed. See git history for the original document. Remaining debt is LOW priority (numeric tower deferred, EqualTo symmetry deferred, reflection-based equality acceptable).
 
 ---
 
@@ -77,8 +67,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
----
-
 ## Assessment Methodology
 
 **Files Analyzed**: 35 files from `git diff --name-only HEAD~10`
@@ -97,7 +85,7 @@ func (p *Integer) EqualTo(v Value) bool {
 
 # Full Codebase Technical Debt Assessment
 
-**Assessment Date**: 2026-02-13 (updated)
+**Assessment Date**: 2026-02-14 (updated)
 **Scope**: Entire codebase (605 Go source files, ~57K lines)
 **Methodology**: Systematic review across all packages for structural debt, consistency issues, testing gaps, and evolution risks
 
@@ -107,37 +95,7 @@ func (p *Integer) EqualTo(v Value) bool {
 
 The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (~772 wrapped errors, ~2 bare errors remaining as panic-recovery wrappers). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt resolved**: CLI coverage (9.9% → 75%), I/O coverage (55.2% → 91.1%), operation boilerplate (OperationBase embedding), pattern matching adapter (syntax-native compiler), tokenizer readers (consolidated).
-
-**Remaining debt**: Numeric tower type-switch explosion (deferred indefinitely), EqualTo symmetry (deferred). These are structural issues with no clean abstraction available.
-
----
-
-## HIGH PRIORITY — ALL RESOLVED
-
-### ~~CLI Package Test Coverage~~ — RESOLVED
-
-**Resolution**: PR #228 (`test/cli-subprocess-coverage`) added subprocess integration tests. Coverage: 9.9% → 75%.
-
-### ~~I/O Extension Test Coverage~~ — RESOLVED
-
-**Resolution**: PR #225 (`test/io-read-write-coverage`) expanded error path coverage. Coverage: 55.2% → 91.1%.
-
----
-
-## MEDIUM PRIORITY — ALL RESOLVED
-
-### ~~Pattern Matching Adapter Layer~~ — RESOLVED
-
-**Resolution**: PR #226 (`refactor/syntax-native-pattern-compiler`) made the pattern compiler and analyzer work directly with `syntax.SyntaxValue`. The `ConstructPatternTree` and `fromPatternValue` conversion functions were eliminated.
-
-### ~~Operation Boilerplate~~ — RESOLVED
-
-**Resolution**: PR #229 (`refactor/operation-base`) embedded `OperationBase` in all 34 VM operation types. Default `String`/`IsVoid` implementations provided by base struct. `EqualTo` uses generic helpers (`sameType`, `fieldMatches`). New operation boilerplate reduced from ~60 lines to ~15.
-
-### ~~Tokenizer Reader Methods~~ — RESOLVED
-
-**Resolution**: Addressed across multiple PRs (PRs #230, #234, #236). Total savings: ~174 lines. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for remaining (deferred) opportunities.
+Completed items have been removed. See git history for the original document. Remaining debt: numeric tower type-switch explosion (deferred indefinitely), EqualTo symmetry (deferred), numeric type switch incompleteness (deferred), reflection-based operation equality (accepted trade-off).
 
 ---
 
@@ -154,23 +112,6 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 **Suggested fix**: Lint rule: type switches on numeric values must use interface types (`values.Number`, `values.RealNumber`, `values.ComplexNumber`) unless concrete type dispatch is semantically required. Fix existing switches to use interfaces where possible.
 
 **Effort**: S (1-2 days to audit and fix)
-
----
-
-### [Priority: Low] — 18 TODO/FIXME Comments Across 7 Files (Triaged)
-
-**Corrected count**: The original assessment of "507 TODO/FIXME comments across 74 files" was incorrect — ~408 of those were `context.TODO()` calls (Go's standard library placeholder context in test code), not task-tracking comments. The actual count is **18 real TODO comments across 7 files** (12 in production code, 6 in tests).
-
-**Where**: Production TODOs concentrated in `internal/tokenizer/tokenizer.go` (6), `environment/top_level_environment.go` (3), `machine/native_template.go` (2), `machine/compile_time_continuation.go` (1). Test TODOs in `machine/syntax_rules_test.go` (3), `internal/tokenizer/` (3).
-
-**What was done**: Triaged all 18 TODOs and created GitHub issues for actionable items:
-- [#231](https://github.com/aalpar/wile/issues/231) — Library registry interface design (3 TODOs, blocks P1 External Extensions)
-- [#232](https://github.com/aalpar/wile/issues/232) — `#!fold-case` case-insensitive parsing (1 TODO, R7RS §2.1)
-- [#233](https://github.com/aalpar/wile/issues/233) — Replace `context.TODO()` → `context.Background()` in tests (~408 calls, housekeeping)
-
-**Not issued**: Tokenizer TODOs (4) fold into existing `plans/TOKENIZER_CONSOLIDATION_PLAN.md`. NativeTemplate optimization notes (2) deferred per project performance policy. Test TODOs (6) are blocked on API changes or are minor cleanup.
-
-**Status**: Resolved — all actionable TODOs tracked in issues or existing plans.
 
 ---
 
