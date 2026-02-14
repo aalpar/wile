@@ -211,8 +211,8 @@ func TestResolveFile_ReturnsAbsolutePath(t *testing.T) {
 			name: "from stack relative",
 			setupFunc: func() (string, []string) {
 				mainFile := filepath.Join(tmpDir, "main.scm")
-				os.WriteFile(mainFile, []byte(""), 0644) //nolint:errcheck
-				_ = stack.Push(mainFile)
+				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
+				c.Assert(stack.Push(mainFile), qt.IsNil)
 				return "test.scm", nil
 			},
 		},
@@ -289,10 +289,10 @@ func TestResolveFile_ErrorMessageHint(t *testing.T) {
 			name: "stack with current dir shows no hint",
 			setupFunc: func() (*LoadPathStack, []string) {
 				mainFile := filepath.Join(tmpDir1, "main.scm")
-				os.WriteFile(mainFile, []byte(""), 0644) //nolint:errcheck
+				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
 
 				s := NewLoadPathStack()
-				_ = s.Push(mainFile)
+				c.Assert(s.Push(mainFile), qt.IsNil)
 				return s, []string{tmpDir2}
 			},
 			wantHint: false,
