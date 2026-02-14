@@ -29,16 +29,13 @@ func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	rest := mc.Arg(1)
 	if size.Value < 0 {
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-vector: size must be non-negative")
 	}
 	var fill values.Value = values.FalseValue
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			fill = tuple.Car()
-		}
+	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	if ok {
+		fill = v
 	}
 	elems := make(values.Vector, size.Value)
 	for i := range elems {

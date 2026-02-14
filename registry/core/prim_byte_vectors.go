@@ -29,25 +29,21 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	rest := mc.Arg(1)
 	if size.Value < 0 {
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-bytevector: size must be non-negative")
 	}
 	var fill uint8
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok && !tuple.IsEmptyList() {
-			fillVal := tuple.Car()
-			fillInt, ok := fillVal.(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", fillVal)
-			}
-			err := values.ValidateByteValue(fillInt, "make-bytevector", "fill")
-			if err != nil {
-				return err
-			}
-			fill = uint8(fillInt.Value)
+	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	if ok {
+		fillInt, ok := v.(*values.Integer)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", v)
 		}
+		err := values.ValidateByteValue(fillInt, "make-bytevector", "fill")
+		if err != nil {
+			return err
+		}
+		fill = uint8(fillInt.Value)
 	}
 	bv := make(values.ByteVector, size.Value)
 	for i := range bv {

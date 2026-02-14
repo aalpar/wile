@@ -61,16 +61,13 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	fillChar := rune(0) // default fill character (NUL)
-	rest := mc.Arg(1)
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if ok {
-			ch, ok := tuple.Car().(*values.Character)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotACharacter, "make-string: expected a character but got %T", tuple.Car())
-			}
-			fillChar = ch.Value
+	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	if ok {
+		ch, ok := v.(*values.Character)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotACharacter, "make-string: expected a character but got %T", v)
 		}
+		fillChar = ch.Value
 	}
 
 	// Use NewMutableString since make-string returns a mutable string per R7RS §6.7
