@@ -1,19 +1,12 @@
 # Architectural Review — Refactoring Opportunities
 
 Updated: 2026-02-13
-Branch: refactor/panic-to-error-convention
 
 ## Overview
 
 Full-codebase architectural review covering: numeric tower, registry/core primitives, machine package, error handling, internal packages, and values/API surface. Findings are organized by priority tier.
 
 Completed items have been removed. See git history for the original document.
-
----
-
-## Tier 1: Correctness Gaps
-
-No open items. BigFloat Hashable (1.1) resolved in commit `c20df47`.
 
 ---
 
@@ -175,8 +168,7 @@ Three different patterns for checking empty list arguments in variadic operation
 
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
-| ~~1 (Quick wins)~~ | ~~1.1, 3.3~~ | ~~None~~ | ~~Done (1.1)~~ |
-| 2 (Low-risk dedup) | 2.4 | Low | ~100 |
-| 3 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
-| 4 (Code generation) | 2.2 | Medium | ~1,500 |
+| 1 (Low-risk dedup) | 2.4 | Low | ~100 |
+| 2 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
+| 3 (Code generation) | 2.2 | Medium | ~1,500 |
 | DEFERRED | ~~2.1~~ | — | — |

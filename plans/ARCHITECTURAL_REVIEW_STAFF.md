@@ -71,13 +71,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-## Top Priority (Recommended Action)
-
-1. **BigFloat missing Hashable** (see Refactoring doc 1.1) — Only numeric type without `HashCode()`. Blocks hashtable key usage.
-2. **Helpers package test coverage** (High, Full Codebase section) — 0.9% coverage on 1447 lines of shared arithmetic/comparison logic.
-
----
-
 ## Assessment Methodology
 
 **Files Analyzed**: 35 files from `git diff --name-only HEAD~10`
@@ -113,12 +106,6 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 ---
 
 ## HIGH PRIORITY
-
-### ~~[Priority: High] — Helpers Package Test Coverage~~ — DONE
-
-**Resolved:** Commit `c20df47` (2026-02-13). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC) covering all exported functions.
-
----
 
 ### [Priority: High] — CLI Package Test Coverage: 9.9% for User-Facing Entry Point
 
@@ -258,13 +245,9 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-## Top 3 Priorities (Recommended Action Order)
+## Top Priority (Recommended Action)
 
-1. ~~**BigFloat missing Hashable**~~ — DONE (commit `c20df47`). `HashCode()` implemented via `hashInexactNumeric()`.
-
-2. ~~**Helpers package test coverage**~~ — DONE (commit `c20df47`). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC).
-
-3. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
+1. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
 
 ---
 

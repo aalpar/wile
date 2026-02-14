@@ -97,28 +97,11 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 - VM ForeignFunction call (`operation_foreign_function_call.go:68-82`): Wraps with `ErrPanicRecovery`
 - Thread execution (`values/thread.go:236-248`): Captures as `ErrThreadPanic`
 
-### Panic Issues
+### Remaining Panic Patterns (acceptable)
 
-**P0 — FIXED in this review session:**
-- `compile_time_continuation.go:838` — `panic(values.ErrNotAList)` on quasiquoted improper lists with unquotes. Reachable via e.g. `` `(a ,b . c) ``. Fixed by removing the improper-list panic from the splice-check phase (the expansion code below already handles improper lists correctly).
-
-**P0 — Unreachable but poor pattern:**
-- `compile_time_continuation.go:836` — `panic(err)` where callback never returns unexpected errors
-- `compile_quasisyntax.go:274` — `panic(err)` where callback always returns nil
-
-**P1 — Intentional invariant checks (stack):**
-- `stack.go:39,50,91` — Stack underflow panics. Only fire on compiler bugs (mismatched push/pop). Internal-only, not user-facing.
-
-**P1 — FIXED (commit `b5c0ece`):**
-- `environment/load_path_stack.go:51` — `panic("LoadPathStack.Push: ...")` → returns `ErrInvalidLoadPath` error
-- `values/big_complex.go` — 10 string panics → typed sentinel panics (`ErrNotANumber`, `ErrExactnessConversion`)
-
-### Ignored Errors (acceptable)
-
-- File close in defer (`cmd/scheme/main.go:171`): Can't propagate from defer
-- Port closure in `call-with-output-file`: Must close even if procedure failed
-- `big.Float` accuracy (not an error, just precision info)
-- Debug column parsing: Optional, defaults to 0
+- `compile_time_continuation.go:836` — `panic(err)` where callback never returns unexpected errors (unreachable)
+- `compile_quasisyntax.go:274` — `panic(err)` where callback always returns nil (unreachable)
+- `stack.go:39,50,91` — Stack underflow panics. Only fire on compiler bugs (mismatched push/pop). Internal-only.
 
 ---
 
@@ -130,25 +113,15 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 - `RegisterFunc` FFI is impressive: pre-computed converters for int64, float64, string, bool, []byte, []T, map[K]V, structs, func callbacks, wile.Value, context.Context
 - Three-level error hierarchy: `Error` (init), `CompilationError` (parse/expand), `RuntimeError` (execution with Condition, Source, StackTrace)
 
-### Issues
+### Open Issues
 
-**P1 — Missing documentation (FIXED — commit `b5c0ece`):**
-- ~~No goroutine-safety documentation on `Engine`~~ → Added: NOT safe for concurrent use; SRFI-18 threads within same Engine are safe
-- ~~`CompiledCode` bound to its Engine — not documented~~ → Added: must run on same Engine, concurrent execution not safe
 - `RuntimeError.Condition` can be nil — not documented (addressed via `IsSchemeException()` method)
 - `RegisterFunc` callback synchronicity requirement needs clearer docs
 - No API stability guarantee document
-
-**P1 — Internal types in public API:**
 - `Engine.Environment()` and `Engine.TopLevelEnvironment()` return `environment.*` types marked "advanced use" — could leak internal API changes to embedders
-
-**P2 — API completeness:**
 - No `Registry.FindPrimitive(name)` or `HasPrimitive(name)` query methods
-- ~~`PushLoadPath` panics on relative paths — should return error~~ (FIXED in P1)
 - `PrimitiveSpec` lacks metadata (Doc, ParamNames, Category) for auto-generated docs
 - No `Engine.Close()` method (acceptable since Engine holds no OS resources, but extensions may spawn goroutines)
-
-**P2 — Error type improvements:**
 - No distinction between Scheme exceptions (Condition != nil) and VM/primitive errors
 - `RuntimeError.Cause` can contain internal `machine.*` types — document as logging-only
 
@@ -228,11 +201,7 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ## Prioritized Recommendations
 
-### P0–P2 — Complete
-
-All P0, P1, and P2 items resolved. Key commits: `b5c0ece` (P1 panics/docs/API), P0 quasiquote fix, P2 docs/tests/API stability. See git history for details.
-
-### P3 — Nice to have
+### P3 — Open items
 
 - [ ] **Add Engine.Close()** for extensions that spawn goroutines
 - [ ] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs

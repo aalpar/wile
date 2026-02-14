@@ -43,7 +43,6 @@ When investigating R7RS conformance issues:
 | File | Purpose | Status |
 |------|---------|--------|
 | `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
-| `ERROR_HANDLING_AUDIT.md` | All actionable items resolved; 2 acceptable `fmt.Errorf` remain | Complete |
 
 ### Architectural Review
 
@@ -51,9 +50,9 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `ARCHITECTURAL_REVIEW.md` | 4 deferred LOW items (L3, L11, L15, L19) | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level analysis; P0-P1 panics done, helpers coverage done | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tier 1 done, Tiers 2-4 open) | Reference |
-| `STAFF_REVIEW_2026_02.md` | February 2026 staff review; P0-P2 complete, P3 open | Reference |
+| `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level tech debt analysis; CLI/IO coverage, medium/low items open | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tiers 2-4 open) | Reference |
+| `STAFF_REVIEW_2026_02.md` | February 2026 staff review; P3 items open | Reference |
 
 ### Code Quality / Analysis
 

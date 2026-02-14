@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-12
+**Last Updated**: 2026-02-13
 
 ### Current Project Status
 
@@ -17,9 +17,8 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| **P1** | **Scheme examples & benchmarks** | **Documentation** | **✅ Complete** | **70+ examples, Gabriel benchmark suite (19 benchmarks), Schelog. See `plans/EXAMPLES_STATUS.md`** |
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`. `plans/LOAD_PATH_STACK.md`** |
+| **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`** |
 | P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
@@ -28,7 +27,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P3 | Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
 | P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
-| P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning. `plans/TOP_LEVEL_ENVIRONMENT.md` |
+| P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
 | P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
 | P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
@@ -39,7 +38,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
 | P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
 | P5 | EmptyList/Void refactoring | Refactoring | Reference | Refactor EmptyList from `*Pair` singleton to its own type. `plans/EMPTY_LIST_VOID_REFACTORING.md` |
-| P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages. `plans/SUBSYSTEM_SIMPLIFICATION.md` |
+| P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages |
 | P5 | Algebraic reductions | Refactoring | Partial | Items II, IV, VII, VIII, IX, X complete. Items I, VI deferred (see investigation docs). Remaining: V. `plans/ALGEBRAIC_REDUCTIONS.md` |
 | P5 | Code consolidation (codegen) | Refactoring | Reference | Operation boilerplate generation. Optional, high risk. `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
@@ -49,21 +48,6 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 Future Extensions
 -----------------
-
-### Scheme Examples & Benchmarks (P1) — ✅ COMPLETE
-
-**Status**: Complete (2026-02-11). Examples exceed original plan by 90%.
-
-**What Exists**:
-- 70+ examples across all categories (basics, numeric-tower, macros, control, concurrency, data-structures, io, applications)
-- Gabriel benchmark suite (19 benchmarks: tak, fib, ackermann, sieve, nqueens, etc.)
-- Schelog logic programming system (~15 files)
-- Go embedding examples (basic.go, source-tracking/)
-- Comprehensive examples/README.md with learning paths
-
-See `plans/EXAMPLES_STATUS.md` for detailed audit.
-
----
 
 ### Go FFI (P2)
 
