@@ -1,6 +1,6 @@
 # Staff Engineer Technical Debt Assessment
 
-**Assessment Date**: 2026-02-12
+**Assessment Date**: 2026-02-13 (updated)
 **Scope**: Recently changed files (last 10 commits)
 **Files Analyzed**: 35 files across `values/`, `registry/core/`, `machine/`, `internal/extensions/io/`, `internal/parser/`
 
@@ -10,7 +10,7 @@
 
 The recently changed files reflect a mature codebase with strong architectural discipline (overflow-safe arithmetic, hygiene-aware macros, R7RS compliance). The dominant debt is **structural duplication** in the numeric tower, where a well-designed abstraction (the Number interface) is undermined by 28 hand-rolled type switches. This is the classic "missing abstraction" smell — the lattice model exists conceptually but isn't reified into data.
 
-Secondary issues are **extension friction** (EqualTo symmetry is N×N, extractOptionalPositions duplication) and **helper misplacement** (numeric comparison helpers far from type definitions). Cache eviction centralization resolved (PR #218). Error construction inconsistency resolved (PR #217).
+Secondary issues are **extension friction** (EqualTo symmetry is N×N) and **helper misplacement** (numeric comparison helpers far from type definitions).
 
 The codebase is **ready for the next phase of growth** (new numeric types, async I/O, performance tuning) but will benefit significantly from addressing the numeric tower duplication before adding complexity.
 
@@ -43,12 +43,6 @@ case *Float: /* operation */
 
 ---
 
-### ~~[Priority: High] — Parser/Tokenizer Cache Eviction Fragility~~ — **Resolved (PR #218)**
-
-Cache eviction centralized into `evictPortCache()`. Merged.
-
----
-
 ### [Priority: Medium] — EqualTo Symmetry Requires N×N Awareness (Deferred)
 
 **Where**: `values/integer.go:470-480`, `rational.go:402-412`, `big_integer.go` (similar)
@@ -75,24 +69,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-
-### [Priority: Medium] — extractOptionalPositions Likely Duplicated
-
-**Where**: `internal/extensions/io/prim_read_write.go:128-163` (and likely `prim_strings.go`, `prim_byte_vectors.go`)
-
-**What**: Complex tuple-walking logic to extract `[start [end]]` optional arguments appears in I/O file. Pattern likely repeated wherever primitives accept optional position ranges.
-
-**Why it matters**:
-- **Maintenance burden**: Bug fixes (e.g., off-by-one errors) must propagate to N sites
-- **Consistency risk**: Subtle differences in validation (negative index handling, end < start checks) create inconsistent behavior
-- **Missed abstraction**: Primitives that accept `(proc obj [start [end]])` are a Scheme idiom
-
-**Suggested fix**: Create `helpers.ExtractPositionRange(mc, argIndex, defaultStart, defaultEnd)` in `registry/helpers/`.
-
-**Effort**: S (2-3 hours for extraction + refactor existing sites)
-
----
-
 ### [Priority: Low] — Helper Function Misplacement
 
 **Where**: `registry/core/prim_arithmetic.go:53-99` (`integerEqualsFloat`, `bigIntegerEqualsFloat`)
@@ -112,7 +88,8 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ## Top Priority (Recommended Action)
 
-1. **extractOptionalPositions duplication** (Medium) — Shared tuple-walking logic for `[start [end]]` optional arguments; deduplicate into `registry/helpers/`.
+1. **BigFloat missing Hashable** (see Refactoring doc 1.1) — Only numeric type without `HashCode()`. Blocks hashtable key usage.
+2. **Helpers package test coverage** (High, Full Codebase section) — 0.9% coverage on 1447 lines of shared arithmetic/comparison logic.
 
 ---
 
@@ -134,7 +111,7 @@ func (p *Integer) EqualTo(v Value) bool {
 
 # Full Codebase Technical Debt Assessment
 
-**Assessment Date**: 2026-02-12
+**Assessment Date**: 2026-02-13 (updated)
 **Scope**: Entire codebase (605 Go source files, ~57K lines)
 **Methodology**: Systematic review across all packages for structural debt, consistency issues, testing gaps, and evolution risks
 
@@ -142,9 +119,9 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ## Executive Summary
 
-The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (623 wrapped errors vs 46 bare errors). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
+The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (~772 wrapped errors, ~2 bare errors remaining as panic-recovery wrappers). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%). Context propagation was resolved in PR #216.
+**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%).
 
 **Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (44 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
 
@@ -304,11 +281,13 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-## Top 2 Priorities (Recommended Action Order)
+## Top 3 Priorities (Recommended Action Order)
 
-1. **Helpers package test coverage** — Fix first because it's a shared dependency for all arithmetic/comparison primitives. A bug here has the widest blast radius. Coverage can be added incrementally without API changes.
+1. **BigFloat missing Hashable** (Refactoring 1.1) — Quick win, correctness gap. Only numeric type without `HashCode()`. Blocks hashtable key usage and breaks numeric tower uniformity.
 
-2. **I/O extension test coverage** — Fix second because I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic. Tests require subprocess/file mocking but don't change APIs.
+2. **Helpers package test coverage** — Shared dependency for all arithmetic/comparison primitives. A bug here has the widest blast radius. Coverage can be added incrementally without API changes.
+
+3. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
 
 ---
 
@@ -320,9 +299,9 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | Total test files | 292 |
 | struct types | 309 |
 | Foreign functions (primitives) | 505 |
-| Error wrapping sites | 623 |
-| Bare errors (fmt.Errorf/errors.New) | 46 |
-| context.TODO() uses | ~~425~~ 4 production, ~404 tests |
+| Error wrapping sites | ~772 |
+| Bare errors (fmt.Errorf/errors.New) | ~2 (panic-recovery wrappers only) |
+| context.TODO() uses | 4 production, ~404 tests |
 | TODO/FIXME comments | 507 |
 | Overall test coverage | 85.3% (root), 85-93% (core packages) |
 

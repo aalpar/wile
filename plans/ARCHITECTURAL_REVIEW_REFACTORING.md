@@ -113,31 +113,6 @@ if p.template == nil { return WrapForeignErrorf(ErrUnexpectedNil, "%s: nil templ
 
 ## Tier 3: Convention Violations (MEDIUM impact)
 
-### 3.1 Bare NewForeignError Without Sentinels
-
-**Scope:** ~24 error sites across 7 files
-**Files:** `registry/core/prim_byte_vectors.go` (4), `registry/core/prim_vectors.go` (2), `registry/core/prim_syntax.go` (5), `registry/core/prim_strings.go` (1), `registry/core/prim_lists.go` (8), `registry/core/prim_parameters.go` (1), `registry/core/prim_pairs.go` (3)
-**Effort:** Low
-
-These use bare `NewForeignError()` without a sentinel, violating the project convention of sentinel + wrap. Creates opaque errors that callers can't match with `errors.Is()`.
-
-**Fix:** Add appropriate sentinels (likely `ErrOutOfRange` or `ErrInvalidArgument`) and wrap with `WrapForeignErrorf`.
-
-### 3.2 `== io.EOF` in Test Files
-
-**Scope:** 7 test files
-**Files:**
-- `machine/compile_time_continuation_test.go:348`
-- `machine/coverage_improvement_test.go:542`
-- `machine/record_test.go:46`
-- `internal/tokenizer/tokenizer_test.go:2922`
-- `internal/tokenizer/additional_coverage_test.go:586`
-- `internal/tokenizer/edge_cases_test.go:992`
-- `internal/parser/parser_test.go:978`
-**Effort:** Trivial
-
-Production code correctly uses `errors.Is(err, io.EOF)`. Test files should match.
-
 ### 3.3 Byte Validation Duplication
 
 **Scope:** 3 sites
@@ -210,6 +185,9 @@ Three different patterns for checking empty list arguments in variadic operation
 - **Two-layer error convention** — Sentinel + wrap pattern enforced across ~80 call sites (refactor/panic-to-error-convention branch)
 - **fmt.Errorf eliminated** — No `fmt.Errorf` in production code
 - **BigInteger Hashable** — Now implements `HashCode()`
+- **Bare sentinels eliminated** — All `NewForeignError` calls now use sentinels (PR #217)
+- **Test error idioms** — `errors.Is(err, io.EOF)` consistent across test and production code
+- **Optional position parsing** — `helpers.ParseSubrange` consolidates `[start [end]]` extraction
 
 ---
 
@@ -217,8 +195,8 @@ Three different patterns for checking empty list arguments in variadic operation
 
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
-| 1 (Quick wins) | 1.1, 3.2, 3.3 | None | ~30 |
-| 2 (Low-risk dedup) | 2.4, 3.1 | Low | ~400 |
+| 1 (Quick wins) | 1.1, 3.3 | None | ~20 |
+| 2 (Low-risk dedup) | 2.4 | Low | ~100 |
 | 3 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
 | 4 (Code generation) | 2.2 | Medium | ~1,500 |
 | DEFERRED | ~~2.1~~ | — | — |
