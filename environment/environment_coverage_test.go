@@ -289,6 +289,61 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		c.Assert(result[1], qt.Equals, 0)
 	})
 
+	t.Run("non-nested overlapping scope sets resolved by count", func(t *testing.T) {
+		c := qt.New(t)
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scopeA := syntax.NewScope()
+		scopeB := syntax.NewScope()
+		scopeC := syntax.NewScope()
+		scopeD := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		// Build 3-level chain with overlapping, non-nested scope sets:
+		//   outer:  {A, B}     (2 scopes)
+		//   middle: {A, C, D}  (3 scopes) — different set, more scopes
+		//   inner:  {B}        (1 scope)
+		// Reference: {A, B, C, D} — all four match as subsets
+		outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB})
+
+		middleEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
+		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC, scopeD})
+
+		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), middleEnv)
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB})
+
+		// Middle binding (3 scopes) should win despite being at depth 1, not depth 0.
+		// This is the core maximality property: scope count trumps position.
+		result := innerEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scopeA, scopeB, scopeC, scopeD})
+		c.Assert(result, qt.IsNotNil)
+		c.Assert(result[1], qt.Equals, 1, qt.Commentf("middle binding (3 scopes, depth 1) should beat inner (1 scope, depth 0)"))
+	})
+
+	t.Run("scopeless candidate loses to scoped candidate", func(t *testing.T) {
+		c := qt.New(t)
+		topLevel := NewTopLevelEnvironment()
+		env := topLevel.Runtime()
+
+		scope1 := syntax.NewScope()
+
+		sym := env.InternSymbol(values.NewSymbol("x"))
+
+		// Inner: no scopes (scopeCount=0), Outer: 1 scope (scopeCount=1)
+		outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1})
+
+		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+
+		// Outer binding (1 scope) should win over inner (0 scopes)
+		result := innerEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1})
+		c.Assert(result, qt.IsNotNil)
+		c.Assert(result[1], qt.Equals, 1, qt.Commentf("scoped binding at depth 1 should beat scopeless at depth 0"))
+	})
+
 	t.Run("superset binding rejected", func(t *testing.T) {
 		topLevel := NewTopLevelEnvironment()
 		env := topLevel.Runtime()

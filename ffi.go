@@ -54,17 +54,29 @@ type ffiSpec struct {
 }
 
 // RegisterFunc registers a Go function as a Scheme primitive using
-// natural Go signatures. Supported parameter types: int64, int, float64,
-// string, bool, []byte, []T (typed slices), map[K]V, structs (exported fields),
-// func(...) (callbacks), wile.Value, and context.Context (first param only).
-// Supported return types: int64, int, float64, string, bool, []byte,
-// []T, map[K]V, structs, wile.Value, error (last return only), and void.
+// natural Go signatures.
+//
+// # Supported Types
+//
+// Parameter types: int64, int, float64, string, bool, []byte, []T (typed
+// slices), map[K]V, structs (exported fields), func(...) (callbacks),
+// [Value], and [context.Context] (first param only).
+//
+// Return types: int64, int, float64, string, bool, []byte, []T, map[K]V,
+// structs, [Value], error (last return only), and void.
+//
+// # Variadic Functions
 //
 // Variadic Go functions are supported. The variadic parameter receives
 // all excess arguments from Scheme, converted element-by-element.
 //
-// If the first parameter is context.Context, the VM's context is forwarded
-// automatically and does not count toward the Scheme parameter count.
+// # Context Forwarding
+//
+// If the first parameter is [context.Context], the VM's context is
+// forwarded automatically and does not count toward the Scheme
+// parameter count.
+//
+// # Callbacks
 //
 // Callback parameters (func types) receive a Go closure that invokes a
 // Scheme procedure through a VM sub-context. Callbacks must be called
@@ -72,7 +84,7 @@ type ffiSpec struct {
 // callback for later invocation or calling it from another goroutine is
 // unsafe — the closure captures VM state that is not goroutine-safe.
 //
-// Returns a *wile.Error if fn is not a function or uses unsupported types.
+// Returns a *[Error] if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {
 	spec, err := buildFFISpec(name, fn)
 	if err != nil {
