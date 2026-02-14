@@ -22,7 +22,7 @@ All 16 R7RS standard libraries complete. Additional: SRFI-1, SRFI-18, `(chibi te
 
 ### Examples & Documentation
 
-72 examples across 12 categories, plus 21 Gabriel benchmarks and Schelog. Comprehensive docs: README, PRIMITIVES.md, CHANGELOG, design docs, dev docs.
+73 examples across 12 categories, plus 21 Gabriel benchmarks and Schelog. Comprehensive docs: README, PRIMITIVES.md, CHANGELOG, design docs, dev docs.
 
 ### Test Infrastructure
 
