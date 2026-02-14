@@ -24,3 +24,19 @@ type ByteCodeCaptureCar struct {
 func (p ByteCodeCaptureCar) String() string {
 	return fmt.Sprintf("CaptureCar(%s)", p.Binding)
 }
+
+// ByteCodeCaptureCdr captures the current cdr as a pattern variable binding.
+// This is used for improper list patterns like (_ a . rest) where rest
+// should capture the remaining elements of the input list.
+//
+// R7RS §4.3.2: In a pattern, an identifier followed by . and another
+// identifier matches any input that is a list of one or more elements,
+// binding the first identifier to the first element and the second
+// identifier to the rest of the list.
+type ByteCodeCaptureCdr struct {
+	Binding string
+}
+
+func (p ByteCodeCaptureCdr) String() string {
+	return fmt.Sprintf("CaptureCdr(%s)", p.Binding)
+}

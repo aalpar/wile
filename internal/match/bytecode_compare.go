@@ -20,6 +20,15 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 )
 
+// ByteCodeCompareCar compares the current car position with a literal syntax value.
+type ByteCodeCompareCar struct {
+	Value syntax.SyntaxValue
+}
+
+func (p ByteCodeCompareCar) String() string {
+	return fmt.Sprintf("CompareCar(%s)", p.Value.SchemeString())
+}
+
 // ByteCodeCompareCdr compares the cdr of the current pair with a literal syntax value.
 // This is used for improper list patterns where the tail is a literal,
 // e.g., (a . b) where b is a literal symbol to match exactly.
