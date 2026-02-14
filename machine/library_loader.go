@@ -120,7 +120,10 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// Push to stack after successful open, pop on exit
 	stack := callerEnv.LoadPathStack()
 	if stack != nil {
-		stack.Push(filePath)
+		pushErr := stack.Push(filePath)
+		if pushErr != nil {
+			return nil, pushErr
+		}
 		defer stack.Pop()
 	}
 

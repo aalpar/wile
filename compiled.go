@@ -20,6 +20,13 @@ import (
 )
 
 // CompiledCode represents compiled Scheme code ready for execution.
+//
+// CompiledCode captures the environment from the Engine that compiled it.
+// It must only be run on the same Engine; running it on a different Engine
+// is undefined behavior (wrong environment bindings, wrong symbol interning).
+//
+// CompiledCode can be run multiple times on the same Engine. It is not safe
+// for concurrent execution (the underlying Engine is not goroutine-safe).
 type CompiledCode struct {
 	template *machine.NativeTemplate
 	env      *environment.EnvironmentFrame

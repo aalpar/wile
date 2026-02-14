@@ -257,12 +257,12 @@ func TestTopLevelEnvironment_ChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child.LoadPathStack(), qt.Equals, parent.LoadPathStack())
 
 	// Push to parent, verify child sees it
-	parent.LoadPathStack().Push("/parent/file.scm")
+	c.Assert(parent.LoadPathStack().Push("/parent/file.scm"), qt.IsNil)
 	c.Assert(child.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
 	c.Assert(child.LoadPathStack().Depth(), qt.Equals, 1)
 
 	// Push to child, verify parent sees it
-	child.LoadPathStack().Push("/child/file.scm")
+	c.Assert(child.LoadPathStack().Push("/child/file.scm"), qt.IsNil)
 	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/child/file.scm")
 	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 2)
 
@@ -287,7 +287,7 @@ func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child2.LoadPathStack(), qt.Equals, root.LoadPathStack())
 
 	// Push to deepest child
-	child2.LoadPathStack().Push("/deep/file.scm")
+	c.Assert(child2.LoadPathStack().Push("/deep/file.scm"), qt.IsNil)
 
 	// All should see it
 	c.Assert(root.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")

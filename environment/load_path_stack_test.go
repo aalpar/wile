@@ -1,11 +1,14 @@
 package environment
 
 import (
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestLoadPathStack_EmptyStack(t *testing.T) {
@@ -33,7 +36,7 @@ func TestLoadPathStack_LIFOOrdering(t *testing.T) {
 
 	// Push all paths
 	for _, p := range paths {
-		stack.Push(p)
+		c.Assert(stack.Push(p), qt.IsNil)
 	}
 
 	c.Assert(stack.Depth(), qt.Equals, len(paths))
@@ -75,14 +78,14 @@ func TestLoadPathStack_CurrentDir(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			stack.Push(tc.path)
+			c.Assert(stack.Push(tc.path), qt.IsNil)
 			c.Assert(stack.CurrentDir(), qt.Equals, tc.want)
 			stack.Pop()
 		})
 	}
 }
 
-func TestLoadPathStack_PushRelativePathPanics(t *testing.T) {
+func TestLoadPathStack_PushRelativePathReturnsError(t *testing.T) {
 	c := qt.New(t)
 	stack := NewLoadPathStack()
 
@@ -98,11 +101,9 @@ func TestLoadPathStack_PushRelativePathPanics(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			defer func() {
-				r := recover()
-				c.Assert(r, qt.Not(qt.IsNil), qt.Commentf("Push(%q) should panic", tc.path))
-			}()
-			stack.Push(tc.path)
+			err := stack.Push(tc.path)
+			c.Assert(err, qt.IsNotNil, qt.Commentf("Push(%q) should return error", tc.path))
+			c.Assert(errors.Is(err, values.ErrInvalidLoadPath), qt.IsTrue)
 		})
 	}
 }
@@ -127,7 +128,7 @@ func TestLoadPathStack_ConcurrentAccess(t *testing.T) {
 			for j := 0; j < opsPerGoroutine; j++ {
 				base := filepath.Join(string(filepath.Separator)+"tmp", "file")
 				path := filepath.Join(base, string(rune('a'+id)), "test.scm")
-				stack.Push(path)
+				_ = stack.Push(path)
 				_ = stack.Current()
 				_ = stack.CurrentDir()
 				_ = stack.Depth()
@@ -148,12 +149,12 @@ func TestLoadPathStack_MultipleOperations(t *testing.T) {
 	stack := NewLoadPathStack()
 
 	// Push, check, push, check, pop, check
-	stack.Push("/app/main.scm")
+	c.Assert(stack.Push("/app/main.scm"), qt.IsNil)
 	c.Assert(stack.Current(), qt.Equals, "/app/main.scm")
 	c.Assert(stack.CurrentDir(), qt.Equals, "/app")
 	c.Assert(stack.Depth(), qt.Equals, 1)
 
-	stack.Push("/app/sub/helper.scm")
+	c.Assert(stack.Push("/app/sub/helper.scm"), qt.IsNil)
 	c.Assert(stack.Current(), qt.Equals, "/app/sub/helper.scm")
 	c.Assert(stack.CurrentDir(), qt.Equals, "/app/sub")
 	c.Assert(stack.Depth(), qt.Equals, 2)
