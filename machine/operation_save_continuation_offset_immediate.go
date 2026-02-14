@@ -22,12 +22,14 @@ import (
 )
 
 type OperationSaveContinuationOffsetImmediate struct {
+	OperationBase
 	Offset int
 }
 
 func NewOperationSaveContinuationOffsetImmediate(off int) *OperationSaveContinuationOffsetImmediate {
 	return &OperationSaveContinuationOffsetImmediate{
-		Offset: off,
+		OperationBase: NewOperationBase("machine-operation-save-continuation-offset-immediate"),
+		Offset:        off,
 	}
 }
 
@@ -41,12 +43,9 @@ func (p *OperationSaveContinuationOffsetImmediate) Apply(ctx context.Context, mc
 	return mc, nil
 }
 
+// SchemeString overrides OperationBase to include offset value.
 func (p *OperationSaveContinuationOffsetImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-save-continuation-offset-immediate %d>", p.Offset)
-}
-
-func (p *OperationSaveContinuationOffsetImmediate) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationSaveContinuationOffsetImmediate) EqualTo(o values.Value) bool {

@@ -24,12 +24,16 @@ import (
 // OperationBuildSyntaxList builds a syntax list from elements on the eval stack.
 // n elements are popped from the stack (in reverse order) and consed into a list.
 type OperationBuildSyntaxList struct {
+	OperationBase
 	Count int
 }
 
 // NewOperationBuildSyntaxList creates a new OperationBuildSyntaxList.
 func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
-	return &OperationBuildSyntaxList{Count: count}
+	return &OperationBuildSyntaxList{
+		OperationBase: NewOperationBaseWithGoName("operation:build-syntax-list", "BuildSyntaxList"),
+		Count:         count,
+	}
 }
 
 // Apply implements the Operation interface.
@@ -56,22 +60,10 @@ func (p *OperationBuildSyntaxList) Apply(_ context.Context, mctx *MachineContext
 	return mctx, nil
 }
 
-func (p *OperationBuildSyntaxList) String() string {
-	return "BuildSyntaxList"
-}
-
-func (p *OperationBuildSyntaxList) SchemeString() string {
-	return "#<operation:build-syntax-list>"
-}
-
 func (p *OperationBuildSyntaxList) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationBuildSyntaxList)
 	return fieldMatches(p, v, ok,
 		func(op *OperationBuildSyntaxList) int {
 			return op.Count
 		})
-}
-
-func (p *OperationBuildSyntaxList) IsVoid() bool {
-	return false
 }

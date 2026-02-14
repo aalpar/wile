@@ -22,11 +22,15 @@ import (
 )
 
 type OperationPeekK struct {
+	OperationBase
 	Depth int
 }
 
 func NewOperationPeekK(depth int) *OperationPeekK {
-	return &OperationPeekK{Depth: depth}
+	return &OperationPeekK{
+		OperationBase: NewOperationBase("machine-operation-peek-k"),
+		Depth:         depth,
+	}
 }
 
 func (p *OperationPeekK) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
@@ -35,12 +39,9 @@ func (p *OperationPeekK) Apply(ctx context.Context, mc *MachineContext) (*Machin
 	return mc, nil
 }
 
+// SchemeString overrides OperationBase to include depth value.
 func (p *OperationPeekK) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-peek-k %d>", p.Depth)
-}
-
-func (p *OperationPeekK) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationPeekK) EqualTo(o values.Value) bool {

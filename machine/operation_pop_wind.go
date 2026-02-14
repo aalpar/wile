@@ -30,24 +30,20 @@ import (
 //
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which the before
 // and after thunks are called whenever control enters or exits.
-type OperationPopWind struct{}
+type OperationPopWind struct {
+	OperationBase
+}
 
 func NewOperationPopWind() *OperationPopWind {
-	return &OperationPopWind{}
+	return &OperationPopWind{
+		OperationBase: NewOperationBase("machine-operation-pop-wind"),
+	}
 }
 
 func (*OperationPopWind) Apply(_ context.Context, mc *MachineContext) (*MachineContext, error) {
 	mc.PopWindingFrame()
 	mc.pc++
 	return mc, nil
-}
-
-func (*OperationPopWind) SchemeString() string {
-	return "#<machine-operation-pop-wind>"
-}
-
-func (p *OperationPopWind) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationPopWind) EqualTo(o values.Value) bool {
