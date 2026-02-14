@@ -19,8 +19,9 @@ import (
 )
 
 type engineConfig struct {
-	registry   *registry.Registry
-	extensions []registry.Extension
+	registry     *registry.Registry
+	extensions   []registry.Extension
+	maxCallDepth uint64
 }
 
 // EngineOption configures an Engine.
@@ -45,5 +46,14 @@ func WithExtension(ext registry.Extension) EngineOption {
 func WithExtensions(exts ...registry.Extension) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, exts...)
+	}
+}
+
+// WithMaxCallDepth sets the maximum recursion depth for the VM.
+// When the continuation stack exceeds this depth, ErrCallDepthExceeded is returned.
+// A value of 0 means unlimited (the default).
+func WithMaxCallDepth(n uint64) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.maxCallDepth = n
 	}
 }

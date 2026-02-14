@@ -13,8 +13,6 @@
 // limitations under the License.
 
 // Package eval provides eval and environment primitives.
-//
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package eval
 
 import (
@@ -32,22 +30,38 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"eval", 2, false, PrimEval},
-		{"load", 1, false, PrimLoad},
-		{"current-load-path", 0, false, PrimCurrentLoadPath},
-		{"current-load-directory", 0, false, PrimCurrentLoadDirectory},
-		{"current-load-depth", 0, false, PrimCurrentLoadDepth},
-		{"interaction-environment", 0, false, PrimInteractionEnvironment},
-		{"scheme-report-environment", 1, false, PrimSchemeReportEnvironment},
-		{"null-environment", 1, false, PrimNullEnvironment},
-		{"environment", 1, true, PrimEnvironment},
-		{"expand", 1, false, PrimExpand},
-		{"expand-once", 1, false, PrimExpandOnce},
-		{"compile", 1, false, PrimCompile},
-		{"syntax-local-value", 1, false, PrimSyntaxLocalValue},
-		{"make-compile-time-value", 1, false, PrimMakeCompileTimeValue},
-		{"syntax-local-introduce", 1, false, PrimSyntaxLocalIntroduce},
-		{"syntax-local-identifier-as-binding", 1, false, PrimSyntaxLocalIdentifierAsBinding},
+		{Name: "eval", ParamCount: 2, Impl: PrimEval,
+			Doc: "Evaluates expression in the given environment.", ParamNames: []string{"expr", "env"}, Category: "eval"},
+		{Name: "load", ParamCount: 1, Impl: PrimLoad,
+			Doc: "Loads and evaluates a Scheme source file.", ParamNames: []string{"filename"}, Category: "eval"},
+		{Name: "current-load-path", Impl: PrimCurrentLoadPath,
+			Doc: "Returns the path of the file currently being loaded.", Category: "eval"},
+		{Name: "current-load-directory", Impl: PrimCurrentLoadDirectory,
+			Doc: "Returns the directory of the file currently being loaded.", Category: "eval"},
+		{Name: "current-load-depth", Impl: PrimCurrentLoadDepth,
+			Doc: "Returns the current load nesting depth.", Category: "eval"},
+		{Name: "interaction-environment", Impl: PrimInteractionEnvironment,
+			Doc: "Returns the current interaction environment.", Category: "eval"},
+		{Name: "scheme-report-environment", ParamCount: 1, Impl: PrimSchemeReportEnvironment,
+			Doc: "Returns the environment for the given Scheme version.", ParamNames: []string{"version"}, Category: "eval"},
+		{Name: "null-environment", ParamCount: 1, Impl: PrimNullEnvironment,
+			Doc: "Returns an empty environment for the given Scheme version.", ParamNames: []string{"version"}, Category: "eval"},
+		{Name: "environment", ParamCount: 1, IsVariadic: true, Impl: PrimEnvironment,
+			Doc: "Creates an environment from import specs.", ParamNames: []string{"import-spec"}, Category: "eval"},
+		{Name: "expand", ParamCount: 1, Impl: PrimExpand,
+			Doc: "Fully expands a syntax object.", ParamNames: []string{"stx"}, Category: "eval"},
+		{Name: "expand-once", ParamCount: 1, Impl: PrimExpandOnce,
+			Doc: "Expands a syntax object by one level.", ParamNames: []string{"stx"}, Category: "eval"},
+		{Name: "compile", ParamCount: 1, Impl: PrimCompile,
+			Doc: "Compiles an expression to a thunk.", ParamNames: []string{"expr"}, Category: "eval"},
+		{Name: "syntax-local-value", ParamCount: 1, Impl: PrimSyntaxLocalValue,
+			Doc: "Returns the compile-time value of an identifier.", ParamNames: []string{"id"}, Category: "eval"},
+		{Name: "make-compile-time-value", ParamCount: 1, Impl: PrimMakeCompileTimeValue,
+			Doc: "Wraps a value for compile-time storage.", ParamNames: []string{"value"}, Category: "eval"},
+		{Name: "syntax-local-introduce", ParamCount: 1, Impl: PrimSyntaxLocalIntroduce,
+			Doc: "Flips the introduction scope on a syntax object.", ParamNames: []string{"stx"}, Category: "eval"},
+		{Name: "syntax-local-identifier-as-binding", ParamCount: 1, Impl: PrimSyntaxLocalIdentifierAsBinding,
+			Doc: "Adds use-site scope to an identifier.", ParamNames: []string{"id"}, Category: "eval"},
 	}, registry.PhaseRuntime)
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/internal/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -831,4 +832,121 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 	`)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
+}
+
+// mockCloseableExtension is a test helper that implements both Extension and Closeable.
+type mockCloseableExtension struct {
+	name     string
+	closed   bool
+	closeErr error
+}
+
+func (m *mockCloseableExtension) Name() string {
+	return m.name
+}
+
+func (m *mockCloseableExtension) AddToRegistry(_ *registry.Registry) error {
+	return nil
+}
+
+func (m *mockCloseableExtension) Close() error {
+	m.closed = true
+	return m.closeErr
+}
+
+func TestEngineClose(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("no closers", func(t *testing.T) {
+		engine, err := NewEngine(context.Background())
+		c.Assert(err, qt.IsNil)
+		err = engine.Close()
+		c.Assert(err, qt.IsNil)
+	})
+
+	t.Run("closeable extension called", func(t *testing.T) {
+		ext := &mockCloseableExtension{name: "test"}
+		engine, err := NewEngine(context.Background(), WithExtension(ext))
+		c.Assert(err, qt.IsNil)
+		c.Assert(ext.closed, qt.IsFalse)
+
+		err = engine.Close()
+		c.Assert(err, qt.IsNil)
+		c.Assert(ext.closed, qt.IsTrue)
+	})
+
+	t.Run("collects errors from closers", func(t *testing.T) {
+		ext1 := &mockCloseableExtension{name: "a", closeErr: errors.New("err-a")}
+		ext2 := &mockCloseableExtension{name: "b", closeErr: errors.New("err-b")}
+		engine, err := NewEngine(context.Background(),
+			WithExtension(ext1),
+			WithExtension(ext2),
+		)
+		c.Assert(err, qt.IsNil)
+
+		err = engine.Close()
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(ext1.closed, qt.IsTrue)
+		c.Assert(ext2.closed, qt.IsTrue)
+	})
+
+	t.Run("double close returns error", func(t *testing.T) {
+		engine, err := NewEngine(context.Background())
+		c.Assert(err, qt.IsNil)
+		err = engine.Close()
+		c.Assert(err, qt.IsNil)
+		err = engine.Close()
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, ErrEngineClosed), qt.IsTrue)
+	})
+}
+
+func TestWithMaxCallDepth(t *testing.T) {
+	tests := []struct {
+		name        string
+		code        string
+		depth       uint64
+		wantErr     bool
+		errSentinel error
+	}{
+		{
+			name:        "deep recursion exceeds limit",
+			code:        "(let loop ((n 20000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
+			depth:       100,
+			wantErr:     true,
+			errSentinel: values.ErrCallDepthExceeded,
+		},
+		{
+			name:    "recursion within limit succeeds",
+			code:    "(let loop ((n 50)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
+			depth:   100,
+			wantErr: false,
+		},
+		{
+			name:    "zero means unlimited",
+			code:    "(let loop ((n 5000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
+			depth:   0,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng, engErr := NewEngine(context.Background(), WithMaxCallDepth(tt.depth))
+			if engErr != nil {
+				t.Fatalf("NewEngine: %v", engErr)
+			}
+			_, err := eng.Eval(context.Background(), tt.code)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !errors.Is(err, tt.errSentinel) {
+					t.Fatalf("expected %v, got: %v", tt.errSentinel, err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

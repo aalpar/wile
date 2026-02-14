@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 )
@@ -247,25 +248,38 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 		}
 	}
 
-	// No default case - block on first available
-	// This is a simplified implementation
-	// A real implementation would use reflect.Select for true multiplexing
-	for {
-		for i, c := range cases {
-			if c.IsDefault {
-				continue
+	// No default case — block using reflect.Select for true multiplexing
+	// Build reflect.SelectCase slice, tracking original indices
+	selectCases := make([]reflect.SelectCase, 0, len(cases))
+	originalIndices := make([]int, 0, len(cases))
+	for i, c := range cases {
+		if c.IsDefault {
+			continue
+		}
+		var rc reflect.SelectCase
+		if c.IsSend {
+			rc = reflect.SelectCase{
+				Dir:  reflect.SelectSend,
+				Chan: reflect.ValueOf(c.Channel.ch),
+				Send: reflect.ValueOf(c.Value),
 			}
-			if c.IsSend {
-				ok, _ := c.Channel.TrySend(c.Value)
-				if ok {
-					return i, nil, true
-				}
-			} else {
-				v, received, ok := c.Channel.TryReceive()
-				if received {
-					return i, v, ok
-				}
+		} else {
+			rc = reflect.SelectCase{
+				Dir:  reflect.SelectRecv,
+				Chan: reflect.ValueOf(c.Channel.ch),
 			}
 		}
+		selectCases = append(selectCases, rc)
+		originalIndices = append(originalIndices, i)
 	}
+
+	chosen, recv, recvOK := reflect.Select(selectCases)
+	idx := originalIndices[chosen]
+	if cases[idx].IsSend {
+		return idx, nil, true
+	}
+	if !recvOK {
+		return idx, nil, false
+	}
+	return idx, recv.Interface().(Value), true
 }

@@ -220,7 +220,7 @@ func PrimThreadYield(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSleep pauses execution for a time
 // (thread-sleep! timeout) -> void
 // timeout can be a time object or a number (seconds)
-func PrimThreadSleep(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadSleep(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 
 	var d time.Duration
@@ -240,7 +240,11 @@ func PrimThreadSleep(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "thread-sleep!: expected time or number, got %T", o)
 	}
 
-	time.Sleep(d)
+	select {
+	case <-time.After(d):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	mc.SetValue(values.Void)
 	return nil
 }

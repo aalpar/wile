@@ -14,7 +14,7 @@
 
 // Package io provides I/O primitives for reading and writing.
 //
-//nolint:govet,revive // Using unkeyed struct fields, package name conflicts with stdlib
+//nolint:revive // package name conflicts with stdlib
 package io
 
 import (
@@ -38,63 +38,105 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addReadWrite(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"read", 1, true, PrimRead},
-		{"read-token", 1, true, PrimReadToken},
-		{"read-syntax", 1, true, PrimReadSyntax},
-		{"read-char", 1, true, PrimReadChar},
-		{"peek-char", 1, true, PrimPeekChar},
-		{"read-line", 1, true, PrimReadLine},
-		{"read-string", 2, true, PrimReadString},
-		{"char-ready?", 1, true, PrimCharReadyQ},
-		{"write", 2, true, PrimWrite},
-		{"write-char", 2, true, PrimWriteChar},
-		{"write-string", 2, true, PrimWriteString},
-		{"display", 2, true, PrimDisplay},
-		{"newline", 1, true, PrimNewline},
-		{"write-simple", 2, true, PrimWriteSimple},
-		{"write-shared", 2, true, PrimWriteShared},
-		{"flush-output-port", 1, true, PrimFlushOutputPort},
+		{Name: "read", ParamCount: 1, IsVariadic: true, Impl: PrimRead,
+			Doc: "Reads an S-expression from a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "read-token", ParamCount: 1, IsVariadic: true, Impl: PrimReadToken,
+			Doc: "Reads a single token from a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "read-syntax", ParamCount: 1, IsVariadic: true, Impl: PrimReadSyntax,
+			Doc: "Reads a syntax object from a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "read-char", ParamCount: 1, IsVariadic: true, Impl: PrimReadChar,
+			Doc: "Reads a single character from a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "peek-char", ParamCount: 1, IsVariadic: true, Impl: PrimPeekChar,
+			Doc: "Peeks at the next character without consuming it.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "read-line", ParamCount: 1, IsVariadic: true, Impl: PrimReadLine,
+			Doc: "Reads a line of text from a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "read-string", ParamCount: 2, IsVariadic: true, Impl: PrimReadString,
+			Doc: "Reads up to k characters from a port.", ParamNames: []string{"k", "port"}, Category: "io"},
+		{Name: "char-ready?", ParamCount: 1, IsVariadic: true, Impl: PrimCharReadyQ,
+			Doc: "Returns #t if a character is available on the port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "write", ParamCount: 2, IsVariadic: true, Impl: PrimWrite,
+			Doc: "Writes a machine-readable representation to a port.", ParamNames: []string{"obj", "port"}, Category: "io"},
+		{Name: "write-char", ParamCount: 2, IsVariadic: true, Impl: PrimWriteChar,
+			Doc: "Writes a character to a port.", ParamNames: []string{"char", "port"}, Category: "io"},
+		{Name: "write-string", ParamCount: 2, IsVariadic: true, Impl: PrimWriteString,
+			Doc: "Writes a string to a port, optionally from start to end.", ParamNames: []string{"string", "port"}, Category: "io"},
+		{Name: "display", ParamCount: 2, IsVariadic: true, Impl: PrimDisplay,
+			Doc: "Writes a human-readable representation to a port.", ParamNames: []string{"obj", "port"}, Category: "io"},
+		{Name: "newline", ParamCount: 1, IsVariadic: true, Impl: PrimNewline,
+			Doc: "Writes a newline to a port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "write-simple", ParamCount: 2, IsVariadic: true, Impl: PrimWriteSimple,
+			Doc: "Writes without shared structure labels.", ParamNames: []string{"obj", "port"}, Category: "io"},
+		{Name: "write-shared", ParamCount: 2, IsVariadic: true, Impl: PrimWriteShared,
+			Doc: "Writes with shared structure markers.", ParamNames: []string{"obj", "port"}, Category: "io"},
+		{Name: "flush-output-port", ParamCount: 1, IsVariadic: true, Impl: PrimFlushOutputPort,
+			Doc: "Flushes buffered output on a port.", ParamNames: []string{"port"}, Category: "io"},
 		// Binary I/O (R7RS §6.13.3)
-		{"read-u8", 1, true, PrimReadU8},
-		{"peek-u8", 1, true, PrimPeekU8},
-		{"u8-ready?", 1, true, PrimU8ReadyQ},
-		{"write-u8", 2, true, PrimWriteU8},
-		{"read-bytevector", 2, true, PrimReadBytevector},
-		{"read-bytevector!", 2, true, PrimReadBytevectorBang},
-		{"write-bytevector", 2, true, PrimWriteBytevector},
+		{Name: "read-u8", ParamCount: 1, IsVariadic: true, Impl: PrimReadU8,
+			Doc: "Reads a single byte from a binary port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "peek-u8", ParamCount: 1, IsVariadic: true, Impl: PrimPeekU8,
+			Doc: "Peeks at the next byte without consuming it.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "u8-ready?", ParamCount: 1, IsVariadic: true, Impl: PrimU8ReadyQ,
+			Doc: "Returns #t if a byte is available on the port.", ParamNames: []string{"port"}, Category: "io"},
+		{Name: "write-u8", ParamCount: 2, IsVariadic: true, Impl: PrimWriteU8,
+			Doc: "Writes a byte to a binary port.", ParamNames: []string{"byte", "port"}, Category: "io"},
+		{Name: "read-bytevector", ParamCount: 2, IsVariadic: true, Impl: PrimReadBytevector,
+			Doc: "Reads up to k bytes from a binary port.", ParamNames: []string{"k", "port"}, Category: "io"},
+		{Name: "read-bytevector!", ParamCount: 2, IsVariadic: true, Impl: PrimReadBytevectorBang,
+			Doc: "Reads bytes into an existing bytevector.", ParamNames: []string{"bytevector", "port"}, Category: "io"},
+		{Name: "write-bytevector", ParamCount: 2, IsVariadic: true, Impl: PrimWriteBytevector,
+			Doc: "Writes bytevector bytes to a binary port.", ParamNames: []string{"bytevector", "port"}, Category: "io"},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addPorts(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"port?", 1, false, PrimPortQ},
-		{"input-port?", 1, false, PrimInputPortQ},
-		{"output-port?", 1, false, PrimOutputPortQ},
-		{"textual-port?", 1, false, PrimTextualPortQ},
-		{"binary-port?", 1, false, PrimBinaryPortQ},
-		{"input-port-open?", 1, false, PrimInputPortOpenQ},
-		{"output-port-open?", 1, false, PrimOutputPortOpenQ},
-		{"close-port", 1, false, PrimClosePort},
-		{"close-input-port", 1, false, PrimClosePort},
-		{"close-output-port", 1, false, PrimClosePort},
-		{"eof-object", 0, false, PrimEofObject},
-		{"eof-object?", 1, false, PrimEofObjectQ},
-		{"call-with-port", 2, false, PrimCallWithPort},
+		{Name: "port?", ParamCount: 1, Impl: PrimPortQ,
+			Doc: "Returns #t if obj is a port.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "input-port?", ParamCount: 1, Impl: PrimInputPortQ,
+			Doc: "Returns #t if obj is an input port.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "output-port?", ParamCount: 1, Impl: PrimOutputPortQ,
+			Doc: "Returns #t if obj is an output port.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "textual-port?", ParamCount: 1, Impl: PrimTextualPortQ,
+			Doc: "Returns #t if obj is a textual port.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "binary-port?", ParamCount: 1, Impl: PrimBinaryPortQ,
+			Doc: "Returns #t if obj is a binary port.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "input-port-open?", ParamCount: 1, Impl: PrimInputPortOpenQ,
+			Doc: "Returns #t if the input port is open.", ParamNames: []string{"port"}, Category: "ports"},
+		{Name: "output-port-open?", ParamCount: 1, Impl: PrimOutputPortOpenQ,
+			Doc: "Returns #t if the output port is open.", ParamNames: []string{"port"}, Category: "ports"},
+		{Name: "close-port", ParamCount: 1, Impl: PrimClosePort,
+			Doc: "Closes a port.", ParamNames: []string{"port"}, Category: "ports"},
+		{Name: "close-input-port", ParamCount: 1, Impl: PrimClosePort,
+			Doc: "Closes an input port.", ParamNames: []string{"port"}, Category: "ports"},
+		{Name: "close-output-port", ParamCount: 1, Impl: PrimClosePort,
+			Doc: "Closes an output port.", ParamNames: []string{"port"}, Category: "ports"},
+		{Name: "eof-object", Impl: PrimEofObject,
+			Doc: "Returns the EOF object.", Category: "ports"},
+		{Name: "eof-object?", ParamCount: 1, Impl: PrimEofObjectQ,
+			Doc: "Returns #t if obj is the EOF object.", ParamNames: []string{"obj"}, Category: "ports"},
+		{Name: "call-with-port", ParamCount: 2, Impl: PrimCallWithPort,
+			Doc: "Calls proc with port, then closes it.", ParamNames: []string{"port", "proc"}, Category: "ports"},
 	}, registry.PhaseRuntime)
 
 	// String ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"open-input-string", 1, false, PrimOpenInputString},
-		{"open-output-string", 0, false, PrimOpenOutputString},
-		{"get-output-string", 1, false, PrimGetOutputString},
+		{Name: "open-input-string", ParamCount: 1, Impl: PrimOpenInputString,
+			Doc: "Creates an input port from a string.", ParamNames: []string{"string"}, Category: "ports"},
+		{Name: "open-output-string", Impl: PrimOpenOutputString,
+			Doc: "Creates an output string port.", Category: "ports"},
+		{Name: "get-output-string", ParamCount: 1, Impl: PrimGetOutputString,
+			Doc: "Returns the accumulated string from an output string port.", ParamNames: []string{"port"}, Category: "ports"},
 	}, registry.PhaseRuntime)
 
 	// Bytevector ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"open-input-bytevector", 1, false, PrimOpenInputBytevector},
-		{"open-output-bytevector", 1, true, PrimOpenOutputBytevector},
-		{"get-output-bytevector", 1, false, PrimGetOutputBytevector},
+		{Name: "open-input-bytevector", ParamCount: 1, Impl: PrimOpenInputBytevector,
+			Doc: "Creates an input port from a bytevector.", ParamNames: []string{"bytevector"}, Category: "ports"},
+		{Name: "open-output-bytevector", ParamCount: 1, IsVariadic: true, Impl: PrimOpenOutputBytevector,
+			Doc: "Creates an output bytevector port.", ParamNames: []string{"capacity"}, Category: "ports"},
+		{Name: "get-output-bytevector", ParamCount: 1, Impl: PrimGetOutputBytevector,
+			Doc: "Returns the accumulated bytevector from an output port.", ParamNames: []string{"port"}, Category: "ports"},
 	}, registry.PhaseRuntime)
 
 	return nil

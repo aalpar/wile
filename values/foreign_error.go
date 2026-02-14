@@ -137,6 +137,9 @@ var (
 	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
 	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
+	// Recursion depth
+	ErrCallDepthExceeded = NewStaticError("call depth exceeded")
+
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 	ErrInvalidLoadPath        = NewStaticError("invalid load path")

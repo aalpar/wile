@@ -52,6 +52,8 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
 | `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level analysis and recommendations | Reference |
 | `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities | Reference |
+| `STAFF_REVIEW_2026_02.md` | February 2026 staff review — P3 items completed | Reference |
+| `MACHINE_EXTRACTION_PLAN.md` | Machine package subpackage extraction research | Deferred |
 
 ### Code Quality / Analysis
 

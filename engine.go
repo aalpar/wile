@@ -29,6 +29,9 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// ErrEngineClosed is returned when operations are attempted on a closed engine.
+var ErrEngineClosed = values.NewStaticError("engine is closed")
+
 // Engine is the main entry point for embedding Wile.
 //
 // An Engine is NOT safe for concurrent use from multiple goroutines.
@@ -43,6 +46,9 @@ type Engine struct {
 	env          *environment.EnvironmentFrame
 	registry     *registry.Registry
 	lastCounters machine.VMCounters
+	closers      []registry.Closeable
+	closed       bool
+	maxCallDepth uint64
 }
 
 // NewEngine creates a new Wile engine.
@@ -101,10 +107,21 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		return nil, err
 	}
 
+	// Collect closeable extensions for Engine.Close()
+	var closers []registry.Closeable
+	for _, ext := range cfg.extensions {
+		c, ok := ext.(registry.Closeable)
+		if ok {
+			closers = append(closers, c)
+		}
+	}
+
 	q := &Engine{
-		topLevel: topLevel,
-		env:      env,
-		registry: reg,
+		topLevel:     topLevel,
+		env:          env,
+		registry:     reg,
+		closers:      closers,
+		maxCallDepth: cfg.maxCallDepth,
 	}
 	return q, nil
 }
@@ -265,6 +282,7 @@ func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, a
 	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
+	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	sub := mc.NewSubContext()
 	_, err := sub.Apply(cls, args...)
@@ -283,6 +301,7 @@ func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClos
 	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
+	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	sub := mc.NewSubContext()
 	_, err := sub.ApplyCaseLambda(cls, args...)
@@ -355,6 +374,7 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
 	mc := machine.NewMachineContext(ctx, cont)
+	mc.SetMaxCallDepth(p.maxCallDepth)
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
 	if err != nil {
@@ -506,4 +526,24 @@ func (p *Engine) PopLoadPath() {
 	if stack != nil {
 		stack.Pop()
 	}
+}
+
+// Close releases resources held by closeable extensions.
+// Extensions that implement registry.Closeable have their Close method called.
+// Errors from individual closers are collected and returned via errors.Join.
+// Calling Close on an already-closed engine returns ErrEngineClosed.
+func (p *Engine) Close() error {
+	if p.closed {
+		return values.WrapForeignErrorf(ErrEngineClosed, "engine: already closed")
+	}
+	p.closed = true
+
+	var errs []error
+	for _, c := range p.closers {
+		err := c.Close()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }

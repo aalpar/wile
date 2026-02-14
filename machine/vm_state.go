@@ -37,6 +37,7 @@ import (
 //	│ threadID     │ ✓              │ ✗           │ ✗                │
 //	│ windingStack │ ✗              │ ✗           │ ✗                │
 //	│ promptTag    │ ✗              │ ✗           │ ✗                │
+//	│ callDepth    │ ✓              │ ✗           │ ✗                │
 //	└──────────────┴────────────────┴─────────────┴──────────────────┘
 type vmState struct {
 	env          *environment.EnvironmentFrame
@@ -47,4 +48,5 @@ type vmState struct {
 	windingStack WindingStack // R7RS dynamic-wind extent tracking
 	promptTag    *PromptTag   // prompt tag for continuation prompts
 	threadID     uint64       // SRFI-18 thread identity: 0 = primordial thread
+	callDepth    uint64       // current continuation depth (incremented on save, decremented on pop)
 }

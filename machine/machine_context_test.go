@@ -1131,3 +1131,142 @@ func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
 	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
 }
+
+func TestSaveContinuation_CallDepthTracking(t *testing.T) {
+	tests := []struct {
+		name         string
+		maxCallDepth uint64
+		saveCalls    int
+		wantErr      bool
+	}{
+		{
+			name:         "increments on save",
+			maxCallDepth: 10,
+			saveCalls:    5,
+			wantErr:      false,
+		},
+		{
+			name:         "exceeds limit",
+			maxCallDepth: 3,
+			saveCalls:    4,
+			wantErr:      true,
+		},
+		{
+			name:         "exactly at limit",
+			maxCallDepth: 3,
+			saveCalls:    3,
+			wantErr:      false,
+		},
+		{
+			name:         "unlimited when zero",
+			maxCallDepth: 0,
+			saveCalls:    100,
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a template with enough operations for all save offsets
+			ops := make([]Operation, 200)
+			for i := range ops {
+				ops[i] = NewOperationLoadVoid()
+			}
+			tpl := NewNativeTemplate(0, 0, false, ops...)
+			topEnv := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+			cont := NewMachineContinuation(nil, tpl, env)
+			mc := NewMachineContext(context.Background(), cont)
+			mc.SetMaxCallDepth(tt.maxCallDepth)
+
+			var lastErr error
+			for i := 0; i < tt.saveCalls; i++ {
+				lastErr = mc.SaveContinuation(1)
+				if lastErr != nil {
+					break
+				}
+			}
+
+			if tt.wantErr {
+				if lastErr == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !errors.Is(lastErr, values.ErrCallDepthExceeded) {
+					t.Fatalf("expected ErrCallDepthExceeded, got: %v", lastErr)
+				}
+			} else if lastErr != nil {
+				t.Fatalf("unexpected error: %v", lastErr)
+			}
+		})
+	}
+}
+
+func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
+	ops := make([]Operation, 20)
+	for i := range ops {
+		ops[i] = NewOperationLoadVoid()
+	}
+	tpl := NewNativeTemplate(0, 0, false, ops...)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+	mc.SetMaxCallDepth(10)
+
+	// Save 5 continuations
+	for i := 0; i < 5; i++ {
+		err := mc.SaveContinuation(1)
+		if err != nil {
+			t.Fatalf("save %d: %v", i, err)
+		}
+	}
+
+	// Pop 3 of them
+	for i := 0; i < 3; i++ {
+		mc.PopContinuation()
+	}
+
+	// Should be able to save 8 more (was at depth 2 after pops, limit 10)
+	for i := 0; i < 8; i++ {
+		err := mc.SaveContinuation(1)
+		if err != nil {
+			t.Fatalf("second save %d: %v", i, err)
+		}
+	}
+
+	// Now at depth 10, one more should fail
+	err := mc.SaveContinuation(1)
+	if err == nil {
+		t.Fatal("expected error at depth limit, got nil")
+	}
+	if !errors.Is(err, values.ErrCallDepthExceeded) {
+		t.Fatalf("expected ErrCallDepthExceeded, got: %v", err)
+	}
+}
+
+func TestNewSubContext_InheritsMaxCallDepth(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.SetMaxCallDepth(42)
+
+	sub := mc.NewSubContext()
+	if sub.MaxCallDepth() != 42 {
+		t.Fatalf("sub-context maxCallDepth = %d, want 42", sub.MaxCallDepth())
+	}
+}
+
+func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.SetMaxCallDepth(99)
+
+	params := mc.CaptureSubContextParams()
+	thunk := values.NewSymbol("thunk-placeholder")
+	thread := values.NewThread(thunk, "test-thread")
+	sub := NewThreadSubContext(params, thread)
+	if sub.MaxCallDepth() != 99 {
+		t.Fatalf("thread sub-context maxCallDepth = %d, want 99", sub.MaxCallDepth())
+	}
+}

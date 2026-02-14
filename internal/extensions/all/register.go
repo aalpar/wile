@@ -13,8 +13,6 @@
 // limitations under the License.
 
 // Package all provides a convenience extension that includes all standard extensions.
-//
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package all
 
 import (
@@ -53,62 +51,100 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-record-type", 2, false, PrimMakeRecordType},
-		{"record-type?", 1, false, PrimIsRecordType},
-		{"record?", 1, false, PrimIsRecord},
-		{"record-type", 1, false, PrimRecordType},
-		{"record-constructor", 2, false, PrimRecordConstructor},
-		{"record-predicate", 1, false, PrimRecordPredicate},
-		{"record-accessor", 2, false, PrimRecordAccessor},
-		{"record-modifier", 2, false, PrimRecordModifier},
+		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
+			Doc: "Creates a new record type from name and field names.", ParamNames: []string{"name", "field-names"}, Category: "records"},
+		{Name: "record-type?", ParamCount: 1, Impl: PrimIsRecordType,
+			Doc: "Returns #t if obj is a record type.", ParamNames: []string{"obj"}, Category: "records"},
+		{Name: "record?", ParamCount: 1, Impl: PrimIsRecord,
+			Doc: "Returns #t if obj is a record.", ParamNames: []string{"obj"}, Category: "records"},
+		{Name: "record-type", ParamCount: 1, Impl: PrimRecordType,
+			Doc: "Returns the record type of a record.", ParamNames: []string{"record"}, Category: "records"},
+		{Name: "record-constructor", ParamCount: 2, Impl: PrimRecordConstructor,
+			Doc: "Creates a constructor procedure for a record type.", ParamNames: []string{"rtd", "field-tags"}, Category: "records"},
+		{Name: "record-predicate", ParamCount: 1, Impl: PrimRecordPredicate,
+			Doc: "Creates a predicate procedure for a record type.", ParamNames: []string{"rtd"}, Category: "records"},
+		{Name: "record-accessor", ParamCount: 2, Impl: PrimRecordAccessor,
+			Doc: "Creates a field accessor for a record type.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
+		{Name: "record-modifier", ParamCount: 2, Impl: PrimRecordModifier,
+			Doc: "Creates a field modifier for a record type.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addPromises(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"promise?", 1, false, PrimPromiseQ},
-		{"make-promise", 1, false, PrimMakePromise},
-		{"force", 1, false, PrimForce},
-		{"%make-lazy-promise", 1, false, PrimMakeLazyPromise},
+		{Name: "promise?", ParamCount: 1, Impl: PrimPromiseQ,
+			Doc: "Returns #t if obj is a promise.", ParamNames: []string{"obj"}, Category: "promises"},
+		{Name: "make-promise", ParamCount: 1, Impl: PrimMakePromise,
+			Doc: "Creates an eager promise wrapping a value.", ParamNames: []string{"obj"}, Category: "promises"},
+		{Name: "force", ParamCount: 1, Impl: PrimForce,
+			Doc: "Forces a promise and returns its value.", ParamNames: []string{"promise"}, Category: "promises"},
+		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
+			Doc: "Creates a lazy promise from a thunk.", ParamNames: []string{"thunk"}, Category: "promises"},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"string-copy!", 2, true, PrimStringCopyTo},
-		{"string-fill!", 2, true, PrimStringFill},
-		{"string-map", 2, true, PrimStringMap},
-		{"string-for-each", 2, true, PrimStringForEach},
-		{"string-ci=?", 2, true, PrimStringCiEqVariadic},
-		{"string-ci<?", 2, true, PrimStringCiLtVariadic},
-		{"string-ci>?", 2, true, PrimStringCiGtVariadic},
-		{"string-ci<=?", 2, true, PrimStringCiLeVariadic},
-		{"string-ci>=?", 2, true, PrimStringCiGeVariadic},
-		{"string-upcase", 1, false, PrimStringUpcase},
-		{"string-downcase", 1, false, PrimStringDowncase},
-		{"string-foldcase", 1, false, PrimStringFoldcase},
+		{Name: "string-copy!", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopyTo,
+			Doc: "Copies characters from one string to another.", ParamNames: []string{"to", "at"}, Category: "strings"},
+		{Name: "string-fill!", ParamCount: 2, IsVariadic: true, Impl: PrimStringFill,
+			Doc: "Fills a string range with a character.", ParamNames: []string{"string", "char"}, Category: "strings"},
+		{Name: "string-map", ParamCount: 2, IsVariadic: true, Impl: PrimStringMap,
+			Doc: "Maps a procedure over string characters.", ParamNames: []string{"proc", "string"}, Category: "strings"},
+		{Name: "string-for-each", ParamCount: 2, IsVariadic: true, Impl: PrimStringForEach,
+			Doc: "Applies a procedure to string characters for side effects.", ParamNames: []string{"proc", "string"}, Category: "strings"},
+		{Name: "string-ci=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiEqVariadic,
+			Doc: "Case-insensitive string equality.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
+		{Name: "string-ci<?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiLtVariadic,
+			Doc: "Case-insensitive string less-than.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
+		{Name: "string-ci>?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiGtVariadic,
+			Doc: "Case-insensitive string greater-than.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
+		{Name: "string-ci<=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiLeVariadic,
+			Doc: "Case-insensitive string less-or-equal.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
+		{Name: "string-ci>=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiGeVariadic,
+			Doc: "Case-insensitive string greater-or-equal.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
+		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
+			Doc: "Returns the uppercase version of a string.", ParamNames: []string{"string"}, Category: "strings"},
+		{Name: "string-downcase", ParamCount: 1, Impl: PrimStringDowncase,
+			Doc: "Returns the lowercase version of a string.", ParamNames: []string{"string"}, Category: "strings"},
+		{Name: "string-foldcase", ParamCount: 1, Impl: PrimStringFoldcase,
+			Doc: "Returns the case-folded version of a string.", ParamNames: []string{"string"}, Category: "strings"},
 	}, registry.PhaseRuntime)
 	return nil
 }
 
 func addMoreChars(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char-ci=?", 2, true, PrimCharCiEqVariadic},
-		{"char-ci<?", 2, true, PrimCharCiLtVariadic},
-		{"char-ci>?", 2, true, PrimCharCiGtVariadic},
-		{"char-ci<=?", 2, true, PrimCharCiLeVariadic},
-		{"char-ci>=?", 2, true, PrimCharCiGeVariadic},
-		{"char-alphabetic?", 1, false, PrimCharAlphabeticQ},
-		{"char-numeric?", 1, false, PrimCharNumericQ},
-		{"char-whitespace?", 1, false, PrimCharWhitespaceQ},
-		{"char-upper-case?", 1, false, PrimCharUpperCaseQ},
-		{"char-lower-case?", 1, false, PrimCharLowerCaseQ},
-		{"char-upcase", 1, false, PrimCharUpcase},
-		{"char-downcase", 1, false, PrimCharDowncase},
-		{"char-foldcase", 1, false, PrimCharFoldcase},
-		{"digit-value", 1, false, PrimDigitValue},
+		{Name: "char-ci=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiEqVariadic,
+			Doc: "Case-insensitive character equality.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
+		{Name: "char-ci<?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiLtVariadic,
+			Doc: "Case-insensitive character less-than.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
+		{Name: "char-ci>?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiGtVariadic,
+			Doc: "Case-insensitive character greater-than.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
+		{Name: "char-ci<=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiLeVariadic,
+			Doc: "Case-insensitive character less-or-equal.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
+		{Name: "char-ci>=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiGeVariadic,
+			Doc: "Case-insensitive character greater-or-equal.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
+		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
+			Doc: "Returns #t if char is alphabetic.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-numeric?", ParamCount: 1, Impl: PrimCharNumericQ,
+			Doc: "Returns #t if char is numeric.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-whitespace?", ParamCount: 1, Impl: PrimCharWhitespaceQ,
+			Doc: "Returns #t if char is whitespace.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-upper-case?", ParamCount: 1, Impl: PrimCharUpperCaseQ,
+			Doc: "Returns #t if char is uppercase.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-lower-case?", ParamCount: 1, Impl: PrimCharLowerCaseQ,
+			Doc: "Returns #t if char is lowercase.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-upcase", ParamCount: 1, Impl: PrimCharUpcase,
+			Doc: "Returns the uppercase version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-downcase", ParamCount: 1, Impl: PrimCharDowncase,
+			Doc: "Returns the lowercase version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "char-foldcase", ParamCount: 1, Impl: PrimCharFoldcase,
+			Doc: "Returns the case-folded version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "digit-value", ParamCount: 1, Impl: PrimDigitValue,
+			Doc: "Returns the numeric value of a digit character, or #f.", ParamNames: []string{"char"}, Category: "characters"},
 	}, registry.PhaseRuntime)
 	return nil
 }

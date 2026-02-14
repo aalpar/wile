@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -22,17 +21,25 @@ import (
 func addPairs(r *registry.Registry) error {
 	// Basic pair operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"cons", 2, false, PrimCons},
-		{"car", 1, false, PrimCar},
-		{"cdr", 1, false, PrimCdr},
-		{"set-car!", 2, false, PrimSetCar},
-		{"set-cdr!", 2, false, PrimSetCdr},
+		{Name: "cons", ParamCount: 2, Impl: PrimCons,
+			Doc: "Creates a new pair.", ParamNames: []string{"obj1", "obj2"}, Category: "pairs"},
+		{Name: "car", ParamCount: 1, Impl: PrimCar,
+			Doc: "Returns the car of a pair.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "cdr", ParamCount: 1, Impl: PrimCdr,
+			Doc: "Returns the cdr of a pair.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "set-car!", ParamCount: 2, Impl: PrimSetCar,
+			Doc: "Sets the car of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs"},
+		{Name: "set-cdr!", ParamCount: 2, Impl: PrimSetCdr,
+			Doc: "Sets the cdr of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// CxR accessors (2/3/4-level) — generated from cxrSpecs table
 	cxrPrims := make([]registry.PrimitiveSpec, len(cxrSpecs))
 	for i, spec := range cxrSpecs {
-		cxrPrims[i] = registry.PrimitiveSpec{spec.name, 1, false, makeCxrPrimitive(spec.name, spec.ops)}
+		cxrPrims[i] = registry.PrimitiveSpec{
+			Name: spec.name, ParamCount: 1, Impl: makeCxrPrimitive(spec.name, spec.ops),
+			Doc: "Composition of car and cdr operations.", ParamNames: []string{"pair"}, Category: "pairs",
+		}
 	}
 	r.AddPrimitives(cxrPrims, registry.PhaseRuntime|registry.PhaseExpand)
 

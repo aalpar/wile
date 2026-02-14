@@ -57,8 +57,8 @@ func TestRegistry_AddPrimitives(t *testing.T) {
 
 	r := NewRegistry()
 	specs := []PrimitiveSpec{
-		{"prim1", 1, false, nil},
-		{"prim2", 2, true, nil},
+		{Name: "prim1", ParamCount: 1, Impl: nil},
+		{Name: "prim2", ParamCount: 2, IsVariadic: true, Impl: nil},
 	}
 
 	r.AddPrimitives(specs, PhaseRuntime|PhaseExpand)
@@ -199,6 +199,97 @@ func TestRegistryBuilder_Build(t *testing.T) {
 	r, err := builder.Build()
 	c.Assert(err, qt.IsNil)
 	c.Assert(r.BindingCount(), qt.Equals, 1)
+}
+
+func TestRegistry_PrimitiveByName(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "car", ParamCount: 1, Impl: nil, Doc: "Returns the car.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "cdr", ParamCount: 1, Impl: nil, Doc: "Returns the cdr.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "+", ParamCount: 0, IsVariadic: true, Impl: nil, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
+	}, PhaseRuntime)
+
+	tcs := []struct {
+		name  string
+		query string
+		found bool
+		doc   string
+		cat   string
+	}{
+		{"existing", "car", true, "Returns the car.", "pairs"},
+		{"existing variadic", "+", true, "Returns the sum.", "arithmetic"},
+		{"missing", "nonexistent", false, "", ""},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			reg, ok := r.PrimitiveByName(tc.query)
+			c.Assert(ok, qt.Equals, tc.found)
+			if tc.found {
+				c.Assert(reg.Spec.Doc, qt.Equals, tc.doc)
+				c.Assert(reg.Spec.Category, qt.Equals, tc.cat)
+			}
+		})
+	}
+}
+
+func TestRegistry_PrimitiveNames(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "alpha", Impl: nil},
+		{Name: "beta", ParamCount: 1, Impl: nil},
+		{Name: "gamma", ParamCount: 2, Impl: nil},
+	}, PhaseRuntime)
+
+	names := r.PrimitiveNames()
+	c.Assert(names, qt.DeepEquals, []string{"alpha", "beta", "gamma"})
+}
+
+func TestRegistry_PrimitivesByCategory(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "car", ParamCount: 1, Impl: nil, Category: "pairs"},
+		{Name: "cdr", ParamCount: 1, Impl: nil, Category: "pairs"},
+		{Name: "+", Impl: nil, Category: "arithmetic"},
+		{Name: "display", ParamCount: 1, Impl: nil},
+	}, PhaseRuntime)
+
+	byCategory := r.PrimitivesByCategory()
+
+	// pairs category has 2 entries
+	c.Assert(len(byCategory["pairs"]), qt.Equals, 2)
+	c.Assert(byCategory["pairs"][0].Spec.Name, qt.Equals, "car")
+	c.Assert(byCategory["pairs"][1].Spec.Name, qt.Equals, "cdr")
+
+	// arithmetic category has 1 entry
+	c.Assert(len(byCategory["arithmetic"]), qt.Equals, 1)
+	c.Assert(byCategory["arithmetic"][0].Spec.Name, qt.Equals, "+")
+
+	// no-category primitives are under empty string
+	c.Assert(len(byCategory[""]), qt.Equals, 1)
+	c.Assert(byCategory[""][0].Spec.Name, qt.Equals, "display")
+}
+
+func TestRegistry_ClonePreservesMetadata(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitive(PrimitiveSpec{
+		Name: "test", ParamCount: 1, Impl: nil,
+		Doc: "A test prim.", ParamNames: []string{"x"}, Category: "testing",
+	}, PhaseRuntime)
+
+	clone := r.Clone()
+	reg, ok := clone.PrimitiveByName("test")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(reg.Spec.Doc, qt.Equals, "A test prim.")
+	c.Assert(reg.Spec.ParamNames, qt.DeepEquals, []string{"x"})
+	c.Assert(reg.Spec.Category, qt.Equals, "testing")
 }
 
 func TestExtension(t *testing.T) {

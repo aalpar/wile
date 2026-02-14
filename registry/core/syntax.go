@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -22,16 +21,22 @@ import (
 func addSyntax(r *registry.Registry) error {
 	// Syntax objects (R6RS syntax-case support)
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"identifier?", 1, false, PrimIdentifierQ},
-		{"syntax->datum", 1, false, PrimSyntaxToDatum},
-		{"datum->syntax", 2, false, PrimDatumToSyntax},
-		{"generate-temporaries", 1, false, PrimGenerateTemporaries},
+		{Name: "identifier?", ParamCount: 1, Impl: PrimIdentifierQ,
+			Doc: "Returns #t if obj is an identifier.", ParamNames: []string{"obj"}, Category: "syntax"},
+		{Name: "syntax->datum", ParamCount: 1, Impl: PrimSyntaxToDatum,
+			Doc: "Strips syntax information from a syntax object.", ParamNames: []string{"stx"}, Category: "syntax"},
+		{Name: "datum->syntax", ParamCount: 2, Impl: PrimDatumToSyntax,
+			Doc: "Converts a datum to a syntax object with the given context.", ParamNames: []string{"template-id", "datum"}, Category: "syntax"},
+		{Name: "generate-temporaries", ParamCount: 1, Impl: PrimGenerateTemporaries,
+			Doc: "Generates a list of unique temporary identifiers.", ParamNames: []string{"stx-list"}, Category: "syntax"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Identifier comparison
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"bound-identifier=?", 2, false, PrimBoundIdentifierEqualQ},
-		{"free-identifier=?", 2, false, PrimFreeIdentifierEqualQ},
+		{Name: "bound-identifier=?", ParamCount: 2, Impl: PrimBoundIdentifierEqualQ,
+			Doc: "Returns #t if two identifiers have the same binding.", ParamNames: []string{"id1", "id2"}, Category: "syntax"},
+		{Name: "free-identifier=?", ParamCount: 2, Impl: PrimFreeIdentifierEqualQ,
+			Doc: "Returns #t if two identifiers refer to the same binding.", ParamNames: []string{"id1", "id2"}, Category: "syntax"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

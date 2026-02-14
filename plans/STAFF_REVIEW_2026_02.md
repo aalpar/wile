@@ -242,7 +242,7 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ### P2 — Should improve
 
-- [ ] **Add Registry query methods** — `FindPrimitive(name)`, `HasPrimitive(name)`
+- [x] **Add Registry query methods** — `PrimitiveByName`, `PrimitiveNames`, `PrimitivesByCategory`
 - [ ] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()`
 - [ ] **Structure long FFI docstrings** with Go doc subheadings
 - [ ] **Add API stability statement** to README
@@ -251,11 +251,11 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ### P3 — Nice to have
 
-- [ ] **Add Engine.Close()** for extensions that spawn goroutines
-- [ ] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs
-- [ ] **Extract machine/ subpackages** (operations/, compiler/, expander/) — optional organizational improvement
-- [ ] **Add recursion depth limit** — configurable via Engine, prevents DoS
-- [ ] **Deferred concurrency items**: thread-sleep context cancellation (L15), eval dynamic context (L11), ChannelSelect busy-spin (L3)
+- [x] **Add Engine.Close()** for extensions that spawn goroutines
+- [x] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs — 467 primitives across 24 files converted
+- [x] **Extract machine/ subpackages** — Research plan created (`plans/MACHINE_EXTRACTION_PLAN.md`); extraction deferred
+- [x] **Add recursion depth limit** — configurable via `WithMaxCallDepth`, default 10000
+- [x] **Deferred concurrency items**: thread-sleep context cancellation (L15), eval dynamic context (L11), ChannelSelect `reflect.Select` (L3)
 
 ---
 

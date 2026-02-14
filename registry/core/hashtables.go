@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -21,16 +20,26 @@ import (
 
 func addHashtables(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-hashtable", 0, false, PrimMakeHashtable},
-		{"hashtable?", 1, false, PrimHashtableQ},
-		{"hashtable-ref", 3, true, PrimHashtableRef},
-		{"hashtable-set!", 3, false, PrimHashtableSet},
-		{"hashtable-delete!", 2, false, PrimHashtableDelete},
-		{"hashtable-keys", 1, false, PrimHashtableKeys},
-		{"hashtable-values", 1, false, PrimHashtableValues},
-		{"hashtable-size", 1, false, PrimHashtableSize},
-		{"hashtable-copy", 1, false, PrimHashtableCopy},
-		{"hashtable-clear!", 1, false, PrimHashtableClear},
+		{Name: "make-hashtable", Impl: PrimMakeHashtable,
+			Doc: "Creates a new empty hashtable.", Category: "hashtables"},
+		{Name: "hashtable?", ParamCount: 1, Impl: PrimHashtableQ,
+			Doc: "Returns #t if obj is a hashtable.", ParamNames: []string{"obj"}, Category: "hashtables"},
+		{Name: "hashtable-ref", ParamCount: 3, IsVariadic: true, Impl: PrimHashtableRef,
+			Doc: "Returns the value for key, or default if not found.", ParamNames: []string{"ht", "key", "default"}, Category: "hashtables"},
+		{Name: "hashtable-set!", ParamCount: 3, Impl: PrimHashtableSet,
+			Doc: "Associates key with value in the hashtable.", ParamNames: []string{"ht", "key", "value"}, Category: "hashtables"},
+		{Name: "hashtable-delete!", ParamCount: 2, Impl: PrimHashtableDelete,
+			Doc: "Removes the entry for key from the hashtable.", ParamNames: []string{"ht", "key"}, Category: "hashtables"},
+		{Name: "hashtable-keys", ParamCount: 1, Impl: PrimHashtableKeys,
+			Doc: "Returns a list of all keys in the hashtable.", ParamNames: []string{"ht"}, Category: "hashtables"},
+		{Name: "hashtable-values", ParamCount: 1, Impl: PrimHashtableValues,
+			Doc: "Returns a list of all values in the hashtable.", ParamNames: []string{"ht"}, Category: "hashtables"},
+		{Name: "hashtable-size", ParamCount: 1, Impl: PrimHashtableSize,
+			Doc: "Returns the number of entries in the hashtable.", ParamNames: []string{"ht"}, Category: "hashtables"},
+		{Name: "hashtable-copy", ParamCount: 1, Impl: PrimHashtableCopy,
+			Doc: "Returns a copy of the hashtable.", ParamNames: []string{"ht"}, Category: "hashtables"},
+		{Name: "hashtable-clear!", ParamCount: 1, Impl: PrimHashtableClear,
+			Doc: "Removes all entries from the hashtable.", ParamNames: []string{"ht"}, Category: "hashtables"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

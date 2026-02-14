@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -22,14 +21,20 @@ import (
 func addCharacters(r *registry.Registry) error {
 	// Character conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"char->integer", 1, false, PrimCharToInteger},
-		{"integer->char", 1, false, PrimIntegerToChar},
+		{Name: "char->integer", ParamCount: 1, Impl: PrimCharToInteger,
+			Doc: "Returns the Unicode code point of char.", ParamNames: []string{"char"}, Category: "characters"},
+		{Name: "integer->char", ParamCount: 1, Impl: PrimIntegerToChar,
+			Doc: "Returns the character with the given Unicode code point.", ParamNames: []string{"n"}, Category: "characters"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Character comparison (generated from charCompareSpecs table)
 	charCmpPrims := make([]registry.PrimitiveSpec, len(charCompareSpecs))
 	for i, spec := range charCompareSpecs {
-		charCmpPrims[i] = registry.PrimitiveSpec{spec.name, 2, true, makeCharComparePrimitive(spec.name, spec.cmp)}
+		charCmpPrims[i] = registry.PrimitiveSpec{
+			Name: spec.name, ParamCount: 2, IsVariadic: true,
+			Impl: makeCharComparePrimitive(spec.name, spec.cmp),
+			Doc:  "Compares characters.", Category: "characters",
+		}
 	}
 	r.AddPrimitives(charCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)
 

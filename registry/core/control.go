@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -24,20 +23,25 @@ func addControl(r *registry.Registry) error {
 	// Note: map and for-each are implemented in Scheme (see bootstrap.go)
 	// so their iteration becomes capturable Scheme frames for call/cc.
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"apply", 2, true, PrimApply},
+		{Name: "apply", ParamCount: 2, IsVariadic: true, Impl: PrimApply,
+			Doc: "Applies a procedure to a list of arguments.", ParamNames: []string{"proc", "arg1", "args"}, Category: "control"},
 	}, registry.PhaseRuntime)
 
 	// Continuations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"call-with-current-continuation", 1, false, PrimCallCC},
-		{"call/cc", 1, false, PrimCallCC},
+		{Name: "call-with-current-continuation", ParamCount: 1, Impl: PrimCallCC,
+			Doc: "Captures the current continuation and passes it to proc.", ParamNames: []string{"proc"}, Category: "control"},
+		{Name: "call/cc", ParamCount: 1, Impl: PrimCallCC,
+			Doc: "Shorthand for call-with-current-continuation.", ParamNames: []string{"proc"}, Category: "control"},
 		// dynamic-wind is now a compiled form, not a primitive (see machine/compile_validated.go)
 	}, registry.PhaseRuntime)
 
 	// Multiple values
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"values", 1, true, PrimValues},
-		{"call-with-values", 2, false, PrimCallWithValues},
+		{Name: "values", ParamCount: 1, IsVariadic: true, Impl: PrimValues,
+			Doc: "Returns multiple values.", ParamNames: []string{"obj", "objs"}, Category: "control"},
+		{Name: "call-with-values", ParamCount: 2, Impl: PrimCallWithValues,
+			Doc: "Calls consumer with the values produced by producer.", ParamNames: []string{"producer", "consumer"}, Category: "control"},
 	}, registry.PhaseRuntime)
 
 	return nil

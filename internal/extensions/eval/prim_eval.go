@@ -65,6 +65,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	// Run the compiled code in a sub-context
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	sub := machine.NewMachineContext(ctx, cont)
+	sub.SetExceptionHandler(mc.ExceptionHandler())
 	err = sub.Run()
 	if err != nil {
 		return err

@@ -72,6 +72,7 @@ type MachineContext struct {
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
+	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -167,6 +168,9 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.evals = cont.evals.Copy()
 	p.cont = cont.parent
 	p.pc = cont.pc
+	if p.callDepth > 0 {
+		p.callDepth--
+	}
 }
 
 // PopContinuation pops the current continuation from the machine context and returns it.
@@ -177,6 +181,9 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 // used for continuation re-entry (call/cc) where the same continuation may be invoked
 // multiple times, requiring the copy to prevent stack corruption.
 func (p *MachineContext) PopContinuation() *MachineContinuation {
+	if p.callDepth > 0 {
+		p.callDepth--
+	}
 	q := p.cont
 	p.template = q.template
 	p.env = q.env
@@ -188,10 +195,18 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 }
 
 // SaveContinuation pushes a new continuation onto the machine context with the given offset to the current program counter.
-func (p *MachineContext) SaveContinuation(off int) {
+// Returns ErrCallDepthExceeded if the call depth limit has been reached.
+func (p *MachineContext) SaveContinuation(off int) error {
+	p.callDepth++
+	if p.maxCallDepth > 0 && p.callDepth > p.maxCallDepth {
+		p.callDepth--
+		return values.WrapForeignErrorf(values.ErrCallDepthExceeded,
+			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)
+	}
 	p.counters.ContinuationsSaved++
 	p.cont = NewMachineContinuationFromMachineContext(p, off)
 	p.evals = NewStack()
+	return nil
 }
 
 func (p *MachineContext) CurrentContinuation() *MachineContinuation {
@@ -464,6 +479,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 		escapeCont:       p.escapeCont,       // inherit escape continuation for nested call/cc
 		thread:           p.thread,           // inherit SRFI-18 thread object
 		exceptionHandler: p.exceptionHandler, // inherit exception handler chain (R7RS §6.11 dynamic extent)
+		maxCallDepth:     p.maxCallDepth,     // inherit call depth limit
 	}
 }
 
@@ -475,6 +491,7 @@ type SubContextParams struct {
 	ParentMC         *MachineContext
 	EscapeCont       *MachineContinuation
 	ExceptionHandler *ExceptionHandler
+	MaxCallDepth     uint64
 }
 
 // CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
@@ -490,6 +507,7 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		ParentMC:         p,
 		EscapeCont:       p.escapeCont,
 		ExceptionHandler: p.exceptionHandler,
+		MaxCallDepth:     p.maxCallDepth,
 	}
 }
 
@@ -511,6 +529,7 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 		parentMC:         params.ParentMC,
 		escapeCont:       params.EscapeCont,
 		exceptionHandler: params.ExceptionHandler,
+		maxCallDepth:     params.MaxCallDepth,
 		// thread will be set by SetThread below
 	}
 	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()
@@ -874,6 +893,16 @@ func (p *MachineContext) ThreadID() uint64 {
 // Thread returns the SRFI-18 thread object for this context, or nil for the primordial thread.
 func (p *MachineContext) Thread() *values.Thread {
 	return p.thread
+}
+
+// MaxCallDepth returns the maximum call depth limit. 0 means unlimited.
+func (p *MachineContext) MaxCallDepth() uint64 {
+	return p.maxCallDepth
+}
+
+// SetMaxCallDepth sets the maximum call depth limit. 0 means unlimited.
+func (p *MachineContext) SetMaxCallDepth(n uint64) {
+	p.maxCallDepth = n
 }
 
 // SetThread sets the SRFI-18 thread identity on this context.
