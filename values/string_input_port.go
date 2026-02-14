@@ -49,38 +49,22 @@ func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
 }
 
 // Read reads data from the port into bs.
-func (p *StringInputPort) Read(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.Read(bs)
+func (p *StringInputPort) Read(bs []byte) (int, error) {
+	return guardedRead(&p.portBase, p.buf, bs)
 }
 
 // ReadRune reads a rune from the port.
-func (p *StringInputPort) ReadRune() (r rune, size int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, 0, err
-	}
-	return p.buf.ReadRune()
+func (p *StringInputPort) ReadRune() (rune, int, error) {
+	return guardedReadRune(&p.portBase, p.buf)
 }
 
 // UnreadRune unreads the last rune read from the port.
 func (p *StringInputPort) UnreadRune() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.buf.UnreadRune()
+	return guardedUnreadRune(&p.portBase, p.buf)
 }
 
 func (p *StringInputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.guardClosed()
 }
 
 // Datum returns the underlying buffer.

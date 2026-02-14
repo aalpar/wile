@@ -51,27 +51,15 @@ func NewCharacterInputPortFromReader(rdr io.Reader) *CharacterInputPort {
 }
 
 func (p *CharacterInputPort) ReadRune() (rune, int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, 0, err
-	}
-	return p.rdr.ReadRune()
+	return guardedReadRune(&p.portBase, p.rdr)
 }
 
 func (p *CharacterInputPort) Read(bs []byte) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.rdr.Read(bs)
+	return guardedRead(&p.portBase, p.rdr, bs)
 }
 
 func (p *CharacterInputPort) UnreadRune() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.rdr.UnreadRune()
+	return guardedUnreadRune(&p.portBase, p.rdr)
 }
 
 // Datum returns the underlying io.RuneReader.

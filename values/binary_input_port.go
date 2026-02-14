@@ -49,27 +49,15 @@ func NewBinaryInputPortFromReader(reader io.Reader) *BinaryInputPort {
 }
 
 func (p *BinaryInputPort) ReadByte() (byte, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.rdr.ReadByte()
+	return guardedReadByte(&p.portBase, p.rdr)
 }
 
 func (p *BinaryInputPort) UnreadByte() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.rdr.UnreadByte()
+	return guardedUnreadByte(&p.portBase, p.rdr)
 }
 
-func (p *BinaryInputPort) Read(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.rdr.Read(bs)
+func (p *BinaryInputPort) Read(bs []byte) (int, error) {
+	return guardedRead(&p.portBase, p.rdr, bs)
 }
 
 // Datum returns the underlying io.Reader.

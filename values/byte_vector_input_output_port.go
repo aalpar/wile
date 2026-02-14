@@ -48,52 +48,28 @@ func NewByteVectorInputOutputPort() *ByteVectorInputOutputPort {
 }
 
 func (p *ByteVectorInputOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.guardClosed()
 }
 
-func (p *ByteVectorInputOutputPort) Write(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.Write(bs)
+func (p *ByteVectorInputOutputPort) Write(bs []byte) (int, error) {
+	return guardedWrite(&p.portBase, p.buf, bs)
 }
 
 func (p *ByteVectorInputOutputPort) Read(bs []byte) (int, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.Read(bs)
+	return guardedRead(&p.portBase, p.buf, bs)
 }
 
 func (p *ByteVectorInputOutputPort) WriteByte(b byte) error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.buf.WriteByte(b)
+	return guardedWriteByte(&p.portBase, p.buf, b)
 }
 
 func (p *ByteVectorInputOutputPort) ReadByte() (byte, error) {
-	err := p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.ReadByte()
+	return guardedReadByte(&p.portBase, p.buf)
 }
 
 // UnreadByte unreads the last byte read, allowing it to be read again.
 func (p *ByteVectorInputOutputPort) UnreadByte() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.buf.UnreadByte()
+	return guardedUnreadByte(&p.portBase, p.buf)
 }
 
 func (p *ByteVectorInputOutputPort) ReadByteVector() (*ByteVector, error) {

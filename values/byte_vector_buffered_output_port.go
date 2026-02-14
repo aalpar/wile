@@ -50,27 +50,15 @@ func NewByteVectorBufferdOutputPortFromBuffer(buf *bytes.Buffer) *ByteVectorBuff
 }
 
 func (p *ByteVectorBufferdOutputPort) Flush() error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.guardClosed()
 }
 
-func (p *ByteVectorBufferdOutputPort) Write(bs []byte) (n int, err error) {
-	err = p.guardClosed()
-	if err != nil {
-		return 0, err
-	}
-	return p.buf.Write(bs)
+func (p *ByteVectorBufferdOutputPort) Write(bs []byte) (int, error) {
+	return guardedWrite(&p.portBase, p.buf, bs)
 }
 
 func (p *ByteVectorBufferdOutputPort) WriteByte(b byte) error {
-	err := p.guardClosed()
-	if err != nil {
-		return err
-	}
-	return p.buf.WriteByte(b)
+	return guardedWriteByte(&p.portBase, p.buf, b)
 }
 
 // Datum returns the underlying bytes.Buffer.
