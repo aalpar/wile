@@ -9,17 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add load path stack for relative file resolution — `(load "helper.scm")` now resolves relative to the file containing the `load` call, not the working directory; nested loads resolve correctly through a per-VM LIFO path stack
+- Add new primitives: `(current-load-path)`, `(current-load-directory)`, `(current-load-depth)` for inspecting the load stack at runtime
+- Add 72 examples across 12 categories (basics, numeric tower, macros, control flow, data structures, I/O, concurrency, applications, logic programming, embedding, benchmarks)
 - Add Gabriel benchmark suite with 21 benchmarks (tak, takl, ctak, cpstak, fib, triangl, sum, sumfp, sumloop, diviter, divrec, deriv, destruct, browse, ackermann, sieve, nqueens, primes, peval, puzzle, puzzle-debug) comparable across Scheme implementations
+- Add Schelog logic programming system (Prolog-style relational programming in Scheme)
 - Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
 - Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
 - Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
 
+### Changed
+
+- Enforce two-layer error convention (sentinel + wrap) across ~80 call sites — all production errors now wrap a sentinel for programmatic matching via `errors.Is`/`errors.As`
+- Unexport `NewForeignError` — callers must use `WrapForeignErrorf` with a sentinel; enforced by ruleguard lint
+- Convert 14 `panic` sites to return sentinel errors, improving error recovery in embedding scenarios
+- Convert read-only `*Pair` call sites to `Tuple` interface across import set parsing and helpers
+- Consolidate `[start [end]]` optional position parsing into `helpers.ParseSubrange`
+- Centralize parser/tokenizer cache eviction into `evictPortCache()`
+
 ### Fixed
 
-- Fix `read-string` and `read-bytevector` unbounded allocation vulnerability allowing denial-of-service via out-of-memory crashes — added 100 MB per-call allocation limit with clear error messages when exceeded (prevents `(read-string 999999999999 port)` from crashing the process)
-- Fix `read-bytevector` and `read-bytevector!` dropping partial reads at EOF instead of returning available bytes, violating R7RS §6.13.3 and Go's `io.Reader` contract (when Read returns `(n > 0, io.EOF)`, the n bytes must be processed before examining the error)
-- Fix `string->utf8` using byte indices instead of character indices for start/end parameters, causing incorrect UTF-8 encoding and invalid byte sequences for non-ASCII strings (R7RS §6.9 specifies character positions)
-- Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines, causing all output to run together)
+- Fix `set!` in hygienic macros using name-based lookup instead of scope-aware lookup, causing incorrect variable binding in macro-generated code (M1)
+- Fix winding stack slice aliasing — cap-limited slices now prevent `dynamic-wind` before/after thunks from sharing backing arrays between contexts (M2)
+- Fix exception handlers not inherited by sub-contexts, violating R7RS dynamic extent semantics for `with-exception-handler` (M3)
+- Fix `SyntaxVector.AddScope` not propagating scopes to vector elements, causing macro hygiene failures on vector patterns (M4)
+- Fix `BigInteger.Compare` precision loss when comparing against `Float` — now promotes to `BigFloat` instead of truncating to `float64` (M5)
+- Fix string interning mutation bug — interned strings are now marked immutable; `string-set!` copies-on-write to prevent aliased mutation (M6)
+- Fix goroutine leak in `ConditionVariable.Wait` with timeout — the wait goroutine now properly exits when the condition is signaled before timeout (M7)
+- Fix dead code in `parseComplex` sign validation (M8)
+- Fix `string-ci=?`, `string-ci<?`, `char-ci=?`, and related predicates to use Unicode case folding instead of simple lowercasing per R7RS §6.7 (M9)
+- Fix `read-string` and `read-bytevector` unbounded allocation vulnerability — added 100 MB per-call allocation limit (M10)
+- Fix `read-bytevector` and `read-bytevector!` dropping partial reads at EOF instead of returning available bytes per R7RS §6.13.3 (M11)
+- Fix `string->utf8` using byte indices instead of character indices for start/end parameters (R7RS §6.9 specifies character positions)
+- Fix cross-goroutine `MachineContext` access in thread creation — thread-start! now deep-copies required state (T4)
+- Fix `nextScopeID` counter not being atomic, causing potential data races under concurrent macro expansion (T5)
+- Fix `with-input-from-file` and `with-output-to-file` thread safety by converting from primitives to macros wrapping `call-with-*-file` (T3)
+- Fix `context.Context` not propagated through `call/cc` restoration, `thread-start!`, and tail-call frames — cancellation now reaches all VM execution paths
+- Fix `eval` and `load` not inheriting thread identity from parent context
+- Fix `ChannelSelect` separating `recover()` assignment from condition check (Go spec requires same expression)
+- Fix reachable panic in quasiquote expansion when quasiquoted improper lists contain unquotes (e.g., `` `(a ,b . c) ``)
+- Fix cross-type numeric hash consistency — `Integer`, `BigInteger`, and `Rational` now share canonical exact hashes; `Float` and `BigFloat` share canonical inexact hashes (restores `Hashable` contract: `a.EqualTo(b)` implies `a.HashCode() == b.HashCode()`)
+- Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines)
 - Fix compilation error in `examples/data-structures/association-lists.scm` (undefined `sort` procedure; added insertion sort implementation)
 
 ## [1.2.0] - 2026-02-11
@@ -77,7 +107,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 - Remove unused `Tower*` dispatch functions from the numeric tower
-- Remove unused `*Same` methods from numeric types
 
 ### Fixed
 
@@ -94,6 +123,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix `(integer? z)` for large inexact floats outside int64 range
 - Fix `RegisterFunc` silently producing empty slices/structs when a non-list value is passed where a proper list is expected
 - Fix `RegisterFunc` panicking on named scalar types (e.g., `type MyInt int64`) due to `reflect.Call` type mismatch
+
+## [1.0.4] - 2026-02-05
+
+### Removed
+
+- Remove unused `*Same` methods from numeric types (dead code from pre-direct-dispatch architecture)
 
 ## [1.0.3] - 2026-02-05
 

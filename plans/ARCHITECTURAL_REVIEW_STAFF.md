@@ -185,7 +185,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ## LOW PRIORITY
 
-### [Priority: Low] — Numeric Type Switch Incompleteness: Interfaces vs Concrete Types
+### [Priority: Low] — Numeric Type Switch Incompleteness: Interfaces vs Concrete Types (Deferred)
 
 **Where**: Multiple files with type switches on numbers (e.g., `registry/core/prim_arithmetic.go`, `values/numeric_tower.go`)
 
@@ -260,3 +260,4 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | `registry/core` | 88.5% | Standard library |
 | `internal/extensions/gointerop` | 96.4% | Go FFI |
 | `internal/extensions/system` | 100.0% | System interface |
+
