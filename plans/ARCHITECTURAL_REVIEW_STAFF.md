@@ -169,17 +169,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types
-
-**Where**: `internal/tokenizer/tokenizer.go:1050-1350` (`readStringToken`, `readSymbolAfterVerticalBar`, `readSymbolToken`)
-
-**What**: These three functions share 80% of their logic (lookahead, escape handling, UTF-8 decoding) but differ in delimiter rules and escape sequence validation. The duplication spans ~300 lines. Adding a new escape sequence (e.g., `\e` for ESC) requires updating all three functions identically.
-
-**Why it matters**: Maintenance cost. The recent H9 fix (string hex escape validation) required changes to `readStringToken` but not the other two functions because characters use a different code path. A global escape sequence change (e.g., R7RS amendment) requires updating three separate functions.
-
-**Suggested fix**: Extract a parameterized `readDelimitedToken(delimiters, allowedEscapes, terminatorFunc)` that handles the common rune reading loop. The three functions become thin wrappers passing different parameters. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for detailed design.
-
-**Effort**: M (requires careful refactoring to preserve error message quality, ~3-5 days)
+### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types — RESOLVED
 
 ---
 
@@ -264,3 +254,4 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | `internal/extensions/gointerop` | 96.4% | Go FFI |
 | `internal/extensions/system` | 100.0% | System interface |
 
+**Status**: Resolved via `readDelimited(terminator, unterminatedMsg)` extraction. `readString` and `readExtendedSymbol` now delegate to `readDelimited`; `readSymbol` correctly left separate (predicate-based termination, no escapes). Removed `readIntraStringEscape` and `readIntraExtendedToken` (single-line pass-throughs). Net -19 lines.

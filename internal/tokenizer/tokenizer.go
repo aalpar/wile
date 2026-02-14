@@ -547,7 +547,6 @@ func (p *Tokenizer) read() {
 			return
 		}
 		p.readExtendedSymbol() //nolint:errcheck
-		// set state
 		p.term()
 		return
 	case isMarker(p.curr()): // '#'
@@ -657,47 +656,48 @@ func (p *Tokenizer) readEscapeSequence() {
 	p.next()
 }
 
-func (p *Tokenizer) readIntraExtendedToken() {
-	p.readEscapeSequence()
-}
-
-// readIntraStringEscape handles escape sequences within strings.
-func (p *Tokenizer) readIntraStringEscape() {
-	p.readEscapeSequence()
-}
-
-// readString reads a string literal until the closing double-quote.
-// Handles escape sequences via readIntraStringEscape.
-// Builds the processed string content in p.value (without quotes, with escapes converted).
-func (p *Tokenizer) readString() {
-	p.value = "" // Reset processed value for this string
-	for p.curr() != '"' {
+// readDelimited reads content enclosed by a terminator rune (e.g. '"' or '|'),
+// processing backslash escape sequences along the way. On EOF before the closing
+// terminator, it converts the error to a TokenizerError with unterminatedMsg.
+// Called after the opening delimiter has already been consumed.
+// Returns true if the terminator was found and consumed.
+func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool {
+	p.value = ""
+	for p.err == nil && p.curr() != terminator {
 		if isBackSlash(p.curr()) {
-			p.next() // skip \
+			p.next()
 			if p.err != nil {
 				if errors.Is(p.err, io.EOF) {
-					p.err = NewTokenizerError(MessageUnterminatedString, p.tokenStart, p.tokenEnd)
+					p.err = NewTokenizerError(unterminatedMsg, p.tokenStart, p.tokenEnd)
 				}
-				return
+				return false
 			}
-			p.readIntraStringEscape() //nolint:errcheck
+			p.readEscapeSequence()
 			if p.err != nil {
-				return
+				return false
 			}
 			continue
 		}
-		// Regular character - add to processed value
 		p.value += string(p.curr())
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
-				p.err = NewTokenizerError(MessageUnterminatedString, p.tokenStart, p.tokenEnd)
+				p.err = NewTokenizerError(unterminatedMsg, p.tokenStart, p.tokenEnd)
 			}
-			return
+			return false
 		}
 	}
-	p.next() // skip "
-	p.state = TokenizerStateString
+	p.next() // consume terminator — may set p.err to io.EOF, which is fine
+	return true
+}
+
+// readString reads a string literal until the closing double-quote.
+// Builds the processed string content in p.value (without quotes, with escapes converted).
+func (p *Tokenizer) readString() {
+	ok := p.readDelimited('"', MessageUnterminatedString)
+	if ok {
+		p.state = TokenizerStateString
+	}
 }
 
 // skipWhitespace consumes whitespace characters (spaces, tabs, newlines).
@@ -1912,33 +1912,9 @@ func (p *Tokenizer) readSymbol() {
 // readExtendedSymbol reads an extended symbol enclosed in vertical bars (|symbol|).
 // Called after the opening '|' has been consumed.
 func (p *Tokenizer) readExtendedSymbol() {
-	for p.err == nil && !isVerticalLine(p.curr()) {
-		if isBackSlash(p.curr()) {
-			// skip backslash and read next intra-extended token character
-			p.next()
-			if p.err != nil {
-				if errors.Is(p.err, io.EOF) {
-					p.err = NewTokenizerError(MessageUnterminatedExtendedSymbol, p.tokenStart, p.tokenEnd)
-				}
-				return
-			}
-			p.readIntraExtendedToken()
-			continue
-		}
-		p.value += string(p.curr())
-		if p.err != nil {
-			return
-		}
-		p.next()
-	}
-	if p.err != nil {
-		if errors.Is(p.err, io.EOF) {
-			p.err = NewTokenizerError(MessageUnterminatedExtendedSymbol, p.tokenStart, p.tokenEnd)
-		}
+	if !p.readDelimited('|', MessageUnterminatedExtendedSymbol) {
 		return
 	}
-	// consume closing '|'
-	p.next()
 }
 
 // scanWith matches bytes using the provided comparison function.
