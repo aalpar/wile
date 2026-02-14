@@ -7,7 +7,7 @@ TODO
 
 **Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
 **Extensions**: 9 extension packages (io, files, math, system, threads, eval, exceptions, gointerop, all)
-**Examples**: 70+ examples across all categories, Gabriel benchmarks, Schelog
+**Examples**: 75 examples across 13 categories, Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
 **Libraries**: (chibi test), (chibi optional), (srfi 1) complete
 
@@ -24,7 +24,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
 | P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
 | P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
-| P3 | Plugin architecture | Architecture | Proposed | Composable capabilities for embedded Scheme. `plans/PLUGIN_ARCHITECTURE_PROPOSAL.md` |
+| P3 | Plugin architecture | Architecture | Complete | Phases 1-3, 5-6 done. Phase 4 (external extraction) → `plans/EXTERNAL_EXTENSIONS_PLAN.md` |
 | P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
 | P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning |
@@ -37,10 +37,9 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
 | P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
-| P5 | EmptyList/Void refactoring | Refactoring | Reference | Refactor EmptyList from `*Pair` singleton to its own type. `plans/EMPTY_LIST_VOID_REFACTORING.md` |
+| P5 | EmptyList/Void refactoring | Refactoring | Complete | EmptyList is `emptyListType{}`, SyntaxEmptyList is `syntaxEmptyListType{}` |
 | P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages |
-| P5 | Algebraic reductions | Refactoring | Partial | Items II, IV, VII, VIII, IX, X complete. Items I, VI deferred (see investigation docs). Remaining: V. `plans/ALGEBRAIC_REDUCTIONS.md` |
-| P5 | Code consolidation (codegen) | Refactoring | Reference | Operation boilerplate generation. Optional, high risk. `plans/CODE_CONSOLIDATION_ARCHITECTURAL.md` |
+| P5 | Operation boilerplate reduction | Refactoring | Reference | ~36 operation files with identical boilerplate. See `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2 |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 | P5 | Systematic debug logging | Tooling | Reference | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 

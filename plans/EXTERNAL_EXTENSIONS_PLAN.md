@@ -2,7 +2,7 @@
 
 **Status:** PROPOSED — Not implemented
 
-> **Cross-reference**: See `PLUGIN_ARCHITECTURE_PROPOSAL.md` for broader architecture.
+> **Cross-reference**: Plugin architecture (Phases 1-3, 5-6) is complete. This plan covers the remaining Phase 4: external extraction.
 
 ## Problem
 

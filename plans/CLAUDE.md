@@ -24,7 +24,6 @@ When investigating R7RS conformance issues:
 | File | Purpose | Status |
 |------|---------|--------|
 | `TOKENIZER_CONSOLIDATION_PLAN.md` | Number parsing consolidation (~295 LOC savings) | Planned |
-| `EMPTY_LIST_VOID_REFACTORING.md` | EmptyList gets its own type (not `*Pair`) | Planned |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
 | `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
