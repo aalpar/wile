@@ -102,13 +102,12 @@ Consolidated 13 single-type bytecode files into 4 files by category:
 
 Three `make-*` primitives each independently extract optional fill arguments with slightly different patterns. Could share a helper.
 
-### 4.5 Empty List Handling Inconsistency
+### ~~4.5 Empty List Handling Inconsistency~~ ✅ COMPLETE
 
-**Scope:** 3+ patterns
-**Files:** `registry/core/prim_lists.go`, `registry/core/prim_byte_vectors.go`, `registry/core/prim_strings.go`
-**Effort:** Low
-
-Three different patterns for checking empty list arguments in variadic operations (check-first, check-in-fallback, check-after-assertion). Standardize on explicit `IsEmptyList` check first.
+Standardized on explicit `IsEmptyList` check-first pattern. Two functions converted:
+`PrimStringAppend` (removed dead check-in-fallback branch) and `PrimAppend` (added explicit
+empty-list guard, removed post-hoc `len(lists) == 0` check). 10 existing sites already
+used check-first; 4 sites use idiomatic loop-guard (`for !IsEmptyList`), left as-is.
 
 ---
 
