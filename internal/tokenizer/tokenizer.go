@@ -1171,27 +1171,28 @@ func (p *Tokenizer) readDiv(r int) {
 }
 
 func (p *Tokenizer) readDecimalFractionWithExponent(r int) {
-	// R7RS §7.1.1 production 4: <digit 10>+ #+ . #* <suffix>
-	// If integer part had hash digits, fraction part can only have hash digits (no real digits).
 	hadHash := p.hashDigit
 	// consume '.'
 	p.next()
 	if p.err != nil {
 		return
 	}
+	p.readOptionalDecimalPart(r, hadHash)
+}
+
+// readOptionalDecimalPart reads fractional digits after a decimal point.
+// Caller must have already consumed the dot. If hadHash is true (hash digits
+// preceded the dot per R7RS §7.1.1 production 4), only hash digits are allowed.
+func (p *Tokenizer) readOptionalDecimalPart(r int, hadHash bool) {
 	if hadHash {
-		// Production 4: only hash digits allowed after dot
 		p.readHashDigits()
-	} else {
-		// R7RS allows zero or more digits after decimal point: <digit 10>+ . <digit 10>*
-		// So "1." is valid (equivalent to "1.0")
+	} else if isDigit(r, p.curr()) {
 		p.readUnsignedBaseNNumber(r) //nolint:errcheck
 		p.readHashDigits()
 	}
 	if p.err != nil {
 		return
 	}
-	// read optional exponent
 	p.mayReadExponent(r) //nolint:errcheck
 }
 
@@ -1361,28 +1362,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 				}
 				// If followed by 'n', it might be inf.0i - continue parsing
 				if p.curr() == 'n' {
-					// Parse "nf.0" portion of inf.0
-					n := p.scanCaseInsensitive([]byte("nf"))
-					if p.err != nil {
-						return
-					}
-					if n != 0 {
-						p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
-						return
-					}
-					if !isDot(p.curr()) {
-						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-						return
-					}
-					p.next()
-					if p.err != nil {
-						return
-					}
-					if !isDigit(r, p.curr()) {
-						p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-						return
-					}
-					p.readUnsignedBaseNNumber(r)
+					p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
 					if p.err != nil {
 						return
 					}
@@ -1618,41 +1598,6 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
 }
 
-func (p *Tokenizer) scanForImaginaryNumberSpecials(r int, txt string) {
-	n := p.scanCaseInsensitive([]byte(txt))
-	if p.err != nil {
-		return
-	}
-	if n != 0 {
-		p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
-		return
-	}
-	if !isDot(p.curr()) { // +inf.0
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-		return
-	}
-	// skip '.'
-	p.next()
-	if p.err != nil {
-		return
-	}
-	if !isDigit(r, p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-		return
-	}
-	// read a number
-	p.readUnsignedBaseNNumber(r) //nolint:errcheck
-	if p.err != nil {
-		return
-	}
-	// check for imaginary 'i'
-	if !isImaginary(p.curr()) {
-		return
-	}
-	// skip 'i'
-	p.next()
-}
-
 // SignedImaginaryPart reads an optional imaginary part for complex numbers.
 // Called when current character is '+' or '-' after reading a real number.
 // Handles patterns like: +3i, +3.5i, +i, -2i, -inf.0i, -nan.0i
@@ -1679,27 +1624,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 			return
 		}
 		// Could be inf.0i - continue parsing "nf.0<digits>i"
-		n := p.scanCaseInsensitive([]byte("nf"))
-		if p.err != nil {
-			return
-		}
-		if n != 0 {
-			p.err = NewTokenizerError(MessageExpectingInf, p.tokenStart, p.tokenEnd)
-			return
-		}
-		if !isDot(p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-			return
-		}
-		p.next()
-		if p.err != nil {
-			return
-		}
-		if !isDigit(r, p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
-			return
-		}
-		p.readUnsignedBaseNNumber(r)
+		p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
 		if p.err != nil {
 			return
 		}
@@ -1709,7 +1634,13 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
-		p.scanForImaginaryNumberSpecials(r, "nan") //nolint:errcheck
+		p.readSpecialNumber("nan", r, MessageExpectingInf, nil)
+		if p.err != nil {
+			return
+		}
+		if isImaginary(p.curr()) {
+			p.next()
+		}
 		return
 	}
 
@@ -1731,17 +1662,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		if p.err != nil {
 			return
 		}
-		if hadHash {
-			// Production 4: only hash digits after dot
-			p.readHashDigits()
-		} else if isDigit(r, p.curr()) {
-			p.readUnsignedBaseNNumber(r) //nolint:errcheck
-			p.readHashDigits()
-		}
-		if p.err != nil {
-			return
-		}
-		p.mayReadExponent(r) //nolint:errcheck
+		p.readOptionalDecimalPart(r, hadHash)
 		if p.err != nil {
 			return
 		}
@@ -1817,13 +1738,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 		if p.err != nil {
 			return
 		}
-		if hadHash {
-			// Production 4: only hash digits after dot
-			p.readHashDigits()
-		} else if isDigit(r, p.curr()) {
-			p.readUnsignedBaseNNumber(r) //nolint:errcheck
-			p.readHashDigits()
-		}
+		p.readOptionalDecimalPart(r, hadHash)
 		if p.err != nil {
 			return
 		}
@@ -1832,7 +1747,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 		return
 	}
 
-	// Check for exponent
+	// Check for exponent (no-op if readOptionalDecimalPart already consumed it)
 	p.mayReadExponent(r) //nolint:errcheck
 	if p.err != nil {
 		return
