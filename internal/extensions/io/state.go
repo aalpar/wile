@@ -40,16 +40,10 @@ var (
 	cacheMu sync.RWMutex
 	// Tokenizers caches tokenizers per input port.
 	//
-	// These are strong references: closing a port does not evict its cache
-	// entry, so the tokenizer (and its internal buffers) remain reachable
-	// as long as the port value itself is reachable as a map key. In
-	// long-running programs that open many transient ports, this can leak
-	// memory. If that becomes a problem, switch to weak.Pointer[T] (Go 1.24+)
-	// or add explicit eviction on port close.
-	//
-	// To diagnose: run with GODEBUG=gctrace=1 or use runtime/pprof to
-	// inspect heap; look for tokenizer.Tokenizer / parser.Parser objects
-	// retained via this map.
+	// Entries are evicted via evictPortCache() on port close or EOF.
+	// Ports that are abandoned without close or EOF will retain their
+	// cache entries until the process exits. If that becomes a problem
+	// in long-running programs, switch to weak.Pointer[T] (Go 1.24+).
 	//
 	// Thread safety: All access must be protected by cacheMu.
 	Tokenizers map[values.Value]*tokenizer.Tokenizer

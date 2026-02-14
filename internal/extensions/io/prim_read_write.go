@@ -185,9 +185,7 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
-			cacheMu.Lock()
-			delete(Parsers, port)
-			cacheMu.Unlock()
+			evictPortCache(port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -222,9 +220,7 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 	q, err := tknz.Next()
 	if errors.Is(err, io.EOF) {
 		// Port is exhausted; evict the cached tokenizer.
-		cacheMu.Lock()
-		delete(Tokenizers, port)
-		cacheMu.Unlock()
+		evictPortCache(port)
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -257,9 +253,7 @@ func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
-			cacheMu.Lock()
-			delete(Parsers, port)
-			cacheMu.Unlock()
+			evictPortCache(port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
