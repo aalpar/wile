@@ -2783,6 +2783,41 @@ func TestCoverageQuasiquoteImproper(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), qt.IsNotNil)
 }
 
+// TestCoverageQuasiquoteImproperWithUnquote tests quasiquote with an improper
+// list that also contains unquoted expressions. This exercises the splice-check
+// phase of expandQuasiquoteList with a dotted tail, which previously panicked
+// with ErrNotAList instead of falling through to expandQuasiquoteImproperList.
+func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
+	t.Run("unquote before dotted tail", func(t *testing.T) {
+		env := newFullRuntimeEnv(t)
+		mc, err := runSchemeExprs(t, env,
+			"(define x 10)",
+			"`(a ,x . c)",
+		)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+			values.NewCons(
+				values.NewSymbol("a"),
+				values.NewCons(values.NewInteger(10), values.NewSymbol("c")),
+			))
+	})
+
+	t.Run("multiple unquotes before dotted tail", func(t *testing.T) {
+		env := newFullRuntimeEnv(t)
+		mc, err := runSchemeExprs(t, env,
+			"(define x 1)",
+			"(define y 2)",
+			"`(,x ,y . z)",
+		)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+			values.NewCons(
+				values.NewInteger(1),
+				values.NewCons(values.NewInteger(2), values.NewSymbol("z")),
+			))
+	})
+}
+
 // TestCoverageQuasiquoteSplicingInList tests unquote-splicing in middle of list.
 // Exercises expandQuasiquote list traversal paths.
 func TestCoverageQuasiquoteSplicingInList(t *testing.T) {

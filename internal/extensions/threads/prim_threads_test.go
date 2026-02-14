@@ -17,6 +17,7 @@ package threads_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile"
 	extexceptions "github.com/aalpar/wile/internal/extensions/exceptions"
@@ -712,4 +713,68 @@ func TestMutexAbandonedOnTermination(t *testing.T) {
 			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// =============================================================================
+// Context Cancellation Integration Tests
+// =============================================================================
+
+// TestThreadParentContextCancellation verifies that cancelling the parent
+// context propagates to a running thread's derived context, causing the
+// thread's VM loop to terminate via context.Canceled.
+func TestThreadParentContextCancellation(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Run scheme code in a goroutine: starts an infinite-loop thread, then joins it.
+	// The join blocks until the thread terminates.
+	errCh := make(chan error, 1)
+	go func() {
+		// Note: engine.Eval is the Scheme interpreter's eval, not JavaScript eval.
+		// It compiles and runs Scheme source code on the Wile VM.
+		_, err := engine.Eval(ctx,
+			`(let ((th (make-thread (lambda () (let loop () (loop))))))
+			   (thread-start! th)
+			   (thread-join! th))`)
+		errCh <- err
+	}()
+
+	// Give the thread time to start and enter its loop
+	time.Sleep(200 * time.Millisecond)
+
+	// Cancel the parent context — should propagate to thread's derived context
+	cancel()
+
+	select {
+	case err := <-errCh:
+		c.Assert(err, qt.IsNotNil)
+	case <-time.After(5 * time.Second):
+		t.Fatal("scheme evaluation did not return after context cancellation")
+	}
+}
+
+// TestThreadRespectsParentTimeout verifies that a thread running an infinite
+// loop terminates when the parent context's deadline expires.
+func TestThreadRespectsParentTimeout(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	// Note: engine.Eval is the Scheme interpreter's eval, not JavaScript eval.
+	// It compiles and runs Scheme source code on the Wile VM.
+	_, err := engine.Eval(ctx,
+		`(let ((th (make-thread (lambda () (let loop () (loop))))))
+		   (thread-start! th)
+		   (thread-join! th))`)
+	elapsed := time.Since(start)
+
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(elapsed < 2*time.Second, qt.IsTrue,
+		qt.Commentf("should terminate within timeout window, took %v", elapsed))
 }

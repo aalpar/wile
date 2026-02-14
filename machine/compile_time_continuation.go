@@ -817,7 +817,10 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 	// Check if any element is ,@ at depth 1
 	hasSplice := false
 	current := pair
-	v, err := current.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, carSyntax syntax.SyntaxValue) error {
+	// Scan for unquote-splicing at the current depth. For improper lists,
+	// SyntaxForEach returns the dotted tail — that's fine, the expansion
+	// logic below handles improper lists via expandQuasiquoteImproperList.
+	_, err := current.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, carSyntax syntax.SyntaxValue) error {
 		carPair, ok := carSyntax.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
@@ -830,13 +833,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 		}
 		return nil
 	})
-	if !errors.Is(err, values.ErrStopIteration) {
-		// Normal termination of iteration
-		if err != nil {
-			panic(err)
-		} else if !syntax.IsSyntaxEmptyList(v) {
-			panic(values.ErrNotAList)
-		}
+	if err != nil && !errors.Is(err, values.ErrStopIteration) {
+		panic(values.WrapForeignErrorf(err, "quasiquote: error scanning list at %s", srcCtx.SchemeString()))
 	}
 	if !hasSplice {
 		// Simple case: (list elem1 elem2 ...)
