@@ -36,6 +36,7 @@ When investigating R7RS conformance issues:
 | `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system (EnvironmentAccess interface) | Proposed |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
+| `GOBRIDGE_FFI_TOOLKIT.md` | Unified FFI toolkit for Go embedded scripting runtimes | Exploratory |
 
 ### Architectural Review
 
