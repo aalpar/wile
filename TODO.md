@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-13
+**Last Updated**: 2026-02-14
 
 ### Current Project Status
 
@@ -34,9 +34,8 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
+| P5 | Tokenizer consolidation | Refactoring | Partially complete | ~325 lines saved across 8 phases. ~80 lines remain (structural `readUreal`, deferred). `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
 | P5 | Subsystem simplification | Refactoring | Not started | 8 simplification opportunities across core packages |
-| P5 | Operation boilerplate reduction | Refactoring | Not started | ~36 operation files with identical boilerplate. See `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2 |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 | P5 | Systematic debug logging | Tooling | Not started | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 

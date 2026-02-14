@@ -10,9 +10,17 @@
 
 The recently changed files reflect a mature codebase with strong architectural discipline (overflow-safe arithmetic, hygiene-aware macros, R7RS compliance). The dominant debt is **structural duplication** in the numeric tower, where a well-designed abstraction (the Number interface) is undermined by 28 hand-rolled type switches. This is the classic "missing abstraction" smell — the lattice model exists conceptually but isn't reified into data.
 
-Secondary issues are **extension friction** (EqualTo symmetry is N×N) and **helper misplacement** (numeric comparison helpers far from type definitions).
+All HIGH items have been resolved:
+- CLI test coverage: 9.9% → 75% (PR #228)
+- I/O test coverage: 55.2% → 91.1% (PR #225)
 
-The codebase is **ready for the next phase of growth** (new numeric types, async I/O, performance tuning) but will benefit significantly from addressing the numeric tower duplication before adding complexity.
+All MEDIUM items have been resolved or deferred:
+- Pattern matching adapter: eliminated by syntax-native pattern compiler (PR #226)
+- Operation boilerplate: resolved via OperationBase embedding (PR #229)
+- Tokenizer readers: consolidated (PRs #230, #234, #236)
+- Numeric type switch incompleteness: deferred (see LOW)
+
+Remaining debt is LOW priority (numeric tower deferred, TODO tracking resolved, reflection-based equality acceptable).
 
 ---
 
@@ -99,89 +107,37 @@ func (p *Integer) EqualTo(v Value) bool {
 
 The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (~772 wrapped errors, ~2 bare errors remaining as panic-recovery wrappers). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt**: Testing gaps in user-facing boundaries (`cmd/scheme` at 9.9%, I/O at 55.2%).
+**Primary debt resolved**: CLI coverage (9.9% → 75%), I/O coverage (55.2% → 91.1%), operation boilerplate (OperationBase embedding), pattern matching adapter (syntax-native compiler), tokenizer readers (consolidated).
 
-**Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (~32 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
-
----
-
-## HIGH PRIORITY
-
-### [Priority: High] — CLI Package Test Coverage: 9.9% for User-Facing Entry Point
-
-**Where**: `cmd/scheme/main.go` (~280 lines including flags, REPL, file loading, error handling)
-
-**What**: The main CLI entry point has only 9.9% test coverage despite containing critical logic for flag parsing, library path resolution, REPL interaction, and error formatting. Functions like `main()`, `runREPL()`, and `loadFiles()` are untested. The `--file` flag (repeatable), `--interactive` mode, and `--library-path` parsing have no regression tests.
-
-**Why it matters**: The CLI is the primary user interface. Bugs here (incorrect flag handling, REPL crashes, library loading failures) directly impact user experience. The recently added GNU-style long flags (`--file`, `--interactive`, `--library-path`) have no tests verifying they work. Adding new flags or changing behavior is risky without coverage.
-
-**Suggested fix**: Add `cmd/scheme/main_test.go` with integration tests: spawn `scheme` subprocess, pass flags, check output. Test: help text, version, multiple `--file` args, `--interactive` after file load, `SCHEME_INCLUDE_PATH` resolution, error messages for missing files, REPL exit conditions.
-
-**Effort**: M (requires subprocess spawning pattern, mock stdin/stdout, ~3-5 days)
+**Remaining debt**: Numeric tower type-switch explosion (deferred indefinitely), EqualTo symmetry (deferred). These are structural issues with no clean abstraction available.
 
 ---
 
-### [Priority: High] — I/O Extension Test Coverage: 55.2% for 912-Line File I/O Package
+## HIGH PRIORITY — ALL RESOLVED
 
-**Where**: `internal/extensions/io/prim_read_write.go` (~824 lines, 55.2% coverage)
+### ~~CLI Package Test Coverage~~ — RESOLVED
 
-**What**: The I/O primitives (`read`, `read-line`, `read-bytevector`, `write`, `write-shared`, `write-simple`) have 55.2% test coverage. Error paths for malformed input, EOF handling, circular structure detection, and bytevector partial reads are undertested. The recently fixed M10/M11 issues (partial bytevector read, unbounded allocation) indicate this area is bug-prone.
+**Resolution**: PR #228 (`test/cli-subprocess-coverage`) added subprocess integration tests. Coverage: 9.9% → 75%.
 
-**Why it matters**: I/O is a boundary with the outside world—untested error paths become production crashes. The `read` primitive interacts with tokenizer/parser, and bugs here can expose parser edge cases. `write-shared` implements datum label graph serialization (`#0=` / `#0#`), which is complex and undertested.
+### ~~I/O Extension Test Coverage~~ — RESOLVED
 
-**Suggested fix**: Add dedicated error path tests: `read` on truncated input, `read-bytevector` with exact buffer size vs. larger, `write-shared` with deeply nested circular structures, `read-line` at EOF, binary vs textual port type mismatches.
-
-**Effort**: M (3-4 days for comprehensive error path coverage)
+**Resolution**: PR #225 (`test/io-read-write-coverage`) expanded error path coverage. Coverage: 55.2% → 91.1%.
 
 ---
 
-## MEDIUM PRIORITY
+## MEDIUM PRIORITY — ALL RESOLVED
 
-### [Priority: Medium] — Pattern Matching Adapter Layer: Two Separate Conversions for Syntax ↔ Raw Values
+### ~~Pattern Matching Adapter Layer~~ — RESOLVED
 
-**Where**: `internal/match/syntax_adapter.go:158-263` (two distinct conversion functions)
+**Resolution**: PR #226 (`refactor/syntax-native-pattern-compiler`) made the pattern compiler and analyzer work directly with `syntax.SyntaxValue`. The `ConstructPatternTree` and `fromPatternValue` conversion functions were eliminated.
 
-**What**: The pattern matching VM operates on raw `values.Value` trees. The macro system uses `syntax.SyntaxValue` with scopes. The adapter layer converts between them:
-- `ConstructPatternTree(syntax.SyntaxValue) (values.Value, error)` — strips scopes for pattern matching
-- `fromPatternValue(values.Value, []ScopeID) (syntax.SyntaxValue, error)` — adds scopes back after template expansion
+### ~~Operation Boilerplate~~ — RESOLVED
 
-These are inverses, but the relationship is implicit. Adding a new `SyntaxValue` type (e.g., `SyntaxBox`, `SyntaxRecord`) requires updating both functions symmetrically or pattern matching breaks.
+**Resolution**: PR #229 (`refactor/operation-base`) embedded `OperationBase` in all 34 VM operation types. Default `String`/`IsVoid` implementations provided by base struct. `EqualTo` uses generic helpers (`sameType`, `fieldMatches`). New operation boilerplate reduced from ~60 lines to ~15.
 
-**Why it matters**: Extension friction. Adding `syntax-box` or `syntax-record` special forms requires touching two separate functions in the adapter layer. Asymmetric updates cause silent failures—patterns match but templates don't construct, or vice versa.
+### ~~Tokenizer Reader Methods~~ — RESOLVED
 
-**Suggested fix**: Add a dispatch table mapping `syntax.SyntaxValue` types to constructor/destructor pairs. New syntax types register in one place. Alternatively, add `ToPatternValue() values.Value` and `FromPatternValue(v values.Value, scopes) SyntaxValue` methods to the `SyntaxValue` interface and dispatch via interface calls.
-
-**Effort**: M (requires refactoring the adapter layer, ~3-4 days with full testing)
-
----
-
-### [Priority: Medium] — Operation Code Generation: Hand-Written Boilerplate for 36+ Operation Types
-
-**Where**: `machine/operation_*.go` (~36 files, ~30-80 lines each)
-
-**What**: Each VM operation (`OperationPush`, `OperationPop`, `OperationLoadLiteral`, etc.) has a dedicated file with hand-written `Apply`, `String`, `EqualTo`, and `MarshalJSON` methods. The boilerplate is 90% identical across operations—only the core `Apply` logic differs. Adding a new operation requires creating a new file and hand-writing 4 methods.
-
-**Why it matters**: Extension friction. Adding a new bytecode instruction (e.g., `OperationTailCallOptimization`, `OperationInlineCache`) requires ~60 lines of boilerplate. The `EqualTo` and `MarshalJSON` methods use reflection helpers (`sameType`, `fieldMatches`) that could be generated. See also `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2.
-
-**Suggested fix**: Do NOT pursue code generation (too risky per existing plan). Instead, extract the boilerplate into an `OperationBase` struct with default `String`/`EqualTo`/`MarshalJSON` implementations. Each operation embeds `OperationBase` and only overrides `Apply`. This reduces new operation code from 60 lines to ~15.
-
-**Effort**: M (requires refactoring all ~36 operation files, ~1 week, but lower risk than codegen)
-
----
-
-### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types — RESOLVED
-
-**Where**: `internal/tokenizer/tokenizer.go`
-
-**Resolution**: Addressed in multiple PRs:
-- PR #230 (`refactor/tokenizer-reader-consolidation`): Extracted `readDelimited` to unify string and extended symbol scanning (~60 lines saved).
-- `refactor/tokenizer-predicate-cleanup`: Consolidated duplicate predicates (`isSymbolInitial`/`isIdentifierInitial` → `isInitial`), fixed `for`→`if` bug (~17 lines saved).
-- `refactor/tokenizer-signed-state-helper`: Extracted `signedState` helper for signed/unsigned state dispatch (~12 lines saved).
-- `refactor/tokenizer-number-parsing-consolidation`: Deleted `scanForImaginaryNumberSpecials`, extracted `readOptionalDecimalPart` (~85 lines saved).
-
-**Total savings**: ~174 lines. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for remaining (deferred) opportunities.
-
-**Effort**: Completed
+**Resolution**: Addressed across multiple PRs (PRs #230, #234, #236). Total savings: ~174 lines. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for remaining (deferred) opportunities.
 
 ---
 
@@ -234,7 +190,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ## Top Priority (Recommended Action)
 
-1. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
+All HIGH and MEDIUM items are resolved. Remaining items are LOW priority with no immediate action needed.
 
 ---
 
@@ -255,8 +211,8 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | Package | Coverage | Notes |
 |---------|----------|-------|
 | `registry/helpers` | 86.7% | Fixed (commit `c20df47`) |
-| `cmd/scheme` | 9.9% | User-facing CLI |
-| `internal/extensions/io` | 55.2% | Bug-prone I/O boundary |
+| `cmd/scheme` | 75.0% | User-facing CLI (was 9.9%, PR #228) |
+| `internal/extensions/io` | 91.1% | I/O boundary (was 55.2%, PR #225) |
 | `internal/extensions/math` | 68.0% | Complex arithmetic |
 | `internal/extensions/eval` | 73.4% | Meta-evaluation |
 | `values` | ~85% | Core numeric tower |
@@ -266,4 +222,3 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | `internal/extensions/gointerop` | 96.4% | Go FFI |
 | `internal/extensions/system` | 100.0% | System interface |
 
-**Status**: Resolved via `readDelimited(terminator, unterminatedMsg)` extraction. `readString` and `readExtendedSymbol` now delegate to `readDelimited`; `readSymbol` correctly left separate (predicate-based termination, no escapes). Removed `readIntraStringEscape` and `readIntraExtendedToken` (single-line pass-throughs). Net -19 lines.

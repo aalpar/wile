@@ -19,11 +19,11 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `PROJECT_STATUS.md` | Comprehensive project status and known gaps | Reference |
 
-### Active Plans (Not Started)
+### Active Plans
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `TOKENIZER_CONSOLIDATION_PLAN.md` | Number parsing consolidation (~174 LOC saved, ~120 deferred) | Partially Complete |
+| `TOKENIZER_CONSOLIDATION_PLAN.md` | Tokenizer consolidation (~325 LOC saved; `readUreal` deferred as documented debt) | Complete |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
 | `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
@@ -43,8 +43,9 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); all others resolved | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; HIGH: CLI/IO coverage; MEDIUM/LOW items open | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tiers 2-4 open) | Reference |
+| `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; all HIGH/MEDIUM resolved, LOW items remain | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tiers 2-4; §2.2 resolved) | Reference |
+| `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision; ExpandOptions resolved | Reference |
 
 ### Testing & Methodology
 
