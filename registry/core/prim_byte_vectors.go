@@ -42,8 +42,9 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", fillVal)
 			}
-			if fillInt.Value < 0 || fillInt.Value > 255 {
-				return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-bytevector: fill must be a byte (0-255)")
+			err := helpers.ValidateByteValue(fillInt, "make-bytevector")
+			if err != nil {
+				return err
 			}
 			fill = uint8(fillInt.Value)
 		}
@@ -75,8 +76,9 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
 		}
-		if intVal.Value < 0 || intVal.Value > 255 {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "bytevector: value must be a byte (0-255)")
+		err := helpers.ValidateByteValue(intVal, "bytevector")
+		if err != nil {
+			return err
 		}
 		bytes = append(bytes, values.NewByte(uint8(intVal.Value)))
 		return nil
@@ -117,8 +119,9 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 			if err != nil {
 				return err
 			}
-			if byteVal.Value < 0 || byteVal.Value > 255 {
-				return values.WrapForeignErrorf(values.ErrInvalidArgument, "bytevector-u8-set!: value must be a byte (0-255)")
+			err = helpers.ValidateByteValue(byteVal, "bytevector-u8-set!")
+			if err != nil {
+				return err
 			}
 			(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
 			return nil

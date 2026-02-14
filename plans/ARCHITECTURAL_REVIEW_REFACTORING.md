@@ -61,13 +61,11 @@ if p.template == nil { return WrapForeignErrorf(ErrUnexpectedNil, "%s: nil templ
 
 ## Tier 3: Convention Violations (MEDIUM impact)
 
-### 3.3 Byte Validation Duplication
+### ~~3.3 Byte Validation Duplication~~ ✅ COMPLETE
 
-**Scope:** 3 sites
-**File:** `registry/core/prim_byte_vectors.go` (lines 45-46, 78, 120)
-**Effort:** Trivial
-
-Repeated `fillInt.Value < 0 || fillInt.Value > 255` check. Extract to `ValidateByteValue()` helper in `registry/helpers/`.
+**Completed.** Extracted `ValidateByteValue()` helper in `registry/helpers/args.go`.
+Three call sites in `registry/core/prim_byte_vectors.go` (`PrimMakeBytevector`,
+`PrimBytevector`, `PrimBytevectorU8Set`) now delegate to the shared helper.
 
 ---
 
