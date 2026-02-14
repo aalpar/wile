@@ -17,6 +17,7 @@ package io
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -1287,6 +1288,10 @@ func TestReadU8Coverage(t *testing.T) {
 // Phase 4 — Cache lifecycle
 // =============================================================================
 
+// NOTE: TestParserCacheEviction accesses package-level state (cacheMu, Parsers,
+// Tokenizers) and must NOT use t.Parallel(). Go tests within the same package
+// run sequentially by default, so no additional synchronization is needed
+// beyond the existing cacheMu locking.
 func TestParserCacheEviction(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
@@ -1344,9 +1349,17 @@ func TestParserCacheEviction(t *testing.T) {
 
 // TestDefaultOutputPort exercises the "no port arg" code path where
 // write/display/newline/write-char/write-simple/write-shared/flush-output-port
-// fall through to the current output port. These write to stdout as a
-// side effect but the code coverage gain justifies the noise.
+// fall through to the current output port.
+//
+// NOTE: This test modifies global state (current output port) and must NOT
+// use t.Parallel(). Go tests within the same package run sequentially by
+// default, so no additional synchronization is needed.
 func TestDefaultOutputPort(t *testing.T) {
+	// Redirect the current output port to io.Discard to avoid polluting
+	// test output while still exercising the default port code path.
+	SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+	defer ResetCurrentOutputPort()
+
 	engine := newEngine(t)
 
 	// Each of these calls the function without a port argument,
@@ -1382,6 +1395,10 @@ func TestDefaultInputPortCharReady(t *testing.T) {
 
 // TestDefaultInputPortRead exercises the "no port arg" path for read-char
 // by redirecting the current input port to a string reader.
+//
+// NOTE: This test modifies global state (current input port) and must NOT
+// use t.Parallel(). Go tests within the same package run sequentially by
+// default, so no additional synchronization is needed.
 func TestDefaultInputPortRead(t *testing.T) {
 	c := qt.New(t)
 
