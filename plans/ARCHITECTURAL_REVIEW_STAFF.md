@@ -169,17 +169,19 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types
+### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types — RESOLVED
 
-**Where**: `internal/tokenizer/tokenizer.go:1050-1350` (`readStringToken`, `readSymbolAfterVerticalBar`, `readSymbolToken`)
+**Where**: `internal/tokenizer/tokenizer.go`
 
-**What**: These three functions share 80% of their logic (lookahead, escape handling, UTF-8 decoding) but differ in delimiter rules and escape sequence validation. The duplication spans ~300 lines. Adding a new escape sequence (e.g., `\e` for ESC) requires updating all three functions identically.
+**Resolution**: Addressed in multiple PRs:
+- PR #230 (`refactor/tokenizer-reader-consolidation`): Extracted `readDelimited` to unify string and extended symbol scanning (~60 lines saved).
+- `refactor/tokenizer-predicate-cleanup`: Consolidated duplicate predicates (`isSymbolInitial`/`isIdentifierInitial` → `isInitial`), fixed `for`→`if` bug (~17 lines saved).
+- `refactor/tokenizer-signed-state-helper`: Extracted `signedState` helper for signed/unsigned state dispatch (~12 lines saved).
+- `refactor/tokenizer-number-parsing-consolidation`: Deleted `scanForImaginaryNumberSpecials`, extracted `readOptionalDecimalPart` (~85 lines saved).
 
-**Why it matters**: Maintenance cost. The recent H9 fix (string hex escape validation) required changes to `readStringToken` but not the other two functions because characters use a different code path. A global escape sequence change (e.g., R7RS amendment) requires updating three separate functions.
+**Total savings**: ~174 lines. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for remaining (deferred) opportunities.
 
-**Suggested fix**: Extract a parameterized `readDelimitedToken(delimiters, allowedEscapes, terminatorFunc)` that handles the common rune reading loop. The three functions become thin wrappers passing different parameters. See `plans/TOKENIZER_CONSOLIDATION_PLAN.md` for detailed design.
-
-**Effort**: M (requires careful refactoring to preserve error message quality, ~3-5 days)
+**Effort**: Completed
 
 ---
 
