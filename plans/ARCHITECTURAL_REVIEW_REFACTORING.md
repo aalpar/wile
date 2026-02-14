@@ -44,7 +44,7 @@ No open items. BigFloat Hashable (1.1) resolved in commit `c20df47`.
 
 ### 2.2 Operation Boilerplate in machine/
 
-**Scope:** 36+ files, ~1,500 lines
+**Scope:** ~32 files, ~1,500 lines
 **Files:** `machine/operation_*.go`
 **Effort:** Medium
 

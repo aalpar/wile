@@ -108,7 +108,7 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 **Primary debt**: Testing gaps in user-facing boundaries (`cmd/scheme` at 9.9%, I/O at 55.2%).
 
-**Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (44 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
+**Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (~32 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
 
 ---
 
@@ -122,7 +122,7 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 ### [Priority: High] — CLI Package Test Coverage: 9.9% for User-Facing Entry Point
 
-**Where**: `cmd/scheme/main.go` (8199 lines including flags, REPL, file loading, error handling)
+**Where**: `cmd/scheme/main.go` (~280 lines including flags, REPL, file loading, error handling)
 
 **What**: The main CLI entry point has only 9.9% test coverage despite containing critical logic for flag parsing, library path resolution, REPL interaction, and error formatting. Functions like `main()`, `runREPL()`, and `loadFiles()` are untested. The `--file` flag (repeatable), `--interactive` mode, and `--library-path` parsing have no regression tests.
 
@@ -136,7 +136,7 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 ### [Priority: High] — I/O Extension Test Coverage: 55.2% for 912-Line File I/O Package
 
-**Where**: `internal/extensions/io/prim_read_write.go` (912 lines, 55.2% coverage)
+**Where**: `internal/extensions/io/prim_read_write.go` (~824 lines, 55.2% coverage)
 
 **What**: The I/O primitives (`read`, `read-line`, `read-bytevector`, `write`, `write-shared`, `write-simple`) have 55.2% test coverage. Error paths for malformed input, EOF handling, circular structure detection, and bytevector partial reads are undertested. The recently fixed M10/M11 issues (partial bytevector read, unbounded allocation) indicate this area is bug-prone.
 
@@ -188,7 +188,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ### [Priority: Medium] — Operation Code Generation: Hand-Written Boilerplate for 40+ Operation Types
 
-**Where**: `machine/operation_*.go` (44 files, ~30-80 lines each)
+**Where**: `machine/operation_*.go` (~32 files, ~30-80 lines each)
 
 **What**: Each VM operation (`OperationPush`, `OperationPop`, `OperationLoadLiteral`, etc.) has a dedicated file with hand-written `Apply`, `String`, `EqualTo`, and `MarshalJSON` methods. The boilerplate is 90% identical across operations—only the core `Apply` logic differs. Adding a new operation requires creating a new file and hand-writing 4 methods.
 
@@ -196,7 +196,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **Suggested fix**: Do NOT pursue code generation (too risky per existing plan). Instead, extract the boilerplate into an `OperationBase` struct with default `String`/`EqualTo`/`MarshalJSON` implementations. Each operation embeds `OperationBase` and only overrides `Apply`. This reduces new operation code from 60 lines to ~15.
 
-**Effort**: M (requires refactoring all 44 operation files, ~1 week, but lower risk than codegen)
+**Effort**: M (requires refactoring all ~32 operation files, ~1 week, but lower risk than codegen)
 
 ---
 
@@ -248,11 +248,11 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **Where**: `machine/operation_helpers.go:10-40` (`sameType`, `fieldMatches`)
 
-**What**: All operation `EqualTo` methods use reflection helpers to compare struct fields generically. This is slower than direct field comparison and harder to debug (reflection panics are opaque). The helpers were added to avoid hand-writing equality checks for 44 operation types, but the tradeoff is performance and debuggability.
+**What**: All operation `EqualTo` methods use reflection helpers to compare struct fields generically. This is slower than direct field comparison and harder to debug (reflection panics are opaque). The helpers were added to avoid hand-writing equality checks for ~32 operation types, but the tradeoff is performance and debuggability.
 
 **Why it matters**: Operation equality is used in test assertions and potentially in optimization passes (detecting redundant operations). The reflection overhead is small but unnecessary—operations are compared frequently during compilation.
 
-**Suggested fix**: Either accept the reflection cost (it's negligible for compilation workloads) or generate `EqualTo` methods via `go generate` using AST inspection. Do NOT hand-write 44 equality methods.
+**Suggested fix**: Either accept the reflection cost (it's negligible for compilation workloads) or generate `EqualTo` methods via `go generate` using AST inspection. Do NOT hand-write ~32 equality methods.
 
 **Effort**: S (if accepting status quo) / M (if pursuing code generation)
 
@@ -272,8 +272,8 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 | Metric | Value |
 |--------|-------|
-| Total Go source files | 605 |
-| Total test files | 292 |
+| Total Go source files | ~615 |
+| Total test files | ~302 |
 | struct types | 309 |
 | Foreign functions (primitives) | 505 |
 | Error wrapping sites | ~772 |

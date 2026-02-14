@@ -1,7 +1,7 @@
 # Staff Software Engineer — Codebase Review (February 2026)
 
 **Scope:** Full codebase review of Wile (R7RS Scheme in Go)
-**Codebase:** 134K lines Go, 605 files (292 test), 33 packages
+**Codebase:** ~164K lines Go, ~615 files (~302 test), 33 packages
 **Test Status:** All passing (Go + Scheme), zero failures
 **Overall Grade:** A-
 

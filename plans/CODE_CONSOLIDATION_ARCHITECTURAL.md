@@ -8,12 +8,12 @@
 
 **Risk: HIGH**
 **Estimated savings: ~1,500-2,000 bytes**
-**Files affected: 29 operation files**
+**Files affected: ~32 operation files**
 **Status: Not started**
 
 ### Problem
 
-29 operation files share boilerplate for type definition, constructor, `SchemeString`, `IsVoid`, and `EqualTo`. Only `Apply` is unique per operation. The `EqualTo` migration (Phase 6) already reduced each `EqualTo` to a one-liner, but the remaining per-file boilerplate is still ~20 lines.
+~32 operation files share boilerplate for type definition, constructor, `SchemeString`, `IsVoid`, and `EqualTo`. Only `Apply` is unique per operation. The `EqualTo` migration (Phase 6) already reduced each `EqualTo` to a one-liner, but the remaining per-file boilerplate is still ~20 lines.
 
 **Current zero-field operation** (e.g., `operation_pop.go`):
 ```go
