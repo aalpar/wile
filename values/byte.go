@@ -60,3 +60,13 @@ func (p *Byte) EqualTo(v Value) bool {
 func (p *Byte) SchemeString() string {
 	return fmt.Sprintf("%d", p.Value)
 }
+
+// ValidateByteValue checks that an integer is in the byte range [0, 255].
+// Returns a wrapped ErrNotAByte error if the value is out of range.
+func ValidateByteValue(v *Integer, name string, desc string) error {
+	if v.Value < 0 || v.Value > 255 {
+		return WrapForeignErrorf(ErrNotAByte,
+			"%s: %s must be a byte (0-255)", name, desc)
+	}
+	return nil
+}

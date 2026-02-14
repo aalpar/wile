@@ -58,11 +58,11 @@ func NewByteVectorFromIntegers(vs ...*Integer) (*ByteVector, error) {
 	bs := make([]*Byte, len(vs))
 	q := ByteVector(bs)
 	for i := range vs {
-		v := vs[i].Value
-		if v < 0 || v > 255 {
-			return nil, WrapForeignErrorf(ErrNotAByte, "NewByteVectorFromIntegers: integer %d is not a byte (0-255)", v)
+		err := ValidateByteValue(vs[i], "NewByteVectorFromIntegers", "element")
+		if err != nil {
+			return nil, err
 		}
-		b := NewByte(uint8(v))
+		b := NewByte(uint8(vs[i].Value))
 		q[i] = b
 	}
 	return &q, nil
