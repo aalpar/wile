@@ -124,44 +124,6 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWrit
 	return p, tuple, nil
 }
 
-// extractOptionalPositions extracts optional start and end positions from a tuple.
-// The tuple is expected to contain [start [end]] as integers.
-// Returns the extracted start and end values, or the provided defaults if not present.
-func extractOptionalPositions(tuple values.Tuple, defaultStart, defaultEnd int64, name string) (int64, int64, error) {
-	start := defaultStart
-	end := defaultEnd
-
-	if !values.IsEmptyList(tuple.Cdr()) {
-		tuple2, ok := tuple.Cdr().(values.Tuple)
-		if !ok {
-			return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
-		}
-		if !tuple2.IsEmptyList() {
-			startVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return 0, 0, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer for start but got %T", name, tuple2.Car())
-			}
-			start = startVal.Value
-
-			if !values.IsEmptyList(tuple2.Cdr()) {
-				tuple3, ok := tuple2.Cdr().(values.Tuple)
-				if !ok {
-					return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
-				}
-				if !tuple3.IsEmptyList() {
-					endVal, ok := tuple3.Car().(*values.Integer)
-					if !ok {
-						return 0, 0, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer for end but got %T", name, tuple3.Car())
-					}
-					end = endVal.Value
-				}
-			}
-		}
-	}
-
-	return start, end, nil
-}
-
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -594,35 +556,10 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 		}
 		writer = p
 
-		// Check for start/end arguments
-		if !values.IsEmptyList(tuple.Cdr()) {
-			tuple2, ok := tuple.Cdr().(values.Tuple)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "write-string: improper argument list")
-			}
-			startVal, ok := tuple2.Car().(*values.Integer)
-			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "write-string: expected an integer for start but got %T", tuple2.Car())
-			}
-			start = int(startVal.Value)
-
-			if !values.IsEmptyList(tuple2.Cdr()) {
-				tuple3, ok := tuple2.Cdr().(values.Tuple)
-				if !ok {
-					return values.WrapForeignErrorf(values.ErrNotAList, "write-string: improper argument list")
-				}
-				endVal, ok := tuple3.Car().(*values.Integer)
-				if !ok {
-					return values.WrapForeignErrorf(values.ErrNotANumber, "write-string: expected an integer for end but got %T", tuple3.Car())
-				}
-				end = int(endVal.Value)
-			}
+		start, end, err = helpers.ParseSubrange(tuple.Cdr(), length, "write-string")
+		if err != nil {
+			return err
 		}
-	}
-
-	// Validate indices
-	if start < 0 || end > length || start > end {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-string: invalid indices")
 	}
 
 	// WriteByte the substring
@@ -803,18 +740,9 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	}
 
 	// Extract optional start/end arguments
-	start, end, err := extractOptionalPositions(tuple, 0, int64(len(*bv)), "read-bytevector!")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*bv), "read-bytevector!")
 	if err != nil {
 		return err
-	}
-
-	// Validate indices
-	bvLen := int64(len(*bv))
-	if start < 0 || start > bvLen {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "read-bytevector!: start index out of bounds")
-	}
-	if end < start || end > bvLen {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "read-bytevector!: end index out of bounds")
 	}
 
 	buf := make([]byte, end-start)
@@ -826,7 +754,7 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	if n > 0 {
 		// Successfully read n bytes; copy into bytevector and return count
 		for i := 0; i < n; i++ {
-			(*bv)[start+int64(i)] = values.NewByte(buf[i])
+			(*bv)[start+i] = values.NewByte(buf[i])
 		}
 		mc.SetValue(values.NewInteger(int64(n)))
 		return nil
@@ -856,28 +784,18 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	bvLen := int64(len(*bv))
-
 	p, tuple, err := getRequiredBinaryOutputPort(mc.Arg(1), "write-bytevector")
 	if err != nil {
 		return err
 	}
 
 	// Extract optional start/end arguments
-	start, end, err := extractOptionalPositions(tuple, 0, bvLen, "write-bytevector")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*bv), "write-bytevector")
 	if err != nil {
 		return err
 	}
 
-	// Validate indices
-	if start < 0 || start > bvLen {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-bytevector: start index out of bounds")
-	}
-	if end < start || end > bvLen {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-bytevector: end index out of bounds")
-	}
-
-	data := bv.AsBytes(int(start), int(end))
+	data := bv.AsBytes(start, end)
 	_, err = p.Write(data)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "write-bytevector: error writing to port")

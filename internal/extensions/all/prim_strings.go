@@ -57,56 +57,38 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Parse variadic arguments: at from [start [end]]
-	var args []values.Value
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
-		}
-		args = append(args, tuple.Car())
-		current = tuple.Cdr()
+	// Extract required arguments: at from
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
 	}
-
-	if len(args) < 2 {
+	if tuple.IsEmptyList() {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
 	}
 
-	atVal, err := helpers.RequireType[*values.Integer](args[0], values.ErrNotANumber, "string-copy!")
+	atVal, err := helpers.RequireType[*values.Integer](tuple.Car(), values.ErrNotANumber, "string-copy!")
 	if err != nil {
 		return err
 	}
 	at := int(atVal.Value)
 
-	from, err := helpers.RequireType[*values.String](args[1], values.ErrNotAString, "string-copy!")
+	tuple2, ok := tuple.Cdr().(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
+	}
+	if tuple2.IsEmptyList() {
+		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
+	}
+
+	from, err := helpers.RequireType[*values.String](tuple2.Car(), values.ErrNotAString, "string-copy!")
 	if err != nil {
 		return err
 	}
 
-	fromLen := from.Len()
-	start := 0
-	end := fromLen
-
-	if len(args) >= 3 {
-		startVal, ok := args[2].(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy!: expected an integer for start but got %T", args[2])
-		}
-		start = int(startVal.Value)
-	}
-
-	if len(args) >= 4 {
-		endVal, ok := args[3].(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-copy!: expected an integer for end but got %T", args[3])
-		}
-		end = int(endVal.Value)
-	}
-
-	// Validate indices
-	if start < 0 || end > fromLen || start > end {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-copy!: invalid source indices")
+	// Extract optional [start [end]] from remaining arguments
+	start, end, err := helpers.ParseSubrange(tuple2.Cdr(), from.Len(), "string-copy!")
+	if err != nil {
+		return err
 	}
 
 	toLen := to.Len()
@@ -139,49 +121,24 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 	}
 	rest := mc.Arg(1)
 
-	// Parse variadic arguments: fill [start [end]]
-	var args []values.Value
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string-fill!: improper argument list")
-		}
-		args = append(args, tuple.Car())
-		current = tuple.Cdr()
+	// Extract required argument: fill
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAList, "string-fill!: improper argument list")
 	}
-
-	if len(args) < 1 {
+	if tuple.IsEmptyList() {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-fill!: expected at least 2 arguments")
 	}
 
-	char, err := helpers.RequireType[*values.Character](args[0], values.ErrNotACharacter, "string-fill!")
+	char, err := helpers.RequireType[*values.Character](tuple.Car(), values.ErrNotACharacter, "string-fill!")
 	if err != nil {
 		return err
 	}
 
-	length := s.Len()
-	start := 0
-	end := length
-
-	if len(args) >= 2 {
-		startVal, ok := args[1].(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-fill!: expected an integer for start but got %T", args[1])
-		}
-		start = int(startVal.Value)
-	}
-
-	if len(args) >= 3 {
-		endVal, ok := args[2].(*values.Integer)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "string-fill!: expected an integer for end but got %T", args[2])
-		}
-		end = int(endVal.Value)
-	}
-
-	if start < 0 || end > length || start > end {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-fill!: invalid indices")
+	// Extract optional [start [end]] from remaining arguments
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), s.Len(), "string-fill!")
+	if err != nil {
+		return err
 	}
 
 	// Fill checks immutability

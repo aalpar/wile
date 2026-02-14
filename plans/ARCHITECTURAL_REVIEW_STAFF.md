@@ -10,7 +10,7 @@
 
 The recently changed files reflect a mature codebase with strong architectural discipline (overflow-safe arithmetic, hygiene-aware macros, R7RS compliance). The dominant debt is **structural duplication** in the numeric tower, where a well-designed abstraction (the Number interface) is undermined by 28 hand-rolled type switches. This is the classic "missing abstraction" smell — the lattice model exists conceptually but isn't reified into data.
 
-Secondary issues are **extension friction** (cache eviction requires manual coordination, EqualTo symmetry is N×N) and **consistency drift** (error construction patterns, conversion helpers).
+Secondary issues are **extension friction** (EqualTo symmetry is N×N, extractOptionalPositions duplication) and **helper misplacement** (numeric comparison helpers far from type definitions). Cache eviction centralization resolved (PR #218). Error construction inconsistency resolved (PR #217).
 
 The codebase is **ready for the next phase of growth** (new numeric types, async I/O, performance tuning) but will benefit significantly from addressing the numeric tower duplication before adding complexity.
 
@@ -43,46 +43,9 @@ case *Float: /* operation */
 
 ---
 
-### [Priority: High] — Parser/Tokenizer Cache Eviction Fragility
+### ~~[Priority: High] — Parser/Tokenizer Cache Eviction Fragility~~ — **Resolved (PR #218)**
 
-**Where**: `internal/extensions/io/prim_read_write.go:186-201, :224-235`, `prim_ports.go:closePort()`
-
-**What**: Cache eviction occurs in three separate code paths:
-1. EOF in `PrimRead`/`PrimReadSyntax`/`PrimReadToken` (inline delete)
-2. Explicit `closePort()` helper (called by `PrimClosePort` and `PrimCallWithPort`)
-
-Adding a fourth port-closure mechanism (e.g., finalizer-based cleanup, port timeout) would require manually inserting eviction logic. No centralized invariant.
-
-**Why it matters**:
-- **Memory leak risk acknowledged**: Comments in `state.go` warn about strong references causing retention in long-running programs
-- **Extension friction**: Adding async I/O or port pooling requires auditing all port lifecycle paths
-- **TOCTOU still possible**: Lock/check/evict pattern appears correct, but manual coordination between three sites increases risk
-
-**Suggested fix**: Wrap port objects with a lifecycle tracker that auto-evicts on close via defer or finalizer. Port.Close() becomes the single choke point.
-
-**Effort**: M (1-2 days for wrapper + refactor + verification)
-
----
-
-### [Priority: Medium] — Error Construction Pattern Inconsistency
-
-**Where**: `registry/core/prim_arithmetic.go:274`, `prim_read_write.go:97`, `values/*.go` error returns
-
-**What**: Three distinct error construction patterns coexist:
-- `values.NewForeignError("msg")` (simple, no wrapping)
-- `values.WrapForeignErrorf(sentinel, "context: %s", detail)` (sentinel + context)
-- `values.NewForeignErrorf("format %s", arg)` (formatted, no sentinel)
-
-Division-by-zero in `prim_arithmetic.go:274` uses the first pattern while architectural review guidance mandates the second.
-
-**Why it matters**:
-- **Programmatic error handling breaks**: Callers can't use `errors.Is()` reliably if some paths return bare errors
-- **Inconsistent stack traces**: `NewForeignError` captures traces; formatted errors via `fmt.Errorf` do not
-- **Convention drift**: New code follows whichever pattern is nearby, not the canonical one
-
-**Suggested fix**: Enforce sentinel + wrap pattern via linter rule; refactor existing violations in batch.
-
-**Effort**: M (2-3 days for linter setup + batch refactor + test updates)
+Cache eviction centralized into `evictPortCache()`. Merged.
 
 ---
 
@@ -130,26 +93,6 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-### [Priority: Low] — Conversion Helper Method Inconsistency
-
-**Where**: `values/{integer,rational,complex,big_complex}.go` conversion helper sections
-
-**What**: Numeric types provide conversion helpers (`bigInt()`, `bigFloat()`, `toComplex()`) for use in arithmetic type switches, but the set of helpers varies:
-- `Integer` has all 5 (`bigInt`, `bigFloat`, `bigRat`, `toComplex`, `toBigComplex`)
-- `Rational` has 2 (`bigFloat`, `toComplex`)
-- `Complex` has 1 (`toBigComplex`)
-
-**Why it matters**:
-- **Developer confusion**: No clear rule for which helpers a type should provide
-- **Copy-paste errors**: When adding a new type, unclear which pattern to follow
-- **Not blocking**: Works fine; just inconsistent aesthetics
-
-**Suggested fix**: Document the helper convention in `values/CLAUDE.md` — each type provides conversions to "higher" types in the lattice. Low priority cleanup pass.
-
-**Effort**: S (1 hour for doc + optional helper additions)
-
----
-
 ### [Priority: Low] — Helper Function Misplacement
 
 **Where**: `registry/core/prim_arithmetic.go:53-99` (`integerEqualsFloat`, `bigIntegerEqualsFloat`)
@@ -167,13 +110,9 @@ func (p *Integer) EqualTo(v Value) bool {
 
 ---
 
-## Top 3 Priorities (Recommended Action Order)
+## Top Priority (Recommended Action)
 
-1. **Numeric tower type-switch explosion** (High) — Deferred indefinitely (see `ARCHITECTURAL_REVIEW_REFACTORING.md` §2.1). Direct dispatch is intentional architecture.
-
-2. **Parser/tokenizer cache eviction fragility** (High) — Acknowledged memory leak risk; fixing now (before async I/O or port pooling) prevents entrenched patterns.
-
-3. **Error construction inconsistency** (Medium) — Silent breakage of programmatic error handling; fixing early prevents accumulation of `errors.Is()` failures in production.
+1. **extractOptionalPositions duplication** (Medium) — Shared tuple-walking logic for `[start [end]]` optional arguments; deduplicate into `registry/helpers/`.
 
 ---
 
@@ -322,20 +261,6 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 ---
 
 ## LOW PRIORITY
-
-### [Priority: Low] — Error Wrapping Inconsistency: Some Errors Use Empty Wrap Messages
-
-**Where**: Scattered across 65 files (use `grep 'WrapForeignErrorf.*""'` to find)
-
-**What**: Some error wrapping sites use empty messages: `WrapForeignErrorf(ErrNotANumber, "")` instead of contextual messages like `WrapForeignErrorf(ErrNotANumber, "add: first argument must be a number")`. The CLAUDE.md convention requires wrapping with context describing *where* and *what failed*.
-
-**Why it matters**: Error messages like `": not a number"` (leading colon from empty context) are harder to debug than `"add: first argument must be a number"`. The convention exists to make errors actionable, but it's not uniformly followed.
-
-**Suggested fix**: Run linter rule: `WrapForeignErrorf` must have non-empty format string. Fix violations by adding `"functionName: operation description"` messages.
-
-**Effort**: S (mechanical refactor, 1-2 days)
-
----
 
 ### [Priority: Low] — Numeric Type Switch Incompleteness: Interfaces vs Concrete Types
 
