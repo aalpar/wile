@@ -13,8 +13,6 @@
 // limitations under the License.
 
 // Package system provides system-level primitives.
-//
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package system
 
 import (
@@ -32,15 +30,24 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"command-line", 0, false, PrimCommandLine},
-		{"exit", 1, true, PrimExit},
-		{"emergency-exit", 1, true, PrimEmergencyExit},
-		{"get-environment-variable", 1, false, PrimGetEnvironmentVariable},
-		{"get-environment-variables", 0, false, PrimGetEnvironmentVariables},
-		{"current-second", 0, false, PrimCurrentSecond},
-		{"current-jiffy", 0, false, PrimCurrentJiffy},
-		{"jiffies-per-second", 0, false, PrimJiffiesPerSecond},
-		{"features", 0, false, PrimFeatures},
+		{Name: "command-line", Impl: PrimCommandLine,
+			Doc: "Returns the command-line arguments as a list.", Category: "system"},
+		{Name: "exit", ParamCount: 1, IsVariadic: true, Impl: PrimExit,
+			Doc: "Exits the program with the given status.", ParamNames: []string{"status"}, Category: "system"},
+		{Name: "emergency-exit", ParamCount: 1, IsVariadic: true, Impl: PrimEmergencyExit,
+			Doc: "Exits the program immediately.", ParamNames: []string{"status"}, Category: "system"},
+		{Name: "get-environment-variable", ParamCount: 1, Impl: PrimGetEnvironmentVariable,
+			Doc: "Returns the value of an environment variable, or #f.", ParamNames: []string{"name"}, Category: "system"},
+		{Name: "get-environment-variables", Impl: PrimGetEnvironmentVariables,
+			Doc: "Returns all environment variables as an alist.", Category: "system"},
+		{Name: "current-second", Impl: PrimCurrentSecond,
+			Doc: "Returns the current time as seconds since epoch.", Category: "system"},
+		{Name: "current-jiffy", Impl: PrimCurrentJiffy,
+			Doc: "Returns monotonic nanoseconds since program start.", Category: "system"},
+		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
+			Doc: "Returns the number of jiffies per second.", Category: "system"},
+		{Name: "features", Impl: PrimFeatures,
+			Doc: "Returns a list of implementation feature symbols.", Category: "system"},
 	}, registry.PhaseRuntime)
 	return nil
 }

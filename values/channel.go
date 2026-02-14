@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 )
@@ -211,18 +212,17 @@ type SelectCase struct {
 	IsDefault bool
 }
 
-// ChannelSelect performs a select operation on multiple channels
-// Returns the index of the selected case and the received value (for receive cases)
-func ChannelSelect(cases []SelectCase) (int, Value, bool) {
+// ChannelSelect performs a select operation on multiple channels.
+// Returns the index of the selected case and the received value (for receive cases).
+// If a send case targets a channel that is closed concurrently, the select returns
+// that case's index with ok=false instead of panicking.
+func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	if len(cases) == 0 {
 		return -1, nil, false
 	}
 
 	// Build native select cases
-	// This is a simplified implementation that polls
-	// For a more efficient implementation, we'd use reflect.Select
-
-	// First pass: try non-blocking operations
+	// First pass: try non-blocking operations before falling through to reflect.Select
 	for i, c := range cases {
 		if c.IsDefault {
 			continue
@@ -247,25 +247,59 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 		}
 	}
 
-	// No default case - block on first available
-	// This is a simplified implementation
-	// A real implementation would use reflect.Select for true multiplexing
-	for {
-		for i, c := range cases {
-			if c.IsDefault {
-				continue
+	// No default case — block using reflect.Select for true multiplexing
+	// Build reflect.SelectCase slice, tracking original indices
+	selectCases := make([]reflect.SelectCase, 0, len(cases))
+	originalIndices := make([]int, 0, len(cases))
+	for i, c := range cases {
+		if c.IsDefault {
+			continue
+		}
+		var rc reflect.SelectCase
+		if c.IsSend {
+			rc = reflect.SelectCase{
+				Dir:  reflect.SelectSend,
+				Chan: reflect.ValueOf(c.Channel.ch),
+				Send: reflect.ValueOf(c.Value),
 			}
-			if c.IsSend {
-				ok, _ := c.Channel.TrySend(c.Value)
-				if ok {
-					return i, nil, true
-				}
-			} else {
-				v, received, ok := c.Channel.TryReceive()
-				if received {
-					return i, v, ok
-				}
+		} else {
+			rc = reflect.SelectCase{
+				Dir:  reflect.SelectRecv,
+				Chan: reflect.ValueOf(c.Channel.ch),
 			}
 		}
+		selectCases = append(selectCases, rc)
+		originalIndices = append(originalIndices, i)
 	}
+
+	// reflect.Select panics with "send on closed channel" if a send case
+	// targets a channel closed between our TrySend check and here (TOCTOU).
+	// Recover and report the closed-channel case instead of crashing.
+	defer func() {
+		r := recover()
+		if r != nil {
+			// A send on a concurrently-closed channel panicked.
+			// Find the first closed send case and report it.
+			for i, c := range cases {
+				if c.IsSend && c.Channel.IsClosed() {
+					idx = i
+					val = nil
+					ok = false
+					return
+				}
+			}
+			// Not a closed-channel panic — re-panic.
+			panic(r)
+		}
+	}()
+
+	chosen, recv, recvOK := reflect.Select(selectCases)
+	idx = originalIndices[chosen]
+	if cases[idx].IsSend {
+		return idx, nil, true
+	}
+	if !recvOK {
+		return idx, nil, false
+	}
+	return idx, recv.Interface().(Value), true
 }

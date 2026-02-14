@@ -213,6 +213,41 @@ func TestThreadSleep(t *testing.T) {
 	}
 }
 
+func TestThreadSleepContextCancellation(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"cancel during integer sleep",
+			`(thread-sleep! 60)`},
+		{"cancel during float sleep",
+			`(thread-sleep! 60.0)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() {
+				_, err := engine.Eval(ctx, tc.code)
+				done <- err
+			}()
+			// Cancel after a short delay to ensure the sleep has started
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+
+			select {
+			case err := <-done:
+				c.Assert(err, qt.IsNotNil)
+			case <-time.After(2 * time.Second):
+				t.Fatal("thread-sleep! did not respect context cancellation")
+			}
+		})
+	}
+}
+
 func TestMutexBasics(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

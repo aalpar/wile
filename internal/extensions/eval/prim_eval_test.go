@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
+	extexceptions "github.com/aalpar/wile/internal/extensions/exceptions"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -362,4 +363,41 @@ func TestSyntaxLocalIdentifierAsBinding(t *testing.T) {
 	t.Run("wrong argument count", func(t *testing.T) {
 		evalExpectError(t, engine, `(syntax-local-identifier-as-binding)`)
 	})
+}
+
+func TestEvalDynamicContextInheritance(t *testing.T) {
+	c := qt.New(t)
+
+	// Create engine with both the standard extension and exceptions extension
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithExtension(extexceptions.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"inherits exception handler via raise-continuable",
+			`(with-exception-handler
+			   (lambda (e) 42)
+			   (lambda ()
+			     (eval '(raise-continuable "boom") (interaction-environment))))`,
+			values.NewInteger(42)},
+		{"handler sees raised condition",
+			`(with-exception-handler
+			   (lambda (e) (equal? e "oops"))
+			   (lambda ()
+			     (eval '(raise-continuable "oops") (interaction-environment))))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := engine.Eval(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
 }

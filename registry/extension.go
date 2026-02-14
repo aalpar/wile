@@ -22,6 +22,14 @@ type Extension interface {
 	AddToRegistry(r *Registry) error
 }
 
+// Closeable is an opt-in interface for extensions that hold resources
+// (goroutines, file handles, connections) and need cleanup when the
+// engine is shut down. Extensions that implement this interface will
+// have Close called by Engine.Close().
+type Closeable interface {
+	Close() error
+}
+
 // ExtensionFunc adapts a function to the Extension interface.
 type ExtensionFunc struct {
 	name string

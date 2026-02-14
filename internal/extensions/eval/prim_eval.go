@@ -65,6 +65,9 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 	// Run the compiled code in a sub-context
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	sub := machine.NewMachineContext(ctx, cont)
+	sub.SetExceptionHandler(mc.ExceptionHandler())
+	sub.SetMaxCallDepth(mc.MaxCallDepth())
+	sub.SetThread(mc.Thread())
 	err = sub.Run()
 	if err != nil {
 		return err
@@ -144,6 +147,9 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		// Run the compiled code
 		cont := machine.NewMachineContinuation(nil, tpl, env)
 		sub := machine.NewMachineContext(ctx, cont)
+		sub.SetExceptionHandler(mc.ExceptionHandler())
+		sub.SetMaxCallDepth(mc.MaxCallDepth())
+		sub.SetThread(mc.Thread())
 		err = sub.Run()
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)

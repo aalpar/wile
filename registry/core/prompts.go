@@ -16,15 +16,20 @@ package core
 
 import "github.com/aalpar/wile/registry"
 
-//nolint:govet
 func addPrompts(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-continuation-prompt-tag", 1, true, PrimMakeContinuationPromptTag},
-		{"default-continuation-prompt-tag", 0, false, PrimDefaultContinuationPromptTag},
-		{"continuation-prompt-tag?", 1, false, PrimContinuationPromptTagQ},
-		{"call-with-continuation-prompt", 3, false, PrimCallWithContinuationPrompt},
-		{"abort-current-continuation", 2, true, PrimAbortCurrentContinuation},
-		{"call-with-composable-continuation", 2, false, PrimCallWithComposableContinuation},
+		{Name: "make-continuation-prompt-tag", ParamCount: 1, IsVariadic: true, Impl: PrimMakeContinuationPromptTag,
+			Doc: "Creates a new continuation prompt tag.", ParamNames: []string{"name"}, Category: "continuations"},
+		{Name: "default-continuation-prompt-tag", Impl: PrimDefaultContinuationPromptTag,
+			Doc: "Returns the default continuation prompt tag.", Category: "continuations"},
+		{Name: "continuation-prompt-tag?", ParamCount: 1, Impl: PrimContinuationPromptTagQ,
+			Doc: "Returns #t if obj is a continuation prompt tag.", ParamNames: []string{"obj"}, Category: "continuations"},
+		{Name: "call-with-continuation-prompt", ParamCount: 3, Impl: PrimCallWithContinuationPrompt,
+			Doc: "Calls thunk with a continuation prompt.", ParamNames: []string{"thunk", "tag", "handler"}, Category: "continuations"},
+		{Name: "abort-current-continuation", ParamCount: 2, IsVariadic: true, Impl: PrimAbortCurrentContinuation,
+			Doc: "Aborts to the nearest prompt with the given tag.", ParamNames: []string{"tag", "val", "vals"}, Category: "continuations"},
+		{Name: "call-with-composable-continuation", ParamCount: 2, Impl: PrimCallWithComposableContinuation,
+			Doc: "Captures a composable continuation up to the nearest prompt.", ParamNames: []string{"proc", "tag"}, Category: "continuations"},
 	}, registry.PhaseRuntime)
 
 	return nil

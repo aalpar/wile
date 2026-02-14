@@ -26,6 +26,9 @@ type PrimitiveSpec struct {
 	ParamCount int
 	IsVariadic bool
 	Impl       machine.ForeignFunction
+	Doc        string   // optional: one-line description
+	ParamNames []string // optional: parameter names
+	Category   string   // optional: grouping category
 }
 
 // PrimitiveRegistration holds a primitive and its phases.
@@ -199,4 +202,39 @@ func (p *Registry) Clone() *Registry {
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
 	return q
+}
+
+// PrimitiveByName returns the registration for the named primitive, if any.
+func (p *Registry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, reg := range p.primitives {
+		if reg.Spec.Name == name {
+			return reg, true
+		}
+	}
+	return PrimitiveRegistration{}, false
+}
+
+// PrimitiveNames returns the names of all registered primitives in registration order.
+func (p *Registry) PrimitiveNames() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	names := make([]string, len(p.primitives))
+	for i, reg := range p.primitives {
+		names[i] = reg.Spec.Name
+	}
+	return names
+}
+
+// PrimitivesByCategory returns registered primitives grouped by category.
+// Primitives with no category are grouped under the empty string key.
+func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	result := make(map[string][]PrimitiveRegistration)
+	for _, reg := range p.primitives {
+		result[reg.Spec.Category] = append(result[reg.Spec.Category], reg)
+	}
+	return result
 }

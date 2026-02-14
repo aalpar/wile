@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -22,39 +21,60 @@ import (
 func addArithmetic(r *registry.Registry) error {
 	// Basic arithmetic
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"+", 1, true, PrimAdd},
-		{"-", 2, true, PrimSub},
-		{"*", 1, true, PrimMul},
-		{"/", 2, true, PrimDiv},
+		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: PrimAdd,
+			Doc: "Returns the sum of its arguments.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "-", ParamCount: 2, IsVariadic: true, Impl: PrimSub,
+			Doc: "Subtracts subsequent arguments from the first, or negates.", ParamNames: []string{"z1", "z2"}, Category: "arithmetic"},
+		{Name: "*", ParamCount: 1, IsVariadic: true, Impl: PrimMul,
+			Doc: "Returns the product of its arguments.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "/", ParamCount: 2, IsVariadic: true, Impl: PrimDiv,
+			Doc: "Divides the first argument by subsequent arguments.", ParamNames: []string{"z1", "z2"}, Category: "arithmetic"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Comparisons
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"=", 2, true, PrimNumEq},
-		{"<", 2, true, PrimNumLt},
-		{">", 2, true, PrimNumGt},
-		{"<=", 2, true, PrimNumLe},
-		{">=", 2, true, PrimNumGe},
+		{Name: "=", ParamCount: 2, IsVariadic: true, Impl: PrimNumEq,
+			Doc: "Returns #t if all arguments are numerically equal.", ParamNames: []string{"z1", "z2", "zs"}, Category: "arithmetic"},
+		{Name: "<", ParamCount: 2, IsVariadic: true, Impl: PrimNumLt,
+			Doc: "Returns #t if arguments are monotonically increasing.", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic"},
+		{Name: ">", ParamCount: 2, IsVariadic: true, Impl: PrimNumGt,
+			Doc: "Returns #t if arguments are monotonically decreasing.", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic"},
+		{Name: "<=", ParamCount: 2, IsVariadic: true, Impl: PrimNumLe,
+			Doc: "Returns #t if arguments are monotonically non-decreasing.", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic"},
+		{Name: ">=", ParamCount: 2, IsVariadic: true, Impl: PrimNumGe,
+			Doc: "Returns #t if arguments are monotonically non-increasing.", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Basic numeric operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"abs", 1, false, PrimAbs},
-		{"min", 2, true, PrimMin},
-		{"max", 2, true, PrimMax},
-		{"quotient", 2, false, PrimQuotient},
-		{"remainder", 2, false, PrimRemainder},
-		{"modulo", 2, false, PrimModulo},
-		{"gcd", 1, true, PrimGcd},
-		{"lcm", 1, true, PrimLcm},
+		{Name: "abs", ParamCount: 1, Impl: PrimAbs,
+			Doc: "Returns the absolute value of x.", ParamNames: []string{"x"}, Category: "arithmetic"},
+		{Name: "min", ParamCount: 2, IsVariadic: true, Impl: PrimMin,
+			Doc: "Returns the smallest of its arguments.", ParamNames: []string{"x1", "x2"}, Category: "arithmetic"},
+		{Name: "max", ParamCount: 2, IsVariadic: true, Impl: PrimMax,
+			Doc: "Returns the largest of its arguments.", ParamNames: []string{"x1", "x2"}, Category: "arithmetic"},
+		{Name: "quotient", ParamCount: 2, Impl: PrimQuotient,
+			Doc: "Returns the integer quotient of n1 and n2.", ParamNames: []string{"n1", "n2"}, Category: "arithmetic"},
+		{Name: "remainder", ParamCount: 2, Impl: PrimRemainder,
+			Doc: "Returns the integer remainder of n1 and n2.", ParamNames: []string{"n1", "n2"}, Category: "arithmetic"},
+		{Name: "modulo", ParamCount: 2, Impl: PrimModulo,
+			Doc: "Returns n1 modulo n2.", ParamNames: []string{"n1", "n2"}, Category: "arithmetic"},
+		{Name: "gcd", ParamCount: 1, IsVariadic: true, Impl: PrimGcd,
+			Doc: "Returns the greatest common divisor.", ParamNames: []string{"n"}, Category: "arithmetic"},
+		{Name: "lcm", ParamCount: 1, IsVariadic: true, Impl: PrimLcm,
+			Doc: "Returns the least common multiple.", ParamNames: []string{"n"}, Category: "arithmetic"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Exactness conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"exact", 1, false, PrimExact},
-		{"inexact", 1, false, PrimInexact},
-		{"exact->inexact", 1, false, PrimInexact},
-		{"inexact->exact", 1, false, PrimExact},
+		{Name: "exact", ParamCount: 1, Impl: PrimExact,
+			Doc: "Converts z to an exact number.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "inexact", ParamCount: 1, Impl: PrimInexact,
+			Doc: "Converts z to an inexact number.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "exact->inexact", ParamCount: 1, Impl: PrimInexact,
+			Doc: "Converts z to an inexact number.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "inexact->exact", ParamCount: 1, Impl: PrimExact,
+			Doc: "Converts z to an exact number.", ParamNames: []string{"z"}, Category: "arithmetic"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

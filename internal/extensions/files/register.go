@@ -13,8 +13,6 @@
 // limitations under the License.
 
 // Package files provides file I/O primitives.
-//
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package files
 
 import (
@@ -43,14 +41,22 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"open-input-file", 1, false, PrimOpenInputFile},
-		{"open-output-file", 1, false, PrimOpenOutputFile},
-		{"open-binary-input-file", 1, false, PrimOpenBinaryInputFile},
-		{"open-binary-output-file", 1, false, PrimOpenBinaryOutputFile},
-		{"file-exists?", 1, false, PrimFileExistsQ},
-		{"delete-file", 1, false, PrimDeleteFile},
-		{"call-with-input-file", 2, false, PrimCallWithInputFile},
-		{"call-with-output-file", 2, false, PrimCallWithOutputFile},
+		{Name: "open-input-file", ParamCount: 1, Impl: PrimOpenInputFile,
+			Doc: "Opens a file for textual input.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "open-output-file", ParamCount: 1, Impl: PrimOpenOutputFile,
+			Doc: "Opens a file for textual output.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "open-binary-input-file", ParamCount: 1, Impl: PrimOpenBinaryInputFile,
+			Doc: "Opens a file for binary input.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "open-binary-output-file", ParamCount: 1, Impl: PrimOpenBinaryOutputFile,
+			Doc: "Opens a file for binary output.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "file-exists?", ParamCount: 1, Impl: PrimFileExistsQ,
+			Doc: "Returns #t if the file exists.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "delete-file", ParamCount: 1, Impl: PrimDeleteFile,
+			Doc: "Deletes the named file.", ParamNames: []string{"filename"}, Category: "files"},
+		{Name: "call-with-input-file", ParamCount: 2, Impl: PrimCallWithInputFile,
+			Doc: "Opens file, calls proc with the port, then closes it.", ParamNames: []string{"filename", "proc"}, Category: "files"},
+		{Name: "call-with-output-file", ParamCount: 2, Impl: PrimCallWithOutputFile,
+			Doc: "Opens file, calls proc with the port, then closes it.", ParamNames: []string{"filename", "proc"}, Category: "files"},
 		// with-input-from-file and with-output-to-file are now macros (see addMacros)
 	}, registry.PhaseRuntime)
 	return nil

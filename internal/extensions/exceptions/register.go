@@ -13,8 +13,6 @@
 // limitations under the License.
 
 // Package exceptions provides exception handling primitives.
-//
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package exceptions
 
 import (
@@ -32,15 +30,24 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"with-exception-handler", 2, false, PrimWithExceptionHandler},
-		{"raise", 1, false, PrimRaise},
-		{"raise-continuable", 1, false, PrimRaiseContinuable},
-		{"error", 2, true, PrimError},
-		{"error-object?", 1, false, PrimErrorObjectQ},
-		{"error-object-message", 1, false, PrimErrorObjectMessage},
-		{"error-object-irritants", 1, false, PrimErrorObjectIrritants},
-		{"read-error?", 1, false, PrimReadErrorQ},
-		{"file-error?", 1, false, PrimFileErrorQ},
+		{Name: "with-exception-handler", ParamCount: 2, Impl: PrimWithExceptionHandler,
+			Doc: "Installs an exception handler and calls thunk.", ParamNames: []string{"handler", "thunk"}, Category: "exceptions"},
+		{Name: "raise", ParamCount: 1, Impl: PrimRaise,
+			Doc: "Raises a non-continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions"},
+		{Name: "raise-continuable", ParamCount: 1, Impl: PrimRaiseContinuable,
+			Doc: "Raises a continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions"},
+		{Name: "error", ParamCount: 2, IsVariadic: true, Impl: PrimError,
+			Doc: "Creates an error object and raises it.", ParamNames: []string{"message", "irritant"}, Category: "exceptions"},
+		{Name: "error-object?", ParamCount: 1, Impl: PrimErrorObjectQ,
+			Doc: "Returns #t if obj is an error object.", ParamNames: []string{"obj"}, Category: "exceptions"},
+		{Name: "error-object-message", ParamCount: 1, Impl: PrimErrorObjectMessage,
+			Doc: "Returns the message of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions"},
+		{Name: "error-object-irritants", ParamCount: 1, Impl: PrimErrorObjectIrritants,
+			Doc: "Returns the irritants of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions"},
+		{Name: "read-error?", ParamCount: 1, Impl: PrimReadErrorQ,
+			Doc: "Returns #t if obj is a read error.", ParamNames: []string{"obj"}, Category: "exceptions"},
+		{Name: "file-error?", ParamCount: 1, Impl: PrimFileErrorQ,
+			Doc: "Returns #t if obj is a file error.", ParamNames: []string{"obj"}, Category: "exceptions"},
 	}, registry.PhaseRuntime)
 	return nil
 }

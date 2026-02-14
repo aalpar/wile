@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -21,8 +20,10 @@ import (
 
 func addParameters(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"make-parameter", 2, true, PrimMakeParameter},
-		{"parameter?", 1, false, PrimParameterQ},
+		{Name: "make-parameter", ParamCount: 2, IsVariadic: true, Impl: PrimMakeParameter,
+			Doc: "Creates a new parameter with an initial value and optional converter.", ParamNames: []string{"init", "converter"}, Category: "parameters"},
+		{Name: "parameter?", ParamCount: 1, Impl: PrimParameterQ,
+			Doc: "Returns #t if obj is a parameter.", ParamNames: []string{"obj"}, Category: "parameters"},
 	}, registry.PhaseRuntime)
 
 	return nil

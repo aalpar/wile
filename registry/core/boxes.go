@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//nolint:govet // Using unkeyed struct fields for concise primitive specs
 package core
 
 import (
@@ -21,10 +20,14 @@ import (
 
 func addBoxes(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{"box", 1, false, PrimBox},
-		{"box?", 1, false, PrimBoxQ},
-		{"unbox", 1, false, PrimUnbox},
-		{"set-box!", 2, false, PrimSetBox},
+		{Name: "box", ParamCount: 1, Impl: PrimBox,
+			Doc: "Wraps a value in a mutable box.", ParamNames: []string{"obj"}, Category: "boxes"},
+		{Name: "box?", ParamCount: 1, Impl: PrimBoxQ,
+			Doc: "Returns #t if obj is a box.", ParamNames: []string{"obj"}, Category: "boxes"},
+		{Name: "unbox", ParamCount: 1, Impl: PrimUnbox,
+			Doc: "Returns the value stored in a box.", ParamNames: []string{"box"}, Category: "boxes"},
+		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
+			Doc: "Stores a new value in a box.", ParamNames: []string{"box", "obj"}, Category: "boxes"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
