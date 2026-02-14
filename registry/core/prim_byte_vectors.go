@@ -42,7 +42,8 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", fillVal)
 			}
-			if err := helpers.ValidateByteValue(fillInt, "make-bytevector"); err != nil {
+			err := helpers.ValidateByteValue(fillInt, "make-bytevector")
+			if err != nil {
 				return err
 			}
 			fill = uint8(fillInt.Value)
@@ -75,7 +76,8 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
 		}
-		if err := helpers.ValidateByteValue(intVal, "bytevector"); err != nil {
+		err := helpers.ValidateByteValue(intVal, "bytevector")
+		if err != nil {
 			return err
 		}
 		bytes = append(bytes, values.NewByte(uint8(intVal.Value)))
@@ -117,7 +119,8 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 			if err != nil {
 				return err
 			}
-			if err := helpers.ValidateByteValue(byteVal, "bytevector-u8-set!"); err != nil {
+			err = helpers.ValidateByteValue(byteVal, "bytevector-u8-set!")
+			if err != nil {
 				return err
 			}
 			(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
