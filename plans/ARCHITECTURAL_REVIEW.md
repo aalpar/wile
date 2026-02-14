@@ -1,6 +1,6 @@
 # Architectural Code Review
 
-**Date:** 2026-02-12
+**Date:** 2026-02-14
 **Scope:** Full codebase review across values/, machine/, tokenizer/parser/syntax, registry/core/, extensions, and public API.
 
 ---
@@ -13,19 +13,11 @@ LOW priority: 18 of 19 fixed/resolved, 1 documented (L10), 1 deferred (L19).
 
 ---
 
-## Resolved LOW Items
-
-| # | Location | Issue | Resolution |
-|---|----------|-------|------------|
-| L3 | `values/channel.go` | `ChannelSelect` busy-spins without `reflect.Select` | **Debunked** — implementation uses `reflect.Select` (line 296); no busy-spin exists |
-| L11 | `internal/extensions/eval/prim_eval.go` | `eval` doesn't inherit dynamic context | **Fixed** — commit `a722464` added `SetThread` propagation to eval/load sub-contexts |
-| L15 | `internal/extensions/threads/prim_threads.go` | `thread-sleep!` ignores context cancellation | **Debunked** — lines 243-246 properly handle `ctx.Done()` via select |
-
 ## Open LOW Items
 
 | # | Location | Issue | Status |
 |---|----------|-------|--------|
-| L19 | `internal/tokenizer/tokenizer.go:2294` | `isExtendedExponentMarkerForRadix` ignores radix | Deferred (exotic edge case) |
+| L19 | `internal/tokenizer/tokenizer.go:2060` | `isExtendedExponentMarker` ignores radix | Deferred (exotic edge case) |
 
 ### Deferral Criteria
 
