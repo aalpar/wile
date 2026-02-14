@@ -451,7 +451,8 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 // Example:
 //
 //	err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-//	    return engine.EvalString("(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	    _, err := engine.Eval(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	    return err
 //	})
 func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
 	err := p.PushLoadPath(absPath)

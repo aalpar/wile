@@ -47,7 +47,8 @@ func NewLoadPathStack() *LoadPathStack {
 }
 
 // Push adds an absolute path to the top of the stack.
-// Returns ErrInvalidLoadPath if absPath is not an absolute path.
+// Returns a wrapped ErrInvalidLoadPath (matchable via errors.Is) if absPath
+// is not an absolute path.
 func (s *LoadPathStack) Push(absPath string) error {
 	if !filepath.IsAbs(absPath) {
 		return values.WrapForeignErrorf(values.ErrInvalidLoadPath, "path must be absolute: %s", absPath)
