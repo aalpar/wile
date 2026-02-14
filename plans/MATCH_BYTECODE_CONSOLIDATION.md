@@ -101,7 +101,7 @@ Remove all `bytecode_*.go` files that were consolidated.
 
 ### 4. Update documentation
 
-Update the instruction table in `internal/match/CLAUDE.local.md` to reflect new file names (4 files instead of 13 file-per-type listing).
+Update the instruction table in `internal/CLAUDE.md` to reflect new file names (4 files instead of 13 file-per-type listing).
 
 ## What Does NOT Change
 
