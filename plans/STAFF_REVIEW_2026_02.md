@@ -234,11 +234,10 @@ All P0, P1, and P2 items resolved. Key commits: `b5c0ece` (P1 panics/docs/API), 
 
 ### P3 — Nice to have
 
-<<<<<<< HEAD
 - [x] **Add Engine.Close()** for extensions that spawn goroutines
 - [x] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs — 467 primitives across 24 files converted
 - [x] **Extract machine/ subpackages** — Research plan created (`plans/MACHINE_EXTRACTION_PLAN.md`); extraction deferred
-- [x] **Add recursion depth limit** — configurable via `WithMaxCallDepth`, default 10000
+- [x] **Add recursion depth limit** — configurable via `WithMaxCallDepth`, default unlimited (0)
 - [x] **Deferred concurrency items**: thread-sleep context cancellation (L15), eval dynamic context (L11), ChannelSelect `reflect.Select` (L3)
 
 ---
