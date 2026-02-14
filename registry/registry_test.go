@@ -70,6 +70,52 @@ func TestRegistry_AddPrimitives(t *testing.T) {
 	c.Assert(prims[0].Phases, qt.Equals, PhaseRuntime|PhaseExpand)
 }
 
+func TestRegistry_FindPrimitive(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitive(PrimitiveSpec{Name: "runtime-only", ParamCount: 1}, PhaseRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "expand-only", ParamCount: 0}, PhaseExpand)
+	r.AddPrimitive(PrimitiveSpec{Name: "both", ParamCount: 2}, PhaseRuntime|PhaseExpand)
+
+	tcs := []struct {
+		name  string
+		prim  string
+		phase Phase
+		found bool
+	}{
+		{"runtime by name zero phase", "runtime-only", 0, true},
+		{"runtime in runtime phase", "runtime-only", PhaseRuntime, true},
+		{"runtime not in expand phase", "runtime-only", PhaseExpand, false},
+		{"expand in expand phase", "expand-only", PhaseExpand, true},
+		{"expand not in runtime phase", "expand-only", PhaseRuntime, false},
+		{"both in runtime phase", "both", PhaseRuntime, true},
+		{"both in expand phase", "both", PhaseExpand, true},
+		{"nonexistent", "no-such-prim", 0, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			reg, ok := r.FindPrimitive(tc.prim, tc.phase)
+			c.Assert(ok, qt.Equals, tc.found)
+			if tc.found {
+				c.Assert(reg.Spec.Name, qt.Equals, tc.prim)
+			}
+		})
+	}
+}
+
+func TestRegistry_HasPrimitive(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitive(PrimitiveSpec{Name: "test-prim"}, PhaseRuntime)
+
+	c.Assert(r.HasPrimitive("test-prim", 0), qt.IsTrue)
+	c.Assert(r.HasPrimitive("test-prim", PhaseRuntime), qt.IsTrue)
+	c.Assert(r.HasPrimitive("test-prim", PhaseExpand), qt.IsFalse)
+	c.Assert(r.HasPrimitive("no-such", 0), qt.IsFalse)
+}
+
 func TestRegistry_AddBinding(t *testing.T) {
 	c := qt.New(t)
 

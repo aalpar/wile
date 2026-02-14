@@ -109,9 +109,9 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 **P1 — Intentional invariant checks (stack):**
 - `stack.go:39,50,91` — Stack underflow panics. Only fire on compiler bugs (mismatched push/pop). Internal-only, not user-facing.
 
-**P1 — String panics that could escape to embedders:**
-- `environment/load_path_stack.go:51` — `panic("LoadPathStack.Push: path must be absolute: " + absPath)` — Should return error
-- `values/big_complex.go` — 10 string panics for internal type invariant violations (`"BigComplex parts must be..."`) — Should use sentinel errors
+**P1 — FIXED (commit `b5c0ece`):**
+- `environment/load_path_stack.go:51` — `panic("LoadPathStack.Push: ...")` → returns `ErrInvalidLoadPath` error
+- `values/big_complex.go` — 10 string panics → typed sentinel panics (`ErrNotANumber`, `ErrExactnessConversion`)
 
 ### Ignored Errors (acceptable)
 
@@ -132,10 +132,10 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ### Issues
 
-**P1 — Missing documentation:**
-- No goroutine-safety documentation on `Engine` (is it safe for concurrent use?)
-- `CompiledCode` bound to its Engine — not documented
-- `RuntimeError.Condition` can be nil — not documented
+**P1 — Missing documentation (FIXED — commit `b5c0ece`):**
+- ~~No goroutine-safety documentation on `Engine`~~ → Added: NOT safe for concurrent use; SRFI-18 threads within same Engine are safe
+- ~~`CompiledCode` bound to its Engine — not documented~~ → Added: must run on same Engine, concurrent execution not safe
+- `RuntimeError.Condition` can be nil — not documented (addressed via `IsSchemeException()` method)
 - `RegisterFunc` callback synchronicity requirement needs clearer docs
 - No API stability guarantee document
 
@@ -144,7 +144,7 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 **P2 — API completeness:**
 - No `Registry.FindPrimitive(name)` or `HasPrimitive(name)` query methods
-- `PushLoadPath` panics on relative paths — should return error
+- ~~`PushLoadPath` panics on relative paths — should return error~~ (FIXED in P1)
 - `PrimitiveSpec` lacks metadata (Doc, ParamNames, Category) for auto-generated docs
 - No `Engine.Close()` method (acceptable since Engine holds no OS resources, but extensions may spawn goroutines)
 
@@ -232,22 +232,22 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 - [x] **Fix quasiquote panic on improper lists with unquotes** — `compile_time_continuation.go:838`. Fixed in this session. Regression test added.
 
-### P1 — Should fix
+### P1 — Should fix (DONE)
 
-- [ ] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51`
-- [ ] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` (10 sites)
-- [ ] **Document Engine goroutine-safety** — Is it safe for concurrent use?
-- [ ] **Document CompiledCode binding to Engine** — Running on wrong Engine is undefined
-- [ ] **Add `RuntimeError.IsSchemeException()` method** for distinguishing Scheme exceptions from VM errors
+- [x] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51`. Changed to return `ErrInvalidLoadPath`. Updated all callers: `engine.go` (`PushLoadPath`, `WithLoadPath`), `prim_eval.go` (`PrimLoad`), `compile_time_continuation.go` (`compileIncludeImpl`), `library_loader.go` (`loadLibraryFromFile`).
+- [x] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` (10 sites). Replaced string panics with typed sentinels (`ErrNotANumber`, `ErrExactnessConversion`). Panics remain (by design — numeric tower uses panic/recover at VM boundary) but are now recoverable via `errors.Is`.
+- [x] **Document Engine goroutine-safety** — Added doc comment: Engine is NOT safe for concurrent use; each goroutine needs its own Engine or external synchronization. SRFI-18 threads within a single Engine are safe.
+- [x] **Document CompiledCode binding to Engine** — Added doc comment: must only be run on the same Engine that compiled it; running on a different Engine is undefined behavior.
+- [x] **Add `RuntimeError.IsSchemeException()` method** — `error.go`. Reports whether error originated from Scheme `raise`/`raise-continuable` (i.e., `Condition != nil`).
 
-### P2 — Should improve
+### P2 — Should improve (DONE)
 
-- [x] **Add Registry query methods** — `PrimitiveByName`, `PrimitiveNames`, `PrimitivesByCategory`
-- [ ] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()`
-- [ ] **Structure long FFI docstrings** with Go doc subheadings
-- [ ] **Add API stability statement** to README
-- [ ] **Document RuntimeError.Condition nil semantics**
-- [ ] **Document callback synchronicity requirement** in RegisterFunc
+- [x] **Add Registry query methods** — `FindPrimitive(name, phase)`, `HasPrimitive(name, phase)` added at `registry/registry.go:120-141`
+- [x] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()` — two new subtests: non-nested overlapping scope sets, scopeless-vs-scoped
+- [x] **Structure long FFI docstrings** with Go doc subheadings — `RegisterFunc` restructured with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks`
+- [x] **Add API stability statement** to README — added after Package Structure table
+- [x] **Document RuntimeError.Condition nil semantics** — restructured doc comment with `# Condition`, `# Source and Stack Trace`, `# Cause` sections
+- [x] **Document callback synchronicity requirement** in RegisterFunc — already documented at `ffi.go:69-73`
 
 ### P3 — Nice to have
 
@@ -260,6 +260,26 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 ---
 
 ## Changes Made in This Review
+
+### Fix: P1 staff review items — panics, docs, API
+
+**Commit:** `b5c0ece`
+
+**Files changed:**
+- `environment/load_path_stack.go` — `Push` returns `error` instead of panicking
+- `environment/load_path_stack_test.go` — Panic assertions → error assertions
+- `environment/resolve_test.go` — Updated `Push` call sites
+- `environment/top_level_environment_test.go` — Updated `Push` call sites
+- `values/big_complex.go` — 10 string panics → typed sentinel panics (`ErrNotANumber`, `ErrExactnessConversion`)
+- `values/foreign_error.go` — Added `ErrInvalidLoadPath` sentinel
+- `engine.go` — `PushLoadPath` returns error; `WithLoadPath` propagates it; goroutine-safety docs on `Engine`
+- `compiled.go` — Doc comment: `CompiledCode` bound to its Engine
+- `error.go` — Added `RuntimeError.IsSchemeException()` method
+- `internal/extensions/eval/prim_eval.go` — `PrimLoad` propagates `Push` error
+- `machine/compile_time_continuation.go` — `compileIncludeImpl` propagates `Push` error
+- `machine/library_loader.go` — `loadLibraryFromFile` propagates `Push` error
+
+**Summary:** Converted the `LoadPathStack.Push` panic to a proper error return and propagated the new error through all 4 callers. Replaced 10 string panics in BigComplex with typed sentinels (the panics themselves are correct by design — the numeric tower uses panic/recover — but string panics can't be matched with `errors.Is`). Added goroutine-safety documentation to `Engine` and `CompiledCode`. Added `RuntimeError.IsSchemeException()` for embedders to distinguish Scheme exceptions from VM errors.
 
 ### Fix: quasiquote panic on improper lists with unquotes
 
@@ -276,3 +296,14 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 **Fix:** Changed `v, err :=` to `_, err :=` (discard unused tail value), replaced nested panic block with `if err != nil && !errors.Is(err, values.ErrStopIteration) { panic(err) }`.
 
 **Test:** Added `TestCoverageQuasiquoteImproperWithUnquote` with two subcases: single unquote before dotted tail, and multiple unquotes before dotted tail.
+
+### Fix: P2 staff review items — docs, tests, API stability
+
+**Files changed:**
+- `error.go` — Restructured `RuntimeError` doc comment with `# Condition`, `# Source and Stack Trace`, `# Cause` subheadings. Documented nil Condition semantics (VM/primitive errors) and Cause opacity.
+- `ffi.go` — Restructured `RegisterFunc` doc comment with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks` subheadings.
+- `README.md` — Added "API Stability" subsection after Package Structure table listing public packages (`wile`, `values`, `registry`) and noting `machine/` and `internal/` are not covered by compatibility guarantees.
+- `environment/environment_coverage_test.go` — Added two new subtests to `TestGetLocalIndexWithScopes_Maximality`: "non-nested overlapping scope sets resolved by count" (verifies scope count trumps position when candidates have disjoint scope subsets) and "scopeless candidate loses to scoped candidate" (verifies a binding with scopes beats a scopeless binding even when the scopeless one is innermost).
+
+**Already documented (no changes needed):**
+- Callback synchronicity requirement already documented at `ffi.go:69-73`.
