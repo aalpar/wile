@@ -135,7 +135,8 @@ func ParseSubrange(rest values.Value, length int, name string) (int, int, error)
 }
 
 // ParseOptionalArg extracts a single optional argument from variadic rest args.
-// Returns the value and true if present, or nil and false if absent.
+// Returns the value and true if present, or nil and false if rest is empty or
+// not a valid argument list.
 func ParseOptionalArg(rest values.Value) (values.Value, bool) {
 	if values.IsEmptyList(rest) {
 		return nil, false
