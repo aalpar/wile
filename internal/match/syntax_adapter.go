@@ -215,6 +215,15 @@ type ExpandOptions struct {
 	UseSiteCtx *syntax.SourceContext
 
 	// Origin tracks the macro expansion chain for debugging and error reporting.
+	// WithOrigin replaces (not appends to) a SourceContext's Origin field, so the
+	// last expansion pass wins. This is correct because the caller constructs the
+	// OriginInfo with the full chain: it reads the previous SourceContext.Origin and
+	// sets it as Parent on the new OriginInfo before calling Expand. The chain lives
+	// inside OriginInfo.Parent, not across successive SourceContext.Origin values.
+	//
+	// The nil guard at each call site skips when no origin is provided — avoiding a
+	// pointless allocation and preserving any existing origin on the SourceContext
+	// (e.g., syntax-case expands with ExpandOptions{}, where Origin is nil).
 	Origin *syntax.OriginInfo
 
 	// PatternVarSyntax contains the syntax symbols from the pattern, enabling nested
@@ -333,6 +342,11 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		if opts.UseSiteCtx != nil {
 			srcCtx = opts.UseSiteCtx
 		}
+		// Stamp origin onto structural nodes so error traces identify which macro
+		// produced them. See ExpandOptions.Origin for why "last caller wins" is correct.
+		if opts.Origin != nil {
+			srcCtx = srcCtx.WithOrigin(opts.Origin)
+		}
 		return syntax.NewSyntaxCons(expandedCar, expandedCdr, srcCtx), nil
 
 	case *syntax.SyntaxVector:
@@ -348,6 +362,9 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		srcCtx := t.SourceContext()
 		if opts.UseSiteCtx != nil {
 			srcCtx = opts.UseSiteCtx
+		}
+		if opts.Origin != nil {
+			srcCtx = srcCtx.WithOrigin(opts.Origin)
 		}
 		return syntax.NewSyntaxVector(srcCtx, expandedElements...), nil
 
@@ -557,6 +574,9 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	if srcCtx == nil && pattern != nil {
 		srcCtx = pattern.SourceContext()
 	}
+	if opts.Origin != nil {
+		srcCtx = srcCtx.WithOrigin(opts.Origin)
+	}
 	result := expandedRest
 	for i := len(results) - 1; i >= 0; i-- {
 		result = syntax.NewSyntaxCons(results[i], result, srcCtx)
@@ -641,6 +661,9 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 		srcCtx := t.SourceContext()
 		if opts.UseSiteCtx != nil {
 			srcCtx = opts.UseSiteCtx
+		}
+		if opts.Origin != nil {
+			srcCtx = srcCtx.WithOrigin(opts.Origin)
 		}
 		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
 

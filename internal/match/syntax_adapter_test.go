@@ -509,6 +509,226 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	c.Assert(resultSc.Origin.Parent.Identifier, qt.Equals, "inner-macro")
 }
 
+// TestExpandWithOrigin_StructuralNodes verifies that origin info propagates to
+// newly created structural syntax nodes (pairs, vectors, ellipsis-generated lists,
+// and escaped template pairs), not just symbols.
+//
+// Each Expand call stamps its OriginInfo onto every node it creates. The chain
+// of successive macro expansions lives inside OriginInfo.Parent, not across
+// SourceContext.Origin values on the same node. The caller builds the chain
+// before calling Expand (see operation_syntax_rules_transform.go):
+//
+//	SourceContext (on each expanded node)
+//	┌─────────────────────┐
+//	│ File: "user.scm"    │
+//	│ Text: "(my-macro …" │       OriginInfo
+//	│ Origin ─────────────┼──→ ┌──────────────────────┐
+//	└─────────────────────┘    │ Identifier: "my-macro"│
+//	                           │ Location: useSiteSc   │
+//	                           │ Parent: nil           │
+//	                           └───────────────────────┘
+//
+// For nested macros (outer expands, then inner expands the result):
+//
+//	SourceContext                OriginInfo (inner)          OriginInfo (outer)
+//	┌──────────────────┐     ┌───────────────────┐      ┌───────────────────┐
+//	│ Origin ───────────┼──→ │ Ident: "inner"    │      │ Ident: "outer"    │
+//	└──────────────────┘     │ Parent ────────────┼──→  │ Parent ──→ nil    │
+//	                         └───────────────────┘      └───────────────────┘
+//
+// WithOrigin replaces SourceContext.Origin (last caller wins). This is correct
+// because the inner expansion already folded the outer's OriginInfo into Parent.
+//
+// Regression test for: https://github.com/aalpar/wile/pull/235
+func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
+	c := qt.New(t)
+
+	// Build the OriginInfo that the caller (operation_syntax_rules_transform)
+	// would construct. In a nested scenario, Parent would point to the prior
+	// expansion's OriginInfo; here we test a single expansion (Parent: nil).
+	origin := &syntax.OriginInfo{
+		Identifier: "my-macro",
+		Location: syntax.NewSourceContext("(my-macro x)", "call.scm",
+			syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(12, 12, 1)),
+	}
+	useSiteSc := syntax.NewSourceContext("(my-macro 42)", "user.scm",
+		syntax.NewSourceIndexes(0, 0, 7), syntax.NewSourceIndexes(13, 13, 7))
+	opts := ExpandOptions{UseSiteCtx: useSiteSc, Origin: origin}
+
+	c.Run("pair template carries origin", func(c *qt.C) {
+		// Exercises: expandSyntaxValue → *SyntaxPair case
+		// Pattern: (macro x), template: (a x) → expanded pair must carry origin.
+		variables := map[string]struct{}{"x": {}}
+		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.TODO(), pattern)
+		c.Assert(err, qt.IsNil)
+
+		input := syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("macro", nil),
+			syntax.NewSyntaxCons(
+				syntax.NewSyntaxObject(values.NewInteger(42), nil),
+				syntax.NewSyntaxEmptyList(nil),
+				nil,
+			),
+			nil,
+		)
+
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		template := testSyntaxList(
+			syntax.NewSyntaxSymbol("a", nil),
+			syntax.NewSyntaxSymbol("x", nil),
+		)
+		result, err := sm.Expand(template, opts)
+		c.Assert(err, qt.IsNil)
+
+		pr, ok := result.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue)
+		sc := pr.SourceContext()
+		c.Assert(sc, qt.IsNotNil)
+		c.Assert(sc.Origin, qt.IsNotNil, qt.Commentf("pair node should carry origin"))
+		c.Assert(sc.Origin.Identifier, qt.Equals, "my-macro")
+	})
+
+	c.Run("vector template carries origin", func(c *qt.C) {
+		// Exercises: expandSyntaxValue → *SyntaxVector case
+		variables := map[string]struct{}{"x": {}}
+		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.TODO(), pattern)
+		c.Assert(err, qt.IsNil)
+
+		input := syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("macro", nil),
+			syntax.NewSyntaxCons(
+				syntax.NewSyntaxObject(values.NewInteger(7), nil),
+				syntax.NewSyntaxEmptyList(nil),
+				nil,
+			),
+			nil,
+		)
+
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		template := syntax.NewSyntaxVector(nil,
+			syntax.NewSyntaxSymbol("x", nil),
+			syntax.NewSyntaxSymbol("a", nil),
+		)
+		result, err := sm.Expand(template, opts)
+		c.Assert(err, qt.IsNil)
+
+		vec, ok := result.(*syntax.SyntaxVector)
+		c.Assert(ok, qt.IsTrue)
+		sc := vec.SourceContext()
+		c.Assert(sc, qt.IsNotNil)
+		c.Assert(sc.Origin, qt.IsNotNil, qt.Commentf("vector node should carry origin"))
+		c.Assert(sc.Origin.Identifier, qt.Equals, "my-macro")
+	})
+
+	c.Run("ellipsis expansion carries origin", func(c *qt.C) {
+		// Exercises: expandSyntaxEllipsis → cons cells built for repetition
+		variables := map[string]struct{}{"x": {}}
+
+		// Pattern: (_ x ...)
+		pattern := syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("_", nil),
+			syntax.NewSyntaxCons(
+				syntax.NewSyntaxSymbol("x", nil),
+				syntax.NewSyntaxCons(
+					syntax.NewSyntaxSymbol("...", nil),
+					syntax.NewSyntaxEmptyList(nil),
+					nil,
+				),
+				nil,
+			),
+			nil,
+		)
+
+		compiled, err := CompileSyntaxPatternFull(context.TODO(), pattern, variables)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ 1 2)
+		input := testSyntaxList(
+			syntax.NewSyntaxSymbol("_", nil),
+			syntax.NewSyntaxObject(values.NewInteger(1), nil),
+			syntax.NewSyntaxObject(values.NewInteger(2), nil),
+		)
+
+		sm := NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: (x ...)
+		template := testSyntaxList(
+			syntax.NewSyntaxSymbol("x", nil),
+			syntax.NewSyntaxSymbol("...", nil),
+		)
+		result, err := sm.Expand(template, opts)
+		c.Assert(err, qt.IsNil)
+
+		pr, ok := result.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(syntax.IsSyntaxEmptyList(pr), qt.IsFalse)
+		sc := pr.SourceContext()
+		c.Assert(sc, qt.IsNotNil)
+		c.Assert(sc.Origin, qt.IsNotNil, qt.Commentf("ellipsis-generated cons should carry origin"))
+		c.Assert(sc.Origin.Identifier, qt.Equals, "my-macro")
+	})
+
+	c.Run("escaped template carries origin", func(c *qt.C) {
+		// Exercises: expandEscapedSyntaxTemplate → *SyntaxPair case
+		variables := map[string]struct{}{"x": {}}
+		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
+
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		err := compiler.Compile(context.TODO(), pattern)
+		c.Assert(err, qt.IsNil)
+
+		input := syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("macro", nil),
+			syntax.NewSyntaxCons(
+				syntax.NewSyntaxObject(values.NewInteger(42), nil),
+				syntax.NewSyntaxEmptyList(nil),
+				nil,
+			),
+			nil,
+		)
+
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: (... (x a)) — escaped, so ... is not treated as repetition
+		innerTemplate := testSyntaxList(
+			syntax.NewSyntaxSymbol("x", nil),
+			syntax.NewSyntaxSymbol("a", nil),
+		)
+		template := testSyntaxList(
+			syntax.NewSyntaxSymbol("...", nil),
+			innerTemplate,
+		)
+		result, err := sm.Expand(template, opts)
+		c.Assert(err, qt.IsNil)
+
+		pr, ok := result.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue)
+		sc := pr.SourceContext()
+		c.Assert(sc, qt.IsNotNil)
+		c.Assert(sc.Origin, qt.IsNotNil, qt.Commentf("escaped template pair should carry origin"))
+		c.Assert(sc.Origin.Identifier, qt.Equals, "my-macro")
+	})
+}
+
 // TestExpandWithOrigin_PreservesPatternVars verifies pattern variables keep original syntax.
 func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	c := qt.New(t)
@@ -577,89 +797,70 @@ func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *env
 	return p.bindings[sym]
 }
 
-// TestLiteralScopesMatchWithChecker_BothHaveSameBinding verifies that when both
-// input and pattern have the same binding (e.g., after library import), they match.
-// This tests the fix for R7RS §4.3.2 auxiliary syntax after (import (scheme base)).
-func TestLiteralScopesMatchWithChecker_BothHaveSameBinding(t *testing.T) {
+// TestLiteralScopesMatchWithChecker verifies R7RS §4.3.2 literal matching:
+// literals match only when both identifiers have the same binding.
+func TestLiteralScopesMatchWithChecker(t *testing.T) {
 	c := qt.New(t)
 
-	srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-	inputSym := syntax.NewSyntaxSymbol("=>", srcCtx)
-	patternSym := syntax.NewSyntaxSymbol("=>", srcCtx)
-
-	// Both symbols resolve to the same binding (simulating imported auxiliary syntax)
+	emptySrcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 	sharedBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
-
-	literalSyntax := map[string]*syntax.SyntaxSymbol{
-		"=>": patternSym,
-	}
-	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
-	matcher.bindingChecker = &mockBindingChecker{
-		bindings: map[string]*environment.Binding{
-			"=>": sharedBinding, // Same binding for both
-		},
-	}
-
-	// Should match because both have the same binding
-	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
-	c.Assert(result, qt.IsTrue, qt.Commentf("both have same binding, should match"))
-}
-
-// TestLiteralScopesMatchWithChecker_DifferentBindings verifies that when input
-// and pattern have different bindings (e.g., let-shadowed), they don't match.
-func TestLiteralScopesMatchWithChecker_DifferentBindings(t *testing.T) {
-	c := qt.New(t)
-
-	// Input has a let-binding scope
 	letScope := syntax.NewScope()
-	inputSrcCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{letScope}}
-	inputSym := syntax.NewSyntaxSymbol("=>", inputSrcCtx)
-
-	// Pattern has no scopes (from macro definition)
-	patternSrcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-	patternSym := syntax.NewSyntaxSymbol("=>", patternSrcCtx)
-
-	// Input has a different binding (let-bound) than pattern (global)
+	scopedSrcCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{letScope}}
 	inputBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
 	patternBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypePrimitive)
 
-	literalSyntax := map[string]*syntax.SyntaxSymbol{
-		"=>": patternSym,
+	tests := []struct {
+		name           string
+		inputSrcCtx    *syntax.SourceContext
+		patternSrcCtx  *syntax.SourceContext
+		bindingChecker BindingChecker
+		expected       bool
+	}{
+		{
+			name:          "both have same binding",
+			inputSrcCtx:   emptySrcCtx,
+			patternSrcCtx: emptySrcCtx,
+			bindingChecker: &mockBindingChecker{
+				bindings: map[string]*environment.Binding{"=>": sharedBinding},
+			},
+			expected: true,
+		},
+		{
+			name:          "different bindings",
+			inputSrcCtx:   scopedSrcCtx,
+			patternSrcCtx: emptySrcCtx,
+			bindingChecker: &mockBindingCheckerWithScopes{
+				inputBinding:   inputBinding,
+				patternBinding: patternBinding,
+			},
+			expected: false,
+		},
+		{
+			name:          "both unbound",
+			inputSrcCtx:   emptySrcCtx,
+			patternSrcCtx: emptySrcCtx,
+			bindingChecker: &mockBindingChecker{
+				bindings: map[string]*environment.Binding{},
+			},
+			expected: true,
+		},
 	}
-	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
 
-	// Create a checker that returns different bindings based on scopes
-	// Input (with scopes) gets input binding, pattern (no scopes) gets pattern binding
-	matcher.bindingChecker = &mockBindingCheckerWithScopes{
-		inputBinding:   inputBinding,
-		patternBinding: patternBinding,
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			inputSym := syntax.NewSyntaxSymbol("=>", tt.inputSrcCtx)
+			patternSym := syntax.NewSyntaxSymbol("=>", tt.patternSrcCtx)
+
+			literalSyntax := map[string]*syntax.SyntaxSymbol{
+				"=>": patternSym,
+			}
+			matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
+			matcher.bindingChecker = tt.bindingChecker
+
+			result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
+			c.Assert(result, qt.Equals, tt.expected)
+		})
 	}
-
-	// Should NOT match because bindings are different
-	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
-	c.Assert(result, qt.IsFalse, qt.Commentf("different bindings, should not match"))
-}
-
-// TestLiteralScopesMatchWithChecker_BothUnbound verifies that when both input
-// and pattern have no binding, they match if they have the same name.
-func TestLiteralScopesMatchWithChecker_BothUnbound(t *testing.T) {
-	c := qt.New(t)
-
-	srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-	inputSym := syntax.NewSyntaxSymbol("=>", srcCtx)
-	patternSym := syntax.NewSyntaxSymbol("=>", srcCtx)
-
-	literalSyntax := map[string]*syntax.SyntaxSymbol{
-		"=>": patternSym,
-	}
-	matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
-	matcher.bindingChecker = &mockBindingChecker{
-		bindings: map[string]*environment.Binding{}, // No bindings
-	}
-
-	// Should match because both are unbound (nil == nil)
-	result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
-	c.Assert(result, qt.IsTrue, qt.Commentf("both unbound, should match"))
 }
 
 // mockBindingCheckerWithScopes returns different bindings for input vs pattern.
