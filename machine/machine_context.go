@@ -705,12 +705,18 @@ func (p *MachineContext) PopWindingFrame() *DynamicWindFrame {
 // UnwindTo runs after thunks from innermost to the common ancestor.
 // Returns error if any after thunk fails.
 func (p *MachineContext) UnwindTo(commonDepth int) error {
+	return p.unwindStackTo(p.windingStack, commonDepth)
+}
+
+// unwindStackTo runs after thunks from innermost to commonDepth on the given stack,
+// then sets p.windingStack to the common ancestor prefix.
+func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) error {
 	// Run after thunks from innermost to outermost (reverse order)
-	for i := len(p.windingStack) - 1; i >= commonDepth; i-- {
-		frame := p.windingStack[i]
+	for i := len(stack) - 1; i >= commonDepth; i-- {
+		frame := stack[i]
 		if frame.After != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = p.windingStack[:i:i] // Set stack to this level (cap to prevent aliasing)
+			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
 			_, err := sub.Apply(frame.After)
 			if err != nil {
 				return err
@@ -723,7 +729,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 		}
 	}
 	// Update current winding stack to common ancestor
-	p.windingStack = p.windingStack[:commonDepth:commonDepth]
+	p.windingStack = stack[:commonDepth:commonDepth]
 	return nil
 }
 
@@ -780,28 +786,13 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	commonDepth := FindCommonWindingPrefix(sourceStack, targetStack)
 
 	// Unwind: run after thunks for frames being exited (from source)
-	// We need to unwind frames that are in sourceStack but not in the common prefix
-	for i := len(sourceStack) - 1; i >= commonDepth; i-- {
-		frame := sourceStack[i]
-		if frame.After != nil {
-			sub := p.NewSubContext()
-			sub.windingStack = sourceStack[:i:i]
-			_, err := sub.Apply(frame.After)
-			if err != nil {
-				return err
-			}
-			err = sub.Run()
-			if err != nil {
-				return err
-			}
-		}
+	err := p.unwindStackTo(sourceStack, commonDepth)
+	if err != nil {
+		return err
 	}
 
-	// Update context's winding stack to common ancestor
-	p.windingStack = sourceStack[:commonDepth:commonDepth]
-
 	// Rewind: run before thunks for frames being entered (to target)
-	err := p.RewindTo(targetStack, commonDepth)
+	err = p.RewindTo(targetStack, commonDepth)
 	if err != nil {
 		return err
 	}
