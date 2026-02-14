@@ -22,11 +22,11 @@ All 16 R7RS standard libraries complete. Additional: SRFI-1, SRFI-18, `(chibi te
 
 ### Examples & Documentation
 
-73 examples across 13 categories. Comprehensive docs: README, PRIMITIVES.md, CHANGELOG, design docs, dev docs.
+92 examples across 13 categories. Comprehensive docs: README, PRIMITIVES.md, CHANGELOG, design docs, dev docs.
 
 ### Test Infrastructure
 
-~292 Go test files (~85% median coverage). Scheme test infrastructure complete but only 1 smoke test exists.
+~302 Go test files (~85% median coverage). Scheme test infrastructure complete but only 1 smoke test exists.
 
 ### Tooling
 

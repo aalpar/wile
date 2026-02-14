@@ -173,9 +173,9 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-### [Priority: Medium] — Operation Code Generation: Hand-Written Boilerplate for 40+ Operation Types
+### [Priority: Medium] — Operation Code Generation: Hand-Written Boilerplate for 36+ Operation Types
 
-**Where**: `machine/operation_*.go` (~32 files, ~30-80 lines each)
+**Where**: `machine/operation_*.go` (~36 files, ~30-80 lines each)
 
 **What**: Each VM operation (`OperationPush`, `OperationPop`, `OperationLoadLiteral`, etc.) has a dedicated file with hand-written `Apply`, `String`, `EqualTo`, and `MarshalJSON` methods. The boilerplate is 90% identical across operations—only the core `Apply` logic differs. Adding a new operation requires creating a new file and hand-writing 4 methods.
 
@@ -183,7 +183,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **Suggested fix**: Do NOT pursue code generation (too risky per existing plan). Instead, extract the boilerplate into an `OperationBase` struct with default `String`/`EqualTo`/`MarshalJSON` implementations. Each operation embeds `OperationBase` and only overrides `Apply`. This reduces new operation code from 60 lines to ~15.
 
-**Effort**: M (requires refactoring all ~32 operation files, ~1 week, but lower risk than codegen)
+**Effort**: M (requires refactoring all ~36 operation files, ~1 week, but lower risk than codegen)
 
 ---
 

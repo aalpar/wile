@@ -1,6 +1,6 @@
 # Wile Plugin Architecture Proposal
 
-**Status:** PROPOSED — Design document for future consideration
+**Status:** INFRASTRUCTURE COMPLETE — Phases 1-3, 5-6 implemented; Phase 4 (external extraction) tracked in `EXTERNAL_EXTENSIONS_PLAN.md`
 
 > **Cross-reference**: See `EXTERNAL_EXTENSIONS_PLAN.md` for `EnvironmentAccess` interface design.
 
@@ -65,12 +65,12 @@ Three-layer design separating minimal core from optional extensions:
 
 ## Migration Phases
 
-| Phase | Description |
-|-------|-------------|
-| 1 | Create registry infrastructure (Registry, Builder, Extension interface) |
-| 2 | Create core primitives package (`registry/core/`) |
-| 3 | Create public API package (`wile/engine.go`) |
-| 4 | Extract extension packages (`extensions/*`) |
-| 5 | Create independent REPL package |
-| 6 | Update entry points (`cmd/main.go`) |
-| 7 | Documentation and examples |
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Create registry infrastructure (Registry, Builder, Extension interface) | **Done** — `registry/registry.go`, `registry/builder.go`, `registry/extension.go` |
+| 2 | Create core primitives package (`registry/core/`) | **Done** — 100+ primitive files |
+| 3 | Create public API package (`wile/engine.go`) | **Done** — `NewEngine`, `Eval`, `Compile`, `Run` |
+| 4 | Extract extension packages (`extensions/*`) | **Open** — see `EXTERNAL_EXTENSIONS_PLAN.md` |
+| 5 | Create independent REPL package | **Done** — `internal/repl/` |
+| 6 | Update entry points (`cmd/main.go`) | **Done** — `cmd/scheme/main.go` uses REPL package |
+| 7 | Documentation and examples | **Done** — README, PRIMITIVES.md, 73 examples |

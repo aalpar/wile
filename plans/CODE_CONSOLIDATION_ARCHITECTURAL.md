@@ -8,7 +8,7 @@
 
 **Risk: HIGH**
 **Estimated savings: ~1,500-2,000 bytes**
-**Files affected: ~32 operation files**
+**Files affected: ~36 operation files**
 **Status: Not started**
 
 ### Problem

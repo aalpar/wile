@@ -37,7 +37,7 @@ Completed items have been removed. See git history for the original document.
 
 ### 2.2 Operation Boilerplate in machine/
 
-**Scope:** ~32 files, ~1,500 lines
+**Scope:** ~36 files, ~1,500 lines
 **Files:** `machine/operation_*.go`
 **Effort:** Medium
 

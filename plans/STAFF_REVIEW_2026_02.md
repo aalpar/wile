@@ -77,10 +77,10 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 **Documented limitation:** `LoadPathStack` is per-VM not per-thread; concurrent `(load ...)` calls could corrupt LIFO ordering. Low impact — concurrent loading is uncommon.
 
-**Deferred items (low priority per architectural review criteria):**
-- L15: `thread-sleep!` ignores context cancellation
-- L11: `eval` doesn't inherit dynamic context
-- L3: `ChannelSelect` busy-spins (could use `reflect.Select`)
+**Resolved items (previously deferred):**
+- L15: `thread-sleep!` — debunked; lines 243-246 properly handle `ctx.Done()` via select
+- L11: `eval` — fixed in commit `a722464`; `SetThread` propagates thread identity to sub-contexts
+- L3: `ChannelSelect` — debunked; implementation uses `reflect.Select` (line 296)
 
 ---
 
@@ -207,7 +207,7 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 - [x] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs — 467 primitives across 24 files converted
 - [x] **Extract machine/ subpackages** — Research plan created (`plans/MACHINE_EXTRACTION_PLAN.md`); extraction deferred
 - [x] **Add recursion depth limit** — configurable via `WithMaxCallDepth`, default unlimited (0)
-- [x] **Deferred concurrency items**: thread-sleep context cancellation (L15), eval dynamic context (L11), ChannelSelect `reflect.Select` (L3)
+- [x] **Concurrency items resolved**: L15 debunked (already handles ctx.Done), L11 fixed (commit `a722464`), L3 debunked (already uses reflect.Select)
 
 ---
 
