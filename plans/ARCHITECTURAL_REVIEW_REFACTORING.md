@@ -1,6 +1,6 @@
 # Architectural Review — Refactoring Opportunities
 
-Updated: 2026-02-13
+Updated: 2026-02-14
 
 ## Overview
 
@@ -34,18 +34,6 @@ Completed items have been removed. See git history for the original document.
 - Inconsistent case ordering across methods and types
 - Conversion helpers reimplemented per-type rather than centralized
 - Same 7-branch type switch copy-pasted across all arithmetic methods
-
-### 2.2 Operation Boilerplate in machine/
-
-**Scope:** ~36 files, ~1,500 lines
-**Files:** `machine/operation_*.go`
-**Effort:** Medium
-
-Every VM operation implements three identical methods — `SchemeString()`, `IsVoid()`, `EqualTo()` — that differ only in the type name. The actual `Apply()` logic is typically 3-10 lines, but the boilerplate doubles each file's size.
-
-**Also found:** `mc.value = []values.Value{v}` vs `mc.value = MultipleValues{v}` — inconsistent value-setting in operations, even though `mc.SetValue()` already exists.
-
-**Recommended fix:** Code-generate the boilerplate via `go generate`, or embed a shared base struct. The type-assertion pattern in `EqualTo` already uses `sameType()`/`fieldMatches()` helpers — close to mechanizable.
 
 ### 2.3 Port Type Duplication in values/
 
@@ -170,5 +158,4 @@ Three different patterns for checking empty list arguments in variadic operation
 |-------|-------|------|-------------|
 | 1 (Low-risk dedup) | 2.4 | Low | ~100 |
 | 2 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
-| 3 (Code generation) | 2.2 | Medium | ~1,500 |
 | DEFERRED | ~~2.1~~ | — | — |

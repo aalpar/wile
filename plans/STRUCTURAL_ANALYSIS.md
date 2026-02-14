@@ -158,37 +158,9 @@ type Operation interface {
 
 ---
 
-### 5. SyntaxMatcher: Parameter Accretion in Expand Methods
+### ~~5. SyntaxMatcher: Parameter Accretion in Expand Methods~~ — RESOLVED
 
-**Principle**: Composability
-**Where**: `internal/match/syntax_adapter.go` — the `Expand*` method chain
-**Theory**: Telescoping constructor anti-pattern (Bloch, *Effective Java*). Each `Expand` variant adds one parameter:
-
-```
-Expand()                                                → 0 params
-ExpandWithIntroScope(introScope, freeIds)               → 2 params
-ExpandWithUseSite(introScope, freeIds, useSiteCtx)      → 3 params
-ExpandWithOrigin(intro, freeIds, useSite, origin)       → 4 params
-ExpandWithPatternVarSyntax(intro, freeIds, use, orig, pv) → 5 params
-```
-
-Each method delegates to the next with an additional nil argument — a linear delegation chain where every intermediate method exists solely to provide a default for one parameter.
-
-**Problem**: Five entry points that all do the same thing with different nil defaults. The real logic is in `ExpandWithPatternVarSyntax`; the other four are convenience wrappers. Additionally, `expandSyntaxValue` (the recursive core) takes 8 parameters threaded through every recursive call.
-
-**Proposed direction**: Consider an `ExpandOptions` struct:
-```go
-type ExpandOptions struct {
-    IntroScope       *syntax.Scope
-    FreeIds          map[string]any
-    UseSiteCtx       *syntax.SourceContext
-    Origin           *syntax.OriginInfo
-    PatternVarSyntax map[string]*syntax.SyntaxSymbol
-}
-```
-This converts the 5-method chain to 1 method + struct. The recursive call passes `*ExpandOptions` instead of 5 separate parameters.
-
-**Impact**: Reduces API surface from 6 public methods to 2, eliminates 4 delegation layers, and makes the recursive core cleaner. Enables future expansion without API churn.
+**Resolution**: PR #235 (`refactor/expand-options`) consolidated 6 `Expand*` methods into a single `Expand(template, ExpandOptions)` method with an `ExpandOptions` struct. The recursive core now passes `*ExpandOptions` instead of 5 separate parameters. API surface reduced from 6 public methods to 1.
 
 ---
 
@@ -251,23 +223,9 @@ Type precision: 4/2^64 ≈ 0% (Go typed-int enum with unbounded underlying type)
 
 ## Opportunities
 
-### Opportunity: ExpandOptions Struct
+### ~~Opportunity: ExpandOptions Struct~~ — RESOLVED
 
-**Replaces**: 6 methods on `SyntaxMatcher` (`Expand`, `ExpandWithIntroScope`, `ExpandWithUseSite`, `ExpandWithOrigin`, `ExpandWithPatternVarSyntax`, and the internal `expandSyntaxValue`)
-**Core operation**: Recursively walk a syntax template, substituting pattern variables with scope-aware hygiene
-**Algebraic structure**: Tree homomorphism — map from template tree to expanded tree preserving structure, parameterized by substitution rules and scope context
-**Proposed shape**:
-```go
-type ExpandOptions struct {
-    IntroScope       *syntax.Scope
-    FreeIds          map[string]any
-    UseSiteCtx       *syntax.SourceContext
-    Origin           *syntax.OriginInfo
-    PatternVarSyntax map[string]*syntax.SyntaxSymbol
-}
-func (p *SyntaxMatcher) ExpandWith(template syntax.SyntaxValue, opts ExpandOptions) (syntax.SyntaxValue, error)
-```
-**Reuse sites**: Any future expansion variant adds a field to the struct rather than a new method.
+**Resolution**: PR #235 (`refactor/expand-options`) implemented this exactly as proposed. Single `Expand(template, ExpandOptions)` method replaced 6 delegation methods.
 
 ### Opportunity: EscapeState Extraction
 
@@ -307,7 +265,7 @@ type escapeTracking struct {
 
 ### Top 3 Highest-Impact Changes (Ranked)
 
-1. **ExpandOptions struct** (Finding #5) — Eliminates 4 delegation methods, reduces recursive parameter count from 8 to 3, creates a stable extension point. Impact: 4 methods removed + cleaner recursive core.
+1. ~~**ExpandOptions struct** (Finding #5)~~ — **RESOLVED** (PR #235). 4 delegation methods removed, recursive core simplified.
 
 2. **EscapeState grouping** (Finding #1) — Raises type precision from 37.5% to ~100% for escape tracking. Makes the call/cc escape lifecycle explicit. Impact: clarifies the most complex control flow in the VM.
 
@@ -315,6 +273,6 @@ type escapeTracking struct {
 
 ### Overall Assessment
 
-This is a structurally sound codebase. The dependency graph is a clean DAG with no cycles and no SDP violations. `values/` is a textbook stable foundation (I=0.00, 25 dependents). The recent OperationBase refactor demonstrates good instincts — factoring repetitive patterns into generic helpers. The main areas for tightening are parameter accretion in the match package and implicit state machines in the VM. These are refinement opportunities, not structural problems.
+This is a structurally sound codebase. The dependency graph is a clean DAG with no cycles and no SDP violations. `values/` is a textbook stable foundation (I=0.00, 25 dependents). The recent OperationBase refactor demonstrates good instincts — factoring repetitive patterns into generic helpers. The main area for tightening is implicit state machines in the VM (parameter accretion in match was resolved via ExpandOptions, PR #235). These are refinement opportunities, not structural problems.
 
 Strong design decisions: DIP via function injection for `Thread`, clean layered architecture respecting stability ordering, consistent error convention (sentinel + wrap). The 27,000+ lines across the three core packages are well-organized for a project of this complexity.
