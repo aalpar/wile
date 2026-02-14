@@ -37,7 +37,7 @@ func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note fu
 		// A panic is raised when the provided args are not comparable.
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("%s", r)
+			err = fmt.Errorf("%s", r) //nolint:gocritic // quicktest checker, not Scheme runtime
 		}
 	}()
 
@@ -46,7 +46,7 @@ func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note fu
 	// Customize error message for non-nil errors.
 	_, ok := got.(error)
 	if ok && got == nil {
-		return errors.New("got non-nil error")
+		return errors.New("got non-nil error") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 
 	// Show error types when comparing errors with different types.
@@ -61,20 +61,20 @@ func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note fu
 				note("want type", qt.Unquoted(wantType.String()))
 			}
 		}
-		return errors.New("values are not equal")
+		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 
 	gotSyntaxValue, ok0 := got.(SyntaxValue)
 	wantSyntaxValue, ok1 := want.(SyntaxValue)
 	if !ok0 || !ok1 {
-		return errors.New("got and want must be of type Datum")
+		return errors.New("got and want must be of type Datum") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 
 	if !gotSyntaxValue.SourceContext().EqualTo(wantSyntaxValue.SourceContext()) {
-		return errors.New("source context are not equal")
+		return errors.New("source context are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 	if !gotSyntaxValue.UnwrapAll().EqualTo(wantSyntaxValue.UnwrapAll()) {
-		return errors.New("values are not equal")
+		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 
 	return nil

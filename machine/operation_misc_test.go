@@ -50,7 +50,7 @@ func TestOperationBrk(t *testing.T) {
 
 func TestOperationBrk_WithError(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	expectedErr := values.NewForeignError("test error")
+	expectedErr := values.NewForeignErrorf("test error")
 
 	fn := func(ctx context.Context, mc *MachineContext) error {
 		return expectedErr

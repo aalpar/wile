@@ -53,7 +53,7 @@ func TestNewErrorObjectWithCauseAndKind(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			cause := NewForeignError("underlying error")
+			cause := newForeignError("underlying error")
 			err := NewErrorObjectWithCauseAndKind("msg", cause, tt.kind)
 			c.Assert(err.Kind(), qt.Equals, tt.kind)
 			c.Assert(err.IsFileError(), qt.Equals, tt.file)
