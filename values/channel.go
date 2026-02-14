@@ -276,7 +276,8 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	// targets a channel closed between our TrySend check and here (TOCTOU).
 	// Recover and report the closed-channel case instead of crashing.
 	defer func() {
-		if r := recover(); r != nil {
+		r := recover()
+		if r != nil {
 			// A send on a concurrently-closed channel panicked.
 			// Find the first closed send case and report it.
 			for i, c := range cases {
