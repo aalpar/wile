@@ -31,9 +31,10 @@ type Rational struct {
 }
 
 // HashCode returns a hash of the rational value.
-// Uses the canonical string representation of the reduced fraction.
+// Uses the canonical exact-family hash so that Integer, BigInteger,
+// and Rational produce identical hashes for equal values.
 func (p *Rational) HashCode() uint64 {
-	return hashString(0x6, p.value.RatString())
+	return hashExactNumeric(p.value)
 }
 
 // NewRational creates a new Rational from numerator and denominator.

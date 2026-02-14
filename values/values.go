@@ -88,8 +88,8 @@ type Value interface {
 // and the hash function must be consistent with the equality predicate:
 // if a.EqualTo(b) then a.HashCode() == b.HashCode().
 //
-// Implemented by: Integer, BigInteger, Float, Rational, Boolean, Character,
-// Symbol, Byte, String.
+// Implemented by: Integer, BigInteger, Float, BigFloat, Rational, Boolean,
+// Character, Symbol, Byte, String.
 type Hashable interface {
 	Value
 	HashCode() uint64

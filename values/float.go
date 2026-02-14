@@ -39,10 +39,15 @@ func NewFloat(v float64) *Float {
 }
 
 // HashCode returns a hash of the float value.
-// Uses the IEEE 754 bit representation to ensure +0.0 and -0.0
-// hash differently (they are not EqualTo each other in Scheme).
+// Uses the canonical inexact-family hash so that Float and BigFloat
+// produce identical hashes for equal values.
+// NaN and Inf use bitwise hashing as a fallback since BigFloat has
+// no Inf/NaN, making cross-type equality impossible for those values.
 func (p *Float) HashCode() uint64 {
-	return hashUint64(0x5, math.Float64bits(p.Value))
+	if math.IsNaN(p.Value) || math.IsInf(p.Value, 0) {
+		return hashUint64(0x5, math.Float64bits(p.Value))
+	}
+	return hashInexactNumeric(new(big.Float).SetFloat64(p.Value))
 }
 
 // Datum returns the underlying float64 value.

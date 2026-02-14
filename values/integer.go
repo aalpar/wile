@@ -65,8 +65,10 @@ func NewInteger(v int64) *Integer {
 }
 
 // HashCode returns a hash of the integer value.
+// Uses the canonical exact-family hash so that Integer, BigInteger,
+// and Rational produce identical hashes for equal values.
 func (p *Integer) HashCode() uint64 {
-	return hashUint64(0x2, uint64(p.Value))
+	return hashExactNumeric(new(big.Rat).SetInt64(p.Value))
 }
 
 // Datum returns the underlying int64 value.

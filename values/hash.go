@@ -14,6 +14,8 @@
 
 package values
 
+import "math/big"
+
 // FNV-1a hash constants.
 // See Fowler-Noll-Vo hash function.
 const (
@@ -45,4 +47,25 @@ func hashUint64(seed byte, v uint64) uint64 {
 		h *= fnvPrime
 	}
 	return h
+}
+
+// hashExactNumeric computes a canonical hash for any exact numeric value.
+// All exact types that compare EqualTo must produce the same hash.
+// Canonical form: big.Rat.RatString() (e.g. "5", "3/7").
+func hashExactNumeric(r *big.Rat) uint64 {
+	return hashString(0x2, r.RatString())
+}
+
+// hashInexactNumeric computes a canonical hash for any inexact numeric value.
+// All inexact types that compare EqualTo must produce the same hash.
+// Canonical form: precision-normalized big.Float.Text('g', -1).
+// MinPrec normalization ensures identical output regardless of the
+// original precision (53-bit Float vs 256-bit BigFloat).
+func hashInexactNumeric(f *big.Float) uint64 {
+	prec := f.MinPrec()
+	if prec == 0 {
+		prec = 1
+	}
+	normalized := new(big.Float).SetPrec(prec).Set(f)
+	return hashString(0x5, normalized.Text('g', -1))
 }

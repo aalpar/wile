@@ -66,8 +66,10 @@ func (p *BigFloat) Float64() float64 {
 }
 
 // HashCode returns a hash code for this BigFloat.
+// Uses the canonical inexact-family hash so that Float and BigFloat
+// produce identical hashes for equal values.
 func (p *BigFloat) HashCode() uint64 {
-	return hashString(0x9, p.value.Text('g', -1))
+	return hashInexactNumeric(p.value)
 }
 
 // Add returns the sum of this BigFloat and another number.
