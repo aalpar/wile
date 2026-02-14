@@ -1069,7 +1069,7 @@ func TestParserError(t *testing.T) {
 	c.Assert(err1.Unwrap(), qt.IsNil)
 
 	// Test NewTokenizerErrorWithWrap
-	innerErr := values.NewForeignError("inner error")
+	innerErr := values.NewForeignErrorf("inner error")
 	err2 := NewParserErrorWithWrap(innerErr, nil, "wrapped error")
 	c.Assert(err2.Error(), qt.Equals, "wrapped error")
 	c.Assert(err2.Unwrap(), qt.Equals, innerErr)

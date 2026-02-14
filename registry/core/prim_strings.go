@@ -57,7 +57,7 @@ func PrimMakeString(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	if kInt.Value < 0 {
-		return values.NewForeignError("make-string: length must be non-negative")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-string: length must be non-negative")
 	}
 
 	fillChar := rune(0) // default fill character (NUL)

@@ -162,7 +162,7 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 
 		// Non-continuable exception - handler should not return
 		if !excErr.Continuable {
-			return values.NewForeignError("exception handler returned from non-continuable exception")
+			return values.WrapForeignErrorf(values.ErrNonContinuableException, "exception handler returned from non-continuable exception")
 		}
 
 		// Continuable: resume execution from the captured continuation

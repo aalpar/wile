@@ -238,7 +238,7 @@ func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) 
 		mc.SetValue(topLevel)
 		return nil
 	default:
-		return values.NewForeignError("scheme-report-environment: unsupported version, expected 5 or 7")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "scheme-report-environment: unsupported version, expected 5 or 7")
 	}
 }
 
@@ -262,7 +262,7 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(newTopLevel)
 		return nil
 	default:
-		return values.NewForeignError("null-environment: unsupported version, expected 5 or 7")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "null-environment: unsupported version, expected 5 or 7")
 	}
 }
 
@@ -347,7 +347,7 @@ func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.NewForeignError("expand: expected syntax object")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "expand: expected syntax object")
 	}
 
 	// Check if we're in an expansion context
@@ -382,7 +382,7 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.NewForeignError("expand-once: expected syntax object")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "expand-once: expected syntax object")
 	}
 
 	// Check if we're in an expansion context
@@ -478,12 +478,12 @@ func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.NewForeignError("syntax-local-value: expected identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "syntax-local-value: expected identifier")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.NewForeignError("syntax-local-value: not in expansion context")
+		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-value: not in expansion context")
 	}
 
 	// Look up in expand phase
@@ -547,12 +547,12 @@ func PrimSyntaxLocalIntroduce(_ context.Context, mc *machine.MachineContext) err
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.NewForeignError("syntax-local-introduce: expected syntax object")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "syntax-local-introduce: expected syntax object")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.NewForeignError("syntax-local-introduce: not in expansion context")
+		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-introduce: not in expansion context")
 	}
 
 	introScope := expanderCtx.IntroductionScope()
@@ -593,12 +593,12 @@ func PrimSyntaxLocalIdentifierAsBinding(_ context.Context, mc *machine.MachineCo
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.NewForeignError("syntax-local-identifier-as-binding: expected identifier")
+		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "syntax-local-identifier-as-binding: expected identifier")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.NewForeignError("syntax-local-identifier-as-binding: not in expansion context")
+		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-identifier-as-binding: not in expansion context")
 	}
 
 	useSiteScope := expanderCtx.UseSiteScope()

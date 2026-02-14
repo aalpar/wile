@@ -69,7 +69,7 @@ func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 	} else {
 		baseArg, ok := rest.(values.Tuple)
 		if !ok {
-			return values.NewForeignError("log: expected a list for rest arguments")
+			return values.WrapForeignErrorf(values.ErrNotAList, "log: expected a list for rest arguments")
 		}
 		base, err := helpers.ToComplex128(baseArg.Car())
 		if err != nil {
@@ -153,7 +153,7 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 		}
 		xArg, ok := rest.(values.Tuple)
 		if !ok {
-			return values.NewForeignError("atan: expected a list for rest arguments")
+			return values.WrapForeignErrorf(values.ErrNotAList, "atan: expected a list for rest arguments")
 		}
 		x, err := helpers.ToFloat64(xArg.Car())
 		if err != nil {
@@ -487,7 +487,7 @@ func PrimFloorDiv(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("floor/: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor/: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -518,7 +518,7 @@ func PrimFloorQuotient(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("floor-quotient: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor-quotient: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -548,7 +548,7 @@ func PrimFloorRemainder(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("floor-remainder: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor-remainder: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -580,7 +580,7 @@ func PrimTruncateDiv(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("truncate/: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate/: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -611,7 +611,7 @@ func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("truncate-quotient: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate-quotient: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -641,7 +641,7 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 	}
 
 	if n1 == 0 {
-		return values.NewForeignError("truncate-remainder: division by zero")
+		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate-remainder: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -702,7 +702,7 @@ func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
-			return values.NewForeignError("numerator: cannot get numerator of infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
 		}
 		num := r.Num()
 		f, _ := new(big.Float).SetInt(num).Float64()
@@ -712,7 +712,7 @@ func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {
-			return values.NewForeignError("numerator: cannot get numerator of infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
 		}
 		num := r.Num()
 		f := new(big.Float).SetInt(num)
@@ -740,7 +740,7 @@ func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
-			return values.NewForeignError("denominator: cannot get denominator of infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
 		}
 		denom := r.Denom()
 		f, _ := new(big.Float).SetInt(denom).Float64()
@@ -750,7 +750,7 @@ func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {
-			return values.NewForeignError("denominator: cannot get denominator of infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
 		}
 		denom := r.Denom()
 		f := new(big.Float).SetInt(denom)
@@ -779,7 +779,7 @@ func PrimRationalize(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		x = new(big.Rat).SetFloat64(v.Value)
 		if x == nil {
-			return values.NewForeignError("rationalize: x cannot be infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "rationalize: x cannot be infinity or NaN")
 		}
 		xExact = false
 	default:
@@ -796,7 +796,7 @@ func PrimRationalize(_ context.Context, mc *machine.MachineContext) error {
 	case *values.Float:
 		y = new(big.Rat).SetFloat64(v.Value)
 		if y == nil {
-			return values.NewForeignError("rationalize: y cannot be infinity or NaN")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "rationalize: y cannot be infinity or NaN")
 		}
 		yExact = false
 	default:
@@ -893,7 +893,7 @@ func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Integer:
 		if v.Value < 0 {
-			return values.NewForeignError("exact-integer-sqrt: expected a non-negative integer")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
 		}
 		s := int64(math.Sqrt(float64(v.Value)))
 		for s*s > v.Value {
@@ -908,7 +908,7 @@ func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 
 	case *values.BigInteger:
 		if v.BigInt().Sign() < 0 {
-			return values.NewForeignError("exact-integer-sqrt: expected a non-negative integer")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
 		}
 		// Use big.Int.Sqrt which computes floor(sqrt(n))
 		s := new(big.Int).Sqrt(v.BigInt())
@@ -1233,7 +1233,7 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 			}
 			radix = int(r.Value)
 			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
-				return values.NewForeignError("number->string: radix must be 2, 8, 10, or 16")
+				return values.WrapForeignErrorf(values.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
 			}
 		}
 	}

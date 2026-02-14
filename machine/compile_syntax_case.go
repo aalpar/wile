@@ -56,7 +56,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Get the rest ((literals) clause ...)
 	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || rest.IsEmptyList() {
-		return values.NewForeignError("syntax-case: expected literals list and clauses")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected literals list and clauses")
 	}
 
 	// Extract literals list (CAR of rest)
@@ -78,7 +78,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Get clauses (CDR of rest)
 	clausesCdr, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || clausesCdr.IsEmptyList() {
-		return values.NewForeignError("syntax-case: expected at least one clause")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected at least one clause")
 	}
 
 	// Compile the input expression (leaves value in value register)
@@ -98,7 +98,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	v, err := clausesCdr.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, clauseVal syntax.SyntaxValue) error {
 		clausePair, ok := clauseVal.(*syntax.SyntaxPair)
 		if !ok || clausePair.IsEmptyList() {
-			return values.NewForeignError("syntax-case: clause must be a list")
+			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: clause must be a list")
 		}
 
 		// Extract pattern
@@ -107,7 +107,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		// Get the rest (body or fender + body)
 		clauseRest, ok := clausePair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok || clauseRest.IsEmptyList() {
-			return values.NewForeignError("syntax-case: expected body in clause")
+			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected body in clause")
 		}
 
 		// Determine if there's a fender
@@ -139,7 +139,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		return err
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return values.NewForeignError("syntax-case: expected proper list of clauses")
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected proper list of clauses")
 	}
 
 	// Add error operation for when no clause matches

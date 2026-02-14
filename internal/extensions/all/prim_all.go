@@ -99,7 +99,7 @@ func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) erro
 	for i, sym := range constructorFields {
 		idx := rt.FieldIndex(sym)
 		if idx < 0 {
-			return values.NewForeignError("record-constructor: unknown field " + sym.SchemeString())
+			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-constructor: unknown field %s", sym.SchemeString())
 		}
 		argIndices[i] = idx
 	}
@@ -140,7 +140,7 @@ func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
 
 	idx := rt.FieldIndex(fieldTag)
 	if idx < 0 {
-		return values.NewForeignError("record-accessor: unknown field " + fieldTag.SchemeString())
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-accessor: unknown field %s", fieldTag.SchemeString())
 	}
 
 	closure := newRecordAccessorClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
@@ -165,7 +165,7 @@ func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
 
 	idx := rt.FieldIndex(fieldTag)
 	if idx < 0 {
-		return values.NewForeignError("record-modifier: unknown field " + fieldTag.SchemeString())
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-modifier: unknown field %s", fieldTag.SchemeString())
 	}
 
 	closure := newRecordModifierClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
@@ -231,7 +231,7 @@ func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.Reco
 			return values.WrapForeignErrorf(values.ErrNotARecord, "record accessor: expected a record but got %T", obj)
 		}
 		if rec.RecordType() != rt {
-			return values.NewForeignError("record accessor: record type mismatch")
+			return values.WrapForeignErrorf(values.ErrTypeConversion, "record accessor: record type mismatch")
 		}
 		innerMC.SetValue(rec.Field(fieldIdx))
 		return nil
@@ -249,7 +249,7 @@ func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.Reco
 			return values.WrapForeignErrorf(values.ErrNotARecord, "record modifier: expected a record but got %T", obj)
 		}
 		if rec.RecordType() != rt {
-			return values.NewForeignError("record modifier: record type mismatch")
+			return values.WrapForeignErrorf(values.ErrTypeConversion, "record modifier: record type mismatch")
 		}
 		rec.SetField(fieldIdx, val)
 		innerMC.SetValue(values.Void)

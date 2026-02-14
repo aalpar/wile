@@ -94,7 +94,7 @@ func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReade
 		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, tuple.SchemeString())
 	}
 	if tuple.IsEmptyList() {
-		return nil, nil, values.NewForeignError(name + ": no binary input port specified")
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAByteInputPort, "%s: no binary input port specified", name)
 	}
 	p, ok := tuple.Car().(values.BinaryReader)
 	if !ok {
@@ -115,7 +115,7 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWrit
 		return nil, nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, tuple.SchemeString())
 	}
 	if tuple.IsEmptyList() {
-		return nil, nil, values.NewForeignError(name + ": no binary output port specified")
+		return nil, nil, values.WrapForeignErrorf(values.ErrNotAByteOutputPort, "%s: no binary output port specified", name)
 	}
 	p, ok := tuple.Car().(values.BinaryWriter)
 	if !ok {
@@ -524,7 +524,7 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	if k.Value < 0 {
-		return values.NewForeignError("read-string: k must be non-negative")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "read-string: k must be non-negative")
 	}
 
 	// Check allocation limit (assume 4 bytes per rune worst case)
@@ -628,7 +628,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 
 	// Validate indices
 	if start < 0 || end > length || start > end {
-		return values.NewForeignError("write-string: invalid indices")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-string: invalid indices")
 	}
 
 	// WriteByte the substring
@@ -655,7 +655,7 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 	switch v := byteVal.(type) {
 	case *values.Integer:
 		if v.Value < 0 || v.Value > 255 {
-			return values.NewForeignError("write-u8: byte must be an exact integer in the range 0-255")
+			return values.WrapForeignErrorf(values.ErrInvalidArgument, "write-u8: byte must be an exact integer in the range 0-255")
 		}
 		b = byte(v.Value)
 	default:
@@ -743,7 +743,7 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	if k.Value < 0 {
-		return values.NewForeignError("read-bytevector: k must be non-negative")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "read-bytevector: k must be non-negative")
 	}
 
 	// Check allocation limit
@@ -817,10 +817,10 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	// Validate indices
 	bvLen := int64(len(*bv))
 	if start < 0 || start > bvLen {
-		return values.NewForeignError("read-bytevector!: start index out of bounds")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "read-bytevector!: start index out of bounds")
 	}
 	if end < start || end > bvLen {
-		return values.NewForeignError("read-bytevector!: end index out of bounds")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "read-bytevector!: end index out of bounds")
 	}
 
 	buf := make([]byte, end-start)
@@ -877,10 +877,10 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 	// Validate indices
 	if start < 0 || start > bvLen {
-		return values.NewForeignError("write-bytevector: start index out of bounds")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-bytevector: start index out of bounds")
 	}
 	if end < start || end > bvLen {
-		return values.NewForeignError("write-bytevector: end index out of bounds")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "write-bytevector: end index out of bounds")
 	}
 
 	data := bv.AsBytes(int(start), int(end))

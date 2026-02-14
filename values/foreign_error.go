@@ -135,6 +135,7 @@ var (
 	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
 	ErrHashtableKeyNotFound    = NewStaticError("hashtable key not found")
 	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
+	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
@@ -169,8 +170,8 @@ type ForeignError struct {
 	stack   []uintptr // stack trace
 }
 
-// NewForeignError creates a new foreign error with the given message.
-func NewForeignError(msg string) *ForeignError {
+// newForeignError creates a new foreign error with the given message.
+func newForeignError(msg string) *ForeignError {
 	pcs := [50]uintptr{}
 	n := runtime.Callers(1, pcs[:])
 	q := &ForeignError{
@@ -183,7 +184,7 @@ func NewForeignError(msg string) *ForeignError {
 // NewForeignErrorf creates a new foreign error with a formatted message.
 func NewForeignErrorf(msg string, vs ...any) *ForeignError {
 	if len(vs) == 0 {
-		return NewForeignError(msg)
+		return newForeignError(msg)
 	}
 	pcs := [50]uintptr{}
 	n := runtime.Callers(1, pcs[:])
@@ -301,8 +302,8 @@ func WrapForeignReadErrorf(err error, msg string, vs ...any) *ForeignReadError {
 	return q
 }
 
-// NewForeignReadErrorf creates a new read error with a formatted message.
-func NewForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
+// newForeignReadErrorf creates a new read error with a formatted message.
+func newForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
 	q := &ForeignReadError{
 		ForeignError: NewForeignErrorf(msg, vs...),
 	}

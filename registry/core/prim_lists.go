@@ -43,7 +43,7 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 
 	count := int(k.Value)
 	if count < 0 {
-		return values.NewForeignError("make-list: k must be non-negative")
+		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-list: k must be non-negative")
 	}
 
 	// Default fill value is unspecified; we use #f
@@ -220,10 +220,10 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
-		return values.NewForeignError("list-ref: index must be non-negative")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index must be non-negative")
 	}
 	if values.IsEmptyList(o) {
-		return values.NewForeignError("list-ref: index out of bounds for empty list")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index out of bounds for empty list")
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
@@ -232,7 +232,7 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 	for i := int64(0); i < idx; i++ {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
-			return values.NewForeignError("list-ref: index out of bounds")
+			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index out of bounds")
 		}
 		pr, ok = next.(values.Tuple)
 		if !ok {
@@ -259,7 +259,7 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 	}
 	k := int(idx)
 	if k < 0 {
-		return values.NewForeignError("list-set!: index must be non-negative")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-set!: index must be non-negative")
 	}
 
 	current := p
@@ -267,7 +267,7 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 		cdr := current.Cdr()
 		next, ok := cdr.(*values.Pair)
 		if !ok {
-			return values.NewForeignError("list-set!: index out of range")
+			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-set!: index out of range")
 		}
 		current = next
 	}
@@ -288,7 +288,7 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
-		return values.NewForeignError("list-tail: index must be non-negative")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-tail: index must be non-negative")
 	}
 	if idx == 0 {
 		mc.SetValue(o)
@@ -305,7 +305,7 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 				mc.SetValue(values.EmptyList)
 				return nil
 			}
-			return values.NewForeignError("list-tail: index out of bounds")
+			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-tail: index out of bounds")
 		}
 		pr, ok = next.(values.Tuple)
 		if !ok {

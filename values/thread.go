@@ -215,7 +215,7 @@ func (p *Thread) Start(parentCtx context.Context) error {
 	}
 	if p.RunFunc == nil {
 		p.mu.Unlock()
-		return NewForeignError("thread-start!: no run function set")
+		return WrapForeignErrorf(ErrInvalidArgument, "thread-start!: no run function set")
 	}
 
 	p.state = ThreadRunnable

@@ -18,7 +18,7 @@ The codebase is **ready for the next phase of growth** (new numeric types, async
 
 ## Prioritized Findings
 
-### [Priority: High] — Numeric Tower Type-Switch Explosion
+### [Priority: High] — Numeric Tower Type-Switch Explosion (Deferred)
 
 **Where**: `values/{integer,rational,complex,big_integer,big_float,big_complex}.go` lines 169-300 (Add/Subtract/Multiply/Divide methods)
 
@@ -86,7 +86,7 @@ Division-by-zero in `prim_arithmetic.go:274` uses the first pattern while archit
 
 ---
 
-### [Priority: Medium] — EqualTo Symmetry Requires N×N Awareness
+### [Priority: Medium] — EqualTo Symmetry Requires N×N Awareness (Deferred)
 
 **Where**: `values/integer.go:470-480`, `rational.go:402-412`, `big_integer.go` (similar)
 

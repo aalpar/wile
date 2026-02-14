@@ -827,7 +827,7 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	env := newFullRuntimeEnv(t)
 
 	fn := func(ctx context.Context, mc *machine.MachineContext) error {
-		return values.NewForeignError("custom test error")
+		return values.NewForeignErrorf("custom test error")
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)

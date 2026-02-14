@@ -70,7 +70,7 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if len(args) < 2 {
-		return values.NewForeignError("string-copy!: expected at least 3 arguments")
+		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
 	}
 
 	atVal, err := helpers.RequireType[*values.Integer](args[0], values.ErrNotANumber, "string-copy!")
@@ -106,13 +106,13 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 
 	// Validate indices
 	if start < 0 || end > fromLen || start > end {
-		return values.NewForeignError("string-copy!: invalid source indices")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-copy!: invalid source indices")
 	}
 
 	toLen := to.Len()
 	copyLen := end - start
 	if at < 0 || at+copyLen > toLen {
-		return values.NewForeignError("string-copy!: destination index out of bounds")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-copy!: destination index out of bounds")
 	}
 
 	// Perform the copy
@@ -152,7 +152,7 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if len(args) < 1 {
-		return values.NewForeignError("string-fill!: expected at least 2 arguments")
+		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-fill!: expected at least 2 arguments")
 	}
 
 	char, err := helpers.RequireType[*values.Character](args[0], values.ErrNotACharacter, "string-fill!")
@@ -181,7 +181,7 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	if start < 0 || end > length || start > end {
-		return values.NewForeignError("string-fill!: invalid indices")
+		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-fill!: invalid indices")
 	}
 
 	// Fill checks immutability

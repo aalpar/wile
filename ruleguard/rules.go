@@ -34,3 +34,23 @@ func noCompoundIf(m dsl.Matcher) { //nolint:unused // loaded by gocritic rulegua
 	m.Match(`if $init; $cond { $*_ }`).
 		Report(`compound if-init statement: separate "$init" from the condition`)
 }
+
+// noErrorsNew flags uses of errors.New in production code.
+// Project convention: use values.WrapForeignErrorf(sentinel, msg) or
+// values.NewForeignErrorf(msg) instead, so callers can match with errors.Is.
+// Skips test files — tests legitimately create ad-hoc errors.
+func noErrorsNew(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(`errors.New($msg)`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`use values.WrapForeignErrorf(sentinel, msg) instead of errors.New`)
+}
+
+// noFmtErrorf flags uses of fmt.Errorf in production code.
+// Project convention: use values.WrapForeignErrorf(sentinel, msg, args...)
+// or values.NewForeignErrorf(msg, args...) instead.
+// Skips test files — tests legitimately create ad-hoc errors.
+func noFmtErrorf(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(`fmt.Errorf($*args)`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`use values.WrapForeignErrorf(sentinel, msg, args...) instead of fmt.Errorf`)
+}

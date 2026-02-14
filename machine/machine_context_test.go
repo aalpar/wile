@@ -701,7 +701,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
-	cause := values.NewForeignError("original error")
+	cause := values.NewForeignErrorf("original error")
 	err := mc.WrapError(cause, "wrapped message")
 
 	qt.Assert(t, err, qt.IsNotNil)
@@ -715,7 +715,7 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
-	cause := values.NewForeignError("original error")
+	cause := values.NewForeignErrorf("original error")
 	err := mc.WrapError(cause, "")
 
 	qt.Assert(t, err, qt.IsNotNil)

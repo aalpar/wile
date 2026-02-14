@@ -74,7 +74,7 @@ func TestForeignReadError_NotDetectedAsFileError(t *testing.T) {
 
 func TestNewForeignReadErrorf(t *testing.T) {
 	c := qt.New(t)
-	err := NewForeignReadErrorf("parse error at %d", 42)
+	err := newForeignReadErrorf("parse error at %d", 42)
 	var readErr *ForeignReadError
 	c.Assert(errors.As(err, &readErr), qt.IsTrue)
 	c.Assert(err.Error(), qt.Matches, ".*parse error at 42.*")
@@ -109,7 +109,7 @@ func TestForeignError_Is(t *testing.T) {
 		{"cause match", WrapForeignErrorWithCause(sentinel, cause, "msg"), cause, true},
 		{"sentinel via cause constructor", WrapForeignErrorWithCause(sentinel, cause, "msg"), sentinel, true},
 		{"no match", WrapForeignErrorf(sentinel, "msg"), fmt.Errorf("other"), false},
-		{"nil sentinel and cause", NewForeignError("msg"), sentinel, false},
+		{"nil sentinel and cause", newForeignError("msg"), sentinel, false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

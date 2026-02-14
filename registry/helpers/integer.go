@@ -76,7 +76,7 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 }
 
 // errNeedsBigInt is a sentinel error indicating we need to use the big.Int path.
-var errNeedsBigInt = values.NewForeignError("needs big int")
+var errNeedsBigInt = values.NewStaticError("needs big int")
 
 // IntegerFold is a helper for integer fold operations (gcd, lcm).
 // Takes rest args at index 0, applies absolute value, then folds with combiner.
