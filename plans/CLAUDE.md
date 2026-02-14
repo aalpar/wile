@@ -37,29 +37,20 @@ When investigating R7RS conformance issues:
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
 
-### Completed / Reference
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `PLUGIN_ARCHITECTURE_PROPOSAL.md` | Three-layer plugin architecture (Phases 1-3, 5-7 done; Phase 4 → `EXTERNAL_EXTENSIONS_PLAN.md`) | Complete |
-| `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
-
 ### Architectural Review
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); L3, L11, L15 resolved | Tracking |
+| `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); all others resolved | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level tech debt analysis; CLI/IO coverage, medium/low items open | Reference |
+| `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; HIGH: CLI/IO coverage; MEDIUM/LOW items open | Reference |
 | `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tiers 2-4 open) | Reference |
-| `STAFF_REVIEW_2026_02.md` | February 2026 staff review; P3 items complete | Reference |
 
-### Code Quality / Analysis
+### Testing & Methodology
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `CODE_CONSOLIDATION_ARCHITECTURAL.md` | Operation code generation (optional, HIGH risk) | Reference |
-| `ALGEBRAIC_REDUCTIONS.md` | Operation boilerplate (V), scope resolution deferred (VI) | Reference |
+| `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Design Documents (outside plans/)
