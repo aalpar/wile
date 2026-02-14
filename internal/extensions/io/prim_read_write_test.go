@@ -89,11 +89,8 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				defer wg.Done()
 				port := ports[portIdx%numPorts]
 
-				// Simulate closePort: delete from maps
-				cacheMu.Lock()
-				delete(Tokenizers, port)
-				delete(Parsers, port)
-				cacheMu.Unlock()
+				// Simulate closePort: evict cached state
+				evictPortCache(port)
 			}(i)
 		}
 		wg.Wait()
@@ -121,10 +118,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 					cacheMu.Unlock()
 				case 2:
 					// Delete operation
-					cacheMu.Lock()
-					delete(Parsers, port)
-					delete(Tokenizers, port)
-					cacheMu.Unlock()
+					evictPortCache(port)
 				}
 			}(i, opType)
 		}

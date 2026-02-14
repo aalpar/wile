@@ -243,15 +243,23 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 
 // closePort closes a port regardless of its type and evicts
 // any cached tokenizer/parser for the port.
+
+// evictPortCache removes any cached tokenizer and parser for the given port.
+// This is the single eviction choke point — all port cleanup paths
+// (explicit close, EOF, call-with-port) must go through here.
+func evictPortCache(port values.Value) {
+	cacheMu.Lock()
+	delete(Tokenizers, port)
+	delete(Parsers, port)
+	cacheMu.Unlock()
+}
+
 func closePort(o values.Value) error {
 	var err error
 	p, ok := o.(values.Port)
 	if ok {
 		err = p.Close()
 	}
-	cacheMu.Lock()
-	delete(Tokenizers, o)
-	delete(Parsers, o)
-	cacheMu.Unlock()
+	evictPortCache(o)
 	return err
 }
