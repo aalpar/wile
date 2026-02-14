@@ -55,14 +55,29 @@ func (p *CompilationError) Unwrap() error {
 }
 
 // RuntimeError wraps errors from executing Scheme code.
-// If the error originated from a Scheme raise/raise-continuable,
-// Condition holds the raised value. Source and StackTrace provide
-// the source location and VM stack trace at the point of the error
-// (populated when per-operation source tracking is available).
+//
+// # Condition
+//
+// When the error originated from a Scheme raise or raise-continuable,
+// Condition holds the raised value and [RuntimeError.IsSchemeException]
+// returns true. When the error originated from Go code (VM errors,
+// primitive failures, type mismatches), Condition is nil.
+//
+// # Source and Stack Trace
+//
+// Source and StackTrace provide the source location and VM stack trace
+// at the point of the error. Both are empty strings when per-operation
+// source tracking is unavailable.
+//
+// # Cause
+//
+// Cause may contain internal machine types. Callers should treat it as
+// an opaque error suitable for logging and [errors.Is]/[errors.As]
+// matching, not for direct type inspection.
 type RuntimeError struct {
 	Message    string
 	Cause      error
-	Condition  Value  // non-nil when Scheme raise produced the error
+	Condition  Value  // non-nil when Scheme raise produced the error; nil for VM/primitive errors
 	Source     string // formatted source location ("file:line:col"), empty if unavailable
 	StackTrace string // formatted VM stack trace, empty if unavailable
 }

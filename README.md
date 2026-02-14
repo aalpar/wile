@@ -523,6 +523,16 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 | `internal/bootstrap/` | Environment initialization |
 | `internal/extensions/` | Extension packages (io, files, math, threads, etc.) |
 
+### API Stability
+
+The following packages form the public API and follow [Go module versioning](https://go.dev/doc/modules/version-numbers):
+
+- **`wile` (root)** — `Engine`, `RegisterFunc`, `Eval`/`Compile`/`Run`, error types
+- **`values`** — Scheme value types, `Value` interface, numeric tower
+- **`registry`** — `Registry`, `Extension`, `PrimitiveSpec`, phase constants
+
+All other packages (`machine/`, `environment/`, `internal/`) are implementation details and may change without notice. The `machine` package is technically importable but is not covered by compatibility guarantees.
+
 ## Hygiene Model
 
 Wile uses the "sets of scopes" approach from Flatt's 2016 paper. Each identifier carries a set of scopes, and variable resolution checks that the binding's scopes are a subset of the use site's scopes:

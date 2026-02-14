@@ -114,6 +114,32 @@ func (p *Registry) PrimitiveCount() int {
 	return len(p.primitives)
 }
 
+// FindPrimitive returns the first registered primitive with the given name.
+// If phase is non-zero, only primitives active in that phase are considered.
+// If phase is zero, any phase matches.
+func (p *Registry) FindPrimitive(name string, phase Phase) (PrimitiveRegistration, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, reg := range p.primitives {
+		if reg.Spec.Name != name {
+			continue
+		}
+		if phase != 0 && reg.Phases&phase == 0 {
+			continue
+		}
+		return reg, true
+	}
+	return PrimitiveRegistration{}, false
+}
+
+// HasPrimitive reports whether a primitive with the given name is registered.
+// If phase is non-zero, only primitives active in that phase are considered.
+// If phase is zero, any phase matches.
+func (p *Registry) HasPrimitive(name string, phase Phase) bool {
+	_, ok := p.FindPrimitive(name, phase)
+	return ok
+}
+
 // BindingCount returns the number of compile-time bindings.
 func (p *Registry) BindingCount() int {
 	p.mu.RLock()
