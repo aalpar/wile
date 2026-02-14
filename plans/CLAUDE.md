@@ -50,7 +50,7 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); all others resolved | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
 | `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; all HIGH/MEDIUM resolved, LOW items remain | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred, 4.4 open | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; all Tier 4 complete (removed) | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
 ### Testing & Methodology

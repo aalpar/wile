@@ -56,12 +56,3 @@ Completed items have been removed. See git history for the original document.
 - **Test error idioms** — `errors.Is(err, io.EOF)` consistent across test and production code
 - **Optional position parsing** — `helpers.ParseSubrange` consolidates `[start [end]]` extraction
 
----
-
-## Recommended Execution Order
-
-| Phase | Items | Risk | Lines Saved |
-|-------|-------|------|-------------|
-| ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
-| ~~2 (Larger refactors)~~ | ~~2.3~~, ~~4.1~~, ~~4.2~~ | ~~Low-Medium~~ | ~~DONE~~ |
-| DEFERRED | ~~2.1~~ | — | — |
