@@ -17,6 +17,7 @@ package io
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -1188,6 +1189,24 @@ func TestWriteU8Coverage(t *testing.T) {
 	for _, tc := range errs {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+func TestWriteU8_ByteRangeSentinel(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"byte 256", `(write-u8 256 (open-output-bytevector))`},
+		{"byte -1", `(write-u8 -1 (open-output-bytevector))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := engine.Eval(context.Background(), tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrNotAByte), qt.IsTrue)
 		})
 	}
 }

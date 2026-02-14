@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -559,6 +560,27 @@ func TestBytevectorU8Set_EdgeCases(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+func TestByteRangeValidation_Sentinel(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"make-bytevector fill > 255", `(make-bytevector 3 256)`},
+		{"make-bytevector fill < 0", `(make-bytevector 3 -1)`},
+		{"bytevector element > 255", `(bytevector 1 256 3)`},
+		{"bytevector element < 0", `(bytevector 1 -1 3)`},
+		{"bytevector-u8-set! value > 255", `(bytevector-u8-set! (bytevector 1 2 3) 0 256)`},
+		{"bytevector-u8-set! value < 0", `(bytevector-u8-set! (bytevector 1 2 3) 0 -1)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, values.ErrNotAByte), qt.IsTrue)
 		})
 	}
 }

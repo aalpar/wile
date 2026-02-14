@@ -54,9 +54,13 @@ The `expandCompileExecute` helper was already extracted previously.
 
 ### ~~3.3 Byte Validation Duplication~~ ✅ COMPLETE
 
-**Completed.** Extracted `ValidateByteValue()` helper in `registry/helpers/args.go`.
-Three call sites in `registry/core/prim_byte_vectors.go` (`PrimMakeBytevector`,
-`PrimBytevector`, `PrimBytevectorU8Set`) now delegate to the shared helper.
+`ValidateByteValue()` moved to `values/byte.go` (was `registry/helpers/args.go`) using
+`ErrNotAByte` sentinel. Five call sites now delegate to the shared helper:
+`PrimMakeBytevector`, `PrimBytevector`, `PrimBytevectorU8Set` (registry/core),
+`PrimWriteU8` (internal/extensions/io), `NewByteVectorFromIntegers` (values).
+
+**Intentionally not converted:** `internal/parser/parser.go` `readByteVector` — uses
+`NewParserErrorWithWrapf` (different error constructor with token position context).
 
 ---
 

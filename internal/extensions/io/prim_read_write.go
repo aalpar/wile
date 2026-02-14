@@ -585,8 +585,9 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 	var b byte
 	switch v := byteVal.(type) {
 	case *values.Integer:
-		if v.Value < 0 || v.Value > 255 {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "write-u8: byte must be an exact integer in the range 0-255")
+		err := values.ValidateByteValue(v, "write-u8", "byte")
+		if err != nil {
+			return err
 		}
 		b = byte(v.Value)
 	default:
