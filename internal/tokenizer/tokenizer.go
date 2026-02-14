@@ -547,7 +547,6 @@ func (p *Tokenizer) read() {
 			return
 		}
 		p.readExtendedSymbol() //nolint:errcheck
-		// set state
 		p.term()
 		return
 	case isMarker(p.curr()): // '#'
@@ -687,12 +686,6 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			}
 			return false
 		}
-	}
-	if p.err != nil {
-		if errors.Is(p.err, io.EOF) {
-			p.err = NewTokenizerError(unterminatedMsg, p.tokenStart, p.tokenEnd)
-		}
-		return false
 	}
 	p.next() // consume terminator — may set p.err to io.EOF, which is fine
 	return true
@@ -1919,7 +1912,9 @@ func (p *Tokenizer) readSymbol() {
 // readExtendedSymbol reads an extended symbol enclosed in vertical bars (|symbol|).
 // Called after the opening '|' has been consumed.
 func (p *Tokenizer) readExtendedSymbol() {
-	p.readDelimited('|', MessageUnterminatedExtendedSymbol)
+	if !p.readDelimited('|', MessageUnterminatedExtendedSymbol) {
+		return
+	}
 }
 
 // scanWith matches bytes using the provided comparison function.
