@@ -20,24 +20,20 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-type OperationPopAll struct{}
+type OperationPopAll struct {
+	OperationBase
+}
 
 func NewOperationPopAll() *OperationPopAll {
-	return &OperationPopAll{}
+	return &OperationPopAll{
+		OperationBase: NewOperationBase("machine-operation-pop-all"),
+	}
 }
 
 func (*OperationPopAll) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	mc.value = mc.evals.PopAll()
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationPopAll) SchemeString() string {
-	return "#<machine-operation-pop-all>"
-}
-
-func (p *OperationPopAll) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationPopAll) EqualTo(o values.Value) bool {

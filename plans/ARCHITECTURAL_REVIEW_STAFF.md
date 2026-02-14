@@ -171,4 +171,87 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ### [Priority: Medium] — Tokenizer Reader Methods: Three Nearly-Identical Functions for Different Token Types — RESOLVED
 
+---
+
+## LOW PRIORITY
+
+### [Priority: Low] — Numeric Type Switch Incompleteness: Interfaces vs Concrete Types (Deferred)
+
+**Where**: Multiple files with type switches on numbers (e.g., `registry/core/prim_arithmetic.go`, `values/numeric_tower.go`)
+
+**What**: Some type switches use `case values.ComplexNumber:` (interface, matches both `*Complex` and `*BigComplex`) while others use `case *values.Complex:` / `case *values.BigComplex:` (concrete types, must list both). The recent H6 fix (`real?` predicate) showed how using concrete types missed `*Complex`. The inconsistency is a latent bug pattern.
+
+**Why it matters**: When adding a new numeric type (e.g., `*Decimal` for R7RS-large), every type switch that uses concrete types must be updated. Type switches using interfaces automatically handle the new type if it implements the interface.
+
+**Suggested fix**: Lint rule: type switches on numeric values must use interface types (`values.Number`, `values.RealNumber`, `values.ComplexNumber`) unless concrete type dispatch is semantically required. Fix existing switches to use interfaces where possible.
+
+**Effort**: S (1-2 days to audit and fix)
+
+---
+
+### [Priority: Low] — 18 TODO/FIXME Comments Across 7 Files (Triaged)
+
+**Corrected count**: The original assessment of "507 TODO/FIXME comments across 74 files" was incorrect — ~408 of those were `context.TODO()` calls (Go's standard library placeholder context in test code), not task-tracking comments. The actual count is **18 real TODO comments across 7 files** (12 in production code, 6 in tests).
+
+**Where**: Production TODOs concentrated in `internal/tokenizer/tokenizer.go` (6), `environment/top_level_environment.go` (3), `machine/native_template.go` (2), `machine/compile_time_continuation.go` (1). Test TODOs in `machine/syntax_rules_test.go` (3), `internal/tokenizer/` (3).
+
+**What was done**: Triaged all 18 TODOs and created GitHub issues for actionable items:
+- [#231](https://github.com/aalpar/wile/issues/231) — Library registry interface design (3 TODOs, blocks P1 External Extensions)
+- [#232](https://github.com/aalpar/wile/issues/232) — `#!fold-case` case-insensitive parsing (1 TODO, R7RS §2.1)
+- [#233](https://github.com/aalpar/wile/issues/233) — Replace `context.TODO()` → `context.Background()` in tests (~408 calls, housekeeping)
+
+**Not issued**: Tokenizer TODOs (4) fold into existing `plans/TOKENIZER_CONSOLIDATION_PLAN.md`. NativeTemplate optimization notes (2) deferred per project performance policy. Test TODOs (6) are blocked on API changes or are minor cleanup.
+
+**Status**: Resolved — all actionable TODOs tracked in issues or existing plans.
+
+---
+
+### [Priority: Low] — VM Operation Equality: Reflection-Based Comparison Instead of Code Generation
+
+**Where**: `machine/operation_helpers.go:10-40` (`sameType`, `fieldMatches`)
+
+**What**: All operation `EqualTo` methods use reflection helpers to compare struct fields generically. This is slower than direct field comparison and harder to debug (reflection panics are opaque). The helpers were added to avoid hand-writing equality checks for ~32 operation types, but the tradeoff is performance and debuggability.
+
+**Why it matters**: Operation equality is used in test assertions and potentially in optimization passes (detecting redundant operations). The reflection overhead is small but unnecessary—operations are compared frequently during compilation.
+
+**Suggested fix**: Either accept the reflection cost (it's negligible for compilation workloads) or generate `EqualTo` methods via `go generate` using AST inspection. Do NOT hand-write ~32 equality methods.
+
+**Effort**: S (if accepting status quo) / M (if pursuing code generation)
+
+---
+
+## Top Priority (Recommended Action)
+
+1. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
+
+---
+
+## Codebase Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total Go source files | ~615 |
+| Total test files | ~302 |
+| struct types | 309 |
+| Foreign functions (primitives) | 505 |
+| Error wrapping sites | ~772 |
+| Bare errors (fmt.Errorf/errors.New) | ~2 (panic-recovery wrappers only) |
+| context.TODO() uses | 4 production, ~408 tests (see [#233](https://github.com/aalpar/wile/issues/233)) |
+| TODO/FIXME comments | 18 (12 production, 6 test) — original count of 507 included `context.TODO()` calls |
+| Overall test coverage | 85.3% (root), 85-93% (core packages) |
+
+| Package | Coverage | Notes |
+|---------|----------|-------|
+| `registry/helpers` | 86.7% | Fixed (commit `c20df47`) |
+| `cmd/scheme` | 9.9% | User-facing CLI |
+| `internal/extensions/io` | 55.2% | Bug-prone I/O boundary |
+| `internal/extensions/math` | 68.0% | Complex arithmetic |
+| `internal/extensions/eval` | 73.4% | Meta-evaluation |
+| `values` | ~85% | Core numeric tower |
+| `machine` | 85.0% | VM and compiler |
+| `environment` | 90.4% | Symbol resolution |
+| `registry/core` | 88.5% | Standard library |
+| `internal/extensions/gointerop` | 96.4% | Go FFI |
+| `internal/extensions/system` | 100.0% | System interface |
+
 **Status**: Resolved via `readDelimited(terminator, unterminatedMsg)` extraction. `readString` and `readExtendedSymbol` now delegate to `readDelimited`; `readSymbol` correctly left separate (predicate-based termination, no escapes). Removed `readIntraStringEscape` and `readIntraExtendedToken` (single-line pass-throughs). Net -19 lines.

@@ -24,22 +24,21 @@ import (
 
 // OperationLoadGlobalByGlobalIndexLiteralIndexImmediate loads a global variable using an index from the literals pool.
 type OperationLoadGlobalByGlobalIndexLiteralIndexImmediate struct {
+	OperationBase
 	LiteralIndex LiteralIndex
 }
 
 // NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate creates a new global load operation.
 func NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(li LiteralIndex) *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate {
-	return &OperationLoadGlobalByGlobalIndexLiteralIndexImmediate{LiteralIndex: li}
+	return &OperationLoadGlobalByGlobalIndexLiteralIndexImmediate{
+		OperationBase: NewOperationBase("machine-operation-load-global-by-global-index-literal-index-immediate"),
+		LiteralIndex:  li,
+	}
 }
 
 // SchemeString returns the Scheme representation of the operation.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-load-global-by-global-index-literal-index-immediate %d>", p.LiteralIndex)
-}
-
-// IsVoid returns true if the operation is nil.
-func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) IsVoid() bool {
-	return p == nil
 }
 
 // EqualTo returns true if both operations have the same literal index.

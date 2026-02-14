@@ -25,21 +25,15 @@ import (
 // the callee in the value register. Apply pops all arguments and delegates to
 // MachineContext.ApplyCallable, which handles the four callable types
 // (MachineClosure, CaseLambdaClosure, Parameter, ComposableContinuation).
-type OperationApply struct{}
+type OperationApply struct {
+	OperationBase
+}
 
 // NewOperationApply returns a new apply operation.
 func NewOperationApply() *OperationApply {
-	return &OperationApply{}
-}
-
-// SchemeString returns the external representation for debugging.
-func (p *OperationApply) SchemeString() string {
-	return "#<operation-apply>"
-}
-
-// IsVoid returns true if the receiver is nil (satisfies values.Value).
-func (p *OperationApply) IsVoid() bool {
-	return p == nil
+	return &OperationApply{
+		OperationBase: NewOperationBase("operation-apply"),
+	}
 }
 
 // EqualTo returns true if o is also an OperationApply (identity by type).

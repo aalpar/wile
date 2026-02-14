@@ -92,10 +92,14 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 //   - Local parameter 0: contains the input form (the macro invocation)
 //
 // The operation is part of the transformer closure created by CompileSyntaxRules.
-type OperationSyntaxRulesTransform struct{}
+type OperationSyntaxRulesTransform struct {
+	OperationBase
+}
 
 func NewOperationSyntaxRulesTransform() *OperationSyntaxRulesTransform {
-	return &OperationSyntaxRulesTransform{}
+	return &OperationSyntaxRulesTransform{
+		OperationBase: NewOperationBaseWithGoName("operation:syntax-rules-transform", "SyntaxRulesTransform"),
+	}
 }
 
 func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
@@ -219,21 +223,9 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	return nil, mctx.Error("syntax-rules: no matching clause for input")
 }
 
-func (p *OperationSyntaxRulesTransform) String() string {
-	return "SyntaxRulesTransform"
-}
-
-func (p *OperationSyntaxRulesTransform) SchemeString() string {
-	return "#<operation:syntax-rules-transform>"
-}
-
 func (p *OperationSyntaxRulesTransform) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationSyntaxRulesTransform)
 	return sameType(p, v, ok)
-}
-
-func (p *OperationSyntaxRulesTransform) IsVoid() bool {
-	return false
 }
 
 // addScopeToSyntaxSkipFreeIds recursively adds an intro scope to syntax objects,

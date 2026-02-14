@@ -20,10 +20,14 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-type OperationRestoreContinuation struct{}
+type OperationRestoreContinuation struct {
+	OperationBase
+}
 
 func NewOperationRestoreContinuation() *OperationRestoreContinuation {
-	return &OperationRestoreContinuation{}
+	return &OperationRestoreContinuation{
+		OperationBase: NewOperationBase("machine-operation-restore-continuation"),
+	}
 }
 
 func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
@@ -32,14 +36,6 @@ func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineCon
 	}
 	mc.Restore(mc.cont)
 	return mc, nil
-}
-
-func (p *OperationRestoreContinuation) SchemeString() string {
-	return "#<machine-operation-restore-continuation>"
-}
-
-func (p *OperationRestoreContinuation) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationRestoreContinuation) EqualTo(o values.Value) bool {

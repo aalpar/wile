@@ -903,7 +903,6 @@ func TestOperationRestoreContinuationMethodsExtra(t *testing.T) {
 
 	// Test nil case
 	var nilOp *OperationRestoreContinuation
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
 }
 
@@ -913,7 +912,6 @@ func TestOperationPullMethodsExtra(t *testing.T) {
 
 	// Test nil case
 	var nilOp *OperationPull
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
 }
 
@@ -996,7 +994,6 @@ func TestOperationBranchMethodsExtra(t *testing.T) {
 	// Nil check
 	var nilOp *OperationBranchOffsetImmediate
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 // TestOperationBranchOnFalseMethodsExtra tests OperationBranchOnFalse extra methods
@@ -1006,7 +1003,6 @@ func TestOperationBranchOnFalseMethodsExtra(t *testing.T) {
 	// Nil check
 	var nilOp *OperationBranchOnFalseOffsetImmediate
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 // TestOperationSaveContinuationMethodsExtra tests OperationSaveContinuation extra methods
@@ -1016,7 +1012,6 @@ func TestOperationSaveContinuationMethodsExtra(t *testing.T) {
 	// Nil check
 	var nilOp *OperationSaveContinuationOffsetImmediate
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 // TestOperationApplyMethodsExtra tests OperationApply extra methods
@@ -1026,7 +1021,6 @@ func TestOperationApplyMethodsExtra(t *testing.T) {
 	// EqualTo - nil case
 	var nilOp *OperationApply
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 // TestOperationLoadGlobalMethodsExtra tests OperationLoadGlobal extra methods
@@ -1120,8 +1114,6 @@ func TestOperationBranchOnFalseEqualTo(t *testing.T) {
 	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
 	qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
 
-	var nilOp *OperationBranchOnFalseOffsetImmediate
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 	qt.Assert(t, op1.IsVoid(), qt.IsFalse)
 }
 
@@ -1131,7 +1123,6 @@ func TestOperationSaveContinuationEqualToAdditional(t *testing.T) {
 
 	// Test nil comparison
 	var nilOp *OperationSaveContinuationOffsetImmediate
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 	qt.Assert(t, op1.EqualTo(nilOp), qt.IsFalse)
 }
 
@@ -1157,8 +1148,4 @@ func TestOperationMakeCaseLambdaClosureAdditional(t *testing.T) {
 	op := NewOperationMakeCaseLambdaClosure(2)
 	qt.Assert(t, op.SchemeString(), qt.Contains, "case-lambda")
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// Test nil comparison
-	var nilOp *OperationMakeCaseLambdaClosure
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }

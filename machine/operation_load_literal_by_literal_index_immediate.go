@@ -23,12 +23,16 @@ import (
 
 // OperationLoadLiteralByLiteralIndexImmediate loads a literal value from the literals pool.
 type OperationLoadLiteralByLiteralIndexImmediate struct {
+	OperationBase
 	LiteralIndex LiteralIndex
 }
 
 // NewOperationLoadLiteralByLiteralIndexImmediate creates a new literal load operation.
 func NewOperationLoadLiteralByLiteralIndexImmediate(li LiteralIndex) *OperationLoadLiteralByLiteralIndexImmediate {
-	return &OperationLoadLiteralByLiteralIndexImmediate{LiteralIndex: li}
+	return &OperationLoadLiteralByLiteralIndexImmediate{
+		OperationBase: NewOperationBase("machine-operation-load-literal-by-literal-index-immediate"),
+		LiteralIndex:  li,
+	}
 }
 
 // Apply executes the operation, loading the literal value.
@@ -42,11 +46,6 @@ func (p *OperationLoadLiteralByLiteralIndexImmediate) Apply(ctx context.Context,
 // SchemeString returns the Scheme representation of the operation.
 func (p *OperationLoadLiteralByLiteralIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-load-literal-by-literal-index-immediate %d>", p.LiteralIndex)
-}
-
-// IsVoid returns true if the operation is nil.
-func (p *OperationLoadLiteralByLiteralIndexImmediate) IsVoid() bool {
-	return p == nil
 }
 
 // EqualTo returns true if both operations have the same literal index.

@@ -23,19 +23,19 @@ import (
 )
 
 type OperationStoreLocalByLocalIndexImmediate struct {
+	OperationBase
 	LocalIndex *environment.LocalIndex
 }
 
 func NewOperationStoreLocalByLocalIndexImmediate(li *environment.LocalIndex) *OperationStoreLocalByLocalIndexImmediate {
-	return &OperationStoreLocalByLocalIndexImmediate{LocalIndex: li}
+	return &OperationStoreLocalByLocalIndexImmediate{
+		OperationBase: NewOperationBase("machine-operation-store-local-by-local-index-immediate"),
+		LocalIndex:    li,
+	}
 }
 
 func (p *OperationStoreLocalByLocalIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-store-local-by-local-index-immediate %s>", p.LocalIndex)
-}
-
-func (p *OperationStoreLocalByLocalIndexImmediate) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationStoreLocalByLocalIndexImmediate) EqualTo(o values.Value) bool {
