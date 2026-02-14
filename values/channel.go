@@ -220,10 +220,7 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 	}
 
 	// Build native select cases
-	// This is a simplified implementation that polls
-	// For a more efficient implementation, we'd use reflect.Select
-
-	// First pass: try non-blocking operations
+	// First pass: try non-blocking operations before falling through to reflect.Select
 	for i, c := range cases {
 		if c.IsDefault {
 			continue
