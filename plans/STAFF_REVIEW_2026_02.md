@@ -242,7 +242,7 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ### P2 — Should improve (DONE)
 
-- [x] **Add Registry query methods** — `FindPrimitive(name)`, `HasPrimitive(name)` — already existed at `registry.go:120-141`
+- [x] **Add Registry query methods** — `FindPrimitive(name, phase)`, `HasPrimitive(name, phase)` added at `registry/registry.go:120-141`
 - [x] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()` — two new subtests: non-nested overlapping scope sets, scopeless-vs-scoped
 - [x] **Structure long FFI docstrings** with Go doc subheadings — `RegisterFunc` restructured with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks`
 - [x] **Add API stability statement** to README — added after Package Structure table
@@ -305,6 +305,5 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 - `README.md` — Added "API Stability" subsection after Package Structure table listing public packages (`wile`, `values`, `registry`) and noting `machine/` and `internal/` are not covered by compatibility guarantees.
 - `environment/environment_coverage_test.go` — Added two new subtests to `TestGetLocalIndexWithScopes_Maximality`: "non-nested overlapping scope sets resolved by count" (verifies scope count trumps position when candidates have disjoint scope subsets) and "scopeless candidate loses to scoped candidate" (verifies a binding with scopes beats a scopeless binding even when the scopeless one is innermost).
 
-**Already done (no changes needed):**
-- `FindPrimitive(name, phase)` and `HasPrimitive(name, phase)` already exist at `registry/registry.go:120-141` with full test coverage.
+**Already documented (no changes needed):**
 - Callback synchronicity requirement already documented at `ffi.go:69-73`.

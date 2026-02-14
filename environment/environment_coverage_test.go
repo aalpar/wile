@@ -290,7 +290,6 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("non-nested overlapping scope sets resolved by count", func(t *testing.T) {
-		c := qt.New(t)
 		topLevel := NewTopLevelEnvironment()
 		env := topLevel.Runtime()
 
@@ -323,7 +322,6 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("scopeless candidate loses to scoped candidate", func(t *testing.T) {
-		c := qt.New(t)
 		topLevel := NewTopLevelEnvironment()
 		env := topLevel.Runtime()
 
