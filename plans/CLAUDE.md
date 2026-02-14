@@ -43,25 +43,24 @@ When investigating R7RS conformance issues:
 | File | Purpose | Status |
 |------|---------|--------|
 | `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
+| `ERROR_HANDLING_AUDIT.md` | All actionable items resolved; 2 acceptable `fmt.Errorf` remain | Complete |
 
 ### Architectural Review
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ARCHITECTURAL_REVIEW.md` | 4 open LOW items (L3, L11, L15, L19) | Tracking |
+| `ARCHITECTURAL_REVIEW.md` | 4 deferred LOW items (L3, L11, L15, L19) | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level analysis and recommendations | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities | Reference |
-| `STAFF_REVIEW_2026_02.md` | February 2026 staff review — P3 items completed | Reference |
-| `MACHINE_EXTRACTION_PLAN.md` | Machine package subpackage extraction research | Deferred |
+| `ARCHITECTURAL_REVIEW_STAFF.md` | Staff-level analysis; P0-P1 panics done, helpers coverage done | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tier 1 done, Tiers 2-4 open) | Reference |
+| `STAFF_REVIEW_2026_02.md` | February 2026 staff review; P0-P2 complete, P3 open | Reference |
 
 ### Code Quality / Analysis
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ERROR_HANDLING_AUDIT.md` | 24 bare `NewForeignError` sites remaining (75 `NewForeignErrorf` resolved) | Audit |
-| `CODE_CONSOLIDATION_ARCHITECTURAL.md` | Operation code generation (HIGH risk) | Reference |
-| `ALGEBRAIC_REDUCTIONS.md` | Remaining: operation boilerplate (V), scope resolution deferred (VI) | Reference |
+| `CODE_CONSOLIDATION_ARCHITECTURAL.md` | Operation code generation (optional, HIGH risk) | Reference |
+| `ALGEBRAIC_REDUCTIONS.md` | Operation boilerplate (V), scope resolution deferred (VI) | Reference |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Design Documents (outside plans/)

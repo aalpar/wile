@@ -106,31 +106,23 @@ func (p *Integer) EqualTo(v Value) bool {
 
 The Wile codebase is **architecturally sound with recent correctness improvements** (10 HIGH, 2 MEDIUM bugs fixed in last architectural review). The core packages (values, machine, environment, syntax) have 85-93% test coverage and follow consistent error handling conventions (~772 wrapped errors, ~2 bare errors remaining as panic-recovery wrappers). The macro system's three-layer architecture (pattern matching VM + syntax adapter + hygienic layer) is well-factored and documented.
 
-**Primary debt**: Testing gaps in shared abstractions (`registry/helpers` at 0.9%, `cmd/scheme` at 9.9%, I/O at 55.2%).
+**Primary debt**: Testing gaps in user-facing boundaries (`cmd/scheme` at 9.9%, I/O at 55.2%).
 
-**Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (44 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
+**Secondary debt**: Duplication in scope-aware lookup (compiler vs expander), operation boilerplate (~32 hand-written files), and tokenizer readers (3 similar functions). These make adding new features (operations, syntax types, token categories) more expensive than necessary.
 
 ---
 
 ## HIGH PRIORITY
 
-### [Priority: High] — Helpers Package: 0.9% Test Coverage on 1447 Lines of Critical Shared Logic
+### ~~[Priority: High] — Helpers Package Test Coverage~~ — DONE
 
-**Where**: `registry/helpers/*.go` (9 files, 1 test file)
-
-**What**: The helpers package centralizes variadic fold patterns, chain comparisons, type conversions, and extremum logic used across all arithmetic and comparison primitives. Despite being a critical abstraction layer with 1447 lines of production code, it has only 0.9% test coverage. Functions like `NumericFoldVariadic`, `NumericExtremum`, `IntegerFold`, `Eqv`, and `AssocLookup` have zero direct tests.
-
-**Why it matters**: These helpers implement R7RS exactness contagion rules, NaN propagation semantics, and cross-type numeric comparisons. A bug here propagates to every primitive that uses the helper. The two-pass BigInteger detection in `IntegerFold` (lines 125-243) is untested. The NaN short-circuit in `NumericExtremum` is untested. The `Eqv` cross-type Integer/BigInteger comparison is untested.
-
-**Suggested fix**: Create `registry/helpers/*_test.go` files with table-driven tests for each exported function covering: identity cases, single-element cases, exactness contagion, NaN propagation, infinity handling, cross-type comparisons, and overflow promotion.
-
-**Effort**: M (2-3 days to achieve 80%+ coverage)
+**Resolved:** Commit `c20df47` (2026-02-13). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC) covering all exported functions.
 
 ---
 
 ### [Priority: High] — CLI Package Test Coverage: 9.9% for User-Facing Entry Point
 
-**Where**: `cmd/scheme/main.go` (8199 lines including flags, REPL, file loading, error handling)
+**Where**: `cmd/scheme/main.go` (~280 lines including flags, REPL, file loading, error handling)
 
 **What**: The main CLI entry point has only 9.9% test coverage despite containing critical logic for flag parsing, library path resolution, REPL interaction, and error formatting. Functions like `main()`, `runREPL()`, and `loadFiles()` are untested. The `--file` flag (repeatable), `--interactive` mode, and `--library-path` parsing have no regression tests.
 
@@ -144,7 +136,7 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 ### [Priority: High] — I/O Extension Test Coverage: 55.2% for 912-Line File I/O Package
 
-**Where**: `internal/extensions/io/prim_read_write.go` (912 lines, 55.2% coverage)
+**Where**: `internal/extensions/io/prim_read_write.go` (~824 lines, 55.2% coverage)
 
 **What**: The I/O primitives (`read`, `read-line`, `read-bytevector`, `write`, `write-shared`, `write-simple`) have 55.2% test coverage. Error paths for malformed input, EOF handling, circular structure detection, and bytevector partial reads are undertested. The recently fixed M10/M11 issues (partial bytevector read, unbounded allocation) indicate this area is bug-prone.
 
@@ -196,7 +188,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ### [Priority: Medium] — Operation Code Generation: Hand-Written Boilerplate for 40+ Operation Types
 
-**Where**: `machine/operation_*.go` (44 files, ~30-80 lines each)
+**Where**: `machine/operation_*.go` (~32 files, ~30-80 lines each)
 
 **What**: Each VM operation (`OperationPush`, `OperationPop`, `OperationLoadLiteral`, etc.) has a dedicated file with hand-written `Apply`, `String`, `EqualTo`, and `MarshalJSON` methods. The boilerplate is 90% identical across operations—only the core `Apply` logic differs. Adding a new operation requires creating a new file and hand-writing 4 methods.
 
@@ -204,7 +196,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **Suggested fix**: Do NOT pursue code generation (too risky per existing plan). Instead, extract the boilerplate into an `OperationBase` struct with default `String`/`EqualTo`/`MarshalJSON` implementations. Each operation embeds `OperationBase` and only overrides `Apply`. This reduces new operation code from 60 lines to ~15.
 
-**Effort**: M (requires refactoring all 44 operation files, ~1 week, but lower risk than codegen)
+**Effort**: M (requires refactoring all ~32 operation files, ~1 week, but lower risk than codegen)
 
 ---
 
@@ -256,11 +248,11 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **Where**: `machine/operation_helpers.go:10-40` (`sameType`, `fieldMatches`)
 
-**What**: All operation `EqualTo` methods use reflection helpers to compare struct fields generically. This is slower than direct field comparison and harder to debug (reflection panics are opaque). The helpers were added to avoid hand-writing equality checks for 44 operation types, but the tradeoff is performance and debuggability.
+**What**: All operation `EqualTo` methods use reflection helpers to compare struct fields generically. This is slower than direct field comparison and harder to debug (reflection panics are opaque). The helpers were added to avoid hand-writing equality checks for ~32 operation types, but the tradeoff is performance and debuggability.
 
 **Why it matters**: Operation equality is used in test assertions and potentially in optimization passes (detecting redundant operations). The reflection overhead is small but unnecessary—operations are compared frequently during compilation.
 
-**Suggested fix**: Either accept the reflection cost (it's negligible for compilation workloads) or generate `EqualTo` methods via `go generate` using AST inspection. Do NOT hand-write 44 equality methods.
+**Suggested fix**: Either accept the reflection cost (it's negligible for compilation workloads) or generate `EqualTo` methods via `go generate` using AST inspection. Do NOT hand-write ~32 equality methods.
 
 **Effort**: S (if accepting status quo) / M (if pursuing code generation)
 
@@ -268,9 +260,9 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ## Top 3 Priorities (Recommended Action Order)
 
-1. **BigFloat missing Hashable** (Refactoring 1.1) — Quick win, correctness gap. Only numeric type without `HashCode()`. Blocks hashtable key usage and breaks numeric tower uniformity.
+1. ~~**BigFloat missing Hashable**~~ — DONE (commit `c20df47`). `HashCode()` implemented via `hashInexactNumeric()`.
 
-2. **Helpers package test coverage** — Shared dependency for all arithmetic/comparison primitives. A bug here has the widest blast radius. Coverage can be added incrementally without API changes.
+2. ~~**Helpers package test coverage**~~ — DONE (commit `c20df47`). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC).
 
 3. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
 
@@ -280,8 +272,8 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 | Metric | Value |
 |--------|-------|
-| Total Go source files | 605 |
-| Total test files | 292 |
+| Total Go source files | ~615 |
+| Total test files | ~302 |
 | struct types | 309 |
 | Foreign functions (primitives) | 505 |
 | Error wrapping sites | ~772 |
@@ -292,7 +284,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 | Package | Coverage | Notes |
 |---------|----------|-------|
-| `registry/helpers` | 0.9% | **Critical gap** |
+| `registry/helpers` | 86.7% | Fixed (commit `c20df47`) |
 | `cmd/scheme` | 9.9% | User-facing CLI |
 | `internal/extensions/io` | 55.2% | Bug-prone I/O boundary |
 | `internal/extensions/math` | 68.0% | Complex arithmetic |

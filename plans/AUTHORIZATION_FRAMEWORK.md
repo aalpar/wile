@@ -75,5 +75,5 @@ Phases 4 and 5 are independent of each other.
 
 ## Scope Boundaries
 
-- **Not covered**: Load path resolution (see `LOAD_PATH_STACK.md`), network primitives (not yet), resource limits (CPU/memory/stack — separate concern)
+- **Not covered**: Load path resolution (planned, no design doc yet), network primitives (not yet), resource limits (CPU/memory/stack — separate concern)
 - **Composes with load-path stack**: path → [resolve] → [authorization check] → os.Open

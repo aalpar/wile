@@ -36,7 +36,7 @@ REPL (readline, history, debugger), Makefile, CI/CD, GoReleaser, Docker, golangc
 
 ### Blocks Adoption
 
-1. **Load-path resolution** — `(load "helper.scm")` resolves from CWD, not file directory (see `LOAD_PATH_STACK.md`)
+1. **Load-path resolution** — `(load "helper.scm")` resolves from CWD, not file directory
 2. **External extensions** — Can't publish extensions to separate repos (see `EXTERNAL_EXTENSIONS_PLAN.md`)
 
 ### Growth

@@ -1,7 +1,7 @@
 # Staff Software Engineer — Codebase Review (February 2026)
 
 **Scope:** Full codebase review of Wile (R7RS Scheme in Go)
-**Codebase:** 134K lines Go, 605 files (292 test), 33 packages
+**Codebase:** ~164K lines Go, ~615 files (~302 test), 33 packages
 **Test Status:** All passing (Go + Scheme), zero failures
 **Overall Grade:** A-
 
@@ -228,29 +228,13 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ## Prioritized Recommendations
 
-### P0 — Ship-blocking (DONE)
+### P0–P2 — Complete
 
-- [x] **Fix quasiquote panic on improper lists with unquotes** — `compile_time_continuation.go:838`. Fixed in this session. Regression test added.
-
-### P1 — Should fix (DONE)
-
-- [x] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51`. Changed to return `ErrInvalidLoadPath`. Updated all callers: `engine.go` (`PushLoadPath`, `WithLoadPath`), `prim_eval.go` (`PrimLoad`), `compile_time_continuation.go` (`compileIncludeImpl`), `library_loader.go` (`loadLibraryFromFile`).
-- [x] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` (10 sites). Replaced string panics with typed sentinels (`ErrNotANumber`, `ErrExactnessConversion`). Panics remain (by design — numeric tower uses panic/recover at VM boundary) but are now recoverable via `errors.Is`.
-- [x] **Document Engine goroutine-safety** — Added doc comment: Engine is NOT safe for concurrent use; each goroutine needs its own Engine or external synchronization. SRFI-18 threads within a single Engine are safe.
-- [x] **Document CompiledCode binding to Engine** — Added doc comment: must only be run on the same Engine that compiled it; running on a different Engine is undefined behavior.
-- [x] **Add `RuntimeError.IsSchemeException()` method** — `error.go`. Reports whether error originated from Scheme `raise`/`raise-continuable` (i.e., `Condition != nil`).
-
-### P2 — Should improve (DONE)
-
-- [x] **Add Registry query methods** — `FindPrimitive(name, phase)`, `HasPrimitive(name, phase)` added at `registry/registry.go:120-141`
-- [x] **Add scope-maximality unit test** for `GetLocalIndexWithScopes()` — two new subtests: non-nested overlapping scope sets, scopeless-vs-scoped
-- [x] **Structure long FFI docstrings** with Go doc subheadings — `RegisterFunc` restructured with `# Supported Types`, `# Variadic Functions`, `# Context Forwarding`, `# Callbacks`
-- [x] **Add API stability statement** to README — added after Package Structure table
-- [x] **Document RuntimeError.Condition nil semantics** — restructured doc comment with `# Condition`, `# Source and Stack Trace`, `# Cause` sections
-- [x] **Document callback synchronicity requirement** in RegisterFunc — already documented at `ffi.go:69-73`
+All P0, P1, and P2 items resolved. Key commits: `b5c0ece` (P1 panics/docs/API), P0 quasiquote fix, P2 docs/tests/API stability. See git history for details.
 
 ### P3 — Nice to have
 
+<<<<<<< HEAD
 - [x] **Add Engine.Close()** for extensions that spawn goroutines
 - [x] **Add PrimitiveSpec metadata** (Doc, ParamNames, Category) for auto-generated docs — 467 primitives across 24 files converted
 - [x] **Extract machine/ subpackages** — Research plan created (`plans/MACHINE_EXTRACTION_PLAN.md`); extraction deferred
