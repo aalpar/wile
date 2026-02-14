@@ -114,17 +114,9 @@ The Wile codebase is **architecturally sound with recent correctness improvement
 
 ## HIGH PRIORITY
 
-### [Priority: High] — Helpers Package: 0.9% Test Coverage on 1447 Lines of Critical Shared Logic
+### ~~[Priority: High] — Helpers Package Test Coverage~~ — DONE
 
-**Where**: `registry/helpers/*.go` (9 files, 1 test file)
-
-**What**: The helpers package centralizes variadic fold patterns, chain comparisons, type conversions, and extremum logic used across all arithmetic and comparison primitives. Despite being a critical abstraction layer with 1447 lines of production code, it has only 0.9% test coverage. Functions like `NumericFoldVariadic`, `NumericExtremum`, `IntegerFold`, `Eqv`, and `AssocLookup` have zero direct tests.
-
-**Why it matters**: These helpers implement R7RS exactness contagion rules, NaN propagation semantics, and cross-type numeric comparisons. A bug here propagates to every primitive that uses the helper. The two-pass BigInteger detection in `IntegerFold` (lines 125-243) is untested. The NaN short-circuit in `NumericExtremum` is untested. The `Eqv` cross-type Integer/BigInteger comparison is untested.
-
-**Suggested fix**: Create `registry/helpers/*_test.go` files with table-driven tests for each exported function covering: identity cases, single-element cases, exactness contagion, NaN propagation, infinity handling, cross-type comparisons, and overflow promotion.
-
-**Effort**: M (2-3 days to achieve 80%+ coverage)
+**Resolved:** Commit `c20df47` (2026-02-13). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC) covering all exported functions.
 
 ---
 
@@ -268,9 +260,9 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ## Top 3 Priorities (Recommended Action Order)
 
-1. **BigFloat missing Hashable** (Refactoring 1.1) — Quick win, correctness gap. Only numeric type without `HashCode()`. Blocks hashtable key usage and breaks numeric tower uniformity.
+1. ~~**BigFloat missing Hashable**~~ — DONE (commit `c20df47`). `HashCode()` implemented via `hashInexactNumeric()`.
 
-2. **Helpers package test coverage** — Shared dependency for all arithmetic/comparison primitives. A bug here has the widest blast radius. Coverage can be added incrementally without API changes.
+2. ~~**Helpers package test coverage**~~ — DONE (commit `c20df47`). Coverage increased from 0.9% to 86.7% with 9 new test files (3,580 LOC).
 
 3. **I/O extension test coverage** — I/O is a system boundary where bugs leak into production. Recent M10/M11 fixes show this area is actively problematic.
 

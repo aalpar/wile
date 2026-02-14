@@ -13,27 +13,7 @@ Completed items have been removed. See git history for the original document.
 
 ## Tier 1: Correctness Gaps
 
-### 1.1 BigFloat Missing Hashable
-
-**Severity:** Correctness gap
-**File:** `values/big_float.go`
-**Effort:** Low
-
-Integer, Float, Rational, and BigInteger all implement `Hashable` (with `HashCode() uint64`). BigFloat does not. This means big floats silently fail when used as hashtable keys, breaking numeric tower uniformity.
-
-**Fix:** Add `HashCode()` to BigFloat. Hash via `Float64()` when finite or fall back to text representation.
-
-**Interface compliance matrix (current state):**
-
-| Type | Hashable | RealNumber | ComplexNumber |
-|------|----------|------------|---------------|
-| Integer | Y | Y | - |
-| BigInteger | Y | Y | - |
-| Float | Y | Y | - |
-| BigFloat | **N** | Y | - |
-| Rational | Y | Y | - |
-| Complex | - | - | Y |
-| BigComplex | - | - | Y |
+No open items. BigFloat Hashable (1.1) resolved in commit `c20df47`.
 
 ---
 
@@ -195,7 +175,7 @@ Three different patterns for checking empty list arguments in variadic operation
 
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
-| 1 (Quick wins) | 1.1, 3.3 | None | ~20 |
+| ~~1 (Quick wins)~~ | ~~1.1, 3.3~~ | ~~None~~ | ~~Done (1.1)~~ |
 | 2 (Low-risk dedup) | 2.4 | Low | ~100 |
 | 3 (Larger refactors) | 2.3, 4.1, 4.2 | Low-Medium | ~600 |
 | 4 (Code generation) | 2.2 | Medium | ~1,500 |

@@ -234,8 +234,8 @@ The pipeline (`Source → Tokenizer → Parser → SyntaxValue → Expander → 
 
 ### P1 — Should fix
 
-- [ ] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51`
-- [ ] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` (10 sites)
+- [x] **Convert `LoadPathStack.Push` panic to error return** — `environment/load_path_stack.go:51` (commit `b5c0ece`)
+- [x] **Convert BigComplex string panics to sentinel errors** — `values/big_complex.go` — all panics now use sentinel errors (commit `b5c0ece`)
 - [ ] **Document Engine goroutine-safety** — Is it safe for concurrent use?
 - [ ] **Document CompiledCode binding to Engine** — Running on wrong Engine is undefined
 - [ ] **Add `RuntimeError.IsSchemeException()` method** for distinguishing Scheme exceptions from VM errors
