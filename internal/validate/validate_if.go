@@ -23,25 +23,8 @@ import (
 
 // validateIf validates (if test conseq [alt])
 func validateIf(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice for easier validation
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "if", "if form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'if' symbol, actual args start at [1]
-	argCount := len(elements) - 1
-
-	if argCount < 2 {
-		result.addErrorf(source, "if", "if requires at least 2 arguments, got %d", argCount)
-		return nil
-	}
-
-	if argCount > 3 {
-		result.addErrorf(source, "if", "if requires at most 3 arguments, got %d", argCount)
+	source, elements, ok := formPrologue(pair, "if", 2, 3, result)
+	if !ok {
 		return nil
 	}
 
@@ -50,12 +33,12 @@ func validateIf(ctx context.Context, env *environment.EnvironmentFrame, pair *sy
 	conseq := validateExpr(ctx, env, elements[2], result)
 
 	var alt ValidatedExpr
-	if argCount == 3 {
+	if len(elements)-1 == 3 {
 		alt = validateExpr(ctx, env, elements[3], result)
 	}
 
 	// If any sub-validation failed, don't return a valid form
-	if test == nil || conseq == nil || (argCount == 3 && alt == nil) {
+	if test == nil || conseq == nil || (len(elements)-1 == 3 && alt == nil) {
 		return nil
 	}
 

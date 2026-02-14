@@ -23,16 +23,11 @@ import (
 
 // validateBegin validates (begin expr...)
 func validateBegin(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "begin", "begin form must be a proper list")
+	source, elements, ok := formPrologue(pair, "begin", 0, -1, result)
+	if !ok {
 		return nil
 	}
 
-	// elements[0] is 'begin', can have zero or more expressions
 	// R7RS allows (begin) with no expressions (returns unspecified value)
 	var body []ValidatedExpr
 	for i := 1; i < len(elements); i++ {

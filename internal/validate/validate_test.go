@@ -37,6 +37,100 @@ type validationTestCase struct {
 	wantOk bool
 }
 
+// TestFormPrologue tests the formPrologue helper directly
+func TestFormPrologue(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   values.Value
+		form    string
+		minArgs int
+		maxArgs int
+		wantOk  bool
+		wantLen int // expected len(elements) when ok
+	}{
+		{
+			name:    "proper list exact arity match",
+			input:   values.List(values.NewSymbol("quote"), values.NewSymbol("x")),
+			form:    "quote",
+			minArgs: 1, maxArgs: 1,
+			wantOk: true, wantLen: 2,
+		},
+		{
+			name:    "proper list exact arity mismatch",
+			input:   values.List(values.NewSymbol("quote"), values.NewSymbol("x"), values.NewSymbol("y")),
+			form:    "quote",
+			minArgs: 1, maxArgs: 1,
+			wantOk: false,
+		},
+		{
+			name:    "proper list min arity satisfied",
+			input:   values.List(values.NewSymbol("begin"), values.NewInteger(1), values.NewInteger(2)),
+			form:    "begin",
+			minArgs: 1, maxArgs: -1,
+			wantOk: true, wantLen: 3,
+		},
+		{
+			name:    "proper list min arity not met",
+			input:   values.List(values.NewSymbol("lambda"), values.EmptyList),
+			form:    "lambda",
+			minArgs: 2, maxArgs: -1,
+			wantOk: false,
+		},
+		{
+			name:    "range arity within bounds",
+			input:   values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1)),
+			form:    "if",
+			minArgs: 2, maxArgs: 3,
+			wantOk: true, wantLen: 3,
+		},
+		{
+			name:    "range arity above max",
+			input:   values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+			form:    "if",
+			minArgs: 2, maxArgs: 3,
+			wantOk: false,
+		},
+		{
+			name:    "no arity check",
+			input:   values.List(values.NewSymbol("begin")),
+			form:    "begin",
+			minArgs: 0, maxArgs: -1,
+			wantOk: true, wantLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			syntaxVal := makeSyntax(tt.input)
+			pair := syntaxVal.(*syntax.SyntaxPair)
+			result := &ValidationResult{}
+
+			source, elements, ok := formPrologue(pair, tt.form, tt.minArgs, tt.maxArgs, result)
+			c.Assert(ok, qt.Equals, tt.wantOk)
+			if tt.wantOk {
+				c.Assert(source, qt.IsNotNil)
+				c.Assert(len(elements), qt.Equals, tt.wantLen)
+			} else {
+				c.Assert(len(result.Errors) > 0, qt.IsTrue)
+			}
+		})
+	}
+}
+
+// TestFormPrologueImproperList tests formPrologue with an improper list
+func TestFormPrologueImproperList(t *testing.T) {
+	c := qt.New(t)
+	syntaxVal := makeSyntax(values.NewCons(values.NewSymbol("if"), values.NewInteger(42)))
+	pair := syntaxVal.(*syntax.SyntaxPair)
+	result := &ValidationResult{}
+
+	_, _, ok := formPrologue(pair, "if", 2, 3, result)
+	c.Assert(ok, qt.IsFalse)
+	c.Assert(len(result.Errors), qt.Equals, 1)
+	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
+}
+
 // TestValidateIf tests the if form validator
 func TestValidateIf(t *testing.T) {
 	tests := []struct {

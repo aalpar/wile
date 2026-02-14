@@ -27,20 +27,8 @@ import (
 // Before is called whenever execution enters the dynamic extent of the call to thunk,
 // and after is called whenever it exits.
 func validateDynamicWind(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice for easier validation
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "dynamic-wind", "dynamic-wind form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'dynamic-wind' symbol, actual args start at [1]
-	argCount := len(elements) - 1
-
-	if argCount != 3 {
-		result.addErrorf(source, "dynamic-wind", "dynamic-wind requires exactly 3 arguments, got %d", argCount)
+	source, elements, ok := formPrologue(pair, "dynamic-wind", 3, 3, result)
+	if !ok {
 		return nil
 	}
 

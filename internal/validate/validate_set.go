@@ -23,18 +23,8 @@ import (
 
 // validateSetBang validates (set! name expr)
 func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "set!", "set! form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'set!', need exactly name and value
-	if len(elements) != 3 {
-		result.addErrorf(source, "set!", "set! requires exactly 2 arguments, got %d", len(elements)-1)
+	source, elements, ok := formPrologue(pair, "set!", 2, 2, result)
+	if !ok {
 		return nil
 	}
 
