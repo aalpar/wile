@@ -7,9 +7,9 @@ TODO
 
 **Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
 **Extensions**: 9 extension packages (io, files, math, system, threads, eval, exceptions, gointerop, all)
-**Examples**: 72 examples across 12 categories, 21 Gabriel benchmarks, Schelog
+**Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
-**Libraries**: (chibi test), (chibi optional), (srfi 1) complete
+**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
 
 ### Summary
 
