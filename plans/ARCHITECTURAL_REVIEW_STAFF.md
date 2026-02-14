@@ -179,7 +179,7 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 **What**: Each VM operation (`OperationPush`, `OperationPop`, `OperationLoadLiteral`, etc.) has a dedicated file with hand-written `Apply`, `String`, `EqualTo`, and `MarshalJSON` methods. The boilerplate is 90% identical across operations—only the core `Apply` logic differs. Adding a new operation requires creating a new file and hand-writing 4 methods.
 
-**Why it matters**: Extension friction. Adding a new bytecode instruction (e.g., `OperationTailCallOptimization`, `OperationInlineCache`) requires ~60 lines of boilerplate. The `EqualTo` and `MarshalJSON` methods use reflection helpers (`sameType`, `fieldMatches`) that could be generated. The existing plan (`plans/CODE_CONSOLIDATION_ARCHITECTURAL.md`) identifies this but is marked HIGH RISK.
+**Why it matters**: Extension friction. Adding a new bytecode instruction (e.g., `OperationTailCallOptimization`, `OperationInlineCache`) requires ~60 lines of boilerplate. The `EqualTo` and `MarshalJSON` methods use reflection helpers (`sameType`, `fieldMatches`) that could be generated. See also `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2.
 
 **Suggested fix**: Do NOT pursue code generation (too risky per existing plan). Instead, extract the boilerplate into an `OperationBase` struct with default `String`/`EqualTo`/`MarshalJSON` implementations. Each operation embeds `OperationBase` and only overrides `Apply`. This reduces new operation code from 60 lines to ~15.
 

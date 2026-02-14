@@ -161,7 +161,7 @@ ls dist/                # Inspect output: 4 tar.gz files + checksums.txt
 |------|---------|
 | `.goreleaser.yml` | GoReleaser v2 config: builds, archives, checksums, release notes |
 | `.github/workflows/release.yml` | GitHub Actions workflow triggered on `v*` tag pushes |
-| `VERSION` | Current version string (e.g., `v1.0.4`) |
+| `VERSION` | Current version string (e.g., `v1.2.0`) |
 | `CHANGELOG.md` | Hand-written release notes following Keep a Changelog format |
 
 ## Changelog
