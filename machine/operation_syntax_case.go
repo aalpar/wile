@@ -218,7 +218,7 @@ func (p *OperationSyntaxTemplateExpand) Apply(ctx context.Context, mctx *Machine
 
 	// Expand the template using the matcher (handles ellipsis)
 	// Use nil for intro scope and freeIds for now - hygiene can be added later
-	expanded, err := sc.matcher.ExpandWithIntroScope(template, nil, nil)
+	expanded, err := sc.matcher.Expand(template, match.ExpandOptions{})
 	if err != nil {
 		return nil, mctx.WrapError(err, "syntax: template expansion error")
 	}

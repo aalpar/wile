@@ -190,73 +190,44 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	return p.matcher.MatchSyntaxWithLiterals(ctx, inputPair, p.literalSyntax, literalMatcher)
 }
 
-// Expand performs template expansion, preserving syntax wrappers
-func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.ExpandWithIntroScope(template, nil, nil)
-}
-
-// ExpandWithIntroScope performs template expansion with hygiene support.
-// The introScope is added to newly created syntax objects (from the template),
-// but NOT to syntax objects preserved from pattern variable substitution.
-// The freeIds map contains identifiers that should not receive the intro scope.
-// Values in the map are pre-resolved bindings (nil means just skip intro scope).
-func (p *SyntaxMatcher) ExpandWithIntroScope(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any) (syntax.SyntaxValue, error) {
-	return p.ExpandWithUseSite(template, introScope, freeIds, nil)
-}
-
-// ExpandWithUseSite performs template expansion with hygiene support and use-site tracking.
-// The introScope is added to newly created syntax objects (from the template),
-// but NOT to syntax objects preserved from pattern variable substitution.
-// The freeIds map contains identifiers that should not receive the intro scope.
-// Values in the map are pre-resolved bindings (nil means just skip intro scope).
-// The useSiteCtx, if provided, is used for the source context of newly created syntax
-// objects instead of the template's context. This allows error messages to point to
-// where the macro was invoked rather than where it was defined.
-func (p *SyntaxMatcher) ExpandWithUseSite(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
-	return p.ExpandWithOrigin(template, introScope, freeIds, useSiteCtx, nil)
-}
-
-// ExpandWithOrigin performs template expansion with full hygiene and origin tracking.
-// Parameters:
-//   - template: The template to expand
-//   - introScope: Hygiene scope added to newly created syntax (not pattern variables)
-//   - freeIds: Map of free identifier names to their pre-resolved bindings (any type to avoid circular imports)
-//   - useSiteCtx: Source context for newly created syntax (use-site vs template-site)
-//   - origin: Origin info for tracking macro expansion chains
-func (p *SyntaxMatcher) ExpandWithOrigin(template syntax.SyntaxValue, introScope *syntax.Scope, freeIds map[string]any, useSiteCtx *syntax.SourceContext, origin *syntax.OriginInfo) (syntax.SyntaxValue, error) {
-	// Use syntax-native expansion (same as ExpandWithPatternVarSyntax but without pattern var syntax)
-	return p.ExpandWithPatternVarSyntax(template, introScope, freeIds, useSiteCtx, origin, nil)
-}
-
-// ExpandWithPatternVarSyntax performs template expansion with full nested macro hygiene.
-// This is the scope-aware expansion that correctly handles the case where an outer macro
-// introduces a symbol into an inner macro's template. The patternVarSyntax map contains
-// the syntax symbols from the pattern, allowing scope comparison during substitution.
+// ExpandOptions holds the hygiene and source-tracking parameters for template expansion.
+// All fields are optional; the zero value expands without hygiene (useful for testing).
 //
 // Per Flatt 2016 "sets of scopes" model: when deciding whether to substitute a template
 // symbol with a captured value, we compare the template symbol's scopes with the pattern
 // variable's scopes. Only substitute if the scopes are compatible (pattern var scopes ⊆
 // template symbol scopes). If the template symbol has additional scopes (e.g., from an
 // outer macro's intro scope), it should NOT be substituted.
-//
-// Example: When outer macro `foo` expands `(foo bar x)` producing:
-//
-//	(define-syntax bar (syntax-rules () ((bar x) 'x)))
-//
-// The pattern's `x` has scopes from the outer expansion (S_outer), while the template's
-// `'x` was substituted from the input and has use-site scopes. When `bar` is compiled,
-// both `x` symbols have different scopes, so template `'x` should NOT be substituted
-// when inner macro expands.
-func (p *SyntaxMatcher) ExpandWithPatternVarSyntax(
-	template syntax.SyntaxValue,
-	introScope *syntax.Scope,
-	freeIds map[string]any,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
-	patternVarSyntax map[string]*syntax.SyntaxSymbol,
-) (syntax.SyntaxValue, error) {
+type ExpandOptions struct {
+	// IntroScope is the hygiene scope added to newly created syntax objects (from the
+	// template), but NOT to syntax objects preserved from pattern variable substitution.
+	IntroScope *syntax.Scope
+
+	// FreeIds maps free identifier names to their pre-resolved bindings.
+	// Identifiers in this map do not receive the intro scope.
+	// Values use type any to avoid circular imports (implemented by machine.FreeIdResolution).
+	// A nil value means just skip intro scope; a non-nil value carries resolved binding info.
+	FreeIds map[string]any
+
+	// UseSiteCtx, if provided, is used for the source context of newly created syntax
+	// objects instead of the template's context. This allows error messages to point to
+	// where the macro was invoked rather than where it was defined.
+	UseSiteCtx *syntax.SourceContext
+
+	// Origin tracks the macro expansion chain for debugging and error reporting.
+	Origin *syntax.OriginInfo
+
+	// PatternVarSyntax contains the syntax symbols from the pattern, enabling nested
+	// macro hygiene via scope comparison. When set, template symbols are only substituted
+	// if their scopes match the corresponding pattern variable's scopes.
+	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+}
+
+// Expand performs template expansion with the given hygiene options.
+// Pass a zero-value ExpandOptions{} for expansion without hygiene.
+func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) (syntax.SyntaxValue, error) {
 	if len(p.matcher.captureStack) == 0 {
-		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "ExpandWithPatternVarSyntax: no captures available for template expansion")
+		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "Expand: no captures available for template expansion")
 	}
 
 	// Perform syntax-preserving expansion with scope comparison
@@ -264,11 +235,7 @@ func (p *SyntaxMatcher) ExpandWithPatternVarSyntax(
 		template,
 		p.matcher.captureStack[0],
 		nil, // ellipsisVars
-		introScope,
-		freeIds,
-		useSiteCtx,
-		origin,
-		patternVarSyntax,
+		&opts,
 	)
 }
 
@@ -279,11 +246,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
-	introScope *syntax.Scope,
-	freeIds map[string]any,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
-	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	if template == nil {
 		return nil, nil
@@ -299,8 +262,8 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 			// Check scope compatibility before substituting
 			// R7RS nested macro hygiene: only substitute if template symbol's scopes
 			// are compatible with pattern variable's scopes
-			if patternVarSyntax != nil {
-				patternSym, hasPattern := patternVarSyntax[symVal.Key]
+			if opts.PatternVarSyntax != nil {
+				patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
 				if hasPattern {
 					templateScopes := t.Scopes()
 					patternScopes := patternSym.Scopes()
@@ -311,16 +274,16 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
 						// Scopes don't match - keep template symbol as literal (hygiene!)
 						// Apply intro scope and free ID handling as normal
-						return p.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+						return p.applyHygieneToSymbol(t, opts), nil
 					}
 				}
 			}
 			// Scopes match (or no pattern var syntax) - substitute with captured value
-			return p.capturedValueToSyntax(capturedVal, introScope, useSiteCtx, origin)
+			return p.capturedValueToSyntax(capturedVal, opts)
 		}
 
 		// Not a pattern variable - apply hygiene as normal
-		return p.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+		return p.applyHygieneToSymbol(t, opts), nil
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
@@ -337,8 +300,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 				if ok && !syntax.IsSyntaxEmptyList(cdrPair) {
 					// Escape form - expand inner template without ellipsis handling
 					return p.expandEscapedSyntaxTemplate(
-						cdrPair.SyntaxCar(),
-						ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+						cdrPair.SyntaxCar(), ctx, ellipsisVars, opts)
 				}
 			}
 		}
@@ -352,25 +314,24 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 				if sym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
 					// Found ellipsis - handle repetition
 					return p.expandSyntaxEllipsis(
-						car, cdrPair.SyntaxCdr(),
-						ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+						car, cdrPair.SyntaxCdr(), ctx, ellipsisVars, opts)
 				}
 			}
 		}
 
 		// Regular pair - expand car and cdr
-		expandedCar, err := p.expandSyntaxValue(car, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		expandedCar, err := p.expandSyntaxValue(car, ctx, ellipsisVars, opts)
 		if err != nil {
 			return nil, err
 		}
-		expandedCdr, err := p.expandSyntaxValue(cdr, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		expandedCdr, err := p.expandSyntaxValue(cdr, ctx, ellipsisVars, opts)
 		if err != nil {
 			return nil, err
 		}
 
 		srcCtx := t.SourceContext()
-		if useSiteCtx != nil {
-			srcCtx = useSiteCtx
+		if opts.UseSiteCtx != nil {
+			srcCtx = opts.UseSiteCtx
 		}
 		return syntax.NewSyntaxCons(expandedCar, expandedCdr, srcCtx), nil
 
@@ -378,15 +339,15 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		// Expand each element
 		expandedElements := make([]syntax.SyntaxValue, len(t.Values))
 		for i, elem := range t.Values {
-			expanded, err := p.expandSyntaxValue(elem, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+			expanded, err := p.expandSyntaxValue(elem, ctx, ellipsisVars, opts)
 			if err != nil {
 				return nil, err
 			}
 			expandedElements[i] = expanded
 		}
 		srcCtx := t.SourceContext()
-		if useSiteCtx != nil {
-			srcCtx = useSiteCtx
+		if opts.UseSiteCtx != nil {
+			srcCtx = opts.UseSiteCtx
 		}
 		return syntax.NewSyntaxVector(srcCtx, expandedElements...), nil
 
@@ -412,29 +373,26 @@ func scopesCompatibleForSubstitution(templateScopes, patternScopes []*syntax.Sco
 // This handles free identifiers and intro scope for non-pattern-variable symbols.
 func (p *SyntaxMatcher) applyHygieneToSymbol(
 	sym *syntax.SyntaxSymbol,
-	introScope *syntax.Scope,
-	freeIds map[string]any,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
+	opts *ExpandOptions,
 ) syntax.SyntaxValue {
 	symVal := sym.Unwrap().(*values.Symbol)
 
 	// Determine source context
 	srcCtx := sym.SourceContext()
-	if useSiteCtx != nil {
-		srcCtx = useSiteCtx
+	if opts.UseSiteCtx != nil {
+		srcCtx = opts.UseSiteCtx
 	}
-	if origin != nil && srcCtx != nil {
-		srcCtx = srcCtx.WithOrigin(origin)
-	} else if origin != nil {
-		srcCtx = &syntax.SourceContext{Origin: origin}
+	if opts.Origin != nil && srcCtx != nil {
+		srcCtx = srcCtx.WithOrigin(opts.Origin)
+	} else if opts.Origin != nil {
+		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
 	}
 
 	// Check if this is a free identifier
 	var isFree bool
 	var resolution any
-	if freeIds != nil {
-		resolution, isFree = freeIds[symVal.Key]
+	if opts.FreeIds != nil {
+		resolution, isFree = opts.FreeIds[symVal.Key]
 	}
 
 	if isFree && resolution != nil {
@@ -487,8 +445,8 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		templateCtx = srcCtx.WithoutScopes()
 	}
 	newSym := syntax.NewSyntaxSymbol(symVal.Key, templateCtx)
-	if introScope != nil {
-		newSym = newSym.AddScope(introScope).(*syntax.SyntaxSymbol)
+	if opts.IntroScope != nil {
+		newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 	}
 	return newSym
 }
@@ -501,9 +459,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 //nolint:unparam
 func (p *SyntaxMatcher) capturedValueToSyntax(
 	val values.Value,
-	introScope *syntax.Scope,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
+	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	// If the value is already a syntax value (from syntax-native capture), return it directly.
 	// This is the normal case because captureContext.bindings stores syntax.SyntaxValue directly.
@@ -513,20 +469,20 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 	}
 
 	// Fallback: wrap the value in syntax (for edge cases like nil or empty list)
-	srcCtx := useSiteCtx
-	if origin != nil && srcCtx != nil {
-		srcCtx = srcCtx.WithOrigin(origin)
-	} else if origin != nil {
-		srcCtx = &syntax.SourceContext{Origin: origin}
+	srcCtx := opts.UseSiteCtx
+	if opts.Origin != nil && srcCtx != nil {
+		srcCtx = srcCtx.WithOrigin(opts.Origin)
+	} else if opts.Origin != nil {
+		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
 	}
 
 	switch v := val.(type) {
 	case *values.Pair:
-		car, err := p.capturedValueToSyntax(v.Car(), introScope, useSiteCtx, origin)
+		car, err := p.capturedValueToSyntax(v.Car(), opts)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.capturedValueToSyntax(v.Cdr(), introScope, useSiteCtx, origin)
+		cdr, err := p.capturedValueToSyntax(v.Cdr(), opts)
 		if err != nil {
 			return nil, err
 		}
@@ -552,11 +508,7 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
-	introScope *syntax.Scope,
-	freeIds map[string]any,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
-	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	// Find which variables in the pattern are bound in child contexts
 	patternVarsInTemplate := p.findSyntaxPatternVariables(pattern)
@@ -565,14 +517,14 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	ellipsisID := p.matcher.findMatchingEllipsisID(patternVarsInTemplate)
 	if ellipsisID < 0 {
 		// No matching ellipsis - just expand the rest
-		return p.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		return p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
 	}
 
 	// Get children for this specific ellipsis ID
 	children := ctx.children[ellipsisID]
 	if len(children) == 0 {
 		// No repetitions captured, just expand the rest
-		return p.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		return p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
 	}
 
 	// Build result by repeating pattern for each child context
@@ -587,7 +539,7 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 			newEllipsisVars[v] = struct{}{}
 		}
 
-		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -595,13 +547,13 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	}
 
 	// Expand the rest
-	expandedRest, err := p.expandSyntaxValue(rest, ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+	expandedRest, err := p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	// Combine results into a list and append the rest
-	srcCtx := useSiteCtx
+	srcCtx := opts.UseSiteCtx
 	if srcCtx == nil && pattern != nil {
 		srcCtx = pattern.SourceContext()
 	}
@@ -643,11 +595,7 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
-	introScope *syntax.Scope,
-	freeIds map[string]any,
-	useSiteCtx *syntax.SourceContext,
-	origin *syntax.OriginInfo,
-	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	if template == nil {
 		return nil, nil
@@ -661,38 +609,38 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 		capturedVal, ok := ctx.bindings[symVal.Key]
 		if ok {
 			// Check scope compatibility before substituting
-			if patternVarSyntax != nil {
-				patternSym, hasPattern := patternVarSyntax[symVal.Key]
+			if opts.PatternVarSyntax != nil {
+				patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
 				if hasPattern {
 					templateScopes := t.Scopes()
 					patternScopes := patternSym.Scopes()
 
 					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
-						return p.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+						return p.applyHygieneToSymbol(t, opts), nil
 					}
 				}
 			}
-			return p.capturedValueToSyntax(capturedVal, introScope, useSiteCtx, origin)
+			return p.capturedValueToSyntax(capturedVal, opts)
 		}
 
-		return p.applyHygieneToSymbol(t, introScope, freeIds, useSiteCtx, origin), nil
+		return p.applyHygieneToSymbol(t, opts), nil
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
 			return t, nil
 		}
 		// In escaped context, don't check for ellipsis patterns
-		car, err := p.expandEscapedSyntaxTemplate(t.SyntaxCar(), ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		car, err := p.expandEscapedSyntaxTemplate(t.SyntaxCar(), ctx, ellipsisVars, opts)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.expandEscapedSyntaxTemplate(t.SyntaxCdr(), ctx, ellipsisVars, introScope, freeIds, useSiteCtx, origin, patternVarSyntax)
+		cdr, err := p.expandEscapedSyntaxTemplate(t.SyntaxCdr(), ctx, ellipsisVars, opts)
 		if err != nil {
 			return nil, err
 		}
 		srcCtx := t.SourceContext()
-		if useSiteCtx != nil {
-			srcCtx = useSiteCtx
+		if opts.UseSiteCtx != nil {
+			srcCtx = opts.UseSiteCtx
 		}
 		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
 

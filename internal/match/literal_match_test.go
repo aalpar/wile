@@ -118,7 +118,7 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 
 	c.Run("values.Symbol wraps to SyntaxSymbol", func(c *qt.C) {
 		sym := values.NewSymbol("hello")
-		result, err := sm.capturedValueToSyntax(sym, nil, nil, nil)
+		result, err := sm.capturedValueToSyntax(sym, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		ss, ok := result.(*syntax.SyntaxSymbol)
 		c.Assert(ok, qt.IsTrue)
@@ -127,7 +127,7 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 
 	c.Run("values.Pair wraps recursively", func(c *qt.C) {
 		pr := values.NewCons(values.NewInteger(1), values.EmptyList)
-		result, err := sm.capturedValueToSyntax(pr, nil, nil, nil)
+		result, err := sm.capturedValueToSyntax(pr, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		sp, ok := result.(*syntax.SyntaxPair)
 		c.Assert(ok, qt.IsTrue)
@@ -135,14 +135,14 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 	})
 
 	c.Run("values.EmptyList wraps to SyntaxEmptyList", func(c *qt.C) {
-		result, err := sm.capturedValueToSyntax(values.EmptyList, nil, nil, nil)
+		result, err := sm.capturedValueToSyntax(values.EmptyList, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue)
 	})
 
 	c.Run("other value wraps to SyntaxObject", func(c *qt.C) {
 		str := values.NewString("test")
-		result, err := sm.capturedValueToSyntax(str, nil, nil, nil)
+		result, err := sm.capturedValueToSyntax(str, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		so, ok := result.(*syntax.SyntaxObject)
 		c.Assert(ok, qt.IsTrue)
@@ -153,7 +153,7 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 		origin := &syntax.OriginInfo{Identifier: "test-macro"}
 		useSite := &syntax.SourceContext{Text: "use"}
 		str := values.NewString("val")
-		result, err := sm.capturedValueToSyntax(str, nil, useSite, origin)
+		result, err := sm.capturedValueToSyntax(str, &ExpandOptions{UseSiteCtx: useSite, Origin: origin})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result.SourceContext().Origin, qt.Equals, origin)
@@ -162,7 +162,7 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 	c.Run("with origin but no useSiteCtx", func(c *qt.C) {
 		origin := &syntax.OriginInfo{Identifier: "test-macro"}
 		str := values.NewString("val")
-		result, err := sm.capturedValueToSyntax(str, nil, nil, origin)
+		result, err := sm.capturedValueToSyntax(str, &ExpandOptions{Origin: origin})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result.SourceContext().Origin, qt.Equals, origin)
@@ -200,7 +200,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("non-free identifier gets intro scope", func(c *qt.C) {
 		sym := syntax.NewSyntaxSymbol("foo", nil)
-		result := sm.applyHygieneToSymbol(sym, introScope, nil, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Sym.Key, qt.Equals, "foo")
 		scopes := ss.Scopes()
@@ -214,7 +214,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 			"bar": mockLocalScopes{scopes: []*syntax.Scope{defScope}},
 		}
 		sym := syntax.NewSyntaxSymbol("bar", &syntax.SourceContext{Text: "bar"})
-		result := sm.applyHygieneToSymbol(sym, introScope, freeIds, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Sym.Key, qt.Equals, "bar")
 		// Should have definition-site scopes, not intro scope
@@ -229,7 +229,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 			"baz": mockGlobalBinding{binding: globalIdx},
 		}
 		sym := syntax.NewSyntaxSymbol("baz", &syntax.SourceContext{Text: "baz"})
-		result := sm.applyHygieneToSymbol(sym, introScope, freeIds, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Sym.Key, qt.Equals, "baz")
 		c.Assert(ss.ResolvedBinding, qt.Equals, globalIdx)
@@ -240,7 +240,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 			"qux": mockHasLocalBinding{has: true},
 		}
 		sym := syntax.NewSyntaxSymbol("qux", nil)
-		result := sm.applyHygieneToSymbol(sym, introScope, freeIds, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Sym.Key, qt.Equals, "qux")
 		// Should NOT have intro scope (has local binding)
@@ -250,7 +250,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 	c.Run("with useSiteCtx overrides source context", func(c *qt.C) {
 		useSite := &syntax.SourceContext{Text: "use-site"}
 		sym := syntax.NewSyntaxSymbol("foo", &syntax.SourceContext{Text: "template"})
-		result := sm.applyHygieneToSymbol(sym, introScope, nil, useSite, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, UseSiteCtx: useSite})
 		c.Assert(result, qt.IsNotNil)
 	})
 
@@ -258,7 +258,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		origin := &syntax.OriginInfo{Identifier: "test"}
 		srcCtx := &syntax.SourceContext{Text: "src"}
 		sym := syntax.NewSyntaxSymbol("foo", srcCtx)
-		result := sm.applyHygieneToSymbol(sym, introScope, nil, nil, origin)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, Origin: origin})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.SourceContext().Origin, qt.Equals, origin)
 	})
@@ -274,7 +274,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 			Scopes: []*syntax.Scope{existingScope},
 		}
 		sym := syntax.NewSyntaxSymbol("baz", srcCtx)
-		result := sm.applyHygieneToSymbol(sym, introScope, freeIds, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.ResolvedBinding, qt.Equals, globalIdx)
 		// Scopes should be cleared when applying global binding
@@ -288,7 +288,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 			Scopes: []*syntax.Scope{existingScope},
 		}
 		sym := syntax.NewSyntaxSymbol("foo", srcCtx)
-		result := sm.applyHygieneToSymbol(sym, introScope, nil, nil, nil)
+		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope})
 		ss := result.(*syntax.SyntaxSymbol)
 		// Should have only intro scope, not the existing scope
 		scopes := ss.Scopes()
@@ -305,7 +305,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 	c.Run("nil template returns nil", func(c *qt.C) {
 		sm := &SyntaxMatcher{matcher: &Matcher{}}
 		ctx := &captureContext{bindings: map[string]syntax.SyntaxValue{}}
-		result, err := sm.expandEscapedSyntaxTemplate(nil, ctx, nil, nil, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(nil, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNil)
 	})
@@ -317,7 +317,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 			bindings: map[string]syntax.SyntaxValue{"x": captured},
 		}
 		template := syntax.NewSyntaxSymbol("x", nil)
-		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, nil, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
 	})
@@ -327,7 +327,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		ctx := &captureContext{bindings: map[string]syntax.SyntaxValue{}}
 		is := syntax.NewScope()
 		template := syntax.NewSyntaxSymbol("foo", nil)
-		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, is, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{IntroScope: is})
 		c.Assert(err, qt.IsNil)
 		ss := result.(*syntax.SyntaxSymbol)
 		scopes := ss.Scopes()
@@ -342,7 +342,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 			bindings: map[string]syntax.SyntaxValue{"a": captured},
 		}
 		template := testSyntaxList(syntax.NewSyntaxSymbol("a", nil))
-		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, nil, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		sp, ok := result.(*syntax.SyntaxPair)
 		c.Assert(ok, qt.IsTrue)
@@ -354,7 +354,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		ctx := &captureContext{bindings: map[string]syntax.SyntaxValue{}}
 		emptyList := syntax.NewSyntaxEmptyList(nil)
 		template := syntax.NewSyntaxCons(emptyList, syntax.NewSyntaxEmptyList(nil), nil)
-		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, nil, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
 	})
@@ -363,7 +363,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		sm := &SyntaxMatcher{matcher: &Matcher{}}
 		ctx := &captureContext{bindings: map[string]syntax.SyntaxValue{}}
 		literal := syntax.NewSyntaxObject(values.NewInteger(99), nil)
-		result, err := sm.expandEscapedSyntaxTemplate(literal, ctx, nil, nil, nil, nil, nil, nil)
+		result, err := sm.expandEscapedSyntaxTemplate(literal, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.Equals, literal)
 	})
@@ -382,7 +382,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 			"x": syntax.NewSyntaxSymbol("x", nil), // no scopes
 		}
 		is := syntax.NewScope()
-		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, is, nil, nil, nil, patternVarSyntax)
+		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{IntroScope: is, PatternVarSyntax: patternVarSyntax})
 		c.Assert(err, qt.IsNil)
 		// Should NOT substitute — should apply hygiene instead
 		ss := result.(*syntax.SyntaxSymbol)

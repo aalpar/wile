@@ -92,7 +92,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		// Expand template: x
 		template := syntax.NewSyntaxSymbol("x", srcCtx)
-		result, err := matcher.Expand(template)
+		result, err := matcher.Expand(template, ExpandOptions{})
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
@@ -147,7 +147,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		freeIds := make(map[string]any)
 
 		template := syntax.NewSyntaxSymbol("x", srcCtx)
-		result, err := matcher.ExpandWithIntroScope(template, introScope, freeIds)
+		result, err := matcher.Expand(template, ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
@@ -293,7 +293,7 @@ func TestExpandWithUseSite(t *testing.T) {
 	// Expand with use-site context
 	introScope := syntax.NewScope()
 	freeIds := map[string]any{"let": nil}
-	result, err := matcher.ExpandWithUseSite(template, introScope, freeIds, useSiteSc)
+	result, err := matcher.Expand(template, ExpandOptions{IntroScope: introScope, FreeIds: freeIds, UseSiteCtx: useSiteSc})
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 
@@ -358,7 +358,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 	template := syntax.NewSyntaxSymbol("x", templateSc)
 
 	// Expand
-	result, err := matcher.ExpandWithUseSite(template, nil, nil, useSiteSc)
+	result, err := matcher.Expand(template, ExpandOptions{UseSiteCtx: useSiteSc})
 	c.Assert(err, qt.IsNil)
 
 	// The result should preserve the original captured value's context
@@ -401,7 +401,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 	template := syntax.NewSyntaxSymbol("result", templateSc)
 
 	// Expand with nil use-site context
-	result, err := matcher.ExpandWithUseSite(template, nil, nil, nil)
+	result, err := matcher.Expand(template, ExpandOptions{})
 	c.Assert(err, qt.IsNil)
 
 	// Should fall back to template context
@@ -447,7 +447,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	}
 
 	// Expand with origin
-	result, err := matcher.ExpandWithOrigin(template, nil, nil, inputSc, origin)
+	result, err := matcher.Expand(template, ExpandOptions{UseSiteCtx: inputSc, Origin: origin})
 	c.Assert(err, qt.IsNil)
 
 	// Result should have origin attached
@@ -497,7 +497,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	}
 
 	// Expand with chained origin
-	result, err := matcher.ExpandWithOrigin(template, nil, nil, inputSc, outerOrigin)
+	result, err := matcher.Expand(template, ExpandOptions{UseSiteCtx: inputSc, Origin: outerOrigin})
 	c.Assert(err, qt.IsNil)
 
 	// Result should have full origin chain
@@ -552,7 +552,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	}
 
 	// Expand with origin
-	result, err := matcher.ExpandWithOrigin(template, nil, nil, inputSc, origin)
+	result, err := matcher.Expand(template, ExpandOptions{UseSiteCtx: inputSc, Origin: origin})
 	c.Assert(err, qt.IsNil)
 
 	// Pattern variable should preserve original context (NOT have origin added)
