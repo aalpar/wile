@@ -279,7 +279,7 @@ The expander checks for local variable bindings before macro lookup (`hasLocalVa
 
 ## Bootstrap Macros
 
-R7RS derived expressions are implemented as macros in `runtime/environment_tiny.go`:
+R7RS derived expressions are implemented as macros in `internal/bootstrap/environment_tiny.go`:
 
 | Macro | Expands To |
 |-------|------------|
@@ -312,7 +312,7 @@ These are loaded during environment initialization and use the same macro system
 | `machine/compile_syntax_rules.go` | `syntax-rules` compilation |
 | `machine/operation_syntax_rules_transform.go` | Runtime macro expansion |
 | `machine/expander_time_continuation.go` | Expansion-phase walker |
-| `runtime/environment_tiny.go` | Bootstrap macro definitions |
+| `internal/bootstrap/environment_tiny.go` | Bootstrap macro definitions |
 
 ## References
 

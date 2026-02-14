@@ -169,7 +169,7 @@ The `NewChildRuntime` method creates an environment that:
 The `machine.LibraryEnvFactory` function creates environments for R7RS libraries. It must share the caller's `TopLevelEnvironment`:
 
 ```go
-// In runtime/environment_tiny.go
+// In internal/bootstrap/environment_tiny.go
 func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
     // Get caller's TopLevelEnvironment
     callerTopLevel := callerEnv.TopLevelEnv()
@@ -187,7 +187,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 }
 
 // In main.go or engine setup
-machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
+machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
 ```
 
 ---
@@ -200,13 +200,13 @@ machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
 import (
     "context"
     "github.com/aalpar/wile/environment"
+    "github.com/aalpar/wile/internal/bootstrap"
     "github.com/aalpar/wile/machine"
-    "github.com/aalpar/wile/runtime"
 )
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     // Create complete environment with primitives and macros
-    env, err := runtime.NewTopLevelEnvironmentFrameTiny(ctx)
+    env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
     if err != nil {
         return nil, err
     }
@@ -216,7 +216,7 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     env.SetLibraryRegistry(registry)
 
     // Configure library environment factory (shares TopLevelEnvironment)
-    machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
+    machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
 
     return env, nil
 }
@@ -230,13 +230,13 @@ func TestSomething(t *testing.T) {
     env := environment.NewTopLevelEnvironmentFrame()
 
     // Or with full primitives
-    env, err := runtime.NewTopLevelEnvironmentFrameTiny(context.TODO())
+    env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
     if err != nil {
         t.Fatal(err)
     }
 
     // For tests involving libraries
-    machine.LibraryEnvFactory = runtime.NewLibraryEnvironmentFrame
+    machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
     defer func() { machine.LibraryEnvFactory = nil }()
 }
 ```
@@ -325,5 +325,5 @@ childEnv := environment.NewEnvironmentFrameWithParent(local, parentEnv)
 
 - R7RS §6.5: Symbols - Symbol identity requirements
 - Flatt 2016: "Binding as Sets of Scopes" - Hygiene model
-- `go/environment/` - Implementation
-- `go/runtime/environment_tiny.go` - Runtime initialization
+- `environment/` - Implementation
+- `internal/bootstrap/environment_tiny.go` - Runtime initialization

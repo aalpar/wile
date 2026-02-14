@@ -102,6 +102,9 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `quote` | Return datum without evaluation |
 | `define` | Define a variable or procedure |
 | `define-syntax` | Define a syntax transformer |
+| `syntax-rules` | Create pattern-based transformer (R7RS) |
+| `let-syntax` | Local syntax definitions |
+| `letrec-syntax` | Local recursive syntax definitions |
 | `set!` | Mutate a variable binding |
 | `begin` | Sequence expressions |
 | `include` | Include source file contents |
@@ -114,7 +117,17 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `begin-for-syntax` | Sequence expressions at macro expansion phase |
 | `eval-when` | Control evaluation timing |
 | `dynamic-wind` | Establish before/after thunks |
+| `define-library` | Define an R7RS library |
+| `library` | R6RS alias for `define-library` |
+| `import` | Import library exports into current environment |
+| `export` | Declare library exports |
 | `syntax-error` | Signal compile-time error |
+| `syntax-case` | Pattern matching with fenders and arbitrary body (R6RS) |
+| `syntax` | Construct syntax object from template |
+| `with-syntax` | Bind pattern variables and expand body |
+| `quasisyntax` | Template with unsyntax escapes |
+| `unsyntax` | Escape from quasisyntax |
+| `unsyntax-splicing` | Splice escape from quasisyntax |
 
 ### Auxiliary Syntax
 

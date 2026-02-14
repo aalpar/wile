@@ -56,6 +56,8 @@ When investigating R7RS conformance issues:
 
 | File | Purpose |
 |------|---------|
+| `docs/design/DESIGN.md` | Macro system design (three-layer architecture) |
+| `docs/design/EMBEDDING.md` | Embedding API design (Engine, Value boundary, interop) |
 | `docs/design/CONTINUATION_ESCAPE_DESIGN.md` | First-class continuation escape mechanism |
 | `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuations: prompts, abort, composable |
 | `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |

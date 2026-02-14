@@ -72,7 +72,6 @@ func NewCons(car, cdr Value) *Pair {
 | `ctx` | first parameter if type `context.Context` |
 | `ctctx` | parameter of type `CompileTimeCallContext` |
 | `mc` | parameter of type `MachineContext` |
-| `etctx` | parameter of type `ExpandTimeCallContext` |
 | `cpctx` | parameter of type `captureContext` |
 
 ```go

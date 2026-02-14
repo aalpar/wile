@@ -24,10 +24,8 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
 | P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
 | P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
-| P3 | Plugin architecture | Architecture | Complete | Phases 1-3, 5-6 done. Phase 4 (external extraction) → `plans/EXTERNAL_EXTENSIONS_PLAN.md` |
 | P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
-| P3 | TopLevelEnvironment | Architecture | Reference | Per-VM symbol interning |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
 | P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
 | P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
@@ -37,11 +35,10 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
 | P5 | Tokenizer consolidation | Refactoring | Planned | Consolidate ~700 lines of number parsing repetition. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
-| P5 | EmptyList/Void refactoring | Refactoring | Complete | EmptyList is `emptyListType{}`, SyntaxEmptyList is `syntaxEmptyListType{}` |
-| P5 | Subsystem simplification | Refactoring | Reference | 8 simplification opportunities across core packages |
-| P5 | Operation boilerplate reduction | Refactoring | Reference | ~36 operation files with identical boilerplate. See `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2 |
+| P5 | Subsystem simplification | Refactoring | Not started | 8 simplification opportunities across core packages |
+| P5 | Operation boilerplate reduction | Refactoring | Not started | ~36 operation files with identical boilerplate. See `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §2.2 |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
-| P5 | Systematic debug logging | Tooling | Reference | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
+| P5 | Systematic debug logging | Tooling | Not started | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 
 ---
 

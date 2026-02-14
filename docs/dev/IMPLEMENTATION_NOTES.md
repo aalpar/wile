@@ -6,7 +6,7 @@ This document describes implementation choices that differ from canonical R7RS r
 
 ## `letrec*` Implementation (§4.2.2)
 
-**File:** `go/registry/core/bootstrap.go:72-75`
+**File:** `registry/core/bootstrap.go`
 
 **R7RS Specification:**
 > The `<variable>`s are bound to fresh locations, each `<variable>` is assigned in left-to-right order to the result of evaluating the corresponding `<init>`, the `<body>` is evaluated in the resulting environment.

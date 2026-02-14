@@ -116,7 +116,7 @@ See [NUMERIC_TOWER.md](NUMERIC_TOWER.md) for full documentation.
 **Plan:** `plans/TESTING_PLAN.md`
 **Status:** Complete
 
-All 12 phases implemented across ~90 test files in `go/registry/core/`.
+All 12 phases implemented across ~90 test files in `registry/core/`.
 
 ### Test Pattern
 
@@ -207,7 +207,7 @@ All numeric primitives tested with:
 
 ### `letrec*` Implementation
 
-**Location:** `go/registry/core/bootstrap.go:72-75`
+**Location:** `registry/core/bootstrap.go`
 
 Wile's `letrec*` simply delegates to `letrec`:
 
@@ -228,19 +228,16 @@ See [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for details.
 
 ```bash
 # All tests
-cd go && make test
+make test
 
 # Numeric tower tests
-cd go && go test -v ./values/ -run "TestTower|TestNumericTower"
+go test -v ./values/ -run "TestTower|TestNumericTower"
 
 # Coverage check
-cd go && go test -cover ./registry/core/...
+go test -cover ./registry/core/...
 
 # Unicode tests
-cd go && go test -v -run "Unicode" ./registry/core/...
-
-# R7RS conformance tests
-./dist/scheme -f r7rs-tests.scm
+go test -v -run "Unicode" ./registry/core/...
 ```
 
 ---
