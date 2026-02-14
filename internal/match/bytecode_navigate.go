@@ -14,6 +14,27 @@
 
 package match
 
+// ByteCodeVisitCar navigates into the car of the current pair.
+type ByteCodeVisitCar struct{}
+
+func (ByteCodeVisitCar) String() string {
+	return "VisitCar"
+}
+
+// ByteCodeVisitCdr navigates to the cdr of the current pair.
+type ByteCodeVisitCdr struct{}
+
+func (ByteCodeVisitCdr) String() string {
+	return "VisitCdr"
+}
+
+// ByteCodeDone signals completion of the current subtree.
+type ByteCodeDone struct{}
+
+func (ByteCodeDone) String() string {
+	return "Done"
+}
+
 // ByteCodeRequireCarEmpty verifies that the car at the current position is an empty list.
 //
 // Problem: Pattern () should only match input (). Without this check,

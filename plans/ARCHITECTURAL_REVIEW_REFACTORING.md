@@ -86,13 +86,13 @@ and CompileCondExpand — all library-system concerns.
 
 All 19 validators repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). The list collection step uses a shared `collectList()` helper, but the error-reporting boilerplate (improper-list check + arity guard) is still duplicated. A `validateFormPrologue()` helper would deduplicate.
 
-### 4.3 Bytecode Instruction Files in match/
+### ~~4.3 Bytecode Instruction Files in match/~~ ✅ COMPLETE
 
-**Scope:** 13 files of ~27 lines each
-**Files:** `internal/match/bytecode_*.go`
-**Effort:** Low
-
-Each contains a single struct + `String()` method. Could consolidate by category (capture, compare, visit, control).
+Consolidated 13 single-type bytecode files into 4 files by category:
+- `bytecode_navigate.go` (VisitCar, VisitCdr, Done, RequireCarEmpty)
+- `bytecode_compare.go` (CompareCar, CompareCdr)
+- `bytecode_capture.go` (CaptureCar, CaptureCdr)
+- `bytecode_control.go` (SkipIfEmpty, SkipIfTailCount, Jump, PushContext, PopContext)
 
 ### 4.4 Optional Fill Argument Extraction
 
