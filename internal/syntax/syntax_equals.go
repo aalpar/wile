@@ -37,7 +37,7 @@ func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note fu
 		// A panic is raised when the provided args are not comparable.
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("%s", r) //nolint:gocritic // quicktest checker, not Scheme runtime
+			err = fmt.Errorf("%v", r) //nolint:gocritic // quicktest checker, not Scheme runtime
 		}
 	}()
 
