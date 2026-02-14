@@ -3,6 +3,8 @@
 **Source:** `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` §4.5
 **Scope:** Low — 2 functions to fix
 **Risk:** Low — behavioral equivalence, no logic changes
+**Note:** Initial implementation used `NewString("")` (immutable) for `PrimStringAppend`'s
+zero-args case; corrected to `NewMutableString("")` to match R7RS §6.7 allocation semantics.
 
 ---
 
