@@ -158,13 +158,7 @@ type Operation interface {
 
 ---
 
-### ~~5. SyntaxMatcher: Parameter Accretion in Expand Methods~~ — RESOLVED
-
-**Resolution**: PR #235 (`refactor/expand-options`) consolidated 6 `Expand*` methods into a single `Expand(template, ExpandOptions)` method with an `ExpandOptions` struct. The recursive core now passes `*ExpandOptions` instead of 5 separate parameters. API surface reduced from 6 public methods to 1.
-
----
-
-### 6. captureContext: Recursive Tree Without Typed Keys
+### 5. captureContext: Recursive Tree Without Typed Keys
 
 **Principle**: State Tightness
 **Where**: `internal/match/syntax_compiler.go:72-75`
@@ -185,7 +179,7 @@ type captureContext struct {
 
 ---
 
-### 7. ThreadState: Correct Sum Type, Missing Transition Guard
+### 6. ThreadState: Correct Sum Type, Missing Transition Guard
 
 **Principle**: State Tightness
 **Where**: `values/thread.go:76-85`
@@ -205,7 +199,7 @@ Type precision: 4/2^64 ≈ 0% (Go typed-int enum with unbounded underlying type)
 
 ---
 
-### 8. IsVoid: 46 Implementations, All Return False (Except One)
+### 7. IsVoid: 46 Implementations, All Return False (Except One)
 
 **Principle**: Composability
 **Where**: All 46 `IsVoid()` methods across `values/`
@@ -222,10 +216,6 @@ Type precision: 4/2^64 ≈ 0% (Go typed-int enum with unbounded underlying type)
 ---
 
 ## Opportunities
-
-### ~~Opportunity: ExpandOptions Struct~~ — RESOLVED
-
-**Resolution**: PR #235 (`refactor/expand-options`) implemented this exactly as proposed. Single `Expand(template, ExpandOptions)` method replaced 6 delegation methods.
 
 ### Opportunity: EscapeState Extraction
 
@@ -263,16 +253,14 @@ type escapeTracking struct {
 - Instability range: [0.00, 1.00]
 - Critical path: `values/ (0.00) → environment/ (0.13) → machine/ (0.32) → registry/ (0.20) → registry/core/ (0.78) → extensions (0.93)`
 
-### Top 3 Highest-Impact Changes (Ranked)
+### Top 2 Highest-Impact Changes (Ranked)
 
-1. ~~**ExpandOptions struct** (Finding #5)~~ — **RESOLVED** (PR #235). 4 delegation methods removed, recursive core simplified.
+1. **EscapeState grouping** (Finding #1) — Raises type precision from 37.5% to ~100% for escape tracking. Makes the call/cc escape lifecycle explicit. Impact: clarifies the most complex control flow in the VM.
 
-2. **EscapeState grouping** (Finding #1) — Raises type precision from 37.5% to ~100% for escape tracking. Makes the call/cc escape lifecycle explicit. Impact: clarifies the most complex control flow in the VM.
-
-3. **ellipsisID type alias** (Finding #6) — `type ellipsisID int` prevents key-type confusion in `captureContext.children` and `SyntaxCompiler.ellipsisVars`. Impact: one-line change, improved documentation-in-type.
+2. **ellipsisID type alias** (Finding #5) — `type ellipsisID int` prevents key-type confusion in `captureContext.children` and `SyntaxCompiler.ellipsisVars`. Impact: one-line change, improved documentation-in-type.
 
 ### Overall Assessment
 
-This is a structurally sound codebase. The dependency graph is a clean DAG with no cycles and no SDP violations. `values/` is a textbook stable foundation (I=0.00, 25 dependents). The recent OperationBase refactor demonstrates good instincts — factoring repetitive patterns into generic helpers. The main area for tightening is implicit state machines in the VM (parameter accretion in match was resolved via ExpandOptions, PR #235). These are refinement opportunities, not structural problems.
+This is a structurally sound codebase. The dependency graph is a clean DAG with no cycles and no SDP violations. `values/` is a textbook stable foundation (I=0.00, 25 dependents). The recent OperationBase refactor demonstrates good instincts — factoring repetitive patterns into generic helpers. The main area for tightening is implicit state machines in the VM. These are refinement opportunities, not structural problems.
 
 Strong design decisions: DIP via function injection for `Thread`, clean layered architecture respecting stability ordering, consistent error convention (sentinel + wrap). The 27,000+ lines across the three core packages are well-organized for a project of this complexity.
