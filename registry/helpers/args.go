@@ -133,3 +133,13 @@ func ParseSubrange(rest values.Value, length int, name string) (int, int, error)
 	}
 	return int(start), int(end), nil
 }
+
+// ValidateByteValue checks that an integer is in the byte range [0, 255].
+// Returns a wrapped ErrInvalidArgument error if the value is out of range.
+func ValidateByteValue(v *values.Integer, name string) error {
+	if v.Value < 0 || v.Value > 255 {
+		return values.WrapForeignErrorf(values.ErrInvalidArgument,
+			"%s: value must be a byte (0-255)", name)
+	}
+	return nil
+}
