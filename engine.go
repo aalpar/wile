@@ -29,7 +29,7 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// ErrEngineClosed is returned when operations are attempted on a closed engine.
+// ErrEngineClosed is returned when Close is called on an already-closed engine.
 var ErrEngineClosed = values.NewStaticError("engine is closed")
 
 // Engine is the main entry point for embedding Wile.

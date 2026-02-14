@@ -168,8 +168,13 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.evals = cont.evals.Copy()
 	p.cont = cont.parent
 	p.pc = cont.pc
-	if p.callDepth > 0 {
-		p.callDepth--
+	// Recompute callDepth from the restored continuation chain.
+	// A simple callDepth-- is wrong when Restore jumps to an arbitrary
+	// continuation (e.g., call/cc): the target chain may be at a completely
+	// different depth than the current one.
+	p.callDepth = 0
+	for q := p.cont; q != nil; q = q.parent {
+		p.callDepth++
 	}
 }
 

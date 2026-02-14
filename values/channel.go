@@ -212,9 +212,11 @@ type SelectCase struct {
 	IsDefault bool
 }
 
-// ChannelSelect performs a select operation on multiple channels
-// Returns the index of the selected case and the received value (for receive cases)
-func ChannelSelect(cases []SelectCase) (int, Value, bool) {
+// ChannelSelect performs a select operation on multiple channels.
+// Returns the index of the selected case and the received value (for receive cases).
+// If a send case targets a channel that is closed concurrently, the select returns
+// that case's index with ok=false instead of panicking.
+func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	if len(cases) == 0 {
 		return -1, nil, false
 	}
@@ -270,8 +272,28 @@ func ChannelSelect(cases []SelectCase) (int, Value, bool) {
 		originalIndices = append(originalIndices, i)
 	}
 
+	// reflect.Select panics with "send on closed channel" if a send case
+	// targets a channel closed between our TrySend check and here (TOCTOU).
+	// Recover and report the closed-channel case instead of crashing.
+	defer func() {
+		if r := recover(); r != nil {
+			// A send on a concurrently-closed channel panicked.
+			// Find the first closed send case and report it.
+			for i, c := range cases {
+				if c.IsSend && c.Channel.IsClosed() {
+					idx = i
+					val = nil
+					ok = false
+					return
+				}
+			}
+			// Not a closed-channel panic — re-panic.
+			panic(r)
+		}
+	}()
+
 	chosen, recv, recvOK := reflect.Select(selectCases)
-	idx := originalIndices[chosen]
+	idx = originalIndices[chosen]
 	if cases[idx].IsSend {
 		return idx, nil, true
 	}

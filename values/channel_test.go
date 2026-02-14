@@ -290,3 +290,22 @@ func TestChannelSelectClosedChannel(t *testing.T) {
 	c.Assert(idx, qt.Equals, 0)
 	c.Assert(ok, qt.IsFalse)
 }
+
+func TestChannelSelectSendToClosedChannel(t *testing.T) {
+	c := qt.New(t)
+
+	ch := NewChannel(1)
+	// Fill the buffer so TrySend fails (non-blocking pass won't catch it)
+	_ = ch.Send(NewInteger(1))
+	// Close the channel — reflect.Select would panic without the recover guard
+	_ = ch.Close()
+
+	cases := []SelectCase{
+		{Channel: ch, IsSend: true, Value: NewInteger(2)},
+	}
+
+	// Must not panic
+	idx, _, ok := ChannelSelect(cases)
+	c.Assert(idx, qt.Equals, 0)
+	c.Assert(ok, qt.IsFalse)
+}
