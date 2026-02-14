@@ -450,47 +450,6 @@ func countRemainingSyntaxElements(pr syntax.SyntaxTuple) int {
 	return count
 }
 
-// valueToSyntaxValue converts a values.Value to syntax.SyntaxValue.
-// Used by the pattern compiler to wrap raw values as syntax for bytecode instructions.
-func valueToSyntaxValue(v values.Value) syntax.SyntaxValue {
-	if v == nil {
-		return nil
-	}
-
-	// Already a syntax value
-	sv, ok := v.(syntax.SyntaxValue)
-	if ok {
-		return sv
-	}
-
-	// Check for empty list before Tuple (EmptyList implements Tuple but needs special handling)
-	if values.IsEmptyList(v) {
-		return syntax.SyntaxEmptyList
-	}
-
-	switch t := v.(type) {
-	case values.Tuple:
-		return valueTupleToSyntaxPair(t)
-	case *values.Symbol:
-		return syntax.NewSyntaxSymbolForSymbol(t, nil)
-	default:
-		return syntax.NewSyntaxObject(v, nil)
-	}
-}
-
-// valueTupleToSyntaxPair converts a values.Tuple to syntax.SyntaxPair recursively.
-// Used by valueToSyntaxValue for nested tuple structures.
-// Precondition: tuple is not nil, not void, and not empty list (checked by caller).
-func valueTupleToSyntaxPair(tuple values.Tuple) *syntax.SyntaxPair {
-	if tuple == nil || values.IsVoid(tuple) {
-		return nil
-	}
-
-	car := valueToSyntaxValue(tuple.Car())
-	cdr := valueToSyntaxValue(tuple.Cdr())
-	return syntax.NewSyntaxCons(car, cdr, nil)
-}
-
 // syntaxValuesEqualForMatch compares two syntax values for pattern matching purposes.
 // For symbols, compares by key (value equality, not pointer equality).
 // For other values, uses the underlying value comparison.

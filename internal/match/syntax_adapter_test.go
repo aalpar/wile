@@ -63,9 +63,9 @@ func TestSyntaxMatcher(t *testing.T) {
 		}
 
 		// Compile pattern: (define x)
-		pattern := testList(
-			values.NewSymbol("define"),
-			values.NewSymbol("x"),
+		pattern := testSyntaxList(
+			testSyntaxSym("define"),
+			testSyntaxSym("x"),
 		)
 
 		compiler := NewSyntaxCompiler()
@@ -117,9 +117,9 @@ func TestSyntaxMatcher(t *testing.T) {
 			"x": {},
 		}
 
-		pattern := testList(
-			values.NewSymbol("define"),
-			values.NewSymbol("x"),
+		pattern := testSyntaxList(
+			testSyntaxSym("define"),
+			testSyntaxSym("x"),
 		)
 
 		compiler := NewSyntaxCompiler()
@@ -216,59 +216,6 @@ func TestCompileSyntaxPattern(t *testing.T) {
 	})
 }
 
-func TestSyntaxToValue(t *testing.T) {
-	t.Run("SyntaxSymbol to Sym", func(t *testing.T) {
-		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-		stx := syntax.NewSyntaxSymbol("foo", srcCtx)
-
-		val := syntaxToValue(stx)
-		sym, ok := val.(*values.Symbol)
-		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, sym.Key, qt.Equals, "foo")
-	})
-
-	t.Run("SyntaxPair to Pair", func(t *testing.T) {
-		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-		stx := syntax.NewSyntaxCons(
-			syntax.NewSyntaxSymbol("a", srcCtx),
-			syntax.NewSyntaxCons(
-				syntax.NewSyntaxSymbol("b", srcCtx),
-				syntax.NewSyntaxEmptyList(srcCtx),
-				srcCtx,
-			),
-			srcCtx,
-		)
-
-		val := syntaxToValue(stx)
-		pair, ok := val.(*values.Pair)
-		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, pair, qt.IsNotNil)
-	})
-
-	t.Run("SyntaxObject to underlying value", func(t *testing.T) {
-		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-		stx := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
-
-		val := syntaxToValue(stx)
-		num, ok := val.(*values.Integer)
-		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, num.Value, qt.Equals, int64(42))
-	})
-
-	t.Run("nil syntax", func(t *testing.T) {
-		val := syntaxToValue(nil)
-		qt.Assert(t, val, qt.IsNil)
-	})
-
-	t.Run("Empty list", func(t *testing.T) {
-		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-		stx := syntax.NewSyntaxEmptyList(srcCtx)
-
-		val := syntaxToValue(stx)
-		qt.Assert(t, values.IsEmptyList(val), qt.IsTrue)
-	})
-}
-
 // TestExpandWithUseSite verifies that ExpandWithUseSite uses the use-site
 // source context for newly created syntax objects instead of the template's context.
 func TestExpandWithUseSite(t *testing.T) {
@@ -279,9 +226,9 @@ func TestExpandWithUseSite(t *testing.T) {
 		"x": {},
 	}
 
-	pattern := testList(
-		values.NewSymbol("macro"),
-		values.NewSymbol("x"),
+	pattern := testSyntaxList(
+		testSyntaxSym("macro"),
+		testSyntaxSym("x"),
 	)
 
 	compiler := NewSyntaxCompiler()
@@ -310,7 +257,7 @@ func TestExpandWithUseSite(t *testing.T) {
 		useSiteSc,
 	)
 
-	// Match the input
+	// Match
 	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
@@ -366,9 +313,9 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 		"x": {},
 	}
 
-	pattern := testList(
-		values.NewSymbol("test"),
-		values.NewSymbol("x"),
+	pattern := testSyntaxList(
+		testSyntaxSym("test"),
+		testSyntaxSym("x"),
 	)
 
 	compiler := NewSyntaxCompiler()
@@ -429,7 +376,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 
 	variables := map[string]struct{}{}
 
-	pattern := testList(values.NewSymbol("test"))
+	pattern := testSyntaxList(testSyntaxSym("test"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -469,7 +416,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test)
-	pattern := testList(values.NewSymbol("test"))
+	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
 	err := compiler.Compile(context.TODO(), pattern)
@@ -516,7 +463,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test)
-	pattern := testList(values.NewSymbol("test"))
+	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
 	err := compiler.Compile(context.TODO(), pattern)
@@ -567,9 +514,9 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up pattern: (test x) where x is a pattern variable
-	pattern := testList(
-		values.NewSymbol("test"),
-		values.NewSymbol("x"),
+	pattern := testSyntaxList(
+		testSyntaxSym("test"),
+		testSyntaxSym("x"),
 	)
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{"x": {}}

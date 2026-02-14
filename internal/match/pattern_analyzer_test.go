@@ -17,25 +17,24 @@ package match
 import (
 	"testing"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/internal/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestAnalyzePatternWithLiterals(t *testing.T) {
-	list := func(vs ...values.Value) *values.Pair { return values.List(vs...).(*values.Pair) }
 	tcs := []struct {
 		name      string
-		pattern   *values.Pair
+		pattern   *syntax.SyntaxPair
 		literals  map[string]struct{}
 		isKeyword bool
 	}{
 		{
 			name: "Simple pattern with literals",
-			pattern: list(
-				values.NewSymbol("define"),
-				values.NewSymbol("x"),
-				values.NewSymbol("y"),
+			pattern: testSyntaxList(
+				testSyntaxSym("define"),
+				testSyntaxSym("x"),
+				testSyntaxSym("y"),
 			),
 			literals: map[string]struct{}{
 				"define": {},
@@ -44,21 +43,21 @@ func TestAnalyzePatternWithLiterals(t *testing.T) {
 		},
 		{
 			name: "Pattern with no literals",
-			pattern: list(
-				values.NewSymbol("foo"),
-				values.NewSymbol("a"),
-				values.NewSymbol("b"),
+			pattern: testSyntaxList(
+				testSyntaxSym("foo"),
+				testSyntaxSym("a"),
+				testSyntaxSym("b"),
 			),
 			literals:  map[string]struct{}{},
 			isKeyword: true,
 		},
 		{
 			name: "Pattern with multiple literals",
-			pattern: list(
-				values.NewSymbol("let"),
-				values.NewSymbol("name"),
-				values.NewSymbol("else"),
-				values.NewSymbol("x"),
+			pattern: testSyntaxList(
+				testSyntaxSym("let"),
+				testSyntaxSym("name"),
+				testSyntaxSym("else"),
+				testSyntaxSym("x"),
 			),
 			literals: map[string]struct{}{
 				"let":  {},
@@ -81,16 +80,16 @@ func TestAnalyzePatternWithLiterals(t *testing.T) {
 func TestCollectPatternVariables(t *testing.T) {
 	tcs := []struct {
 		name         string
-		pattern      values.Value
+		pattern      syntax.SyntaxValue
 		literals     map[string]struct{}
 		isFirst      bool
 		expectedVars map[string]struct{}
 	}{
 		{
 			name: "Simple symbol pattern",
-			pattern: values.List(
-				values.NewSymbol("define"),
-				values.NewSymbol("x"),
+			pattern: testSyntaxList(
+				testSyntaxSym("define"),
+				testSyntaxSym("x"),
 			),
 			literals: map[string]struct{}{
 				"define": {},
@@ -102,10 +101,10 @@ func TestCollectPatternVariables(t *testing.T) {
 		},
 		{
 			name: "Pattern with ellipsis",
-			pattern: values.List(
-				values.NewSymbol("let"),
-				values.NewSymbol("x"),
-				values.NewSymbol("..."),
+			pattern: testSyntaxList(
+				testSyntaxSym("let"),
+				testSyntaxSym("x"),
+				testSyntaxSym("..."),
 			),
 			literals: map[string]struct{}{
 				"let": {},
@@ -117,10 +116,10 @@ func TestCollectPatternVariables(t *testing.T) {
 		},
 		{
 			name: "Nested pattern",
-			pattern: values.List(
-				values.NewSymbol("lambda"),
-				values.List(values.NewSymbol("x"), values.NewSymbol("y")),
-				values.NewSymbol("body"),
+			pattern: testSyntaxList(
+				testSyntaxSym("lambda"),
+				testSyntaxList(testSyntaxSym("x"), testSyntaxSym("y")),
+				testSyntaxSym("body"),
 			),
 			literals: map[string]struct{}{
 				"lambda": {},
@@ -144,11 +143,11 @@ func TestCollectPatternVariables(t *testing.T) {
 }
 
 func TestContainsVariables(t *testing.T) {
-	pattern := values.List(
-		values.NewSymbol("define"),
-		values.NewSymbol("x"),
-		values.NewInteger(42),
-	).(*values.Pair)
+	pattern := testSyntaxList(
+		testSyntaxSym("define"),
+		testSyntaxSym("x"),
+		testSyntaxInt(42),
+	)
 	variables := map[string]struct{}{
 		"x": {},
 	}
@@ -163,11 +162,11 @@ func TestContainsVariables(t *testing.T) {
 }
 
 func TestGetVariables(t *testing.T) {
-	pattern := values.List(
-		values.NewSymbol("define"),
-		values.NewSymbol("x"),
-		values.NewSymbol("y"),
-	).(*values.Pair)
+	pattern := testSyntaxList(
+		testSyntaxSym("define"),
+		testSyntaxSym("x"),
+		testSyntaxSym("y"),
+	)
 	variables := map[string]struct{}{
 		"x": {},
 		"y": {},
