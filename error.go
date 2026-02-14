@@ -94,6 +94,13 @@ func (p *RuntimeError) Unwrap() error {
 	return p.Cause
 }
 
+// IsSchemeException reports whether this error originated from a Scheme
+// raise or raise-continuable expression. When true, Condition holds
+// the raised value.
+func (p *RuntimeError) IsSchemeException() bool {
+	return p != nil && p.Condition != nil
+}
+
 // isEOF checks if an error represents end of input.
 func isEOF(err error) bool {
 	return errors.Is(err, io.EOF)

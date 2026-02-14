@@ -30,6 +30,14 @@ import (
 )
 
 // Engine is the main entry point for embedding Wile.
+//
+// An Engine is NOT safe for concurrent use from multiple goroutines.
+// The underlying environment's global bindings use a RWMutex (concurrent
+// reads are safe), but Eval, Compile, and Run mutate the environment.
+// Each goroutine should use its own Engine, or synchronize externally.
+//
+// SRFI-18 threads within a single Engine are safe — the VM handles
+// thread coordination internally.
 type Engine struct {
 	topLevel     *environment.TopLevelEnvironment
 	env          *environment.EnvironmentFrame
@@ -438,15 +446,19 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 // This is the recommended API for embedders - it guarantees balanced push/pop
 // via defer even if fn panics or returns an error.
 //
-// absPath must be an absolute path (panics if relative).
+// Returns an error if absPath is not an absolute path.
 //
 // Example:
 //
 //	err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-//	    return engine.EvalString("(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	    _, err := engine.Eval(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	    return err
 //	})
 func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
-	p.PushLoadPath(absPath)
+	err := p.PushLoadPath(absPath)
+	if err != nil {
+		return err
+	}
 	defer p.PopLoadPath()
 	return fn()
 }
@@ -472,15 +484,16 @@ func (p *Engine) CurrentLoadDirectory() string {
 }
 
 // PushLoadPath pushes an absolute path onto the load path stack.
-// Panics if absPath is not absolute.
+// Returns an error if absPath is not absolute.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.
-func (p *Engine) PushLoadPath(absPath string) {
+func (p *Engine) PushLoadPath(absPath string) error {
 	stack := p.topLevel.LoadPathStack()
-	if stack != nil {
-		stack.Push(absPath)
+	if stack == nil {
+		return nil
 	}
+	return stack.Push(absPath)
 }
 
 // PopLoadPath removes the top path from the load path stack.

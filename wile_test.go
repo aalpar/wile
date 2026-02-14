@@ -562,6 +562,25 @@ func TestRuntimeError_SchemeRaise(t *testing.T) {
 	c.Assert(rtErr.Condition.SchemeString(), qt.Equals, `"boom"`)
 }
 
+func TestRuntimeError_IsSchemeException(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("true when condition set", func(t *testing.T) {
+		e := &RuntimeError{Message: "raised", Condition: NewInteger(42)}
+		c.Assert(e.IsSchemeException(), qt.IsTrue)
+	})
+
+	t.Run("false when no condition", func(t *testing.T) {
+		e := &RuntimeError{Message: "go error"}
+		c.Assert(e.IsSchemeException(), qt.IsFalse)
+	})
+
+	t.Run("false on nil receiver", func(t *testing.T) {
+		var e *RuntimeError
+		c.Assert(e.IsSchemeException(), qt.IsFalse)
+	})
+}
+
 func TestRuntimeError_Format(t *testing.T) {
 	c := qt.New(t)
 

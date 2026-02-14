@@ -139,6 +139,7 @@ var (
 
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
+	ErrInvalidLoadPath        = NewStaticError("invalid load path")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.

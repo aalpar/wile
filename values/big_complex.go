@@ -66,7 +66,7 @@ func validateBigComplexPart(n Number) {
 	case *BigInteger, *BigFloat, *Rational:
 		return
 	default:
-		panic("BigComplex parts must be BigInteger, Rational, or BigFloat")
+		panic(ErrNotANumber)
 	}
 }
 
@@ -102,7 +102,7 @@ func toBigFloat(n Number) *BigFloat {
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
 	}
-	panic("toBigFloat: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
@@ -127,7 +127,7 @@ func promoteToBigComplexPart(n Number) Number {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic("promoteToBigComplexPart: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // addParts adds two BigComplex-compatible parts.
@@ -159,7 +159,7 @@ func addParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Add(toBigFloat(b))
 	}
-	panic("addParts: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // subtractParts subtracts two BigComplex-compatible parts.
@@ -191,7 +191,7 @@ func subtractParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Subtract(toBigFloat(b))
 	}
-	panic("subtractParts: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // multiplyParts multiplies two BigComplex-compatible parts.
@@ -218,7 +218,7 @@ func multiplyParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Multiply(toBigFloat(b))
 	}
-	panic("multiplyParts: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // divideParts divides two BigComplex-compatible parts, preserving exactness when possible.
@@ -247,7 +247,7 @@ func divideParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Divide(toBigFloat(b))
 	}
-	panic("divideParts: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // Add returns the sum of this BigComplex and another number.
@@ -451,7 +451,7 @@ func negatePart(n Number) Number {
 	case *Rational:
 		return v.Negate()
 	}
-	panic("negatePart: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // IsZero returns true if both real and imaginary parts are zero.
@@ -579,7 +579,7 @@ func toExactPart(n Number) Number {
 		r := new(big.Rat).SetFloat64(f)
 		if r == nil {
 			// Non-finite value (should not happen for BigFloat)
-			panic("toExactPart: BigFloat contains non-finite value")
+			panic(ErrExactnessConversion)
 		}
 		if r.IsInt() {
 			num := r.Num()
@@ -587,7 +587,7 @@ func toExactPart(n Number) Number {
 		}
 		return NewRationalFromRat(r)
 	}
-	panic("toExactPart: unexpected type")
+	panic(ErrNotANumber)
 }
 
 // ToInexact converts this BigComplex to an inexact representation.

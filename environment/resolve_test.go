@@ -59,7 +59,7 @@ func TestResolveFile_StackRelative(t *testing.T) {
 	c.Assert(os.WriteFile(helperFile, []byte(""), 0644), qt.IsNil)
 
 	stack := NewLoadPathStack()
-	stack.Push(mainFile)
+	c.Assert(stack.Push(mainFile), qt.IsNil)
 
 	// Resolve "sub/helper.scm" relative to main.scm's directory
 	result, err := ResolveFile(stack, "sub/helper.scm", nil)
@@ -121,7 +121,7 @@ func TestResolveFile_StackTakesPrecedenceOverFallback(t *testing.T) {
 	c.Assert(os.WriteFile(fallbackCommon, []byte("fallback"), 0644), qt.IsNil)
 
 	stack := NewLoadPathStack()
-	stack.Push(stackFile)
+	c.Assert(stack.Push(stackFile), qt.IsNil)
 
 	// Should resolve to stack directory, not fallback
 	result, err := ResolveFile(stack, "common.scm", []string{fallbackDir})
@@ -144,7 +144,7 @@ func TestResolveFile_NotFound_ErrorMessage(t *testing.T) {
 	c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
 
 	stack := NewLoadPathStack()
-	stack.Push(mainFile)
+	c.Assert(stack.Push(mainFile), qt.IsNil)
 
 	fallbacks := []string{tmpDir2}
 
@@ -211,8 +211,8 @@ func TestResolveFile_ReturnsAbsolutePath(t *testing.T) {
 			name: "from stack relative",
 			setupFunc: func() (string, []string) {
 				mainFile := filepath.Join(tmpDir, "main.scm")
-				os.WriteFile(mainFile, []byte(""), 0644)
-				stack.Push(mainFile)
+				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
+				c.Assert(stack.Push(mainFile), qt.IsNil)
 				return "test.scm", nil
 			},
 		},
@@ -289,10 +289,10 @@ func TestResolveFile_ErrorMessageHint(t *testing.T) {
 			name: "stack with current dir shows no hint",
 			setupFunc: func() (*LoadPathStack, []string) {
 				mainFile := filepath.Join(tmpDir1, "main.scm")
-				os.WriteFile(mainFile, []byte(""), 0644)
+				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
 
 				s := NewLoadPathStack()
-				s.Push(mainFile)
+				c.Assert(s.Push(mainFile), qt.IsNil)
 				return s, []string{tmpDir2}
 			},
 			wantHint: false,

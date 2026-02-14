@@ -106,7 +106,10 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 	defer f.Close() //nolint:errcheck
 
 	// Push to stack after successful open, pop on exit
-	stack.Push(absPath)
+	err = stack.Push(absPath)
+	if err != nil {
+		return err
+	}
 	defer stack.Pop()
 
 	// Create parser with file tracking for source locations
