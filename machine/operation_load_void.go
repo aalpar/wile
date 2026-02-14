@@ -22,24 +22,20 @@ import (
 
 var _ Operation = (*OperationLoadVoid)(nil)
 
-type OperationLoadVoid struct{}
+type OperationLoadVoid struct {
+	OperationBase
+}
 
 func NewOperationLoadVoid() *OperationLoadVoid {
-	return &OperationLoadVoid{}
+	return &OperationLoadVoid{
+		OperationBase: NewOperationBase("machine-operation-load-void"),
+	}
 }
 
 func (p *OperationLoadVoid) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	mc.value = MultipleValues{values.Void}
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationLoadVoid) SchemeString() string {
-	return "#<machine-operation-load-void>"
-}
-
-func (p *OperationLoadVoid) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationLoadVoid) EqualTo(o values.Value) bool {

@@ -25,10 +25,14 @@ import (
 //
 // This is used in syntax-case fender evaluation to restore the environment
 // when the fender returns false, before branching to the next clause.
-type OperationPopEnv struct{}
+type OperationPopEnv struct {
+	OperationBase
+}
 
 func NewOperationPopEnv() *OperationPopEnv {
-	return &OperationPopEnv{}
+	return &OperationPopEnv{
+		OperationBase: NewOperationBaseWithGoName("operation:pop-env", "PopEnv"),
+	}
 }
 
 func (p *OperationPopEnv) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
@@ -41,19 +45,7 @@ func (p *OperationPopEnv) Apply(ctx context.Context, mctx *MachineContext) (*Mac
 	return mctx, nil
 }
 
-func (p *OperationPopEnv) String() string {
-	return "PopEnv"
-}
-
-func (p *OperationPopEnv) SchemeString() string {
-	return "#<operation:pop-env>"
-}
-
 func (p *OperationPopEnv) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationPopEnv)
 	return sameType(p, v, ok)
-}
-
-func (p *OperationPopEnv) IsVoid() bool {
-	return false
 }

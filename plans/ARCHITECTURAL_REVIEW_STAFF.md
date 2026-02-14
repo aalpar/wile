@@ -201,17 +201,20 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 
 ---
 
-### [Priority: Low] — 507 TODO/FIXME Comments Across 74 Files
+### [Priority: Low] — 18 TODO/FIXME Comments Across 7 Files (Triaged)
 
-**Where**: Concentrated in tests (`internal/parser/parser_coverage_test.go`: 104 TODOs, `internal/validate/validate_test.go`: 29 TODOs, `internal/bootstrap/multithreading_test.go`: 30 TODOs)
+**Corrected count**: The original assessment of "507 TODO/FIXME comments across 74 files" was incorrect — ~408 of those were `context.TODO()` calls (Go's standard library placeholder context in test code), not task-tracking comments. The actual count is **18 real TODO comments across 7 files** (12 in production code, 6 in tests).
 
-**What**: 507 TODO comments, mostly in test files marking missing coverage or known edge cases. Examples: `"TODO: test overflow"`, `"FIXME: test circular lists"`, `"XXX: this should fail but doesn't"`. The TODOs are not tracked in any issue tracker.
+**Where**: Production TODOs concentrated in `internal/tokenizer/tokenizer.go` (6), `environment/top_level_environment.go` (3), `machine/native_template.go` (2), `machine/compile_time_continuation.go` (1). Test TODOs in `machine/syntax_rules_test.go` (3), `internal/tokenizer/` (3).
 
-**Why it matters**: Technical debt visibility. TODOs in test files indicate known gaps in coverage. TODOs in production code indicate incomplete implementations. Without centralized tracking, TODOs accumulate and are forgotten.
+**What was done**: Triaged all 18 TODOs and created GitHub issues for actionable items:
+- [#231](https://github.com/aalpar/wile/issues/231) — Library registry interface design (3 TODOs, blocks P1 External Extensions)
+- [#232](https://github.com/aalpar/wile/issues/232) — `#!fold-case` case-insensitive parsing (1 TODO, R7RS §2.1)
+- [#233](https://github.com/aalpar/wile/issues/233) — Replace `context.TODO()` → `context.Background()` in tests (~408 calls, housekeeping)
 
-**Suggested fix**: Create GitHub issues for all production code TODOs (non-test files). Test TODOs can stay inline but should be audited to verify they're not hiding real bugs.
+**Not issued**: Tokenizer TODOs (4) fold into existing `plans/TOKENIZER_CONSOLIDATION_PLAN.md`. NativeTemplate optimization notes (2) deferred per project performance policy. Test TODOs (6) are blocked on API changes or are minor cleanup.
 
-**Effort**: S (2-3 days to triage and create issues)
+**Status**: Resolved — all actionable TODOs tracked in issues or existing plans.
 
 ---
 
@@ -245,8 +248,8 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | Foreign functions (primitives) | 505 |
 | Error wrapping sites | ~772 |
 | Bare errors (fmt.Errorf/errors.New) | ~2 (panic-recovery wrappers only) |
-| context.TODO() uses | 4 production, ~404 tests |
-| TODO/FIXME comments | 507 |
+| context.TODO() uses | 4 production, ~408 tests (see [#233](https://github.com/aalpar/wile/issues/233)) |
+| TODO/FIXME comments | 18 (12 production, 6 test) — original count of 507 included `context.TODO()` calls |
 | Overall test coverage | 85.3% (root), 85-93% (core packages) |
 
 | Package | Coverage | Notes |
@@ -263,3 +266,4 @@ These are inverses, but the relationship is implicit. Adding a new `SyntaxValue`
 | `internal/extensions/gointerop` | 96.4% | Go FFI |
 | `internal/extensions/system` | 100.0% | System interface |
 
+**Status**: Resolved via `readDelimited(terminator, unterminatedMsg)` extraction. `readString` and `readExtendedSymbol` now delegate to `readDelimited`; `readSymbol` correctly left separate (predicate-based termination, no escapes). Removed `readIntraStringEscape` and `readIntraExtendedToken` (single-line pass-throughs). Net -19 lines.

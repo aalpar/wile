@@ -22,21 +22,20 @@ import (
 )
 
 type OperationBranchOffsetImmediate struct {
+	OperationBase
 	Offset int
 }
 
 func NewOperationBranchOffsetImmediate(offset int) *OperationBranchOffsetImmediate {
 	return &OperationBranchOffsetImmediate{
-		Offset: offset,
+		OperationBase: NewOperationBase("machine-operation-branch-offset-immediate"),
+		Offset:        offset,
 	}
 }
 
+// SchemeString overrides OperationBase to include offset value.
 func (p *OperationBranchOffsetImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-branch-offset-immediate %d>", p.Offset)
-}
-
-func (p *OperationBranchOffsetImmediate) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationBranchOffsetImmediate) EqualTo(o values.Value) bool {

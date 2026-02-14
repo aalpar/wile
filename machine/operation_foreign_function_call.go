@@ -24,12 +24,14 @@ import (
 type ForeignFunction func(ctx context.Context, mc *MachineContext) error
 
 type OperationForeignFunctionCall struct {
+	OperationBase
 	Function ForeignFunction
 }
 
 func NewOperationForeignFunctionCall(ffn ForeignFunction) *OperationForeignFunctionCall {
 	return &OperationForeignFunctionCall{
-		Function: ffn,
+		OperationBase: NewOperationBase("machine-operation-foreign-function-call"),
+		Function:      ffn,
 	}
 }
 
@@ -116,14 +118,6 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 	}
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationForeignFunctionCall) SchemeString() string {
-	return "#<machine-operation-foreign-function-call>"
-}
-
-func (p *OperationForeignFunctionCall) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationForeignFunctionCall) EqualTo(o values.Value) bool {

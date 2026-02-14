@@ -907,7 +907,7 @@ func TestTokenizer_ImaginaryNanBranches(t *testing.T) {
 	}
 }
 
-// Test readIntraStringEscape with more escapes
+// Test string escape sequence branches (exercises readDelimited + readEscapeSequence)
 func TestTokenizer_StringEscapeBranches(t *testing.T) {
 	tests := []struct {
 		in  string

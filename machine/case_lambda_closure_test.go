@@ -218,9 +218,6 @@ func TestOperationMakeCaseLambdaClosure_SchemeString(t *testing.T) {
 func TestOperationMakeCaseLambdaClosure_IsVoid(t *testing.T) {
 	op := NewOperationMakeCaseLambdaClosure(2)
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	var nilOp *OperationMakeCaseLambdaClosure
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 func TestOperationMakeCaseLambdaClosure_EqualTo(t *testing.T) {

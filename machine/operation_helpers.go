@@ -93,3 +93,49 @@ func sliceMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) []
 	}
 	return slices.Equal(getField(p), getField(v))
 }
+
+// OperationBase provides default SchemeString, IsVoid, and String methods
+// for VM operations. Embed as the first field in operation structs.
+// EqualTo is intentionally not provided: Go requires per-type assertions.
+type OperationBase struct {
+	opName string
+	goName string
+}
+
+// NewOperationBase creates an OperationBase with the given Scheme name.
+// The name is used as: "#<" + opName + ">".
+func NewOperationBase(opName string) OperationBase {
+	return OperationBase{
+		opName: opName,
+	}
+}
+
+// NewOperationBaseWithGoName creates an OperationBase with both a Scheme name
+// and a separate Go fmt.Stringer name.
+func NewOperationBaseWithGoName(opName, goName string) OperationBase {
+	return OperationBase{
+		opName: opName,
+		goName: goName,
+	}
+}
+
+// SchemeString returns the Scheme representation of the operation.
+func (p OperationBase) SchemeString() string {
+	return "#<" + p.opName + ">"
+}
+
+// IsVoid returns false; operations are never void.
+// Unlike other values.Value implementations, this does not handle nil
+// receivers — operations are bytecode instructions constructed by the
+// compiler and stored in NativeTemplate slices; they are never nil.
+func (p OperationBase) IsVoid() bool {
+	return false
+}
+
+// String returns the Go string representation of the operation.
+func (p OperationBase) String() string {
+	if p.goName != "" {
+		return p.goName
+	}
+	return p.opName
+}

@@ -23,24 +23,20 @@ import (
 // OperationDrop removes the top value from the eval stack without
 // affecting the value register. This is used when we need to clean
 // up the stack but preserve the current result.
-type OperationDrop struct{}
+type OperationDrop struct {
+	OperationBase
+}
 
 func NewOperationDrop() *OperationDrop {
-	return &OperationDrop{}
+	return &OperationDrop{
+		OperationBase: NewOperationBase("machine-operation-drop"),
+	}
 }
 
 func (*OperationDrop) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	mc.evals.Pop() // Discard the value
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationDrop) SchemeString() string {
-	return "#<machine-operation-drop>"
-}
-
-func (p *OperationDrop) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationDrop) EqualTo(o values.Value) bool {
