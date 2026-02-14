@@ -25,12 +25,14 @@ import (
 // Stack layout (top to bottom): closure_n, closure_n-1, ..., closure_1
 // The closureCount immediate specifies how many closures to pop.
 type OperationMakeCaseLambdaClosure struct {
+	OperationBase
 	closureCount int
 }
 
 func NewOperationMakeCaseLambdaClosure(closureCount int) *OperationMakeCaseLambdaClosure {
 	return &OperationMakeCaseLambdaClosure{
-		closureCount: closureCount,
+		OperationBase: NewOperationBase("machine-operation-make-case-lambda-closure"),
+		closureCount:  closureCount,
 	}
 }
 
@@ -50,14 +52,6 @@ func (p *OperationMakeCaseLambdaClosure) Apply(ctx context.Context, mc *MachineC
 	mc.value = MultipleValues{caseLambda}
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationMakeCaseLambdaClosure) SchemeString() string {
-	return "#<machine-operation-make-case-lambda-closure>"
-}
-
-func (p *OperationMakeCaseLambdaClosure) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationMakeCaseLambdaClosure) EqualTo(o values.Value) bool {

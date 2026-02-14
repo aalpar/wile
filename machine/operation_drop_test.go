@@ -43,9 +43,6 @@ func TestOperationDrop_IsVoid(t *testing.T) {
 
 	op := NewOperationDrop()
 	c.Assert(op.IsVoid(), qt.IsFalse)
-
-	var nilOp *OperationDrop
-	c.Assert(nilOp.IsVoid(), qt.IsTrue)
 }
 
 func TestOperationDrop_EqualTo(t *testing.T) {

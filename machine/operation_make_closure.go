@@ -21,10 +21,14 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-type OperationMakeClosure struct{}
+type OperationMakeClosure struct {
+	OperationBase
+}
 
 func NewOperationMakeClosure() *OperationMakeClosure {
-	return &OperationMakeClosure{}
+	return &OperationMakeClosure{
+		OperationBase: NewOperationBase("machine-operation-make-closure"),
+	}
 }
 
 func (p *OperationMakeClosure) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
@@ -48,14 +52,6 @@ func (p *OperationMakeClosure) Apply(ctx context.Context, mc *MachineContext) (*
 	mc.value = MultipleValues{cls}
 	mc.pc++
 	return mc, nil
-}
-
-func (p *OperationMakeClosure) SchemeString() string {
-	return "#<machine-operation-make-closure>"
-}
-
-func (p *OperationMakeClosure) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationMakeClosure) EqualTo(o values.Value) bool {

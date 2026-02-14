@@ -75,9 +75,6 @@ func TestOperationBrk_SchemeString(t *testing.T) {
 func TestOperationBrk_IsVoid(t *testing.T) {
 	op := NewOperationBrk(nil)
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	var nilOp *OperationBrk
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 func TestOperationBrk_EqualTo(t *testing.T) {
@@ -127,9 +124,6 @@ func TestOperationLoadLiteralInteger_SchemeString(t *testing.T) {
 func TestOperationLoadLiteralInteger_IsVoid(t *testing.T) {
 	op := NewOperationLoadLiteralInteger(42)
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	var nilOp *OperationLoadLiteralInteger
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
 }
 
 func TestOperationLoadLiteralInteger_EqualTo(t *testing.T) {

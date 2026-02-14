@@ -24,21 +24,21 @@ import (
 
 // OperationStoreGlobalByGlobalIndexLiteralIndexImmediate stores a value to a global variable using an index from the literals pool.
 type OperationStoreGlobalByGlobalIndexLiteralIndexImmediate struct {
+	OperationBase
 	LiteralIndex LiteralIndex
 }
 
 // NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate creates a new global store operation.
 func NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti LiteralIndex) *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate {
-	return &OperationStoreGlobalByGlobalIndexLiteralIndexImmediate{LiteralIndex: liti}
+	return &OperationStoreGlobalByGlobalIndexLiteralIndexImmediate{
+		OperationBase: NewOperationBase("machine-operation-store-global-by-global-index-literal-immediate"),
+		LiteralIndex:  liti,
+	}
 }
 
 // SchemeString returns the Scheme representation of the operation.
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() string {
 	return fmt.Sprintf("#<machine-operation-store-global-by-global-index-literal-immediate %d>", p.LiteralIndex)
-}
-
-func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {

@@ -20,18 +20,14 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-type OperationPull struct{}
+type OperationPull struct {
+	OperationBase
+}
 
 func NewOperationPull() *OperationPull {
-	return &OperationPull{}
-}
-
-func (p *OperationPull) SchemeString() string {
-	return "#<machine-operation-pull>"
-}
-
-func (p *OperationPull) IsVoid() bool {
-	return p == nil
+	return &OperationPull{
+		OperationBase: NewOperationBase("machine-operation-pull"),
+	}
 }
 
 func (p *OperationPull) EqualTo(o values.Value) bool {

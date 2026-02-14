@@ -31,10 +31,14 @@ import (
 //
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which the before
 // and after thunks are called whenever control enters or exits.
-type OperationPushWind struct{}
+type OperationPushWind struct {
+	OperationBase
+}
 
 func NewOperationPushWind() *OperationPushWind {
-	return &OperationPushWind{}
+	return &OperationPushWind{
+		OperationBase: NewOperationBase("machine-operation-push-wind"),
+	}
 }
 
 func (*OperationPushWind) Apply(_ context.Context, mc *MachineContext) (*MachineContext, error) {
@@ -60,14 +64,6 @@ func (*OperationPushWind) Apply(_ context.Context, mc *MachineContext) (*Machine
 
 	mc.pc++
 	return mc, nil
-}
-
-func (*OperationPushWind) SchemeString() string {
-	return "#<machine-operation-push-wind>"
-}
-
-func (p *OperationPushWind) IsVoid() bool {
-	return p == nil
 }
 
 func (p *OperationPushWind) EqualTo(o values.Value) bool {

@@ -86,10 +86,6 @@ func TestOperationBrk_ValueMethods(t *testing.T) {
 	// Test IsVoid - should be false for non-nil operation
 	qt.Assert(t, op1.IsVoid(), qt.IsFalse)
 
-	// Test IsVoid for nil operation
-	var nilOp *OperationBrk
-	qt.Assert(t, nilOp.IsVoid(), qt.IsTrue)
-
 	// Test EqualTo - operations are equal if both are OperationBrk (functions not compared)
 	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
 
@@ -97,6 +93,7 @@ func TestOperationBrk_ValueMethods(t *testing.T) {
 	qt.Assert(t, op1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 
 	// Test EqualTo with nil
+	var nilOp *OperationBrk
 	qt.Assert(t, op1.EqualTo(nilOp), qt.IsFalse)
 	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
 }

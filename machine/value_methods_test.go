@@ -190,9 +190,6 @@ func TestOperationPushWind_Boilerplate(t *testing.T) {
 	c.Assert(op.IsVoid(), qt.IsFalse)
 	c.Assert(op.EqualTo(NewOperationPushWind()), qt.IsTrue)
 	c.Assert(op.EqualTo(values.NewInteger(1)), qt.IsFalse)
-
-	var nilOp *OperationPushWind
-	c.Assert(nilOp.IsVoid(), qt.IsTrue)
 }
 
 func TestOperationPopWind_Boilerplate(t *testing.T) {
@@ -202,9 +199,6 @@ func TestOperationPopWind_Boilerplate(t *testing.T) {
 	c.Assert(op.IsVoid(), qt.IsFalse)
 	c.Assert(op.EqualTo(NewOperationPopWind()), qt.IsTrue)
 	c.Assert(op.EqualTo(values.NewInteger(1)), qt.IsFalse)
-
-	var nilOp *OperationPopWind
-	c.Assert(nilOp.IsVoid(), qt.IsTrue)
 }
 
 // --- NativeTemplate ---
