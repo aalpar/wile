@@ -25,18 +25,8 @@ import (
 // validateDefine validates both forms:
 // (define name expr) and (define (name params...) body...)
 func validateDefine(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "define", "define form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'define', need at least name and value/body
-	if len(elements) < 3 {
-		result.addErrorf(source, "define", "define requires at least 2 arguments, got %d", len(elements)-1)
+	source, elements, ok := formPrologue(pair, "define", 2, -1, result)
+	if !ok {
 		return nil
 	}
 

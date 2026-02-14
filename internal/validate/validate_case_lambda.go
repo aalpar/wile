@@ -24,18 +24,8 @@ import (
 // validateCaseLambda validates (case-lambda [clause] ...)
 // Each clause is (params body...) like a lambda without the 'lambda' keyword
 func validateCaseLambda(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "case-lambda", "case-lambda form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'case-lambda', need at least one clause
-	if len(elements) < 2 {
-		result.addError(source, "case-lambda", "case-lambda requires at least one clause")
+	source, elements, ok := formPrologue(pair, "case-lambda", 1, -1, result)
+	if !ok {
 		return nil
 	}
 

@@ -23,18 +23,8 @@ import (
 
 // validateLambda validates (lambda (params...) body...)
 func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	// Collect all elements into a slice
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "lambda", "lambda form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'lambda', need params and at least one body expr
-	if len(elements) < 3 {
-		result.addErrorf(source, "lambda", "lambda requires parameters and at least one body expression, got %d parts", len(elements)-1)
+	source, elements, ok := formPrologue(pair, "lambda", 2, -1, result)
+	if !ok {
 		return nil
 	}
 

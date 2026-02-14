@@ -26,23 +26,14 @@ import (
 // Returns a ValidatedLiteral wrapping the original form since the compiler
 // has specialized handling for this.
 func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "define-syntax", "define-syntax form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'define-syntax', need keyword and transformer
-	if len(elements) != 3 {
-		result.addErrorf(source, "define-syntax", "define-syntax requires exactly 2 arguments (keyword and transformer), got %d", len(elements)-1)
+	source, elements, ok := formPrologue(pair, "define-syntax", 2, 2, result)
+	if !ok {
 		return nil
 	}
 
 	// Second element must be a symbol (the keyword to bind)
-	_, ok := asSyntaxSymbol(elements[1])
-	if !ok {
+	_, isSym := asSyntaxSymbol(elements[1])
+	if !isSym {
 		result.addError(getSourceContext(elements[1]), "define-syntax", "define-syntax keyword must be a symbol")
 		return nil
 	}
@@ -58,17 +49,8 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "syntax-rules", "syntax-rules form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'syntax-rules', need at least literals list
-	if len(elements) < 2 {
-		result.addError(source, "syntax-rules", "syntax-rules requires at least a literals list")
+	source, elements, ok := formPrologue(pair, "syntax-rules", 1, -1, result)
+	if !ok {
 		return nil
 	}
 
@@ -122,17 +104,8 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 // validateImport validates (import import-set...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "import", "import form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'import', need at least one import set
-	if len(elements) < 2 {
-		result.addError(source, "import", "import requires at least one import-set")
+	source, elements, ok := formPrologue(pair, "import", 1, -1, result)
+	if !ok {
 		return nil
 	}
 
@@ -153,11 +126,8 @@ func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *
 // validateExport validates (export export-spec...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "export", "export form must be a proper list")
+	source, elements, ok := formPrologue(pair, "export", 0, -1, result)
+	if !ok {
 		return nil
 	}
 
@@ -185,17 +155,8 @@ func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *
 // validateDefineLibrary validates (define-library (name...) declaration...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "define-library", "define-library form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'define-library', need at least library name
-	if len(elements) < 2 {
-		result.addError(source, "define-library", "define-library requires a library name")
+	source, elements, ok := formPrologue(pair, "define-library", 1, -1, result)
+	if !ok {
 		return nil
 	}
 
@@ -237,17 +198,8 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 // validateInclude validates (include filename...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "include", "include form must be a proper list")
-		return nil
-	}
-
-	// elements[0] is 'include', need at least one filename
-	if len(elements) < 2 {
-		result.addError(source, "include", "include requires at least one filename")
+	source, elements, ok := formPrologue(pair, "include", 1, -1, result)
+	if !ok {
 		return nil
 	}
 
@@ -269,11 +221,8 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 // validateCondExpand validates (cond-expand clause...)
 // Returns a ValidatedLiteral wrapping the original form.
 func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source := pair.SourceContext()
-
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, "cond-expand", "cond-expand form must be a proper list")
+	source, elements, ok := formPrologue(pair, "cond-expand", 0, -1, result)
+	if !ok {
 		return nil
 	}
 

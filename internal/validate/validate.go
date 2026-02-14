@@ -171,6 +171,51 @@ func collectList(pair *syntax.SyntaxPair) ([]syntax.SyntaxValue, bool) {
 	}
 }
 
+// formPrologue collects list elements, validates the list is proper,
+// and checks argument count (excluding the form keyword at elements[0]).
+// minArgs and maxArgs define acceptable argument counts.
+// Use maxArgs < 0 for unlimited.
+func formPrologue(
+	pair *syntax.SyntaxPair,
+	formName string,
+	minArgs, maxArgs int,
+	result *ValidationResult,
+) (*syntax.SourceContext, []syntax.SyntaxValue, bool) {
+	source := pair.SourceContext()
+
+	elements, improper := collectList(pair)
+	if improper {
+		result.addError(source, formName, formName+" form must be a proper list")
+		return nil, nil, false
+	}
+
+	argCount := len(elements) - 1
+
+	if minArgs == maxArgs && maxArgs >= 0 {
+		if argCount != minArgs {
+			result.addErrorf(source, formName,
+				"%s requires exactly %d argument(s), got %d",
+				formName, minArgs, argCount)
+			return nil, nil, false
+		}
+	} else {
+		if argCount < minArgs {
+			result.addErrorf(source, formName,
+				"%s requires at least %d argument(s), got %d",
+				formName, minArgs, argCount)
+			return nil, nil, false
+		}
+		if maxArgs >= 0 && argCount > maxArgs {
+			result.addErrorf(source, formName,
+				"%s requires at most %d argument(s), got %d",
+				formName, maxArgs, argCount)
+			return nil, nil, false
+		}
+	}
+
+	return source, elements, true
+}
+
 // getSourceContext extracts SourceContext from a SyntaxValue if available
 func getSourceContext(v syntax.SyntaxValue) *syntax.SourceContext {
 	switch sv := v.(type) {
