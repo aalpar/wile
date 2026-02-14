@@ -66,16 +66,17 @@ The `expandCompileExecute` helper was already extracted previously.
 
 ## Tier 4: Organizational (LOW impact)
 
-### 4.1 compile_time_continuation.go is 2,371 Lines
+### ~~4.1 compile_time_continuation.go is 2,371 Lines~~ ✅ COMPLETE
 
-**File:** `machine/compile_time_continuation.go`
-**Effort:** Medium
+Split by domain into four files:
+- `compile_time_continuation.go` (core: 433 lines — struct, symbol resolution, procedure calls, expression compilation)
+- `compile_time_continuation_quasiquote.go` (565 lines — quasiquote expansion and compilation)
+- `compile_time_continuation_library.go` (1,201 lines — define-library, import/export, cond-expand, define-syntax, parsing)
+- `compile_time_continuation_include.go` (247 lines — include, include-ci, file resolution, letrec* semantics)
 
-Mixed concerns: core compilation, quasiquote (900 lines), library system (500 lines), include (200 lines). Split by domain:
-- `compile_time_continuation.go` (core: ~600 lines)
-- `compile_time_continuation_quasiquote.go` (~900 lines)
-- `compile_time_continuation_library.go` (~500 lines)
-- `compile_time_continuation_include.go` (~200 lines)
+Library file larger than estimated (~1,200 vs ~500) because it includes the full import set
+parsing family (parseImportSet*, 7 variants), feature requirement parsing, CompileDefineSyntax,
+and CompileCondExpand — all library-system concerns.
 
 ### 4.2 Validator Prologue Duplication
 
@@ -137,5 +138,5 @@ Three different patterns for checking empty list arguments in variadic operation
 | Phase | Items | Risk | Lines Saved |
 |-------|-------|------|-------------|
 | ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
-| 2 (Larger refactors) | ~~2.3~~, 4.1, 4.2 | Low-Medium | ~600 |
+| 2 (Larger refactors) | ~~2.3~~, ~~4.1~~, 4.2 | Low-Medium | ~600 |
 | DEFERRED | ~~2.1~~ | — | — |
