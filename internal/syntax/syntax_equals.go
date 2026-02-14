@@ -71,7 +71,7 @@ func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note fu
 	}
 
 	if !gotSyntaxValue.SourceContext().EqualTo(wantSyntaxValue.SourceContext()) {
-		return errors.New("source context are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("source contexts are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
 	}
 	if !gotSyntaxValue.UnwrapAll().EqualTo(wantSyntaxValue.UnwrapAll()) {
 		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
