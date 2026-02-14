@@ -19,12 +19,6 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// testList constructs a proper list from values, returning *values.Pair.
-// Used across match test files since values.List() now returns values.Tuple.
-func testList(vs ...values.Value) *values.Pair {
-	return values.List(vs...).(*values.Pair)
-}
-
 // testSyntaxInt creates a syntax-wrapped integer for test bytecode.
 func testSyntaxInt(v int64) syntax.SyntaxValue {
 	return syntax.NewSyntaxObject(values.NewInteger(v), nil)

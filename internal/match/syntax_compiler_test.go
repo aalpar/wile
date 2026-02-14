@@ -20,21 +20,10 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
 )
-
-// testSyntaxIntC creates a syntax-wrapped integer for test bytecode in compiler tests.
-func testSyntaxIntC(v int64) syntax.SyntaxValue {
-	return syntax.NewSyntaxObject(values.NewInteger(v), nil)
-}
-
-// testSyntaxSymC creates a syntax-wrapped symbol for test bytecode in compiler tests.
-func testSyntaxSymC(key string) syntax.SyntaxValue {
-	return syntax.NewSyntaxSymbol(key, nil)
-}
 
 // bytecodeEqual compares two bytecode slices by their string representation.
 // This avoids issues with qt.DeepEquals not being able to compare unexported fields.
@@ -60,16 +49,16 @@ type UtilsMatcherSuite struct{}
 func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 	tcs := []struct {
 		variables map[string]struct{}
-		in        *values.Pair
+		in        *syntax.SyntaxPair
 		out       []SyntaxCommand
 	}{
 		{
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: testList(values.NewInteger(10), values.NewSymbol("a")),
+			in: testSyntaxList(testSyntaxInt(10), testSyntaxSym("a")),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeDone{},
@@ -77,12 +66,12 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			in:        testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			out: []SyntaxCommand{
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeDone{},
 			},
 		},
@@ -90,47 +79,47 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: testList(values.NewInteger(10), values.List(values.NewSymbol("a"), values.NewSymbol("b")), values.NewInteger(40)),
+			in: testSyntaxList(testSyntaxInt(10), testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxInt(40)),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(40)},
-				ByteCodeDone{},
-			},
-		},
-		{
-			variables: map[string]struct{}{},
-			in:        testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
-			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
-				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
-				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(30)},
+				ByteCodeCompareCar{Value: testSyntaxInt(40)},
 				ByteCodeDone{},
 			},
 		},
 		{
 			variables: map[string]struct{}{},
-			in: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
+			in:        testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
+				ByteCodeVisitCdr{},
+				ByteCodeCompareCar{Value: testSyntaxInt(30)},
+				ByteCodeDone{},
+			},
+		},
+		{
+			variables: map[string]struct{}{},
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			out: []SyntaxCommand{
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
+				ByteCodeVisitCdr{},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("a")},
+				ByteCodeCompareCar{Value: testSyntaxSym("a")},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("...")},
+				ByteCodeCompareCar{Value: testSyntaxSym("...")},
 				ByteCodeDone{},
 			},
 		},
@@ -138,13 +127,13 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
 			out: []SyntaxCommand{
-				ByteCodeCompareCar{Value: testSyntaxIntC(10)},
+				ByteCodeCompareCar{Value: testSyntaxInt(10)},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxIntC(20)},
+				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
 				// SkipIfEmpty checks for empty list before executing loop body
 				ByteCodeSkipIfEmpty{Offset: 9},
@@ -153,7 +142,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeCaptureCar{Binding: "a"},
 				ByteCodeVisitCdr{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
 				ByteCodePopContext{},
 				ByteCodeJump{Offset: -8},
@@ -162,7 +151,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		},
 	}
 	for i, tc := range tcs {
-		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
+		c.Run(fmt.Sprintf("%d", i), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
 			vst.Compile(context.TODO(), tc.in) //nolint:errcheck
@@ -175,7 +164,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 	tcs := []struct {
 		variables map[string]struct{}
-		in        *values.Pair
+		in        *syntax.SyntaxPair
 		target    *syntax.SyntaxPair
 		matches   bool
 	}{
@@ -183,13 +172,13 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in:      testList(values.NewInteger(10), values.NewSymbol("a")),
+			in:      testSyntaxList(testSyntaxInt(10), testSyntaxSym("a")),
 			target:  testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
 			matches: true,
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        testList(values.List(values.NewInteger(10)), values.NewInteger(20)),
+			in:        testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			target:    testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			matches:   true,
 		},
@@ -197,10 +186,10 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: testList(
-				values.NewInteger(10), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b"),
-				), values.NewInteger(40),
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b"),
+				), testSyntaxInt(40),
 			),
 			target: testSyntaxList(
 				testSyntaxInt(10), testSyntaxList(
@@ -211,15 +200,15 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		},
 		{
 			variables: map[string]struct{}{},
-			in:        testList(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+			in:        testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			target:    testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			matches:   true,
 		},
 		{
 			variables: map[string]struct{}{},
-			in: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b")), values.NewSymbol("...")),
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
 			target: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
@@ -229,10 +218,10 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			variables: map[string]struct{}{
 				"a": {},
 			},
-			in: testList(
-				values.NewInteger(10), values.NewInteger(20), values.List(
-					values.NewSymbol("a"), values.NewSymbol("b"),
-				), values.NewSymbol("..."),
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b"),
+				), testSyntaxSym("..."),
 			),
 			target: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
@@ -246,7 +235,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		},
 	}
 	for i, tc := range tcs {
-		c.Run(fmt.Sprintf("%d: %s", i, tc.in.SchemeString()), func(c *qt.C) {
+		c.Run(fmt.Sprintf("%d", i), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
 			err := vst.Compile(context.TODO(), tc.in)
@@ -254,9 +243,9 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			mtc := NewMatcher(vst.variables, vst.codes)
 			err = mtc.MatchSyntax(context.Background(), tc.target)
 			if tc.matches {
-				c.Assert(err, qt.IsNil, qt.Commentf("expected match for %s", tc.in.SchemeString()))
+				c.Assert(err, qt.IsNil, qt.Commentf("expected match"))
 			} else {
-				c.Assert(err, qt.ErrorIs, ErrNotAMatch, qt.Commentf("expected no match for %s", tc.in.SchemeString()))
+				c.Assert(err, qt.ErrorIs, ErrNotAMatch, qt.Commentf("expected no match"))
 			}
 		})
 	}
@@ -274,7 +263,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -283,7 +272,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -294,7 +283,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -303,7 +292,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeDone{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -314,7 +303,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -323,7 +312,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeJump{Offset: +3},
 				ByteCodeDone{},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -334,7 +323,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -343,7 +332,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeJump{Offset: +3},
 				ByteCodeVisitCar{},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -3},
 				ByteCodeVisitCar{},
 			},
@@ -354,7 +343,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -362,7 +351,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
 				ByteCodeJump{Offset: -3},
 				ByteCodeVisitCar{},
@@ -374,7 +363,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -382,7 +371,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeDone{},
 				ByteCodeVisitCar{},
@@ -394,7 +383,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 			},
@@ -402,7 +391,7 @@ func (UtilsMatcherSuite) TestInsert(c *qt.C) {
 				ByteCodeVisitCar{},
 				ByteCodeJump{Offset: +2},
 				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSymC("b")},
+				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeJump{Offset: -2},
 				ByteCodeVisitCar{},
 				ByteCodeDone{},

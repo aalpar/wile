@@ -206,13 +206,13 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		inputVal values.Value
+		inputVal syntax.SyntaxValue
 		template syntax.SyntaxValue
 		checkFn  func(c *qt.C, result syntax.SyntaxValue)
 	}{
 		{
 			name:     "variable substitution yields captured integer",
-			inputVal: values.NewInteger(42),
+			inputVal: syntax.NewSyntaxObject(values.NewInteger(42), nil),
 			template: syntax.NewSyntaxSymbol("x", nil),
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				obj, ok := result.(*syntax.SyntaxObject)
@@ -222,7 +222,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 		},
 		{
 			name:     "variable substitution yields captured symbol",
-			inputVal: values.NewSymbol("hello"),
+			inputVal: syntax.NewSyntaxSymbol("hello", nil),
 			template: syntax.NewSyntaxSymbol("x", nil),
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
@@ -232,7 +232,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 		},
 		{
 			name:     "non-variable symbol returned with hygiene",
-			inputVal: values.NewInteger(42),
+			inputVal: syntax.NewSyntaxObject(values.NewInteger(42), nil),
 			template: syntax.NewSyntaxSymbol("other", nil),
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
@@ -242,7 +242,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 		},
 		{
 			name:     "empty list template returns empty list",
-			inputVal: values.NewInteger(42),
+			inputVal: syntax.NewSyntaxObject(values.NewInteger(42), nil),
 			template: syntax.NewSyntaxEmptyList(nil),
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				pr, ok := result.(*syntax.SyntaxPair)
@@ -255,7 +255,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
 			variables := map[string]struct{}{"x": {}}
-			pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+			pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
@@ -265,7 +265,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 			input := syntax.NewSyntaxCons(
 				syntax.NewSyntaxSymbol("macro", nil),
 				syntax.NewSyntaxCons(
-					valueToSyntaxValue(tc.inputVal),
+					tc.inputVal,
 					syntax.NewSyntaxEmptyList(nil),
 					nil,
 				),
@@ -325,7 +325,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
 			variables := map[string]struct{}{"x": {}}
-			pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+			pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
@@ -360,7 +360,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -412,12 +412,12 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		inputVal []values.Value
+		inputVal []syntax.SyntaxValue
 		checkFn  func(c *qt.C, result syntax.SyntaxValue)
 	}{
 		{
 			name:     "zero repetitions yields empty list",
-			inputVal: []values.Value{},
+			inputVal: []syntax.SyntaxValue{},
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				pr, ok := result.(*syntax.SyntaxPair)
 				c.Assert(ok, qt.IsTrue)
@@ -426,7 +426,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 		},
 		{
 			name:     "single repetition",
-			inputVal: []values.Value{values.NewInteger(1)},
+			inputVal: []syntax.SyntaxValue{syntax.NewSyntaxObject(values.NewInteger(1), nil)},
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				pr, ok := result.(*syntax.SyntaxPair)
 				c.Assert(ok, qt.IsTrue)
@@ -438,10 +438,10 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 		},
 		{
 			name: "multiple repetitions",
-			inputVal: []values.Value{
-				values.NewInteger(10),
-				values.NewInteger(20),
-				values.NewInteger(30),
+			inputVal: []syntax.SyntaxValue{
+				syntax.NewSyntaxObject(values.NewInteger(10), nil),
+				syntax.NewSyntaxObject(values.NewInteger(20), nil),
+				syntax.NewSyntaxObject(values.NewInteger(30), nil),
 			},
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				// Walk the list and collect unwrapped values
@@ -488,9 +488,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 
 			// Build input: (_ val1 val2 ...)
 			inputElems := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("_", nil)}
-			for _, v := range tc.inputVal {
-				inputElems = append(inputElems, valueToSyntaxValue(v))
-			}
+			inputElems = append(inputElems, tc.inputVal...)
 			input := testSyntaxList(inputElems...)
 
 			sm := NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
@@ -526,7 +524,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -573,7 +571,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 	// Test that pattern variable substitution respects scope compatibility
 	// when patternVarSyntax is provided.
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -612,7 +610,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	// When template symbol has extra scopes vs pattern variable, substitution
 	// should NOT occur (nested macro hygiene).
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -655,7 +653,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -740,7 +738,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
@@ -788,7 +786,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	variables := map[string]struct{}{"x": {}}
-	pattern := testList(values.NewSymbol("macro"), values.NewSymbol("x"))
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables

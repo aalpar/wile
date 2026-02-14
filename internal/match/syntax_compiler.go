@@ -62,10 +62,10 @@ var (
 )
 
 type syntaxCompilerStackEntry struct {
-	mark             int          // position in instructions in which loops will return to
-	lastElementStart int          // position where the last element's bytecode starts
-	lastElement      values.Value // the actual last element value for analysis lookup
-	pr               *values.Pair
+	mark             int                // position in instructions in which loops will return to
+	lastElementStart int                // position where the last element's bytecode starts
+	lastElement      syntax.SyntaxValue // the actual last element value for analysis lookup
+	pr               *syntax.SyntaxPair
 	variables        map[string]struct{}
 	vararg           bool
 }
@@ -123,16 +123,15 @@ func (p *SyntaxCompiler) SetSkipMacroKeyword(skip bool) {
 }
 
 // Compile compiles a pattern pair into bytecode.
-func (p *SyntaxCompiler) Compile(ctx context.Context, pr *values.Pair) error {
+func (p *SyntaxCompiler) Compile(ctx context.Context, pr *syntax.SyntaxPair) error {
 	// Analyze pattern first to identify which subtrees contain variables
-	// Use the pre-set variables for now (from test setup)
 	p.analysis = AnalyzePattern(pr, p.variables)
 
 	compile(ctx, p, pr)
 	return nil
 }
 
-func compile(ctx context.Context, vis *SyntaxCompiler, v0 *values.Pair) bool {
+func compile(ctx context.Context, vis *SyntaxCompiler, v0 *syntax.SyntaxPair) bool {
 	stack := []syntaxCompilerStackEntry{
 		{pr: v0, variables: map[string]struct{}{}},
 	}
@@ -147,9 +146,9 @@ func compile(ctx context.Context, vis *SyntaxCompiler, v0 *values.Pair) bool {
 // Returns the updated stack (with current level popped and Done emitted).
 func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []syntaxCompilerStackEntry) []syntaxCompilerStackEntry { //nolint:unparam
 	l := len(stack)
-	for !values.IsEmptyList(stack[l-1].pr) && !values.IsVoid(stack[l-1].pr) {
+	for !syntax.IsSyntaxEmptyList(stack[l-1].pr) && !stack[l-1].pr.IsVoid() {
 		elementStart := len(vis.codes)
-		element := stack[l-1].pr.Car()
+		element := stack[l-1].pr.SyntaxCar()
 
 		// Process the current element and get updated stack
 		var shouldContinue bool
@@ -173,7 +172,7 @@ func compileCurrentLevel(ctx context.Context, vis *SyntaxCompiler, stack []synta
 
 // compileElement compiles a single element (car of current pair).
 // Returns the updated stack and whether the main loop should continue (skip CDR handling).
-func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, element values.Value, elementStart int) ([]syntaxCompilerStackEntry, bool) {
+func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, element syntax.SyntaxValue, elementStart int) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 
 	// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro
@@ -186,32 +185,32 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 	}
 
 	// Handle pair elements (nested lists)
-	pr, ok := element.(*values.Pair)
+	pr, ok := element.(*syntax.SyntaxPair)
 	if ok {
 		return compilePairElement(vis, stack, pr, element, elementStart)
 	}
 
 	// Handle symbol elements
-	sym, ok := element.(*values.Symbol)
+	sym, ok := element.(*syntax.SyntaxSymbol)
 	if ok {
 		skipCdr := compileSymbolElement(vis, &stack[l-1], sym)
 		return stack, skipCdr
 	}
 
-	// Handle literal values (numbers, strings, etc.)
-	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: valueToSyntaxValue(element)})
+	// Handle literal values (numbers, strings, etc.) — already syntax
+	vis.codes = append(vis.codes, ByteCodeCompareCar{Value: element})
 	return stack, false
 }
 
 // compilePairElement handles when the current element is a pair (nested list).
 // For empty pairs, emits RequireCarEmpty. For non-empty, emits VisitCar and pushes to stack.
-func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, pr *values.Pair, element values.Value, elementStart int) ([]syntaxCompilerStackEntry, bool) {
+func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, pr *syntax.SyntaxPair, element syntax.SyntaxValue, elementStart int) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 
-	if values.IsEmptyList(pr) {
+	if syntax.IsSyntaxEmptyList(pr) {
 		// Empty pair pattern () - verify input car is also empty
 		vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
-		stack[l-1].pr, _ = stack[l-1].pr.Cdr().(*values.Pair)
+		stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
 		stack[l-1].lastElement = element
 		stack[l-1].lastElementStart = elementStart
 		return stack, true
@@ -219,7 +218,7 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 
 	// Non-empty nested pair - descend into it
 	vis.codes = append(vis.codes, ByteCodeVisitCar{})
-	stack[l-1].pr, _ = stack[l-1].pr.Cdr().(*values.Pair)
+	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
 	stack[l-1].lastElement = element
 	stack[l-1].lastElementStart = elementStart
 
@@ -233,16 +232,16 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 
 // compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.
 // Returns true if CDR handling should be skipped (e.g., for ellipsis-in-middle patterns).
-func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) bool {
+func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) bool {
 	// Check for ellipsis (custom or default)
-	if sym.Key == vis.ellipsis {
+	if sym.Sym.Key == vis.ellipsis {
 		return compileEllipsis(vis, entry)
 	}
 	// Check for wildcard
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
 	// it appears in the list of literals, in which case it is matched literally.
-	if sym.Key == "_" {
-		_, isLiteral := vis.literals[sym.Key]
+	if sym.Sym.Key == "_" {
+		_, isLiteral := vis.literals[sym.Sym.Key]
 		if !isLiteral {
 			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
 			return false
@@ -255,14 +254,14 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 }
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
-func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *values.Symbol) {
-	if _, isVar := vis.variables[sym.Key]; isVar {
+func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) {
+	if _, isVar := vis.variables[sym.Sym.Key]; isVar {
 		// Pattern variable - capture it
-		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key})
-		entry.variables[sym.Key] = struct{}{}
+		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Sym.Key})
+		entry.variables[sym.Sym.Key] = struct{}{}
 	} else {
 		// Literal symbol - compare exactly
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Sym.Key, nil)})
 	}
 }
 
@@ -304,7 +303,7 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 	// 3. We just need to update entry.pr to point to the tail pattern elements
 	if tailCount > 0 {
 		// Advance entry.pr past the ellipsis to the tail elements
-		entry.pr, _ = entry.pr.Cdr().(*values.Pair)
+		entry.pr, _ = entry.pr.SyntaxCdr().(*syntax.SyntaxPair)
 		return true
 	}
 	return false
@@ -312,17 +311,17 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 
 // countPatternTailElements counts the number of pattern elements that follow
 // the ellipsis. This is used for ellipsis-in-middle patterns like (a ... b c).
-func countPatternTailElements(ellipsisPair *values.Pair) int {
+func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 	// ellipsisPair car is "...", ellipsisPair cdr is the rest
-	cdr := ellipsisPair.Cdr()
+	cdr := ellipsisPair.SyntaxCdr()
 	count := 0
 	for {
-		pr, ok := cdr.(*values.Pair)
-		if !ok || values.IsEmptyList(pr) {
+		pr, ok := cdr.(*syntax.SyntaxPair)
+		if !ok || syntax.IsSyntaxEmptyList(pr) {
 			break
 		}
 		count++
-		cdr = pr.Cdr()
+		cdr = pr.SyntaxCdr()
 	}
 	return count
 }
@@ -333,13 +332,13 @@ func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStack
 		return false
 	}
 
-	prevPair, ok := entry.lastElement.(*values.Pair)
+	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
 	if ok {
 		return vis.analysis.ContainsVariables(prevPair)
 	}
-	prevSym, ok := entry.lastElement.(*values.Symbol)
+	prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 	if ok {
-		_, isVar := vis.variables[prevSym.Key]
+		_, isVar := vis.variables[prevSym.Sym.Key]
 		return isVar
 	}
 	return false
@@ -349,17 +348,17 @@ func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStack
 func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) map[string]struct{} {
 	capturedVars := make(map[string]struct{})
 
-	if prevPair, ok := entry.lastElement.(*values.Pair); ok {
+	if prevPair, ok := entry.lastElement.(*syntax.SyntaxPair); ok {
 		vars := vis.analysis.GetVariables(prevPair)
 		for v := range vars {
 			capturedVars[v] = struct{}{}
 		}
 	} else {
-		prevSym, ok := entry.lastElement.(*values.Symbol)
+		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 		if ok {
-			_, isVar := vis.variables[prevSym.Key]
+			_, isVar := vis.variables[prevSym.Sym.Key]
 			if isVar {
-				capturedVars[prevSym.Key] = struct{}{}
+				capturedVars[prevSym.Sym.Key] = struct{}{}
 			}
 		}
 	}
@@ -454,10 +453,10 @@ func isPairPattern(codes []SyntaxCommand) bool {
 
 // advanceToNextElement handles CDR advancement after processing an element.
 // Returns false if at end of list (should break from loop).
-func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, element values.Value, elementStart int) bool {
-	cdr := entry.pr.Cdr()
-	cdrPair, ok := cdr.(*values.Pair)
-	if ok && !values.IsEmptyList(cdrPair) {
+func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, element syntax.SyntaxValue, elementStart int) bool {
+	cdr := entry.pr.SyntaxCdr()
+	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(cdrPair) {
 		// Normal case: more elements in proper list
 		vis.codes = append(vis.codes, ByteCodeVisitCdr{})
 		entry.lastElementStart = elementStart
@@ -468,15 +467,15 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	}
 
 	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
-	sym, ok := cdr.(*values.Symbol)
+	sym, ok := cdr.(*syntax.SyntaxSymbol)
 	if ok {
-		if _, isVar := vis.variables[sym.Key]; isVar {
+		if _, isVar := vis.variables[sym.Sym.Key]; isVar {
 			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
-			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key})
-			entry.variables[sym.Key] = struct{}{}
+			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Sym.Key})
+			entry.variables[sym.Sym.Key] = struct{}{}
 		} else {
 			// The CDR is a literal symbol - compare it
-			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbolForSymbol(sym, nil)})
+			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Sym.Key, nil)})
 		}
 	}
 

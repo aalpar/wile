@@ -701,77 +701,6 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 	}
 }
 
-// syntaxToValue recursively unwraps syntax objects to raw values.Value types.
-//
-// This is the "datum" extraction from R7RS syntax->datum. It strips away:
-//   - Source location information (file, line, column)
-//   - Scope sets (used for hygiene)
-//
-// Used by CompileSyntaxPatternWithLiterals to convert syntax patterns to
-// raw values.Pair for the pattern compiler, which operates on values.Pair.
-func syntaxToValue(stx syntax.SyntaxValue) values.Value {
-	if stx == nil {
-		return nil
-	}
-
-	switch s := stx.(type) {
-	case *syntax.SyntaxPair:
-		if s == nil || s.IsEmptyList() {
-			return values.EmptyList
-		}
-		// Recursively unwrap car and cdr
-		var car values.Value
-		carVal := s.Car()
-		if carVal != nil {
-			carSyntax, ok := carVal.(syntax.SyntaxValue)
-			if ok {
-				car = syntaxToValue(carSyntax)
-			} else {
-				// If it's already a value, use it directly
-				car = carVal
-			}
-		}
-
-		var cdr values.Value
-		cdrVal := s.SyntaxCdr()
-		if cdrVal != nil {
-			cdrSyntax := cdrVal
-			cdr = syntaxToValue(cdrSyntax)
-			// } else {
-			// If it's already a value, use it directly
-			//	cdr = cdrVal.(values.wrt)
-			//}
-		}
-
-		// nil: syntax node had no cdr; EmptyList: proper list terminator
-		if cdr == nil || values.IsEmptyList(cdr) {
-			return values.NewCons(car, values.EmptyList)
-		}
-		cdrPair, ok := cdr.(*values.Pair)
-		if ok {
-			return values.NewCons(car, cdrPair)
-		}
-		// Improper list
-		return values.NewCons(car, cdr)
-
-	case *syntax.SyntaxSymbol:
-		return s.Unwrap()
-
-	case *syntax.SyntaxObject:
-		return s.Unwrap()
-
-	default:
-		// For other syntax types, try to unwrap
-		unwrapper, ok := stx.(interface{ Unwrap() values.Value })
-		if ok {
-			return unwrapper.Unwrap()
-		}
-		// If it's already a value, return as-is
-		val := stx
-		return val
-	}
-}
-
 // CompiledPattern contains the compiled bytecode and ellipsis variable mapping.
 type CompiledPattern struct {
 	Codes        []SyntaxCommand
@@ -814,11 +743,8 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 		ellipsisID = DefaultEllipsis
 	}
 
-	// Convert syntax pattern to raw values
-	rawPattern := syntaxToValue(pattern)
-
-	// Ensure it's a pair
-	pair, ok := rawPattern.(*values.Pair)
+	// Pattern must be a syntax pair
+	pair, ok := pattern.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
 	}

@@ -15,38 +15,34 @@
 package match
 
 import (
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/internal/syntax"
 )
 
 // PatternAnalysis holds analysis results for a pattern
 type PatternAnalysis struct {
-	// Maps each subtree (Pair) to whether it contains pattern variables
-	containsVariables map[*values.Pair]bool
+	// Maps each subtree (SyntaxPair) to whether it contains pattern variables
+	containsVariables map[*syntax.SyntaxPair]bool
 	// Maps each subtree to the set of variables it contains
-	variablesInSubtree map[*values.Pair]map[string]struct{}
+	variablesInSubtree map[*syntax.SyntaxPair]map[string]struct{}
 }
 
 // NewPatternAnalysis creates a new pattern analysis
 func NewPatternAnalysis() *PatternAnalysis {
 	return &PatternAnalysis{
-		containsVariables:  make(map[*values.Pair]bool),
-		variablesInSubtree: make(map[*values.Pair]map[string]struct{}),
+		containsVariables:  make(map[*syntax.SyntaxPair]bool),
+		variablesInSubtree: make(map[*syntax.SyntaxPair]map[string]struct{}),
 	}
 }
 
 // AnalyzePattern analyzes a pattern and returns analysis results
-func AnalyzePattern(pattern *values.Pair, variables map[string]struct{}) *PatternAnalysis {
+func AnalyzePattern(pattern *syntax.SyntaxPair, variables map[string]struct{}) *PatternAnalysis {
 	analysis := NewPatternAnalysis()
-	// Use the provided variables directly
-	// In a full implementation, these would be determined from syntax-rules literals
-
-	// Analyze which subtrees contain variables
 	analyzeRecursive(pattern, variables, analysis)
 	return analysis
 }
 
 // AnalyzePatternWithLiterals analyzes a pattern determining variables from literals
-func AnalyzePatternWithLiterals(pattern *values.Pair, literals map[string]struct{}, isKeyword bool) *PatternAnalysis {
+func AnalyzePatternWithLiterals(pattern *syntax.SyntaxPair, literals map[string]struct{}, isKeyword bool) *PatternAnalysis {
 	analysis := NewPatternAnalysis()
 	// Determine pattern variables first
 	variables := make(map[string]struct{})
@@ -59,40 +55,40 @@ func AnalyzePatternWithLiterals(pattern *values.Pair, literals map[string]struct
 
 // collectPatternVariables walks the pattern and identifies all pattern variables.
 // Uses the default ellipsis identifier ("...").
-func collectPatternVariables(v values.Value, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) {
+func collectPatternVariables(v syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) {
 	collectPatternVariablesWithEllipsis(v, literals, isFirst, variables, DefaultEllipsis)
 }
 
 // collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
 // using the specified ellipsis identifier.
-func collectPatternVariablesWithEllipsis(v values.Value, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) {
+func collectPatternVariablesWithEllipsis(v syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) {
 	switch t := v.(type) {
-	case *values.Symbol:
+	case *syntax.SyntaxSymbol:
 		// Skip if it's a keyword (first element), literal, or ellipsis
-		if !isFirst && t.Key != ellipsis {
-			_, isLiteral := literals[t.Key]
+		if !isFirst && t.Sym.Key != ellipsis {
+			_, isLiteral := literals[t.Sym.Key]
 			if !isLiteral {
-				variables[t.Key] = struct{}{}
+				variables[t.Sym.Key] = struct{}{}
 			}
 		}
-	case *values.Pair:
-		if !values.IsEmptyList(t) {
+	case *syntax.SyntaxPair:
+		if !syntax.IsSyntaxEmptyList(t) {
 			// First element in a pattern is the keyword
-			collectPatternVariablesWithEllipsis(t.Car(), literals, isFirst, variables, ellipsis)
+			collectPatternVariablesWithEllipsis(t.SyntaxCar(), literals, isFirst, variables, ellipsis)
 			// Rest of the pattern
-			collectPatternVariablesWithEllipsis(t.Cdr(), literals, false, variables, ellipsis)
+			collectPatternVariablesWithEllipsis(t.SyntaxCdr(), literals, false, variables, ellipsis)
 		}
 	}
 }
 
 // analyzeRecursive analyzes which subtrees contain pattern variables
-func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *PatternAnalysis) bool {
+func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analysis *PatternAnalysis) bool {
 	switch t := v.(type) {
-	case *values.Symbol:
-		_, isVar := variables[t.Key]
+	case *syntax.SyntaxSymbol:
+		_, isVar := variables[t.Sym.Key]
 		return isVar
-	case *values.Pair:
-		if values.IsEmptyList(t) {
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(t) {
 			return false
 		}
 
@@ -100,18 +96,18 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		varsInSubtree := make(map[string]struct{})
 
 		// Check car (first element)
-		carHasVars := analyzeRecursive(t.Car(), variables, analysis)
+		carHasVars := analyzeRecursive(t.SyntaxCar(), variables, analysis)
 		if carHasVars {
 			// If car is a symbol variable, add it
-			sym, ok := t.Car().(*values.Symbol)
+			sym, ok := t.SyntaxCar().(*syntax.SyntaxSymbol)
 			if ok {
-				_, isVar := variables[sym.Key]
+				_, isVar := variables[sym.Sym.Key]
 				if isVar {
-					varsInSubtree[sym.Key] = struct{}{}
+					varsInSubtree[sym.Sym.Key] = struct{}{}
 				}
 			}
 			// If car is a pair, merge its variables
-			carPair, ok := t.Car().(*values.Pair)
+			carPair, ok := t.SyntaxCar().(*syntax.SyntaxPair)
 			if ok {
 				carVars, exists := analysis.variablesInSubtree[carPair]
 				if exists {
@@ -123,10 +119,10 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 		}
 
 		// Check cdr (rest)
-		cdrHasVars := analyzeRecursive(t.Cdr(), variables, analysis)
+		cdrHasVars := analyzeRecursive(t.SyntaxCdr(), variables, analysis)
 		if cdrHasVars {
 			// If cdr is a pair, merge its variables
-			cdrPair, ok := t.Cdr().(*values.Pair)
+			cdrPair, ok := t.SyntaxCdr().(*syntax.SyntaxPair)
 			if ok {
 				cdrVars, exists := analysis.variablesInSubtree[cdrPair]
 				if exists {
@@ -149,7 +145,7 @@ func analyzeRecursive(v values.Value, variables map[string]struct{}, analysis *P
 }
 
 // ContainsVariables returns whether a subtree contains pattern variables
-func (p *PatternAnalysis) ContainsVariables(pair *values.Pair) bool {
+func (p *PatternAnalysis) ContainsVariables(pair *syntax.SyntaxPair) bool {
 	if pair == nil {
 		return false
 	}
@@ -157,7 +153,7 @@ func (p *PatternAnalysis) ContainsVariables(pair *values.Pair) bool {
 }
 
 // GetVariables returns the set of variables in a subtree
-func (p *PatternAnalysis) GetVariables(pair *values.Pair) map[string]struct{} {
+func (p *PatternAnalysis) GetVariables(pair *syntax.SyntaxPair) map[string]struct{} {
 	if pair == nil {
 		return nil
 	}
