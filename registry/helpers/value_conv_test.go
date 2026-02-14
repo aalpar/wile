@@ -267,9 +267,7 @@ func TestToFloat64(t *testing.T) {
 		{"float neg infinity", values.NewFloat(math.Inf(-1)), math.Inf(-1), nil},
 		{
 			"float NaN", values.NewFloat(math.NaN()), 0,
-			func(f float64) bool {
-				return math.IsNaN(f)
-			},
+			math.IsNaN,
 		},
 
 		// Rational
@@ -351,9 +349,7 @@ func TestExtractReal(t *testing.T) {
 		{"float neg infinity", values.NewFloat(math.Inf(-1)), math.Inf(-1), false, nil},
 		{
 			"float NaN", values.NewFloat(math.NaN()), 0, false,
-			func(f float64) bool {
-				return math.IsNaN(f)
-			},
+			math.IsNaN,
 		},
 
 		// Rational (exact)
