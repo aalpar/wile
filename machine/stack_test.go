@@ -366,6 +366,27 @@ func TestStackPeekKBoundary(t *testing.T) {
 	qt.Assert(t, s.PeekK(2), values.SchemeEquals, values.NewInteger(1)) // third/bottom
 }
 
+// TestStackPopAllThenPush verifies that Push works after PopAll
+// (PopAll sets the stack to nil; append on nil allocates a fresh slice).
+func TestStackPopAllThenPush(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(1))
+	s.Push(values.NewInteger(2))
+
+	got := s.PopAll()
+	qt.Assert(t, len(got), qt.Equals, 2)
+	qt.Assert(t, s.Len(), qt.Equals, 0)
+
+	// Push after PopAll must work and must not corrupt the returned slice.
+	s.Push(values.NewInteger(99))
+	qt.Assert(t, s.Len(), qt.Equals, 1)
+	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(99))
+
+	// Original slice unchanged.
+	qt.Assert(t, got[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, got[1], values.SchemeEquals, values.NewInteger(2))
+}
+
 // TestStackPeekKPanics tests that Stack.PeekK panics on invalid indices
 func TestStackPeekKPanics(t *testing.T) {
 	s := NewStack(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
