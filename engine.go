@@ -102,9 +102,57 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	// Load bootstrap macros
-	err = loadBootstrapMacros(ctx, env, reg.MacroSources())
+	macroSources := reg.MacroSources()
+	err = loadBootstrapMacros(ctx, env, macroSources)
 	if err != nil {
 		return nil, err
+	}
+
+	// Set up library system if WithLibraryPaths was called
+	if cfg.libraryEnabled {
+		libReg := machine.NewLibraryRegistry()
+
+		// Prepend user paths in reverse order so first path has highest priority.
+		// AddSearchPath prepends, so reverse-iterating produces the correct order.
+		for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
+			libReg.AddSearchPath(cfg.libraryPaths[i])
+		}
+
+		env.SetLibraryRegistry(libReg)
+
+		// LibraryEnvFactory creates isolated library environments that mirror
+		// this engine's configuration — same registry, same macros.
+		// NOTE: package-level global; multiple engines overwrite each other.
+		machine.LibraryEnvFactory = func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+			callerTopLevel := callerEnv.TopLevelEnv()
+			if callerTopLevel == nil {
+				return nil, &Error{Message: "library env factory: caller has no TopLevelEnvironment"}
+			}
+
+			libEnv := callerTopLevel.NewChildRuntime()
+
+			applyErr := reg.Apply(ctx, libEnv)
+			if applyErr != nil {
+				return nil, &Error{Message: "library env factory: failed to apply registry", Cause: applyErr}
+			}
+
+			applyErr = machine.RegisterSyntaxCompilers(libEnv)
+			if applyErr != nil {
+				return nil, &Error{Message: "library env factory: failed to register syntax compilers", Cause: applyErr}
+			}
+
+			applyErr = machine.RegisterPrimitiveExpanders(libEnv)
+			if applyErr != nil {
+				return nil, &Error{Message: "library env factory: failed to register primitive expanders", Cause: applyErr}
+			}
+
+			applyErr = loadBootstrapMacros(ctx, libEnv, macroSources)
+			if applyErr != nil {
+				return nil, &Error{Message: "library env factory: failed to load bootstrap macros", Cause: applyErr}
+			}
+
+			return libEnv, nil
+		}
 	}
 
 	// Collect closeable extensions for Engine.Close()

@@ -19,9 +19,11 @@ import (
 )
 
 type engineConfig struct {
-	registry     *registry.Registry
-	extensions   []registry.Extension
-	maxCallDepth uint64
+	registry       *registry.Registry
+	extensions     []registry.Extension
+	maxCallDepth   uint64
+	libraryPaths   []string
+	libraryEnabled bool // true when WithLibraryPaths was called
 }
 
 // EngineOption configures an Engine.
@@ -55,5 +57,27 @@ func WithExtensions(exts ...registry.Extension) EngineOption {
 func WithMaxCallDepth(n uint64) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxCallDepth = n
+	}
+}
+
+// WithLibraryPaths enables the R7RS library system (define-library / import)
+// and configures directories to search for .sld library files.
+//
+// Without this option, (import ...) raises a configuration error.
+//
+// Paths are searched in order: user-supplied paths first, then the defaults
+// ("." and "./lib"). An empty call WithLibraryPaths() enables library support
+// with defaults only.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    wile.WithLibraryPaths("/app/libs", "./vendor"),
+//	)
+//	// search order: /app/libs, ./vendor, ., ./lib
+func WithLibraryPaths(paths ...string) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.libraryEnabled = true
+		cfg.libraryPaths = paths
 	}
 }
