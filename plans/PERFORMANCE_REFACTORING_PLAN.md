@@ -55,8 +55,8 @@ Phase 0 ──→ Phase 1 ──→ Phase 3
 |------|-------------|--------|--------|
 | 1.1 | PopAll — eliminate clone by swapping backing array ownership | **Complete** | `8f53bc7` |
 | 1.2 | ctx.Done() batching — check every 1024 ops instead of every op | **Complete** | `7f694c1` |
-| 1.3 | Character cache — intern common characters like integers/booleans | Not started | — |
-| 1.4 | ForeignError depth — cap stack trace frame capture | Not started | — |
+| 1.3 | Character cache — intern ASCII characters (0–127) like integers/booleans | **Complete** | `80f1db7` |
+| 1.4 | ForeignError stack removal | **Deferred** | Useful debug info on cold path; not worth removing |
 | 1.5 | Single-value MV — split value register to avoid slice allocation | **Complete** | `d4fb408` |
 
 ## Critical Files
