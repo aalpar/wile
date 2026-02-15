@@ -1,6 +1,6 @@
 # External Extensions Plan
 
-**Status:** IN PROGRESS — Phase 2 complete (2026-02-14)
+**Status:** IN PROGRESS — Phase 3 complete (2026-02-14)
 
 > **Cross-reference**: Plugin architecture (Phases 1-3, 5-6) is complete. This plan covers the remaining Phase 4: external extraction.
 
@@ -132,20 +132,17 @@ This eliminates `addPortState`'s `InitFunc`, which eliminates the only `ApplyCon
 
 **Outcome:** `ApplyContext.Environment()` has zero extension callers.
 
-### Phase 3: Deprecate `ApplyContext.Environment()`
+### Phase 3: Remove `ApplyContext` ✅
 
-With no extension callers, `ApplyContext.Environment()` can be deprecated. Options:
-
-- **Option A**: Remove `Environment()` from the `ApplyContext` interface entirely. `InitFunc` still receives the context but can't reach the raw environment.
-- **Option B**: Keep the method but document it as internal-only. External extensions should not depend on it.
-
-Either way, external extensions can only use `MachineContext` (for primitives) and `Registry` (for registration) — both already public with stable APIs.
+With zero production callers of both `ApplyContext.Environment()` and `AddInitFunc`, the entire `ApplyContext` type was removed. `InitFunc` simplified from `func(ApplyContext) error` to `func() error`.
 
 **Files changed:**
 | File | Change |
 |------|--------|
-| `registry/apply.go` | Remove or deprecate `Environment()` from `ApplyContext` |
-| `registry/apply_test.go` | Update tests |
+| `registry/apply.go` | Removed `ApplyContext` interface, `applyContext` struct, simplified init func loop |
+| `registry/registry.go` | Changed `InitFunc` type from `func(ApplyContext) error` to `func() error` |
+| `registry/apply_test.go` | Updated `TestApply_InitFunc`, removed `TestApplyContext_Methods` |
+| `registry/registry_test.go` | Updated `TestRegistry_AddInitFunc` signature |
 
 ### Phase 4: Move Tier 1 Extensions Out of `internal/`
 
@@ -208,7 +205,7 @@ Both are deferred until Tier 1 extraction proves the pattern.
 ```
 Phase 1: Move BoolToBoolean et al. to values/     → unblocks 7/9 extensions          ✅
 Phase 2: Refactor io port param registration       → eliminates ApplyContext.Env()     ✅
-Phase 3: Deprecate ApplyContext.Environment()       → clean API boundary
+Phase 3: Remove ApplyContext entirely                → clean API boundary       ✅
 Phase 4: Move Tier 1 to extensions/ (public)        → 6/9 extensions importable
 Phase 5: Extract to separate repos (future)         → distribution concern only
 ```

@@ -38,8 +38,8 @@ type PrimitiveRegistration struct {
 	Phases Phase
 }
 
-// InitFunc is called after primitives are registered.
-type InitFunc func(ApplyContext) error
+// InitFunc is called after all primitives and global values are registered.
+type InitFunc func() error
 
 // GlobalValue pairs a name with a value to be registered as a global binding.
 type GlobalValue struct {

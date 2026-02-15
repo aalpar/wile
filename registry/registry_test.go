@@ -161,7 +161,7 @@ func TestRegistry_AddInitFunc(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddInitFunc(func(_ ApplyContext) error {
+	r.AddInitFunc(func() error {
 		return nil
 	})
 

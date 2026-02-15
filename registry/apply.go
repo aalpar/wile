@@ -22,19 +22,6 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// ApplyContext provides context during registry application.
-type ApplyContext interface {
-	Environment() *environment.EnvironmentFrame
-}
-
-type applyContext struct {
-	env *environment.EnvironmentFrame
-}
-
-func (p *applyContext) Environment() *environment.EnvironmentFrame {
-	return p.env
-}
-
 // Apply registers all primitives and runs init functions on an environment.
 func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame) error {
 	p.mu.RLock()
@@ -87,9 +74,8 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	}
 
 	// Run initialization functions
-	actx := &applyContext{env: env}
 	for _, f := range p.initFuncs {
-		err := f(actx)
+		err := f()
 		if err != nil {
 			return err
 		}
