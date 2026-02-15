@@ -22,6 +22,13 @@ type Extension interface {
 	AddToRegistry(r *Registry) error
 }
 
+// LibraryNamer is an optional interface that extensions can implement
+// to control their R7RS library name. Extensions that don't implement
+// this get the default name (wile <ext.Name()>).
+type LibraryNamer interface {
+	LibraryName() []string
+}
+
 // Closeable is an opt-in interface for extensions that hold resources
 // (goroutines, file handles, connections) and need cleanup when the
 // engine is shut down. Extensions that implement this interface will

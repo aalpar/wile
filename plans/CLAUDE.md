@@ -72,3 +72,5 @@ When investigating R7RS conformance issues:
 | `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
 | `docs/dev/NUMERIC_TOWER.md` | Numeric tower (direct dispatch, lattice model) |
 | `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented R7RS specification deviations |
+| `docs/EXTENSIONS.md` | Extension system: architecture, authoring, registry, phases, FFI |
+| `docs/EXTENSION_LIBRARIES.md` | R7RS library integration for extensions |
