@@ -24,6 +24,18 @@ var (
 	_ Hashable = (*Character)(nil)
 )
 
+// Character cache for ASCII characters (0 to 127).
+// This avoids allocations for commonly used character values.
+const charCacheMax = 127
+
+var charCache [charCacheMax + 1]*Character
+
+func init() {
+	for i := rune(0); i <= charCacheMax; i++ {
+		charCache[i] = &Character{Value: i}
+	}
+}
+
 // Character represents a Scheme character value.
 type Character struct {
 	Value rune
@@ -31,6 +43,9 @@ type Character struct {
 
 // NewCharacter creates a new character from a rune.
 func NewCharacter(v rune) *Character {
+	if v >= 0 && v <= charCacheMax {
+		return charCache[v]
+	}
 	q := &Character{Value: v}
 	return q
 }
