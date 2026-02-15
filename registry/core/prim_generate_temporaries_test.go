@@ -132,7 +132,7 @@ func TestGenerateTemporaries_GensymPrefix(t *testing.T) {
 }
 
 func TestGenerateTemporaries_PrimitiveExists(t *testing.T) {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := env.InternSymbol(values.NewSymbol("generate-temporaries"))

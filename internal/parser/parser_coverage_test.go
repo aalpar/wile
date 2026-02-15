@@ -92,7 +92,7 @@ func TestCoverage_BinaryIntegers(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
 		})
@@ -115,7 +115,7 @@ func TestCoverage_OctalIntegers(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
 		})
@@ -139,7 +139,7 @@ func TestCoverage_HexIntegers(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
 		})
@@ -166,7 +166,7 @@ func TestCoverage_BinaryRationals(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			v := syn.Unwrap()
 			r := new(big.Rat).SetFrac64(tt.expectNum, tt.expectDen)
@@ -181,7 +181,7 @@ func TestCoverage_OctalRationals(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#o7/3"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	r := new(big.Rat).SetFrac64(7, 3)
 	expected := values.Simplify(values.NewRationalFromRat(r))
@@ -193,7 +193,7 @@ func TestCoverage_HexRationals(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#x10/8"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	// #x10 = 16, #x8 = 8 => 16/8 = 2
 	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(2))
@@ -254,7 +254,7 @@ func TestCoverage_ExactPrefix(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			tt.check(c, syn.Unwrap())
 		})
@@ -266,7 +266,7 @@ func TestCoverage_ExactInfError(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#e+inf.0"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(strings.Contains(err.Error(), "cannot convert"), qt.IsTrue)
 }
@@ -276,7 +276,7 @@ func TestCoverage_ExactNanError(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#e+nan.0"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(strings.Contains(err.Error(), "cannot convert"), qt.IsTrue)
 }
@@ -298,7 +298,7 @@ func TestCoverage_InexactPrefix(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			f, ok := syn.Unwrap().(*values.Float)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", syn.Unwrap(), syn.Unwrap()))
@@ -313,7 +313,7 @@ func TestCoverage_InexactFloat(t *testing.T) {
 
 	// #i on an already-inexact float should pass through unchanged
 	p := NewParser(env, false, strings.NewReader("#i1.5"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -330,7 +330,7 @@ func TestCoverage_HashDigitInteger(t *testing.T) {
 
 	// 1## -> inexact 100.0 (already tested in hash_digit_test but exercises numberToInexact)
 	p := NewParser(env, false, strings.NewReader("1##"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -347,7 +347,7 @@ func TestCoverage_DatumLabelList(t *testing.T) {
 
 	// #0=(1 2 3) -> labeled list
 	p := NewParser(env, true, strings.NewReader("#0=(1 2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -363,7 +363,7 @@ func TestCoverage_DatumLabelCircular(t *testing.T) {
 
 	// #0=(a . #0#) -> circular pair
 	p := NewParser(env, true, strings.NewReader("#0=(a . #0#)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -386,7 +386,7 @@ func TestCoverage_DatumLabelEmptyList(t *testing.T) {
 
 	// #0=() -> labeled empty list
 	p := NewParser(env, true, strings.NewReader("#0=()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -401,7 +401,7 @@ func TestCoverage_DatumLabelSingleElement(t *testing.T) {
 
 	// #0=(42) -> labeled single-element list
 	p := NewParser(env, true, strings.NewReader("#0=(42)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -416,7 +416,7 @@ func TestCoverage_DatumLabelImproperMulti(t *testing.T) {
 
 	// #0=(a b . c) -> labeled improper list with multiple elements
 	p := NewParser(env, true, strings.NewReader("#0=(a b . c)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -431,7 +431,7 @@ func TestCoverage_DatumLabelAtom(t *testing.T) {
 
 	// #0=42 -> labeled atom (non-compound)
 	p := NewParser(env, true, strings.NewReader("#0=42"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -446,11 +446,11 @@ func TestCoverage_DatumLabelReference(t *testing.T) {
 
 	// Read two datums: #0=hello then #0# (reference to label 0)
 	p := NewParser(env, true, strings.NewReader("#0=hello #0#"))
-	syn1, err := p.ReadSyntax(context.TODO())
+	syn1, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn1, qt.IsNotNil)
 
-	syn2, err := p.ReadSyntax(context.TODO())
+	syn2, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn2, qt.IsNotNil)
 }
@@ -461,7 +461,7 @@ func TestCoverage_DatumLabelVector(t *testing.T) {
 
 	// #0=#(1 2 3) -> labeled vector
 	p := NewParser(env, true, strings.NewReader("#0=#(1 2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
@@ -523,7 +523,7 @@ func TestCoverage_InfNanStandalone(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			tt.check(c, syn.Unwrap())
 		})
@@ -573,7 +573,7 @@ func TestCoverage_InfNanImaginary(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			tt.check(c, syn.Unwrap())
 		})
@@ -589,15 +589,15 @@ func TestCoverage_MultipleReads(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("1 2 3"))
-	syn1, err := p.ReadSyntax(context.TODO())
+	syn1, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn1.Unwrap(), values.SchemeEquals, values.NewInteger(1))
 
-	syn2, err := p.ReadSyntax(context.TODO())
+	syn2, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn2.Unwrap(), values.SchemeEquals, values.NewInteger(2))
 
-	syn3, err := p.ReadSyntax(context.TODO())
+	syn3, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn3.Unwrap(), values.SchemeEquals, values.NewInteger(3))
 }
@@ -608,7 +608,7 @@ func TestCoverage_FoldCaseDirective(t *testing.T) {
 
 	// #!fold-case should cause subsequent symbols to be lowercased
 	p := NewParser(env, true, strings.NewReader("#!fold-case FOO"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	sym, ok := syn.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -621,7 +621,7 @@ func TestCoverage_NoFoldCaseDirective(t *testing.T) {
 
 	// #!fold-case followed by #!no-fold-case should restore case sensitivity
 	p := NewParser(env, true, strings.NewReader("#!fold-case #!no-fold-case FOO"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	sym, ok := syn.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -676,7 +676,7 @@ func TestCoverage_ComplexInfNan(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			num, ok := syn.Unwrap().(values.Number)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -697,7 +697,7 @@ func TestCoverage_ExactComplex(t *testing.T) {
 
 	// #e on a complex with inf should error
 	p := NewParser(env, false, strings.NewReader("#e1.0+inf.0i"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -707,7 +707,7 @@ func TestCoverage_InexactComplex(t *testing.T) {
 
 	// #i on an exact complex number like 1+2i
 	p := NewParser(env, false, strings.NewReader("#i1+2i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -725,7 +725,7 @@ func TestCoverage_PolarComplex(t *testing.T) {
 
 	// 1@0 -> 1+0i (angle 0 means pure real)
 	p := NewParser(env, false, strings.NewReader("1@0"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -743,7 +743,7 @@ func TestCoverage_PolarNonZeroAngle(t *testing.T) {
 
 	// 2@1.5708 (approximately pi/2) -> real near 0, imag near 2
 	p := NewParser(env, false, strings.NewReader("2@1.5708"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -771,7 +771,7 @@ func TestCoverage_ScientificNotation(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			f, ok := syn.Unwrap().(*values.Float)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", syn.Unwrap(), syn.Unwrap()))
@@ -790,7 +790,7 @@ func TestCoverage_ExactScientific(t *testing.T) {
 
 	// #e1e2 -> exact integer 100
 	p := NewParser(env, false, strings.NewReader("#e1e2"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	i, ok := syn.Unwrap().(*values.Integer)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", syn.Unwrap(), syn.Unwrap()))
@@ -806,7 +806,7 @@ func TestCoverage_CloseParser(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("42"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	err = p.Close()
@@ -822,7 +822,7 @@ func TestCoverage_UnexpectedCloseParen(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader(")"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(strings.Contains(err.Error(), "unexpected close )"), qt.IsTrue)
 }
@@ -837,7 +837,7 @@ func TestCoverage_CommentSkipInList(t *testing.T) {
 
 	// List with inline comments that should be skipped
 	p := NewParser(env, true, strings.NewReader("(1 ; a comment\n 2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -848,7 +848,7 @@ func TestCoverage_DatumCommentSkip(t *testing.T) {
 
 	// #; datum comment should skip the next datum
 	p := NewParser(env, true, strings.NewReader("#;foo bar"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	sym, ok := syn.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -861,7 +861,7 @@ func TestCoverage_DatumCommentInList(t *testing.T) {
 
 	// Datum comment inside a list
 	p := NewParser(env, true, strings.NewReader("(1 #;2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -910,7 +910,7 @@ func TestCoverage_InexactBigInteger(t *testing.T) {
 
 	// #i on a big integer
 	p := NewParser(env, false, strings.NewReader("#i999999999999999999"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -927,7 +927,7 @@ func TestCoverage_BlockComment(t *testing.T) {
 
 	// Block comment followed by a datum
 	p := NewParser(env, true, strings.NewReader("#| block comment |# 42"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -941,7 +941,7 @@ func TestCoverage_Bytevector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8(1 2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	bv, ok := syn.Unwrap().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -953,7 +953,7 @@ func TestCoverage_EmptyBytevector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	bv, ok := syn.Unwrap().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -988,7 +988,7 @@ func TestCoverage_Characters(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			ch, ok := syn.Unwrap().(*values.Character)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1006,7 +1006,7 @@ func TestCoverage_Vector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#(1 2 3)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	vec, ok := syn.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -1018,7 +1018,7 @@ func TestCoverage_EmptyVector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	vec, ok := syn.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -1045,7 +1045,7 @@ func TestCoverage_QuoteForms(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn, qt.IsNotNil)
 		})
@@ -1061,7 +1061,7 @@ func TestCoverage_DottedPair(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("(1 . 2)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	pair, ok := syn.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -1078,7 +1078,7 @@ func TestCoverage_DirectiveNoSkip(t *testing.T) {
 
 	// When not skipping comments, directives are returned as syntax values
 	p := NewParser(env, false, strings.NewReader("#!fold-case"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.(*syntax.SyntaxDirective)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
@@ -1094,7 +1094,7 @@ func TestCoverage_ExactBigFloat(t *testing.T) {
 
 	// #e on a BigFloat (arbitrary precision)
 	p := NewParser(env, false, strings.NewReader("#e#m1.5"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	// Should be converted to exact rational
 	_, ok := syn.Unwrap().(*values.Rational)
@@ -1107,7 +1107,7 @@ func TestCoverage_ExactBigFloatInt(t *testing.T) {
 
 	// #e on a BigFloat that is an integer
 	p := NewParser(env, false, strings.NewReader("#e#m42.0"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	// Should be converted to exact BigInteger
 	_, ok := syn.Unwrap().(*values.BigInteger)
@@ -1124,7 +1124,7 @@ func TestCoverage_BinaryHashDigit(t *testing.T) {
 
 	// #b1# -> binary with hash digit, should be inexact
 	p := NewParser(env, false, strings.NewReader("#b1#"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1138,7 +1138,7 @@ func TestCoverage_OctalHashDigit(t *testing.T) {
 
 	// #o7## -> octal with hash digits, should be inexact
 	p := NewParser(env, false, strings.NewReader("#o7##"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1152,7 +1152,7 @@ func TestCoverage_HexHashDigit(t *testing.T) {
 
 	// #xf# -> hex with hash digit, should be inexact
 	p := NewParser(env, false, strings.NewReader("#xf#"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1170,7 +1170,7 @@ func TestCoverage_NumberToInexactRational(t *testing.T) {
 
 	// #i on a rational number -> should convert to float
 	p := NewParser(env, false, strings.NewReader("#i1/3"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1187,7 +1187,7 @@ func TestCoverage_ExactInexactComplex(t *testing.T) {
 
 	// #e on an inexact complex like 1.5+2.5i -> exact BigComplex
 	p := NewParser(env, false, strings.NewReader("#e1.5+2.5i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", syn.Unwrap(), syn.Unwrap()))
@@ -1203,7 +1203,7 @@ func TestCoverage_InexactBigComplex(t *testing.T) {
 
 	// #i on an exact complex number 1+2i -> inexact Complex
 	p := NewParser(env, false, strings.NewReader("#i1+2i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1221,7 +1221,7 @@ func TestCoverage_ExactExactBigComplex(t *testing.T) {
 
 	// #e on an already exact complex 1+2i -> should stay exact BigComplex
 	p := NewParser(env, false, strings.NewReader("#e1+2i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", syn.Unwrap(), syn.Unwrap()))
@@ -1237,7 +1237,7 @@ func TestCoverage_PolarWithFloats(t *testing.T) {
 
 	// 2.0@0.0 -> 2+0i (exercises parseFloatOrInfnan with regular float)
 	p := NewParser(env, false, strings.NewReader("2.0@0.0"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1254,7 +1254,7 @@ func TestCoverage_SkipTopLevelComment(t *testing.T) {
 
 	// Line comment at top level followed by datum
 	p := NewParser(env, true, strings.NewReader("; comment\n42"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -1269,11 +1269,11 @@ func TestCoverage_CachedError(t *testing.T) {
 
 	// Parse something that causes an error, then try again
 	p := NewParser(env, true, strings.NewReader(")"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 
 	// Second read should return the cached error
-	_, err2 := p.ReadSyntax(context.TODO())
+	_, err2 := p.ReadSyntax(context.Background())
 	c.Assert(err2, qt.IsNotNil)
 }
 
@@ -1287,7 +1287,7 @@ func TestCoverage_HashDigitRational(t *testing.T) {
 
 	// Rational with hash digits should force inexact
 	p := NewParser(env, false, strings.NewReader("1#/3"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1315,7 +1315,7 @@ func TestCoverage_SyntaxQuoteForms(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn, qt.IsNotNil)
 		})
@@ -1331,7 +1331,7 @@ func TestCoverage_Base10Prefix(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#d42"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -1345,7 +1345,7 @@ func TestCoverage_EmptyList(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1370,7 +1370,7 @@ func TestCoverage_SignedDecimal(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			f, ok := syn.Unwrap().(*values.Float)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1400,7 +1400,7 @@ func TestCoverage_SignedRational(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
 		})
@@ -1417,7 +1417,7 @@ func TestCoverage_ExactNonNumber(t *testing.T) {
 
 	// #e on a symbol - should produce an error
 	p := NewParser(env, false, strings.NewReader("#efoo"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -1431,7 +1431,7 @@ func TestCoverage_InexactNonNumber(t *testing.T) {
 
 	// #i on a symbol - should produce an error
 	p := NewParser(env, false, strings.NewReader("#ifoo"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -1444,7 +1444,7 @@ func TestCoverage_Strings(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, false, strings.NewReader(`"hello world"`))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	s, ok := syn.Unwrap().(*values.String)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
@@ -1461,7 +1461,7 @@ func TestCoverage_ExactBigFloatInf(t *testing.T) {
 
 	// #e on -inf.0 should error
 	p := NewParser(env, false, strings.NewReader("#e-inf.0"))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -1519,7 +1519,7 @@ func TestCoverage_PureImaginary(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			tt.check(c, syn.Unwrap())
 		})
@@ -1535,7 +1535,7 @@ func TestCoverage_ParserWithFile(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParserWithFile(env, true, strings.NewReader("42"), "test.scm")
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -1549,7 +1549,7 @@ func TestCoverage_InexactRational(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#i1/3"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1563,7 +1563,7 @@ func TestCoverage_InexactBigComplexMakeInexact(t *testing.T) {
 
 	// #i on an exact complex number exercises makeInexact BigComplex path
 	p := NewParser(env, true, strings.NewReader("#i1+2i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cplx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1577,7 +1577,7 @@ func TestCoverage_ExactComplexToExact(t *testing.T) {
 
 	// #e on inexact complex exercises makeExact Complex → BigComplex path
 	p := NewParser(env, true, strings.NewReader("#e1.0+2.0i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	// Should convert to exact BigComplex
 	_, ok := syn.Unwrap().(*values.BigComplex)
@@ -1595,7 +1595,7 @@ func TestCoverage_BinaryIntegerOverflow(t *testing.T) {
 	// 65-bit binary number overflows int64
 	bigBin := "#b1" + strings.Repeat("0", 64)
 	p := NewParser(env, true, strings.NewReader(bigBin))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue)
@@ -1607,7 +1607,7 @@ func TestCoverage_HexIntegerOverflow(t *testing.T) {
 
 	// Hex number that overflows int64
 	p := NewParser(env, true, strings.NewReader("#xFFFFFFFFFFFFFFFF1"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue)
@@ -1624,7 +1624,7 @@ func TestCoverage_BinaryRationalOverflowNumerator(t *testing.T) {
 	// Binary rational with overflow numerator
 	bigBin := "#b" + strings.Repeat("1", 65) + "/10"
 	p := NewParser(env, true, strings.NewReader(bigBin))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1635,7 +1635,7 @@ func TestCoverage_HexRationalOverflowDenominator(t *testing.T) {
 
 	// Hex rational with overflow denominator
 	p := NewParser(env, true, strings.NewReader("#x1/FFFFFFFFFFFFFFFF1"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1647,7 +1647,7 @@ func TestCoverage_SignedBinaryRationalOverflow(t *testing.T) {
 	// Signed binary rational with overflow
 	bigBin := "#b-" + strings.Repeat("1", 65) + "/10"
 	p := NewParser(env, true, strings.NewReader(bigBin))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1662,7 +1662,7 @@ func TestCoverage_PolarWithRationalMagnitude(t *testing.T) {
 
 	// Polar complex with non-zero angle to exercise cos/sin paths
 	p := NewParser(env, true, strings.NewReader("2@1"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cplx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1681,14 +1681,14 @@ func TestCoverage_UnsignedImaginary(t *testing.T) {
 
 	// Test +nan.0i and -nan.0i
 	p := NewParser(env, true, strings.NewReader("+nan.0i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cplx, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(math.IsNaN(cplx.Imag()), qt.IsTrue)
 
 	p = NewParser(env, true, strings.NewReader("-nan.0i"))
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	cplx, ok = syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1701,7 +1701,7 @@ func TestCoverage_SignedDecimalFraction(t *testing.T) {
 
 	// Positive signed decimal fraction
 	p := NewParser(env, true, strings.NewReader("+3.14"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1709,7 +1709,7 @@ func TestCoverage_SignedDecimalFraction(t *testing.T) {
 
 	// Negative decimal fraction
 	p = NewParser(env, true, strings.NewReader("-2.5"))
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok = syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1721,19 +1721,19 @@ func TestCoverage_Boolean(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#t #f #true #false"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), qt.Equals, values.TrueValue)
 
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), qt.Equals, values.FalseValue)
 
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), qt.Equals, values.TrueValue)
 
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.Unwrap(), qt.Equals, values.FalseValue)
 }
@@ -1744,7 +1744,7 @@ func TestCoverage_ExactFloat(t *testing.T) {
 
 	// #e on a float that is a whole number → Integer
 	p := NewParser(env, true, strings.NewReader("#e5.0"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	i, ok := syn.Unwrap().(*values.Integer)
 	c.Assert(ok, qt.IsTrue)
@@ -1752,7 +1752,7 @@ func TestCoverage_ExactFloat(t *testing.T) {
 
 	// #e on a float that is NOT a whole number → Rational
 	p = NewParser(env, true, strings.NewReader("#e0.1"))
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	r, ok := syn.Unwrap().(*values.Rational)
 	c.Assert(ok, qt.IsTrue)
@@ -1765,7 +1765,7 @@ func TestCoverage_InexactInteger(t *testing.T) {
 
 	// #i on an integer
 	p := NewParser(env, true, strings.NewReader("#i42"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1778,7 +1778,7 @@ func TestCoverage_ConsError(t *testing.T) {
 
 	// A standalone '.' at top-level should produce an error
 	p := NewParser(env, true, strings.NewReader("."))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -1788,7 +1788,7 @@ func TestCoverage_NestedList(t *testing.T) {
 
 	// Nested list (1 (2 3))
 	p := NewParser(env, true, strings.NewReader("(1 (2 3))"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1800,7 +1800,7 @@ func TestCoverage_ExactBigInteger(t *testing.T) {
 	// #e on a BigInteger - should pass through
 	bigNum := "#e99999999999999999999"
 	p := NewParser(env, true, strings.NewReader(bigNum))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue)
@@ -1812,7 +1812,7 @@ func TestCoverage_ExactRational(t *testing.T) {
 
 	// #e on a rational - should pass through
 	p := NewParser(env, true, strings.NewReader("#e1/3"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.Rational)
 	c.Assert(ok, qt.IsTrue)
@@ -1825,7 +1825,7 @@ func TestCoverage_NumberToInexactBigComplex(t *testing.T) {
 	// Parse exact complex 1+2i (becomes BigComplex), then apply #i
 	// This exercises numberToInexact BigComplex path
 	p := NewParser(env, true, strings.NewReader("#i1+2i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1837,7 +1837,7 @@ func TestCoverage_BigFloatBasic(t *testing.T) {
 
 	// #m prefix for BigFloat
 	p := NewParser(env, true, strings.NewReader("#m3.14159265358979323846"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue)
@@ -1849,7 +1849,7 @@ func TestCoverage_MakeInexactBigInteger(t *testing.T) {
 
 	// #i on a BigInteger exercises makeInexact BigInteger path
 	p := NewParser(env, true, strings.NewReader("#i99999999999999999999"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1861,7 +1861,7 @@ func TestCoverage_SignedRationalFraction(t *testing.T) {
 
 	// Positive signed rational
 	p := NewParser(env, true, strings.NewReader("+3/4"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 }
@@ -1872,7 +1872,7 @@ func TestCoverage_UnsignedComplexExact(t *testing.T) {
 
 	// Exact complex with integer parts
 	p := NewParser(env, true, strings.NewReader("3+4i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	_, ok := syn.Unwrap().(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue)

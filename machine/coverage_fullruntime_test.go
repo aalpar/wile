@@ -38,14 +38,14 @@ import (
 func parseSchemeExprExt(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
 	reader := bufio.NewReader(strings.NewReader(code))
 	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
+	sv, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }
 
 // newFullRuntimeEnv creates a full runtime environment with all primitives
 func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }

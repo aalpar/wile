@@ -154,7 +154,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 		c.Run(fmt.Sprintf("%d", i), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			vst.Compile(context.TODO(), tc.in) //nolint:errcheck
+			vst.Compile(context.Background(), tc.in) //nolint:errcheck
 			c.Assert(bytecodeEqual(vst.codes, tc.out), qt.IsTrue,
 				qt.Commentf("got %v, want %v", vst.codes, tc.out))
 		})
@@ -238,7 +238,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		c.Run(fmt.Sprintf("%d", i), func(c *qt.C) {
 			vst := NewSyntaxCompiler()
 			vst.variables = tc.variables
-			err := vst.Compile(context.TODO(), tc.in)
+			err := vst.Compile(context.Background(), tc.in)
 			c.Assert(err, qt.IsNil)
 			mtc := NewMatcher(vst.variables, vst.codes)
 			err = mtc.MatchSyntax(context.Background(), tc.target)

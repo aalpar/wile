@@ -33,7 +33,7 @@ import (
 // in one top-level environment does not affect another.
 func TestMultiEnv_PrimitiveMutationIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env1, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -61,7 +61,7 @@ func TestMultiEnv_PrimitiveMutationIsolation(t *testing.T) {
 // pointers, since each has its own symbol intern table.
 func TestMultiEnv_SymbolNonIdentityAcrossTopLevels(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env1, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -83,7 +83,7 @@ func TestMultiEnv_SymbolNonIdentityAcrossTopLevels(t *testing.T) {
 // independent top-level environments simultaneously without interference.
 func TestMultiEnv_ConcurrentTopLevelUse(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env1, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -126,7 +126,7 @@ func TestMultiEnv_ConcurrentTopLevelUse(t *testing.T) {
 // top-level environment does not affect another.
 func TestMultiEnv_UserMacroIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env1, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -156,7 +156,7 @@ func TestMultiEnv_UserMacroIsolation(t *testing.T) {
 // created from the same parent are isolated from each other.
 func TestMultiEnv_SiblingLibraryIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -204,7 +204,7 @@ func TestMultiEnv_SiblingLibraryIsolation(t *testing.T) {
 // in sibling library environments are pointer-identical.
 func TestMultiEnv_SiblingLibrarySymbolIdentity(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -228,7 +228,7 @@ func TestMultiEnv_SiblingLibrarySymbolIdentity(t *testing.T) {
 // both have access to the same primitives.
 func TestMultiEnv_SiblingLibrarySharedPrimitives(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -262,7 +262,7 @@ func TestMultiEnv_SiblingLibrarySharedPrimitives(t *testing.T) {
 // one library does not leak to its sibling or parent.
 func TestMultiEnv_SiblingLibraryMacroIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -301,7 +301,7 @@ func TestMultiEnv_SiblingLibraryMacroIsolation(t *testing.T) {
 // library imports another library) works correctly.
 func TestMultiEnv_NestedLibraryCreation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -323,7 +323,7 @@ func TestMultiEnv_NestedLibraryCreation(t *testing.T) {
 // works across three levels: top-level -> outer library -> inner library.
 func TestMultiEnv_NestedLibrarySymbolIdentity(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -346,7 +346,7 @@ func TestMultiEnv_NestedLibrarySymbolIdentity(t *testing.T) {
 // level (top-level, outer library, inner library) are fully isolated.
 func TestMultiEnv_NestedLibraryBindingIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -383,7 +383,7 @@ func TestMultiEnv_NestedLibraryBindingIsolation(t *testing.T) {
 // macros are available at all nesting levels.
 func TestMultiEnv_NestedLibraryPrimitivesAvailable(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -412,7 +412,7 @@ func TestMultiEnv_NestedLibraryPrimitivesAvailable(t *testing.T) {
 // one environment can be used in another that shares the same TopLevelEnvironment.
 func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -449,7 +449,7 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 // even when called from a different environment.
 func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -491,7 +491,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 // object created in one environment can be parameterized in another.
 func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -537,7 +537,7 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 // use sibling library environments concurrently.
 func TestMultiEnv_ConcurrentLibraryUse(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -589,7 +589,7 @@ func TestMultiEnv_ConcurrentLibraryUse(t *testing.T) {
 // and the extensions in runtime/environment_tiny.go.
 func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -749,7 +749,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 // primitive availability as a library created directly from the top level.
 func TestMultiEnv_NestedLibraryPrimitiveAvailability(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)

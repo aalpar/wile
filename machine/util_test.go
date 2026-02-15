@@ -31,7 +31,7 @@ import (
 func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
 	reader := bufio.NewReader(strings.NewReader(code))
 	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
+	sv, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }

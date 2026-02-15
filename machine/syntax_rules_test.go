@@ -29,7 +29,7 @@ import (
 // Helper function to parse a string into syntax
 func parseSyntax(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	// Parse the input string
-	stx, err := parser.NewParser(env, true, strings.NewReader(input)).ReadSyntax(context.TODO())
+	stx, err := parser.NewParser(env, true, strings.NewReader(input)).ReadSyntax(context.Background())
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}

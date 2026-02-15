@@ -70,7 +70,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(context.TODO(), pattern)
+		err := compiler.Compile(context.Background(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Create syntax input
@@ -124,7 +124,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(context.TODO(), pattern)
+		err := compiler.Compile(context.Background(), pattern)
 		qt.Assert(t, err, qt.IsNil)
 
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
@@ -233,7 +233,7 @@ func TestExpandWithUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Template source context (where macro is defined)
@@ -380,7 +380,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	inputSc := syntax.NewSourceContext("(test)", "input.scm",
@@ -419,7 +419,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -466,7 +466,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{}
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input
@@ -563,7 +563,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(context.TODO(), pattern)
+		err := compiler.Compile(context.Background(), pattern)
 		c.Assert(err, qt.IsNil)
 
 		input := syntax.NewSyntaxCons(
@@ -602,7 +602,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(context.TODO(), pattern)
+		err := compiler.Compile(context.Background(), pattern)
 		c.Assert(err, qt.IsNil)
 
 		input := syntax.NewSyntaxCons(
@@ -653,7 +653,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			nil,
 		)
 
-		compiled, err := CompileSyntaxPatternFull(context.TODO(), pattern, variables)
+		compiled, err := CompileSyntaxPatternFull(context.Background(), pattern, variables)
 		c.Assert(err, qt.IsNil)
 
 		// Input: (_ 1 2)
@@ -691,7 +691,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
-		err := compiler.Compile(context.TODO(), pattern)
+		err := compiler.Compile(context.Background(), pattern)
 		c.Assert(err, qt.IsNil)
 
 		input := syntax.NewSyntaxCons(
@@ -740,7 +740,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	)
 	compiler := NewSyntaxCompiler()
 	compiler.variables = map[string]struct{}{"x": {}}
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input with specific source context for the captured value

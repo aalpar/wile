@@ -114,7 +114,7 @@ func Test_ForEach(t *testing.T) {
 	count := 0
 	sum := int64(0)
 
-	tail, err := ForEach(context.TODO(), list, func(_ context.Context, _ int, _ bool, v Value) error {
+	tail, err := ForEach(context.Background(), list, func(_ context.Context, _ int, _ bool, v Value) error {
 		count++
 		intVal, ok := v.(*Integer)
 		if ok {
@@ -131,7 +131,7 @@ func Test_ForEach(t *testing.T) {
 
 func Test_ForEach_NonTuple(t *testing.T) {
 	i := NewInteger(42)
-	tail, err := ForEach(context.TODO(), i, func(_ context.Context, _ int, _ bool, _ Value) error {
+	tail, err := ForEach(context.Background(), i, func(_ context.Context, _ int, _ bool, _ Value) error {
 		return fmt.Errorf("should not be called")
 	})
 	qt.Assert(t, err, qt.IsNil)

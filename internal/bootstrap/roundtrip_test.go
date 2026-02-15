@@ -33,7 +33,7 @@ import (
 func evalSchemeEscape(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	t.Helper()
 	p := parser.NewParser(env, true, strings.NewReader(code))
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func runRoundTripsEscape(t *testing.T, cases []roundTripCase) {
 func runRoundTripsWith(t *testing.T, eval evalFunc, cases []roundTripCase) {
 	t.Helper()
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := NewTopLevelEnvironmentFrameTiny(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	for _, tt := range cases {
@@ -109,7 +109,7 @@ func runRoundTripsBoolEscape(t *testing.T, cases []struct{ name, code string }) 
 func runRoundTripsBoolWith(t *testing.T, eval evalFunc, cases []struct{ name, code string }) {
 	t.Helper()
 	c := qt.New(t)
-	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := NewTopLevelEnvironmentFrameTiny(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	for _, tt := range cases {

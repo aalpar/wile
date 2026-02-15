@@ -593,7 +593,7 @@ func TestDynamicWind(t *testing.T) {
 // TestDynamicWindEscape tests that after is called on continuation escape.
 // This test uses runSchemeCodeWithEnv to load bootstrap macros for 'let'.
 func TestDynamicWindEscape(t *testing.T) {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Parse and run:
@@ -613,7 +613,7 @@ func TestDynamicWindEscape(t *testing.T) {
 		(vector-ref v 0))`
 
 	p := parser.NewParser(env, true, strings.NewReader(prog))
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()

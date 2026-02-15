@@ -343,7 +343,7 @@ func evalSchemeString(code string) (values.Value, error) {
 
 	var lastResult = values.Void
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
+		stx, err := p.ReadSyntax(context.Background())
 		if err != nil {
 			if err == io.EOF {
 				break

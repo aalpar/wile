@@ -599,7 +599,7 @@ func TestParser_Read(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, false, strings.NewReader(tc.in))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.ErrorIs, tc.err)
 			if err != nil {
 				return
@@ -619,7 +619,7 @@ func TestParser_Read(t *testing.T) {
 func TestParse(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironment().Runtime()
-	syn, err := NewParser(env, true, strings.NewReader("42")).ReadSyntax(context.TODO())
+	syn, err := NewParser(env, true, strings.NewReader("42")).ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(42))
 }
@@ -632,7 +632,7 @@ func TestParser_Close(t *testing.T) {
 	p.skipComment = false
 
 	// Read first expression
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(10))
 
@@ -652,7 +652,7 @@ func TestParser_Text(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("hello"))
 	p.skipComment = false
 
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	text := p.Text()
 	c.Assert(text, qt.Equals, "hello")
@@ -703,7 +703,7 @@ func TestParser_Quasiquote(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			p.skipComment = false
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -744,7 +744,7 @@ func TestParser_Quasisyntax(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			p.skipComment = false
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -809,7 +809,7 @@ func TestParser_Strings(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			p.skipComment = false
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -839,7 +839,7 @@ func TestParser_MoreCharacters(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			p.skipComment = false
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -974,7 +974,7 @@ func TestParser_CommentsFollowedByCode(t *testing.T) {
 			p := NewParser(env, tc.skipComments, strings.NewReader(tc.in))
 
 			for i, expect := range tc.expects {
-				syn, err := p.ReadSyntax(context.TODO())
+				syn, err := p.ReadSyntax(context.Background())
 				if err == io.EOF {
 					c.Fatalf("unexpected EOF at index %d, expected %v", i, expect)
 				}
@@ -990,7 +990,7 @@ func TestParser_CommentsFollowedByCode(t *testing.T) {
 			}
 
 			// Verify we've consumed everything
-			_, err := p.ReadSyntax(context.TODO())
+			_, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.Equals, io.EOF)
 		})
 	}
@@ -1048,12 +1048,12 @@ func TestParser_CommentsInsideLists(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in)) // skipComments = true
 
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 
 			// Verify we've consumed everything
-			_, err = p.ReadSyntax(context.TODO())
+			_, err = p.ReadSyntax(context.Background())
 			c.Assert(err, qt.Equals, io.EOF)
 		})
 	}
@@ -1370,7 +1370,7 @@ func TestReadSyntaxRational(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			r, ok := syn.UnwrapAll().(*values.Rational)
@@ -1397,7 +1397,7 @@ func TestReadSyntaxImaginary(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			val := syn.UnwrapAll()
@@ -1441,7 +1441,7 @@ func TestReadSyntaxComplex(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			// Complex numbers can be either *values.Complex (inexact) or *values.BigComplex (exact)
@@ -1475,7 +1475,7 @@ func TestReadSyntaxRadixBinary(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
@@ -1501,7 +1501,7 @@ func TestReadSyntaxRadixOctal(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
@@ -1525,7 +1525,7 @@ func TestReadSyntaxRadixDecimal(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
@@ -1555,7 +1555,7 @@ func TestReadSyntaxRadixHex(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
@@ -1582,7 +1582,7 @@ func TestReadSyntaxExactMarker(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
@@ -1607,7 +1607,7 @@ func TestReadSyntaxInexactMarker(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			f, ok := syn.UnwrapAll().(*values.Float)
@@ -1627,7 +1627,7 @@ func TestReadSyntaxRealInf(t *testing.T) {
 	// Test +inf.0
 	env := environment.NewTopLevelEnvironment().Runtime()
 	p := NewParser(env, true, strings.NewReader("+inf.0"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.UnwrapAll().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1636,7 +1636,7 @@ func TestReadSyntaxRealInf(t *testing.T) {
 	// Test -inf.0
 	env2 := environment.NewTopLevelEnvironment().Runtime()
 	p2 := NewParser(env2, true, strings.NewReader("-inf.0"))
-	syn2, err := p2.ReadSyntax(context.TODO())
+	syn2, err := p2.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	f2, ok := syn2.UnwrapAll().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
@@ -1654,7 +1654,7 @@ func TestReadSyntaxRealNan(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			f, ok := syn.UnwrapAll().(*values.Float)
@@ -1670,7 +1670,7 @@ func TestReadSyntaxImaginaryInf(t *testing.T) {
 	// Test +inf.0i
 	env := environment.NewTopLevelEnvironment().Runtime()
 	p := NewParser(env, true, strings.NewReader("+inf.0i"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	z, ok := syn.UnwrapAll().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1680,7 +1680,7 @@ func TestReadSyntaxImaginaryInf(t *testing.T) {
 	// Test -inf.0i
 	env2 := environment.NewTopLevelEnvironment().Runtime()
 	p2 := NewParser(env2, true, strings.NewReader("-inf.0i"))
-	syn2, err := p2.ReadSyntax(context.TODO())
+	syn2, err := p2.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	z2, ok := syn2.UnwrapAll().(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
@@ -1699,7 +1699,7 @@ func TestReadSyntaxImaginaryNan(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			z, ok := syn.UnwrapAll().(*values.Complex)
@@ -1719,7 +1719,7 @@ func TestReadSyntaxComplexInList(t *testing.T) {
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	p := NewParser(env, true, strings.NewReader("(1+2i 3-4i)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Get the list - UnwrapAll returns the underlying Pair
@@ -1748,7 +1748,7 @@ func TestReadSyntaxMixedNumericTypes(t *testing.T) {
 	// List with integer, rational, imaginary, and complex
 	env := environment.NewTopLevelEnvironment().Runtime()
 	p := NewParser(env, true, strings.NewReader("(42 3/4 +2i 1+2i)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	pair := syn.UnwrapAll().(*values.Pair)
@@ -2001,7 +2001,7 @@ func TestParser_ExtendedExponentMarkers(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -2382,7 +2382,7 @@ func TestReadSyntaxPolarComplex(t *testing.T) {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			z, ok := syn.UnwrapAll().(*values.Complex)
@@ -2420,7 +2420,7 @@ func TestReadSyntaxComplexInfNan(t *testing.T) {
 		qt.New(t).Run(tc.name, func(c *qt.C) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			z, ok := syn.UnwrapAll().(*values.Complex)
@@ -2454,22 +2454,22 @@ func TestParser_MultipleReads(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader(input))
 
 	// First read
-	syn1, err := p.ReadSyntax(context.TODO())
+	syn1, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn1.UnwrapAll(), values.SchemeEquals, values.NewInteger(10))
 
 	// Second read - tokenizer should be preserved
-	syn2, err := p.ReadSyntax(context.TODO())
+	syn2, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn2.UnwrapAll(), values.SchemeEquals, values.NewInteger(20))
 
 	// Third read
-	syn3, err := p.ReadSyntax(context.TODO())
+	syn3, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn3.UnwrapAll(), values.SchemeEquals, values.NewInteger(30))
 
 	// Fourth read should hit EOF
-	_, err = p.ReadSyntax(context.TODO())
+	_, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.Equals, io.EOF)
 }
 
@@ -2479,7 +2479,7 @@ func TestParser_EmptyVector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
@@ -2494,7 +2494,7 @@ func TestParser_EmptyByteVector(t *testing.T) {
 
 	// Empty byte vector - tests the close paren path in byte vector parsing
 	p := NewParser(env, true, strings.NewReader("#u8(10 20)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
@@ -2508,7 +2508,7 @@ func TestParser_SingleElementVector(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#(42)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
@@ -2523,7 +2523,7 @@ func TestParser_NestedLists(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("((a b) (c d e))"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	outerList, ok := syn.UnwrapAll().(*values.Pair)
@@ -2545,7 +2545,7 @@ func TestParser_VectorWithMixedTypes(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader(`#(42 "hello" #t foo)`))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
@@ -2565,7 +2565,7 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 
 	// Test quote with multiple elements in a list
 	p := NewParser(env, true, strings.NewReader("'(a b c d)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Should be (quote (a b c d))
@@ -2591,7 +2591,7 @@ func TestParser_CharacterMnemonicCoverage(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			ch := syn.UnwrapAll().(*values.Character)
 			c.Assert(ch.Value, qt.Equals, tc.expected)
@@ -2606,7 +2606,7 @@ func TestParser_ReadSyntaxErrorPropagation(t *testing.T) {
 
 	// Test with unclosed list - should propagate EOF error
 	p := NewParser(env, true, strings.NewReader("("))
-	_, err := p.ReadSyntax(context.TODO())
+	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNotNil)
 
 	// After error, tokenizer should be nil
@@ -2633,7 +2633,7 @@ func TestParser_ByteVectorWithMultipleValues(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8(255 128 0 64)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
@@ -2653,7 +2653,7 @@ func TestParser_ReadSyntaxPreservesTokenizer(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("(a b) (c d)"))
 
 	// First read
-	syn1, err := p.ReadSyntax(context.TODO())
+	syn1, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	list1 := syn1.UnwrapAll().(*values.Pair)
 	c.Assert(list1.Length(), qt.Equals, 2)
@@ -2662,7 +2662,7 @@ func TestParser_ReadSyntaxPreservesTokenizer(t *testing.T) {
 	c.Assert(p.toks, qt.Not(qt.IsNil))
 
 	// Second read should work
-	syn2, err := p.ReadSyntax(context.TODO())
+	syn2, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	list2 := syn2.UnwrapAll().(*values.Pair)
 	c.Assert(list2.Length(), qt.Equals, 2)
@@ -2687,12 +2687,12 @@ func TestParser_ReadSyntaxEOFHandling(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("42"))
 
 	// First read succeeds
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(42))
 
 	// Second read hits EOF (but this is OK, tokenizer advances)
-	_, err = p.ReadSyntax(context.TODO())
+	_, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.Equals, io.EOF)
 }
 
@@ -2703,7 +2703,7 @@ func TestParser_VectorLoop(t *testing.T) {
 
 	// Test vector with multiple elements to exercise the loop
 	p := NewParser(env, true, strings.NewReader("#(1 2 3 4 5)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
@@ -2718,7 +2718,7 @@ func TestParser_ListWithMultipleElements(t *testing.T) {
 
 	// List with many elements
 	p := NewParser(env, true, strings.NewReader("(a b c d e f g h)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	list, ok := syn.UnwrapAll().(*values.Pair)
@@ -2732,7 +2732,7 @@ func TestParser_ByteVectorLoop(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8(1 2 3 4 5 6 7 8)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
@@ -2746,7 +2746,7 @@ func TestParser_EmptyList(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("()"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.EmptyList)
 }
@@ -2757,7 +2757,7 @@ func TestParser_ImproperList(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("(a b . c)"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Should be a pair with a and a pair with b and c
@@ -2771,7 +2771,7 @@ func TestParser_QuasiquoteSingleElement(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("`x"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Should be (quasiquote x)
@@ -2786,7 +2786,7 @@ func TestParser_UnquoteSplicing(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	p := NewParser(env, true, strings.NewReader(",@foo"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Should be (unquote-splicing foo)
@@ -2811,7 +2811,7 @@ func TestParser_SignedNumbers(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
 		})
@@ -2825,7 +2825,7 @@ func TestParser_RationalNumbers(t *testing.T) {
 
 	// Test both signed and unsigned rational fractions
 	p1 := NewParser(env, true, strings.NewReader("1/2"))
-	syn1, err := p1.ReadSyntax(context.TODO())
+	syn1, err := p1.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	r1 := syn1.UnwrapAll().(*values.Rational)
 	c.Assert(r1.Num().Int64(), qt.Equals, int64(1))
@@ -2833,7 +2833,7 @@ func TestParser_RationalNumbers(t *testing.T) {
 
 	// Test signed rational
 	p2 := NewParser(env, true, strings.NewReader("-3/4"))
-	syn2, err := p2.ReadSyntax(context.TODO())
+	syn2, err := p2.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	r2 := syn2.UnwrapAll().(*values.Rational)
 	c.Assert(r2.Num().Int64(), qt.Equals, int64(-3))
@@ -2848,7 +2848,7 @@ func TestNewParserWithFile(t *testing.T) {
 	filename := "test-file.scm"
 	p := NewParserWithFile(env, true, strings.NewReader("(define x 42)"), filename)
 
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(stx, qt.IsNotNil)
 
@@ -2874,7 +2874,7 @@ func TestNewParserWithFile_EmptyFilename(t *testing.T) {
 	// Test backward compatibility: NewParser should set empty filename
 	p := NewParser(env, true, strings.NewReader("hello"))
 
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	sc := stx.SourceContext()

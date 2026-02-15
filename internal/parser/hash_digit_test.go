@@ -186,7 +186,7 @@ func TestHashDigit_Parser(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewTopLevelEnvironment().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
-			syn, err := p.ReadSyntax(context.TODO())
+			syn, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
 			v := syn.UnwrapAll()
 			c.Assert(v, values.SchemeEquals, tc.expect)
@@ -202,7 +202,7 @@ func TestHashDigit_Inexactness(t *testing.T) {
 
 	// 1## should be inexact (Float)
 	p := NewParser(env, true, strings.NewReader("1##"))
-	syn, err := p.ReadSyntax(context.TODO())
+	syn, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	v := syn.UnwrapAll()
 	_, isFloat := v.(*values.Float)
@@ -210,7 +210,7 @@ func TestHashDigit_Inexactness(t *testing.T) {
 
 	// #e1## should be exact (Integer)
 	p = NewParser(env, true, strings.NewReader("#e1##"))
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	v = syn.UnwrapAll()
 	_, isInt := v.(*values.Integer)
@@ -218,7 +218,7 @@ func TestHashDigit_Inexactness(t *testing.T) {
 
 	// #i1## should be inexact (Float) - #i on already-inexact is a no-op
 	p = NewParser(env, true, strings.NewReader("#i1##"))
-	syn, err = p.ReadSyntax(context.TODO())
+	syn, err = p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	v = syn.UnwrapAll()
 	_, isFloat = v.(*values.Float)

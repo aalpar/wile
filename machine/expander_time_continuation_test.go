@@ -199,7 +199,7 @@ func TestAddScopeToSyntaxViaDefineSyntax(t *testing.T) {
 	`))
 
 	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
+	sv, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	_, err = newTopLevelThunk(sv, env)

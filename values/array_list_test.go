@@ -361,7 +361,7 @@ func TestArrayList_ForEach(t *testing.T) {
 	a := NewArrayList(NewInteger(1), NewInteger(2), EmptyList)
 	count := 0
 	sum := int64(0)
-	a.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error { //nolint:errcheck
+	a.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error { //nolint:errcheck
 		count++
 		intVal, ok := v.(*Integer)
 		if ok {
