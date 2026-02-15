@@ -58,7 +58,7 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 
 	// Build list from tail to head
 	result := values.Value(values.EmptyList)
-	for i := 0; i < count; i++ {
+	for range count {
 		result = values.NewCons(fill, result)
 	}
 
@@ -228,7 +228,7 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list-ref: expected a list but got %T", o)
 	}
-	for i := int64(0); i < idx; i++ {
+	for range idx {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
 			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index out of bounds")
@@ -262,7 +262,7 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	current := p
-	for i := 0; i < k; i++ {
+	for range k {
 		cdr := current.Cdr()
 		next, ok := cdr.(*values.Pair)
 		if !ok {
@@ -297,7 +297,7 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "list-tail: expected a list but got %T", o)
 	}
-	for i := int64(0); i < idx; i++ {
+	for i := range idx {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
 			if i == idx-1 {

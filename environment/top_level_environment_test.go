@@ -105,14 +105,14 @@ func TestInternSymbol_Stress(t *testing.T) {
 
 	// Intern 10,000 unique symbols
 	symbols := make([]*values.Symbol, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		sym := values.NewSymbol("stress-sym-" + string(rune(i/256+1)) + string(rune(i%256+1)))
 		symbols[i] = topLevel.InternSymbol(sym)
 	}
 	c.Assert(topLevel.SymbolInternCount(), qt.Equals, count)
 
 	// Re-interning all returns same pointers
-	for i := 0; i < count; i++ {
+	for i := range count {
 		again := topLevel.InternSymbol(values.NewSymbol(symbols[i].Datum()))
 		c.Assert(again, qt.Equals, symbols[i],
 			qt.Commentf("re-intern of symbol %d should return same pointer", i))
@@ -132,11 +132,11 @@ func TestInternSymbol_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make([][perGoroutine]*values.Symbol, goroutines)
 
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(gIdx int) {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for i := range perGoroutine {
 				var name string
 				if i < 100 {
 					// Shared names across all goroutines
@@ -152,7 +152,7 @@ func TestInternSymbol_Concurrent(t *testing.T) {
 	wg.Wait()
 
 	// Shared symbols: all goroutines should get the same pointer
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		for g := 1; g < goroutines; g++ {
 			c.Assert(results[g][i], qt.Equals, results[0][i],
 				qt.Commentf("shared symbol %d should be identical across goroutines", i))

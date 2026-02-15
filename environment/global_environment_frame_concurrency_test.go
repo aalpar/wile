@@ -39,7 +39,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		topLevel := NewTopLevelEnvironment()
 		env := topLevel.Runtime()
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -61,12 +61,12 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		env := topLevel.Runtime()
 
 		// Pre-populate with bindings
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			env.global.CreateGlobalBinding(sym, BindingTypeVariable)
 		}
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -85,14 +85,14 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 		// Pre-populate with bindings
 		symbols := make([]*values.Symbol, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
 			gi, _ := env.global.CreateGlobalBinding(sym, BindingTypeVariable)
 			_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(0))
 		}
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -104,7 +104,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		wg.Wait()
 
 		// Verify all bindings have values
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			gi := env.global.GetGlobalIndex(symbols[i])
 			bd := env.global.GetOwnGlobalBinding(gi)
 			c.Assert(bd, qt.Not(qt.IsNil))
@@ -119,7 +119,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 		// Pre-populate with some bindings
 		symbols := make([]*values.Symbol, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
 			gi, _ := env.global.CreateGlobalBinding(sym, BindingTypeVariable)
@@ -161,13 +161,13 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		env := topLevel.Runtime()
 
 		// Pre-populate with bindings
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			gi, _ := env.global.CreateGlobalBinding(sym, BindingTypeVariable)
 			_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		}
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -186,7 +186,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		env2 := topLevel.NewChildRuntime()
 
 		// Pre-populate both with same bindings
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			gi1, _ := env1.global.CreateGlobalBinding(sym, BindingTypeVariable)
 			gi2, _ := env2.global.CreateGlobalBinding(sym, BindingTypeVariable)
@@ -194,7 +194,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			_ = env2.global.SetOwnGlobalValue(gi2, values.NewInteger(int64(i)))
 		}
 
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -214,14 +214,14 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 		// Pre-populate parent with bindings
 		symbols := make([]*values.Symbol, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
 			gi, _ := parent.global.CreateGlobalBinding(sym, BindingTypeVariable)
 			_ = parent.global.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		}
 
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()

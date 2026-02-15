@@ -703,7 +703,7 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 	if n > 0 {
 		// Successfully read n bytes; create and return bytevector
 		bv := make(values.ByteVector, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			bv[i] = &values.Byte{Value: buf[i]}
 		}
 		mc.SetValue(&bv)
@@ -754,7 +754,7 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 	// the EOF status is irrelevant since we have data to return.
 	if n > 0 {
 		// Successfully read n bytes; copy into bytevector and return count
-		for i := 0; i < n; i++ {
+		for i := range n {
 			(*bv)[start+i] = values.NewByte(buf[i])
 		}
 		mc.SetValue(values.NewInteger(int64(n)))

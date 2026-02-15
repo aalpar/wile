@@ -227,10 +227,7 @@ func PrimThreadSleep(ctx context.Context, mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Time:
 		// Sleep until the specified time
-		d = time.Until(v.GoTime())
-		if d < 0 {
-			d = 0
-		}
+		d = max(time.Until(v.GoTime()), 0)
 	case *values.Integer:
 		d = time.Duration(v.Value) * time.Second
 	case *values.Float:

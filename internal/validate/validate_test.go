@@ -137,7 +137,7 @@ func TestValidateIf(t *testing.T) {
 		name     string
 		input    values.Value
 		wantOk   bool
-		wantType interface{}
+		wantType any
 	}{
 		{
 			name:     "valid 3-arg if",

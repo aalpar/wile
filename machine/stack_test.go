@@ -158,7 +158,7 @@ func TestStackMoreOperations(t *testing.T) {
 	s := NewStack()
 
 	// Push multiple values
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s.Push(values.NewInteger(int64(i)))
 	}
 	qt.Assert(t, s.Len(), qt.Equals, 10)

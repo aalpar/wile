@@ -729,10 +729,10 @@ func TestSyntaxEquals(t *testing.T) {
 	sym2 := NewSyntaxSymbol("foo", sctx2)
 	sym3 := NewSyntaxSymbol("foo", sctx3)
 
-	err := checker.Check(sym1, []interface{}{sym2}, nil)
+	err := checker.Check(sym1, []any{sym2}, nil)
 	qt.Assert(t, err, qt.IsNil)
 
-	err = checker.Check(sym1, []interface{}{sym3}, nil)
+	err = checker.Check(sym1, []any{sym3}, nil)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 

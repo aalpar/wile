@@ -30,7 +30,7 @@ import (
 // addOpsWithSource adds count placeholder operations tagged with the given source.
 // Used by tests that need a template with source-tagged operations.
 func addOpsWithSource(tpl *NativeTemplate, count int, source *syntax.SourceContext) {
-	for i := 0; i < count; i++ {
+	for range count {
 		tpl.appendOperationsWithSource(source, NewOperationLoadVoid())
 	}
 }
@@ -115,7 +115,7 @@ func TestCaptureStackTrace_MaxDepth(t *testing.T) {
 
 	// Build a deep continuation chain
 	var cont *MachineContinuation
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		cont = NewMachineContinuation(cont, tpl, env)
 	}
 

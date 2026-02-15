@@ -39,7 +39,7 @@ func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 		keys:     make(map[values.Symbol]int),
 		bindings: make([]*Binding, pcnt),
 	}
-	for i := 0; i < pcnt; i++ {
+	for i := range pcnt {
 		q.bindings[i] = NewBinding(values.Void, BindingTypeUnknown)
 	}
 	return q

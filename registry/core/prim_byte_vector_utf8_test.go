@@ -16,6 +16,7 @@ package core_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -104,15 +105,15 @@ func TestStringToUtf8CharacterIndices(t *testing.T) {
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected bytevector, got %T", result))
 
 			// Convert to hex string for comparison
-			var gotHex string
+			var gotHex strings.Builder
 			for i := 0; i < len(*bv); i++ {
 				if i > 0 {
-					gotHex += " "
+					gotHex.WriteString(" ")
 				}
-				gotHex += fmt.Sprintf("%02x", (*bv)[i].Value)
+				gotHex.WriteString(fmt.Sprintf("%02x", (*bv)[i].Value))
 			}
 
-			c.Assert(gotHex, qt.Equals, tc.wantHex,
+			c.Assert(gotHex.String(), qt.Equals, tc.wantHex,
 				qt.Commentf("for code: %s", tc.code))
 		})
 	}
@@ -167,15 +168,15 @@ func TestStringToUtf8EdgeCases(t *testing.T) {
 			bv, ok := result.(*values.ByteVector)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected bytevector, got %T", result))
 
-			var gotHex string
+			var gotHex strings.Builder
 			for i := 0; i < len(*bv); i++ {
 				if i > 0 {
-					gotHex += " "
+					gotHex.WriteString(" ")
 				}
-				gotHex += fmt.Sprintf("%02x", (*bv)[i].Value)
+				gotHex.WriteString(fmt.Sprintf("%02x", (*bv)[i].Value))
 			}
 
-			c.Assert(gotHex, qt.Equals, tc.wantHex)
+			c.Assert(gotHex.String(), qt.Equals, tc.wantHex)
 		})
 	}
 }

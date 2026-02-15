@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -707,41 +708,45 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 
 	for _, op := range operations {
 		t.Logf("\n=== %s Coverage Matrix ===", op.name)
-		header := "Receiver\\Operand"
+		var header strings.Builder
+		header.WriteString("Receiver\\Operand")
 		for _, n := range numbers {
-			header += fmt.Sprintf("\t%s", n.name[:3])
+			header.WriteString(fmt.Sprintf("\t%s", n.name[:3]))
 		}
-		t.Log(header)
+		t.Log(header.String())
 
 		for _, receiver := range numbers {
-			row := receiver.name[:3]
+			var row strings.Builder
+			row.WriteString(receiver.name[:3])
 			for _, operand := range numbers {
 				result := tryOperation(func() Number {
 					return op.op(receiver.value, operand.value)
 				})
 				switch {
 				case result.success:
-					row += "\t✓"
+					row.WriteString("\t✓")
 				case result.isNil:
-					row += "\tNIL"
+					row.WriteString("\tNIL")
 				default:
-					row += "\tPAN"
+					row.WriteString("\tPAN")
 				}
 			}
-			t.Log(row)
+			t.Log(row.String())
 		}
 	}
 
 	// LessThan matrix
 	t.Log("\n=== LessThan Coverage Matrix ===")
-	header := "Receiver\\Operand"
+	var header strings.Builder
+	header.WriteString("Receiver\\Operand")
 	for _, n := range numbers {
-		header += fmt.Sprintf("\t%s", n.name[:3])
+		header.WriteString(fmt.Sprintf("\t%s", n.name[:3]))
 	}
-	t.Log(header)
+	t.Log(header.String())
 
 	for _, receiver := range numbers {
-		row := receiver.name[:3]
+		var row strings.Builder
+		row.WriteString(receiver.name[:3])
 		for _, operand := range numbers {
 			var panicked bool
 			func() {
@@ -754,11 +759,11 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 				_ = receiver.value.LessThan(operand.value)
 			}()
 			if panicked {
-				row += "\tPAN"
+				row.WriteString("\tPAN")
 			} else {
-				row += "\t✓"
+				row.WriteString("\t✓")
 			}
 		}
-		t.Log(row)
+		t.Log(row.String())
 	}
 }

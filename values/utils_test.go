@@ -152,7 +152,7 @@ func Test_NewTemporaryVariableName_Uniqueness(t *testing.T) {
 	seen := make(map[string]bool)
 
 	// Generate 1000 names rapidly to test PRNG initialization and uniqueness
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		name := NewTemporaryVariableName()
 		if seen[name.Key] {
 			c.Fatalf("duplicate name generated: %s", name.Key)

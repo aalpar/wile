@@ -36,6 +36,7 @@ package match
 
 import (
 	"context"
+	"maps"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
@@ -549,9 +550,7 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	for _, childCtx := range children {
 		// Create a new ellipsis variable set for this expansion
 		newEllipsisVars := make(map[string]struct{})
-		for k, v := range ellipsisVars {
-			newEllipsisVars[k] = v
-		}
+		maps.Copy(newEllipsisVars, ellipsisVars)
 		for v := range patternVarsInTemplate {
 			newEllipsisVars[v] = struct{}{}
 		}

@@ -32,7 +32,7 @@ func (p *syntaxEqualsChecker) ArgNames() []string {
 }
 
 // Check implements Checker.Check by checking that got == args[0].
-func (p *syntaxEqualsChecker) Check(got interface{}, args []interface{}, note func(key string, value interface{})) (err error) {
+func (p *syntaxEqualsChecker) Check(got any, args []any, note func(key string, value any)) (err error) {
 	defer func() {
 		// A panic is raised when the provided args are not comparable.
 		r := recover()

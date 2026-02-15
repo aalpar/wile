@@ -95,7 +95,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	timeout := 10 * time.Millisecond
 
 	// Run 100 timeouts (old code would leak 100 goroutines)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		signaled := cv.Wait(nil, &timeout)
 		c.Assert(signaled, qt.IsFalse)
 	}
@@ -201,7 +201,7 @@ func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 	results := make(chan bool, numWaiters)
 
 	// Start 50 waiters
-	for i := 0; i < numWaiters; i++ {
+	for range numWaiters {
 		go func() {
 			signaled := cv.Wait(nil, &timeout)
 			results <- signaled
@@ -215,7 +215,7 @@ func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 	// Collect results
 	signaled := 0
 	timedout := 0
-	for i := 0; i < numWaiters; i++ {
+	for range numWaiters {
 		if <-results {
 			signaled++
 		} else {

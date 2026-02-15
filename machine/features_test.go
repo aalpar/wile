@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -175,12 +176,7 @@ func TestComplexFeatureRequirements(t *testing.T) {
 
 // Helper function to check if a slice contains a string
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }
 
 // Tests moved from coverage_additional_test.go
@@ -190,13 +186,7 @@ func TestAllPlatformFeatures(t *testing.T) {
 	qt.Assert(t, len(features) > 0, qt.IsTrue)
 
 	// Check for some expected features
-	found := false
-	for _, f := range features {
-		if f == "r7rs" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(features, "r7rs")
 	qt.Assert(t, found, qt.IsTrue)
 }
 
@@ -322,13 +312,7 @@ func TestAllFeaturesFunction(t *testing.T) {
 	qt.Assert(t, len(features) > 0, qt.IsTrue)
 
 	// Should include r7rs
-	found := false
-	for _, f := range features {
-		if f == "r7rs" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(features, "r7rs")
 	qt.Assert(t, found, qt.IsTrue)
 }
 
@@ -387,13 +371,7 @@ func TestAllFeaturesContainsPlatformFeatures(t *testing.T) {
 
 	// All platform features should be in AllFeatures
 	for _, f := range pf {
-		found := false
-		for _, af := range features {
-			if af == f {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(features, f)
 		qt.Assert(t, found, qt.IsTrue, qt.Commentf("platform feature %q not found", f))
 	}
 }

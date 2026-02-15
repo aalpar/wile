@@ -678,7 +678,7 @@ func TestMachineContext_Error(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Message, qt.Equals, "test error message")
 	// Error should be a SchemeError
-	_, ok := interface{}(err).(*SchemeError)
+	_, ok := any(err).(*SchemeError)
 	qt.Assert(t, ok, qt.IsTrue)
 }
 
@@ -1214,7 +1214,7 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 	mc.SetMaxCallDepth(10)
 
 	// Save 5 continuations
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err := mc.SaveContinuation(1)
 		if err != nil {
 			t.Fatalf("save %d: %v", i, err)
@@ -1222,12 +1222,12 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 	}
 
 	// Pop 3 of them
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		mc.PopContinuation()
 	}
 
 	// Should be able to save 8 more (was at depth 2 after pops, limit 10)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		err := mc.SaveContinuation(1)
 		if err != nil {
 			t.Fatalf("second save %d: %v", i, err)

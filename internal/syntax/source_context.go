@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aalpar/wile/values"
 )
@@ -201,20 +202,20 @@ func FormatOriginChain(origin *OriginInfo, maxDepth int) string {
 	if origin == nil {
 		return ""
 	}
-	var result string
+	var result strings.Builder
 	depth := 0
 	for o := origin; o != nil; o = o.Parent {
 		depth++
 		if maxDepth > 0 && depth > maxDepth {
 			remaining := origin.Depth() - maxDepth
-			result += fmt.Sprintf("\n  ... and %d more expansion(s)", remaining)
+			result.WriteString(fmt.Sprintf("\n  ... and %d more expansion(s)", remaining))
 			break
 		}
-		result += fmt.Sprintf("\n  expanded from '%s'", o.Identifier)
+		result.WriteString(fmt.Sprintf("\n  expanded from '%s'", o.Identifier))
 		if o.Location != nil && o.Location.File != "" {
-			result += fmt.Sprintf(" at %s:%d:%d",
-				o.Location.File, o.Location.Start.Line(), o.Location.Start.Column())
+			result.WriteString(fmt.Sprintf(" at %s:%d:%d",
+				o.Location.File, o.Location.Start.Line(), o.Location.Start.Column()))
 		}
 	}
-	return result
+	return result.String()
 }

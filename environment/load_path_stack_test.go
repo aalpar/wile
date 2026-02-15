@@ -122,10 +122,10 @@ func TestLoadPathStack_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < opsPerGoroutine; j++ {
+			for range opsPerGoroutine {
 				base := filepath.Join(string(filepath.Separator)+"tmp", "file")
 				path := filepath.Join(base, string(rune('a'+id)), "test.scm")
 				_ = stack.Push(path)

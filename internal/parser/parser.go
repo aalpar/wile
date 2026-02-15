@@ -1357,14 +1357,14 @@ func (p *Parser) parseImaginary(s string) (values.Number, error) {
 // and converts it to rectangular form using: real = r*cos(θ), imag = r*sin(θ)
 func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	// Find the @ separator
-	atPos := strings.Index(s, "@")
-	if atPos == -1 {
+	before, after, ok := strings.Cut(s, "@")
+	if !ok {
 		return nil, NewParserErrorf(p.cur, "invalid polar complex number: %s (no @ separator found)", s)
 	}
 
 	// Split into magnitude and angle parts
-	magPart := s[:atPos]
-	anglePart := s[atPos+1:]
+	magPart := before
+	anglePart := after
 
 	// Parse magnitude
 	mag, err := parseFloatOrInfnan(magPart)
@@ -1547,10 +1547,10 @@ func parseFloatOrInfnan(s string) (float64, error) {
 	}
 
 	// Check for rational number (contains '/')
-	slashIdx := strings.Index(s, "/")
-	if slashIdx != -1 {
-		numStr := s[:slashIdx]
-		denStr := s[slashIdx+1:]
+	before, after, ok := strings.Cut(s, "/")
+	if ok {
+		numStr := before
+		denStr := after
 
 		num, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {

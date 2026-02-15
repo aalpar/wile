@@ -28,6 +28,7 @@ package machine
 
 import (
 	"runtime"
+	"slices"
 )
 
 // ImplementationName is the name of this Scheme implementation.
@@ -97,12 +98,7 @@ func AllFeatures() []string {
 
 // IsFeatureSupported checks if a feature identifier is supported.
 func IsFeatureSupported(feature string) bool {
-	for _, f := range AllFeatures() {
-		if f == feature {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(AllFeatures(), feature)
 }
 
 // FeatureRequirement represents a parsed cond-expand feature requirement.

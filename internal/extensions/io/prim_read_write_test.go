@@ -44,7 +44,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	// Create multiple ports that will be accessed concurrently
 	numPorts := 10
 	ports := make([]*values.StringInputPort, numPorts)
-	for i := 0; i < numPorts; i++ {
+	for i := range numPorts {
 		ports[i] = values.NewStringInputPortWithBuffer(bytes.NewBufferString("(+ 1 2) (+ 3 4)"))
 	}
 
@@ -55,7 +55,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 
 	// Test 1: Concurrent parser creation and access (PrimRead pattern)
 	t.Run("concurrent parser access", func(t *testing.T) {
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(portIdx int) {
 				defer wg.Done()
@@ -86,7 +86,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 		}
 
 		// Concurrently delete entries
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(portIdx int) {
 				defer wg.Done()
@@ -131,7 +131,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	// Test 4: Concurrent InitState calls (should be idempotent and safe)
 	t.Run("concurrent InitState", func(t *testing.T) {
 		ResetState()
-		for i := 0; i < numGoroutines; i++ {
+		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

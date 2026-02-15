@@ -121,16 +121,16 @@ func TestPhaseRegistry_Concurrent(t *testing.T) {
 	const numPhases = 5
 
 	results := make([][]*EnvironmentFrame, numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		results[i] = make([]*EnvironmentFrame, numPhases)
 	}
 
 	// Concurrently access phases
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(goroutineID int) {
 			defer wg.Done()
-			for phase := 0; phase < numPhases; phase++ {
+			for phase := range numPhases {
 				results[goroutineID][phase] = topLevel.phases.GetOrCreate(phase)
 			}
 		}(i)
@@ -139,7 +139,7 @@ func TestPhaseRegistry_Concurrent(t *testing.T) {
 	wg.Wait()
 
 	// All goroutines should get the same instances
-	for phase := 0; phase < numPhases; phase++ {
+	for phase := range numPhases {
 		expected := results[0][phase]
 		for goroutineID := 1; goroutineID < numGoroutines; goroutineID++ {
 			qt.Assert(t, results[goroutineID][phase], qt.Equals, expected,

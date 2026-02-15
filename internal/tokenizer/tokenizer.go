@@ -1676,9 +1676,9 @@ func (p *Tokenizer) readBaseNInteger(r, maxn int) (int64, int) {
 
 func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	n := 0
-	var s string
+	var s strings.Builder
 	for p.err == nil && (isDigit(r, p.curr()) && (maxn <= 0 || n < maxn)) {
-		s += string(p.curr())
+		s.WriteString(string(p.curr()))
 		p.next()
 		n++
 	}
@@ -1688,7 +1688,7 @@ func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	var q int64
 	var err error
 	// always attempt to parse s, even on error
-	q, err = strconv.ParseInt(s, r, 64)
+	q, err = strconv.ParseInt(s.String(), r, 64)
 	if err != nil {
 		err = NewTokenizerErrorWithWrap(p.err, MessageCannotParseNumber, p.tokenStart, p.tokenEnd)
 	}

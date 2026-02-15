@@ -61,7 +61,7 @@ func (p Operations) EqualTo(o values.Value) bool {
 	if len(p) != len(v) {
 		return false
 	}
-	for i := 0; i < len(p); i++ {
+	for i := range p {
 		if !p[i].EqualTo(v[i]) {
 			return false
 		}

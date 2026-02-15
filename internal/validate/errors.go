@@ -90,6 +90,6 @@ func (p *ValidationResult) addError(source *syntax.SourceContext, form, message 
 	})
 }
 
-func (p *ValidationResult) addErrorf(source *syntax.SourceContext, form, format string, args ...interface{}) {
+func (p *ValidationResult) addErrorf(source *syntax.SourceContext, form, format string, args ...any) {
 	p.addError(source, form, fmt.Sprintf(format, args...))
 }

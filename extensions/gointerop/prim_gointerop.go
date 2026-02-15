@@ -41,10 +41,7 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 		if ok {
 			n, ok := restList.Car().(*values.Integer)
 			if ok {
-				bufferSize = int(n.Value)
-				if bufferSize < 0 {
-					bufferSize = 0
-				}
+				bufferSize = max(int(n.Value), 0)
 			}
 		}
 	}

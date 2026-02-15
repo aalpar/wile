@@ -77,7 +77,7 @@ func (p *WindingStack) Pop() *DynamicWindFrame {
 // Returns the index where they diverge (0 means no common frames).
 func FindCommonWindingPrefix(current, target WindingStack) int {
 	minLen := min(len(current), len(target))
-	for i := 0; i < minLen; i++ {
+	for i := range minLen {
 		if current[i].ID != target[i].ID {
 			return i
 		}

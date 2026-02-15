@@ -217,7 +217,7 @@ func TestPair_IsList_Circular(t *testing.T) {
 		for i := range cells {
 			cells[i] = NewCons(NewInteger(int64(i)), EmptyList)
 		}
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			cells[i].SetCdr(cells[i+1])
 		}
 		cells[5].SetCdr(cells[4]) // cycle between last two
