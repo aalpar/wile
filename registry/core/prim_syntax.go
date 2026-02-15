@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -34,7 +33,7 @@ func PrimIdentifierQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	_, ok := obj.(*syntax.SyntaxSymbol)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -170,7 +169,7 @@ func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) er
 	scopes0 := id0.Scopes()
 	scopes1 := id1.Scopes()
 	result := syntax.ScopesMatch(scopes0, scopes1) && syntax.ScopesMatch(scopes1, scopes0)
-	mc.SetValue(schemeutil.BoolToBoolean(result))
+	mc.SetValue(values.BoolToBoolean(result))
 	return nil
 }
 
@@ -200,7 +199,7 @@ func PrimFreeIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) err
 
 	// Both unbound → compare names (free references to same global)
 	if binding0 == nil && binding1 == nil {
-		mc.SetValue(schemeutil.BoolToBoolean(id0.Sym.Key == id1.Sym.Key))
+		mc.SetValue(values.BoolToBoolean(id0.Sym.Key == id1.Sym.Key))
 		return nil
 	}
 
@@ -211,6 +210,6 @@ func PrimFreeIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) err
 	}
 
 	// Both bound → same binding object?
-	mc.SetValue(schemeutil.BoolToBoolean(binding0 == binding1))
+	mc.SetValue(values.BoolToBoolean(binding0 == binding1))
 	return nil
 }

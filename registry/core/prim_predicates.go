@@ -19,7 +19,6 @@ import (
 	"math"
 	"math/big"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -93,7 +92,7 @@ var PrimProcedureQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // Returns #t if the argument is the void value.
 func PrimVoidQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	mc.SetValue(schemeutil.BoolToBoolean(o.IsVoid()))
+	mc.SetValue(values.BoolToBoolean(o.IsVoid()))
 	return nil
 }
 
@@ -101,7 +100,7 @@ func PrimVoidQ(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is the empty list '().
 func PrimNullQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	mc.SetValue(schemeutil.BoolToBoolean(values.IsEmptyList(o)))
+	mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
 	return nil
 }
 
@@ -112,7 +111,7 @@ func PrimNullQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Pair)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -130,9 +129,9 @@ func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 	// Check runtime list types only (not syntax pairs).
 	switch t := o.(type) {
 	case *values.Pair:
-		mc.SetValue(schemeutil.BoolToBoolean(t.IsList()))
+		mc.SetValue(values.BoolToBoolean(t.IsList()))
 	case *values.ArrayList:
-		mc.SetValue(schemeutil.BoolToBoolean(t.IsList()))
+		mc.SetValue(values.BoolToBoolean(t.IsList()))
 	default:
 		mc.SetValue(values.FalseValue)
 	}
@@ -149,7 +148,7 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsInteger()))
+	mc.SetValue(values.BoolToBoolean(n.IsInteger()))
 	return nil
 }
 
@@ -164,7 +163,7 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 		_ = v
 		mc.SetValue(values.TrueValue)
 	case values.ComplexNumber:
-		mc.SetValue(schemeutil.BoolToBoolean(v.IsReal()))
+		mc.SetValue(values.BoolToBoolean(v.IsReal()))
 	default:
 		mc.SetValue(values.FalseValue)
 	}
@@ -181,7 +180,7 @@ func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsRational()))
+	mc.SetValue(values.BoolToBoolean(n.IsRational()))
 	return nil
 }
 
@@ -210,7 +209,7 @@ func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsExact() && n.IsInteger()))
+	mc.SetValue(values.BoolToBoolean(n.IsExact() && n.IsInteger()))
 	return nil
 }
 
@@ -245,9 +244,9 @@ func parityCheck(
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
-		mc.SetValue(schemeutil.BoolToBoolean(regularTest(v.Value)))
+		mc.SetValue(values.BoolToBoolean(regularTest(v.Value)))
 	case *values.BigInteger:
-		mc.SetValue(schemeutil.BoolToBoolean(bigTest(v.BigInt())))
+		mc.SetValue(values.BoolToBoolean(bigTest(v.BigInt())))
 	case *values.Float:
 		// Must be an integer value (no fractional part)
 		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
@@ -259,14 +258,14 @@ func parityCheck(
 		// Convert to big.Int for reliable parity check on large floats
 		bf := new(big.Float).SetFloat64(v.Value)
 		bi, _ := bf.Int(nil)
-		mc.SetValue(schemeutil.BoolToBoolean(bigTest(bi)))
+		mc.SetValue(values.BoolToBoolean(bigTest(bi)))
 	case *values.BigFloat:
 		// Must be an integer value
 		if !v.BigFloatValue().IsInt() {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.BigFloatValue())
 		}
 		bi, _ := v.BigFloatValue().Int(nil)
-		mc.SetValue(schemeutil.BoolToBoolean(bigTest(bi)))
+		mc.SetValue(values.BoolToBoolean(bigTest(bi)))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, o)
 	}

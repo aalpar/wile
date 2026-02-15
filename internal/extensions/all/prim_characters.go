@@ -21,7 +21,6 @@ import (
 	"context"
 	"unicode"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -68,7 +67,7 @@ func PrimCharAlphabeticQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsLetter(ch.Value)))
+	mc.SetValue(values.BoolToBoolean(unicode.IsLetter(ch.Value)))
 	return nil
 }
 
@@ -78,7 +77,7 @@ func PrimCharNumericQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsDigit(ch.Value)))
+	mc.SetValue(values.BoolToBoolean(unicode.IsDigit(ch.Value)))
 	return nil
 }
 
@@ -88,7 +87,7 @@ func PrimCharWhitespaceQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsSpace(ch.Value)))
+	mc.SetValue(values.BoolToBoolean(unicode.IsSpace(ch.Value)))
 	return nil
 }
 
@@ -98,7 +97,7 @@ func PrimCharUpperCaseQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsUpper(ch.Value)))
+	mc.SetValue(values.BoolToBoolean(unicode.IsUpper(ch.Value)))
 	return nil
 }
 
@@ -108,7 +107,7 @@ func PrimCharLowerCaseQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(unicode.IsLower(ch.Value)))
+	mc.SetValue(values.BoolToBoolean(unicode.IsLower(ch.Value)))
 	return nil
 }
 

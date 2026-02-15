@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -285,7 +284,7 @@ func PrimError(ctx context.Context, mc *machine.MachineContext) error {
 func PrimErrorObjectQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.NativeError)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -316,7 +315,7 @@ func PrimErrorObjectIrritants(_ context.Context, mc *machine.MachineContext) err
 func PrimReadErrorQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
-	mc.SetValue(schemeutil.BoolToBoolean(ok && errObj.IsReadError()))
+	mc.SetValue(values.BoolToBoolean(ok && errObj.IsReadError()))
 	return nil
 }
 
@@ -325,6 +324,6 @@ func PrimReadErrorQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimFileErrorQ(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
-	mc.SetValue(schemeutil.BoolToBoolean(ok && errObj.IsFileError()))
+	mc.SetValue(values.BoolToBoolean(ok && errObj.IsFileError()))
 	return nil
 }

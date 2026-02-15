@@ -17,7 +17,6 @@ package core
 import (
 	"context"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -34,7 +33,7 @@ func PrimMakeHashtable(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is a hash table, #f otherwise.
 func PrimHashtableQ(_ context.Context, mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(*values.Hashtable)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 

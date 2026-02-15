@@ -69,3 +69,31 @@ func (p *Boolean) SchemeString() string {
 	}
 	return "#t"
 }
+
+// BoolToBoolean converts a Go bool to a Scheme boolean value.
+func BoolToBoolean(b bool) *Boolean {
+	if b {
+		return TrueValue
+	}
+	return FalseValue
+}
+
+// BooleanToBool converts a Scheme *Boolean to a Go bool value.
+func BooleanToBool(b *Boolean) bool {
+	return b == TrueValue
+}
+
+// ValueToBool converts a value into a Go bool using Scheme semantics.
+// In Scheme, only #f is false; everything else (including 0, "", '()) is true.
+func ValueToBool(b Value) bool {
+	v, ok := b.(*Boolean)
+	if !ok {
+		return true
+	}
+	return v.Datum()
+}
+
+// ValueToBoolean converts a value into a Scheme *Boolean using Scheme semantics.
+func ValueToBoolean(b Value) *Boolean {
+	return BoolToBoolean(ValueToBool(b))
+}

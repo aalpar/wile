@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -419,7 +418,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 
 		// If compare returns a true value (not #f), we found a match
 		result := sub.GetValue()
-		if schemeutil.ValueToBool(result) {
+		if values.ValueToBool(result) {
 			mc.SetValue(pr)
 			return nil
 		}
@@ -497,7 +496,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 
 		// If compare returns a true value (not #f), we found a match
 		result := sub.GetValue()
-		if schemeutil.ValueToBool(result) {
+		if values.ValueToBool(result) {
 			mc.SetValue(entry)
 			return values.ErrStopIteration
 		}

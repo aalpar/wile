@@ -23,7 +23,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -96,7 +95,7 @@ func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
 func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Thread)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -328,7 +327,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Mutex)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -432,7 +431,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 				threadArg := rest2List.Car()
 				if t, ok := threadArg.(*values.Thread); ok {
 					owner = t
-				} else if schemeutil.ValueToBool(threadArg) {
+				} else if values.ValueToBool(threadArg) {
 					return values.WrapForeignErrorf(values.ErrNotAThread, "mutex-lock!: expected thread or #f for owner, got %T", threadArg)
 				} else {
 					owner = nil
@@ -459,7 +458,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 	if acquired && owner != nil {
 		owner.TrackMutex(mutex)
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(acquired))
+	mc.SetValue(values.BoolToBoolean(acquired))
 	return nil
 }
 
@@ -486,7 +485,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 		cvArg := restList.Car()
 		if c, ok := cvArg.(*values.ConditionVariable); ok {
 			cv = c
-		} else if schemeutil.ValueToBool(cvArg) {
+		} else if values.ValueToBool(cvArg) {
 			return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "mutex-unlock!: expected condition-variable or #f, got %T", cvArg)
 		}
 
@@ -511,7 +510,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 	}
 
 	result := mutex.Unlock(cv, timeout)
-	mc.SetValue(schemeutil.BoolToBoolean(result))
+	mc.SetValue(values.BoolToBoolean(result))
 	return nil
 }
 
@@ -524,7 +523,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.ConditionVariable)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -621,7 +620,7 @@ func PrimCurrentTime(_ context.Context, mc *machine.MachineContext) error {
 func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Time)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 

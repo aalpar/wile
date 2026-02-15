@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -55,7 +54,7 @@ func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.RecordType)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -63,7 +62,7 @@ func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.Record)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -216,7 +215,7 @@ func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.Rec
 	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
-		innerMC.SetValue(schemeutil.BoolToBoolean(ok && rec.RecordType() == rt))
+		innerMC.SetValue(values.BoolToBoolean(ok && rec.RecordType() == rt))
 		return nil
 	}
 	return machine.NewForeignClosure(env, 1, false, fn)
@@ -266,7 +265,7 @@ func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.Reco
 func PrimPromiseQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Promise)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 

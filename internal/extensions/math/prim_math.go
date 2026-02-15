@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -661,7 +660,7 @@ func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsFinite()))
+	mc.SetValue(values.BoolToBoolean(n.IsFinite()))
 	return nil
 }
 
@@ -671,7 +670,7 @@ func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(!n.IsFinite() && !n.IsNaN()))
+	mc.SetValue(values.BoolToBoolean(!n.IsFinite() && !n.IsNaN()))
 	return nil
 }
 
@@ -681,7 +680,7 @@ func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(n.IsNaN()))
+	mc.SetValue(values.BoolToBoolean(n.IsNaN()))
 	return nil
 }
 

@@ -17,7 +17,6 @@ package helpers
 import (
 	"context"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -27,7 +26,7 @@ import (
 func MakeTypePredicate(check func(values.Value) bool) func(context.Context, *machine.MachineContext) error {
 	return func(_ context.Context, mc *machine.MachineContext) error {
 		o := mc.Arg(0)
-		mc.SetValue(schemeutil.BoolToBoolean(check(o)))
+		mc.SetValue(values.BoolToBoolean(check(o)))
 		return nil
 	}
 }
@@ -48,7 +47,7 @@ func MakeNumericPredicate[T any](
 		if err != nil {
 			return err
 		}
-		mc.SetValue(schemeutil.BoolToBoolean(test(n)))
+		mc.SetValue(values.BoolToBoolean(test(n)))
 		return nil
 	}
 }

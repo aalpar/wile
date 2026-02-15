@@ -18,7 +18,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -92,7 +91,7 @@ func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 	_, err = os.Stat(filename.Value)
-	mc.SetValue(schemeutil.BoolToBoolean(err == nil))
+	mc.SetValue(values.BoolToBoolean(err == nil))
 	return nil
 }
 
