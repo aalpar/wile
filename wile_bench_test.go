@@ -89,6 +89,125 @@ func BenchmarkCompile(b *testing.B) {
 	}
 }
 
+// BenchmarkRunSimple benchmarks VM-only execution of a simple expression.
+// Pre-compiles once, then benchmarks just Engine.Run() to isolate VM dispatch
+// from parse/expand/compile overhead.
+func BenchmarkRunSimple(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "(+ 1 2)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
+// BenchmarkRunArithmetic benchmarks VM-only nested arithmetic.
+func BenchmarkRunArithmetic(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "(+ (* 2 3) (- 10 5))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
+// BenchmarkRunLambda benchmarks VM-only lambda creation and application.
+// Exercises function call + environment copy.
+func BenchmarkRunLambda(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "((lambda (x) (+ x 1)) 42)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
+// BenchmarkRunFibonacci benchmarks VM-only recursive Fibonacci.
+// Heavy environment copy on every non-tail call — key target for Phase 3 CoW.
+func BenchmarkRunFibonacci(b *testing.B) {
+	ctx := context.Background()
+	engine, _ := NewEngine(ctx)
+	_, err := engine.Eval(ctx, "(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	compiled, err := engine.Compile(ctx, "(fib 10)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(ctx, compiled)
+	}
+}
+
+// BenchmarkRunTailRecursion benchmarks VM-only tail-recursive sum.
+// No environment copy on tail calls — comparison baseline for Phase 3.
+func BenchmarkRunTailRecursion(b *testing.B) {
+	ctx := context.Background()
+	engine, _ := NewEngine(ctx)
+	_, err := engine.Eval(ctx, "(define (sum n acc) (if (<= n 0) acc (sum (- n 1) (+ acc n))))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	compiled, err := engine.Compile(ctx, "(sum 100 0)")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(ctx, compiled)
+	}
+}
+
+// BenchmarkRunLet benchmarks VM-only let binding creation.
+func BenchmarkRunLet(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "(let ((x 10) (y 20)) (+ x y))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
+// BenchmarkRunList benchmarks VM-only list operations.
+func BenchmarkRunList(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "(length (list 1 2 3 4 5))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
+// BenchmarkRunCond benchmarks VM-only conditional dispatch.
+func BenchmarkRunCond(b *testing.B) {
+	engine, _ := NewEngine(context.Background())
+	compiled, err := engine.Compile(context.Background(), "(cond ((< 5 3) 'less) ((> 5 3) 'greater) (else 'equal))")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = engine.Run(context.TODO(), compiled)
+	}
+}
+
 // BenchmarkEvalMacro benchmarks macro expansion and execution
 func BenchmarkEvalMacro(b *testing.B) {
 	engine, _ := NewEngine(context.Background())
