@@ -27,6 +27,13 @@ import (
 // errHalt is the internal VM sentinel returned by OperationRestoreContinuation
 // when mc.cont == nil (i.e., no more frames to pop — execution is complete).
 // Run() catches this and returns nil, so callers never see it.
+// contextCheckMask gates how often the VM loop checks ctx.Done().
+// A non-blocking select is cheap (~15ns) but not free; checking every
+// 1024 ops eliminates ~99.9% of them while keeping worst-case
+// cancellation latency under 1ms at typical throughput.
+// Power of 2 so the check is a single AND instruction.
+const contextCheckMask = 1023
+
 var errHalt = values.NewStaticError("machine halt: no more operations to run")
 
 var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
@@ -457,11 +464,15 @@ func (p *MachineContext) Run() error {
 	var err error
 	mc := p
 	for mc.pc < len(mc.template.operations) {
-		// Check for context cancellation (enables preemption via timeout/cancel)
-		select {
-		case <-mc.ctx.Done():
-			return mc.ctx.Err()
-		default:
+		// Check for context cancellation every 1024 ops instead of every op.
+		// A non-blocking select is cheap but not free; batching keeps the
+		// tight dispatch loop fast while maintaining <1ms cancel latency.
+		if mc.counters.OpsExecuted&contextCheckMask == 0 {
+			select {
+			case <-mc.ctx.Done():
+				return mc.ctx.Err()
+			default:
+			}
 		}
 
 		// Check for debugger breaks
