@@ -658,6 +658,9 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Primitive | Description |
 |-----------|-------------|
 | `load` | Load and execute a file |
+| `current-load-path` | Absolute path of file being loaded, or `#f` in REPL |
+| `current-load-directory` | Directory of file being loaded, or `#f` in REPL |
+| `current-load-depth` | Nesting depth of load stack (0 in REPL) |
 
 ## Expansion and Compilation
 

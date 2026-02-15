@@ -18,7 +18,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`** |
+| P1 | Load-path stack | Feature | **Complete** | LIFO stack in `environment/load_path_stack.go`, integrated into `load`, `include`, `import` with 3-tier resolution |
 | P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |

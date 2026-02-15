@@ -242,8 +242,46 @@ go test -v -run "Unicode" ./registry/core/...
 
 ---
 
+## Load-Path Stack
+
+**Location:** `environment/load_path_stack.go`, `environment/resolve.go`
+**Architecture:** See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) § Load-Path Stack
+**Status:** Stable
+
+### Summary
+
+LIFO stack of absolute file paths enabling relative path resolution for `load`, `include`, and `import`. Stored per-VM on `TopLevelEnvironment`.
+
+### Components
+
+| File | Role |
+|------|------|
+| `environment/load_path_stack.go` | Stack implementation (push/pop/current/depth) |
+| `environment/resolve.go` | 3-tier path resolution (absolute → stack-relative → fallback) |
+| `internal/extensions/eval/prim_eval.go` | `load`, `current-load-path`, `current-load-directory`, `current-load-depth` |
+| `machine/compile_time_continuation_include.go` | `include` integration |
+| `machine/library_loader.go` | `import` / library loading integration |
+| `engine.go` | Public embedder API (`WithLoadPath`, `PushLoadPath`, `PopLoadPath`) |
+
+### Scheme Primitives
+
+| Primitive | Returns | Notes |
+|-----------|---------|-------|
+| `(current-load-path)` | string or `#f` | Absolute path of file being loaded |
+| `(current-load-directory)` | string or `#f` | Directory of file being loaded |
+| `(current-load-depth)` | integer | Nesting depth (0 in REPL) |
+
+### Tests
+
+- `environment/load_path_stack_test.go` — LIFO ordering, concurrent access, relative path rejection
+- `environment/resolve_test.go` — 3-tier resolution, precedence, error messages
+- `internal/extensions/eval/load_path_integration_test.go` — nested loads, Scheme primitives, embedder API
+
+---
+
 ## References
 
 - [NUMERIC_TOWER.md](NUMERIC_TOWER.md) - Numeric tower architecture
 - [R7RS_SEMANTIC_DIFFERENCES.md](R7RS_SEMANTIC_DIFFERENCES.md) - Documented differences from R7RS
 - [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) - Implementation choices
+- [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) - Environment system (includes load-path stack)
