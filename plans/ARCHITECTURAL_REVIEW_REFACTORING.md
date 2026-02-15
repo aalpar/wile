@@ -35,6 +35,79 @@ Completed items have been removed. See git history for the original document.
 - Conversion helpers reimplemented per-type rather than centralized
 - Same 7-branch type switch copy-pasted across all arithmetic methods
 
+### ~~2.3 Port Type Guard-and-Delegate Deduplication~~ ✅ COMPLETE
+
+**Completed.** 43 guard-and-delegate methods across 10 port files refactored to use
+11 typed helper functions in `values/port_helpers.go`. No struct layout, interface,
+or public API changes. Net savings ~76 lines (172 removed from concrete types,
+96 added in helpers). Guard pattern consolidated from 39 sites → 11 definitions.
+
+### ~~2.4 Compiler Nil-Guard Duplication in machine/~~ — DONE
+
+Extracted `ensureState(formName string) error` on `CompileTimeContinuation` in `compile_helpers.go`.
+Four call sites updated: `CompileBeginForSyntax`, `CompileDefineForSyntax`, `CompileEvalWhen`, `CompileDefineSyntax`.
+The `expandCompileExecute` helper was already extracted previously.
+
+---
+
+## Tier 3: Convention Violations (MEDIUM impact)
+
+### ~~3.3 Byte Validation Duplication~~ ✅ COMPLETE
+
+`ValidateByteValue()` moved to `values/byte.go` (was `registry/helpers/args.go`) using
+`ErrNotAByte` sentinel. Five call sites now delegate to the shared helper:
+`PrimMakeBytevector`, `PrimBytevector`, `PrimBytevectorU8Set` (registry/core),
+`PrimWriteU8` (internal/extensions/io), `NewByteVectorFromIntegers` (values).
+
+**Intentionally not converted:** `internal/parser/parser.go` `readByteVector` — uses
+`NewParserErrorWithWrapf` (different error constructor with token position context).
+
+---
+
+## Tier 4: Organizational (LOW impact)
+
+### ~~4.1 compile_time_continuation.go is 2,371 Lines~~ ✅ COMPLETE
+
+Split by domain into four files:
+- `compile_time_continuation.go` (core: 433 lines — struct, symbol resolution, procedure calls, expression compilation)
+- `compile_time_continuation_quasiquote.go` (565 lines — quasiquote expansion and compilation)
+- `compile_time_continuation_library.go` (1,201 lines — define-library, import/export, cond-expand, define-syntax, parsing)
+- `compile_time_continuation_include.go` (247 lines — include, include-ci, file resolution, letrec* semantics)
+
+Library file larger than estimated (~1,200 vs ~500) because it includes the full import set
+parsing family (parseImportSet*, 7 variants), feature requirement parsing, CompileDefineSyntax,
+and CompileCondExpand — all library-system concerns.
+
+### 4.2 Validator Prologue Duplication
+
+**Scope:** 19 validators
+**Files:** `internal/validate/validate_*.go`
+**Effort:** Low
+
+All 19 validators repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). The list collection step uses a shared `collectList()` helper, but the error-reporting boilerplate (improper-list check + arity guard) is still duplicated. A `validateFormPrologue()` helper would deduplicate.
+
+### ~~4.3 Bytecode Instruction Files in match/~~ ✅ COMPLETE
+
+Consolidated 13 single-type bytecode files into 4 files by category:
+- `bytecode_navigate.go` (VisitCar, VisitCdr, Done, RequireCarEmpty)
+- `bytecode_compare.go` (CompareCar, CompareCdr)
+- `bytecode_capture.go` (CaptureCar, CaptureCdr)
+- `bytecode_control.go` (SkipIfEmpty, SkipIfTailCount, Jump, PushContext, PopContext)
+
+### 4.4 Optional Fill Argument Extraction
+
+**Scope:** 3 sites
+**Files:** `registry/core/prim_vectors.go` (PrimMakeVector), `registry/core/prim_byte_vectors.go` (PrimMakeBytevector), `registry/core/prim_strings.go` (PrimMakeString)
+**Effort:** Low
+
+Three `make-*` primitives each independently extract optional fill arguments with slightly different patterns. Could share a helper.
+
+### ~~4.5 Empty List Handling Inconsistency~~ ✅ COMPLETE
+
+Standardized on explicit `IsEmptyList` check-first pattern. Two functions converted:
+`PrimStringAppend` (removed dead check-in-fallback branch) and `PrimAppend` (added explicit
+empty-list guard, removed post-hoc `len(lists) == 0` check). 10 existing sites already
+used check-first; 4 sites use idiomatic loop-guard (`for !IsEmptyList`), left as-is.
 ---
 
 ## What's Working Well (Preserve)

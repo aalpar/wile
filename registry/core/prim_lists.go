@@ -91,6 +91,10 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 // - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
 func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
+	if values.IsEmptyList(o) {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
 	args, ok := o.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "append: expected a list but got %T", o)
@@ -107,10 +111,6 @@ func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "append: expected proper list of arguments")
-	}
-	if len(lists) == 0 {
-		mc.SetValue(values.EmptyList)
-		return nil
 	}
 	// Build result from right to left
 	var result values.Value = values.EmptyList

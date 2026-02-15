@@ -219,12 +219,14 @@ func PrimStringToSymbol(_ context.Context, mc *machine.MachineContext) error {
 // Concatenates strings.
 func PrimStringAppend(ctx context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
+	if values.IsEmptyList(o) {
+		// R7RS §6.7: string-append returns a newly allocated mutable string,
+		// even in the zero-argument / empty-list case.
+		mc.SetValue(values.NewMutableString(""))
+		return nil
+	}
 	tuple, ok := o.(values.Tuple)
 	if !ok {
-		if values.IsEmptyList(o) {
-			mc.SetValue(values.NewString(""))
-			return nil
-		}
 		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
