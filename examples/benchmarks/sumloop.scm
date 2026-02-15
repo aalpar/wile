@@ -32,4 +32,4 @@
 
 ;; Benchmark
 (display "=== Iterative Summation Benchmark ===\n\n")
-(run-benchmark 1000 10000)
+(run-benchmark 100 10000)

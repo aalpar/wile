@@ -185,7 +185,9 @@
 
 ;; Literal matching
 (define-syntax cond-with-arrow
-  (syntax-rules (=>)
+  (syntax-rules (=> else)
+    ((cond-with-arrow (else body ...))
+     (begin body ...))
     ((cond-with-arrow (test => proc) rest ...)
      (let ((temp test))
        (if temp

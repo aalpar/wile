@@ -145,8 +145,22 @@
 (display v8)
 (newline)
 
+;; Simple insertion sort (sort is not in R7RS-small)
+(define (insert-sorted item lst less-than?)
+  (cond
+   ((null? lst) (list item))
+   ((less-than? item (car lst)) (cons item lst))
+   (else (cons (car lst) (insert-sorted item (cdr lst) less-than?)))))
+
+(define (insertion-sort lst less-than?)
+  (let loop ((remaining lst) (sorted '()))
+    (if (null? remaining)
+        sorted
+        (loop (cdr remaining)
+              (insert-sorted (car remaining) sorted less-than?)))))
+
 ;; Convert to list, sort, convert back
-(define v8-sorted (list->vector (sort (vector->list v8) <)))
+(define v8-sorted (list->vector (insertion-sort (vector->list v8) <)))
 (display "  Sorted: ")
 (display v8-sorted)
 (newline)

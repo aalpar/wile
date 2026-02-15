@@ -30,8 +30,10 @@
       elapsed)))
 
 ;; Warmup
-(ackermann 3 6)
+(ackermann 3 4)
 
 ;; Benchmark
+;; Note: ack(3,n) time grows ~8x per increment of n.
+;; ack(3,7) takes ~3s; ack(3,9) takes ~330s per call.
 (display "=== Ackermann Function Benchmark ===\n\n")
-(run-benchmark 10 3 9)
+(run-benchmark 5 3 7)
