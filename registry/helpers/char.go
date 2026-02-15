@@ -15,7 +15,6 @@
 package helpers
 
 import (
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -75,7 +74,7 @@ func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bo
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c2)
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
+	mc.SetValue(values.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
 	return nil
 }
 

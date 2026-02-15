@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/internal/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/exceptions"
 
 	qt "github.com/frankban/quicktest"
 )

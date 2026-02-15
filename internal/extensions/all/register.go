@@ -16,14 +16,14 @@
 package all
 
 import (
+	"github.com/aalpar/wile/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/files"
+	"github.com/aalpar/wile/extensions/gointerop"
+	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/eval"
-	"github.com/aalpar/wile/internal/extensions/exceptions"
-	"github.com/aalpar/wile/internal/extensions/files"
-	"github.com/aalpar/wile/internal/extensions/gointerop"
 	"github.com/aalpar/wile/internal/extensions/io"
-	"github.com/aalpar/wile/internal/extensions/math"
-	"github.com/aalpar/wile/internal/extensions/system"
-	"github.com/aalpar/wile/internal/extensions/threads"
 	"github.com/aalpar/wile/registry"
 )
 

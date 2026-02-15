@@ -17,7 +17,6 @@ package core
 import (
 	"context"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -30,7 +29,7 @@ func PrimEqQ(_ context.Context, mc *machine.MachineContext) error {
 	o1 := mc.Arg(1)
 	// eq? tests for object identity - same pointer or same immediate value
 	// Go's == compares pointers by address for reference types
-	mc.SetValue(schemeutil.BoolToBoolean(o0 == o1))
+	mc.SetValue(values.BoolToBoolean(o0 == o1))
 	return nil
 }
 
@@ -45,7 +44,7 @@ func PrimEqQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimEqvQ(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	mc.SetValue(schemeutil.BoolToBoolean(helpers.Eqv(o0, o1)))
+	mc.SetValue(values.BoolToBoolean(helpers.Eqv(o0, o1)))
 	return nil
 }
 
@@ -54,7 +53,7 @@ func PrimEqvQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimEqualQ(_ context.Context, mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	mc.SetValue(schemeutil.BoolToBoolean(values.EqualTo(o0, o1)))
+	mc.SetValue(values.BoolToBoolean(values.EqualTo(o0, o1)))
 	return nil
 }
 
@@ -63,7 +62,7 @@ func PrimEqualQ(_ context.Context, mc *machine.MachineContext) error {
 func PrimNot(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// In Scheme, only #f is false; everything else is true
-	mc.SetValue(schemeutil.BoolToBoolean(!schemeutil.ValueToBool(o)))
+	mc.SetValue(values.BoolToBoolean(!values.ValueToBool(o)))
 	return nil
 }
 

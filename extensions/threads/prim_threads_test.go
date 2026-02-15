@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/aalpar/wile"
-	extexceptions "github.com/aalpar/wile/internal/extensions/exceptions"
-	extthreads "github.com/aalpar/wile/internal/extensions/threads"
+	extexceptions "github.com/aalpar/wile/extensions/exceptions"
+	extthreads "github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"

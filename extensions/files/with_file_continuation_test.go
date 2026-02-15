@@ -23,7 +23,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile"
-	extfiles "github.com/aalpar/wile/internal/extensions/files"
+	extfiles "github.com/aalpar/wile/extensions/files"
 	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/values"
 )

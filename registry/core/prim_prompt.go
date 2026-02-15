@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -56,7 +55,7 @@ func PrimDefaultContinuationPromptTag(_ context.Context, mc *machine.MachineCont
 // PrimContinuationPromptTagQ tests whether a value is a continuation prompt tag.
 func PrimContinuationPromptTagQ(_ context.Context, mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(*machine.PromptTag)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 

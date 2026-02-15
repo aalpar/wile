@@ -39,7 +39,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system (EnvironmentAccess interface) | Proposed |
+| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, 6/9 extensions public | In Progress |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
 

@@ -125,9 +125,9 @@ func TestApply_InitFunc(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
 
-	var calledEnv *environment.EnvironmentFrame
-	reg.AddInitFunc(func(actx ApplyContext) error {
-		calledEnv = actx.Environment()
+	called := false
+	reg.AddInitFunc(func() error {
+		called = true
 		return nil
 	})
 
@@ -135,7 +135,7 @@ func TestApply_InitFunc(t *testing.T) {
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
-	c.Assert(calledEnv, qt.Equals, env)
+	c.Assert(called, qt.IsTrue)
 }
 
 // Apply with multi-phase primitive
@@ -174,15 +174,4 @@ func TestApply_EmptyRegistry(t *testing.T) {
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
-}
-
-// applyContext methods
-
-func TestApplyContext_Methods(t *testing.T) {
-	c := qt.New(t)
-	topLevel := environment.NewTopLevelEnvironment()
-	env := topLevel.Runtime()
-
-	actx := &applyContext{env: env}
-	c.Assert(actx.Environment(), qt.Equals, env)
 }

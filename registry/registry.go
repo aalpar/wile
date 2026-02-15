@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
 )
 
 // PrimitiveSpec defines a primitive to be registered.
@@ -37,8 +38,14 @@ type PrimitiveRegistration struct {
 	Phases Phase
 }
 
-// InitFunc is called after primitives are registered.
-type InitFunc func(ApplyContext) error
+// InitFunc is called after all primitives and global values are registered.
+type InitFunc func() error
+
+// GlobalValue pairs a name with a value to be registered as a global binding.
+type GlobalValue struct {
+	Name  string
+	Value values.Value
+}
 
 // Registry is the central registry for primitives.
 type Registry struct {
@@ -47,6 +54,7 @@ type Registry struct {
 	bindings     []string // Compile-time only bindings
 	initFuncs    []InitFunc
 	macroSources []string
+	globalValues []GlobalValue
 }
 
 // NewRegistry creates a new empty registry.
@@ -56,6 +64,7 @@ func NewRegistry() *Registry {
 		bindings:     make([]string, 0, 16),
 		initFuncs:    make([]InitFunc, 0, 8),
 		macroSources: make([]string, 0, 4),
+		globalValues: make([]GlobalValue, 0, 4),
 	}
 	return q
 }
@@ -108,6 +117,17 @@ func (p *Registry) AddMacroSource(source string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.macroSources = append(p.macroSources, source)
+}
+
+// AddGlobalValue registers a named value to be bound as a global variable.
+// Unlike AddPrimitive, this takes an arbitrary Value rather than a ForeignFunction.
+func (p *Registry) AddGlobalValue(name string, value values.Value) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.globalValues = append(p.globalValues, GlobalValue{
+		Name:  name,
+		Value: value,
+	})
 }
 
 // PrimitiveCount returns the number of registered primitives.
@@ -186,6 +206,15 @@ func (p *Registry) InitFuncs() []InitFunc {
 	return q
 }
 
+// GlobalValues returns a copy of the global value registrations.
+func (p *Registry) GlobalValues() []GlobalValue {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]GlobalValue, len(p.globalValues))
+	copy(q, p.globalValues)
+	return q
+}
+
 // Clone creates a copy of the registry.
 func (p *Registry) Clone() *Registry {
 	p.mu.RLock()
@@ -196,11 +225,13 @@ func (p *Registry) Clone() *Registry {
 		bindings:     make([]string, len(p.bindings)),
 		initFuncs:    make([]InitFunc, len(p.initFuncs)),
 		macroSources: make([]string, len(p.macroSources)),
+		globalValues: make([]GlobalValue, len(p.globalValues)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindings, p.bindings)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
+	copy(q.globalValues, p.globalValues)
 	return q
 }
 

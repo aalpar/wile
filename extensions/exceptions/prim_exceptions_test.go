@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extexceptions "github.com/aalpar/wile/internal/extensions/exceptions"
+	extexceptions "github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"

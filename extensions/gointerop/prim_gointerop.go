@@ -20,7 +20,6 @@ package gointerop
 import (
 	"context"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -60,7 +59,7 @@ func PrimMakeChannel(_ context.Context, mc *machine.MachineContext) error {
 func PrimChannelQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Channel)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -117,7 +116,7 @@ func PrimChannelTrySend(_ context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(err, "channel-try-send!")
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(sent))
+	mc.SetValue(values.BoolToBoolean(sent))
 	return nil
 }
 
@@ -182,7 +181,7 @@ func PrimChannelClosedQ(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(ch.IsClosed()))
+	mc.SetValue(values.BoolToBoolean(ch.IsClosed()))
 	return nil
 }
 
@@ -227,7 +226,7 @@ func PrimMakeWaitGroup(_ context.Context, mc *machine.MachineContext) error {
 func PrimWaitGroupQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.WaitGroup)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -311,7 +310,7 @@ func PrimMakeRWMutex(_ context.Context, mc *machine.MachineContext) error {
 func PrimRWMutexQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.RWMutex)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -375,7 +374,7 @@ func PrimRWMutexTryReadLock(_ context.Context, mc *machine.MachineContext) error
 		return err
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryRLock()))
+	mc.SetValue(values.BoolToBoolean(rwm.TryRLock()))
 	return nil
 }
 
@@ -387,7 +386,7 @@ func PrimRWMutexTryWriteLock(_ context.Context, mc *machine.MachineContext) erro
 		return err
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(rwm.TryLock()))
+	mc.SetValue(values.BoolToBoolean(rwm.TryLock()))
 	return nil
 }
 
@@ -408,7 +407,7 @@ func PrimMakeOnce(_ context.Context, mc *machine.MachineContext) error {
 func PrimOnceQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Once)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -446,7 +445,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		return thunkErr
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(executed))
+	mc.SetValue(values.BoolToBoolean(executed))
 	return nil
 }
 
@@ -458,7 +457,7 @@ func PrimOnceDoneQ(_ context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	mc.SetValue(schemeutil.BoolToBoolean(once.Done()))
+	mc.SetValue(values.BoolToBoolean(once.Done()))
 	return nil
 }
 
@@ -481,7 +480,7 @@ func PrimMakeAtomic(_ context.Context, mc *machine.MachineContext) error {
 func PrimAtomicQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.AtomicBox)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -544,6 +543,6 @@ func PrimAtomicCompareAndSwap(_ context.Context, mc *machine.MachineContext) err
 	oldVal := mc.Arg(1)
 	newVal := mc.Arg(2)
 
-	mc.SetValue(schemeutil.BoolToBoolean(a.CompareAndSwap(oldVal, newVal)))
+	mc.SetValue(values.BoolToBoolean(a.CompareAndSwap(oldVal, newVal)))
 	return nil
 }

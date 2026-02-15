@@ -15,7 +15,6 @@
 package helpers
 
 import (
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -33,7 +32,7 @@ func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, s2)
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(cmp(str1.Value, str2.Value)))
+	mc.SetValue(values.BoolToBoolean(cmp(str1.Value, str2.Value)))
 	return nil
 }
 

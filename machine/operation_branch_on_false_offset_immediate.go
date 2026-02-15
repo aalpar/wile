@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/values"
 )
 
@@ -46,7 +45,7 @@ func (p *OperationBranchOnFalseOffsetImmediate) EqualTo(o values.Value) bool {
 
 func (p *OperationBranchOnFalseOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	v := mc.evals.Pop()
-	if !schemeutil.ValueToBool(v) {
+	if !values.ValueToBool(v) {
 		mc.pc += p.Offset
 	} else {
 		mc.pc++

@@ -99,3 +99,156 @@ func TestBoolean_Datum(t *testing.T) {
 	b2 := NewBoolean(false)
 	qt.Assert(t, b2.Datum(), qt.Equals, false)
 }
+
+func TestBoolToBoolean(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   bool
+		out  *Boolean
+	}{
+		{
+			name: "true returns TrueValue",
+			in:   true,
+			out:  TrueValue,
+		},
+		{
+			name: "false returns FalseValue",
+			in:   false,
+			out:  FalseValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := BoolToBoolean(tc.in)
+			c.Assert(result, qt.Equals, tc.out)
+		})
+	}
+}
+
+func TestValueToBool(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   Value
+		out  bool
+	}{
+		{
+			name: "boolean false returns false",
+			in:   FalseValue,
+			out:  false,
+		},
+		{
+			name: "boolean true returns true",
+			in:   TrueValue,
+			out:  true,
+		},
+		{
+			name: "integer returns true (Scheme semantics)",
+			in:   NewInteger(0),
+			out:  true,
+		},
+		{
+			name: "negative integer returns true",
+			in:   NewInteger(-1),
+			out:  true,
+		},
+		{
+			name: "positive integer returns true",
+			in:   NewInteger(42),
+			out:  true,
+		},
+		{
+			name: "empty string returns true",
+			in:   NewString(""),
+			out:  true,
+		},
+		{
+			name: "non-empty string returns true",
+			in:   NewString("hello"),
+			out:  true,
+		},
+		{
+			name: "empty list returns true",
+			in:   EmptyList,
+			out:  true,
+		},
+		{
+			name: "pair returns true",
+			in:   NewCons(NewInteger(1), NewInteger(2)),
+			out:  true,
+		},
+		{
+			name: "symbol returns true",
+			in:   NewSymbol("foo"),
+			out:  true,
+		},
+		{
+			name: "void returns true",
+			in:   Void,
+			out:  true,
+		},
+		{
+			name: "character returns true",
+			in:   NewCharacter('a'),
+			out:  true,
+		},
+		{
+			name: "float zero returns true",
+			in:   NewFloat(0.0),
+			out:  true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValueToBool(tc.in)
+			c.Assert(result, qt.Equals, tc.out)
+		})
+	}
+}
+
+func TestValueToBoolean(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   Value
+		out  *Boolean
+	}{
+		{
+			name: "boolean false returns FalseValue",
+			in:   FalseValue,
+			out:  FalseValue,
+		},
+		{
+			name: "boolean true returns TrueValue",
+			in:   TrueValue,
+			out:  TrueValue,
+		},
+		{
+			name: "integer returns TrueValue (Scheme semantics)",
+			in:   NewInteger(0),
+			out:  TrueValue,
+		},
+		{
+			name: "string returns TrueValue",
+			in:   NewString(""),
+			out:  TrueValue,
+		},
+		{
+			name: "empty list returns TrueValue",
+			in:   EmptyList,
+			out:  TrueValue,
+		},
+		{
+			name: "symbol returns TrueValue",
+			in:   NewSymbol("bar"),
+			out:  TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValueToBoolean(tc.in)
+			c.Assert(result, qt.Equals, tc.out)
+		})
+	}
+}

@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -30,7 +29,7 @@ import (
 // R7RS §6.13.1: Returns #t if obj is a port, otherwise returns #f.
 func PrimPortQ(_ context.Context, mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(values.Port)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -40,7 +39,7 @@ func PrimPortQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.1: Returns #t if obj is an input port, otherwise returns #f.
 func PrimInputPortQ(_ context.Context, mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(values.InputPort)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -50,7 +49,7 @@ func PrimInputPortQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.1: Returns #t if obj is an output port, otherwise returns #f.
 func PrimOutputPortQ(_ context.Context, mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(values.OutputPort)
-	mc.SetValue(schemeutil.BoolToBoolean(ok))
+	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
 }
 
@@ -63,7 +62,7 @@ func PrimInputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(!p.IsClosed()))
+	mc.SetValue(values.BoolToBoolean(!p.IsClosed()))
 	return nil
 }
 
@@ -76,7 +75,7 @@ func PrimOutputPortOpenQ(_ context.Context, mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(schemeutil.BoolToBoolean(!p.IsClosed()))
+	mc.SetValue(values.BoolToBoolean(!p.IsClosed()))
 	return nil
 }
 
@@ -109,7 +108,7 @@ func PrimEofObject(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is the EOF object.
 func PrimEofObjectQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	mc.SetValue(schemeutil.BoolToBoolean(o == values.EOFObject))
+	mc.SetValue(values.BoolToBoolean(o == values.EOFObject))
 	return nil
 }
 
@@ -193,7 +192,7 @@ func PrimTextualPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, isReader := o.(values.TextualReader)
 	_, isWriter := o.(values.TextualWriter)
-	mc.SetValue(schemeutil.BoolToBoolean(isReader || isWriter))
+	mc.SetValue(values.BoolToBoolean(isReader || isWriter))
 	return nil
 }
 
@@ -203,7 +202,7 @@ func PrimBinaryPortQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, isReader := o.(values.BinaryReader)
 	_, isWriter := o.(values.BinaryWriter)
-	mc.SetValue(schemeutil.BoolToBoolean(isReader || isWriter))
+	mc.SetValue(values.BoolToBoolean(isReader || isWriter))
 	return nil
 }
 
