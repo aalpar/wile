@@ -1,6 +1,6 @@
 # Wile Project Status
 
-**Current Version**: v1.2.0 (released 2026-02-11)
+**Current Version**: v1.3.0 (pending release)
 
 ## Implementation Status
 
@@ -36,14 +36,12 @@ REPL (readline, history, debugger), Makefile, CI/CD, GoReleaser, Docker, golangc
 
 ### Blocks Adoption
 
-1. **Load-path resolution** — `(load "helper.scm")` resolves from CWD, not file directory
-2. **External extensions** — Can't publish extensions to separate repos (see `EXTERNAL_EXTENSIONS_PLAN.md`)
+1. **External extensions** — Can't publish extensions to separate repos (see `EXTERNAL_EXTENSIONS_PLAN.md`)
 
 ### Growth
 
 1. **Scheme test content** — Infrastructure exists, needs test files
-2. **Performance benchmarks** — Need published results vs other Schemes
-3. **External extension proof-of-concept** — No example yet
+2. **External extension proof-of-concept** — No example yet
 
 ### Long-term
 

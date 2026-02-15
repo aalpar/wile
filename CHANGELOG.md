@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-14
+
 ### Added
 
 - Add load path stack for relative file resolution — `(load "helper.scm")` now resolves relative to the file containing the `load` call, not the working directory; nested loads resolve correctly through a per-VM LIFO path stack
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
 - Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
 - Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
+- Add Apache 2.0 NOTICE file
+- Add CLI package subprocess tests (coverage 9.8% → 75%)
 
 ### Changed
 
@@ -31,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Consolidate 6 `SyntaxMatcher.Expand*` methods into single `Expand(template, ExpandOptions)` with options struct
 - Consolidate tokenizer number parsing — extract `readOptionalDecimalPart`, delete `scanForImaginaryNumberSpecials`, extract `signedState` helper, unify string/extended-symbol scanning via `readDelimited`
 - Deduplicate unwind logic between `UnwindTo` and `RestoreWithWindingFrom`
+- Deduplicate validator prologues with `formPrologue` helper
+- Deduplicate port guard-and-delegate methods
+- Split `compile_time_continuation.go` by domain into focused files
+- Consolidate match bytecode instructions by category
+- Extract `ParseOptionalArg` helper for `make-*` fill parameter extraction
+- Standardize empty list handling on check-first pattern
+- Extract `ValidateByteValue` helper for byte range checks with `ErrNotAByte` sentinel
 
 ### Fixed
 
@@ -56,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fix cross-type numeric hash consistency — `Integer`, `BigInteger`, and `Rational` now share canonical exact hashes; `Float` and `BigFloat` share canonical inexact hashes (restores `Hashable` contract: `a.EqualTo(b)` implies `a.HashCode() == b.HashCode()`)
 - Fix broken output in `examples/concurrency/mutex.scm` (used `#\newline` character literals instead of printing newlines)
 - Fix compilation error in `examples/data-structures/association-lists.scm` (undefined `sort` procedure; added insertion sort implementation)
+- Fix compilation error in `examples/data-structures/vectors.scm` (undefined `sort` procedure; added insertion sort implementation)
+- Fix compilation error in `examples/macros/simple-macros.scm` (`else` not listed as literal in user-defined `cond-with-arrow` macro)
+- Fix `examples/basics/higher-order.scm` using undefined `filter` (not in R7RS-small; added local definition)
+- Fix `examples/io/file-io.scm` using `with-exception-handler` where `guard` is needed (handler returned from non-continuable exception)
+- Fix `string-append` with zero arguments returning an immutable string instead of a mutable one
+- Fix `ValidateByteValue` error messages losing argument-role context after helper extraction
 
 ## [1.2.0] - 2026-02-11
 
@@ -181,7 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/aalpar/wile/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aalpar/wile/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aalpar/wile/compare/v1.0.4...v1.1.0
 [1.0.4]: https://github.com/aalpar/wile/compare/v1.0.3...v1.0.4

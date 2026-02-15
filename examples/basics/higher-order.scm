@@ -10,6 +10,13 @@
 (newline)
 
 ;; filter - keep elements that satisfy predicate
+;; Note: filter is not in R7RS-small base, so we define our own
+(define (filter pred lst)
+  (cond
+   ((null? lst) '())
+   ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))
+   (else (filter pred (cdr lst)))))
+
 (define (even? n)
   (= (modulo n 2) 0))
 

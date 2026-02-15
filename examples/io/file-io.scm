@@ -71,20 +71,17 @@
   (newline port)
   (close-output-port port))
 
-;; Using with-exception-handler for error handling
+;; Using guard for error handling
 (display "File operations with error handling:")
 (newline)
-(with-exception-handler
-  (lambda (exn)
-    (display "Error: ")
-    (display exn)
-    (newline)
-    #f)
-  (lambda ()
-    ;; Try to read a non-existent file
-    (call-with-input-file "nonexistent.txt"
-      (lambda (port)
-        (read-line port)))))
+(guard (exn
+        (#t (display "Error: ")
+            (display exn)
+            (newline)))
+  ;; Try to read a non-existent file
+  (call-with-input-file "nonexistent.txt"
+    (lambda (port)
+      (read-line port))))
 
 ;; Clean up
 (display "Cleaning up test file...")
