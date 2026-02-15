@@ -30,7 +30,7 @@ import (
 	"log"
 
 	"github.com/aalpar/wile"
-	"github.com/aalpar/wile/internal/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/exceptions"
 )
 
 func main() {

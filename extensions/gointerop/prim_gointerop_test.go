@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extgointerop "github.com/aalpar/wile/internal/extensions/gointerop"
+	extgointerop "github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"

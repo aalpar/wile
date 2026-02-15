@@ -25,7 +25,7 @@ import (
 // These are implemented as macros using parameterize to ensure proper integration
 // with the continuation system (fixes T3 from architectural review).
 //
-// Source: go/internal/extensions/files/with_file_macros.scm (embedded at compile-time)
+// Source: go/extensions/files/with_file_macros.scm (embedded at compile-time)
 //
 //go:embed with_file_macros.scm
 var withFileMacroSource string

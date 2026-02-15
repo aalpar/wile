@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aalpar/wile/internal/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 

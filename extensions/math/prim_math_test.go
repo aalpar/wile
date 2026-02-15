@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extmath "github.com/aalpar/wile/internal/extensions/math"
+	extmath "github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"

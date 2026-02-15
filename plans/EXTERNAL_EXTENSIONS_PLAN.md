@@ -1,6 +1,6 @@
 # External Extensions Plan
 
-**Status:** IN PROGRESS — Phase 3 complete (2026-02-14)
+**Status:** IN PROGRESS — Phase 4 complete (2026-02-14)
 
 > **Cross-reference**: Plugin architecture (Phases 1-3, 5-6) is complete. This plan covers the remaining Phase 4: external extraction.
 
@@ -144,7 +144,7 @@ With zero production callers of both `ApplyContext.Environment()` and `AddInitFu
 | `registry/apply_test.go` | Updated `TestApply_InitFunc`, removed `TestApplyContext_Methods` |
 | `registry/registry_test.go` | Updated `TestRegistry_AddInitFunc` signature |
 
-### Phase 4: Move Tier 1 Extensions Out of `internal/`
+### Phase 4: Move Tier 1 Extensions Out of `internal/` ✅
 
 After Phases 1-3, these extensions import only public packages (`values/`, `registry/`, `registry/helpers/`, `machine/`). Move them from `internal/extensions/` to `extensions/` (still in-tree but importable):
 
@@ -157,7 +157,22 @@ internal/extensions/files      →  extensions/files
 internal/extensions/threads    →  extensions/threads
 ```
 
-`internal/extensions/all` must be updated to import from the new locations.
+`internal/extensions/all` updated to import from the new locations.
+
+**Files changed:**
+| File | Change |
+|------|--------|
+| `extensions/system/` | Moved from `internal/extensions/system/` |
+| `extensions/math/` | Moved from `internal/extensions/math/` |
+| `extensions/gointerop/` | Moved from `internal/extensions/gointerop/` |
+| `extensions/exceptions/` | Moved from `internal/extensions/exceptions/` |
+| `extensions/files/` | Moved from `internal/extensions/files/` |
+| `extensions/threads/` | Moved from `internal/extensions/threads/` |
+| `internal/extensions/all/register.go` | Updated 6 import paths |
+| `internal/bootstrap/environment_tiny.go` | Updated 6 import paths |
+| `wile_test.go`, `with_source_test.go` | Updated exceptions import |
+| `examples/embedding/source-tracking/main.go` | Updated exceptions import |
+| `internal/extensions/eval/prim_eval_test.go` | Updated exceptions import |
 
 **Outcome:** 6 extensions are now importable by external Go code.
 
@@ -206,7 +221,7 @@ Both are deferred until Tier 1 extraction proves the pattern.
 Phase 1: Move BoolToBoolean et al. to values/     → unblocks 7/9 extensions          ✅
 Phase 2: Refactor io port param registration       → eliminates ApplyContext.Env()     ✅
 Phase 3: Remove ApplyContext entirely                → clean API boundary       ✅
-Phase 4: Move Tier 1 to extensions/ (public)        → 6/9 extensions importable
+Phase 4: Move Tier 1 to extensions/ (public)        → 6/9 extensions importable ✅
 Phase 5: Extract to separate repos (future)         → distribution concern only
 ```
 
