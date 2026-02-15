@@ -76,15 +76,17 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	type extSnapshot struct {
 		name       string
 		startIndex int
+		endIndex   int
 		namer      registry.LibraryNamer // nil if not implemented
 	}
 	var extSnapshots []extSnapshot
 	for _, ext := range cfg.extensions {
-		snapshot := reg.PrimitiveCount()
+		startIdx := reg.PrimitiveCount()
 		err := ext.AddToRegistry(reg)
 		if err != nil {
 			return nil, err
 		}
+		endIdx := reg.PrimitiveCount()
 		var namer registry.LibraryNamer
 		n, ok := ext.(registry.LibraryNamer)
 		if ok {
@@ -92,7 +94,8 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		}
 		extSnapshots = append(extSnapshots, extSnapshot{
 			name:       ext.Name(),
-			startIndex: snapshot,
+			startIndex: startIdx,
+			endIndex:   endIdx,
 			namer:      namer,
 		})
 	}
@@ -140,23 +143,39 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		// Register each extension as a synthetic R7RS library so Scheme code
 		// can selectively import extension primitives via (import (wile math)) etc.
 		for _, snap := range extSnapshots {
-			names := reg.RuntimePrimitiveNamesSince(snap.startIndex)
+			names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
 			if len(names) == 0 {
 				continue
 			}
 
-			var libName machine.LibraryName
+			var parts []string
 			if snap.namer != nil {
-				libName = machine.NewLibraryName(snap.namer.LibraryName()...)
+				parts = snap.namer.LibraryName()
 			} else {
-				libName = machine.NewLibraryName("wile", snap.name)
+				parts = []string{"wile", snap.name}
+			}
+			for _, part := range parts {
+				if part == "" {
+					return nil, &Error{
+						Message: fmt.Sprintf("invalid library name for extension %q: empty name part", snap.name),
+					}
+				}
+			}
+			if len(parts) == 0 {
+				return nil, &Error{
+					Message: fmt.Sprintf("invalid library name for extension %q: no name parts", snap.name),
+				}
 			}
 
+			libName := machine.NewLibraryName(parts...)
 			lib := machine.NewCompiledLibrary(libName, env)
 			for _, name := range names {
 				lib.AddExport(name, "")
 			}
-			_ = libReg.Register(lib)
+			regErr := libReg.Register(lib)
+			if regErr != nil {
+				return nil, &Error{Message: "failed to register extension library", Cause: regErr}
+			}
 		}
 
 		// LibraryEnvFactory creates isolated library environments that mirror

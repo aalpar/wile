@@ -236,13 +236,33 @@ func (p *Registry) Clone() *Registry {
 }
 
 // RuntimePrimitiveNamesSince returns the names of primitives registered
-// at index >= startIndex that have PhaseRuntime. Used to determine which
-// primitives an extension contributed.
+// at index >= startIndex that have PhaseRuntime. If startIndex is negative
+// it is treated as 0. If startIndex exceeds the primitive count, nil is returned.
 func (p *Registry) RuntimePrimitiveNamesSince(startIndex int) []string {
+	return p.RuntimePrimitiveNamesRange(startIndex, -1)
+}
+
+// RuntimePrimitiveNamesRange returns the names of runtime primitives registered
+// in the index range [startIndex, endIndex). If endIndex is negative, all
+// primitives from startIndex onward are included. Negative startIndex is
+// treated as 0.
+func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= len(p.primitives) {
+		return nil
+	}
+	upper := len(p.primitives)
+	if endIndex >= 0 && endIndex < upper {
+		upper = endIndex
+	}
+
 	var names []string
-	for i := startIndex; i < len(p.primitives); i++ {
+	for i := startIndex; i < upper; i++ {
 		if p.primitives[i].Phases&PhaseRuntime != 0 {
 			names = append(names, p.primitives[i].Spec.Name)
 		}

@@ -18,7 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile/internal/extensions/math"
+	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 
 	qt "github.com/frankban/quicktest"
@@ -131,7 +132,10 @@ func (m *mockLibraryNamerExtension) AddToRegistry(r *registry.Registry) error {
 	r.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "custom-fn",
 		ParamCount: 1,
-		Impl:       nil, // placeholder — we just need it registered
+		Impl: machine.ForeignFunction(func(_ context.Context, mc *machine.MachineContext) error {
+			mc.SetValue(nil)
+			return nil
+		}),
 	}, registry.PhaseRuntime)
 	return nil
 }
