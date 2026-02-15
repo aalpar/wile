@@ -105,7 +105,7 @@ func TestExpandExpression_List(t *testing.T) {
 		// Since expansion now recursively expands results, returning (bar ...) would loop forever
 		listSym := syntax.NewSyntaxSymbol("list", nil)
 		result := syntax.SyntaxList(nil, append([]syntax.SyntaxValue{listSym}, argList...)...)
-		mc.value = NewMultipleValues(result)
+		mc.SetValue(result)
 		return nil
 	})
 	err := env.SetOwnGlobalValue(gi, mcls)

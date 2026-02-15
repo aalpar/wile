@@ -33,7 +33,7 @@ func NewOperationLoadVoid() *OperationLoadVoid {
 }
 
 func (p *OperationLoadVoid) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = MultipleValues{values.Void}
+	mc.SetValue(values.Void)
 	mc.pc++
 	return mc, nil
 }

@@ -185,9 +185,9 @@ func TestOperationMakeCaseLambdaClosure(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, newMc.pc, qt.Equals, 1)
 	qt.Assert(t, *newMc.evals, qt.HasLen, 0)
-	qt.Assert(t, newMc.value, qt.HasLen, 1)
+	qt.Assert(t, newMc.GetValues(), qt.HasLen, 1)
 
-	caseLambda, ok := newMc.value[0].(*CaseLambdaClosure)
+	caseLambda, ok := newMc.GetValue().(*CaseLambdaClosure)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, caseLambda.Clauses(), qt.HasLen, 2)
 }

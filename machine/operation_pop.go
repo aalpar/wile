@@ -31,7 +31,7 @@ func NewOperationPop() *OperationPop {
 }
 
 func (*OperationPop) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = []values.Value{mc.evals.Pop()}
+	mc.SetValue(mc.evals.Pop())
 	mc.pc++
 	return mc, nil
 }

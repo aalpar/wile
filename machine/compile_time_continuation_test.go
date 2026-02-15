@@ -67,10 +67,10 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -119,11 +119,11 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
 
 	mc := NewMachineContext(context.Background(), cont)
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewCons(values.NewString("hello"), values.EmptyList))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewCons(values.NewString("hello"), values.EmptyList))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -151,10 +151,10 @@ func TestCompileContext_CompileDefine(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
 	mc := NewMachineContext(context.Background(), cont)
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -179,11 +179,11 @@ func TestCompileContext_CompileQuote(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 1)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewSymbol("x"))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("x"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -208,11 +208,11 @@ func TestCompileContext_CompileQuasiquote(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 1)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewSymbol("x"))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("x"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -375,8 +375,8 @@ func evalSchemeString(code string) (values.Value, error) {
 			return nil, err
 		}
 
-		if len(mc.value) > 0 {
-			lastResult = mc.value[0]
+		if mc.GetValues().Len() > 0 {
+			lastResult = mc.GetValue()
 		}
 	}
 
@@ -410,11 +410,11 @@ func TestCompileContext_CompileIf(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 3)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("false"))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("false"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -444,12 +444,12 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, cont.template.literals[1], values.SchemeEquals, gi)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
 	// set! now returns void with the LoadVoid operation at the end
-	qt.Assert(t, mc.value[0], qt.Equals, values.Void)
+	qt.Assert(t, mc.GetValue(), qt.Equals, values.Void)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 	gi = mc.env.GlobalEnvironment().GetGlobalIndex(mc.env.InternSymbol(values.NewSymbol("x")))
 	qt.Assert(t, gi, qt.IsNotNil)
@@ -504,11 +504,11 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 4)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewBoolean(true))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewBoolean(true))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -531,11 +531,11 @@ func TestCompileContext_CompileBegin_1(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("false"))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("false"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -559,11 +559,11 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 	qt.Assert(t, cont.template.literals, qt.HasLen, 2)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.value, qt.HasLen, 0)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewString("second"))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("second"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -755,8 +755,8 @@ func TestCompileContext_CompileCaseLambda(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify we got a case-lambda closure
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	caseLambda, ok := mc.value[0].(*CaseLambdaClosure)
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	caseLambda, ok := mc.GetValue().(*CaseLambdaClosure)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, caseLambda.Clauses(), qt.HasLen, 2)
 
@@ -789,8 +789,8 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should call first clause with 1 arg: returns 42
-	qt.Assert(t, mc.value, qt.HasLen, 1)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // Tests moved from coverage_additional_test.go
@@ -1073,7 +1073,7 @@ func TestCompileIfBranches(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
 
 	// if without else (just consequent)
 	sv2 := parseSchemeExpr(t, env, `(if #f 1)`)
@@ -1188,7 +1188,7 @@ func TestCompileProcedureCallTail(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileProcedureCallNonTail tests non-tail call compilation
@@ -1204,7 +1204,7 @@ func TestCompileProcedureCallNonTail(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCompileBeginSequence tests begin with multiple expressions
@@ -1219,7 +1219,7 @@ func TestCompileBeginSequence(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
 }
 
 // TestCompileIfNoAlternate tests if without else
@@ -1235,7 +1235,7 @@ func TestCompileIfNoAlternate(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 
 	// If without else, false case - should return void
 	sv = parseSchemeExpr(t, env, `(if #f 42)`)
@@ -1260,7 +1260,7 @@ func TestCompileLambdaWithRestParameter(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	// rest should be (2 3)
-	result := mc.value[0]
+	result := mc.GetValue()
 	qt.Assert(t, result, qt.IsNotNil)
 }
 
@@ -1292,7 +1292,7 @@ func TestCompileCondExpandNotFeature(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileCondExpandAndFeature tests cond-expand with and feature
@@ -1308,7 +1308,7 @@ func TestCompileCondExpandAndFeature(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileCondExpandOrFeature tests cond-expand with or feature
@@ -1324,7 +1324,7 @@ func TestCompileCondExpandOrFeature(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileCondExpandLibraryFeature tests cond-expand with library feature
@@ -1340,7 +1340,7 @@ func TestCompileCondExpandLibraryFeature(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCompileSymbolBranches tests various branches of CompileSymbol
@@ -1364,7 +1364,7 @@ func TestCompileSymbolBranches(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileSymbolLocalBinding tests compiling local bindings
@@ -1380,7 +1380,7 @@ func TestCompileSymbolLocalBinding(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
 }
 
 // historical but the test remains valid for verifying primitive form compilation.
@@ -1434,7 +1434,7 @@ func TestCompileMultipleForms(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileSelfEvaluating tests compiling self-evaluating values
@@ -1463,7 +1463,7 @@ func TestCompileSelfEvaluating(t *testing.T) {
 			mc := NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.value[0], values.SchemeEquals, tc.expect)
+			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -1481,7 +1481,7 @@ func TestCompileNestedLambda(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
 }
 
 // TestCompileComplexIf tests complex if expressions
@@ -1497,7 +1497,7 @@ func TestCompileComplexIf(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
 }
 
 // TestCompileUnquoteOutsideQuasiquote tests that unquote outside quasiquote returns error

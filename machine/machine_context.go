@@ -82,11 +82,12 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 	q := &MachineContext{
 		ctx: ctx,
 		vmState: vmState{
-			env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
-			template: cont.template, // not needed to copy, templates are immutable
-			value:    cont.value,    // must not copy the values, they are passed between contexts
-			evals:    cont.evals,    // no copy needed: continuation is consumed once at context creation
-			pc:       cont.pc,
+			env:         cont.env,         // cannot copy environment here, it will be copied when pushed onto the stack
+			template:    cont.template,    // not needed to copy, templates are immutable
+			singleValue: cont.singleValue, // must not copy the values, they are passed between contexts
+			multiValues: cont.multiValues,
+			evals:       cont.evals, // no copy needed: continuation is consumed once at context creation
+			pc:          cont.pc,
 		},
 		cont: cont.parent,
 	}
@@ -131,23 +132,53 @@ func (p *MachineContext) SetPC(v int) {
 	p.pc = v
 }
 
+// SetValues sets the value register. For a single value this uses the
+// zero-allocation fast path (singleValue); for multiple values it falls
+// back to the multiValues slice.
 func (p *MachineContext) SetValues(vs ...values.Value) {
-	p.value = vs
+	if len(vs) == 1 {
+		p.singleValue = vs[0]
+		p.multiValues = nil
+		return
+	}
+	p.multiValues = vs
+	p.singleValue = nil
 }
 
+// SetValue stores a single value in the value register without allocating.
+// This is the hot path: every LoadLocal, LoadGlobal, LoadLiteral, Pull, Pop,
+// MakeClosure, etc. goes through here.
 func (p *MachineContext) SetValue(v values.Value) {
-	p.value = NewMultipleValues(v)
+	p.singleValue = v
+	p.multiValues = nil
 }
 
+// GetValue returns the first (or only) value from the value register.
+// Returns Void if the register is empty.
 func (p *MachineContext) GetValue() values.Value {
-	if len(p.value) == 0 {
+	if p.multiValues != nil {
+		if len(p.multiValues) == 0 {
+			return values.Void
+		}
+		return p.multiValues[0]
+	}
+	if p.singleValue == nil {
 		return values.Void
 	}
-	return p.value[0]
+	return p.singleValue
 }
 
+// GetValues returns all values from the value register as a MultipleValues
+// slice. For the single-value case this allocates a one-element slice; callers
+// on the hot path should use GetValue instead.
 func (p *MachineContext) GetValues() MultipleValues {
-	return p.value
+	if p.multiValues != nil {
+		return p.multiValues
+	}
+	if p.singleValue == nil {
+		return nil
+	}
+	return MultipleValues{p.singleValue}
 }
 
 func (p *MachineContext) EnvironmentFrame() *environment.EnvironmentFrame {
@@ -195,7 +226,8 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 	p.evals = q.evals
 	p.cont = q.parent
 	p.pc = q.pc
-	p.value = q.value
+	p.singleValue = q.singleValue
+	p.multiValues = q.multiValues
 	return q
 }
 

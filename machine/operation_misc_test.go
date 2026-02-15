@@ -103,8 +103,8 @@ func TestOperationLoadLiteralInteger(t *testing.T) {
 
 	mc := &MachineContext{
 		vmState: vmState{
-			env:   env,
-			value: MultipleValues{values.NewInteger(999)},
+			env:         env,
+			singleValue: values.NewInteger(999),
 		},
 	}
 
@@ -113,7 +113,7 @@ func TestOperationLoadLiteralInteger(t *testing.T) {
 
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, newMc.pc, qt.Equals, 1)
-	qt.Assert(t, newMc.value, qt.DeepEquals, MultipleValues{values.NewInteger(42)})
+	qt.Assert(t, newMc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 func TestOperationLoadLiteralInteger_SchemeString(t *testing.T) {

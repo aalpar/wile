@@ -26,15 +26,16 @@ import (
 
 func TestOperation(t *testing.T) {
 	tcs := []struct {
-		evals   *Stack
-		value   []values.Value
-		op      Operation
-		setupFn func(t *testing.T, mc *MachineContext)
-		checkFn func(t *testing.T, mc *MachineContext)
+		evals       *Stack
+		singleValue values.Value
+		multiValues MultipleValues
+		op          Operation
+		setupFn     func(t *testing.T, mc *MachineContext)
+		checkFn     func(t *testing.T, mc *MachineContext)
 	}{
 		{
-			value: []values.Value{values.NewInteger(10)},
-			op:    NewOperationPush(),
+			singleValue: values.NewInteger(10),
+			op:          NewOperationPush(),
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, (*mc.evals), qt.HasLen, 1)
@@ -46,8 +47,8 @@ func TestOperation(t *testing.T) {
 			op:    NewOperationPop(),
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -61,12 +62,12 @@ func TestOperation(t *testing.T) {
 			op: NewOperationPopAll(),
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				qt.Assert(t, mc.value, qt.HasLen, 5)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(10))
-				qt.Assert(t, mc.value[1], values.SchemeEquals, values.NewInteger(20))
-				qt.Assert(t, mc.value[2], values.SchemeEquals, values.NewInteger(30))
-				qt.Assert(t, mc.value[3], values.SchemeEquals, values.NewInteger(40))
-				qt.Assert(t, mc.value[4], values.SchemeEquals, values.NewInteger(50))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 5)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValues()[1], values.SchemeEquals, values.NewInteger(20))
+				qt.Assert(t, mc.GetValues()[2], values.SchemeEquals, values.NewInteger(30))
+				qt.Assert(t, mc.GetValues()[3], values.SchemeEquals, values.NewInteger(40))
+				qt.Assert(t, mc.GetValues()[4], values.SchemeEquals, values.NewInteger(50))
 			},
 		},
 		{
@@ -118,8 +119,8 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -130,8 +131,8 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -143,7 +144,7 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 0)
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 				li := mc.env.LocalEnvironment().GetLocalIndex(sym)
@@ -163,8 +164,8 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 			},
 		},
@@ -179,7 +180,7 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 0)
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 				gi := mc.env.GlobalEnvironment().GetGlobalIndex(sym)
 				v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi).Value()
@@ -195,8 +196,8 @@ func TestOperation(t *testing.T) {
 			),
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(2))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
 			},
 		},
 		{
@@ -210,8 +211,8 @@ func TestOperation(t *testing.T) {
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				mcls, ok := mc.value[0].(*MachineClosure)
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				mcls, ok := mc.GetValue().(*MachineClosure)
 				qt.Assert(t, ok, qt.IsTrue)
 				qt.Assert(t, mcls, qt.IsNotNil)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
@@ -244,8 +245,8 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				// Closure executed: value = 42; returned via RestoreContinuation.
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 1)
-				qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
+				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 			},
 		},
@@ -261,7 +262,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				// SaveCont pushed a second frame; chain depth is now 1.
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 0)
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 1)
 			},
@@ -280,7 +281,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				// Restored one level; two frames remain (CallDepth = 1).
 				qt.Assert(t, mc.pc, qt.Equals, 1)
-				qt.Assert(t, mc.value, qt.HasLen, 0)
+				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 				qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 1)
 			},
@@ -297,7 +298,8 @@ func TestOperation(t *testing.T) {
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
 			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 			mc.evals = tc.evals
-			mc.value = tc.value
+			mc.multiValues = tc.multiValues
+			mc.singleValue = tc.singleValue
 			if tc.setupFn != nil {
 				tc.setupFn(t, mc)
 			}

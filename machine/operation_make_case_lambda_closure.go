@@ -49,7 +49,7 @@ func (p *OperationMakeCaseLambdaClosure) Apply(ctx context.Context, mc *MachineC
 	}
 
 	caseLambda := NewCaseLambdaClosure(closures)
-	mc.value = MultipleValues{caseLambda}
+	mc.SetValue(caseLambda)
 	mc.pc++
 	return mc, nil
 }

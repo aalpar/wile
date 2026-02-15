@@ -35,8 +35,16 @@ func (p *OperationPush) EqualTo(o values.Value) bool {
 	return sameType(p, v, ok)
 }
 
+// Apply pushes the value register onto the evaluation stack. It branches on
+// the split value representation: the common single-value case uses Push
+// (no slice overhead), while the rare multi-value case falls through to
+// PushAll. A nil value register (void) pushes nothing.
 func (*OperationPush) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.evals.PushAll(mc.value)
+	if mc.multiValues != nil {
+		mc.evals.PushAll(mc.multiValues)
+	} else if mc.singleValue != nil {
+		mc.evals.Push(mc.singleValue)
+	}
 	mc.pc++
 	return mc, nil
 }

@@ -54,7 +54,7 @@ func (p *OperationLoadLocalByLocalIndexImmediate) Apply(ctx context.Context, mc 
 	if bd == nil {
 		return nil, mc.Error(fmt.Sprintf("no such local binding %s", p.LocalIndex))
 	}
-	mc.value = MultipleValues{bd.Value()}
+	mc.SetValue(bd.Value())
 	mc.pc++
 	return mc, nil
 }
