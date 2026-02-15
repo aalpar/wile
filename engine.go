@@ -72,12 +72,29 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		}
 	}
 
-	// Add any additional extensions
+	// Add any additional extensions, tracking primitive snapshots for library creation
+	type extSnapshot struct {
+		name       string
+		startIndex int
+		namer      registry.LibraryNamer // nil if not implemented
+	}
+	var extSnapshots []extSnapshot
 	for _, ext := range cfg.extensions {
+		snapshot := reg.PrimitiveCount()
 		err := ext.AddToRegistry(reg)
 		if err != nil {
 			return nil, err
 		}
+		var namer registry.LibraryNamer
+		n, ok := ext.(registry.LibraryNamer)
+		if ok {
+			namer = n
+		}
+		extSnapshots = append(extSnapshots, extSnapshot{
+			name:       ext.Name(),
+			startIndex: snapshot,
+			namer:      namer,
+		})
 	}
 
 	// Create TopLevelEnvironment (per-instance symbol interning)
@@ -119,6 +136,28 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		}
 
 		env.SetLibraryRegistry(libReg)
+
+		// Register each extension as a synthetic R7RS library so Scheme code
+		// can selectively import extension primitives via (import (wile math)) etc.
+		for _, snap := range extSnapshots {
+			names := reg.RuntimePrimitiveNamesSince(snap.startIndex)
+			if len(names) == 0 {
+				continue
+			}
+
+			var libName machine.LibraryName
+			if snap.namer != nil {
+				libName = machine.NewLibraryName(snap.namer.LibraryName()...)
+			} else {
+				libName = machine.NewLibraryName("wile", snap.name)
+			}
+
+			lib := machine.NewCompiledLibrary(libName, env)
+			for _, name := range names {
+				lib.AddExport(name, "")
+			}
+			_ = libReg.Register(lib)
+		}
 
 		// LibraryEnvFactory creates isolated library environments that mirror
 		// this engine's configuration — same registry, same macros.

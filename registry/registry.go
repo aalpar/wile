@@ -235,6 +235,21 @@ func (p *Registry) Clone() *Registry {
 	return q
 }
 
+// RuntimePrimitiveNamesSince returns the names of primitives registered
+// at index >= startIndex that have PhaseRuntime. Used to determine which
+// primitives an extension contributed.
+func (p *Registry) RuntimePrimitiveNamesSince(startIndex int) []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	var names []string
+	for i := startIndex; i < len(p.primitives); i++ {
+		if p.primitives[i].Phases&PhaseRuntime != 0 {
+			names = append(names, p.primitives[i].Spec.Name)
+		}
+	}
+	return names
+}
+
 // PrimitiveByName returns the registration for the named primitive, if any.
 func (p *Registry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
