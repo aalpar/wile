@@ -60,11 +60,11 @@ import (
 //	│ callDepth    │ ✓              │ recomputed  │ ✗                │
 //	└──────────────┴────────────────┴─────────────┴──────────────────┘
 type vmState struct {
-	env         *environment.EnvironmentFrame
-	template    *NativeTemplate
-	singleValue values.Value   // value register: single value (fast path, no allocation)
-	multiValues MultipleValues // value register: multiple values (only for R7RS values/call-with-values)
-	evals       *Stack         // evaluation stack, holds intermediate values during execution
+	env          *environment.EnvironmentFrame
+	template     *NativeTemplate
+	singleValue  values.Value   // value register: single value (fast path, no allocation)
+	multiValues  MultipleValues // value register: multiple values (only for R7RS values/call-with-values)
+	evals        *Stack         // evaluation stack, holds intermediate values during execution
 	pc           int
 	windingStack WindingStack // R7RS dynamic-wind extent tracking
 	promptTag    *PromptTag   // prompt tag for continuation prompts
