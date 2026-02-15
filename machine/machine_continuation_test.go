@@ -85,6 +85,24 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
 }
 
+func TestMachineContinuation_PushValues_PromoteSingleToMulti(t *testing.T) {
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	cont := NewMachineContinuation(nil, nil, env)
+
+	// Start with a single value set on the continuation.
+	cont.singleValue = values.NewInteger(1)
+
+	// Pushing additional values should promote the single value into multiValues.
+	cont.PushValues(values.NewInteger(2), values.NewInteger(3))
+
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
+	qt.Assert(t, cont.multiValues[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cont.multiValues[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, cont.multiValues[2], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, cont.singleValue, qt.IsNil)
+}
+
 func TestMachineContinuation_Copy(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
