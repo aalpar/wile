@@ -33,7 +33,7 @@ import (
 // This is the legacy version that accepts a pre-built AST.
 func runProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func runProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog 
 // runSchemeCode parses and runs Scheme source code string.
 func runSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func runSchemeCode(t *testing.T, code string) (values.Value, error) {
 func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	t.Helper()
 	p := parser.NewParser(env, true, strings.NewReader(code))
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	if err != nil {
 		return nil, err
 	}

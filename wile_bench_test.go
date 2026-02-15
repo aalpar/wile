@@ -25,7 +25,7 @@ func BenchmarkEvalSimple(b *testing.B) {
 	code := "(+ 1 2)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 
@@ -35,7 +35,7 @@ func BenchmarkEvalArithmetic(b *testing.B) {
 	code := "(+ (* 2 3) (- 10 5))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 
@@ -45,7 +45,7 @@ func BenchmarkEvalLambda(b *testing.B) {
 	code := "((lambda (x) (+ x 1)) 42)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 
@@ -55,27 +55,27 @@ func BenchmarkEvalList(b *testing.B) {
 	code := "(length (list 1 2 3 4 5))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 
 // BenchmarkEvalFibonacci benchmarks recursive Fibonacci
 func BenchmarkEvalFibonacci(b *testing.B) {
 	engine, _ := NewEngine(context.Background())
-	_, _ = engine.Eval(context.TODO(), "(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))")
+	_, _ = engine.Eval(context.Background(), "(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), "(fib 10)")
+		_, _ = engine.Eval(context.Background(), "(fib 10)")
 	}
 }
 
 // BenchmarkEvalTailRecursion benchmarks tail recursion
 func BenchmarkEvalTailRecursion(b *testing.B) {
 	engine, _ := NewEngine(context.Background())
-	_, _ = engine.Eval(context.TODO(), "(define (sum n acc) (if (<= n 0) acc (sum (- n 1) (+ acc n))))")
+	_, _ = engine.Eval(context.Background(), "(define (sum n acc) (if (<= n 0) acc (sum (- n 1) (+ acc n))))")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), "(sum 100 0)")
+		_, _ = engine.Eval(context.Background(), "(sum 100 0)")
 	}
 }
 
@@ -92,7 +92,7 @@ func BenchmarkCompile(b *testing.B) {
 // BenchmarkEvalMacro benchmarks macro expansion and execution
 func BenchmarkEvalMacro(b *testing.B) {
 	engine, _ := NewEngine(context.Background())
-	_, _ = engine.Eval(context.TODO(), `
+	_, _ = engine.Eval(context.Background(), `
 		(define-syntax when
 			(syntax-rules ()
 				((when test body ...)
@@ -100,7 +100,7 @@ func BenchmarkEvalMacro(b *testing.B) {
 	`)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), "(when #t (+ 1 2))")
+		_, _ = engine.Eval(context.Background(), "(when #t (+ 1 2))")
 	}
 }
 
@@ -110,7 +110,7 @@ func BenchmarkEvalLet(b *testing.B) {
 	code := "(let ((x 10) (y 20)) (+ x y))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 
@@ -120,7 +120,7 @@ func BenchmarkEvalCond(b *testing.B) {
 	code := "(cond ((< 5 3) 'less) ((> 5 3) 'greater) (else 'equal))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Eval(context.TODO(), code)
+		_, _ = engine.Eval(context.Background(), code)
 	}
 }
 

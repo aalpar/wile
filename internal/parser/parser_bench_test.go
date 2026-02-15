@@ -28,7 +28,7 @@ func BenchmarkParseInteger(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }
@@ -39,7 +39,7 @@ func BenchmarkParseList(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }
@@ -50,7 +50,7 @@ func BenchmarkParseQuoted(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }
@@ -61,7 +61,7 @@ func BenchmarkParseNestedList(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }
@@ -72,7 +72,7 @@ func BenchmarkParseString(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }
@@ -83,7 +83,7 @@ func BenchmarkParseFloat(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := NewParser(env, true, strings.NewReader(input))
-		_, _ = p.ReadSyntax(context.TODO())
+		_, _ = p.ReadSyntax(context.Background())
 		_ = p.Close()
 	}
 }

@@ -32,7 +32,7 @@ import (
 // evalScheme evaluates a Scheme expression string and returns the result
 func evalScheme(t *testing.T, code string) values.Value {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	ctx := context.Background()
@@ -42,7 +42,7 @@ func evalScheme(t *testing.T, code string) values.Value {
 	var lastValue = values.Void
 
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
+		stx, err := p.ReadSyntax(context.Background())
 		if err == io.EOF {
 			break
 		}

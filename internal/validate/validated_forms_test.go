@@ -39,7 +39,7 @@ func TestValidatedIf_Getters(t *testing.T) {
 		values.NewInteger(1),
 		values.NewInteger(2),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vi, ok := result.Expr.(*ValidatedIf)
@@ -60,7 +60,7 @@ func TestValidatedDefine_Variable_Getters(t *testing.T) {
 		values.NewSymbol("x"),
 		values.NewInteger(42),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vd, ok := result.Expr.(*ValidatedDefine)
@@ -86,7 +86,7 @@ func TestValidatedDefine_Function_Getters(t *testing.T) {
 		values.List(values.NewSymbol("f"), values.NewSymbol("x")),
 		values.NewSymbol("x"),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vd, ok := result.Expr.(*ValidatedDefine)
@@ -107,7 +107,7 @@ func TestValidatedLambda_Getters(t *testing.T) {
 		values.List(values.NewSymbol("a"), values.NewSymbol("b")),
 		values.NewSymbol("a"),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vl, ok := result.Expr.(*ValidatedLambda)
@@ -133,7 +133,7 @@ func TestValidatedLambda_RestParam(t *testing.T) {
 		values.NewCons(values.NewSymbol("a"), values.NewSymbol("rest")),
 		values.NewSymbol("a"),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vl, ok := result.Expr.(*ValidatedLambda)
@@ -151,7 +151,7 @@ func TestValidatedSetBang_Getters(t *testing.T) {
 		values.NewSymbol("x"),
 		values.NewInteger(99),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vs, ok := result.Expr.(*ValidatedSetBang)
@@ -172,7 +172,7 @@ func TestValidatedQuote_Getters(t *testing.T) {
 		values.NewSymbol("quote"),
 		values.NewSymbol("hello"),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vq, ok := result.Expr.(*ValidatedQuote)
@@ -194,7 +194,7 @@ func TestValidatedBegin_Getters(t *testing.T) {
 		values.NewInteger(1),
 		values.NewInteger(2),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vb, ok := result.Expr.(*ValidatedBegin)
@@ -217,7 +217,7 @@ func TestValidatedCall_Getters(t *testing.T) {
 		values.NewInteger(1),
 		values.NewInteger(2),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vc, ok := result.Expr.(*ValidatedCall)
@@ -236,7 +236,7 @@ func TestValidatedCall_Getters(t *testing.T) {
 func TestValidatedSymbol_Getters(t *testing.T) {
 	c := qt.New(t)
 	input := values.NewSymbol("x")
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vs, ok := result.Expr.(*ValidatedSymbol)
@@ -254,7 +254,7 @@ func TestValidatedSymbol_Getters(t *testing.T) {
 func TestValidatedLiteral_Getters(t *testing.T) {
 	c := qt.New(t)
 	input := values.NewInteger(42)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vl, ok := result.Expr.(*ValidatedLiteral)
@@ -275,7 +275,7 @@ func TestValidatedQuasiquote_Getters(t *testing.T) {
 		values.NewSymbol("quasiquote"),
 		values.List(values.NewSymbol("a"), values.NewInteger(1)),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vq, ok := result.Expr.(*ValidatedQuasiquote)
@@ -303,7 +303,7 @@ func TestValidatedCaseLambda_Getters(t *testing.T) {
 			values.NewSymbol("x"),
 		),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vcl, ok := result.Expr.(*ValidatedCaseLambda)
@@ -336,7 +336,7 @@ func TestValidatedDynamicWind_Getters(t *testing.T) {
 		values.NewSymbol("thunk"),
 		values.NewSymbol("after"),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vdw, ok := result.Expr.(*ValidatedDynamicWind)
@@ -360,7 +360,7 @@ func TestValidatedLiteral_Passthrough(t *testing.T) {
 		values.EmptyList,
 		values.NewInteger(1),
 	)
-	result := ValidateExpression(context.TODO(), nil, makeSyntaxFromValue(input))
+	result := ValidateExpression(context.Background(), nil, makeSyntaxFromValue(input))
 	c.Assert(result.Ok(), qt.IsTrue)
 
 	vl, ok := result.Expr.(*ValidatedLiteral)

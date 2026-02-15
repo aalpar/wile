@@ -146,7 +146,7 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+			env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 			qt.Assert(t, err, qt.IsNil)
 
 			// Test free-identifier=? by checking binding resolution
@@ -176,7 +176,7 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 }
 
 func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the bound-identifier=? primitive exists
@@ -186,7 +186,7 @@ func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
 }
 
 func TestFreeIdentifierEqualQPrimitiveExists(t *testing.T) {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the free-identifier=? primitive exists

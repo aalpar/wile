@@ -534,7 +534,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	// First define x
 	rdr := strings.NewReader("(define x 42)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(context.TODO())
+	stx, _ := p.ReadSyntax(context.Background())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
@@ -544,7 +544,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	// Now reference x
 	rdr = strings.NewReader("x")
 	p = parser.NewParserWithFile(env, true, rdr, "ref.scm")
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -565,7 +565,7 @@ func TestSourceRecording_Literal(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	rdr := strings.NewReader("42")
 	p := parser.NewParserWithFile(env, true, rdr, "literal.scm")
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)

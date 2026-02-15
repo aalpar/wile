@@ -34,7 +34,7 @@ import (
 // can be created from a valid caller environment.
 func TestNewLibraryEnvironmentFrame_Basic(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -49,7 +49,7 @@ func TestNewLibraryEnvironmentFrame_Basic(t *testing.T) {
 // which is required for symbol identity across library boundaries (R7RS §6.5).
 func TestNewLibraryEnvironmentFrame_SharedTopLevelEnvironment(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -69,7 +69,7 @@ func TestNewLibraryEnvironmentFrame_SharedTopLevelEnvironment(t *testing.T) {
 // R7RS §6.5: symbol identity must be preserved across library boundaries.
 func TestNewLibraryEnvironmentFrame_SymbolIdentity(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -90,7 +90,7 @@ func TestNewLibraryEnvironmentFrame_SymbolIdentity(t *testing.T) {
 // defined in the library environment do not leak into the caller environment.
 func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -116,7 +116,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 // environment has access to core primitives.
 func TestNewLibraryEnvironmentFrame_PrimitivesAvailable(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -134,7 +134,7 @@ func TestNewLibraryEnvironmentFrame_PrimitivesAvailable(t *testing.T) {
 // bootstrap macros (and, or, let, cond, etc.) are available in library environments.
 func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -167,7 +167,7 @@ func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 // an environment without a TopLevelEnvironment returns an error.
 func TestNewLibraryEnvironmentFrame_NilTopLevelEnvironment(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Create a bare environment frame with no TopLevelEnvironment
 	bareEnv := environment.NewEnvironmentFrame(nil, nil)
@@ -180,7 +180,7 @@ func TestNewLibraryEnvironmentFrame_NilTopLevelEnvironment(t *testing.T) {
 // variables in the library environment does not affect the caller, and vice versa.
 func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -214,7 +214,7 @@ func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 // two separately created top-level environments are fully independent.
 func TestNewTopLevelEnvironmentFrameTiny_IndependentEnvironments(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env1, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -242,7 +242,7 @@ func TestNewTopLevelEnvironmentFrameTiny_IndependentEnvironments(t *testing.T) {
 // expected bootstrap macros are functional after environment creation.
 func TestNewTopLevelEnvironmentFrameTiny_BootstrapMacrosLoaded(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -283,7 +283,7 @@ func TestNewTopLevelEnvironmentFrameTiny_BootstrapMacrosLoaded(t *testing.T) {
 // succeeds without error.
 func TestLoadBootstrapMacros_EmptySources(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -299,7 +299,7 @@ func TestLoadBootstrapMacros_EmptySources(t *testing.T) {
 // during macro expansion produces an error.
 func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -315,7 +315,7 @@ func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 // fails to compile produces an error.
 func TestLoadBootstrapMacros_CompileError(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -335,7 +335,7 @@ func TestLoadBootstrapMacros_CompileError(t *testing.T) {
 // definition is properly loaded and usable.
 func TestLoadBootstrapMacros_ValidMacro(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -358,7 +358,7 @@ func TestLoadBootstrapMacros_ValidMacro(t *testing.T) {
 // strings are loaded in order, with later macros able to use earlier ones.
 func TestLoadBootstrapMacros_MultipleSources(t *testing.T) {
 	c := qt.New(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
@@ -399,7 +399,7 @@ func TestNewTopLevelEnvironmentFrameTiny_ExtensionError(t *testing.T) {
 	allExtensions = []registry.Extension{brokenExtension{}}
 	defer func() { allExtensions = saved }()
 
-	_, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
+	_, err := NewTopLevelEnvironmentFrameTiny(context.Background())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -409,7 +409,7 @@ func TestNewLibraryEnvironmentFrame_ExtensionError(t *testing.T) {
 	c := qt.New(t)
 
 	// First create a valid parent with the real extensions
-	parent, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
+	parent, err := NewTopLevelEnvironmentFrameTiny(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Then break extensions for the library creation
@@ -417,6 +417,6 @@ func TestNewLibraryEnvironmentFrame_ExtensionError(t *testing.T) {
 	allExtensions = []registry.Extension{brokenExtension{}}
 	defer func() { allExtensions = saved }()
 
-	_, err = NewLibraryEnvironmentFrame(context.TODO(), parent)
+	_, err = NewLibraryEnvironmentFrame(context.Background(), parent)
 	c.Assert(err, qt.IsNotNil)
 }

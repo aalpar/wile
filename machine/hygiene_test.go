@@ -33,7 +33,7 @@ import (
 func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
 	p := parser.NewParser(env, true, reader)
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -566,7 +566,7 @@ func parseMultipleForms(t *testing.T, env *environment.EnvironmentFrame, input s
 	p := parser.NewParser(env, true, reader)
 	var forms []syntax.SyntaxValue
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
+		stx, err := p.ReadSyntax(context.Background())
 		if err != nil {
 			// EOF or other error
 			break

@@ -42,7 +42,7 @@ func getTestdataPath() string {
 func parseLibrarySyntax(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
 	p := parser.NewParser(env, true, reader)
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
@@ -302,7 +302,7 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
 
 	// Create the top-level environment
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
@@ -741,7 +741,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	// Set up environment with library registry
 	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
 	defer func() { machine.LibraryEnvFactory = nil }()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	// Set up library registry

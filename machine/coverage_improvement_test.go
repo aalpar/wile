@@ -194,7 +194,7 @@ func TestParseExportSpec(t *testing.T) {
 			// Parse the input
 			reader := bufio.NewReader(strings.NewReader(tc.input))
 			p := parser.NewParser(env, true, reader)
-			stx, err := p.ReadSyntax(context.TODO())
+			stx, err := p.ReadSyntax(context.Background())
 			qt.Assert(t, err, qt.IsNil)
 
 			// Call parseExportSpec
@@ -220,7 +220,7 @@ func TestParseImportSetExcept(t *testing.T) {
 	input := "(except (scheme base) car cdr)"
 	reader := bufio.NewReader(strings.NewReader(input))
 	p := parser.NewParser(env, true, reader)
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := stx.(*syntax.SyntaxPair)
@@ -243,7 +243,7 @@ func TestParseImportSetRename(t *testing.T) {
 	input := "(rename (scheme base) (car first) (cdr rest))"
 	reader := bufio.NewReader(strings.NewReader(input))
 	p := parser.NewParser(env, true, reader)
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := stx.(*syntax.SyntaxPair)
@@ -331,7 +331,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 			env := environment.NewTopLevelEnvironment().Runtime()
 			reader := bufio.NewReader(strings.NewReader(tc.input))
 			p := parser.NewParser(env, true, reader)
-			stx, err := p.ReadSyntax(context.TODO())
+			stx, err := p.ReadSyntax(context.Background())
 			qt.Assert(t, err, qt.IsNil)
 
 			req, err := parseFeatureRequirement(context.Background(), stx)
@@ -435,7 +435,7 @@ func TestParseFeatureRequirementList(t *testing.T) {
 	input := "(r7rs r6rs (library (scheme base)))"
 	reader := bufio.NewReader(strings.NewReader(input))
 	p := parser.NewParser(env, true, reader)
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	reqs, err := parseFeatureRequirementList(context.Background(), stx)
@@ -535,7 +535,7 @@ func TestParseExportSpecRenameErrors(t *testing.T) {
 
 			reader := bufio.NewReader(strings.NewReader(tc.input))
 			p := parser.NewParser(env, true, reader)
-			stx, err := p.ReadSyntax(context.TODO())
+			stx, err := p.ReadSyntax(context.Background())
 			if err == io.EOF || err != nil {
 				// Input might be incomplete - that's expected for some cases
 				return

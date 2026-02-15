@@ -259,7 +259,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
-			err := compiler.Compile(context.TODO(), pattern)
+			err := compiler.Compile(context.Background(), pattern)
 			c.Assert(err, qt.IsNil)
 
 			input := syntax.NewSyntaxCons(
@@ -329,7 +329,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 
 			compiler := NewSyntaxCompiler()
 			compiler.variables = variables
-			err := compiler.Compile(context.TODO(), pattern)
+			err := compiler.Compile(context.Background(), pattern)
 			c.Assert(err, qt.IsNil)
 
 			input := syntax.NewSyntaxCons(
@@ -364,7 +364,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(
@@ -483,7 +483,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 				nil,
 			)
 
-			compiled, err := CompileSyntaxPatternFull(context.TODO(), pattern, variables)
+			compiled, err := CompileSyntaxPatternFull(context.Background(), pattern, variables)
 			c.Assert(err, qt.IsNil)
 
 			// Build input: (_ val1 val2 ...)
@@ -528,7 +528,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	// Create input where the captured value has specific scopes
@@ -575,7 +575,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(
@@ -614,7 +614,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(
@@ -657,7 +657,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(
@@ -742,7 +742,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(
@@ -790,7 +790,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables
-	err := compiler.Compile(context.TODO(), pattern)
+	err := compiler.Compile(context.Background(), pattern)
 	c.Assert(err, qt.IsNil)
 
 	input := syntax.NewSyntaxCons(

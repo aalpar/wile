@@ -31,7 +31,7 @@ func compileScheme(t *testing.T, code string) *NativeTemplate {
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
@@ -107,7 +107,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	// Define a simple function
 	rdr := strings.NewReader("(define (id x) x)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(context.TODO())
+	stx, _ := p.ReadSyntax(context.Background())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
@@ -119,7 +119,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	// Now compile a call to that function
 	rdr = strings.NewReader("(id 42)")
 	p = parser.NewParserWithFile(env, true, rdr, "test.scm")
-	stx, err = p.ReadSyntax(context.TODO())
+	stx, err = p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -137,7 +137,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	// First compile (define x 1)
 	rdr := strings.NewReader("(define x 1)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
-	stx, _ := p.ReadSyntax(context.TODO())
+	stx, _ := p.ReadSyntax(context.Background())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
 	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
@@ -148,7 +148,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	// Now compile (set! x 2)
 	rdr = strings.NewReader("(set! x 2)")
 	p = parser.NewParserWithFile(env, true, rdr, "test.scm")
-	stx, err = p.ReadSyntax(context.TODO())
+	stx, err = p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
@@ -174,7 +174,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "multiline.scm")
 
-	stx, err := p.ReadSyntax(context.TODO())
+	stx, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := NewNativeTemplate(0, 0, false)
