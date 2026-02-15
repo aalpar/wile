@@ -26,10 +26,6 @@ Enable tracing of macro-generated code back to which macro generated it, which i
 
 Using `SyntaxValue` instead of `*SourceContext` preserves actual syntax structure — can inspect arguments, print original forms, get location via `.SourceContext()`.
 
-### New method: `Scope.ID() uint64`
-
-Expose existing `id` field for introspection.
-
 ### `syntax-origin` Primitive
 
 ```scheme
@@ -44,7 +40,6 @@ Expose existing `id` field for introspection.
 | File | Change |
 |------|--------|
 | `syntax/source_context.go` | Extend `OriginInfo` with new fields |
-| `syntax/syntax_value.go` | Add `Scope.ID()` method |
 | `machine/operation_syntax_rules_transform.go` | Create intro scope before origin, populate new fields |
 | `internal/extensions/eval/prim_eval.go` | Add `PrimSyntaxOrigin` |
 | `internal/extensions/eval/register.go` | Register `syntax-origin` |

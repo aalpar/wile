@@ -12,11 +12,11 @@ Completed items have been removed. See git history for the original document.
 
 ## Tier 2: Systemic Duplication (HIGH impact)
 
-### ~~2.1 Numeric Tower Type-Switch Copy-Paste~~ — DEFERRED
+### 2.1 Numeric Tower Type-Switch Copy-Paste — DEFERRED
 
-> **⚠️ DEFERRED INDEFINITELY ⚠️**
+> **DEFERRED INDEFINITELY**
 >
-> Multiple attempts to unify the numeric tower dispatch have failed. The 7×7
+> Multiple attempts to unify the numeric tower dispatch have failed. The 7x7
 > type-switch matrix across arithmetic methods is deeply entangled with
 > promotion semantics, exactness contagion, and special-case handling (e.g.,
 > `(* 0 +inf.0)`). Each attempt introduced subtle regressions or required
@@ -108,7 +108,6 @@ Standardized on explicit `IsEmptyList` check-first pattern. Two functions conver
 `PrimStringAppend` (removed dead check-in-fallback branch) and `PrimAppend` (added explicit
 empty-list guard, removed post-hoc `len(lists) == 0` check). 10 existing sites already
 used check-first; 4 sites use idiomatic loop-guard (`for !IsEmptyList`), left as-is.
-
 ---
 
 ## What's Working Well (Preserve)
@@ -130,12 +129,3 @@ used check-first; 4 sites use idiomatic loop-guard (`for !IsEmptyList`), left as
 - **Test error idioms** — `errors.Is(err, io.EOF)` consistent across test and production code
 - **Optional position parsing** — `helpers.ParseSubrange` consolidates `[start [end]]` extraction
 
----
-
-## Recommended Execution Order
-
-| Phase | Items | Risk | Lines Saved |
-|-------|-------|------|-------------|
-| ~~1 (Low-risk dedup)~~ | ~~2.4~~ | ~~Low~~ | ~~DONE~~ |
-| 2 (Larger refactors) | ~~2.3~~, ~~4.1~~, 4.2 | Low-Medium | ~600 |
-| DEFERRED | ~~2.1~~ | — | — |

@@ -312,11 +312,85 @@ childEnv := environment.NewEnvironmentFrameWithParent(local, parentEnv)
 
 ---
 
+## Load-Path Stack
+
+The `LoadPathStack` enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `TopLevelEnvironment` (per-VM, not per-thread).
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  LoadPathStack (environment/load_path_stack.go)         │
+│                                                         │
+│  paths []string    ← LIFO stack of absolute file paths  │
+│  mu    sync.Mutex  ← thread-safe access                 │
+│                                                         │
+│  Push(absPath) → Pop() → Current() → CurrentDir()      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Resolution Strategy
+
+`ResolveFile` (`environment/resolve.go`) resolves filenames using a 3-tier strategy:
+
+```
+1. Absolute path     → use as-is (if exists)
+2. Stack-relative    → path relative to stack.CurrentDir()
+3. Fallback dirs     → SCHEME_INCLUDE_PATH, CWD
+```
+
+Stack-relative takes precedence over fallback directories. Error messages list all searched paths.
+
+### Integration Points
+
+All three file-loading operations push/pop the stack:
+
+| Operation | Location | Phase |
+|-----------|----------|-------|
+| `load` | `internal/extensions/eval/prim_eval.go` | Runtime |
+| `include` | `machine/compile_time_continuation_include.go` | Compile-time |
+| `import` (library loading) | `machine/library_loader.go` | Compile-time |
+
+This enables correct nested resolution: `(load "a.scm")` containing `(load "b.scm")` resolves `b.scm` relative to `a.scm`'s directory.
+
+### Scheme Primitives
+
+| Primitive | Returns | Notes |
+|-----------|---------|-------|
+| `(current-load-path)` | string or `#f` | Absolute path of file being loaded |
+| `(current-load-directory)` | string or `#f` | Directory of file being loaded |
+| `(current-load-depth)` | integer | Nesting depth (0 in REPL) |
+
+### Go Embedder API
+
+```go
+// Recommended: automatic push/pop via defer
+err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
+    _, err := engine.Eval(ctx, `(load "helper.scm")`) // resolves relative to /app/scripts/
+    return err
+})
+
+// Direct access
+engine.PushLoadPath("/app/scripts/main.scm")
+defer engine.PopLoadPath()
+
+// Query
+engine.CurrentLoadPath()       // "" if none
+engine.CurrentLoadDirectory()  // "" if none
+```
+
+### Design: Per-VM, Not Per-Thread
+
+The stack lives on `TopLevelEnvironment`, shared across all child environments via delegation. This is intentional: library loading must resolve paths relative to the importing file even when the library runs in its own isolated environment.
+
+**Concurrency caveat**: Concurrent `(load ...)` from multiple SRFI-18 threads can corrupt LIFO ordering. Single-threaded loading (the common case) is fully correct.
+
+---
+
 ## Thread Safety
 
 - `TopLevelEnvironment.InternSymbol()` - Thread-safe (uses RWMutex)
 - `TopLevelEnvironment.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
+- `LoadPathStack` - Thread-safe for individual operations (uses Mutex); LIFO ordering only guaranteed single-threaded
 - Binding operations - Not thread-safe (single-threaded compilation assumed)
 
 ---

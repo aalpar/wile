@@ -54,7 +54,8 @@ if !ok {
 ```go
 o := mc.Arg(0)
 if values.IsEmptyList(o) {
-    mc.SetValue(values.NewString(""))
+    // R7RS §6.7: string-append returns a newly allocated mutable string
+    mc.SetValue(values.NewMutableString(""))
     return nil
 }
 tuple, ok := o.(values.Tuple)

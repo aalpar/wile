@@ -18,7 +18,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| **P1** | **Load-path stack** | **Feature** | **Planned** | **Relative path resolution for `load`, `include`, `import`** |
+| P1 | Load-path stack | Feature | **Complete** | LIFO stack in `environment/load_path_stack.go`, integrated into `load`, `include`, `import` with 3-tier resolution |
 | P2 | Performance refactoring (8 phases) | Performance | Planned | Full-pipeline optimization: parse → expand → compile → execute. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
@@ -26,7 +26,9 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
+| P3 | Plugin shadowing | Architecture | Proposed | Extension primitive shadowing. Depends on external extensions. `plans/PLUGIN_SHADOWING_DESIGN.md` |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
+| P4 | Fused lexing/parsing | Research | Research | Flap paper analysis for fusing tokenizer into parser. `plans/FUSED_LEXING_PARSING.md` |
 | P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
 | P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
 | P4 | Debugger / DAP integration | Tooling | Not started | Debug Adapter Protocol |
@@ -34,10 +36,10 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| P5 | Tokenizer consolidation | Refactoring | Partially complete | ~325 lines saved across 8 phases. ~80 lines remain (structural `readUreal`, deferred). `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
-| P5 | Subsystem simplification | Refactoring | Not started | 8 simplification opportunities across core packages |
+| P5 | Tokenizer consolidation | Refactoring | **Complete** | ~325 lines saved across 8 phases. Structural `readUreal` extraction deferred as documented debt. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
+| P5 | Subsystem simplification | Refactoring | Mostly complete | All architectural review findings resolved except numeric tower type-switch (deferred indefinitely). `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
-| P5 | Systematic debug logging | Tooling | Not started | Debugging methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
+| P5 | Systematic debug logging | Tooling | **Complete** | Reference methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 
 ---
 

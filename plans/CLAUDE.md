@@ -23,11 +23,16 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `TOKENIZER_CONSOLIDATION_PLAN.md` | Tokenizer consolidation (~325 LOC saved; `readUreal` deferred as documented debt) | Complete |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
 | `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
 | `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
+
+### Completed (kept for reference)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `TOKENIZER_CONSOLIDATION_PLAN.md` | Tokenizer consolidation (~325 LOC saved; `readUreal` deferred as documented debt) | Complete |
 
 ### Proposed Designs (Future)
 
@@ -36,7 +41,7 @@ When investigating R7RS conformance issues:
 | `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system (EnvironmentAccess interface) | Proposed |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
-| `GOBRIDGE_FFI_TOOLKIT.md` | Unified FFI toolkit for Go embedded scripting runtimes | Exploratory |
+
 
 ### Architectural Review
 
@@ -45,7 +50,7 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); all others resolved | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
 | `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; all HIGH/MEDIUM resolved, LOW items remain | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring opportunities (Tiers 2-4) | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; all Tier 4 complete (removed) | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
 ### Testing & Methodology
