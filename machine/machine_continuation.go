@@ -48,7 +48,24 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 
 // NewMachineContinuationFromMachineContext creates a new machine continuation from the given machine context and an offset to the program counter.
 // The new continuation inherits the environment, template, and evaluation stack from the machine context.
+//
+// callDepth derivation: the new frame's parent is mc.cont, so its depth is
+// derived from mc.cont's cached depth — NOT from mc.callDepth. These values
+// differ because SaveContinuation pre-increments mc.callDepth before calling
+// this function, but other callers do not:
+//
+//   - SaveContinuation: mc.callDepth already incremented → mc.callDepth != chain length
+//   - PrimCallCC sub-context path (prim_control.go): mc.callDepth == 0, mc.cont == nil
+//   - PrimDynamicWind escape cont (prim_control.go): mc.callDepth == chain length
+//
+// Using mc.callDepth - 1 would uint64-underflow to 2^64-1 in the PrimCallCC
+// case (callDepth is uint64). The parent-pointer formula is correct for all
+// callers and immune to underflow.
 func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *MachineContinuation {
+	var depth uint64
+	if mc.cont != nil {
+		depth = mc.cont.callDepth + 1
+	}
 	q := &MachineContinuation{
 		vmState: vmState{
 			env:         mc.env,
@@ -58,7 +75,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 			evals:       mc.evals,
 			pc:          mc.pc + off,
 			threadID:    mc.threadID,
-			callDepth:   mc.callDepth - 1,
+			callDepth:   depth,
 		},
 		parent: mc.cont,
 	}

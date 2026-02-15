@@ -237,6 +237,11 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 
 // SaveContinuation pushes a new continuation onto the machine context with the given offset to the current program counter.
 // Returns ErrCallDepthExceeded if the call depth limit has been reached.
+//
+// Note: callDepth is incremented BEFORE calling NewMachineContinuationFromMachineContext.
+// The continuation's own callDepth is derived from mc.cont (the parent pointer), not from
+// mc.callDepth, so this pre-increment does not affect the continuation's cached depth.
+// See the comment on NewMachineContinuationFromMachineContext for why this matters.
 func (p *MachineContext) SaveContinuation(off int) error {
 	p.callDepth++
 	if p.maxCallDepth > 0 && p.callDepth > p.maxCallDepth {
