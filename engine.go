@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -154,11 +155,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 			} else {
 				parts = []string{"wile", snap.name}
 			}
-			for _, part := range parts {
-				if part == "" {
-					return nil, &Error{
-						Message: fmt.Sprintf("invalid library name for extension %q: empty name part", snap.name),
-					}
+			if slices.Contains(parts, "") {
+				return nil, &Error{
+					Message: fmt.Sprintf("invalid library name for extension %q: empty name part", snap.name),
 				}
 			}
 			if len(parts) == 0 {
