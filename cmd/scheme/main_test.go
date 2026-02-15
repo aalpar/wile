@@ -334,6 +334,37 @@ func TestBuildVariables(t *testing.T) {
 	}
 }
 
+func TestResolveVersion(t *testing.T) {
+	oldSHA := BuildSHA
+	oldVer := BuildVersion
+	defer func() {
+		BuildSHA = oldSHA
+		BuildVersion = oldVer
+	}()
+
+	t.Run("ldflags take priority", func(t *testing.T) {
+		BuildVersion = "v9.9.9"
+		BuildSHA = "deadbeef"
+		v, s := resolveVersion()
+		if v != "v9.9.9" {
+			t.Errorf("expected v9.9.9, got %s", v)
+		}
+		if s != "deadbeef" {
+			t.Errorf("expected deadbeef, got %s", s)
+		}
+	})
+
+	t.Run("fallback when ldflags empty", func(t *testing.T) {
+		BuildVersion = ""
+		BuildSHA = ""
+		v, s := resolveVersion()
+		// In test binaries, ReadBuildInfo returns module info.
+		// We just verify the function doesn't panic and returns strings.
+		_ = v
+		_ = s
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Phase 2: Flag parsing tests
 // ---------------------------------------------------------------------------

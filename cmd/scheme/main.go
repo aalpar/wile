@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	goruntime "runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -58,6 +59,37 @@ const (
 	// SchemeLibraryPathEnv is the environment variable for library search paths
 	SchemeLibraryPathEnv = "SCHEME_LIBRARY_PATH"
 )
+
+// resolveVersion returns the version and SHA for display. Ldflags values
+// take priority; debug.ReadBuildInfo fills in when go install is used.
+func resolveVersion() (version, sha string) {
+	version = BuildVersion
+	sha = BuildSHA
+
+	if version != "" && sha != "" {
+		return version, sha
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version, sha
+	}
+
+	if version == "" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+
+	if sha == "" {
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+				sha = s.Value[:7]
+				break
+			}
+		}
+	}
+
+	return version, sha
+}
 
 // initLibraryRegistry creates and configures the library registry with search paths.
 // Search path order (highest priority first):
@@ -132,7 +164,8 @@ func main() {
 	}
 
 	if opts.Version {
-		fmt.Printf("Wile Scheme %s (%s)\n", BuildVersion, BuildSHA)
+		v, s := resolveVersion()
+		fmt.Printf("Wile Scheme %s (%s)\n", v, s)
 		os.Exit(0)
 	}
 
