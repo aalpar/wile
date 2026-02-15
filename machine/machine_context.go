@@ -29,6 +29,13 @@ import (
 // Run() catches this and returns nil, so callers never see it.
 var errHalt = values.NewStaticError("machine halt: no more operations to run")
 
+// contextCheckMask gates how often the VM loop checks ctx.Done().
+// A non-blocking select is cheap (~15ns) but not free; checking every
+// 1024 ops eliminates ~99.9% of them while keeping worst-case
+// cancellation latency under 1ms at typical throughput.
+// Power of 2 so the check is a single AND instruction.
+const contextCheckMask = 1023
+
 var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
 
 // immediateReturnTemplate is an empty NativeTemplate used for callables that
@@ -446,7 +453,7 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
-// Context cancellation: The loop checks p.ctx.Done() on each iteration, allowing
+// Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:
 //   - Test timeouts that actually stop execution
 //   - REPL interrupt support (Ctrl+C)
@@ -457,11 +464,15 @@ func (p *MachineContext) Run() error {
 	var err error
 	mc := p
 	for mc.pc < len(mc.template.operations) {
-		// Check for context cancellation (enables preemption via timeout/cancel)
-		select {
-		case <-mc.ctx.Done():
-			return mc.ctx.Err()
-		default:
+		// Check for context cancellation every 1024 ops instead of every op.
+		// A non-blocking select is cheap but not free; batching keeps the
+		// tight dispatch loop fast while maintaining <1ms cancel latency.
+		if mc.counters.OpsExecuted&contextCheckMask == 0 {
+			select {
+			case <-mc.ctx.Done():
+				return mc.ctx.Err()
+			default:
+			}
 		}
 
 		// Check for debugger breaks
