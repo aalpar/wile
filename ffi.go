@@ -106,8 +106,10 @@ func (p *Engine) RegisterFunc(name string, fn any) error {
 // with a signature supported by [RegisterFunc].
 //
 // Registration stops on the first error. The error message includes the
-// binding name that failed. Functions registered before the failure remain
-// registered.
+// binding name that failed first. When multiple functions are invalid, the
+// particular binding that fails first is non-deterministic because Go map
+// iteration order is unspecified. Functions registered before the failure
+// remain registered.
 func (p *Engine) RegisterFuncs(funcs map[string]any) error {
 	for name, fn := range funcs {
 		err := p.RegisterFunc(name, fn)

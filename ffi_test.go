@@ -1319,6 +1319,11 @@ func TestRegisterFuncsFailFast(t *testing.T) {
 	if !strings.Contains(err.Error(), "bad") {
 		t.Errorf("expected error to mention binding name %q, got: %v", "bad", err)
 	}
+
+	// Verify that "good" was registered despite the error (if it was iterated first).
+	// Since map order is non-deterministic, "good" may or may not be registered.
+	// We only check that calling it doesn't panic — it either works or returns an error.
+	_, _ = engine.Eval(context.Background(), "(good 5)")
 }
 
 func TestRegisterFuncsEmpty(t *testing.T) {
