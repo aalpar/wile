@@ -101,6 +101,23 @@ func (p *Engine) RegisterFunc(name string, fn any) error {
 	})
 }
 
+// RegisterFuncs registers multiple Go functions as Scheme primitives.
+// Each key in the map is the Scheme name; each value must be a Go function
+// with a signature supported by [RegisterFunc].
+//
+// Registration stops on the first error. The error message includes the
+// binding name that failed. Functions registered before the failure remain
+// registered.
+func (p *Engine) RegisterFuncs(funcs map[string]any) error {
+	for name, fn := range funcs {
+		err := p.RegisterFunc(name, fn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // buildFFISpec reflects on fn to produce an ffiSpec with pre-computed converters.
 func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	fnType := reflect.TypeOf(fn)

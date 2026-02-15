@@ -1260,3 +1260,79 @@ func TestRegisterFuncNonListToComposite(t *testing.T) {
 		})
 	}
 }
+
+// --- RegisterFuncs batch registration ---
+
+func TestRegisterFuncs(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFuncs(map[string]any{
+		"inc": func(n int64) int64 {
+			return n + 1
+		},
+		"dec": func(n int64) int64 {
+			return n - 1
+		},
+		"greet": func(name string) string {
+			return "hello, " + name
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"inc", "(inc 5)", "6"},
+		{"dec", "(dec 5)", "4"},
+		{"greet", `(greet "world")`, `"hello, world"`},
+		{"combined", "(inc (dec (inc 10)))", "11"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestRegisterFuncsFailFast(t *testing.T) {
+	engine := newEngine(t)
+
+	err := engine.RegisterFuncs(map[string]any{
+		"good": func(n int64) int64 {
+			return n
+		},
+		"bad": 42, // not a function
+	})
+	if err == nil {
+		t.Fatal("expected error from RegisterFuncs with non-function value")
+	}
+
+	var wileErr *wile.Error
+	if !errors.As(err, &wileErr) {
+		t.Fatalf("expected *wile.Error, got %T", err)
+	}
+	if !strings.Contains(err.Error(), "bad") {
+		t.Errorf("expected error to mention binding name %q, got: %v", "bad", err)
+	}
+}
+
+func TestRegisterFuncsEmpty(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFuncs(map[string]any{})
+	c.Assert(err, qt.IsNil)
+}
+
+func TestRegisterFuncsNil(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	err := engine.RegisterFuncs(nil)
+	c.Assert(err, qt.IsNil)
+}
