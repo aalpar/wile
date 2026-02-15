@@ -31,4 +31,4 @@
 
 ;; Benchmark
 (display "=== Recursive Summation Benchmark ===\n\n")
-(run-benchmark 1000 10000)
+(run-benchmark 15 10000)

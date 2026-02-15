@@ -57,4 +57,4 @@
 
 ;; Benchmark
 (display "=== N-Queens Puzzle Benchmark ===\n\n")
-(run-benchmark 5 10)
+(run-benchmark 2 10)

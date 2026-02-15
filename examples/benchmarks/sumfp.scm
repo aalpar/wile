@@ -35,4 +35,4 @@
 
 ;; Benchmark
 (display "=== Floating-Point Summation Benchmark ===\n\n")
-(run-benchmark 10 1000000.0)
+(run-benchmark 7 1000000.0)

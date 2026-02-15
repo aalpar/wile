@@ -32,4 +32,4 @@
 
 ;; Benchmark
 (display "=== Iterative Division Benchmark ===\n\n")
-(run-benchmark 10000 1000)
+(run-benchmark 6000 1000)

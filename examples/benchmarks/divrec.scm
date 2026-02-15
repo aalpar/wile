@@ -31,4 +31,4 @@
 
 ;; Benchmark
 (display "=== Recursive Division Benchmark ===\n\n")
-(run-benchmark 10000 1000)
+(run-benchmark 2000 1000)
