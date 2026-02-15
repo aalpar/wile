@@ -57,7 +57,7 @@ import (
 //	│ threadID     │ ✓              │ ✗           │ ✗                │
 //	│ windingStack │ ✗              │ ✗           │ ✗                │
 //	│ promptTag    │ ✗              │ ✗           │ ✗                │
-//	│ callDepth    │ ✓              │ recomputed  │ ✗                │
+//	│ callDepth    │ ✓              │ ✓ (saved)   │ ✗                │
 //	└──────────────┴────────────────┴─────────────┴──────────────────┘
 type vmState struct {
 	env          *environment.EnvironmentFrame

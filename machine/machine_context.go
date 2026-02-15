@@ -206,14 +206,11 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.evals = cont.evals.Copy()
 	p.cont = cont.parent
 	p.pc = cont.pc
-	// Recompute callDepth from the restored continuation chain.
-	// A simple callDepth-- is wrong when Restore jumps to an arbitrary
-	// continuation (e.g., call/cc): the target chain may be at a completely
-	// different depth than the current one.
-	p.callDepth = 0
-	for q := p.cont; q != nil; q = q.parent {
-		p.callDepth++
-	}
+	// Restore callDepth from the continuation's cached value.
+	// Each continuation stores its ancestor count at creation time, which
+	// equals the chain length of cont.parent (which is now p.cont).
+	// This replaces an O(d) chain walk with an O(1) field read.
+	p.callDepth = cont.callDepth
 }
 
 // PopContinuation pops the current continuation from the machine context and returns it.
@@ -260,10 +257,7 @@ func (p *MachineContext) CurrentContinuation() *MachineContinuation {
 
 // CallDepth returns the depth of the current continuation stack.
 func (p *MachineContext) CallDepth() int {
-	if p.cont == nil {
-		return 0
-	}
-	return p.cont.CallDepth() + 1
+	return int(p.callDepth)
 }
 
 func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*MachineContext, error) {

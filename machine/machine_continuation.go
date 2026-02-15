@@ -30,11 +30,16 @@ type MachineContinuation struct {
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
 func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineContinuation {
+	var depth uint64
+	if parent != nil {
+		depth = parent.callDepth + 1
+	}
 	q := &MachineContinuation{
 		vmState: vmState{
-			env:      env,
-			template: tpl,
-			evals:    NewStack(),
+			env:       env,
+			template:  tpl,
+			evals:     NewStack(),
+			callDepth: depth,
 		},
 		parent: parent,
 	}
@@ -53,6 +58,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 			evals:       mc.evals,
 			pc:          mc.pc + off,
 			threadID:    mc.threadID,
+			callDepth:   mc.callDepth - 1,
 		},
 		parent: mc.cont,
 	}
@@ -92,18 +98,12 @@ func (p *MachineContinuation) PushValues(v ...values.Value) {
 }
 
 // CallDepth returns the depth of the continuation stack.
+// The depth is cached in each frame at creation time, so this is O(1).
 func (p *MachineContinuation) CallDepth() int {
-	r := p
-	if r == nil {
+	if p == nil {
 		return 0
 	}
-	q := 0
-	// count the number of parents
-	for r.parent != nil {
-		q++
-		r = r.parent
-	}
-	return q
+	return int(p.callDepth)
 }
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
@@ -118,6 +118,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 			windingStack: p.windingStack.Copy(),
 			promptTag:    p.promptTag,
 			threadID:     p.threadID,
+			callDepth:    p.callDepth,
 		},
 		parent:        p.parent,
 		promptHandler: p.promptHandler,
