@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** PLANNED — Not started
+**Status:** IN PROGRESS — Phase 1 partially complete
 
 ## Overview
 
@@ -10,8 +10,8 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 
 ```
 ┌─────────────┬──────────────────────────────────────────────┐
-│ VM          │ PopAll clones stack, env deep-copy every     │
-│             │ non-tail call, ctx.Done() every iteration,   │
+│ VM          │ ✓PopAll fixed, env deep-copy every non-tail  │
+│             │ call, ✓ctx.Done() batched every 1024 ops,    │
 │             │ interface dispatch (2 ptr indirections/op)   │
 ├─────────────┼──────────────────────────────────────────────┤
 │ Expansion   │ New SyntaxPair/Symbol per AddScope,          │
@@ -33,7 +33,7 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 | Phase | Description | Impact | Risk | Deps |
 |-------|-------------|--------|------|------|
 | **0** | Measurement — stage-isolated benchmarks, GC pressure, pprof | Foundation | Low | None |
-| **1** | Quick wins — PopAll fix, ctx.Done batching, char cache, ForeignError depth, single-value MV | 15–25% | Low | 0 |
+| **1** | Quick wins — ~~PopAll fix~~, ~~ctx.Done batching~~, char cache, ForeignError depth, ~~single-value MV~~ | 15–25% | Low | 0 |
 | **2** | sync.Pool — Stack, Continuation, sub-context pooling | 30–50% alloc reduction | Medium | 0 |
 | **3** | Environment CoW — shared flag, binding copy avoidance, keys map sharing | 20–40% call-heavy | Medium | 0, 1 |
 | **4** | Expansion — lazy scope propagation, SourceContext interning, expander sub-context reuse | 40–60% expansion alloc | High | 0 |
@@ -48,6 +48,16 @@ Phase 0 ──→ Phase 1 ──→ Phase 3
    ├──→ Phase 4
    └──→ Phase 5 ──→ Phase 6 ──→ Phase 7
 ```
+
+## Phase 1 Progress
+
+| Item | Description | Status | Commit |
+|------|-------------|--------|--------|
+| 1.1 | PopAll — eliminate clone by swapping backing array ownership | **Complete** | `8f53bc7` |
+| 1.2 | ctx.Done() batching — check every 1024 ops instead of every op | **Complete** | `7f694c1` |
+| 1.3 | Character cache — intern common characters like integers/booleans | Not started | — |
+| 1.4 | ForeignError depth — cap stack trace frame capture | Not started | — |
+| 1.5 | Single-value MV — split value register to avoid slice allocation | **Complete** | `d4fb408` |
 
 ## Critical Files
 

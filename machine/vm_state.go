@@ -57,7 +57,7 @@ import (
 //	│ threadID     │ ✓              │ ✗           │ ✗                │
 //	│ windingStack │ ✗              │ ✗           │ ✗                │
 //	│ promptTag    │ ✗              │ ✗           │ ✗                │
-//	│ callDepth    │ ✓              │ recomputed  │ ✗                │
+//	│ callDepth    │ ✓              │ ✓ (saved)   │ ✗                │
 //	└──────────────┴────────────────┴─────────────┴──────────────────┘
 type vmState struct {
 	env          *environment.EnvironmentFrame
@@ -69,5 +69,18 @@ type vmState struct {
 	windingStack WindingStack // R7RS dynamic-wind extent tracking
 	promptTag    *PromptTag   // prompt tag for continuation prompts
 	threadID     uint64       // SRFI-18 thread identity: 0 = primordial thread
-	callDepth    uint64       // current continuation depth (incremented on save, decremented on pop)
+	// callDepth caches the continuation chain length to avoid O(d) traversals.
+	//
+	// On MachineContext: number of frames in the cont chain (mc.cont → ... → nil).
+	//   Maintained by SaveContinuation (++), PopContinuation (--), Restore (read
+	//   from continuation).
+	//
+	// On MachineContinuation: number of ancestor frames (parent → ... → nil).
+	//   Set once at creation time, never mutated. A root frame (parent == nil)
+	//   has callDepth 0; each level adds 1.
+	//
+	// WARNING: callDepth is uint64. Subtracting from it can silently wrap to
+	// 2^64-1. All depth computation must use the parent pointer (which is nil-safe)
+	// rather than arithmetic on callDepth. See NewMachineContinuationFromMachineContext.
+	callDepth uint64
 }

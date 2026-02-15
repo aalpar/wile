@@ -62,6 +62,14 @@ type Matcher struct {
 	syntaxStack  []syntaxPathEntry           // Input traversal stack (syntax-native)
 	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
 	ellipsisID   string                      // Custom ellipsis identifier (default "...")
+
+	// tailCountCache and tailCountPC cache the remaining element count for
+	// ByteCodeSkipIfTailCount to avoid re-walking the list on every loop
+	// iteration. Without caching, ellipsis-in-middle patterns like (a ... b c)
+	// have O(n²) matching cost. With caching, the count is computed once and
+	// decremented per iteration, reducing total cost to O(n).
+	tailCountCache int // cached remaining count; -1 = not cached
+	tailCountPC    int // bytecode index where the cache was set
 }
 
 // NewMatcher creates a new pattern matcher with the default ellipsis ("...").
@@ -204,6 +212,9 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			bindings: map[string]syntax.SyntaxValue{},
 		},
 	}
+	// Reset tail count cache so the first ByteCodeSkipIfTailCount hit
+	// computes a fresh count via countRemainingSyntaxElements.
+	p.tailCountCache = -1
 	lvs := len(p.syntaxStack)
 	i := 0
 	iterations := 0
@@ -330,14 +341,28 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 				i += cd.Offset - 1 // -1 because i++ at end of loop
 			}
 		case ByteCodeSkipIfTailCount:
-			// Skip forward if remaining elements equals Count (for ellipsis-in-middle)
-			// R7RS §4.3.2 allows patterns like (a ... b c) where ellipsis is followed by more elements
-			remaining := countRemainingSyntaxElements(p.syntaxStack[lvs-1].pr)
+			// Skip forward if remaining elements equals Count (for ellipsis-in-middle).
+			// R7RS §4.3.2 allows patterns like (a ... b c) where ellipsis is
+			// followed by more elements. The remaining count is cached to avoid
+			// O(n) list walks on every iteration, reducing O(n²) to O(n) total.
+			var remaining int
+			if p.tailCountPC == i && p.tailCountCache >= 0 {
+				// Same loop iteration — one element was consumed since last visit
+				p.tailCountCache--
+				remaining = p.tailCountCache
+			} else {
+				// First encounter or different SkipIfTailCount instruction
+				remaining = countRemainingSyntaxElements(p.syntaxStack[lvs-1].pr)
+				p.tailCountCache = remaining
+				p.tailCountPC = i
+			}
 			if remaining == cd.Count {
 				// Exactly enough for trailing pattern, exit loop
 				i += cd.Offset - 1 // -1 because i++ at end of loop
+				p.tailCountCache = -1
 			} else if remaining < cd.Count {
 				// Not enough elements for trailing pattern
+				p.tailCountCache = -1
 				return ErrNotAMatch
 			}
 			// remaining > Count: continue loop to match more ellipsis iterations

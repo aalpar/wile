@@ -387,6 +387,8 @@ import (
 
 ## Comments
 
+Comments explain *why*, not *what*. Non-obvious logic gets context; obvious code gets none.
+
 ### Package Documentation
 
 Use structured comments with Markdown-style headings:

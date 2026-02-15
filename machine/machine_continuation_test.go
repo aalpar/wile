@@ -417,3 +417,56 @@ func TestMachineContinuation_CallDepth(t *testing.T) {
 	c2 := NewMachineContinuation(c1, tpl, env)
 	qt.Assert(t, c2.CallDepth(), qt.Equals, 2)
 }
+
+// TestNewMachineContinuationFromMachineContext_CallDepth verifies that
+// NewMachineContinuationFromMachineContext computes callDepth correctly
+// regardless of whether the caller pre-incremented mc.callDepth.
+// This covers the PrimCallCC sub-context path and PrimDynamicWind escape
+// continuation path, where mc.callDepth == 0 would previously underflow.
+func TestNewMachineContinuationFromMachineContext_CallDepth(t *testing.T) {
+	c := qt.New(t)
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	tpl := NewNativeTemplate(0, 0, false)
+
+	tcs := []struct {
+		name      string
+		setup     func() *MachineContext
+		wantDepth int
+	}{
+		{
+			name: "fresh context with nil cont",
+			setup: func() *MachineContext {
+				cont := NewMachineContinuation(nil, tpl, env)
+				return NewMachineContext(context.Background(), cont)
+			},
+			wantDepth: 0,
+		},
+		{
+			name: "context after one SaveContinuation",
+			setup: func() *MachineContext {
+				cont := NewMachineContinuation(nil, tpl, env)
+				mc := NewMachineContext(context.Background(), cont)
+				_ = mc.SaveContinuation(1)
+				return mc
+			},
+			wantDepth: 1,
+		},
+		{
+			name: "sub-context with callDepth 0",
+			setup: func() *MachineContext {
+				cont := NewMachineContinuation(nil, tpl, env)
+				mc := NewMachineContext(context.Background(), cont)
+				return mc.NewSubContext()
+			},
+			wantDepth: 0,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := tc.setup()
+			newCont := NewMachineContinuationFromMachineContext(mc, 1)
+			c.Assert(newCont.CallDepth(), qt.Equals, tc.wantDepth)
+		})
+	}
+}
