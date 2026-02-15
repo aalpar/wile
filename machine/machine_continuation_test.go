@@ -74,15 +74,33 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
-	qt.Assert(t, len(cont.value), qt.Equals, 0)
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 0)
 
 	cont.PushValues(values.NewInteger(1), values.NewInteger(2))
-	qt.Assert(t, len(cont.value), qt.Equals, 2)
-	qt.Assert(t, cont.value[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, cont.value[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 2)
+	qt.Assert(t, cont.multiValues[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cont.multiValues[1], values.SchemeEquals, values.NewInteger(2))
 
 	cont.PushValues(values.NewInteger(3))
-	qt.Assert(t, len(cont.value), qt.Equals, 3)
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
+}
+
+func TestMachineContinuation_PushValues_PromoteSingleToMulti(t *testing.T) {
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	cont := NewMachineContinuation(nil, nil, env)
+
+	// Start with a single value set on the continuation.
+	cont.singleValue = values.NewInteger(1)
+
+	// Pushing additional values should promote the single value into multiValues.
+	cont.PushValues(values.NewInteger(2), values.NewInteger(3))
+
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
+	qt.Assert(t, cont.multiValues[0], values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cont.multiValues[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, cont.multiValues[2], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, cont.singleValue, qt.IsNil)
 }
 
 func TestMachineContinuation_Copy(t *testing.T) {
@@ -93,7 +111,7 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	cont := NewMachineContinuation(parent, tpl, env)
 	cont.SetPC(10)
 	cont.evals.Push(values.NewInteger(42))
-	cont.value = NewMultipleValues(values.NewInteger(100))
+	cont.singleValue = values.NewInteger(100)
 
 	cpy := cont.Copy()
 
@@ -104,9 +122,8 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	qt.Assert(t, cpy.env, qt.Equals, cont.env)
 	qt.Assert(t, cpy.template, qt.Equals, cont.template)
 	qt.Assert(t, cpy.pc, qt.Equals, cont.pc)
-	// Verify value slice is copied
-	qt.Assert(t, cpy.value[0], values.SchemeEquals, cont.value[0])
-	qt.Assert(t, &cpy.value[0] != &cont.value[0], qt.IsTrue)
+	// Verify singleValue is copied
+	qt.Assert(t, cpy.singleValue, values.SchemeEquals, cont.singleValue)
 	// Verify evals stack is copied
 	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }

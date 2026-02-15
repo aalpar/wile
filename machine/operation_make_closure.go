@@ -49,7 +49,7 @@ func (p *OperationMakeClosure) Apply(ctx context.Context, mc *MachineContext) (*
 		mc.env,                            // Capture runtime parent for free variables
 	)
 	cls := NewClosureWithTemplate(tpl, runtimeEnv)
-	mc.value = MultipleValues{cls}
+	mc.SetValue(cls)
 	mc.pc++
 	return mc, nil
 }

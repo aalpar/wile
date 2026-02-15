@@ -30,8 +30,13 @@ func NewOperationPopAll() *OperationPopAll {
 	}
 }
 
+// Apply pops all values from the evaluation stack into the value register.
+// This is the R7RS multiple-values path (used by values/call-with-values),
+// so it writes multiValues directly and clears singleValue rather than
+// going through SetValue.
 func (*OperationPopAll) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = mc.evals.PopAll()
+	mc.multiValues = mc.evals.PopAll()
+	mc.singleValue = nil
 	mc.pc++
 	return mc, nil
 }

@@ -36,7 +36,7 @@ func (p *OperationPull) EqualTo(o values.Value) bool {
 }
 
 func (*OperationPull) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = MultipleValues{mc.evals.Pull()}
+	mc.SetValue(mc.evals.Pull())
 	mc.pc++
 	return mc, nil
 }

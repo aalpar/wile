@@ -35,11 +35,11 @@ func TestNewMachineContext(t *testing.T) {
 	// Create a continuation with specific state
 	cont := &MachineContinuation{
 		vmState: vmState{
-			env:      env,
-			template: tpl,
-			value:    NewMultipleValues(values.NewInteger(42)),
-			evals:    NewStack(),
-			pc:       5,
+			env:         env,
+			template:    tpl,
+			singleValue: values.NewInteger(42),
+			evals:       NewStack(),
+			pc:          5,
 		},
 		parent: parentCont,
 	}
@@ -54,7 +54,7 @@ func TestNewMachineContext(t *testing.T) {
 	qt.Assert(t, mc.template, qt.Equals, tpl)
 	qt.Assert(t, mc.cont, qt.Equals, parentCont) // cont field should be cont.parent
 	qt.Assert(t, mc.pc, qt.Equals, 5)
-	qt.Assert(t, mc.value.Len(), qt.Equals, 1)
+	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 1)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 2)
 }
@@ -113,7 +113,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
 	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
-	qt.Assert(t, mc.value.Len(), qt.Equals, 0)
+	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
 }
 
@@ -127,7 +127,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
 	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
-	qt.Assert(t, mc.value.Len(), qt.Equals, 0)
+	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
 }
 
@@ -208,7 +208,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 	// Sub-context should have fresh state
 	qt.Assert(t, subCtx.template, qt.IsNil)
 	qt.Assert(t, subCtx.pc, qt.Equals, 0)
-	qt.Assert(t, subCtx.value, qt.IsNil)
+	qt.Assert(t, subCtx.GetValues(), qt.IsNil)
 	qt.Assert(t, subCtx.evals.Len(), qt.Equals, 0)
 	qt.Assert(t, subCtx.cont, qt.IsNil)
 	// But shares top-level environment
@@ -738,9 +738,9 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.IsNotNil)
-	qt.Assert(t, len(mc.value) > 0, qt.IsTrue)
-	qt.Assert(t, mc.value[0], values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValues(), qt.IsNotNil)
+	qt.Assert(t, mc.GetValues().Len() > 0, qt.IsTrue)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
 }
 
 // TestExecuteVariadicProcedure tests running a variadic procedure
@@ -757,7 +757,7 @@ func TestExecuteVariadicProcedure(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.value, qt.IsNotNil)
+	qt.Assert(t, mc.GetValues(), qt.IsNotNil)
 }
 
 // TestMachineContextNewSubContext tests creating a sub-context

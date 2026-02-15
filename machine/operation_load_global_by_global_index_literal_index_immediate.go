@@ -71,7 +71,7 @@ func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx contex
 	if bd == nil {
 		return nil, mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
 	}
-	mc.value = NewMultipleValues(bd.Value())
+	mc.SetValue(bd.Value())
 	mc.pc++
 	return mc, nil
 }

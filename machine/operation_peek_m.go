@@ -34,7 +34,7 @@ func NewOperationPeekK(depth int) *OperationPeekK {
 }
 
 func (p *OperationPeekK) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.value = []values.Value{mc.evals.PeekK(p.Depth)}
+	mc.SetValue(mc.evals.PeekK(p.Depth))
 	mc.pc++
 	return mc, nil
 }

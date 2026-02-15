@@ -38,7 +38,7 @@ func NewOperationLoadLiteralByLiteralIndexImmediate(li LiteralIndex) *OperationL
 // Apply executes the operation, loading the literal value.
 func (p *OperationLoadLiteralByLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
 	o := mc.template.literals[p.LiteralIndex]
-	mc.value = []values.Value{o}
+	mc.SetValue(o)
 	mc.pc++
 	return mc, nil
 }

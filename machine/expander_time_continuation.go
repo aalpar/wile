@@ -1308,13 +1308,9 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 		return nil, err
 	}
 	// Check if the transformer produced a result
-	if len(mc.value) == 0 {
+	result := mc.GetValue()
+	if values.IsVoid(result) {
 		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "syntax transformer produced no result")
-	}
-	// The transformer should return the expanded syntax
-	result := mc.value[0]
-	if result == nil {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "syntax transformer returned nil")
 	}
 
 	// For syntax-rules transformers, the result should be the expanded form.
@@ -1406,13 +1402,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 	}
 
 	// Check if the transformer produced a result
-	if len(mc.value) == 0 {
+	result := mc.GetValue()
+	if values.IsVoid(result) {
 		return nil, false, values.WrapForeignErrorf(values.ErrUnexpectedNil, "syntax transformer produced no result")
-	}
-
-	result := mc.value[0]
-	if result == nil {
-		return nil, false, values.WrapForeignErrorf(values.ErrUnexpectedNil, "syntax transformer returned nil")
 	}
 
 	// Return the result WITHOUT recursive expansion

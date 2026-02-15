@@ -34,7 +34,6 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 		vmState: vmState{
 			env:      env,
 			template: tpl,
-			value:    NewMultipleValues(),
 			evals:    NewStack(),
 		},
 		parent: parent,
@@ -47,12 +46,13 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *MachineContinuation {
 	q := &MachineContinuation{
 		vmState: vmState{
-			env:      mc.env,
-			template: mc.template,
-			value:    mc.value,
-			evals:    mc.evals,
-			pc:       mc.pc + off,
-			threadID: mc.threadID,
+			env:         mc.env,
+			template:    mc.template,
+			singleValue: mc.singleValue,
+			multiValues: mc.multiValues,
+			evals:       mc.evals,
+			pc:          mc.pc + off,
+			threadID:    mc.threadID,
 		},
 		parent: mc.cont,
 	}
@@ -79,8 +79,16 @@ func (p *MachineContinuation) SetPC(v int) {
 	p.pc = v
 }
 
+// PushValues appends values to the continuation's value register. If the
+// register currently holds a single value, it is promoted to the multi-value
+// representation before appending. This promote-then-append pattern avoids
+// losing the existing single value when transitioning to the multi-value path.
 func (p *MachineContinuation) PushValues(v ...values.Value) {
-	p.value = append(p.value, v...)
+	if p.multiValues == nil && p.singleValue != nil {
+		p.multiValues = MultipleValues{p.singleValue}
+		p.singleValue = nil
+	}
+	p.multiValues = append(p.multiValues, v...)
 }
 
 // CallDepth returns the depth of the continuation stack.
@@ -103,7 +111,8 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 		vmState: vmState{
 			env:          p.env,
 			template:     p.template,
-			value:        slices.Clone(p.value),
+			singleValue:  p.singleValue,
+			multiValues:  slices.Clone(p.multiValues),
 			evals:        p.evals.Copy(),
 			pc:           p.pc,
 			windingStack: p.windingStack.Copy(),
