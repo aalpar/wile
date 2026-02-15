@@ -1,7 +1,7 @@
 # Release TODO — v1.3.0
 
 **Branch**: (create `release/1.3.0` when ready)
-**Predecessor**: v1.2.0 (2026-02-11), 200 commits since
+**Predecessor**: v1.2.0 (2026-02-11), 200+ commits since
 
 ---
 
