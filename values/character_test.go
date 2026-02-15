@@ -82,3 +82,30 @@ func TestCharacter_String(t *testing.T) {
 	c := NewCharacter('z')
 	qt.Assert(t, c.String(), qt.Equals, "z")
 }
+
+func TestCharacter_CacheIdentity(t *testing.T) {
+	tcs := []struct {
+		name      string
+		r         rune
+		samePtr   bool
+	}{
+		{"ASCII low", 0, true},
+		{"ASCII letter", 'a', true},
+		{"ASCII boundary", 127, true},
+		{"above cache", 128, false},
+		{"unicode lambda", 'λ', false},
+		{"unicode CJK", '日', false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			a := NewCharacter(tc.r)
+			b := NewCharacter(tc.r)
+			if tc.samePtr {
+				qt.Assert(t, a, qt.Equals, b)
+			} else {
+				qt.Assert(t, a != b, qt.IsTrue)
+			}
+			qt.Assert(t, a.Datum(), qt.Equals, tc.r)
+		})
+	}
+}
