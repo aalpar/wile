@@ -27,14 +27,14 @@ import (
 // errHalt is the internal VM sentinel returned by OperationRestoreContinuation
 // when mc.cont == nil (i.e., no more frames to pop — execution is complete).
 // Run() catches this and returns nil, so callers never see it.
+var errHalt = values.NewStaticError("machine halt: no more operations to run")
+
 // contextCheckMask gates how often the VM loop checks ctx.Done().
 // A non-blocking select is cheap (~15ns) but not free; checking every
 // 1024 ops eliminates ~99.9% of them while keeping worst-case
 // cancellation latency under 1ms at typical throughput.
 // Power of 2 so the check is a single AND instruction.
 const contextCheckMask = 1023
-
-var errHalt = values.NewStaticError("machine halt: no more operations to run")
 
 var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
 
@@ -453,7 +453,7 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
-// Context cancellation: The loop checks p.ctx.Done() on each iteration, allowing
+// Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:
 //   - Test timeouts that actually stop execution
 //   - REPL interrupt support (Ctrl+C)
