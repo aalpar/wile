@@ -32,6 +32,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `RELEASE_1_3_0.md` | v1.3.0 release checklist | Complete |
 | `TOKENIZER_CONSOLIDATION_PLAN.md` | Tokenizer consolidation (~325 LOC saved; `readUreal` deferred as documented debt) | Complete |
 
 ### Proposed Designs (Future)
