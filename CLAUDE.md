@@ -76,6 +76,20 @@ values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,valida
 
 Public API (embedders): `wile/`, `values/`, `registry/`. Internal: `internal/*`. Machine: public but rarely used directly.
 
+## Code & Style
+
+- Lowercase filenames, no uppercase or underscores in package names
+- Avoid generic `util` packages — put helpers where they're used
+- Comments explain *why*, not *what* — non-obvious logic gets context, obvious code gets none
+- Table-driven tests are the norm for multiple scenarios (see `registry/CLAUDE.md`)
+- All new packages require unit tests; significant features need integration tests in `integration/`
+
+## Git Workflow
+
+- `git fetch` + `git rebase`, never `git pull` (merge commits block PRs)
+- Never push to upstream master — always branch + PR
+- Squash fixup commits after review, not before
+
 ## Go Conventions
 
 After any Go code changes, run `make lint` (or at minimum `goimports -w` on changed files) before considering the task complete. Do not report completion with outstanding formatting or import issues.
