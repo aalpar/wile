@@ -78,6 +78,14 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 		}
 	}
 
+	// Register global values
+	for _, gv := range p.globalValues {
+		err := registerGlobalValue(env, gv.Name, gv.Value)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Run initialization functions
 	actx := &applyContext{env: env}
 	for _, f := range p.initFuncs {
@@ -112,6 +120,17 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error registering %s", spec.Name)
+	}
+	return nil
+}
+
+func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
+	sym := env.InternSymbol(values.NewSymbol(name))
+	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+
+	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "error registering global value %s", name)
 	}
 	return nil
 }

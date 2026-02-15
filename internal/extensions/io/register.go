@@ -18,9 +18,7 @@
 package io
 
 import (
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/values"
 )
 
 // Extension is the I/O extension.
@@ -143,30 +141,9 @@ func addPorts(r *registry.Registry) error {
 }
 
 func addPortState(r *registry.Registry) error {
-	r.AddInitFunc(func(ctx registry.ApplyContext) error {
-		InitState()
-		registerPortParameters(ctx)
-		return nil
-	})
+	InitState()
+	r.AddGlobalValue("current-input-port", GetCurrentInputPortParam())
+	r.AddGlobalValue("current-output-port", GetCurrentOutputPortParam())
+	r.AddGlobalValue("current-error-port", GetCurrentErrorPortParam())
 	return nil
-}
-
-func registerPortParameters(ctx registry.ApplyContext) {
-	// Import the necessary types
-	env := ctx.Environment()
-
-	portParams := []struct {
-		name  string
-		param interface{}
-	}{
-		{"current-input-port", GetCurrentInputPortParam()},
-		{"current-output-port", GetCurrentOutputPortParam()},
-		{"current-error-port", GetCurrentErrorPortParam()},
-	}
-
-	for _, pp := range portParams {
-		sym := env.InternSymbol(values.NewSymbol(pp.name))
-		idx, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-		env.SetOwnGlobalValue(idx, pp.param.(values.Value)) //nolint:errcheck
-	}
 }

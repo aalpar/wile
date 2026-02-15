@@ -21,7 +21,13 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
 )
+
+// testValue creates a simple string value for testing.
+func testValue(s string) values.Value {
+	return values.NewString(s)
+}
 
 func TestRegistry_NewRegistry(t *testing.T) {
 	c := qt.New(t)
@@ -336,6 +342,50 @@ func TestRegistry_ClonePreservesMetadata(t *testing.T) {
 	c.Assert(reg.Spec.Doc, qt.Equals, "A test prim.")
 	c.Assert(reg.Spec.ParamNames, qt.DeepEquals, []string{"x"})
 	c.Assert(reg.Spec.Category, qt.Equals, "testing")
+}
+
+func TestRegistry_AddGlobalValue(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddGlobalValue("my-var", testValue("hello"))
+	r.AddGlobalValue("other-var", testValue("world"))
+
+	gvs := r.GlobalValues()
+	c.Assert(len(gvs), qt.Equals, 2)
+	c.Assert(gvs[0].Name, qt.Equals, "my-var")
+	c.Assert(gvs[1].Name, qt.Equals, "other-var")
+}
+
+func TestRegistry_GlobalValues_DefensiveCopy(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddGlobalValue("a", testValue("x"))
+
+	gvs := r.GlobalValues()
+	c.Assert(len(gvs), qt.Equals, 1)
+
+	// Mutating the returned slice should not affect the registry.
+	gvs[0].Name = "mutated"
+	gvs2 := r.GlobalValues()
+	c.Assert(gvs2[0].Name, qt.Equals, "a")
+}
+
+func TestRegistry_CloneGlobalValues(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddGlobalValue("x", testValue("original"))
+
+	clone := r.Clone()
+	c.Assert(len(clone.GlobalValues()), qt.Equals, 1)
+	c.Assert(clone.GlobalValues()[0].Name, qt.Equals, "x")
+
+	// Adding to original should not affect clone.
+	r.AddGlobalValue("y", testValue("extra"))
+	c.Assert(len(r.GlobalValues()), qt.Equals, 2)
+	c.Assert(len(clone.GlobalValues()), qt.Equals, 1)
 }
 
 func TestExtension(t *testing.T) {

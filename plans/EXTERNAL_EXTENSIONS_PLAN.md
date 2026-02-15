@@ -1,6 +1,6 @@
 # External Extensions Plan
 
-**Status:** PROPOSED — Revised 2026-02-14
+**Status:** IN PROGRESS — Phase 2 complete (2026-02-14)
 
 > **Cross-reference**: Plugin architecture (Phases 1-3, 5-6) is complete. This plan covers the remaining Phase 4: external extraction.
 
@@ -79,7 +79,7 @@ The original plan proposed a new `EnvironmentAccess` interface with methods (`De
 
 ## Revised Plan
 
-### Phase 1: Move Predicate Utilities to `values/`
+### Phase 1: Move Predicate Utilities to `values/` ✅
 
 Move the four predicate functions from `internal/schemeutil/predicate.go` to `values/bool.go`:
 
@@ -106,7 +106,7 @@ Leave `syntax.go` functions in `internal/schemeutil` — only `eval` uses them, 
 
 **Outcome:** 6 of 9 extensions have zero `internal/` imports.
 
-### Phase 2: Refactor Port Parameter Registration
+### Phase 2: Refactor Port Parameter Registration ✅
 
 `io`'s `registerPortParameters` manually calls `InternSymbol`, `MaybeCreateOwnGlobalBinding`, `SetOwnGlobalValue` — reimplementing what `Registry.Apply()` already does. This is the only consumer of `ApplyContext.Environment()`.
 
@@ -206,8 +206,8 @@ Both are deferred until Tier 1 extraction proves the pattern.
 ## Summary
 
 ```
-Phase 1: Move BoolToBoolean et al. to values/     → unblocks 7/9 extensions
-Phase 2: Refactor io port param registration       → eliminates ApplyContext.Environment() usage
+Phase 1: Move BoolToBoolean et al. to values/     → unblocks 7/9 extensions          ✅
+Phase 2: Refactor io port param registration       → eliminates ApplyContext.Env()     ✅
 Phase 3: Deprecate ApplyContext.Environment()       → clean API boundary
 Phase 4: Move Tier 1 to extensions/ (public)        → 6/9 extensions importable
 Phase 5: Extract to separate repos (future)         → distribution concern only
