@@ -19,7 +19,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 |----------|------|----------|--------|-------|
 | **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
 | P1 | Load-path stack | Feature | **Complete** | LIFO stack in `environment/load_path_stack.go`, integrated into `load`, `include`, `import` with 3-tier resolution |
-| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1: 3/5 done (PopAll, ctx.Done batching, single-value MV). `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1: 4/5 done (PopAll, ctx.Done batching, single-value MV, char cache). 1.4 ForeignError stack removal deferred (useful debug info, cold path). `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
 | P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
