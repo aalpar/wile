@@ -1,12 +1,13 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-14
+**Last Updated**: 2026-02-16
 
 ### Current Project Status
 
+**Version**: v1.3.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
-**Extensions**: 9 extension packages (io, files, math, system, threads, eval, exceptions, gointerop, all)
+**Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all)
 **Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
@@ -17,14 +18,14 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| **P1** | **External extensions** | **Architecture** | **Proposed** | **Make extension system publicly consumable in separate repos. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
-| P1 | Load-path stack | Feature | **Complete** | LIFO stack in `environment/load_path_stack.go`, integrated into `load`, `include`, `import` with 3-tier resolution |
-| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1: 4/5 done (PopAll, ctx.Done batching, single-value MV, char cache). 1.4 ForeignError stack removal deferred (useful debug info, cold path). `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1-2 complete. Phase 3: env CoW next. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
+| P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
+| P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
 | P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
 | P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
-| P3 | Unit testing library | Standard library | ⚠️ Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
+| P3 | Unit testing library | Standard library | Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
 | P3 | Plugin shadowing | Architecture | Proposed | Extension primitive shadowing. Depends on external extensions. `plans/PLUGIN_SHADOWING_DESIGN.md` |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
@@ -36,7 +37,6 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| P5 | Subsystem simplification | Refactoring | Mostly complete | All architectural review findings resolved except numeric tower type-switch (deferred indefinitely). `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 
 ---
@@ -69,12 +69,6 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 
 ---
 
-### Runtime Source Location Tracking
-
-- [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
-
----
-
 ### Standard Libraries
 
 **Network Libraries (Racket-compatible)**
@@ -91,14 +85,14 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 - [ ] File system operations beyond R7RS (permissions, symlinks, stat)
 - [ ] Signal handling
 
-**Unit Testing Library** — ⚠️ Partial
+**Unit Testing Library** — Partial
 
 **What Exists**:
-- ✅ `(chibi test)` framework in `lib/chibi/test.scm`
-- ✅ Test infrastructure: `test/` directory with runner scripts
-- ✅ Automated test discovery (`*-test.scm` files)
-- ✅ CI integration (`make test-scheme`)
-- ✅ Cross-implementation testing support
+- `(chibi test)` framework in `lib/chibi/test.scm`
+- Test infrastructure: `test/` directory with runner scripts
+- Automated test discovery (`*-test.scm` files)
+- CI integration (`make test-scheme`)
+- Cross-implementation testing support
 
 **What's Missing**:
 - [ ] Comprehensive test content (only 1 smoke test exists)

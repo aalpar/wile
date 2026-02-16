@@ -13,52 +13,37 @@ When investigating R7RS conformance issues:
 
 ## Plan Files
 
-### Project Overview
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `PROJECT_STATUS.md` | Comprehensive project status and known gaps | Reference |
-
 ### Active Plans
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Phase 1-2 complete, Phase 3+ remaining |
+| `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
+| `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Planned |
-| `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
-
-### Completed (kept for reference)
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `RELEASE_1_3_0.md` | v1.3.0 release checklist | Complete |
-| `TOKENIZER_CONSOLIDATION_PLAN.md` | Tokenizer consolidation (~325 LOC saved; `readUreal` deferred as documented debt) | Complete |
 
 ### Proposed Designs (Future)
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, 6/9 extensions public | In Progress |
+| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, Phase 5 + Tier 2 remaining | Phase 4 complete |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
-
+| `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
 
 ### Architectural Review
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ARCHITECTURAL_REVIEW.md` | 1 deferred LOW item (L19); all others resolved | Tracking |
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_STAFF.md` | Full-codebase tech debt; all HIGH/MEDIUM resolved, LOW items remain | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; all Tier 4 complete (removed) | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; 4.2, 4.4 low-priority remaining | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
-### Testing & Methodology
+### Reference
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Design Documents (outside plans/)
