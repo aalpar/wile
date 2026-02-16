@@ -75,3 +75,31 @@ func ReleaseSubContext(mc *MachineContext) {
 	*mc = MachineContext{}
 	subContextPool.Put(mc)
 }
+
+// continuationPool recycles MachineContinuation frames. Frames are created
+// on every non-tail call (SaveContinuation) and consumed on every normal
+// return (RestoreAndRelease). Only the normal-return path pools frames;
+// call/cc, escape, and composable continuation paths must not pool because
+// the frame may be re-invoked.
+var continuationPool = sync.Pool{
+	New: func() any {
+		return &MachineContinuation{}
+	},
+}
+
+// acquireContinuation returns a zeroed MachineContinuation from the pool.
+func acquireContinuation() *MachineContinuation {
+	return continuationPool.Get().(*MachineContinuation)
+}
+
+// releaseContinuation returns the continuation's evals stack to the stack
+// pool, zeros all fields (breaking GC references), and returns the frame
+// to the continuation pool. Nil-safe.
+func releaseContinuation(cont *MachineContinuation) {
+	if cont == nil {
+		return
+	}
+	releaseStack(cont.evals)
+	*cont = MachineContinuation{}
+	continuationPool.Put(cont)
+}

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -161,6 +162,140 @@ func TestReleaseSubContext_NoParent_NoPanic(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Continuation pool
+// ---------------------------------------------------------------------------
+
+func TestAcquireContinuation_ReturnsZeroedFrame(t *testing.T) {
+	cont := acquireContinuation()
+	qt.Assert(t, cont, qt.IsNotNil)
+	qt.Assert(t, cont.parent, qt.IsNil)
+	qt.Assert(t, cont.env, qt.IsNil)
+	qt.Assert(t, cont.template, qt.IsNil)
+	qt.Assert(t, cont.evals, qt.IsNil)
+	qt.Assert(t, cont.singleValue, qt.IsNil)
+	qt.Assert(t, cont.multiValues, qt.IsNil)
+	qt.Assert(t, cont.pc, qt.Equals, 0)
+	qt.Assert(t, cont.callDepth, qt.Equals, uint64(0))
+	qt.Assert(t, cont.promptHandler, qt.IsNil)
+	qt.Assert(t, cont.promptTag, qt.IsNil)
+}
+
+func TestReleaseContinuation_NilIsNoop(t *testing.T) {
+	// Must not panic.
+	releaseContinuation(nil)
+}
+
+func TestContinuationPool_Roundtrip(t *testing.T) {
+	cont := acquireContinuation()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.pc = 42
+	cont.parent = &MachineContinuation{}
+	cont.evals = acquireStack()
+	cont.evals.Push(values.NewInteger(1))
+
+	releaseContinuation(cont)
+
+	// Re-acquire: all fields must be zeroed.
+	cont2 := acquireContinuation()
+	qt.Assert(t, cont2, qt.IsNotNil)
+	qt.Assert(t, cont2.env, qt.IsNil)
+	qt.Assert(t, cont2.template, qt.IsNil)
+	qt.Assert(t, cont2.pc, qt.Equals, 0)
+	qt.Assert(t, cont2.parent, qt.IsNil)
+	qt.Assert(t, cont2.evals, qt.IsNil)
+}
+
+func TestReleaseContinuation_ReleasesEvalsStack(t *testing.T) {
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.evals.Push(values.NewInteger(1))
+	cont.evals.Push(values.NewInteger(2))
+	savedCap := cap(*cont.evals)
+
+	releaseContinuation(cont)
+
+	// The evals stack should have been returned to stackPool.
+	s := acquireStack()
+	qt.Assert(t, s.Len(), qt.Equals, 0)
+	qt.Assert(t, cap(*s) >= savedCap, qt.IsTrue)
+	releaseStack(s)
+}
+
+func TestReleaseContinuation_ClearsAllReferences(t *testing.T) {
+	cont := acquireContinuation()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.parent = &MachineContinuation{}
+	cont.singleValue = values.NewInteger(42)
+	cont.promptHandler = &MachineClosure{}
+	cont.promptTag = NewPromptTag("test")
+	cont.evals = acquireStack()
+
+	releaseContinuation(cont)
+
+	// Re-acquire and verify all reference fields are nil.
+	cont2 := acquireContinuation()
+	qt.Assert(t, cont2.env, qt.IsNil)
+	qt.Assert(t, cont2.template, qt.IsNil)
+	qt.Assert(t, cont2.parent, qt.IsNil)
+	qt.Assert(t, cont2.singleValue, qt.IsNil)
+	qt.Assert(t, cont2.promptHandler, qt.IsNil)
+	qt.Assert(t, cont2.promptTag, qt.IsNil)
+	qt.Assert(t, cont2.evals, qt.IsNil)
+}
+
+func TestRestoreAndRelease_TransfersEvalsAndPoolsFrame(t *testing.T) {
+	// Build a minimal continuation with known evals.
+	cont := acquireContinuation()
+	evalsStack := acquireStack()
+	evalsStack.Push(values.NewInteger(10))
+	evalsStack.Push(values.NewInteger(20))
+	cont.evals = evalsStack
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.pc = 7
+
+	// Build an mc with its own evals.
+	mc := &MachineContext{}
+	mc.evals = acquireStack()
+	mc.evals.Push(values.NewInteger(99))
+
+	mc.RestoreAndRelease(cont)
+
+	// mc.evals should now be the transferred stack (not a copy).
+	qt.Assert(t, mc.evals, qt.Equals, evalsStack)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 2)
+	qt.Assert(t, mc.pc, qt.Equals, 7)
+
+	// The continuation frame should have been pooled (we can't directly
+	// observe this, but acquiring again should give us a zeroed frame).
+	cont2 := acquireContinuation()
+	qt.Assert(t, cont2.evals, qt.IsNil)
+	qt.Assert(t, cont2.parent, qt.IsNil)
+}
+
+func TestRestoreAndRelease_IncrementsCounters(t *testing.T) {
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+
+	mc := &MachineContext{}
+	mc.evals = acquireStack()
+
+	qt.Assert(t, mc.counters.ContinuationsRestored, qt.Equals, uint64(0))
+	qt.Assert(t, mc.counters.StackPoolReleases, qt.Equals, uint64(0))
+	qt.Assert(t, mc.counters.ContinuationPoolReleases, qt.Equals, uint64(0))
+
+	mc.RestoreAndRelease(cont)
+
+	qt.Assert(t, mc.counters.ContinuationsRestored, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.StackPoolReleases, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.ContinuationPoolReleases, qt.Equals, uint64(1))
+}
+
+// ---------------------------------------------------------------------------
 // Concurrent access
 // ---------------------------------------------------------------------------
 
@@ -212,4 +347,26 @@ func TestSubContextPool_ConcurrentAccess(t *testing.T) {
 	// uint64 increments without atomics can lose writes. But it should be
 	// non-zero, confirming the counter path executes.
 	qt.Assert(t, parent.counters.SubContextPoolReleases > 0, qt.IsTrue)
+}
+
+func TestContinuationPool_ConcurrentAccess(t *testing.T) {
+	const goroutines = 16
+	const iterations = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range iterations {
+				cont := acquireContinuation()
+				cont.evals = acquireStack()
+				cont.evals.Push(values.NewInteger(1))
+				cont.pc = 42
+				releaseContinuation(cont)
+			}
+		}()
+	}
+	wg.Wait()
 }

@@ -34,7 +34,7 @@ func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineCon
 	if mc.cont == nil {
 		return nil, errHalt
 	}
-	mc.Restore(mc.cont)
+	mc.RestoreAndRelease(mc.cont)
 	return mc, nil
 }
 

@@ -45,20 +45,20 @@ import (
 // The table below summarizes how each method (SaveContinuation, Restore,
 // PopContinuation) treats each field.
 //
-//	┌──────────────┬────────────────┬─────────────┬──────────────────┐
-//	│ Field        │ SaveCont saves │ Restore     │ PopContinuation  │
-//	├──────────────┼────────────────┼─────────────┼──────────────────┤
-//	│ env          │ ✓              │ ✓           │ ✓                │
-//	│ template     │ ✓              │ ✓           │ ✓                │
-//	│ singleValue  │ ✓              │ ✗           │ ✓                │
-//	│ multiValues  │ ✓              │ ✗           │ ✓                │
-//	│ evals        │ ✓              │ ✓ (Copy)    │ ✓ (no copy)      │
-//	│ pc           │ ✓ (+offset)    │ ✓           │ ✓                │
-//	│ threadID     │ ✓              │ ✗           │ ✗                │
-//	│ windingStack │ ✗              │ ✗           │ ✗                │
-//	│ promptTag    │ ✗              │ ✗           │ ✗                │
-//	│ callDepth    │ ✓              │ ✓ (saved)   │ ✗                │
-//	└──────────────┴────────────────┴─────────────┴──────────────────┘
+//	┌──────────────┬────────────────┬─────────────┬─────────────────────┬──────────────────┐
+//	│ Field        │ SaveCont saves │ Restore     │ RestoreAndRelease   │ PopContinuation  │
+//	├──────────────┼────────────────┼─────────────┼─────────────────────┼──────────────────┤
+//	│ env          │ ✓              │ ✓           │ ✓                   │ ✓                │
+//	│ template     │ ✓              │ ✓           │ ✓                   │ ✓                │
+//	│ singleValue  │ ✓              │ ✗           │ ✗                   │ ✓                │
+//	│ multiValues  │ ✓              │ ✗           │ ✗                   │ ✓                │
+//	│ evals        │ ✓              │ ✓ (Copy)    │ ✓ (transfer+pool)   │ ✓ (no copy)      │
+//	│ pc           │ ✓ (+offset)    │ ✓           │ ✓                   │ ✓                │
+//	│ threadID     │ ✓              │ ✗           │ ✗                   │ ✗                │
+//	│ windingStack │ ✗              │ ✗           │ ✗                   │ ✗                │
+//	│ promptTag    │ ✗              │ ✗           │ ✗                   │ ✗                │
+//	│ callDepth    │ ✓              │ ✓ (saved)   │ ✓ (saved)           │ ✗                │
+//	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
 type vmState struct {
 	env          *environment.EnvironmentFrame
 	template     *NativeTemplate

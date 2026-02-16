@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** IN PROGRESS — Phase 1 partially complete
+**Status:** IN PROGRESS — Phase 1 complete, Phase 2 complete
 
 ## Overview
 
@@ -58,6 +58,34 @@ Phase 0 ──→ Phase 1 ──→ Phase 3
 | 1.3 | Character cache — intern ASCII characters (0–127) like integers/booleans | **Complete** | `80f1db7` |
 | 1.4 | ForeignError stack removal | **Deferred** | Useful debug info on cold path; not worth removing |
 | 1.5 | Single-value MV — split value register to avoid slice allocation | **Complete** | `d4fb408` |
+
+## Phase 2 Progress
+
+| Item | Description | Status | Notes |
+|------|-------------|--------|-------|
+| 2.1 | Stack pool (`acquireStack`/`releaseStack`) | **Complete** | Phase 1 prerequisite; already merged |
+| 2.2 | SubContext pool (`acquireSubContext`/`ReleaseSubContext`) | **Complete** | Phase 1 prerequisite; already merged |
+| 2.3 | Continuation pool (`acquireContinuation`/`releaseContinuation`) | **Complete** | `machine/pool.go` |
+| 2.4 | Pool-backed `NewMachineContinuationFromMachineContext` | **Complete** | Uses `acquireContinuation()` instead of struct literal |
+| 2.5 | `RestoreAndRelease` — transfer evals, pool consumed frame | **Complete** | Normal return path; no evals.Copy() |
+| 2.6 | Switch `OperationRestoreContinuation` + `returnImmediate` | **Complete** | `Restore` → `RestoreAndRelease` |
+| 2.7 | DeepCopy at continuation capture sites | **Complete** | Required for pool safety; see below |
+| 2.8 | `ContinuationPoolReleases` counter | **Complete** | `machine/counters.go` |
+
+### Pool safety: capture-site deep copies
+
+`RestoreAndRelease` pools continuation frames after consuming them. Because `MachineContinuation.Copy()` is shallow (shares parent chain), captured continuations (call/cc, raise-continuable) would be corrupted when parent frames are pooled. Fix: all capture sites now use `DeepCopy()` to create fully independent chains.
+
+```
+Capture-time DeepCopy (ensures captured chain is intact):
+  PrimCallCC inline:    mc.Parent().DeepCopy()
+  PrimCallCC sub-ctx:   mc.EscapeCont().DeepCopy()
+  PrimRaiseContinuable: cont.DeepCopy()
+
+Use-time DeepCopy (each re-invocation gets a disposable chain):
+  RestoreWithWindingFrom: cont.DeepCopy()
+  RunWithEscapeHandling:  escapeCont.DeepCopy()
+```
 
 ## Critical Files
 
