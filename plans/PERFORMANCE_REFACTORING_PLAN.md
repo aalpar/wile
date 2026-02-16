@@ -34,7 +34,7 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 |-------|-------------|--------|------|------|
 | **0** | Measurement — stage-isolated benchmarks, GC pressure, pprof | Foundation | Low | None |
 | **1** | Quick wins — ~~PopAll fix~~, ~~ctx.Done batching~~, char cache, ForeignError depth, ~~single-value MV~~ | 15–25% | Low | 0 |
-| **2** | sync.Pool — Stack, Continuation, sub-context pooling | 30–50% alloc reduction | Medium | 0 |
+| **2** | sync.Pool — Stack, Continuation, sub-context pooling | **Measured: 17% alloc ↓, 10% speed ↑** | Medium | 0 |
 | **3** | Environment CoW — shared flag, binding copy avoidance, keys map sharing | 20–40% call-heavy | Medium | 0, 1 |
 | **4** | Expansion — lazy scope propagation, SourceContext interning, expander sub-context reuse | 40–60% expansion alloc | High | 0 |
 | **5** | Compiler — operations prealloc, constant folding, peephole (push/pop elimination) | 5–15% | Medium | 0 |
@@ -86,6 +86,36 @@ Use-time DeepCopy (each re-invocation gets a disposable chain):
   RestoreWithWindingFrom: cont.DeepCopy()
   RunWithEscapeHandling:  escapeCont.DeepCopy()
 ```
+
+### Benchmark results (Phase 2 vs master)
+
+```
+                     │    master    │      pooling       │
+                     │    sec/op    │  sec/op   vs base  │
+Run/Lambda-16              787.7n      742.2n    -5.78%
+Run/Let-16                 876.7n      835.8n    -4.67%
+Run/Fibonacci-16           242.2µ      206.5µ   -14.73%
+Run/TailRecursion-16       159.9µ      139.3µ   -12.93%
+geomean                    12.79µ      11.56µ    -9.63%
+
+                     │    master    │      pooling       │
+                     │     B/op     │   B/op    vs base  │
+Run/Lambda-16             1.493Ki     1.330Ki   -10.92%
+Run/Let-16                1.649Ki     1.487Ki    -9.83%
+Run/Fibonacci-16          390.7Ki     297.1Ki   -23.94%
+Run/TailRecursion-16      259.9Ki     205.9Ki   -20.80%
+geomean                   22.36Ki     18.65Ki   -16.60%
+
+                     │    master    │      pooling       │
+                     │  allocs/op   │ allocs/op vs base  │
+Run/Lambda-16               29         27        -6.90%
+Run/Let-16                  32         30        -6.25%
+Run/Fibonacci-16           8566       7155      -16.47%
+Run/TailRecursion-16       5731       4928      -14.01%
+geomean                     462        411      -11.02%
+```
+
+p=0.000, n=8 for all comparisons. Apple M4 Max, darwin/arm64.
 
 ## Critical Files
 
