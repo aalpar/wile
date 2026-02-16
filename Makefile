@@ -147,7 +147,8 @@ SCHELOG_DIR=examples/logic/schelog
 SCHELOG_LIBS=-i -f $(SCHELOG_DIR)/schelog.scm \
              -i -f $(SCHELOG_DIR)/toys.scm \
              -i -f $(SCHELOG_DIR)/puzzle.scm \
-             -i -f $(SCHELOG_DIR)/houses.scm
+             -i -f $(SCHELOG_DIR)/mapcol.scm \
+             -i -f $(SCHELOG_DIR)/games.scm
 
 .PHONY: bench-schelog
 bench-schelog: build
