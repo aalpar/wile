@@ -85,9 +85,9 @@ func TestCharacter_String(t *testing.T) {
 
 func TestCharacter_CacheIdentity(t *testing.T) {
 	tcs := []struct {
-		name      string
-		r         rune
-		samePtr   bool
+		name    string
+		r       rune
+		samePtr bool
 	}{
 		{"ASCII low", 0, true},
 		{"ASCII letter", 'a', true},
