@@ -27,7 +27,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, 6/9 extensions public | In Progress |
+| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, Phase 5 + Tier 2 remaining | Phase 4 complete |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
 | `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
@@ -40,11 +40,10 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; 4.2, 4.4 low-priority remaining | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
-### Testing & Methodology
+### Reference
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `SCHEME_TEST_INFRASTRUCTURE_PLAN.md` | Test infra complete, content pending | Infra complete |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Design Documents (outside plans/)

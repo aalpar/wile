@@ -7,7 +7,7 @@ TODO
 
 **Version**: v1.3.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
-**Extensions**: 9 extension packages (io, files, math, system, threads, eval, exceptions, gointerop, all)
+**Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all)
 **Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
@@ -18,7 +18,6 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| **P1** | **External extensions** | **Architecture** | **In Progress** | **Phases 1-4 complete, 6/9 extensions public. `plans/EXTERNAL_EXTENSIONS_PLAN.md`** |
 | P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1-2 complete. Phase 3: env CoW next. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
@@ -38,7 +37,6 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| P5 | Subsystem simplification | Refactoring | Mostly complete | 2.1 (numeric tower) deferred indefinitely; 4.2, 4.4 low-priority. `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 
 ---
@@ -68,12 +66,6 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 | 4 | Gate runtime primitives (files, system, eval extensions) | Not started |
 | 5 | Gate compile-time code loading (include, library import) | Not started |
 | 6 | Integration tests | Not started |
-
----
-
-### Runtime Source Location Tracking
-
-- [ ] Create debugger REPL or IDE integration (e.g., Debug Adapter Protocol)
 
 ---
 
