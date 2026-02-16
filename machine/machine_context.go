@@ -314,6 +314,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.counters.ClosuresApplied++
 	p.counters.EnvsCopied++
 	p.counters.BindingsCopied += uint64(len(bnds))
+	p.counters.KeysShared++
 	l := tpl.ParameterCount()
 	if !tpl.IsVariadic() {
 		if len(vs) != l {

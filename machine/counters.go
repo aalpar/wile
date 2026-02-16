@@ -34,6 +34,7 @@ type VMCounters struct {
 	StackPoolReleases        uint64
 	SubContextPoolReleases   uint64
 	ContinuationPoolReleases uint64
+	KeysShared               uint64
 }
 
 // String returns a tabular summary of all counters.
@@ -51,7 +52,8 @@ func (c VMCounters) String() string {
 			"sub_contexts_created:         %d\n"+
 			"stack_pool_releases:          %d\n"+
 			"sub_context_pool_releases:    %d\n"+
-			"continuation_pool_releases:   %d",
+			"continuation_pool_releases:   %d\n"+
+			"keys_shared:                  %d",
 		c.OpsExecuted,
 		c.ClosuresApplied,
 		c.EnvsCopied,
@@ -65,5 +67,6 @@ func (c VMCounters) String() string {
 		c.StackPoolReleases,
 		c.SubContextPoolReleases,
 		c.ContinuationPoolReleases,
+		c.KeysShared,
 	)
 }

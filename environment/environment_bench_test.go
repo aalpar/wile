@@ -140,6 +140,23 @@ func BenchmarkFrameCreation(b *testing.B) {
 	}
 }
 
+// BenchmarkLocalFrameCopyShared measures Copy() on a frame that was itself produced
+// by Copy(). This exercises the shared-keys path where the keys map is already
+// a reference rather than an owned map.
+func BenchmarkLocalFrameCopyShared(b *testing.B) {
+	for _, n := range []int{1, 5, 10, 25, 50} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			// First copy: produces a frame with keysShared=true
+			shared := env.LocalEnvironment().Copy().(*LocalEnvironmentFrame)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = shared.Copy()
+			}
+		})
+	}
+}
+
 // BenchmarkFrameCopyAndCreate measures Copy + NewEnvironmentFrameWithParent combined.
 // This simulates what happens in Apply for non-tail calls: the closure's environment
 // is copied and a new frame is created with the copy.

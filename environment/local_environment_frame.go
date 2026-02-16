@@ -16,7 +16,6 @@ package environment
 
 import (
 	"maps"
-	"slices"
 
 	"github.com/aalpar/wile/values"
 )
@@ -27,8 +26,9 @@ import (
 // Note: LocalEnvironmentFrame has no hierarchy of its own; the hierarchy is
 // managed by EnvironmentFrame via its parent field.
 type LocalEnvironmentFrame struct {
-	keys     map[values.Symbol]int
-	bindings []*Binding
+	keys       map[values.Symbol]int
+	bindings   []*Binding
+	keysShared bool // true when keys map is shared with another frame (CoW)
 }
 
 // NewLocalEnvironment creates a new local environment frame with pre-allocated
@@ -63,10 +63,20 @@ func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
 // EnsureLocalBinding returns the local binding for the given key, creating it if
 // it does not already exist. Returns (index, true) if a new binding was created,
 // or (index, false) if the binding already existed.
+//
+// If the keys map is shared (from Copy), it is cloned before mutation (CoW).
+// In practice, EnsureLocalBinding is only called during compilation, never at
+// runtime, so the CoW path is a safety net rather than a hot path.
 func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	i, ok := p.keys[*key]
 	if ok {
 		return &LocalIndex{i, 0}, false
+	}
+	if p.keysShared {
+		owned := make(map[values.Symbol]int, len(p.keys)+1)
+		maps.Copy(owned, p.keys)
+		p.keys = owned
+		p.keysShared = false
 	}
 	i = len(p.bindings)
 	p.keys[*key] = i
@@ -128,19 +138,29 @@ func (p *LocalEnvironmentFrame) EqualTo(o values.Value) bool {
 	return true
 }
 
-// Copy creates a deep copy of this local environment frame.
+// Copy creates a copy of this local environment frame. The keys map is shared
+// by reference (copy-on-write) since it is only mutated during compilation.
+// Bindings are allocated as a single contiguous block to reduce GC pressure,
+// and each binding's scopes slice is shared (immutable at runtime).
 func (p *LocalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
 		return (*LocalEnvironmentFrame)(nil)
 	}
-	q := &LocalEnvironmentFrame{}
-	q.bindings = slices.Clone(p.bindings)
-	for i := range p.bindings {
-		q.bindings[i] = p.bindings[i].Copy().(*Binding)
+	n := len(p.bindings)
+	block := make([]Binding, n)
+	ptrs := make([]*Binding, n)
+	for i, b := range p.bindings {
+		block[i] = Binding{
+			value:       b.value,
+			bindingType: b.bindingType,
+			scopes:      b.scopes,
+			source:      b.source,
+		}
+		ptrs[i] = &block[i]
 	}
-	if p.keys != nil {
-		q.keys = make(map[values.Symbol]int, len(p.keys))
-		maps.Copy(q.keys, p.keys)
+	return &LocalEnvironmentFrame{
+		keys:       p.keys,
+		keysShared: true,
+		bindings:   ptrs,
 	}
-	return q
 }
