@@ -36,10 +36,8 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
-| P5 | Tokenizer consolidation | Refactoring | **Complete** | ~325 lines saved across 8 phases. Structural `readUreal` extraction deferred as documented debt. `plans/TOKENIZER_CONSOLIDATION_PLAN.md` |
 | P5 | Subsystem simplification | Refactoring | Mostly complete | All architectural review findings resolved except numeric tower type-switch (deferred indefinitely). `plans/ARCHITECTURAL_REVIEW_REFACTORING.md` |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
-| P5 | Systematic debug logging | Tooling | **Complete** | Reference methodology doc. `plans/SYSTEMATIC_DEBUG_LOGGING.md` |
 
 ---
 

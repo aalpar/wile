@@ -199,6 +199,7 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 	// Apply proc to each position
 	result := make([]rune, minLen)
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 
 	for i := 0; i < minLen; i++ {
 		// Collect one character from each string
@@ -278,6 +279,7 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 
 	// Apply proc to each position
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 
 	for i := 0; i < minLen; i++ {
 		// Collect one character from each string

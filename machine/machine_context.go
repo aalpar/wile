@@ -198,6 +198,8 @@ func (p *MachineContext) Arg(index int) values.Value {
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
+	p.counters.StackPoolReleases++
+	old := p.evals
 	p.env = cont.env
 	p.template = cont.template
 	// Must copy evals to avoid corrupting the continuation's saved stack.
@@ -211,6 +213,9 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// equals the chain length of cont.parent (which is now p.cont).
 	// This replaces an O(d) chain walk with an O(1) field read.
 	p.callDepth = cont.callDepth
+	// Return the old evals stack to the pool. It was allocated by a prior
+	// SaveContinuation and is now dead (replaced by the continuation's copy).
+	releaseStack(old)
 }
 
 // PopContinuation pops the current continuation from the machine context and returns it.
@@ -251,7 +256,7 @@ func (p *MachineContext) SaveContinuation(off int) error {
 	}
 	p.counters.ContinuationsSaved++
 	p.cont = NewMachineContinuationFromMachineContext(p, off)
-	p.evals = NewStack()
+	p.evals = acquireStack()
 	return nil
 }
 
@@ -346,14 +351,14 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 // If a continuation is saved, it restores it (like RestoreContinuation for
 // closures). Otherwise (sub-context, cont == nil) it sets immediateReturnTemplate
 // so that Run() returns nil immediately.
-func (p *MachineContext) returnImmediate() (*MachineContext, error) {
+func (p *MachineContext) returnImmediate() *MachineContext {
 	if p.cont != nil {
 		p.Restore(p.cont)
 	} else {
 		p.template = immediateReturnTemplate
 		p.pc = 0
 	}
-	return p, nil
+	return p
 }
 
 // applyParameter handles calling a parameter object.
@@ -363,7 +368,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 	switch len(args) {
 	case 0:
 		p.SetValue(param.Value())
-		return p.returnImmediate()
+		return p.returnImmediate(), nil
 
 	case 1:
 		newVal := args[0]
@@ -371,6 +376,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 		if param.HasConverter() {
 			converter := param.Converter()
 			sub := p.NewSubContext()
+			defer ReleaseSubContext(sub)
 			_, err := sub.Apply(converter, newVal)
 			if err != nil {
 				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
@@ -386,7 +392,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 
 		param.SetValue(newVal)
 		p.SetValue(values.Void)
-		return p.returnImmediate()
+		return p.returnImmediate(), nil
 
 	default:
 		err := p.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
@@ -515,19 +521,17 @@ func (p *MachineContext) Run() error {
 // should continue after their completion (set by dynamic-wind and similar constructs).
 func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
-	return &MachineContext{
-		ctx: p.ctx,
-		vmState: vmState{
-			env:      p.env.TopLevel(), // share global environment chain
-			evals:    NewStack(),
-			threadID: p.threadID, // inherit SRFI-18 thread identity
-		},
-		parentMC:         p,                  // track parent for call/cc continuation capture
-		escapeCont:       p.escapeCont,       // inherit escape continuation for nested call/cc
-		thread:           p.thread,           // inherit SRFI-18 thread object
-		exceptionHandler: p.exceptionHandler, // inherit exception handler chain (R7RS §6.11 dynamic extent)
-		maxCallDepth:     p.maxCallDepth,     // inherit call depth limit
-	}
+	mc := acquireSubContext()
+	mc.ctx = p.ctx
+	mc.env = p.env.TopLevel()
+	mc.evals = acquireStack()
+	mc.threadID = p.threadID
+	mc.parentMC = p
+	mc.escapeCont = p.escapeCont
+	mc.thread = p.thread
+	mc.exceptionHandler = p.exceptionHandler
+	mc.maxCallDepth = p.maxCallDepth
+	return mc
 }
 
 // SubContextParams holds the parent state needed to create a thread's sub-context.
@@ -761,9 +765,11 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
 			_, err := sub.Apply(frame.After)
 			if err != nil {
+				ReleaseSubContext(sub)
 				return err
 			}
 			err = sub.Run()
+			ReleaseSubContext(sub)
 			if err != nil {
 				// Propagate escapes and exceptions
 				return err
@@ -786,9 +792,11 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 			sub.windingStack = p.windingStack // Current stack at this point
 			_, err := sub.Apply(frame.Before)
 			if err != nil {
+				ReleaseSubContext(sub)
 				return err
 			}
 			err = sub.Run()
+			ReleaseSubContext(sub)
 			if err != nil {
 				return err
 			}

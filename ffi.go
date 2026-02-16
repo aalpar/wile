@@ -601,6 +601,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 
 			// Invoke the Scheme procedure in a sub-context.
 			sub := mc.NewSubContext()
+			defer machine.ReleaseSubContext(sub)
 			sub.SetContext(ctx)
 
 			_, applyErr := sub.ApplyCallable(v, schemeArgs...)
@@ -713,6 +714,7 @@ func callbackParameterResult(
 		newVal := args[0]
 		if param.HasConverter() {
 			sub := mc.NewSubContext()
+			defer machine.ReleaseSubContext(sub)
 			sub.SetContext(ctx)
 			_, applyErr := sub.Apply(param.Converter(), newVal)
 			if applyErr != nil {

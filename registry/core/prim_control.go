@@ -74,6 +74,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err := sub.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
@@ -142,6 +143,7 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Sub-context mode: run the lambda in an isolated context.
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.Apply(mcls, contClosure)
 	if err != nil {
@@ -236,6 +238,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// 1. Call before thunk (in current dynamic extent)
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.Apply(beforeCls)
 	if err != nil {
@@ -257,6 +260,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// 4. Call main thunk (with new winding context and escape continuation)
 	sub2 := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub2)
 	sub2.SetWindingStack(mc.WindingStack()) // Include new frame
 	sub2.SetEscapeCont(escapeCont)          // Allow call/cc to find continuation
 	_, err = sub2.Apply(thunkCls)
@@ -272,6 +276,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 
 	// 5. Call after thunk (back to original dynamic extent)
 	sub3 := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub3)
 	sub3.SetWindingStack(mc.WindingStack())
 	_, err = sub3.Apply(afterCls)
 	if err != nil {
@@ -338,6 +343,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call producer with no arguments
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err = sub.Apply(producerCls)
 	if err != nil {
 		return err
@@ -352,6 +358,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Call consumer with all produced values as arguments
 	sub2 := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub2)
 	_, err = sub2.Apply(consumerCls, producedValues...)
 	if err != nil {
 		return err

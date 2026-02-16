@@ -36,6 +36,7 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 	// Run thunk in sub-context
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 
 	_, err := sub.ApplyCallable(thunk)
 	if err != nil {
@@ -70,6 +71,7 @@ func PrimWithExceptionHandler(ctx context.Context, mc *machine.MachineContext) e
 func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Value) (values.Value, error) {
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 
 	_, err := sub.ApplyCallable(handler, condition)
 	if err != nil {
@@ -109,6 +111,7 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 
 	// Exception handler automatically inherited from parent (M3 fix)
 	resumeSub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(resumeSub)
 	resumeSub.Restore(cont)
 	resumeSub.SetValue(value)
 
@@ -142,9 +145,11 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 				sub.SetWindingStack(excErr.WindingStack[:i])
 				_, err := sub.Apply(frame.After)
 				if err != nil {
+					machine.ReleaseSubContext(sub)
 					return err
 				}
 				err = sub.Run()
+				machine.ReleaseSubContext(sub)
 				if err != nil {
 					return err
 				}

@@ -1,0 +1,77 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package machine
+
+import "sync"
+
+// stackPool recycles Stack allocations. Stacks are created on every
+// non-tail call (SaveContinuation) and discarded on return (Restore).
+// Pooling avoids repeated heap allocation of the backing slice.
+var stackPool = sync.Pool{
+	New: func() any {
+		s := make(Stack, 0, 8)
+		return &s
+	},
+}
+
+// subContextPool recycles MachineContext structs used as sub-contexts.
+// Sub-contexts are created by NewSubContext for every foreign function
+// that needs to call back into Scheme, and are immediately dead after
+// the call returns.
+var subContextPool = sync.Pool{
+	New: func() any {
+		return &MachineContext{}
+	},
+}
+
+// acquireStack returns a zeroed-length Stack from the pool.
+func acquireStack() *Stack {
+	s := stackPool.Get().(*Stack)
+	*s = (*s)[:0]
+	return s
+}
+
+// releaseStack nils out all accessible elements (so the GC can collect
+// referenced values) and returns the Stack to the pool.
+func releaseStack(s *Stack) {
+	if s == nil {
+		return
+	}
+	full := (*s)[:cap(*s)]
+	for i := range full {
+		full[i] = nil
+	}
+	*s = full[:0]
+	stackPool.Put(s)
+}
+
+// acquireSubContext returns a zeroed MachineContext from the pool.
+func acquireSubContext() *MachineContext {
+	return subContextPool.Get().(*MachineContext)
+}
+
+// ReleaseSubContext zeros the MachineContext and returns it to the pool.
+// Exported because call sites live in other packages (registry/, extensions/).
+func ReleaseSubContext(mc *MachineContext) {
+	if mc == nil {
+		return
+	}
+	if mc.parentMC != nil {
+		mc.parentMC.counters.SubContextPoolReleases++
+	}
+	releaseStack(mc.evals)
+	*mc = MachineContext{}
+	subContextPool.Put(mc)
+}
