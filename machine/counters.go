@@ -21,35 +21,37 @@ import "fmt"
 // is single-goroutine. Sub-contexts have their own counters (not aggregated
 // into the parent).
 type VMCounters struct {
-	OpsExecuted            uint64
-	ClosuresApplied        uint64
-	EnvsCopied             uint64
-	BindingsCopied         uint64
-	ContinuationsSaved     uint64
-	ContinuationsRestored  uint64
-	StackPopAlls           uint64
-	StackElementsCopied    uint64
-	ForeignCalls           uint64
-	SubContextsCreated     uint64
-	StackPoolReleases      uint64
-	SubContextPoolReleases uint64
+	OpsExecuted              uint64
+	ClosuresApplied          uint64
+	EnvsCopied               uint64
+	BindingsCopied           uint64
+	ContinuationsSaved       uint64
+	ContinuationsRestored    uint64
+	StackPopAlls             uint64
+	StackElementsCopied      uint64
+	ForeignCalls             uint64
+	SubContextsCreated       uint64
+	StackPoolReleases        uint64
+	SubContextPoolReleases   uint64
+	ContinuationPoolReleases uint64
 }
 
 // String returns a tabular summary of all counters.
 func (c VMCounters) String() string {
 	return fmt.Sprintf(
-		"ops_executed:              %d\n"+
-			"closures_applied:          %d\n"+
-			"envs_copied:               %d\n"+
-			"bindings_copied:           %d\n"+
-			"continuations_saved:       %d\n"+
-			"continuations_restored:    %d\n"+
-			"stack_pop_alls:            %d\n"+
-			"stack_elements_copied:     %d\n"+
-			"foreign_calls:             %d\n"+
-			"sub_contexts_created:      %d\n"+
-			"stack_pool_releases:       %d\n"+
-			"sub_context_pool_releases: %d",
+		"ops_executed:                 %d\n"+
+			"closures_applied:             %d\n"+
+			"envs_copied:                  %d\n"+
+			"bindings_copied:              %d\n"+
+			"continuations_saved:          %d\n"+
+			"continuations_restored:       %d\n"+
+			"stack_pop_alls:               %d\n"+
+			"stack_elements_copied:        %d\n"+
+			"foreign_calls:                %d\n"+
+			"sub_contexts_created:         %d\n"+
+			"stack_pool_releases:          %d\n"+
+			"sub_context_pool_releases:    %d\n"+
+			"continuation_pool_releases:   %d",
 		c.OpsExecuted,
 		c.ClosuresApplied,
 		c.EnvsCopied,
@@ -62,5 +64,6 @@ func (c VMCounters) String() string {
 		c.SubContextsCreated,
 		c.StackPoolReleases,
 		c.SubContextPoolReleases,
+		c.ContinuationPoolReleases,
 	)
 }

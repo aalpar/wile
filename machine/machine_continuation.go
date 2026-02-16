@@ -66,19 +66,16 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	if mc.cont != nil {
 		depth = mc.cont.callDepth + 1
 	}
-	q := &MachineContinuation{
-		vmState: vmState{
-			env:         mc.env,
-			template:    mc.template,
-			singleValue: mc.singleValue,
-			multiValues: mc.multiValues,
-			evals:       mc.evals,
-			pc:          mc.pc + off,
-			threadID:    mc.threadID,
-			callDepth:   depth,
-		},
-		parent: mc.cont,
-	}
+	q := acquireContinuation()
+	q.env = mc.env
+	q.template = mc.template
+	q.singleValue = mc.singleValue
+	q.multiValues = mc.multiValues
+	q.evals = mc.evals
+	q.pc = mc.pc + off
+	q.threadID = mc.threadID
+	q.callDepth = depth
+	q.parent = mc.cont
 	return q
 }
 

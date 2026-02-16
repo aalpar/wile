@@ -233,7 +233,7 @@ func PrimRaiseContinuable(_ context.Context, mc *machine.MachineContext) error {
 	// This follows the pattern established by call/cc.
 	cont := mc.Parent()
 	if cont != nil {
-		cont = cont.Copy()
+		cont = cont.DeepCopy()
 	}
 
 	return &machine.ErrExceptionEscape{

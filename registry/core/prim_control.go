@@ -112,15 +112,18 @@ func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Capture the current continuation and winding stack.
+	// DeepCopy creates a fully independent frame chain so that normal-return
+	// pooling (RestoreAndRelease) of the live chain cannot corrupt the
+	// captured continuation's parent frames.
 	var cont *machine.MachineContinuation
 	var escapeCont *machine.MachineContinuation
 	if mc.Parent() != nil {
-		cont = mc.Parent().Copy()
+		cont = mc.Parent().DeepCopy()
 	} else {
 		// Sub-context: capture our own state as the inner continuation.
 		cont = machine.NewMachineContinuationFromMachineContext(mc, 1)
 		if mc.EscapeCont() != nil {
-			escapeCont = mc.EscapeCont().Copy()
+			escapeCont = mc.EscapeCont().DeepCopy()
 		}
 	}
 	windingStack := mc.WindingStack().Copy()

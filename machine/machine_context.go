@@ -218,6 +218,38 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	releaseStack(old)
 }
 
+// RestoreAndRelease is the fast path for normal function return. It transfers
+// the continuation's state into the MachineContext (like Restore) but avoids
+// copying evals — instead it transfers ownership directly and pools the
+// consumed frame. This is safe because normal return consumes the frame
+// exactly once; call/cc and escape paths must use Restore (which copies).
+//
+// The sequence is:
+//  1. Release mc's current evals to the stack pool (it's dead after restore)
+//  2. Transfer cont's evals directly to mc (no copy)
+//  3. Nil cont.evals so releaseContinuation won't double-release it
+//  4. Pool the consumed continuation frame
+func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
+	p.counters.ContinuationsRestored++
+	p.counters.StackPoolReleases++
+	p.counters.ContinuationPoolReleases++
+
+	old := p.evals
+	p.env = cont.env
+	p.template = cont.template
+	p.evals = cont.evals // transfer, not copy
+	p.cont = cont.parent
+	p.pc = cont.pc
+	p.callDepth = cont.callDepth
+
+	releaseStack(old)
+
+	// Break the evals reference before pooling so the transferred stack
+	// (now p.evals) is not released again inside releaseContinuation.
+	cont.evals = nil
+	releaseContinuation(cont)
+}
+
 // PopContinuation pops the current continuation from the machine context and returns it.
 // It restores the machine context to the state saved in the popped continuation.
 //
@@ -261,7 +293,7 @@ func (p *MachineContext) SaveContinuation(off int) error {
 }
 
 func (p *MachineContext) CurrentContinuation() *MachineContinuation {
-	q := p.cont.Copy()
+	q := p.cont.DeepCopy()
 	return q
 }
 
@@ -353,7 +385,7 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 // so that Run() returns nil immediately.
 func (p *MachineContext) returnImmediate() *MachineContext {
 	if p.cont != nil {
-		p.Restore(p.cont)
+		p.RestoreAndRelease(p.cont)
 	} else {
 		p.template = immediateReturnTemplate
 		p.pc = 0
@@ -847,13 +879,15 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 		return err
 	}
 
-	// Restore the machine state (if we have a valid continuation)
-	// We must copy the continuation before restoring because p.Restore assigns
-	// p.evals = cont.evals directly. Without copying, subsequent invocations of
-	// the same continuation (via call/cc re-entry) would see corrupted stacks
-	// because the stack gets modified during execution.
+	// Restore the machine state (if we have a valid continuation).
+	// DeepCopy is required for two reasons:
+	//  1. Restore copies evals but shares the parent chain. Without deep-copying,
+	//     subsequent re-invocations of the same continuation would share parent
+	//     frames that RestoreAndRelease may have already pooled.
+	//  2. Each invocation gets a fully independent disposable chain that can be
+	//     safely consumed by the normal-return pooling path.
 	if cont != nil {
-		p.Restore(cont.Copy())
+		p.Restore(cont.DeepCopy())
 	}
 	return nil
 }
@@ -999,7 +1033,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			if p.pendingEscape != nil {
 				escapeCont := p.pendingEscape
 				p.pendingEscape = nil
-				p.Restore(escapeCont)
+				p.Restore(escapeCont.DeepCopy())
 				continue
 			}
 
