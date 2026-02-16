@@ -971,3 +971,67 @@ func TestFormatOriginChain_MaxDepth(t *testing.T) {
 	c.Assert(result, qt.Contains, "... and 3 more expansion(s)")
 	c.Assert(result, qt.Not(qt.Contains), "macro3")
 }
+
+// TestMapSyntaxTreeStructuralSharing verifies that mapSyntaxTree returns the
+// original pair pointer when children are unchanged (structural sharing).
+func TestMapSyntaxTreeStructuralSharing(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := &SourceContext{Text: "test"}
+	scope := NewScope()
+
+	c.Run("pair of non-symbols returned unchanged", func(c *qt.C) {
+		// A pair containing only SyntaxObjects (numbers) should be returned
+		// as-is since AddScope on non-symbols is a no-op.
+		num1 := NewSyntaxObject(values.NewInteger(1), sctx)
+		num2 := NewSyntaxObject(values.NewInteger(2), sctx)
+		pair := NewSyntaxCons(num1, num2, sctx)
+
+		result := pair.AddScope(scope)
+		c.Assert(result, qt.Equals, pair) // pointer identity
+	})
+
+	c.Run("pair with symbol child is reallocated", func(c *qt.C) {
+		sym := NewSyntaxSymbol("x", sctx)
+		num := NewSyntaxObject(values.NewInteger(1), sctx)
+		pair := NewSyntaxCons(sym, num, sctx)
+
+		result := pair.AddScope(scope)
+		c.Assert(result, qt.Not(qt.Equals), pair)
+		// But the cdr (unchanged number) should propagate through
+		resultPair := result.(*SyntaxPair)
+		c.Assert(resultPair.Values[1], qt.Equals, num)
+	})
+
+	c.Run("nested pairs share unchanged subtrees", func(c *qt.C) {
+		// Build: (1 . (x . 2))
+		// The inner pair has a symbol → changes. The outer pair should change too.
+		// But if we build: (1 . (2 . 3)), both pairs should be returned as-is.
+		num1 := NewSyntaxObject(values.NewInteger(1), sctx)
+		num2 := NewSyntaxObject(values.NewInteger(2), sctx)
+		num3 := NewSyntaxObject(values.NewInteger(3), sctx)
+		inner := NewSyntaxCons(num2, num3, sctx)
+		outer := NewSyntaxCons(num1, inner, sctx)
+
+		result := outer.AddScope(scope)
+		c.Assert(result, qt.Equals, outer) // entire tree unchanged
+	})
+
+	c.Run("vector structural sharing", func(c *qt.C) {
+		num1 := NewSyntaxObject(values.NewInteger(1), sctx)
+		num2 := NewSyntaxObject(values.NewInteger(2), sctx)
+		vec := NewSyntaxVector(sctx, num1, num2)
+
+		result := vec.AddScope(scope)
+		c.Assert(result, qt.Equals, vec) // pointer identity
+	})
+
+	c.Run("FlipScope structural sharing on non-symbol tree", func(c *qt.C) {
+		num1 := NewSyntaxObject(values.NewInteger(1), sctx)
+		num2 := NewSyntaxObject(values.NewInteger(2), sctx)
+		pair := NewSyntaxCons(num1, num2, sctx)
+
+		result := FlipScope(pair, scope)
+		c.Assert(result, qt.Equals, pair)
+	})
+}

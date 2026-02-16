@@ -319,8 +319,12 @@ func addScopeToPairSkipFreeIds(pair *syntax.SyntaxPair, scope *syntax.Scope, fre
 		}
 	}
 
-	// Create new pair with processed car and cdr
-	// Preserve source context from original pair
+	// Structural sharing: if children are unchanged, return original pair.
+	// Free IDs are returned unchanged, so pairs containing only free IDs
+	// and unchanged subtrees avoid allocation entirely.
+	if newCar == pair.SyntaxCar() && newCdr == pair.SyntaxCdr() {
+		return pair
+	}
 	return syntax.NewSyntaxCons(newCar, newCdr, pair.SourceContext())
 }
 
