@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** IN PROGRESS — Phase 1 complete, Phase 2 complete
+**Status:** IN PROGRESS — Phase 1–3 complete
 
 ## Overview
 
@@ -10,8 +10,8 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 
 ```
 ┌─────────────┬──────────────────────────────────────────────┐
-│ VM          │ ✓PopAll fixed, env deep-copy every non-tail  │
-│             │ call, ✓ctx.Done() batched every 1024 ops,    │
+│ VM          │ ✓PopAll fixed, ✓env CoW (Apply hot path),     │
+│             │ ✓ctx.Done() batched every 1024 ops,           │
 │             │ interface dispatch (2 ptr indirections/op)   │
 ├─────────────┼──────────────────────────────────────────────┤
 │ Expansion   │ New SyntaxPair/Symbol per AddScope,          │
@@ -54,6 +54,8 @@ Phase 0 ──→ Phase 1 ──→ Phase 3
 **Phase 1** (quick wins): PopAll swap, ctx.Done() batching (1024 ops), ASCII character cache, single-value MV register. ForeignError stack removal deferred (useful debug info on cold path).
 
 **Phase 2** (sync.Pool): Stack, sub-context, and continuation pooling. Pool-backed continuation creation, `RestoreAndRelease` for normal return path, `DeepCopy` at all capture sites for pool safety. Benchmark: **10% speed improvement, 17% allocation reduction** (geomean, p=0.000, n=8, Apple M4 Max).
+
+**Phase 3** (environment CoW): Copy-on-write for environment frame keys and shallow binding copies (#271), plus CoW for the Apply hot path (#274). Shared keys maps avoid allocation on non-mutating frames; bindings are shallow-copied only on write.
 
 ## Critical Files
 
