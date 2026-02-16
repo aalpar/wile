@@ -7,6 +7,15 @@
 
 Full hygienic macros, first-class continuations, and numeric tower. `go get` and it just works.
 
+### Embed Scheme in 4 lines of Go
+
+```go
+engine, _ := wile.NewEngine(ctx)
+engine.Define("width", wile.NewInteger(800))
+engine.Define("height", wile.NewInteger(600))
+result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
+```
+
 ## Why Wile?
 
 **Embedding a Lisp in Go has always required tradeoffs:**
@@ -20,20 +29,6 @@ Full hygienic macros, first-class continuations, and numeric tower. `go get` and
 
 **Wile solves this:** Full R7RS Scheme in pure Go. Scheme values are Go heap objects, collected by Go's GC. No custom allocator, no FFI tax, no surprises.
 
-## Use Cases
-
-Wile is designed for embedding Scheme as a scripting layer in Go applications:
-
-- **Policy engines** — Express complex authorization rules without hardcoding logic
-- **Configuration DSLs** — User-programmable config with hygiene and safety
-- **Solver frontends** — Define constraints and search spaces in a Lisp
-- **Build tools** — Scriptable build logic with real code, not YAML
-- **Data transformation** — Symbolic computation for ETL pipelines
-
-If you need **Go-native scripting with macros, hygiene, and continuations**, Wile is the only pure-Go option.
-
-## How Wile Compares
-
 | Feature | Wile | Chibi/S7 (CGo) | Goja (JS) | Starlark | Lua |
 |---------|------|----------------|-----------|----------|-----|
 | Pure Go | ✓ | ✗ | ✓ | ✓ | ✗ |
@@ -42,6 +37,103 @@ If you need **Go-native scripting with macros, hygiene, and continuations**, Wil
 | First-class continuations | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Cross-compilation | ✓ | ✗ | ✓ | ✓ | ✗ |
 | Go GC integration | ✓ | ✗ | ✓ | ✓ | ✗ |
+
+## Embedding in Go
+
+Wile provides a public API for embedding Scheme in Go programs via the `wile` package.
+
+### Basic Usage
+
+```go
+import "github.com/aalpar/wile"
+
+// Create an engine
+engine, err := wile.NewEngine(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Evaluate a single expression
+result, err := engine.Eval(ctx, "(+ 1 2 3)")
+fmt.Println(result.SchemeString()) // "6"
+
+// Evaluate multiple expressions (returns last result)
+result, err = engine.EvalMultiple(ctx, `
+  (define x 10)
+  (define y 20)
+  (+ x y)
+`)
+```
+
+### Compile Once, Run Many Times
+
+```go
+compiled, err := engine.Compile(ctx, "(+ x 1)")
+result, err := engine.Run(ctx, compiled)
+```
+
+### Bridging Go and Scheme
+
+Define Go values in Scheme's environment:
+
+```go
+engine.Define("my-var", wile.NewInteger(100))
+val, ok := engine.Get("my-var")
+```
+
+Register a Go function as a Scheme primitive:
+
+```go
+import "github.com/aalpar/wile/values"
+
+engine.RegisterPrimitive(wile.PrimitiveSpec{
+    Name:       "go-add",
+    ParamCount: 2,
+    Impl: func(ctx context.Context, mc *wile.MachineContext) error {
+        a := mc.Arg(0).(*values.Integer).Value
+        b := mc.Arg(1).(*values.Integer).Value
+        mc.SetValue(values.NewInteger(a + b))
+        return nil
+    },
+})
+// Now callable from Scheme: (go-add 3 4) => 7
+```
+
+Call a Scheme procedure from Go:
+
+```go
+proc, _ := engine.Get("my-scheme-function")
+result, err := engine.Call(ctx, proc, wile.NewInteger(42))
+```
+
+### Value Constructors
+
+| Constructor | Creates |
+|---|---|
+| `wile.NewInteger(n)` | Exact integer |
+| `wile.NewBigInteger(n)` | Exact arbitrary-precision integer (`*big.Int`) |
+| `wile.NewFloat(f)` | Inexact real |
+| `wile.NewBigFloat(f)` | Inexact arbitrary-precision float (`*big.Float`) |
+| `wile.NewRational(num, den)` | Exact rational |
+| `wile.NewComplex(v)` | Complex number (`complex128`) |
+| `wile.NewString(s)` | String |
+| `wile.NewSymbol(s)` | Symbol |
+| `wile.NewBoolean(b)` | `#t` / `#f` |
+| `wile.True` / `wile.False` | Boolean constants |
+| `wile.NewVector(vals...)` | Vector |
+| `wile.NewList(vals...)` | Proper list |
+| `wile.Null` | Empty list `'()` |
+| `wile.Void` | Void value |
+
+Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the `values` package.
+
+### Engine Options
+
+| Option | Description |
+|---|---|
+| `wile.WithRegistry(r)` | Use a custom registry instead of the default core primitives |
+| `wile.WithExtension(ext)` | Add a single extension |
+| `wile.WithExtensions(exts...)` | Add multiple extensions |
 
 ## Quick Start
 
@@ -86,97 +178,6 @@ ls examples/
 ```
 
 *See [examples/logic/schelog/](examples/logic/schelog/) for a self-contained Prolog implementation in Scheme.*
-
-**Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
-
-```scheme
-(/ 1 3)              ; ⇒ 1/3 (exact rational, not 0.333...)
-(* 1/3 3)            ; ⇒ 1 (exact)
-(make-rectangular 0 1) ; ⇒ 0+1i (exact complex)
-(expt 2 1000)        ; ⇒ 10715086071862673209484250490...
-```
-
-**Hygienic Macros** — Build DSLs without variable capture
-
-```scheme
-(load "examples/macros/state-machine.scm")
-
-(define-state-machine traffic-light
-  (states: red yellow green)
-  (initial: red)
-  (transitions:
-   (red -> green)
-   (green -> yellow)
-   (yellow -> red)))
-```
-
-**Go-Native Concurrency** — Goroutines and channels from Scheme
-
-```scheme
-(let ((ch (make-channel)))
-  (thread-start!
-   (make-thread
-    (lambda () (channel-send ch 42))))
-  (channel-receive ch))  ; ⇒ 42
-```
-
-**First-Class Continuations** — Non-local control flow
-
-```scheme
-;; Early return
-(call/cc (lambda (return)
-  (for-each (lambda (x)
-              (if (negative? x)
-                  (return x)))
-            '(1 2 -3 4))
-  'not-found))  ; ⇒ -3
-
-;; See examples/control/ for generators, coroutines, and backtracking
-```
-
-## Quick Start
-
-```bash
-# Install as a command-line tool
-go install github.com/aalpar/wile/cmd/scheme@latest
-
-# Or download a prebuilt binary from releases
-# https://github.com/aalpar/wile/releases
-
-# Run the REPL
-scheme
-
-# Try an example
-scheme --file examples/basics/hello.scm
-
-# See all examples
-ls examples/
-```
-
-**Explore**:
-- [**72 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
-- [**Gabriel Benchmarks**](examples/benchmarks/) — 21 Scheme benchmarks for performance testing
-- [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
-- [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
-
-## Key Features in Action
-
-**Logic Programming** — Full Prolog embedded in Scheme
-
-```scheme
-(load "examples/logic/schelog/schelog.scm")
-
-(%rel (append xs ys zs)
-  ((append () ?ys ?ys))
-  ((append (?x . ?xs) ?ys (?x . ?zs))
-   (append ?xs ?ys ?zs)))
-
-(%which (zs)
-  (append '(1 2) '(3 4) zs))
-;; ⇒ ((zs 1 2 3 4))
-```
-
-*See [examples/logic/schelog/](examples/logic/schelog/) for a complete Prolog implementation in ~500 lines of Scheme.*
 
 **Numeric Tower** — Exact rationals, complex numbers, and arbitrary precision
 
@@ -286,180 +287,6 @@ The REPL includes an integrated debugger. Commands start with `,`:
 | `,backtrace` | Show stack trace |
 | `,where` | Show current source location |
 
-## Examples
-
-### Hygienic Macros
-
-```scheme
-(define-syntax swap!
-  (syntax-rules ()
-    ((swap! x y)
-     (let ((tmp x))
-       (set! x y)
-       (set! y tmp)))))
-
-(let ((a 1) (b 2))
-  (swap! a b)
-  (list a b))
-;; => (2 1)
-```
-
-### First-Class Continuations
-
-```scheme
-(call-with-current-continuation
-  (lambda (exit)
-    (for-each (lambda (x)
-                (if (negative? x) (exit x)))
-              '(54 0 37 -3 245 19))
-    #t))
-;; => -3
-```
-
-### Delimited Continuations
-
-```scheme
-(define tag (make-continuation-prompt-tag 'example))
-
-(call-with-continuation-prompt
-  (lambda ()
-    (+ 1 (abort-current-continuation tag 42)))
-  tag
-  (lambda (v) (* v 2)))
-;; => 84
-```
-
-### Threads (SRFI-18)
-
-```scheme
-(import (srfi 18))
-
-(define counter 0)
-(define mtx (make-mutex))
-
-(define (increment!)
-  (mutex-lock! mtx)
-  (set! counter (+ counter 1))
-  (mutex-unlock! mtx))
-
-(define threads
-  (map (lambda (_)
-         (make-thread increment!))
-       (iota 10)))
-
-(for-each thread-start! threads)
-(for-each thread-join! threads)
-counter
-;; => 10
-```
-
-### Go Channels
-
-```scheme
-(define ch (make-channel 10))  ; buffered channel
-
-(channel-send! ch 42)
-(channel-receive ch)
-;; => 42
-```
-
-## Embedding in Go
-
-Wile provides a public API for embedding Scheme in Go programs via the `wile` package.
-
-### Basic Usage
-
-```go
-import "github.com/aalpar/wile"
-
-// Create an engine
-engine, err := wile.NewEngine(ctx)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Evaluate a single expression
-result, err := engine.Eval(ctx, "(+ 1 2 3)")
-fmt.Println(result.SchemeString()) // "6"
-
-// Evaluate multiple expressions (returns last result)
-result, err = engine.EvalMultiple(ctx, `
-  (define x 10)
-  (define y 20)
-  (+ x y)
-`)
-```
-
-### Compile Once, Run Many Times
-
-```go
-compiled, err := engine.Compile(ctx, "(+ x 1)")
-result, err := engine.Run(ctx, compiled)
-```
-
-### Bridging Go and Scheme
-
-Define Go values in Scheme's environment:
-
-```go
-engine.Define("my-var", wile.NewInteger(100))
-val, ok := engine.Get("my-var")
-```
-
-Register a Go function as a Scheme primitive:
-
-```go
-import "github.com/aalpar/wile/values"
-
-engine.RegisterPrimitive(wile.PrimitiveSpec{
-    Name:       "go-add",
-    ParamCount: 2,
-    Impl: func(ctx context.Context, mc *wile.MachineContext) error {
-        a := mc.Arg(0).(*values.Integer).Value
-        b := mc.Arg(1).(*values.Integer).Value
-        mc.SetValue(values.NewInteger(a + b))
-        return nil
-    },
-})
-// Now callable from Scheme: (go-add 3 4) => 7
-```
-
-Call a Scheme procedure from Go:
-
-```go
-proc, _ := engine.Get("my-scheme-function")
-result, err := engine.Call(ctx, proc, wile.NewInteger(42))
-```
-
-### Value Constructors
-
-| Constructor | Creates |
-|---|---|
-| `wile.NewInteger(n)` | Exact integer |
-| `wile.NewBigInteger(n)` | Exact arbitrary-precision integer (`*big.Int`) |
-| `wile.NewFloat(f)` | Inexact real |
-| `wile.NewBigFloat(f)` | Inexact arbitrary-precision float (`*big.Float`) |
-| `wile.NewRational(num, den)` | Exact rational |
-| `wile.NewComplex(v)` | Complex number (`complex128`) |
-| `wile.NewString(s)` | String |
-| `wile.NewSymbol(s)` | Symbol |
-| `wile.NewBoolean(b)` | `#t` / `#f` |
-| `wile.True` / `wile.False` | Boolean constants |
-| `wile.NewVector(vals...)` | Vector |
-| `wile.NewList(vals...)` | Proper list |
-| `wile.Null` | Empty list `'()` |
-| `wile.Void` | Void value |
-
-Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the `values` package.
-
-### Engine Options
-
-| Option | Description |
-|---|---|
-| `wile.WithRegistry(r)` | Use a custom registry instead of the default core primitives |
-| `wile.WithExtension(ext)` | Add a single extension |
-| `wile.WithExtensions(exts...)` | Add multiple extensions |
-
 ## R7RS Standard Libraries
 
 | Library | Description |
@@ -481,7 +308,7 @@ Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) a
 | `(scheme time)` | `current-second`, `current-jiffy`, `jiffies-per-second` |
 | `(scheme r5rs)` | R5RS compatibility |
 
-## Additional Libraries
+### Additional Libraries
 
 | Library | Description |
 |---|---|
