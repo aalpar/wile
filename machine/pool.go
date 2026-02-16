@@ -71,6 +71,7 @@ func ReleaseSubContext(mc *MachineContext) {
 	if mc.parentMC != nil {
 		mc.parentMC.counters.SubContextPoolReleases++
 	}
+	releaseStack(mc.evals)
 	*mc = MachineContext{}
 	subContextPool.Put(mc)
 }

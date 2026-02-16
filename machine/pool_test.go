@@ -112,6 +112,28 @@ func TestSubContextPool_Roundtrip(t *testing.T) {
 	qt.Assert(t, mc2.thread, qt.IsNil)
 }
 
+func TestReleaseSubContext_ReleasesEvalsStack(t *testing.T) {
+	mc := acquireSubContext()
+	mc.evals = acquireStack()
+	mc.evals.Push(values.NewInteger(1))
+	mc.evals.Push(values.NewInteger(2))
+	savedCap := cap(*mc.evals)
+
+	ReleaseSubContext(mc)
+
+	// The evals stack should have been returned to stackPool.
+	// Acquire from the pool and verify we get a zeroed stack with
+	// the same (or greater) capacity.
+	s := acquireStack()
+	qt.Assert(t, s.Len(), qt.Equals, 0)
+	qt.Assert(t, cap(*s) >= savedCap, qt.IsTrue)
+	full := (*s)[:cap(*s)]
+	for i, v := range full {
+		qt.Assert(t, v, qt.IsNil, qt.Commentf("element %d should be nil", i))
+	}
+	releaseStack(s)
+}
+
 func TestReleaseSubContext_IncrementsParentCounter(t *testing.T) {
 	parent := &MachineContext{}
 	qt.Assert(t, parent.counters.SubContextPoolReleases, qt.Equals, uint64(0))
