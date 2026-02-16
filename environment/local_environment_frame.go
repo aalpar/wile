@@ -68,15 +68,13 @@ func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
 // In practice, EnsureLocalBinding is only called during compilation, never at
 // runtime, so the CoW path is a safety net rather than a hot path.
 func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
+	if p.keysShared {
+		p.keys = maps.Clone(p.keys)
+		p.keysShared = false
+	}
 	i, ok := p.keys[*key]
 	if ok {
 		return &LocalIndex{i, 0}, false
-	}
-	if p.keysShared {
-		owned := make(map[values.Symbol]int, len(p.keys)+1)
-		maps.Copy(owned, p.keys)
-		p.keys = owned
-		p.keysShared = false
 	}
 	i = len(p.bindings)
 	p.keys[*key] = i
@@ -163,4 +161,26 @@ func (p *LocalEnvironmentFrame) Copy() values.Value {
 		keysShared: true,
 		bindings:   ptrs,
 	}
+}
+
+// CopyForApply creates a lightweight copy optimized for the Apply hot path.
+// The keys map is shared between frames and must be treated as immutable at
+// runtime; callers must not mutate the shared keys map or any map returned
+// by Keys(). Bindings use RuntimeCopy (sharing scopes, which are also
+// treated as immutable at runtime). Only binding values are independent
+// between original and copy.
+func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
+	if p == nil {
+		return nil
+	}
+	q := &LocalEnvironmentFrame{
+		keys:       p.keys,
+		keysShared: true,
+	}
+	p.keysShared = true
+	q.bindings = make([]*Binding, len(p.bindings))
+	for i, b := range p.bindings {
+		q.bindings[i] = b.RuntimeCopy()
+	}
+	return q
 }

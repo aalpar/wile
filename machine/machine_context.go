@@ -308,7 +308,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// This is critical for recursive functions: without copying, all invocations
 	// share the same bindings, causing parameter corruption when evaluating
 	// arguments like (+ (f (- n 1)) (f (- n 2))).
-	localEnv := mcls.env.LocalEnvironment().Copy().(*environment.LocalEnvironmentFrame)
+	localEnv := mcls.env.LocalEnvironment().CopyForApply()
 	env := environment.NewEnvironmentFrameWithParent(localEnv, mcls.env.Parent())
 	bnds := localEnv.Bindings()
 	p.counters.ClosuresApplied++
