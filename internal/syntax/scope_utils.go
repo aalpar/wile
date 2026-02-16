@@ -111,7 +111,11 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 			newCdr = mapSyntaxTree(s.Values[1], fn)
 		}
 
-		// Return new pair with transformed children (pair itself unchanged)
+		// Structural sharing: if children are unchanged, return original pair.
+		// Only symbols accumulate scopes, so most pairs pass this check.
+		if newCar == s.Values[0] && newCdr == s.Values[1] {
+			return s
+		}
 		return NewSyntaxCons(newCar, newCdr, s.SourceContext())
 
 	case *SyntaxSymbol:
