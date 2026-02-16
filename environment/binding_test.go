@@ -150,12 +150,12 @@ func TestBinding_Copy(t *testing.T) {
 	qt.Assert(t, b2.BindingType(), qt.Equals, b1.BindingType())
 	qt.Assert(t, b2.Scopes(), qt.HasLen, 2)
 
-	// Check that scopes slice is a deep copy (different slices, same scope objects)
+	// Scopes are shared by reference (immutable at runtime), same scope objects
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1)
 	qt.Assert(t, b2.Scopes()[1], qt.Equals, scope2)
 
-	// Modify original scopes slice - copy should not be affected
-	b1.Scopes()[0] = syntax.NewScope()
+	// SetScopes on original replaces the whole slice — copy is unaffected
+	b1.SetScopes([]*syntax.Scope{syntax.NewScope()})
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1) // Copy unchanged
 
 	// Test copy with nil scopes

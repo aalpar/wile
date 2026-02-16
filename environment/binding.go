@@ -15,8 +15,6 @@
 package environment
 
 import (
-	"slices"
-
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
@@ -130,19 +128,15 @@ func (p *Binding) EqualTo(o values.Value) bool {
 	return p.value.EqualTo(v.value) && p.bindingType == v.bindingType
 }
 
-// Copy creates a deep copy of this binding, including the scopes slice.
+// Copy creates a copy of this binding. Scopes and source are shared by
+// reference because they are immutable at runtime — SetScopes is only
+// called during compilation/expansion, never during VM execution.
 func (p *Binding) Copy() values.Value {
-	// Copy the scopes slice to avoid shared references
-	var scopesCopy []*syntax.Scope
-	if p.scopes != nil {
-		scopesCopy = slices.Clone(p.scopes)
-	}
-
 	q := &Binding{
 		value:       p.value,
 		bindingType: p.bindingType,
-		scopes:      scopesCopy,
-		source:      p.source, // Source context is immutable, no need to copy
+		scopes:      p.scopes,
+		source:      p.source,
 	}
 	return q
 }
