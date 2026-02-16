@@ -98,6 +98,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 	// it on the context. When abort propagates, it reaches this primitive
 	// which catches it.
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
 	sub.SetPromptTag(tag)
 
@@ -127,6 +128,7 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 			// This abort targets our prompt. Invoke the handler.
 			if handlerCls != nil {
 				handlerSub := mc.NewSubContext()
+				defer machine.ReleaseSubContext(handlerSub)
 				handlerSub.SetWindingStack(mc.WindingStack())
 				_, applyErr := handlerSub.Apply(handlerCls, abortErr.Values...)
 				if applyErr != nil {
@@ -229,6 +231,7 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	// Call proc with the composable continuation.
 	// The result of proc becomes the value delivered to the prompt boundary.
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.Apply(procCls, cc)
 	if err != nil {

@@ -140,6 +140,7 @@ func callWithFile(
 	port := portCreator(file)
 
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err = sub.Apply(proc, port)
 	if err != nil {
 		return err

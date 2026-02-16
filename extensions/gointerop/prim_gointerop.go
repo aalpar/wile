@@ -426,6 +426,7 @@ func PrimOnceDo(_ context.Context, mc *machine.MachineContext) error {
 		}
 
 		sub := mc.NewSubContext()
+		defer machine.ReleaseSubContext(sub)
 		_, err := sub.Apply(cls)
 		if err != nil {
 			thunkErr = err

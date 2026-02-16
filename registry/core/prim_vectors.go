@@ -242,6 +242,7 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 	// Apply the procedure to each set of elements
 	results := make(values.Vector, minLen)
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	for i := range minLen {
 		args := make(values.Vector, len(vectors))
 		for j, v := range vectors {
@@ -285,6 +286,7 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 
 	// Apply the procedure to each set of elements
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	for i := range minLen {
 		args := make(values.Vector, len(vectors))
 		for j, v := range vectors {

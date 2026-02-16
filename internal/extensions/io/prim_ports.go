@@ -221,6 +221,7 @@ func PrimCallWithPort(_ context.Context, mc *machine.MachineContext) error {
 
 	// Call the procedure with the port
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err = sub.Apply(mcls, portArg)
 	if err != nil {
 		return err

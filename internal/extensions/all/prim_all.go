@@ -292,6 +292,7 @@ func executeThunk(mc *machine.MachineContext, thunk values.Value) (values.Value,
 			"force: promise thunk is not a procedure: %T", thunk)
 	}
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err := sub.Apply(mcls)
 	if err != nil {
 		return nil, err

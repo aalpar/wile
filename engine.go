@@ -390,6 +390,7 @@ func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, a
 	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err := sub.Apply(cls, args...)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
@@ -409,6 +410,7 @@ func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClos
 	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	_, err := sub.ApplyCaseLambda(cls, args...)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)

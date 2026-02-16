@@ -400,6 +400,7 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	for !values.IsEmptyList(lst) {
 		pr, ok := lst.(values.Tuple)
 		if !ok {
@@ -478,6 +479,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
 	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {

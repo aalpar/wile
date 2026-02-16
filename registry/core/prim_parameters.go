@@ -48,6 +48,7 @@ func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
 
 			// Apply converter to initial value
 			sub := mc.NewSubContext()
+			defer machine.ReleaseSubContext(sub)
 			_, err := sub.Apply(converterCls, init)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
