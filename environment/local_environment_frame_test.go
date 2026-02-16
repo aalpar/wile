@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -168,11 +169,7 @@ func TestCopyForApply_SharesKeys(t *testing.T) {
 	// Keys map is the same pointer (shared, not cloned)
 	origKeys := le.Keys()
 	copyKeys := copied.Keys()
-	qt.Assert(t, len(copyKeys), qt.Equals, len(origKeys))
-	// Verify same content
-	for k, v := range origKeys {
-		qt.Assert(t, copyKeys[k], qt.Equals, v)
-	}
+	qt.Assert(t, reflect.ValueOf(copyKeys).Pointer(), qt.Equals, reflect.ValueOf(origKeys).Pointer())
 }
 
 func TestCopyForApply_IndependentBindings(t *testing.T) {

@@ -164,9 +164,11 @@ func (p *LocalEnvironmentFrame) Copy() values.Value {
 }
 
 // CopyForApply creates a lightweight copy optimized for the Apply hot path.
-// The keys map is shared (immutable at runtime); bindings use RuntimeCopy
-// (shares scopes, which are also immutable at runtime). Only binding values
-// are independent between original and copy.
+// The keys map is shared between frames and must be treated as immutable at
+// runtime; callers must not mutate the shared keys map or any map returned
+// by Keys(). Bindings use RuntimeCopy (sharing scopes, which are also
+// treated as immutable at runtime). Only binding values are independent
+// between original and copy.
 func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 	if p == nil {
 		return nil
