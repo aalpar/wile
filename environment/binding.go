@@ -128,6 +128,18 @@ func (p *Binding) EqualTo(o values.Value) bool {
 	return p.value.EqualTo(v.value) && p.bindingType == v.bindingType
 }
 
+// RuntimeCopy creates a lightweight copy suitable for the Apply hot path.
+// Shares scopes and source (immutable at runtime); only value independence
+// is needed between caller and callee.
+func (p *Binding) RuntimeCopy() *Binding {
+	return &Binding{
+		value:       p.value,
+		bindingType: p.bindingType,
+		scopes:      p.scopes,
+		source:      p.source,
+	}
+}
+
 // Copy creates a copy of this binding. Scopes and source are shared by
 // reference because they are immutable at runtime — SetScopes is only
 // called during compilation/expansion, never during VM execution.

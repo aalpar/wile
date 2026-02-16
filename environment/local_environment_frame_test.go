@@ -157,3 +157,65 @@ func TestLocalEnvironmentFrame_Copy(t *testing.T) {
 	// Verify bindings were copied
 	qt.Assert(t, len(leCopy.Bindings()), qt.Equals, len(le.Bindings()))
 }
+
+func TestCopyForApply_SharesKeys(t *testing.T) {
+	le := NewLocalEnvironment(0)
+	sym := values.NewSymbol("x")
+	le.EnsureLocalBinding(sym, BindingTypeVariable)
+
+	copied := le.CopyForApply()
+
+	// Keys map is the same pointer (shared, not cloned)
+	origKeys := le.Keys()
+	copyKeys := copied.Keys()
+	qt.Assert(t, len(copyKeys), qt.Equals, len(origKeys))
+	// Verify same content
+	for k, v := range origKeys {
+		qt.Assert(t, copyKeys[k], qt.Equals, v)
+	}
+}
+
+func TestCopyForApply_IndependentBindings(t *testing.T) {
+	le := NewLocalEnvironment(2)
+	li0 := &LocalIndex{0, 0}
+	li1 := &LocalIndex{1, 0}
+	le.SetLocalValue(li0, values.NewInteger(10))
+	le.SetLocalValue(li1, values.NewInteger(20))
+
+	copied := le.CopyForApply()
+
+	// SetValue on copy does not affect original
+	copied.SetLocalValue(li0, values.NewInteger(99))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, copied.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(99))
+
+	// Original still intact
+	qt.Assert(t, le.GetLocalBinding(li1).Value(), values.SchemeEquals, values.NewInteger(20))
+}
+
+func TestCopyForApply_NilSafe(t *testing.T) {
+	var le *LocalEnvironmentFrame
+	result := le.CopyForApply()
+	qt.Assert(t, result, qt.IsNil)
+}
+
+func TestCopyForApply_EnsureLocalBindingCowsKeys(t *testing.T) {
+	le := NewLocalEnvironment(0)
+	sym1 := values.NewSymbol("x")
+	le.EnsureLocalBinding(sym1, BindingTypeVariable)
+
+	// CopyForApply sets keysShared on both
+	copied := le.CopyForApply()
+
+	// EnsureLocalBinding on the copy should COW the keys map
+	sym2 := values.NewSymbol("y")
+	copied.EnsureLocalBinding(sym2, BindingTypeVariable)
+
+	// Copy now has "y", original does not
+	qt.Assert(t, copied.GetLocalIndex(sym2), qt.Not(qt.IsNil))
+	qt.Assert(t, le.GetLocalIndex(sym2), qt.IsNil)
+
+	// Original keys unaffected
+	qt.Assert(t, len(le.Keys()), qt.Equals, 1)
+	qt.Assert(t, len(copied.Keys()), qt.Equals, 2)
+}

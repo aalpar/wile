@@ -125,6 +125,21 @@ func BenchmarkLocalFrameCopy(b *testing.B) {
 	}
 }
 
+// BenchmarkLocalFrameCopyForApply measures LocalEnvironmentFrame.CopyForApply() at various frame sizes.
+// This is the optimized CoW path — shares keys map and scopes slices.
+func BenchmarkLocalFrameCopyForApply(b *testing.B) {
+	for _, n := range []int{1, 5, 10, 25, 50} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			local := env.LocalEnvironment()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = local.CopyForApply()
+			}
+		})
+	}
+}
+
 // BenchmarkFrameCreation measures NewEnvironmentFrameWithParent — frame allocation.
 func BenchmarkFrameCreation(b *testing.B) {
 	for _, n := range []int{1, 5, 10, 25, 50} {
@@ -169,6 +184,23 @@ func BenchmarkFrameCopyAndCreate(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				copied := local.Copy().(*LocalEnvironmentFrame)
+				_ = NewEnvironmentFrameWithParent(copied, parent)
+			}
+		})
+	}
+}
+
+// BenchmarkFrameCopyForApplyAndCreate measures CopyForApply + NewEnvironmentFrameWithParent combined.
+// This simulates the optimized Apply path for non-tail calls.
+func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
+	for _, n := range []int{1, 5, 10, 25, 50} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			local := env.LocalEnvironment()
+			parent := env.Parent()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				copied := local.CopyForApply()
 				_ = NewEnvironmentFrameWithParent(copied, parent)
 			}
 		})
