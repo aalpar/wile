@@ -1,24 +1,15 @@
 # External Extensions Plan
 
-**Status:** Phase 4 complete (2026-02-14). Remaining: Phase 5 (future), Tier 2 (deferred).
+**Status:** Phases 1–4 complete (2026-02-14). Remaining: Phase 5 (future), Tier 2 (deferred).
 
-## Problem
+## Current State
 
-Extensions live in `internal/extensions/`, blocking external repos from linking. External extensions can't be `go get`-installed.
-
-## Completed (Phases 1-4)
-
-- **Phase 1:** Moved `BoolToBoolean` et al. from `internal/schemeutil` to `values/` — unblocked 7/9 extensions
-- **Phase 2:** Refactored `io` port param registration via `Registry.AddGlobalValue` — eliminated `ApplyContext.Environment()`
-- **Phase 3:** Removed `ApplyContext` entirely — clean API boundary
-- **Phase 4:** Moved 6 Tier 1 extensions from `internal/extensions/` to `extensions/` (system, math, gointerop, exceptions, files, threads)
-
-6 of 9 extensions are now importable by external Go code.
+6 of 9 extensions are now in `extensions/` (public, importable): system, math, gointerop, exceptions, files, threads.
 
 ## Extractability Tiers
 
 ```
-Tier 1 — Extractable (DONE):
+Tier 1 — Done:
   system, math, gointerop, exceptions, files, threads
   → Now in extensions/ (public, importable)
 

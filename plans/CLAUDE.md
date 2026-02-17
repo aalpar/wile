@@ -17,8 +17,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (8 phases) | Phase 1-3 complete, Phase 4+ remaining |
-| `PHASE4_EXPANSION_ALLOCATION_OPTIMIZATION.md` | Phase 4 expansion allocation: structural sharing (4.1-4.2 done), context pooling (4.4 done), WithScope idempotency (4.3) | 4.1-4.2, 4.4 complete |
+| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phases 5–7 remaining) | Phases 0–4 complete, Phase 5+ remaining |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
@@ -28,7 +27,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phases 1-4 complete, Phase 5 + Tier 2 remaining | Phase 4 complete |
+| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phase 5 + Tier 2 remaining | Phase 5+ remaining |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
 | `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
