@@ -1,6 +1,6 @@
 # Phase 4: Expansion Allocation Optimization
 
-**Status:** Sub-phases 4.1 and 4.2 complete. Sub-phases 4.3, 4.4 remaining.
+**Status:** Sub-phases 4.1, 4.2, and 4.3 complete. Sub-phase 4.4 remaining.
 
 ## What Was Implemented (4.1 + 4.2)
 
