@@ -44,7 +44,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 
 // buildQuasiquoteSyntaxList creates a proper list from syntax elements.
 func (p *CompileTimeContinuation) buildQuasiquoteSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
-	var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(srcCtx)
+	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := len(elems) - 1; i >= 0; i-- {
 		result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
 	}

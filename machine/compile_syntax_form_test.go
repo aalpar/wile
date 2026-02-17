@@ -35,7 +35,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 
 	// (syntax bindSymbolWithScopes) -> (bindSymbolWithScopes)
 	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
-	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
+	expr := syntax.NewSyntaxCons(template, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
@@ -50,7 +50,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// Empty args
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -69,7 +69,7 @@ func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	extra := syntax.NewSyntaxSymbol("bar", nil)
 	expr := syntax.NewSyntaxCons(template,
-		syntax.NewSyntaxCons(extra, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(extra, syntax.SyntaxEmptyList, nil), nil)
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -100,7 +100,7 @@ func TestTemplateContainsEllipsis_InList(t *testing.T) {
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
 	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	list := syntax.NewSyntaxCons(foo,
-		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(ellipsis, syntax.SyntaxEmptyList, nil), nil)
 
 	c.Assert(templateContainsEllipsis(list), qt.IsTrue)
 }
@@ -108,7 +108,7 @@ func TestTemplateContainsEllipsis_InList(t *testing.T) {
 func TestTemplateContainsEllipsis_EmptyList(t *testing.T) {
 	c := qt.New(t)
 
-	stx := syntax.NewSyntaxEmptyList(nil)
+	stx := syntax.SyntaxEmptyList
 	c.Assert(templateContainsEllipsis(stx), qt.IsFalse)
 }
 
@@ -120,7 +120,7 @@ func TestTemplateContainsEllipsis_EscapeForm(t *testing.T) {
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
 	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	escapeForm := syntax.NewSyntaxCons(ellipsis,
-		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(foo, syntax.SyntaxEmptyList, nil), nil)
 
 	c.Assert(templateContainsEllipsis(escapeForm), qt.IsFalse)
 }
@@ -133,7 +133,7 @@ func TestTemplateContainsEllipsis_EscapeFormWithEllipsisInside(t *testing.T) {
 	ellipsis1 := syntax.NewSyntaxSymbol("...", nil)
 	ellipsis2 := syntax.NewSyntaxSymbol("...", nil)
 	escapeForm := syntax.NewSyntaxCons(ellipsis1,
-		syntax.NewSyntaxCons(ellipsis2, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(ellipsis2, syntax.SyntaxEmptyList, nil), nil)
 
 	c.Assert(templateContainsEllipsis(escapeForm), qt.IsFalse)
 }
@@ -149,11 +149,11 @@ func TestTemplateContainsEllipsis_EscapeFormFollowedByEllipsis(t *testing.T) {
 	trailingEllipsis := syntax.NewSyntaxSymbol("...", nil)
 
 	escapeForm := syntax.NewSyntaxCons(ellipsis,
-		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(foo, syntax.SyntaxEmptyList, nil), nil)
 
 	outerList := syntax.NewSyntaxCons(escapeForm,
 		syntax.NewSyntaxCons(x,
-			syntax.NewSyntaxCons(trailingEllipsis, syntax.NewSyntaxEmptyList(nil), nil), nil), nil)
+			syntax.NewSyntaxCons(trailingEllipsis, syntax.SyntaxEmptyList, nil), nil), nil)
 
 	c.Assert(templateContainsEllipsis(outerList), qt.IsTrue)
 }
@@ -164,7 +164,7 @@ func TestTemplateContainsEllipsis_BareEllipsisNotEscapeForm(t *testing.T) {
 	// (...) - just ellipsis with no template, NOT an escape form
 	// Should return true because this is an unescaped ellipsis
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
-	bareEllipsis := syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil)
+	bareEllipsis := syntax.NewSyntaxCons(ellipsis, syntax.SyntaxEmptyList, nil)
 
 	c.Assert(templateContainsEllipsis(bareEllipsis), qt.IsTrue)
 }
@@ -183,8 +183,8 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
 	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	escapeForm := syntax.NewSyntaxCons(ellipsis,
-		syntax.NewSyntaxCons(foo, syntax.NewSyntaxEmptyList(nil), nil), nil)
-	expr := syntax.NewSyntaxCons(escapeForm, syntax.NewSyntaxEmptyList(nil), nil)
+		syntax.NewSyntaxCons(foo, syntax.SyntaxEmptyList, nil), nil)
+	expr := syntax.NewSyntaxCons(escapeForm, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
@@ -211,8 +211,8 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
 	template := syntax.NewSyntaxCons(foo,
-		syntax.NewSyntaxCons(ellipsis, syntax.NewSyntaxEmptyList(nil), nil), nil)
-	expr := syntax.NewSyntaxCons(template, syntax.NewSyntaxEmptyList(nil), nil)
+		syntax.NewSyntaxCons(ellipsis, syntax.SyntaxEmptyList, nil), nil)
+	expr := syntax.NewSyntaxCons(template, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)

@@ -148,15 +148,14 @@ func collectList(pair *syntax.SyntaxPair) ([]syntax.SyntaxValue, bool) {
 	var current values.Value = pair
 
 	for {
+		if values.IsEmptyList(current) {
+			return elements, false // proper list
+		}
+
 		p, ok := current.(*syntax.SyntaxPair)
 		if !ok {
 			// Not a pair - improper list
 			return elements, true
-		}
-
-		// Check for empty list marker (SyntaxPair with nil values)
-		if p.IsEmptyList() {
-			return elements, false // proper list
 		}
 
 		// Get the car element

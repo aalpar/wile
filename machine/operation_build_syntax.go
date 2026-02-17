@@ -39,7 +39,7 @@ func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
 // Apply implements the Operation interface.
 func (p *OperationBuildSyntaxList) Apply(_ context.Context, mctx *MachineContext) (*MachineContext, error) {
 	// Pop elements from stack in reverse order and build a list
-	var result syntax.SyntaxValue = syntax.NewSyntaxEmptyList(nil)
+	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
 
 	for i := 0; i < p.Count; i++ {
 		elem := mctx.evals.Pop()

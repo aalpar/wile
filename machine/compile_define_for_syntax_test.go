@@ -33,7 +33,7 @@ func TestCompileDefineForSyntax_Error_NilEnv(t *testing.T) {
 		env:      nil,
 	}
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -49,7 +49,7 @@ func TestCompileDefineForSyntax_Error_NilTemplate(t *testing.T) {
 		env:      env,
 	}
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -64,7 +64,7 @@ func TestCompileDefineForSyntax_Error_NoArgs(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// Empty args
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -80,7 +80,7 @@ func TestCompileDefineForSyntax_Error_MissingExpression(t *testing.T) {
 
 	// (name) - missing expression
 	name := syntax.NewSyntaxSymbol("x", nil)
-	expr := syntax.NewSyntaxCons(name, syntax.NewSyntaxEmptyList(nil), nil)
+	expr := syntax.NewSyntaxCons(name, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileDefineForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)

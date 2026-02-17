@@ -508,7 +508,7 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 
 	case values.Tuple:
 		if v.IsEmptyList() {
-			return syntax.NewSyntaxEmptyList(srcCtx), nil
+			return syntax.SyntaxEmptyList, nil
 		}
 		return syntax.NewSyntaxObject(val, srcCtx), nil
 

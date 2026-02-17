@@ -23,24 +23,26 @@ import (
 // syntaxEmptyListType is the dedicated type for the syntax empty list ().
 // It implements SyntaxTuple but is not *SyntaxPair, enforcing type safety
 // parallel to values.emptyListType.
-type syntaxEmptyListType struct {
-	sourceContext *SourceContext
-}
+//
+// This is a pointer singleton — SyntaxEmptyList is the only instance.
+// Empty lists carry no scopes and no source context. AddScope returns
+// the singleton unchanged because there are no symbols to propagate to.
+type syntaxEmptyListType struct{}
 
 var (
-	_ values.Value = syntaxEmptyListType{}
-	_ values.Tuple = syntaxEmptyListType{}
-	_ SyntaxValue  = syntaxEmptyListType{}
-	_ SyntaxTuple  = syntaxEmptyListType{}
+	_ values.Value = (*syntaxEmptyListType)(nil)
+	_ values.Tuple = (*syntaxEmptyListType)(nil)
+	_ SyntaxValue  = (*syntaxEmptyListType)(nil)
+	_ SyntaxTuple  = (*syntaxEmptyListType)(nil)
 )
 
 // SchemeString returns "#'()" for the syntax empty list, matching other SyntaxValue implementations.
-func (syntaxEmptyListType) SchemeString() string {
+func (*syntaxEmptyListType) SchemeString() string {
 	return "#'()"
 }
 
 // IsVoid returns false. The empty list is a valid first-class value, not void.
-func (syntaxEmptyListType) IsVoid() bool {
+func (*syntaxEmptyListType) IsVoid() bool {
 	return false
 }
 
@@ -48,103 +50,93 @@ func (syntaxEmptyListType) IsVoid() bool {
 // Two syntax objects are equal? only if they are the same type of syntax object.
 // For value comparison of syntax objects, use syntax->datum first.
 // R7RS: (equal? (syntax ()) '()) => #f
-func (syntaxEmptyListType) EqualTo(v values.Value) bool {
-	// Syntax objects use identity comparison
-	// Only another syntaxEmptyListType is equal
-	_, ok := v.(syntaxEmptyListType)
+func (*syntaxEmptyListType) EqualTo(v values.Value) bool {
+	_, ok := v.(*syntaxEmptyListType)
 	return ok
 }
 
 // Length returns 0.
-func (syntaxEmptyListType) Length() int {
+func (*syntaxEmptyListType) Length() int {
 	return 0
 }
 
 // Append returns vs unchanged, since appending to the empty list yields vs.
-func (syntaxEmptyListType) Append(vs values.Value) values.Value {
+func (*syntaxEmptyListType) Append(vs values.Value) values.Value {
 	return vs
 }
 
 // ForEach is a no-op on the empty list; returns the empty list and nil error.
-func (p syntaxEmptyListType) ForEach(_ context.Context, _ values.ForEachFunc) (values.Value, error) {
+func (p *syntaxEmptyListType) ForEach(_ context.Context, _ values.ForEachFunc) (values.Value, error) {
 	return p, nil
 }
 
 // IsEmptyList returns true.
-func (syntaxEmptyListType) IsEmptyList() bool {
+func (*syntaxEmptyListType) IsEmptyList() bool {
 	return true
 }
 
 // IsList returns true. The empty list is a proper list.
-func (syntaxEmptyListType) IsList() bool {
+func (*syntaxEmptyListType) IsList() bool {
 	return true
 }
 
 // AsVector returns a new empty vector.
-func (syntaxEmptyListType) AsVector() *values.Vector {
+func (*syntaxEmptyListType) AsVector() *values.Vector {
 	return values.NewVector()
 }
 
 // Car panics with ErrNotAPair. R7RS: (car '()) is an error.
-func (syntaxEmptyListType) Car() values.Value {
+func (*syntaxEmptyListType) Car() values.Value {
 	panic(values.ErrNotAPair)
 }
 
 // Cdr panics with ErrNotAPair. R7RS: (cdr '()) is an error.
-func (syntaxEmptyListType) Cdr() values.Value {
+func (*syntaxEmptyListType) Cdr() values.Value {
 	panic(values.ErrNotAPair)
 }
 
 // SyntaxCar panics with ErrNotAPair.
-func (syntaxEmptyListType) SyntaxCar() SyntaxValue {
+func (*syntaxEmptyListType) SyntaxCar() SyntaxValue {
 	panic(values.ErrNotAPair)
 }
 
 // SyntaxCdr panics with ErrNotAPair.
-func (syntaxEmptyListType) SyntaxCdr() SyntaxValue {
+func (*syntaxEmptyListType) SyntaxCdr() SyntaxValue {
 	panic(values.ErrNotAPair)
 }
 
 // SyntaxForEach is a no-op on the empty list.
-func (p syntaxEmptyListType) SyntaxForEach(_ context.Context, _ SyntaxForEachFunc) (SyntaxValue, error) {
+func (p *syntaxEmptyListType) SyntaxForEach(_ context.Context, _ SyntaxForEachFunc) (SyntaxValue, error) {
 	return p, nil
 }
 
 // SyntaxAppend returns vs unchanged.
-func (syntaxEmptyListType) SyntaxAppend(vs SyntaxValue) SyntaxValue {
+func (*syntaxEmptyListType) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	return vs
 }
 
 // AsSyntaxVector returns a new empty syntax vector.
-func (p syntaxEmptyListType) AsSyntaxVector() *SyntaxVector {
-	return NewSyntaxVector(p.sourceContext)
+func (*syntaxEmptyListType) AsSyntaxVector() *SyntaxVector {
+	return NewSyntaxVector(nil)
 }
 
-// SourceContext returns the source context.
-func (p syntaxEmptyListType) SourceContext() *SourceContext {
-	return p.sourceContext
+// SourceContext returns nil. The singleton empty list carries no source context.
+func (*syntaxEmptyListType) SourceContext() *SourceContext {
+	return nil
 }
 
 // Unwrap returns the empty values.Value list.
-func (syntaxEmptyListType) Unwrap() values.Value {
+func (*syntaxEmptyListType) Unwrap() values.Value {
 	return values.EmptyList
 }
 
 // UnwrapAll returns the empty values.Value list.
-func (syntaxEmptyListType) UnwrapAll() values.Value {
+func (*syntaxEmptyListType) UnwrapAll() values.Value {
 	return values.EmptyList
 }
 
-// AddScope returns a new empty list with the source context updated.
-// Empty lists have no symbols to propagate scopes to, but we preserve
-// the scope in the source context for consistency.
-func (p syntaxEmptyListType) AddScope(scope *Scope) SyntaxValue {
-	return syntaxEmptyListType{
-		sourceContext: p.sourceContext.WithScope(scope),
-	}
-}
-
-// NewSyntaxEmptyListWithContext creates a syntax empty list with the given source context.
-func NewSyntaxEmptyListWithContext(sctx *SourceContext) SyntaxValue {
-	return syntaxEmptyListType{sourceContext: sctx}
+// AddScope returns the singleton unchanged.
+// Empty lists have no symbols to propagate scopes to.
+func (p *syntaxEmptyListType) AddScope(_ *Scope) SyntaxValue {
+	return p
 }

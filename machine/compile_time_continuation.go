@@ -200,7 +200,7 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	return nil
 }
 
-func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTimeCallContext, args *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTimeCallContext, args syntax.SyntaxValue) error {
 	tail, err := syntax.SyntaxForEach(ctctx.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		err := p.CompileExpression(ctctx.NotInTail(), v)
 		if err != nil {
@@ -268,7 +268,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 		NewOperationPush(),
 	)
 	// compile as a procedure call
-	err = p.compileProcedureArgumentList(ctctx, expr.(*syntax.SyntaxPair))
+	err = p.compileProcedureArgumentList(ctctx, expr)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "failed to compile expression list")
 	}

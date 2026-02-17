@@ -96,7 +96,7 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 		return syntax.SyntaxVoid
 	}
 	if values.IsEmptyList(o) {
-		return syntax.NewSyntaxEmptyList(sctx)
+		return syntax.SyntaxEmptyList
 	}
 	switch v := o.(type) {
 	case *values.Symbol:

@@ -193,9 +193,7 @@ func TestCapturedValueToSyntax(t *testing.T) {
 				_, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxSymbol, got %T", result))
 			case "SyntaxPair":
-				pr, ok := result.(*syntax.SyntaxPair)
-				c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxPair, got %T", result))
-				c.Assert(syntax.IsSyntaxEmptyList(pr), qt.IsTrue)
+				c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue, qt.Commentf("expected empty list, got %T", result))
 			}
 		})
 	}
@@ -243,11 +241,9 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 		{
 			name:     "empty list template returns empty list",
 			inputVal: syntax.NewSyntaxObject(values.NewInteger(42), nil),
-			template: syntax.NewSyntaxEmptyList(nil),
+			template: syntax.SyntaxEmptyList,
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
-				pr, ok := result.(*syntax.SyntaxPair)
-				c.Assert(ok, qt.IsTrue)
-				c.Assert(syntax.IsSyntaxEmptyList(pr), qt.IsTrue)
+				c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue)
 			},
 		},
 	}
@@ -266,7 +262,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 				syntax.NewSyntaxSymbol("macro", nil),
 				syntax.NewSyntaxCons(
 					tc.inputVal,
-					syntax.NewSyntaxEmptyList(nil),
+					syntax.SyntaxEmptyList,
 					nil,
 				),
 				nil,
@@ -336,7 +332,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 				syntax.NewSyntaxSymbol("macro", nil),
 				syntax.NewSyntaxCons(
 					syntax.NewSyntaxObject(values.NewInteger(1), nil),
-					syntax.NewSyntaxEmptyList(nil),
+					syntax.SyntaxEmptyList,
 					nil,
 				),
 				nil,
@@ -371,7 +367,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -419,9 +415,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 			name:     "zero repetitions yields empty list",
 			inputVal: []syntax.SyntaxValue{},
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
-				pr, ok := result.(*syntax.SyntaxPair)
-				c.Assert(ok, qt.IsTrue)
-				c.Assert(syntax.IsSyntaxEmptyList(pr), qt.IsTrue)
+				c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue)
 			},
 		},
 		{
@@ -475,7 +469,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 					syntax.NewSyntaxSymbol("x", nil),
 					syntax.NewSyntaxCons(
 						syntax.NewSyntaxSymbol("...", nil),
-						syntax.NewSyntaxEmptyList(nil),
+						syntax.SyntaxEmptyList,
 						nil,
 					),
 					nil,
@@ -540,7 +534,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			capturedSym,
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -582,7 +576,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -621,7 +615,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -664,7 +658,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -749,7 +743,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(7), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,
@@ -797,7 +791,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", nil),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(1), nil),
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			nil,
 		),
 		nil,

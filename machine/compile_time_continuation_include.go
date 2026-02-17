@@ -128,10 +128,15 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		}
 
 		// Move to next filename
-		rest, ok = rest.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list, got %T", rest)
+		cdr := rest.SyntaxCdr()
+		nextPair, cdrOk := cdr.(*syntax.SyntaxPair)
+		if !cdrOk {
+			if syntax.IsSyntaxEmptyList(cdr) {
+				break
+			}
+			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list, got %T", cdr)
 		}
+		rest = nextPair
 	}
 	return nil
 }

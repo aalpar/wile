@@ -33,7 +33,7 @@ func TestCompileBeginForSyntax_Error_NilEnv(t *testing.T) {
 		env:      nil,
 	}
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -49,7 +49,7 @@ func TestCompileBeginForSyntax_Error_NilTemplate(t *testing.T) {
 		env:      env,
 	}
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -78,8 +78,8 @@ func TestCompileBeginForSyntax_Empty(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	// Use an empty SyntaxPair (which returns true for IsSyntaxEmptyList)
-	exprPair := &syntax.SyntaxPair{}
+	// Empty list singleton
+	exprPair := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), exprPair)
 	c.Assert(err, qt.IsNil)

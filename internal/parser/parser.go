@@ -221,8 +221,8 @@ func (p *Parser) wrapSyntaxVector(os []values.Value, t tokenizer.Token) *syntax.
 	return syntax.NewSyntaxVector(sc, svs...)
 }
 
-func (p *Parser) wrapSyntaxEmptyList(t tokenizer.Token) *syntax.SyntaxPair {
-	return syntax.NewSyntaxEmptyList(p.newSourceContext(t))
+func (p *Parser) wrapSyntaxEmptyList(_ tokenizer.Token) syntax.SyntaxTuple {
+	return syntax.SyntaxEmptyList
 }
 
 func (p *Parser) wrapSyntaxPair(v0, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxPair {
@@ -335,7 +335,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 	// Check for end of list
 	if p.cur.Type() == expectedClose {
 		// Single element list - set cdr to empty list
-		placeholder.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
+		placeholder.SetCdr(syntax.SyntaxEmptyList)
 		return placeholder, nil
 	}
 	// Check for bracket mismatch
@@ -397,7 +397,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		}
 	case p.cur.Type() == expectedClose:
 		// Proper list - terminate with empty list
-		current.SetCdr(syntax.NewSyntaxEmptyList(p.newSourceContext(p.cur)))
+		current.SetCdr(syntax.SyntaxEmptyList)
 	case p.isListCloser(p.cur.Type()):
 		// Bracket mismatch
 		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",

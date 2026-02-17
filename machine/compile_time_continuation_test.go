@@ -1099,7 +1099,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		syntax.NewSyntaxSymbol("quote", sctx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("x", sctx),
-			syntax.NewSyntaxEmptyList(sctx),
+			syntax.SyntaxEmptyList,
 			sctx,
 		),
 		sctx,
@@ -1114,7 +1114,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		syntax.NewSyntaxSymbol("quasiquote", sctx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("y", sctx),
-			syntax.NewSyntaxEmptyList(sctx),
+			syntax.SyntaxEmptyList,
 			sctx,
 		),
 		sctx,

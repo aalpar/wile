@@ -47,7 +47,7 @@ func (p *SyntaxValueSuite) makeSyntaxPair(v0, v1 SyntaxValue) SyntaxValue {
 }
 
 func (p *SyntaxValueSuite) makeSyntaxEmptyList() SyntaxValue {
-	return NewSyntaxEmptyList(p.sctx)
+	return SyntaxEmptyList
 }
 
 // Test EqualTo and SchemeEquals methods

@@ -28,8 +28,8 @@ var (
 
 	// SyntaxEmptyList is the empty list singleton.
 	// It implements SyntaxTuple but is not *SyntaxPair, enforcing type safety
-	// parallel to values.EmptyList.
-	SyntaxEmptyList SyntaxTuple = syntaxEmptyListType{sourceContext: nil}
+	// parallel to values.EmptyList. Pointer identity enables O(1) equality checks.
+	SyntaxEmptyList SyntaxTuple = &syntaxEmptyListType{}
 )
 
 // SyntaxPair wraps a Scheme pair (cons cell) with source context.
@@ -63,17 +63,6 @@ func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
 		// Nodes that don't support AddScope are returned unchanged
 		return node
 	})
-}
-
-// NewSyntaxEmptyList creates a syntax empty list with the given source context.
-func NewSyntaxEmptyList(sctx *SourceContext) *SyntaxPair {
-	q := &SyntaxPair{
-		Values: [2]SyntaxValue{nil, nil},
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
-	}
-	return q
 }
 
 // NewSyntaxCons creates a new syntax pair (cons cell).

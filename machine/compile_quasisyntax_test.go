@@ -32,14 +32,11 @@ func makeTestSyntaxSymbol(name string) *syntax.SyntaxSymbol {
 }
 
 func makeTestSyntaxList(elems ...syntax.SyntaxValue) *syntax.SyntaxPair {
-	if len(elems) == 0 {
-		return syntax.NewSyntaxEmptyList(nil)
-	}
-	result := syntax.NewSyntaxEmptyList(nil)
+	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := len(elems) - 1; i >= 0; i-- {
 		result = syntax.NewSyntaxCons(elems[i], result, nil)
 	}
-	return result
+	return result.(*syntax.SyntaxPair)
 }
 
 func makeTestUnsyntax(expr syntax.SyntaxValue) *syntax.SyntaxPair {
@@ -80,7 +77,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// Empty args
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -94,7 +91,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -108,7 +105,7 @@ func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -199,7 +196,7 @@ func TestQuasisyntaxNeedsRuntime_EmptyList(t *testing.T) {
 	c := qt.New(t)
 	ccnt, _ := newTestCompiler()
 
-	stx := syntax.NewSyntaxEmptyList(nil)
+	stx := syntax.SyntaxEmptyList
 	needs := ccnt.quasisyntaxNeedsRuntime(stx, 1)
 	c.Assert(needs, qt.IsFalse)
 }
@@ -299,7 +296,7 @@ func TestExpandQuasisyntax_EmptyList(t *testing.T) {
 	ccnt, _ := newTestCompiler()
 
 	// () -> (syntax ())
-	stx := syntax.NewSyntaxEmptyList(nil)
+	stx := syntax.SyntaxEmptyList
 	expanded := ccnt.expandQuasisyntax(context.Background(), stx, 1)
 
 	pair, ok := expanded.(*syntax.SyntaxPair)

@@ -352,8 +352,8 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 	c.Run("empty list passthrough", func(c *qt.C) {
 		sm := &SyntaxMatcher{matcher: &Matcher{}}
 		ctx := &captureContext{bindings: map[string]syntax.SyntaxValue{}}
-		emptyList := syntax.NewSyntaxEmptyList(nil)
-		template := syntax.NewSyntaxCons(emptyList, syntax.NewSyntaxEmptyList(nil), nil)
+		emptyList := syntax.SyntaxEmptyList
+		template := syntax.NewSyntaxCons(emptyList, syntax.SyntaxEmptyList, nil)
 		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.IsNotNil)
@@ -410,7 +410,7 @@ func TestMatchSyntax_RequireCarEmpty(t *testing.T) {
 	c.Run("empty list at car matches", func(c *qt.C) {
 		m := NewMatcher(vars, codes)
 		target := testSyntaxList(
-			syntax.NewSyntaxEmptyList(nil),
+			syntax.SyntaxEmptyList,
 			testSyntaxInt(42),
 		)
 		err := m.MatchSyntax(context.Background(), target)

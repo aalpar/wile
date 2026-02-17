@@ -91,6 +91,13 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 
 	// Get the body expressions
 	bodyCdr := argsPair.Cdr()
+	if values.IsEmptyList(bodyCdr) {
+		// Empty body — emit void
+		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(
+			p.template.MaybeAppendLiteral(values.Void),
+		))
+		return nil
+	}
 	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: expected body expressions")
@@ -128,14 +135,12 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phasesExpr syntax.SyntaxValue) (evalWhenBehavior, error) {
 	var behavior evalWhenBehavior
 
+	if syntax.IsSyntaxEmptyList(phasesExpr) {
+		return behavior, nil
+	}
 	phasesPair, ok := phasesExpr.(*syntax.SyntaxPair)
 	if !ok {
 		return 0, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: phase list must be a list")
-	}
-
-	// Handle empty phase list
-	if syntax.IsSyntaxEmptyList(phasesPair) {
-		return behavior, nil
 	}
 
 	// Iterate through phase symbols

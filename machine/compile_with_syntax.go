@@ -38,14 +38,23 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 
 	// Get the bindings list (CAR of args)
 	bindingsList := argsPair.SyntaxCar()
-	bindingsPair, ok := bindingsList.(*syntax.SyntaxPair)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: bindings must be a list")
+	bindingsEmpty := syntax.IsSyntaxEmptyList(bindingsList)
+	var bindingsPair *syntax.SyntaxPair
+	if !bindingsEmpty {
+		var ok bool
+		bindingsPair, ok = bindingsList.(*syntax.SyntaxPair)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: bindings must be a list")
+		}
 	}
 
 	// Get the body (CDR of args)
-	bodyList, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || bodyList.IsEmptyList() {
+	bodyCdr := argsPair.SyntaxCdr()
+	if values.IsEmptyList(bodyCdr) {
+		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: expected body expressions")
+	}
+	bodyList, ok := bodyCdr.(*syntax.SyntaxPair)
+	if !ok {
 		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "with-syntax: expected body expressions")
 	}
 
@@ -53,7 +62,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	srcCtx := argsPair.SourceContext()
 
 	// If no bindings, just compile the body as a begin
-	if bindingsPair.IsEmptyList() {
+	if bindingsEmpty {
 		return p.compileWithSyntaxBody(ctctx, bodyList)
 	}
 
@@ -112,7 +121,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	syntaxCaseForm := p.buildQuasiquoteSyntaxList(srcCtx,
 		syntax.NewSyntaxSymbol("syntax-case", srcCtx),
 		listExpr,
-		syntax.NewSyntaxEmptyList(srcCtx), // empty literals list
+		syntax.SyntaxEmptyList, // empty literals list
 		clause,
 	)
 
