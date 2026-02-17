@@ -18,7 +18,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1-3 complete, Phase 4.1-4.2 complete (structural sharing). Phase 4.3: WithScope idempotency next. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1-3 complete, Phase 4.1-4.2 complete (structural sharing), Phase 4.4 complete (expander context pooling). Phase 4.3: WithScope idempotency next. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |

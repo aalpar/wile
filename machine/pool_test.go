@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -159,6 +160,73 @@ func TestReleaseSubContext_NoParent_NoPanic(t *testing.T) {
 	mc := acquireSubContext()
 	mc.parentMC = nil
 	ReleaseSubContext(mc)
+}
+
+// ---------------------------------------------------------------------------
+// Macro context pool (acquireMacroContext)
+// ---------------------------------------------------------------------------
+
+func TestAcquireMacroContext_InitializesFields(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(2)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(2, 0, false)
+	cls := NewClosureWithTemplate(tpl, env)
+
+	ctx := context.Background()
+	mc := acquireMacroContext(ctx, cls)
+	defer ReleaseSubContext(mc)
+
+	// Fields set from closure + context.
+	qt.Assert(t, mc.ctx, qt.Equals, ctx)
+	qt.Assert(t, mc.env, qt.Equals, env)
+	qt.Assert(t, mc.template, qt.Equals, tpl)
+	qt.Assert(t, mc.evals, qt.IsNotNil)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
+
+	// Fields NOT set must be zero.
+	qt.Assert(t, mc.cont, qt.IsNil)
+	qt.Assert(t, mc.parentMC, qt.IsNil)
+	qt.Assert(t, mc.expanderCtx, qt.IsNil)
+	qt.Assert(t, mc.exceptionHandler, qt.IsNil)
+	qt.Assert(t, mc.singleValue, qt.IsNil)
+	qt.Assert(t, mc.multiValues, qt.IsNil)
+	qt.Assert(t, mc.pc, qt.Equals, 0)
+	qt.Assert(t, mc.thread, qt.IsNil)
+}
+
+func TestAcquireMacroContext_Roundtrip(t *testing.T) {
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(2)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(2, 0, false)
+	cls := NewClosureWithTemplate(tpl, env)
+
+	ctx := context.Background()
+	mc := acquireMacroContext(ctx, cls)
+
+	// Simulate what a macro expansion does: set expanderCtx, run, get value.
+	mc.expanderCtx = &ExpanderContext{}
+	mc.singleValue = values.NewInteger(42)
+
+	ReleaseSubContext(mc)
+
+	// Re-acquire: all fields must be reset (new closure fields replace old).
+	env2 := environment.NewEnvironmentFrameWithParent(
+		environment.NewLocalEnvironment(1), topEnv,
+	)
+	tpl2 := NewNativeTemplate(1, 0, false)
+	cls2 := NewClosureWithTemplate(tpl2, env2)
+
+	mc2 := acquireMacroContext(ctx, cls2)
+	defer ReleaseSubContext(mc2)
+
+	qt.Assert(t, mc2.env, qt.Equals, env2)
+	qt.Assert(t, mc2.template, qt.Equals, tpl2)
+	qt.Assert(t, mc2.expanderCtx, qt.IsNil)
+	qt.Assert(t, mc2.singleValue, qt.IsNil)
+	qt.Assert(t, mc2.evals, qt.IsNotNil)
+	qt.Assert(t, mc2.evals.Len(), qt.Equals, 0)
 }
 
 // ---------------------------------------------------------------------------
