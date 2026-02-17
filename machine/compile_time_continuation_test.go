@@ -385,37 +385,85 @@ func evalSchemeString(code string) (values.Value, error) {
 
 func TestCompileContext_CompileIf(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	// top-level closure with no parameters (thunk)
+	sctx := syntax.NewZeroValueSourceContext()
+
+	// Set up a global variable 'x' for non-constant test
+	symX := env.InternSymbol(values.NewSymbol("x"))
+	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
+
+	// (if x "true" "false") — tests BranchOnFalseValue (value register, no Push)
 	prog := values.List(values.NewSymbol("if"),
-		values.NewBoolean(false),
+		values.NewSymbol("x"),
 		values.NewString("true"),
 		values.NewString("false"))
-	sctx := syntax.NewZeroValueSourceContext()
 
 	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 
-	// check that the closure has been compiled correctly
-	qt.Assert(t, cont.template.operations, qt.HasLen, 6)
+	// BranchOnFalseValue reads value register directly, no Push needed
+	qt.Assert(t, cont.template.operations, qt.HasLen, 5)
 	qt.Assert(t, cont.template.operations, values.SchemeEquals, NewOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(0),
-		NewOperationPush(),
-		NewOperationBranchOnFalseOffsetImmediate(3),
+		NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0),
+		NewOperationBranchOnFalseValueOffsetImmediate(3),
 		NewOperationLoadLiteralByLiteralIndexImmediate(1),
 		NewOperationBranchOffsetImmediate(2),
 		NewOperationLoadLiteralByLiteralIndexImmediate(2),
 	))
-	qt.Assert(t, cont.template.isVariadic, qt.Equals, false)
-	qt.Assert(t, cont.template.parameterCount, qt.Equals, 0)
-	qt.Assert(t, cont.template.literals, qt.HasLen, 3)
 
+	// Run with x = #f → should take the false branch
+	_ = env.SetOwnGlobalValue(gi, values.FalseValue)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
-	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
 	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("false"))
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
+
+	// Run with x = #t → should take the true branch
+	_ = env.SetOwnGlobalValue(gi, values.TrueValue)
+	mc = NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("true"))
+}
+
+func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	sctx := syntax.NewZeroValueSourceContext()
+
+	// (if #f "true" "false") — constant-folds to just "false"
+	prog := values.List(values.NewSymbol("if"),
+		values.NewBoolean(false),
+		values.NewString("true"),
+		values.NewString("false"))
+
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Constant folding: only the alternative branch is compiled
+	qt.Assert(t, cont.template.operations, qt.HasLen, 1)
+	qt.Assert(t, cont.template.operations, values.SchemeEquals, NewOperations(
+		NewOperationLoadLiteralByLiteralIndexImmediate(0),
+	))
+
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont.template, env))
+	err = mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("false"))
+
+	// (if #t "true" "false") — constant-folds to just "true"
+	prog2 := values.List(values.NewSymbol("if"),
+		values.NewBoolean(true),
+		values.NewString("true"),
+		values.NewString("false"))
+
+	cont2, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog2), env)
+	qt.Assert(t, err, qt.IsNil)
+
+	qt.Assert(t, cont2.template.operations, qt.HasLen, 1)
+	mc2 := NewMachineContext(context.Background(), NewMachineContinuation(nil, cont2.template, env))
+	err = mc2.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, mc2.GetValue(), values.SchemeEquals, values.NewString("true"))
 }
 
 func TestCompileContext_CompileSetBang(t *testing.T) {

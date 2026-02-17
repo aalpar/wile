@@ -17,11 +17,12 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phases 5–7 remaining) | Phases 0–4 complete, Phase 5+ remaining |
+| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phases 6–7 remaining) | Phases 0–5 complete, Phase 6+ remaining |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
+| `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | Planned |
 
 ### Proposed Designs (Future)
 

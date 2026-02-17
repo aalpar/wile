@@ -36,17 +36,27 @@ type NativeTemplate struct {
 	name           string                  // Function name (for stack traces)
 }
 
+// initialOpsCap is the pre-allocated capacity for the operations and sourceRefs
+// slices when a template is created without initial operations (the compilation
+// path). Covers simple lambda bodies without re-allocation; larger functions
+// grow normally. Kept small to avoid wasting memory on the many short templates
+// typical in Scheme programs.
+const initialOpsCap = 8
+
 func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *NativeTemplate {
 	q := &NativeTemplate{
 		parameterCount: pcnt,
 		valueCount:     vcnt,
 		isVariadic:     vd,
-		operations:     operations,
 		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
 	}
-	// Tag any initial operations with nil source (index 0)
-	for range operations {
-		q.sourceRefs = append(q.sourceRefs, 0)
+	if len(operations) > 0 {
+		q.operations = operations
+		q.sourceRefs = make([]uint16, len(operations))
+	} else {
+		// Pre-allocate for the compilation path to reduce append growth.
+		q.operations = make(Operations, 0, initialOpsCap)
+		q.sourceRefs = make([]uint16, 0, initialOpsCap)
 	}
 	return q
 }

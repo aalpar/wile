@@ -94,16 +94,35 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 // CompileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
 func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedIf) error {
-	// Compile the test condition (not in tail position)
+	// Constant folding: if the test is a compile-time-known literal, fold the
+	// if form to just the consequent or alternative. Per R7RS, only #f is false;
+	// all other values (including 0, "", '()) are truthy.
+	folded, isFalsy := isLiteralFalse(v.Test)
+	if folded {
+		if isFalsy {
+			// (if #f X Y) → Y, or void if no alternative
+			if v.Alt != nil {
+				return p.compileValidated(ctctx, v.Alt)
+			}
+			voidIdx := p.template.MaybeAppendLiteral(values.Void)
+			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(voidIdx))
+			return nil
+		}
+		// (if <truthy-literal> X Y) → X
+		return p.compileValidated(ctctx, v.Conseq)
+	}
+
+	// Compile the test condition (not in tail position).
+	// The result lands in the value register; BranchOnFalseValue reads it
+	// directly, avoiding a Push+Pop roundtrip through the eval stack.
 	err := p.compileValidated(ctctx.NotInTail(), v.Test)
 	if err != nil {
 		return err
 	}
-	p.AppendOperations(NewOperationPush())
 
-	// Set up branch-on-false to skip consequent
+	// Set up branch-on-false to skip consequent (reads value register directly)
 	branchOnFalseIndex := p.template.operations.Len()
-	p.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
+	p.AppendOperations(NewOperationBranchOnFalseValueOffsetImmediate(0)) // placeholder
 
 	// Compile consequent (inherits tail position)
 	err = p.compileValidated(ctctx, v.Conseq)
@@ -132,10 +151,33 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 
 	// Fix up branch targets
 	endIndex := p.template.operations.Len()
-	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseOffsetImmediate(altStart - branchOnFalseIndex)
+	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseValueOffsetImmediate(altStart - branchOnFalseIndex)
 	p.template.operations[branchToEndIndex] = NewOperationBranchOffsetImmediate(endIndex - branchToEndIndex)
 
 	return nil
+}
+
+// isLiteralFalse checks if a validated expression is a compile-time-known
+// literal. Returns (true, true) for #f, (true, false) for any other literal
+// (which is truthy per R7RS), and (false, false) for non-literal expressions.
+func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
+	lit, ok := expr.(*validate.ValidatedLiteral)
+	if !ok {
+		return false, false
+	}
+	if lit.Value == nil {
+		return false, false
+	}
+	unwrapped := lit.Value.UnwrapAll()
+	if unwrapped == nil {
+		return false, false
+	}
+	b, isBool := unwrapped.(*values.Boolean)
+	if !isBool {
+		// Non-boolean literal — truthy per R7RS
+		return true, false
+	}
+	return true, !b.Datum()
 }
 
 // CompileValidatedDefine compiles a validated define form.
