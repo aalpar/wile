@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/values"
@@ -160,6 +161,9 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 			Scopes: []*Scope{scope},
 		}
 	}
+	if slices.Contains(p.Scopes, scope) {
+		return p
+	}
 	newScopes := make([]*Scope, len(p.Scopes)+1)
 	newScopes[0] = scope
 	copy(newScopes[1:], p.Scopes)
@@ -181,6 +185,16 @@ func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
 		}
 	}
 	if len(scopes) == 0 {
+		return p
+	}
+	allPresent := true
+	for _, s := range scopes {
+		if !slices.Contains(p.Scopes, s) {
+			allPresent = false
+			break
+		}
+	}
+	if allPresent {
 		return p
 	}
 	newScopes := make([]*Scope, len(scopes)+len(p.Scopes))

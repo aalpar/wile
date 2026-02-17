@@ -972,6 +972,175 @@ func TestFormatOriginChain_MaxDepth(t *testing.T) {
 	c.Assert(result, qt.Not(qt.Contains), "macro3")
 }
 
+// ============================================================================
+// WithScope / AddScope Idempotency Tests (Phase 4.3)
+// ============================================================================
+
+// TestWithScope_Idempotent verifies that WithScope returns the same pointer
+// when the scope is already present, avoiding unnecessary allocation.
+func TestWithScope_Idempotent(t *testing.T) {
+	c := qt.New(t)
+
+	scope1 := NewScope()
+	scope2 := NewScope()
+	sctx := NewSourceContext("x", "test.scm",
+		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
+
+	// Add scope1
+	sctx2 := sctx.WithScope(scope1)
+	c.Assert(sctx2, qt.Not(qt.Equals), sctx) // new allocation
+
+	// Add scope1 again — should return same pointer
+	sctx3 := sctx2.WithScope(scope1)
+	c.Assert(sctx3, qt.Equals, sctx2) // pointer identity
+
+	// Add scope2 — new scope, should allocate
+	sctx4 := sctx2.WithScope(scope2)
+	c.Assert(sctx4, qt.Not(qt.Equals), sctx2)
+	c.Assert(len(sctx4.Scopes), qt.Equals, 2)
+
+	// Add scope1 again to sctx4 (which has [scope2, scope1]) — idempotent
+	sctx5 := sctx4.WithScope(scope1)
+	c.Assert(sctx5, qt.Equals, sctx4)
+
+	// Add scope2 again to sctx4 — also idempotent
+	sctx6 := sctx4.WithScope(scope2)
+	c.Assert(sctx6, qt.Equals, sctx4)
+}
+
+// TestWithScopes_Idempotent verifies that WithScopes returns the same pointer
+// when all scopes are already present.
+func TestWithScopes_Idempotent(t *testing.T) {
+	c := qt.New(t)
+
+	scope1 := NewScope()
+	scope2 := NewScope()
+	scope3 := NewScope()
+	sctx := NewSourceContext("x", "test.scm",
+		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
+
+	// Add two scopes
+	sctx2 := sctx.WithScopes([]*Scope{scope1, scope2})
+	c.Assert(sctx2, qt.Not(qt.Equals), sctx)
+	c.Assert(len(sctx2.Scopes), qt.Equals, 2)
+
+	// Add same two scopes again — idempotent
+	sctx3 := sctx2.WithScopes([]*Scope{scope1, scope2})
+	c.Assert(sctx3, qt.Equals, sctx2)
+
+	// Add subset — idempotent
+	sctx4 := sctx2.WithScopes([]*Scope{scope1})
+	c.Assert(sctx4, qt.Equals, sctx2)
+
+	// Add one new scope — should allocate
+	sctx5 := sctx2.WithScopes([]*Scope{scope3})
+	c.Assert(sctx5, qt.Not(qt.Equals), sctx2)
+	c.Assert(len(sctx5.Scopes), qt.Equals, 3)
+
+	// Mix of present and new — should allocate
+	sctx6 := sctx2.WithScopes([]*Scope{scope1, scope3})
+	c.Assert(sctx6, qt.Not(qt.Equals), sctx2)
+}
+
+// TestSyntaxSymbol_AddScope_Idempotent verifies that AddScope on a symbol
+// returns the same pointer when the scope is already present.
+func TestSyntaxSymbol_AddScope_Idempotent(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := NewSourceContext("x", "test.scm",
+		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
+	sym := NewSyntaxSymbol("x", sctx)
+
+	scope := NewScope()
+
+	// First AddScope — new symbol
+	sym2 := sym.AddScope(scope)
+	c.Assert(sym2, qt.Not(qt.Equals), SyntaxValue(sym))
+
+	// Second AddScope with same scope — same pointer
+	sym3 := sym2.(*SyntaxSymbol).AddScope(scope)
+	c.Assert(sym3, qt.Equals, SyntaxValue(sym2.(*SyntaxSymbol)))
+}
+
+// TestSyntaxSymbol_AddScope_Idempotent_PreservesResolvedBinding verifies
+// that pointer identity is maintained even when ResolvedBinding is set.
+func TestSyntaxSymbol_AddScope_Idempotent_PreservesResolvedBinding(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := NewSourceContext("x", "test.scm",
+		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
+	sym := NewSyntaxSymbol("x", sctx)
+	sym = sym.WithResolvedBinding("some-binding")
+
+	scope := NewScope()
+	sym2 := sym.AddScope(scope).(*SyntaxSymbol)
+	c.Assert(sym2.ResolvedBinding, qt.Equals, "some-binding")
+
+	// Idempotent — same pointer, binding preserved
+	sym3 := sym2.AddScope(scope).(*SyntaxSymbol)
+	c.Assert(sym3, qt.Equals, sym2)
+	c.Assert(sym3.ResolvedBinding, qt.Equals, "some-binding")
+}
+
+// TestStructuralSharing_CascadesFromIdempotentSymbols verifies the full cascade:
+// when all symbols in a pair tree already have a scope, AddScope on the
+// enclosing pair returns the same pair pointer.
+func TestStructuralSharing_CascadesFromIdempotentSymbols(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := &SourceContext{Text: "test"}
+	scope := NewScope()
+
+	// Build a tree of symbols that already have the scope
+	sym1 := NewSyntaxSymbol("a", sctx.WithScope(scope))
+	sym2 := NewSyntaxSymbol("b", sctx.WithScope(scope))
+	pair := NewSyntaxCons(sym1, sym2, sctx)
+
+	// AddScope should cascade idempotency: symbols unchanged → pair unchanged
+	result := pair.AddScope(scope)
+	c.Assert(result, qt.Equals, SyntaxValue(pair))
+}
+
+// TestStructuralSharing_CascadesNestedPairs verifies cascade through nested pairs.
+func TestStructuralSharing_CascadesNestedPairs(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := &SourceContext{Text: "test"}
+	scope := NewScope()
+
+	// Build: (a . (b . ()))  where both symbols already have the scope
+	sym1 := NewSyntaxSymbol("a", sctx.WithScope(scope))
+	sym2 := NewSyntaxSymbol("b", sctx.WithScope(scope))
+	inner := NewSyntaxCons(sym2, SyntaxEmptyList, sctx)
+	outer := NewSyntaxCons(sym1, inner, sctx)
+
+	result := outer.AddScope(scope)
+	c.Assert(result, qt.Equals, SyntaxValue(outer))
+}
+
+// TestStructuralSharing_PartialChange verifies that when only some symbols
+// need updating, unchanged subtrees are shared.
+func TestStructuralSharing_PartialChange(t *testing.T) {
+	c := qt.New(t)
+
+	sctx := &SourceContext{Text: "test"}
+	scope := NewScope()
+
+	// sym1 already has the scope, sym2 does not
+	sym1 := NewSyntaxSymbol("a", sctx.WithScope(scope))
+	sym2 := NewSyntaxSymbol("b", sctx)
+	pair := NewSyntaxCons(sym1, sym2, sctx)
+
+	result := pair.AddScope(scope)
+	c.Assert(result, qt.Not(qt.Equals), SyntaxValue(pair)) // pair changed
+
+	resultPair := result.(*SyntaxPair)
+	// Car (sym1) should be reused — already had the scope
+	c.Assert(resultPair.Values[0], qt.Equals, SyntaxValue(sym1))
+	// Cdr (sym2) should be new — scope was added
+	c.Assert(resultPair.Values[1], qt.Not(qt.Equals), SyntaxValue(sym2))
+}
+
 // TestMapSyntaxTreeStructuralSharing verifies that mapSyntaxTree returns the
 // original pair pointer when children are unchanged (structural sharing).
 func TestMapSyntaxTreeStructuralSharing(t *testing.T) {
