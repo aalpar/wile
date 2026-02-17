@@ -22,13 +22,15 @@ import (
 )
 
 // OperationBranchOnFalseValueOffsetImmediate branches if the value register
-// is #f. Unlike OperationBranchOnFalseOffsetImmediate, this reads directly
-// from the value register instead of popping from the eval stack, eliminating
-// the preceding Push instruction that would otherwise be needed.
+// is #f. This reads directly from the value register instead of popping from
+// the eval stack, eliminating the Push instruction that would otherwise be
+// needed.
 //
-// This is a peephole optimization for if-forms and syntax-case match/fender
-// branches where the test result is in the value register and doesn't need
-// to survive on the stack.
+// Peephole optimization (Aho et al., Compilers §8.9): examines a small
+// window of generated instructions and replaces inefficient patterns. Here,
+// the Push+BranchOnFalse+Pop sequence is replaced with a single
+// BranchOnFalseValue that reads the value register directly.
+// See BIBLIOGRAPHY.md "Peephole Optimization".
 type OperationBranchOnFalseValueOffsetImmediate struct {
 	OperationBase
 	Offset int

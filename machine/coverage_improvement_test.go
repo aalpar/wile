@@ -75,29 +75,6 @@ func TestClausesWrapper_SchemeString(t *testing.T) {
 	qt.Assert(t, c.SchemeString(), qt.Equals, "#<syntax-rules-clauses>")
 }
 
-// TestOperationBrk_ValueMethods tests EqualTo, IsVoid, and SchemeString for OperationBrk
-func TestOperationBrk_ValueMethods(t *testing.T) {
-	op1 := NewOperationBrk(nil)
-	op2 := NewOperationBrk(nil)
-
-	// Test SchemeString
-	qt.Assert(t, op1.SchemeString(), qt.Equals, "#<machine-operation-brk>")
-
-	// Test IsVoid - should be false for non-nil operation
-	qt.Assert(t, op1.IsVoid(), qt.IsFalse)
-
-	// Test EqualTo - operations are equal if both are OperationBrk (functions not compared)
-	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-
-	// Test EqualTo with different type
-	qt.Assert(t, op1.EqualTo(values.NewInteger(42)), qt.IsFalse)
-
-	// Test EqualTo with nil
-	var nilOp *OperationBrk
-	qt.Assert(t, op1.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
-}
-
 // TestCompileUnquote tests that unquote outside quasiquote errors
 func TestCompileUnquote(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())

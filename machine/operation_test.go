@@ -52,64 +52,9 @@ func TestOperation(t *testing.T) {
 			},
 		},
 		{
-			evals: &Stack{
-				values.NewInteger(10),
-				values.NewInteger(20),
-				values.NewInteger(30),
-				values.NewInteger(40),
-				values.NewInteger(50),
-			},
-			op: NewOperationPopAll(),
-			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				qt.Assert(t, mc.GetValues(), qt.HasLen, 5)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
-				qt.Assert(t, mc.GetValues()[1], values.SchemeEquals, values.NewInteger(20))
-				qt.Assert(t, mc.GetValues()[2], values.SchemeEquals, values.NewInteger(30))
-				qt.Assert(t, mc.GetValues()[3], values.SchemeEquals, values.NewInteger(40))
-				qt.Assert(t, mc.GetValues()[4], values.SchemeEquals, values.NewInteger(50))
-			},
-		},
-		{
 			op: NewOperationBranchOffsetImmediate(2),
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 2)
-			},
-		},
-		{
-			evals: NewStack(
-				values.NewBoolean(false),
-			),
-			op: NewOperationBranchOnFalseOffsetImmediate(2),
-			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 2)
-			},
-		},
-		{
-			evals: NewStack(
-				values.NewBoolean(true),
-			),
-			op: NewOperationBranchOnFalseOffsetImmediate(2),
-			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 1)
-			},
-		},
-		{
-			evals: NewStack(
-				values.NewBoolean(true),
-			),
-			op: NewOperationBranchOnNotFalseOffsetImmediate(2),
-			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 2)
-			},
-		},
-		{
-			evals: NewStack(
-				values.NewBoolean(false),
-			),
-			op: NewOperationBranchOnNotFalseOffsetImmediate(2),
-			checkFn: func(t *testing.T, mc *MachineContext) {
-				qt.Assert(t, mc.pc, qt.Equals, 1)
 			},
 		},
 		{
@@ -330,15 +275,6 @@ func TestOperationValueMethods(t *testing.T) {
 		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 	})
 
-	// Test PopAll
-	t.Run("PopAll", func(t *testing.T) {
-		op1 := NewOperationPopAll()
-		op2 := NewOperationPopAll()
-		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
-		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-	})
-
 	// Test Pull
 	t.Run("Pull", func(t *testing.T) {
 		op1 := NewOperationPull()
@@ -353,28 +289,6 @@ func TestOperationValueMethods(t *testing.T) {
 		op1 := NewOperationBranchOffsetImmediate(5)
 		op2 := NewOperationBranchOffsetImmediate(5)
 		op3 := NewOperationBranchOffsetImmediate(10)
-		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
-		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-		qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
-		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-	})
-
-	// Test BranchOnFalseOffsetImmediate
-	t.Run("BranchOnFalseOffsetImmediate", func(t *testing.T) {
-		op1 := NewOperationBranchOnFalseOffsetImmediate(5)
-		op2 := NewOperationBranchOnFalseOffsetImmediate(5)
-		op3 := NewOperationBranchOnFalseOffsetImmediate(10)
-		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
-		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-		qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
-		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-	})
-
-	// Test BranchOnNotFalseOffsetImmediate
-	t.Run("BranchOnNotFalseOffsetImmediate", func(t *testing.T) {
-		op1 := NewOperationBranchOnNotFalseOffsetImmediate(5)
-		op2 := NewOperationBranchOnNotFalseOffsetImmediate(5)
-		op3 := NewOperationBranchOnNotFalseOffsetImmediate(10)
 		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
 		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
 		qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
@@ -711,23 +625,6 @@ func TestOperationBranchMethods(t *testing.T) {
 	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
 }
 
-// TestOperationBranchOnFalseMethods tests BranchOnFalse operation methods
-func TestOperationBranchOnFalseMethods(t *testing.T) {
-	op := NewOperationBranchOnFalseOffsetImmediate(10)
-	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// Test EqualTo
-	op2 := NewOperationBranchOnFalseOffsetImmediate(10)
-	op3 := NewOperationBranchOnFalseOffsetImmediate(20)
-	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
-	qt.Assert(t, op.EqualTo(op3), qt.IsFalse)
-
-	var nilOp *OperationBranchOnFalseOffsetImmediate
-	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
-}
-
 // TestOperationLoadVoidMethods tests LoadVoid operation methods
 func TestOperationLoadVoidMethods(t *testing.T) {
 	op := NewOperationLoadVoid()
@@ -758,17 +655,6 @@ func TestOperationApplyMethods(t *testing.T) {
 
 	// Test EqualTo
 	op2 := NewOperationApply()
-	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
-}
-
-// TestOperationBranchOnNotFalseMethods tests BranchOnNotFalse operation methods
-func TestOperationBranchOnNotFalseMethods(t *testing.T) {
-	op := NewOperationBranchOnNotFalseOffsetImmediate(10)
-	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// Test EqualTo
-	op2 := NewOperationBranchOnNotFalseOffsetImmediate(10)
 	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
 }
 
@@ -827,48 +713,6 @@ func TestOperationMakeCaseLambdaClosureMethods(t *testing.T) {
 
 	op3 := NewOperationMakeCaseLambdaClosure(3)
 	qt.Assert(t, op.EqualTo(op3), qt.IsFalse)
-}
-
-// TestOperationPopAllMethods tests OperationPopAll methods
-func TestOperationPopAllMethods(t *testing.T) {
-	op := NewOperationPopAll()
-	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// Test EqualTo - same operation type
-	op2 := NewOperationPopAll()
-	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
-}
-
-// TestOperationLoadLiteralIntegerMethods tests OperationLoadLiteralInteger methods
-func TestOperationLoadLiteralIntegerMethods(t *testing.T) {
-	op := NewOperationLoadLiteralInteger(42)
-	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// Test EqualTo - same value
-	op2 := NewOperationLoadLiteralInteger(42)
-	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
-
-	// Different value
-	op3 := NewOperationLoadLiteralInteger(99)
-	qt.Assert(t, op.EqualTo(op3), qt.IsFalse)
-
-	// Different type
-	qt.Assert(t, op.EqualTo(values.NewInteger(42)), qt.IsFalse)
-}
-
-// TestOperationBrkMethods tests OperationBrk methods
-func TestOperationBrkMethods(t *testing.T) {
-	fn := func(ctx context.Context, mc *MachineContext) error {
-		return nil
-	}
-	op := NewOperationBrk(fn)
-	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-
-	// EqualTo - same operation
-	qt.Assert(t, op.EqualTo(op), qt.IsTrue)
 }
 
 // TestNativeTemplateOperationsArray tests NativeTemplate operations
@@ -998,15 +842,6 @@ func TestOperationBranchMethodsExtra(t *testing.T) {
 	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
 }
 
-// TestOperationBranchOnFalseMethodsExtra tests OperationBranchOnFalse extra methods
-func TestOperationBranchOnFalseMethodsExtra(t *testing.T) {
-	op := NewOperationBranchOnFalseOffsetImmediate(5)
-
-	// Nil check
-	var nilOp *OperationBranchOnFalseOffsetImmediate
-	qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-}
-
 // TestOperationSaveContinuationMethodsExtra tests OperationSaveContinuation extra methods
 func TestOperationSaveContinuationMethodsExtra(t *testing.T) {
 	op := NewOperationSaveContinuationOffsetImmediate(3)
@@ -1105,18 +940,6 @@ func TestOperationSyntaxRulesTransformApply(t *testing.T) {
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
 	qt.Assert(t, op.EqualTo(NewOperationSyntaxRulesTransform()), qt.IsTrue)
 	qt.Assert(t, op.EqualTo(values.NewInteger(1)), qt.IsFalse)
-}
-
-// TestOperationBranchOnFalseEqualTo tests branch on false equality
-func TestOperationBranchOnFalseEqualTo(t *testing.T) {
-	op1 := NewOperationBranchOnFalseOffsetImmediate(5)
-	op2 := NewOperationBranchOnFalseOffsetImmediate(5)
-	op3 := NewOperationBranchOnFalseOffsetImmediate(10)
-
-	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
-	qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
-
-	qt.Assert(t, op1.IsVoid(), qt.IsFalse)
 }
 
 // TestOperationSaveContinuationEqualToAdditional tests additional save continuation paths

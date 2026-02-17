@@ -32,7 +32,7 @@ import (
 //   - singleValue: holds the result when exactly one value is produced.
 //     Setting it requires no allocation (just an interface assignment).
 //   - multiValues: non-nil only when multiple values are in play
-//     (OperationPopAll, SetValues with len > 1).
+//     (SetValues with len > 1, R7RS values primitive).
 //
 // Invariant: at most one of the two fields is "active" at any time.
 // When multiValues != nil it is authoritative; otherwise singleValue is.
@@ -40,6 +40,7 @@ import (
 //
 // This eliminated ~20% of all allocations in call-heavy benchmarks by
 // removing the []values.Value{v} slice that every operation previously created.
+// See BIBLIOGRAPHY.md "Split Value Register".
 //
 // IMPORTANT: The fields are NOT uniformly copied by save/restore operations.
 // The table below summarizes how each method (SaveContinuation, Restore,
