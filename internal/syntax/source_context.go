@@ -222,13 +222,13 @@ func FormatOriginChain(origin *OriginInfo, maxDepth int) string {
 		depth++
 		if maxDepth > 0 && depth > maxDepth {
 			remaining := origin.Depth() - maxDepth
-			result.WriteString(fmt.Sprintf("\n  ... and %d more expansion(s)", remaining))
+			fmt.Fprintf(&result, "\n  ... and %d more expansion(s)", remaining)
 			break
 		}
-		result.WriteString(fmt.Sprintf("\n  expanded from '%s'", o.Identifier))
+		fmt.Fprintf(&result, "\n  expanded from '%s'", o.Identifier)
 		if o.Location != nil && o.Location.File != "" {
-			result.WriteString(fmt.Sprintf(" at %s:%d:%d",
-				o.Location.File, o.Location.Start.Line(), o.Location.Start.Column()))
+			fmt.Fprintf(&result, " at %s:%d:%d",
+				o.Location.File, o.Location.Start.Line(), o.Location.Start.Column())
 		}
 	}
 	return result.String()

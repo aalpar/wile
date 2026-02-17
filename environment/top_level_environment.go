@@ -15,12 +15,19 @@
 package environment
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
+
+// LibraryEnvFactory creates a fresh environment for an R7RS library.
+// The returned environment must share the caller's TopLevelEnvironment
+// for symbol interning (R7RS §6.5 symbol identity), but have isolated
+// bindings so library definitions don't leak.
+type LibraryEnvFactory func(context.Context, *EnvironmentFrame) (*EnvironmentFrame, error)
 
 var _ values.Value = (*TopLevelEnvironment)(nil)
 
@@ -67,6 +74,11 @@ type TopLevelEnvironment struct {
 	// Stored as any to avoid circular dependency with machine package.
 	// TODO: consider defining an interface for library registries.
 	libraryRegistry any
+
+	// libraryEnvFactory creates isolated library environments during
+	// R7RS library loading. Per-instance (not global) so multiple engines
+	// don't race on a shared function pointer.
+	libraryEnvFactory LibraryEnvFactory
 
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
@@ -219,6 +231,17 @@ func (p *TopLevelEnvironment) LibraryRegistry() any {
 // The registry should be a *machine.LibraryRegistry.
 func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
 	p.libraryRegistry = registry
+}
+
+// LibraryEnvFactory returns the factory for creating library environments.
+// Returns nil if no factory has been set.
+func (p *TopLevelEnvironment) LibraryEnvFactory() LibraryEnvFactory {
+	return p.libraryEnvFactory
+}
+
+// SetLibraryEnvFactory sets the factory for creating library environments.
+func (p *TopLevelEnvironment) SetLibraryEnvFactory(f LibraryEnvFactory) {
+	p.libraryEnvFactory = f
 }
 
 // LoadPathStack returns the load path stack for tracking files currently
@@ -376,8 +399,9 @@ func (p *TopLevelEnvironment) LoadPathStack() *LoadPathStack {
 // TODO: review for optimization/refactoring opportunities
 func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment {
 	q := &TopLevelEnvironment{
-		libraryRegistry: p.libraryRegistry,
-		parent:          p,
+		libraryRegistry:   p.libraryRegistry,
+		libraryEnvFactory: p.libraryEnvFactory,
+		parent:            p,
 	}
 
 	// Create the runtime (phase 0) environment frame

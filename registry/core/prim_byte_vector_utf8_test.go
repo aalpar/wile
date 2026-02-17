@@ -110,7 +110,7 @@ func TestStringToUtf8CharacterIndices(t *testing.T) {
 				if i > 0 {
 					gotHex.WriteString(" ")
 				}
-				gotHex.WriteString(fmt.Sprintf("%02x", (*bv)[i].Value))
+				fmt.Fprintf(&gotHex, "%02x", (*bv)[i].Value)
 			}
 
 			c.Assert(gotHex.String(), qt.Equals, tc.wantHex,
@@ -173,7 +173,7 @@ func TestStringToUtf8EdgeCases(t *testing.T) {
 				if i > 0 {
 					gotHex.WriteString(" ")
 				}
-				gotHex.WriteString(fmt.Sprintf("%02x", (*bv)[i].Value))
+				fmt.Fprintf(&gotHex, "%02x", (*bv)[i].Value)
 			}
 
 			c.Assert(gotHex.String(), qt.Equals, tc.wantHex)

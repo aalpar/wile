@@ -308,10 +308,9 @@ func main() {
    `RegisterFunc`/`RegisterFuncs` go directly to the top-level environment
    and are not wrapped in a library.
 
-4. **`LibraryEnvFactory` is a package-level global.** Multiple engines
-   overwrite each other's factory. This is a known limitation — each engine
-   should be the only one using the library system, or engines should be
-   created sequentially.
+4. **`LibraryEnvFactory` is per-`TopLevelEnvironment`.** Each engine stores
+   its own factory via `SetLibraryEnvFactory`, so multiple engines can coexist
+   safely without race conditions.
 
 5. **Extensions with only compile-time bindings produce no library.** If an
    extension registers no `PhaseRuntime` primitives, no library is created

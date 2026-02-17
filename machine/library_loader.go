@@ -37,13 +37,6 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// LibraryEnvFactory is a function that creates a new environment for a library.
-// This avoids import cycles between machine and runtime packages.
-// The function should return a fresh environment with primitives registered,
-// but MUST share the TopLevelEnvironment with callerEnv to ensure symbol identity.
-// R7RS §6.5: (eq? 'bindSymbolWithScopes (string->symbol "bindSymbolWithScopes")) must be #t.
-var LibraryEnvFactory func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error)
-
 // LoadLibrary loads a library by name, compiling and executing it if not already loaded.
 // Returns the CompiledLibrary which can be used to import bindings.
 //
@@ -130,10 +123,11 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// Create a fresh environment for the library
 	// This isolates the library's bindings from the caller's environment,
 	// but shares the TopLevelEnvironment for symbol interning.
-	if LibraryEnvFactory == nil {
+	factory := callerEnv.TopLevelEnv().LibraryEnvFactory()
+	if factory == nil {
 		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
 	}
-	libEnv, err := LibraryEnvFactory(ctx, callerEnv)
+	libEnv, err := factory(ctx, callerEnv)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "could not create library environment")
 	}

@@ -298,14 +298,14 @@ func TestCompileExport_TopLevelError(t *testing.T) {
 func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
-	// Set up the factory for creating library environments
-	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
-
 	// Create the top-level environment
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
+
+	// Set up the factory for creating library environments
+	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Create and configure the library registry
 	registry := machine.NewLibraryRegistry()
@@ -739,10 +739,9 @@ func TestLibraryForwardReferences(t *testing.T) {
 	`
 
 	// Set up environment with library registry
-	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
-	defer func() { machine.LibraryEnvFactory = nil }()
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
+	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Set up library registry
 	registry := machine.NewLibraryRegistry()

@@ -711,7 +711,7 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 		var header strings.Builder
 		header.WriteString("Receiver\\Operand")
 		for _, n := range numbers {
-			header.WriteString(fmt.Sprintf("\t%s", n.name[:3]))
+			fmt.Fprintf(&header, "\t%s", n.name[:3])
 		}
 		t.Log(header.String())
 
@@ -740,7 +740,7 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 	var header strings.Builder
 	header.WriteString("Receiver\\Operand")
 	for _, n := range numbers {
-		header.WriteString(fmt.Sprintf("\t%s", n.name[:3]))
+		fmt.Fprintf(&header, "\t%s", n.name[:3])
 	}
 	t.Log(header.String())
 
