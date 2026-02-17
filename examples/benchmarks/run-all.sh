@@ -19,6 +19,13 @@ if [ -L "$SCHEME" ]; then
     SCHEME="$SCHEME_DIR/$SCHEME_TARGET"
 fi
 
+# Resolve SCHEME to absolute path before changing directory
+SCHEME="$(cd "$(dirname "$SCHEME")" && pwd)/$(basename "$SCHEME")"
+
+# Run from the directory containing the benchmark files
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 if [ ! -x "$SCHEME" ]; then
     echo "Error: Scheme binary not executable: $SCHEME"
     exit 1
