@@ -14,7 +14,10 @@
 
 package machine
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // stackPool recycles Stack allocations. Stacks are created on every
 // non-tail call (SaveContinuation) and discarded on return (Restore).
@@ -74,6 +77,20 @@ func ReleaseSubContext(mc *MachineContext) {
 	releaseStack(mc.evals)
 	*mc = MachineContext{}
 	subContextPool.Put(mc)
+}
+
+// acquireMacroContext returns a pooled MachineContext initialized for running
+// a macro transformer closure. Callers must defer ReleaseSubContext(mc).
+//
+// This replaces NewMachineContextFromMachineClosure for the two macro expansion
+// call sites, eliminating the intermediate MachineContinuation allocation.
+func acquireMacroContext(ctx context.Context, cls *MachineClosure) *MachineContext {
+	mc := acquireSubContext()
+	mc.ctx = ctx
+	mc.env = cls.env
+	mc.template = cls.template
+	mc.evals = acquireStack()
+	return mc
 }
 
 // continuationPool recycles MachineContinuation frames. Frames are created

@@ -1286,11 +1286,9 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "not a machine closure: %T", bnd.Value())
 	}
-	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(ctx, mcls)
-	if mc == nil {
-		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "failed to create machine context from closure")
-	}
+	// Acquire a pooled machine context for the macro transformer.
+	mc := acquireMacroContext(ctx, mcls)
+	defer ReleaseSubContext(mc)
 
 	// Set the expander context so the transformer can access the use-site environment.
 	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
@@ -1386,11 +1384,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "not a machine closure: %T", bnd.Value())
 	}
 
-	// Create a machine context from the closure
-	mc := NewMachineContextFromMachineClosure(ctx, mcls)
-	if mc == nil {
-		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "failed to create machine context from closure")
-	}
+	// Acquire a pooled machine context for the macro transformer.
+	mc := acquireMacroContext(ctx, mcls)
+	defer ReleaseSubContext(mc)
 
 	// Build the input form
 	var cdr syntax.SyntaxValue

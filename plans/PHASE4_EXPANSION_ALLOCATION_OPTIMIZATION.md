@@ -67,6 +67,31 @@ Free identifiers are returned unchanged by design (they skip the intro scope), s
 - For a 50-node tree with 15 symbols: drops from ~35 pair allocs to ~10-15 (only pairs on the path to a changed symbol are reallocated).
 - Macros with many free IDs (e.g., `cond` with `else`, `=>`, `if`, `begin`) see 60-80% fewer pair allocs in template expansion via `addScopeToPairSkipFreeIds`.
 
+### 4.4: Expander MachineContext Pooling
+
+**Files:** `machine/pool.go`, `machine/expander_time_continuation.go`, `machine/pool_test.go`
+
+The two macro expansion call sites (`expandMacroInvocation` and `ExpandOnce`) previously allocated a fresh `MachineContext` via `NewMachineContextFromMachineClosure`, which internally created an intermediate `MachineContinuation` (with a `Stack`) that was immediately unpacked and discarded. This created 3 allocations per macro invocation: `MachineContext` + `MachineContinuation` + `Stack`.
+
+New `acquireMacroContext(ctx, cls)` pulls a zeroed `MachineContext` from the existing `subContextPool` and a `Stack` from `stackPool`, sets only the 4 fields needed (`ctx`, `env`, `template`, `evals`), and eliminates the intermediate `MachineContinuation` entirely. Callers use `defer ReleaseSubContext(mc)` for cleanup.
+
+```go
+func acquireMacroContext(ctx context.Context, cls *MachineClosure) *MachineContext {
+    mc := acquireSubContext()
+    mc.ctx = ctx
+    mc.env = cls.env
+    mc.template = cls.template
+    mc.evals = acquireStack()
+    return mc
+}
+```
+
+Safe because: (1) transformer runs in isolation (single `Apply` + `Run`, result extracted, released), (2) result is a syntax tree with no MachineContext references, (3) `defer` handles all error paths, (4) uses the same pool infrastructure proven in Phase 2.
+
+The dead nil checks at both call sites were removed — neither `NewMachineContextFromMachineClosure` nor pool acquisition ever returned nil.
+
+`NewMachineContextFromMachineClosure` is retained (used in tests, may be useful for non-pooled top-level contexts).
+
 ## Remaining Sub-Phases
 
 ### 4.3: `SourceContext.WithScope` Idempotency ✅
@@ -90,10 +115,6 @@ This is the missing link that lets 4.1/4.2's structural sharing cascade from lea
 - `TestStructuralSharing_CascadesFromIdempotentSymbols` — pair of pre-scoped symbols returns same pointer
 - `TestStructuralSharing_CascadesNestedPairs` — nested pairs cascade
 - `TestStructuralSharing_PartialChange` — mixed: unchanged car reused, changed cdr allocated
-
-### 4.4: Expander MachineContext Pooling
-
-Pool `MachineContext` instances for macro invocation lifecycle. Each macro invocation currently allocates a fresh sub-context. Independent of 4.1-4.3, but should be measured after those are in place to establish the remaining allocation baseline.
 
 ## Verification
 
