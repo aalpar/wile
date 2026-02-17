@@ -166,7 +166,7 @@ The `NewChildRuntime` method creates an environment that:
 
 ## Library Environment Factory
 
-The `machine.LibraryEnvFactory` function creates environments for R7RS libraries. It must share the caller's `TopLevelEnvironment`:
+The `LibraryEnvFactory` field on `TopLevelEnvironment` creates environments for R7RS libraries. It must share the caller's `TopLevelEnvironment`:
 
 ```go
 // In internal/bootstrap/environment_tiny.go
@@ -187,7 +187,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 }
 
 // In main.go or engine setup
-machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
+env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 ```
 
 ---
@@ -216,7 +216,7 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     env.SetLibraryRegistry(registry)
 
     // Configure library environment factory (shares TopLevelEnvironment)
-    machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
+    env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
     return env, nil
 }
@@ -236,8 +236,7 @@ func TestSomething(t *testing.T) {
     }
 
     // For tests involving libraries
-    machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
-    defer func() { machine.LibraryEnvFactory = nil }()
+    env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 }
 ```
 
@@ -275,7 +274,7 @@ These invariants must be maintained:
    - Always create environments properly
 
 3. **Libraries share TopLevelEnvironment with caller**
-   - `LibraryEnvFactory` must use caller's TopLevelEnvironment
+   - `TopLevelEnvironment.LibraryEnvFactory()` must use caller's TopLevelEnvironment
    - Failure breaks `(eq? 'foo (string->symbol "foo"))` per R7RS §6.5
 
 4. **Phase environments share TopLevelEnvironment**

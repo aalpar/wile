@@ -179,8 +179,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		// LibraryEnvFactory creates isolated library environments that mirror
 		// this engine's configuration — same registry, same macros.
-		// NOTE: package-level global; multiple engines overwrite each other.
-		machine.LibraryEnvFactory = func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
 			callerTopLevel := callerEnv.TopLevelEnv()
 			if callerTopLevel == nil {
 				return nil, &Error{Message: "library env factory: caller has no TopLevelEnvironment"}
@@ -209,7 +208,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 			}
 
 			return libEnv, nil
-		}
+		})
 	}
 
 	// Collect closeable extensions for Engine.Close()

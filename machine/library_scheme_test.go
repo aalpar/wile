@@ -43,14 +43,14 @@ func getSchemeLibPath() string {
 func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
-	// Set up the factory for creating library environments
-	machine.LibraryEnvFactory = bootstrap.NewLibraryEnvironmentFrame
-
 	// Create the top-level environment
 	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
+
+	// Set up the factory for creating library environments
+	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Create and configure the library registry with the scheme lib path
 	registry := machine.NewLibraryRegistry()
@@ -239,7 +239,6 @@ func TestSchemeLibraryImportsWithUsage(t *testing.T) {
 func TestLibraryInternalMacroHygiene(t *testing.T) {
 	c := qt.New(t)
 	env := setupSchemeLibraryTest(t)
-	defer func() { machine.LibraryEnvFactory = nil }()
 
 	// Step 1: Compile and execute a library with a non-exported helper
 	// and a macro that references it. We replicate what loadLibraryFromFile
