@@ -86,12 +86,16 @@ func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *Syn
 // scope. A user's "tmp" at the call site doesn't have this scope, so they're
 // distinguished during variable resolution (see ScopesMatch in scope_utils.go).
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
+	newCtx := p.sourceContext.WithScope(scope)
+	if newCtx == p.sourceContext {
+		return p
+	}
 	return &SyntaxSymbol{
 		Sym: p.Sym,
 		syntaxBase: syntaxBase{
-			sourceContext: p.sourceContext.WithScope(scope),
+			sourceContext: newCtx,
 		},
-		ResolvedBinding: p.ResolvedBinding, // Preserve resolved binding
+		ResolvedBinding: p.ResolvedBinding,
 	}
 }
 

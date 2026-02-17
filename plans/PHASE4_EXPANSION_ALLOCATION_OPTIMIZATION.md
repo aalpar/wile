@@ -1,6 +1,6 @@
 # Phase 4: Expansion Allocation Optimization
 
-**Status:** Sub-phases 4.1 and 4.2 complete. Sub-phases 4.3, 4.4 remaining.
+**Status:** Sub-phases 4.1, 4.2, and 4.3 complete. Sub-phase 4.4 remaining.
 
 ## What Was Implemented (4.1 + 4.2)
 
@@ -69,9 +69,27 @@ Free identifiers are returned unchanged by design (they skip the intro scope), s
 
 ## Remaining Sub-Phases
 
-### 4.3: `SourceContext.WithScope` Idempotency
+### 4.3: `SourceContext.WithScope` Idempotency ✅
 
-Early return from `WithScope` if the scope is already present in the scope set. Independent of 4.1/4.2. Would reduce allocation further for cases where the same scope is added multiple times (e.g., re-expansion).
+**Files:** `internal/syntax/source_context.go`, `internal/syntax/syntax_symbol.go`
+
+Made `WithScope` and `WithScopes` idempotent: they return the receiver unchanged when the scope(s) are already present. Propagated this through `SyntaxSymbol.AddScope`, which now checks pointer identity on the returned `*SourceContext` and returns `p` when unchanged.
+
+This is the missing link that lets 4.1/4.2's structural sharing cascade from leaves to the root. Previously, `WithScope` always allocated a new `SourceContext` + scope slice, so `SyntaxSymbol.AddScope` always returned a new symbol, which prevented `mapSyntaxTree`'s identity check from succeeding on any pair containing symbols.
+
+**Changes:**
+- `WithScope`: `slices.Contains` check before allocation — returns `p` if scope already present
+- `WithScopes`: loop checking all scopes present — returns `p` if all are
+- `SyntaxSymbol.AddScope`: compares `WithScope` result pointer; returns `p` if unchanged
+
+**Tests** (in `internal/syntax/coverage_test.go`):
+- `TestWithScope_Idempotent` — same pointer on duplicate scope, new pointer on novel scope
+- `TestWithScopes_Idempotent` — all-present, subset, and mixed cases
+- `TestSyntaxSymbol_AddScope_Idempotent` — symbol pointer identity
+- `TestSyntaxSymbol_AddScope_Idempotent_PreservesResolvedBinding` — idempotency with ResolvedBinding set
+- `TestStructuralSharing_CascadesFromIdempotentSymbols` — pair of pre-scoped symbols returns same pointer
+- `TestStructuralSharing_CascadesNestedPairs` — nested pairs cascade
+- `TestStructuralSharing_PartialChange` — mixed: unchanged car reused, changed cdr allocated
 
 ### 4.4: Expander MachineContext Pooling
 
