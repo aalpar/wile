@@ -121,19 +121,14 @@ func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
 // (list? #'()) => #f, (list? '()) => #t
 func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	// Check for values.EmptyList specifically (not syntax empty list)
-	if o == values.EmptyList {
-		mc.SetValue(values.TrueValue)
-		return nil
-	}
-	// Check runtime list types only (not syntax pairs).
+	// Runtime list types only — not syntax pairs.
 	switch t := o.(type) {
 	case *values.Pair:
 		mc.SetValue(values.BoolToBoolean(t.IsList()))
 	case *values.ArrayList:
 		mc.SetValue(values.BoolToBoolean(t.IsList()))
 	default:
-		mc.SetValue(values.FalseValue)
+		mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
 	}
 	return nil
 }
