@@ -73,7 +73,7 @@ func (p *ValidationResult) Error() string {
 		return p.Errors[0].Error()
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%d validation errors:\n", len(p.Errors)))
+	fmt.Fprintf(&sb, "%d validation errors:\n", len(p.Errors))
 	for _, e := range p.Errors {
 		sb.WriteString("  ")
 		sb.WriteString(e.Error())
