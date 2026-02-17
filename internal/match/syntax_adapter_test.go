@@ -79,7 +79,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			syntax.NewSyntaxSymbol("define", srcCtx),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxObject(values.NewInteger(42), srcCtx),
-				syntax.NewSyntaxEmptyList(srcCtx),
+				syntax.SyntaxEmptyList,
 				srcCtx,
 			),
 			srcCtx,
@@ -132,7 +132,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			syntax.NewSyntaxSymbol("define", srcCtx),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxSymbol("foo", srcCtx),
-				syntax.NewSyntaxEmptyList(srcCtx),
+				syntax.SyntaxEmptyList,
 				srcCtx,
 			),
 			srcCtx,
@@ -160,7 +160,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			syntax.NewSyntaxSymbol("define", srcCtx),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxSymbol("x", srcCtx),
-				syntax.NewSyntaxEmptyList(srcCtx),
+				syntax.SyntaxEmptyList,
 				srcCtx,
 			),
 			srcCtx,
@@ -184,7 +184,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 				syntax.NewSyntaxSymbol("x", srcCtx),
 				syntax.NewSyntaxCons(
 					syntax.NewSyntaxSymbol("...", srcCtx),
-					syntax.NewSyntaxEmptyList(srcCtx),
+					syntax.SyntaxEmptyList,
 					srcCtx,
 				),
 				srcCtx,
@@ -251,7 +251,7 @@ func TestExpandWithUseSite(t *testing.T) {
 		syntax.NewSyntaxSymbol("macro", useSiteSc),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), useSiteSc),
-			syntax.NewSyntaxEmptyList(useSiteSc),
+			syntax.SyntaxEmptyList,
 			useSiteSc,
 		),
 		useSiteSc,
@@ -272,17 +272,17 @@ func TestExpandWithUseSite(t *testing.T) {
 					syntax.NewSyntaxSymbol("tmp", templateSc),
 					syntax.NewSyntaxCons(
 						syntax.NewSyntaxSymbol("x", templateSc),
-						syntax.NewSyntaxEmptyList(templateSc),
+						syntax.SyntaxEmptyList,
 						templateSc,
 					),
 					templateSc,
 				),
-				syntax.NewSyntaxEmptyList(templateSc),
+				syntax.SyntaxEmptyList,
 				templateSc,
 			),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxSymbol("tmp", templateSc),
-				syntax.NewSyntaxEmptyList(templateSc),
+				syntax.SyntaxEmptyList,
 				templateSc,
 			),
 			templateSc,
@@ -341,7 +341,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 		syntax.NewSyntaxSymbol("test", inputSc),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("val", capturedSc), // This should be preserved
-			syntax.NewSyntaxEmptyList(inputSc),
+			syntax.SyntaxEmptyList,
 			inputSc,
 		),
 		inputSc,
@@ -387,7 +387,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(6, 6, 1))
 	input := syntax.NewSyntaxCons(
 		syntax.NewSyntaxSymbol("test", inputSc),
-		syntax.NewSyntaxEmptyList(inputSc),
+		syntax.SyntaxEmptyList,
 		inputSc,
 	)
 
@@ -427,7 +427,7 @@ func TestExpandWithOrigin(t *testing.T) {
 		syntax.NewSourceIndexes(0, 0, 5), syntax.NewSourceIndexes(10, 10, 5))
 	input := syntax.NewSyntaxCons(
 		syntax.NewSyntaxSymbol("test", inputSc),
-		syntax.NewSyntaxEmptyList(inputSc),
+		syntax.SyntaxEmptyList,
 		inputSc,
 	)
 
@@ -474,7 +474,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 		syntax.NewSourceIndexes(0, 0, 10), syntax.NewSourceIndexes(13, 13, 10))
 	input := syntax.NewSyntaxCons(
 		syntax.NewSyntaxSymbol("test", inputSc),
-		syntax.NewSyntaxEmptyList(inputSc),
+		syntax.SyntaxEmptyList,
 		inputSc,
 	)
 
@@ -570,7 +570,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			syntax.NewSyntaxSymbol("macro", nil),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxObject(values.NewInteger(42), nil),
-				syntax.NewSyntaxEmptyList(nil),
+				syntax.SyntaxEmptyList,
 				nil,
 			),
 			nil,
@@ -609,7 +609,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			syntax.NewSyntaxSymbol("macro", nil),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxObject(values.NewInteger(7), nil),
-				syntax.NewSyntaxEmptyList(nil),
+				syntax.SyntaxEmptyList,
 				nil,
 			),
 			nil,
@@ -645,7 +645,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 				syntax.NewSyntaxSymbol("x", nil),
 				syntax.NewSyntaxCons(
 					syntax.NewSyntaxSymbol("...", nil),
-					syntax.NewSyntaxEmptyList(nil),
+					syntax.SyntaxEmptyList,
 					nil,
 				),
 				nil,
@@ -698,7 +698,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			syntax.NewSyntaxSymbol("macro", nil),
 			syntax.NewSyntaxCons(
 				syntax.NewSyntaxObject(values.NewInteger(42), nil),
-				syntax.NewSyntaxEmptyList(nil),
+				syntax.SyntaxEmptyList,
 				nil,
 			),
 			nil,
@@ -752,7 +752,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 		syntax.NewSyntaxSymbol("test", inputSc),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(42), valueSc),
-			syntax.NewSyntaxEmptyList(inputSc),
+			syntax.SyntaxEmptyList,
 			inputSc,
 		),
 		inputSc,

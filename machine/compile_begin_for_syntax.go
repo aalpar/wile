@@ -37,15 +37,13 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	}
 
 	// expr is (expr ...) - the expressions after 'begin-for-syntax'
+	if syntax.IsSyntaxEmptyList(expr) {
+		// No expressions - nothing to do
+		return nil
+	}
 	exprPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "begin-for-syntax: expected expressions")
-	}
-
-	// Handle empty begin-for-syntax
-	if syntax.IsSyntaxEmptyList(exprPair) {
-		// No expressions - nothing to do
-		return nil
 	}
 
 	// Get expand phase environment for execution

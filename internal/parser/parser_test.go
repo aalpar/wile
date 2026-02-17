@@ -142,13 +142,7 @@ func TestParser_Read(t *testing.T) {
 							syntax.NewSourceIndexes(6, 6, 0),
 						),
 					),
-					syntax.NewSyntaxEmptyList(
-						syntax.NewSourceContext(
-							"'", "",
-							syntax.NewSourceIndexes(0, 0, 0),
-							syntax.NewSourceIndexes(1, 1, 0),
-						),
-					),
+					syntax.SyntaxEmptyList,
 					syntax.NewSourceContext(
 						"'", "",
 						syntax.NewSourceIndexes(0, 0, 0),
@@ -189,13 +183,7 @@ func TestParser_Read(t *testing.T) {
 								syntax.NewSourceIndexes(8, 8, 0),
 							),
 						),
-						syntax.NewSyntaxEmptyList(
-							syntax.NewSourceContext(
-								"'", "",
-								syntax.NewSourceIndexes(2, 2, 0),
-								syntax.NewSourceIndexes(3, 3, 0),
-							),
-						),
+						syntax.SyntaxEmptyList,
 						syntax.NewSourceContext(
 							"'", "",
 							syntax.NewSourceIndexes(2, 2, 0),
@@ -208,13 +196,7 @@ func TestParser_Read(t *testing.T) {
 						syntax.NewSourceIndexes(3, 3, 0),
 					),
 				),
-				syntax.NewSyntaxEmptyList(
-					syntax.NewSourceContext(
-						")", "",
-						syntax.NewSourceIndexes(9, 9, 0),
-						syntax.NewSourceIndexes(10, 10, 0),
-					),
-				),
+				syntax.SyntaxEmptyList,
 				syntax.NewSourceContext(
 					"(", "",
 					syntax.NewSourceIndexes(0, 0, 0),
@@ -386,12 +368,7 @@ func TestParser_Read(t *testing.T) {
 								syntax.NewSourceIndexes(11, 11, 0),
 							),
 						),
-						syntax.NewSyntaxEmptyList(
-							syntax.NewSourceContext(")", "",
-								syntax.NewSourceIndexes(12, 12, 0),
-								syntax.NewSourceIndexes(13, 13, 0),
-							),
-						),
+						syntax.SyntaxEmptyList,
 						syntax.NewSourceContext("20", "",
 							syntax.NewSourceIndexes(9, 9, 0),
 							syntax.NewSourceIndexes(11, 11, 0),
@@ -479,12 +456,7 @@ func TestParser_Read(t *testing.T) {
 											syntax.NewSourceIndexes(21, 21, 0),
 										),
 									),
-									syntax.NewSyntaxEmptyList(
-										syntax.NewSourceContext(")", "",
-											syntax.NewSourceIndexes(22, 22, 0),
-											syntax.NewSourceIndexes(23, 23, 0),
-										),
-									),
+									syntax.SyntaxEmptyList,
 									syntax.NewSourceContext("a", "",
 										syntax.NewSourceIndexes(12, 12, 0),
 										syntax.NewSourceIndexes(13, 13, 0),
@@ -909,12 +881,7 @@ func TestParser_CommentsFollowedByCode(t *testing.T) {
 								"",
 								syntax.NewSourceIndexes(0, 0, 0),
 								syntax.NewSourceIndexes(0, 0, 0))),
-						syntax.NewSyntaxEmptyList(
-							syntax.NewSourceContext(
-								"",
-								"",
-								syntax.NewSourceIndexes(0, 0, 0),
-								syntax.NewSourceIndexes(0, 0, 0))),
+						syntax.SyntaxEmptyList,
 						syntax.NewSourceContext(
 							"",
 							"",

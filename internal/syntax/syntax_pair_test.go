@@ -29,10 +29,10 @@ func TestSyntaxPair_SchemeString(t *testing.T) {
 	}{
 		{nil, "#<syntax-void>"},
 		{NewSyntaxCons(nil, nil, nil), "#'()"},
-		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxEmptyList(nil), nil), nil), "#'(#'1 #'2)"},
-		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(3), nil), NewSyntaxEmptyList(nil), nil), nil), nil), "#'(#'1 #'2 #'3)"},
-		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxObject(values.NewInteger(2), nil), nil), NewSyntaxEmptyList(nil), nil), "#'(#'(#'1 . #'2))"},
-		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), (*SyntaxPair)(nil), nil), NewSyntaxEmptyList(nil), nil), "#'(#'(#'1 . #<syntax-void>))"},
+		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), SyntaxEmptyList, nil), nil), "#'(#'1 #'2)"},
+		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(3), nil), SyntaxEmptyList, nil), nil), nil), "#'(#'1 #'2 #'3)"},
+		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxObject(values.NewInteger(2), nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #'2))"},
+		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), (*SyntaxPair)(nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #<syntax-void>))"},
 	}
 
 	for _, tc := range tcs {
@@ -51,30 +51,30 @@ func TestSyntaxPair_EqualTo(t *testing.T) {
 	})
 
 	t.Run("same object equals itself", func(t *testing.T) {
-		p := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil)
+		p := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
 		qt.Assert(t, p.EqualTo(p), qt.IsTrue)
 	})
 
 	t.Run("different objects with same content not equal", func(t *testing.T) {
-		p1 := NewSyntaxEmptyList(nil)
-		p2 := NewSyntaxEmptyList(nil)
+		p1 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
+		p2 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
 		qt.Assert(t, p1.EqualTo(p2), qt.IsFalse)
 	})
 
 	t.Run("different objects with different content not equal", func(t *testing.T) {
-		p1 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil)
-		p2 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil)
+		p1 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
+		p2 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil)
 		qt.Assert(t, p1.EqualTo(p2), qt.IsFalse)
 	})
 
 	t.Run("nil not equal to non-nil", func(t *testing.T) {
 		var p1 *SyntaxPair
-		p2 := NewSyntaxEmptyList(nil)
+		p2 := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
 		qt.Assert(t, p1.EqualTo(p2), qt.IsFalse)
 	})
 
 	t.Run("wrong type returns false", func(t *testing.T) {
-		p := NewSyntaxEmptyList(nil)
+		p := NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil)
 		qt.Assert(t, p.EqualTo(values.NewInteger(10)), qt.IsFalse)
 	})
 }
@@ -90,11 +90,10 @@ func TestSyntaxPair_IsList(t *testing.T) {
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: NewSyntaxEmptyList(nil), out: true},
-		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), out: true},
-		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxEmptyList(nil), nil), out: true},
+		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), out: true},
+		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), SyntaxEmptyList, nil), out: true},
 		// List with nested cons as first element: ((10) 20) - proper list
-		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil), nil), out: true},
+		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil), nil), out: true},
 		// Improper list: (10 20 . 30)
 		{
 			in:  NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
@@ -120,10 +119,9 @@ func TestSyntaxPair_Length(t *testing.T) {
 			panicMatches: "not a list",
 			out:          -1,
 		},
-		{in: NewSyntaxEmptyList(nil), out: 0},
-		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), out: 1},
-		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil), NewSyntaxEmptyList(nil), nil), out: 1},
-		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil), nil), out: 2},
+		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), out: 1},
+		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), SyntaxEmptyList, nil), out: 1},
+		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil), nil), out: 2},
 		{
 			in:           NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
 			panicMatches: "not a list",
@@ -169,13 +167,8 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 			out:  nil,
 		},
 		{
-			name: "empty list returns empty vector",
-			in:   NewSyntaxEmptyList(nil),
-			out:  values.NewVector(),
-		},
-		{
 			name: "single element list",
-			in:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
+			in:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
 			out:  values.NewVector(values.NewInteger(10)),
 		},
 		{
@@ -184,7 +177,7 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 				NewSyntaxObject(values.NewInteger(10), nil),
 				NewSyntaxCons(
 					NewSyntaxObject(values.NewInteger(20), nil),
-					NewSyntaxEmptyList(nil), nil), nil),
+					SyntaxEmptyList, nil), nil),
 			out: values.NewVector(values.NewInteger(10), values.NewInteger(20)),
 		},
 		{
@@ -195,7 +188,7 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 					NewSyntaxObject(values.NewInteger(2), nil),
 					NewSyntaxCons(
 						NewSyntaxObject(values.NewInteger(3), nil),
-						NewSyntaxEmptyList(nil), nil), nil), nil),
+						SyntaxEmptyList, nil), nil), nil),
 			out: values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
@@ -205,8 +198,8 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 					NewSyntaxObject(values.NewInteger(1), nil),
 					NewSyntaxCons(
 						NewSyntaxObject(values.NewInteger(2), nil),
-						NewSyntaxEmptyList(nil), nil), nil),
-				NewSyntaxEmptyList(nil), nil),
+						SyntaxEmptyList, nil), nil),
+				SyntaxEmptyList, nil),
 			out: values.NewVector(values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))),
 		},
 		{
@@ -217,7 +210,7 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 					NewSyntaxObject(values.NewString("hello"), nil),
 					NewSyntaxCons(
 						NewSyntaxObject(values.TrueValue, nil),
-						NewSyntaxEmptyList(nil), nil), nil), nil),
+						SyntaxEmptyList, nil), nil), nil),
 			out: values.NewVector(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
 		},
 		{
@@ -257,13 +250,8 @@ func TestSyntaxPair_AsSyntaxVector(t *testing.T) {
 			outLen: -1, // special marker for nil
 		},
 		{
-			name:   "empty list returns empty syntax vector",
-			in:     NewSyntaxEmptyList(nil),
-			outLen: 0,
-		},
-		{
 			name:   "single element list",
-			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
+			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
 			outLen: 1,
 		},
 		{
@@ -272,7 +260,7 @@ func TestSyntaxPair_AsSyntaxVector(t *testing.T) {
 				NewSyntaxObject(values.NewInteger(10), nil),
 				NewSyntaxCons(
 					NewSyntaxObject(values.NewInteger(20), nil),
-					NewSyntaxEmptyList(nil), nil), nil),
+					SyntaxEmptyList, nil), nil),
 			outLen: 2,
 		},
 		{
@@ -283,7 +271,7 @@ func TestSyntaxPair_AsSyntaxVector(t *testing.T) {
 					NewSyntaxObject(values.NewInteger(2), nil),
 					NewSyntaxCons(
 						NewSyntaxObject(values.NewInteger(3), nil),
-						NewSyntaxEmptyList(nil), nil), nil), nil),
+						SyntaxEmptyList, nil), nil), nil),
 			outLen: 3,
 		},
 		{
@@ -291,8 +279,8 @@ func TestSyntaxPair_AsSyntaxVector(t *testing.T) {
 			in: NewSyntaxCons(
 				NewSyntaxCons(
 					NewSyntaxObject(values.NewInteger(1), nil),
-					NewSyntaxEmptyList(nil), nil),
-				NewSyntaxEmptyList(nil), nil),
+					SyntaxEmptyList, nil),
+				SyntaxEmptyList, nil),
 			outLen: 1,
 		},
 		{
@@ -325,7 +313,7 @@ func TestSyntaxPair_AsSyntaxVector_PreservesSyntaxValues(t *testing.T) {
 	sc := NewSourceContext("foo", "test.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(3, 3, 1))
 	elem1 := NewSyntaxSymbol("foo", sc)
 	elem2 := NewSyntaxSymbol("bar", sc)
-	list := NewSyntaxCons(elem1, NewSyntaxCons(elem2, NewSyntaxEmptyList(sc), sc), sc)
+	list := NewSyntaxCons(elem1, NewSyntaxCons(elem2, SyntaxEmptyList, sc), sc)
 
 	vec := list.AsSyntaxVector()
 
@@ -355,46 +343,32 @@ func TestSyntaxPair_Append(t *testing.T) {
 			expect:       false,
 		},
 		{
-			name:   "4",
-			in:     NewSyntaxEmptyList(nil),
-			vs:     NewSyntaxObject(values.NewInteger(10), nil),
-			out:    NewSyntaxObject(values.NewInteger(10), nil),
-			expect: true,
-		},
-		{
 			name: "5",
-			in:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
-			vs:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil),
+			in:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
+			vs:   NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil),
 			out: NewSyntaxCons(
 				NewSyntaxObject(values.NewInteger(10), nil),
 				NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil),
-					NewSyntaxEmptyList(nil), nil), nil),
-			expect: true,
-		},
-		{
-			name:   "6",
-			in:     NewSyntaxEmptyList(nil),
-			vs:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
-			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
+					SyntaxEmptyList, nil), nil),
 			expect: true,
 		},
 		{
 			name:   "7",
-			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
-			vs:     NewSyntaxEmptyList(nil),
-			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
+			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
+			vs:     SyntaxEmptyList,
+			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
 			expect: true,
 		},
 		{
 			name:   "8",
-			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
-			vs:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil),
-			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxEmptyList(nil), nil), nil),
+			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
+			vs:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil),
+			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil), nil),
 			expect: true,
 		},
 		{
 			name:   "9",
-			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxEmptyList(nil), nil),
+			in:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil),
 			vs:     NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil),
 			out:    NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
 			expect: true,

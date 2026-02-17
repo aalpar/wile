@@ -25,7 +25,7 @@ import (
 
 // testSyntaxList builds a proper syntax list from the given elements.
 func testSyntaxList(elems ...syntax.SyntaxValue) *syntax.SyntaxPair {
-	var q syntax.SyntaxValue = syntax.NewSyntaxEmptyList(nil)
+	var q syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := len(elems) - 1; i >= 0; i-- {
 		q = syntax.NewSyntaxCons(elems[i], q, nil)
 	}

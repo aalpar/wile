@@ -124,16 +124,16 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 		return params
 	}
 
-	// Must be a pair (possibly empty list)
+	// Handle empty list: (lambda () body)
+	if syntax.IsSyntaxEmptyList(paramExpr) {
+		return params
+	}
+
+	// Must be a pair
 	pair, ok := paramExpr.(*syntax.SyntaxPair)
 	if !ok {
 		result.addErrorf(getSourceContext(paramExpr), params.formName, "expected parameter list, got %T", paramExpr)
 		return nil
-	}
-
-	// Handle empty list: (lambda () body)
-	if pair.IsEmptyList() {
-		return params
 	}
 
 	// Walk the list
@@ -141,6 +141,10 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	var current values.Value = pair
 
 	for {
+		if values.IsEmptyList(current) {
+			return params
+		}
+
 		p, ok := current.(*syntax.SyntaxPair)
 		if !ok {
 			// Not a pair - check if it's a rest parameter (improper list)
@@ -161,11 +165,6 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 
 				params.Rest = sym
 			}
-			return params
-		}
-
-		// Check for empty list marker
-		if p.IsEmptyList() {
 			return params
 		}
 

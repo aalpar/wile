@@ -93,7 +93,7 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 
 	case values.Tuple:
 		if v.IsEmptyList() {
-			return syntax.NewSyntaxEmptyList(sctx)
+			return syntax.SyntaxEmptyList
 		}
 		car := datumToSyntax(v.Car(), sctx)
 		cdr := datumToSyntax(v.Cdr(), sctx)

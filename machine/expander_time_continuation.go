@@ -108,14 +108,13 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ctx context.Context, expr sy
 	}
 	var result syntax.SyntaxValue
 	var err error
+	if syntax.IsSyntaxEmptyList(expr) {
+		return expr, nil
+	}
 	switch stx := expr.(type) {
 	case *syntax.SyntaxPair:
-		// Handle empty list - no expansion needed
-		if syntax.IsSyntaxEmptyList(stx) {
-			return stx, nil
-		}
 		car := stx.SyntaxCar()
-		cdr := stx.SyntaxCdr().(*syntax.SyntaxPair)
+		cdr := stx.SyntaxCdr()
 		result, err = p.ExpandSyntaxOrProcedureCall(ctx, car, cdr)
 		if err != nil {
 			return nil, err
@@ -138,7 +137,7 @@ func (p *ExpanderTimeContinuation) ExpandSymbol(_ context.Context, expr *syntax.
 // ExpandSyntaxOrProcedureCall handles a list expression. The car may be a
 // symbol (possibly a macro), a nested pair (computed procedure), or a
 // self-evaluating value (like in quoted data or malformed expressions).
-func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(ctx context.Context, car syntax.SyntaxValue, cdr *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(ctx context.Context, car syntax.SyntaxValue, cdr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	switch v := car.(type) {
 	case *syntax.SyntaxPair:
 		// Car is a pair - expand it (computed procedure), then expand arguments
@@ -248,9 +247,14 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 
 	// Get the bindings list
 	bindingsStx := argsPair.SyntaxCar()
-	bindingsPair, ok := bindingsStx.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings list", formName)
+	bindingsEmpty := syntax.IsSyntaxEmptyList(bindingsStx)
+	var bindingsPair *syntax.SyntaxPair
+	if !bindingsEmpty {
+		var pairOk bool
+		bindingsPair, pairOk = bindingsStx.(*syntax.SyntaxPair)
+		if !pairOk {
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings list", formName)
+		}
 	}
 
 	// Get the body
@@ -262,14 +266,17 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 
 	// Count bindings for local environment allocation
 	numBindings := 0
-	current := bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
-		numBindings++
-		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
-			current = nextPair
-		} else {
-			break
+	var current *syntax.SyntaxPair
+	if !bindingsEmpty {
+		current = bindingsPair
+		for !syntax.IsSyntaxEmptyList(current) {
+			numBindings++
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else {
+				break
+			}
 		}
 	}
 
@@ -289,7 +296,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	letScope := syntax.NewRebindingScope()
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
-	if recursive {
+	if recursive && !bindingsEmpty {
 		current = bindingsPair
 		for !syntax.IsSyntaxEmptyList(current) {
 			bindingStx := current.SyntaxCar()
@@ -316,8 +323,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	}
 
 	// Compile each transformer and store in child expand environment
-	current = bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
+	if !bindingsEmpty {
+		current = bindingsPair
+	}
+	for !bindingsEmpty && !syntax.IsSyntaxEmptyList(current) {
 		bindingStx := current.SyntaxCar()
 		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
@@ -427,7 +436,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	if hasDefine {
 		// Wrap in lambda to create new runtime scope for defines
 		lambdaSym := syntax.NewSyntaxSymbol("lambda", sc)
-		emptyArgs := syntax.NewSyntaxEmptyList(sc)
+		emptyArgs := syntax.SyntaxEmptyList
 		lambdaExpr := syntax.SyntaxList(sc, lambdaSym, emptyArgs, beginExpr)
 		return syntax.SyntaxList(sc, lambdaExpr), nil
 	}
@@ -614,7 +623,7 @@ func (p *ExpanderTimeContinuation) expandBeginForm(ctx context.Context, sym *syn
 		}
 
 		// Rebuild the begin form with expanded contents
-		expandedArgs := syntax.NewSyntaxEmptyList(sym.SourceContext())
+		expandedArgs := syntax.SyntaxEmptyList
 		for i := len(expandedForms) - 1; i >= 0; i-- {
 			expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
 		}
@@ -855,7 +864,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ctx context.Context, sym *sy
 	}
 
 	// Rebuild the body as a syntax list
-	var expandedBody *syntax.SyntaxPair
+	var expandedBody syntax.SyntaxValue
 	if wasBeginWrapped {
 		// Re-wrap in begin
 		beginSym := syntax.NewSyntaxSymbol("begin", sym.SourceContext())
@@ -1384,9 +1393,12 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 	}
 
 	// Build the input form
-	cdr, ok := stxPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		cdr = syntax.SyntaxList(sym.SourceContext())
+	var cdr syntax.SyntaxValue
+	cdrPair, ok := stxPair.SyntaxCdr().(*syntax.SyntaxPair)
+	if ok {
+		cdr = cdrPair
+	} else {
+		cdr = syntax.SyntaxEmptyList
 	}
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
@@ -1418,9 +1430,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 
 // ExpandSyntaxArgumentList expands each argument in the argument list.
 // It returns a new syntax list with the expanded arguments.
-func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context, args *syntax.SyntaxPair) (*syntax.SyntaxPair, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context, args syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// instantiate result list
-	q := syntax.SyntaxList(args.SourceContext())
+	q := syntax.SyntaxEmptyList
 	// go through each argument and expand it
 	// and append to result list
 	// if any error, return error
@@ -1433,7 +1445,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context,
 		}
 		// append to result list
 		cdr := syntax.SyntaxList(v0.SourceContext(), v0)
-		q = q.SyntaxAppend(cdr).(*syntax.SyntaxPair)
+		q = q.SyntaxAppend(cdr).(syntax.SyntaxTuple)
 		return nil
 	})
 	if err != nil {

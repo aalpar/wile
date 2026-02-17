@@ -117,44 +117,58 @@ func NewMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellips
 //   - Updated syntax stack length
 //   - Error if pattern doesn't match (ErrNotAMatch)
 func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
-	// Before popping, check that the cdr of current pair is empty
-	// This ensures the pattern consumed all elements at this level
-	cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
-	if !syntax.IsSyntaxEmptyList(cdr) && cdr != nil {
-		// There are more elements in the input than in the pattern
-		// Check if we're in a loop context (ellipsis) - in that case
-		// cdr being non-empty is expected
-		cdrPair, ok := cdr.(*syntax.SyntaxPair)
-		if ok && !cdrPair.IsVoid() {
-			// More elements exist - this is only OK in a loop context
-			if i+1 >= len(p.codes) {
+	// Before popping, check that the cdr of current pair is empty.
+	// This ensures the pattern consumed all elements at this level.
+	// If the position is already at the empty list singleton, all elements
+	// were consumed — skip the cdr check.
+	currentPr := p.syntaxStack[lvs-1].pr
+	if !syntax.IsSyntaxEmptyList(currentPr) {
+		cdr := currentPr.SyntaxCdr()
+		if !syntax.IsSyntaxEmptyList(cdr) && cdr != nil {
+			// There are more elements in the input than in the pattern.
+			// Check if we're in a loop context (ellipsis) — non-empty cdr
+			// is expected there.
+			cdrPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok && !cdrPair.IsVoid() {
+				// More elements exist - this is only OK in a loop context
+				if i+1 >= len(p.codes) {
+					return 0, ErrNotAMatch
+				}
+				// Check if the next instruction continues processing
+				switch p.codes[i+1].(type) {
+				case ByteCodeJump, ByteCodePopContext:
+					// Loop context - cdr being non-empty is expected
+				default:
+					// Not in loop context, extra elements means no match
+					return 0, ErrNotAMatch
+				}
+			} else if !syntax.IsSyntaxEmptyList(cdr) {
+				// Improper list or other non-pair cdr when we expected end
 				return 0, ErrNotAMatch
 			}
-			// Check if the next instruction continues processing
-			switch p.codes[i+1].(type) {
-			case ByteCodeJump, ByteCodePopContext:
-				// Loop context - cdr being non-empty is expected
-			default:
-				// Not in loop context, extra elements means no match
-				return 0, ErrNotAMatch
-			}
-		} else if !syntax.IsSyntaxEmptyList(cdr) {
-			// Improper list or other non-pair cdr when we expected end
-			return 0, ErrNotAMatch
 		}
 	}
 
+	// Pop current level
 	lvs = len(p.syntaxStack) - 1
 	p.syntaxStack = p.syntaxStack[:lvs]
 	if len(p.syntaxStack) == 0 {
 		return lvs, nil
 	}
-	cdr = p.syntaxStack[lvs-1].pr.SyntaxCdr()
 
-	// Check if there are more elements at the parent level
-	// After popping, if cdr is not empty, there are more siblings to match
+	// Advance parent to next sibling.
+	// If parent is already at the empty list (set by a previous Done),
+	// there are no siblings to advance to.
+	parentPr := p.syntaxStack[lvs-1].pr
+	if syntax.IsSyntaxEmptyList(parentPr) {
+		lvs = len(p.syntaxStack)
+		return lvs, nil
+	}
+	cdr := parentPr.SyntaxCdr()
+
+	// Check if there are more elements at the parent level.
 	// If the next instruction is ByteCodeDone (no more pattern elements),
-	// then extra siblings means the pattern doesn't match
+	// then extra siblings means the pattern doesn't match.
 	cdrPair, ok := cdr.(*syntax.SyntaxPair)
 	if ok && !syntax.IsSyntaxEmptyList(cdrPair) {
 		if i+1 < len(p.codes) {
@@ -231,6 +245,9 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 		switch cd := code.(type) {
 		case ByteCodeCompareCar:
 			vsv := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(vsv) {
+				return ErrNotAMatch
+			}
 			inputCar := vsv.SyntaxCar()
 
 			// Check for literal hygiene: if pattern is a literal symbol,
@@ -264,12 +281,18 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 		case ByteCodeCompareCdr:
 			// Compare the CDR with a literal value (for improper list patterns with literal tail)
 			vsv := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(vsv) {
+				return ErrNotAMatch
+			}
 			if !syntaxValuesEqualForMatch(cd.Value, vsv.SyntaxCdr()) {
 				return ErrNotAMatch
 			}
 		case ByteCodeCaptureCar:
 			lcs := len(p.captureStack)
 			vsv := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(vsv) {
+				return ErrNotAMatch
+			}
 			capturedSyntax := vsv.SyntaxCar()
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
 			if ok && !syntaxValuesEqualForMatch(capturedSyntax, bv) {
@@ -280,6 +303,9 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			// Capture the CDR of the current pair (for improper list patterns like (_ a . rest))
 			lcs := len(p.captureStack)
 			vsv := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(vsv) {
+				return ErrNotAMatch
+			}
 			capturedSyntax := vsv.SyntaxCdr()
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
 			if ok && !syntaxValuesEqualForMatch(capturedSyntax, bv) {
@@ -319,20 +345,40 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			lcs := len(p.captureStack)
 			p.captureStack = p.captureStack[:lcs-1]
 		case ByteCodeVisitCar:
+			if syntax.IsSyntaxEmptyList(p.syntaxStack[lvs-1].pr) {
+				return ErrNotAMatch
+			}
 			car := p.syntaxStack[lvs-1].pr.SyntaxCar()
 			pr, ok := car.(*syntax.SyntaxPair)
 			if !ok {
+				// The car might be the empty list singleton (e.g., () in let bindings).
+				// Push it as a valid position — SkipIfEmpty will handle it in ellipsis loops.
+				if syntax.IsSyntaxEmptyList(car) {
+					p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: syntax.SyntaxEmptyList})
+					lvs = len(p.syntaxStack)
+					break
+				}
 				return ErrNotAMatch
 			}
 			p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: pr})
 			lvs = len(p.syntaxStack)
 		case ByteCodeVisitCdr:
+			if syntax.IsSyntaxEmptyList(p.syntaxStack[lvs-1].pr) {
+				return ErrNotAMatch
+			}
 			cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
 			pr, ok := cdr.(*syntax.SyntaxPair)
 			if !ok {
-				return ErrNotAMatch
+				// In ellipsis loops, reaching end-of-list via VisitCdr is normal —
+				// SkipIfEmpty at the loop head will exit. Set position to empty list.
+				if syntax.IsSyntaxEmptyList(cdr) {
+					p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
+				} else {
+					return ErrNotAMatch
+				}
+			} else {
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: pr}
 			}
-			p.syntaxStack[lvs-1] = syntaxPathEntry{pr: pr}
 			lvs = len(p.syntaxStack)
 		case ByteCodeSkipIfEmpty:
 			// Skip forward if the current position is empty or void
@@ -367,16 +413,19 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			}
 			// remaining > Count: continue loop to match more ellipsis iterations
 		case ByteCodeRequireCarEmpty:
-			// Verify that the car at the current position is an empty list
-			// This is generated for patterns like () that must match empty input
-			car := p.syntaxStack[lvs-1].pr.SyntaxCar()
-			carPair, ok := car.(*syntax.SyntaxPair)
-			if !ok || !syntax.IsSyntaxEmptyList(carPair) {
+			// Verify that the car at the current position is an empty list.
+			// This is generated for patterns like () that must match empty input.
+			entryPr := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(entryPr) {
+				return ErrNotAMatch
+			}
+			car := entryPr.SyntaxCar()
+			if !syntax.IsSyntaxEmptyList(car) {
 				// Car is not an empty list - pattern doesn't match
 				return ErrNotAMatch
 			}
 			// Move to next element in the list
-			cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
+			cdr := entryPr.SyntaxCdr()
 			cdrPair, ok := cdr.(*syntax.SyntaxPair)
 			switch {
 			case ok:

@@ -34,7 +34,7 @@ func TestCompileSyntaxCase_Error_NoArgs(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// Empty args
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -51,7 +51,7 @@ func TestCompileSyntaxCase_Error_NoLiterals(t *testing.T) {
 
 	// (input) - missing literals and clauses
 	input := syntax.NewSyntaxSymbol("x", nil)
-	expr := syntax.NewSyntaxCons(input, syntax.NewSyntaxEmptyList(nil), nil)
+	expr := syntax.NewSyntaxCons(input, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -67,9 +67,9 @@ func TestCompileSyntaxCase_Error_NoClauses(t *testing.T) {
 
 	// (input ()) - missing clauses
 	input := syntax.NewSyntaxSymbol("x", nil)
-	literals := syntax.NewSyntaxEmptyList(nil)
+	literals := syntax.SyntaxEmptyList
 	expr := syntax.NewSyntaxCons(input,
-		syntax.NewSyntaxCons(literals, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(literals, syntax.SyntaxEmptyList, nil), nil)
 
 	err := ccnt.CompileSyntaxCase(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)

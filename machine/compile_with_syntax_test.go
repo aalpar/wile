@@ -33,7 +33,7 @@ func TestCompileWithSyntax_Error_NoArgs(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// Empty args
-	expr := syntax.NewSyntaxEmptyList(nil)
+	expr := syntax.SyntaxEmptyList
 
 	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -48,8 +48,8 @@ func TestCompileWithSyntax_Error_NoBody(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// (()) - empty bindings list, no body
-	bindings := syntax.NewSyntaxEmptyList(nil)
-	expr := syntax.NewSyntaxCons(bindings, syntax.NewSyntaxEmptyList(nil), nil)
+	bindings := syntax.SyntaxEmptyList
+	expr := syntax.NewSyntaxCons(bindings, syntax.SyntaxEmptyList, nil)
 
 	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
@@ -64,10 +64,10 @@ func TestCompileWithSyntax_EmptyBindings(t *testing.T) {
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
 	// (() body) - empty bindings, simple body
-	bindings := syntax.NewSyntaxEmptyList(nil)
+	bindings := syntax.SyntaxEmptyList
 	body := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 	expr := syntax.NewSyntaxCons(bindings,
-		syntax.NewSyntaxCons(body, syntax.NewSyntaxEmptyList(nil), nil), nil)
+		syntax.NewSyntaxCons(body, syntax.SyntaxEmptyList, nil), nil)
 
 	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)

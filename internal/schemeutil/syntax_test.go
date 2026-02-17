@@ -46,7 +46,7 @@ func (p *SyntaxValueToDatumSuite) TestVoid(c *qt.C) {
 }
 
 func (p *SyntaxValueToDatumSuite) TestEmptyList(c *qt.C) {
-	emptyList := syntax.NewSyntaxEmptyList(p.sctx)
+	emptyList := syntax.SyntaxEmptyList
 	result := SyntaxValueToDatum(emptyList)
 	c.Assert(values.IsEmptyList(result), qt.IsTrue)
 }
@@ -66,7 +66,7 @@ func (p *SyntaxValueToDatumSuite) TestProperList(c *qt.C) {
 	list := syntax.NewSyntaxCons(s1,
 		syntax.NewSyntaxCons(s2,
 			syntax.NewSyntaxCons(s3,
-				syntax.NewSyntaxEmptyList(p.sctx), p.sctx), p.sctx), p.sctx)
+				syntax.SyntaxEmptyList, p.sctx), p.sctx), p.sctx)
 
 	result := SyntaxValueToDatum(list)
 	expected := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
@@ -141,15 +141,15 @@ func (p *SyntaxValueToDatumSuite) TestNestedList(c *qt.C) {
 		syntax.NewSyntaxObject(values.NewInteger(1), p.sctx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(2), p.sctx),
-			syntax.NewSyntaxEmptyList(p.sctx), p.sctx), p.sctx)
+			syntax.SyntaxEmptyList, p.sctx), p.sctx)
 	inner2 := syntax.NewSyntaxCons(
 		syntax.NewSyntaxObject(values.NewInteger(3), p.sctx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxObject(values.NewInteger(4), p.sctx),
-			syntax.NewSyntaxEmptyList(p.sctx), p.sctx), p.sctx)
+			syntax.SyntaxEmptyList, p.sctx), p.sctx)
 	outer := syntax.NewSyntaxCons(inner1,
 		syntax.NewSyntaxCons(inner2,
-			syntax.NewSyntaxEmptyList(p.sctx), p.sctx), p.sctx)
+			syntax.SyntaxEmptyList, p.sctx), p.sctx)
 
 	result := SyntaxValueToDatum(outer)
 	expected := values.List(

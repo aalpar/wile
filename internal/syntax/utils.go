@@ -23,11 +23,11 @@ import (
 // The sc parameter provides a fallback source context for the list container.
 // Each intermediate pair uses the source context of its car element when available,
 // preserving per-element source location information for better error reporting.
-func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
+func SyntaxList(sc *SourceContext, os ...SyntaxValue) SyntaxValue {
 	l := len(os)
 	switch l {
 	case 0:
-		return NewSyntaxEmptyList(sc)
+		return SyntaxEmptyList
 	case 1:
 		// Use element's source context if available, otherwise fall back to sc
 		elemSc := sc
@@ -38,7 +38,7 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 			}
 		}
 		return &SyntaxPair{
-			Values: [2]SyntaxValue{os[0], NewSyntaxEmptyList(sc)},
+			Values: [2]SyntaxValue{os[0], SyntaxEmptyList},
 			syntaxBase: syntaxBase{
 				sourceContext: elemSc,
 			},
@@ -71,7 +71,7 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) *SyntaxPair {
 			}
 		}
 	}
-	curr.SetCdr(NewSyntaxEmptyList(sc))
+	curr.SetCdr(SyntaxEmptyList)
 	return q
 }
 
@@ -105,6 +105,9 @@ func IsSyntaxList(v SyntaxValue) bool {
 	if v == nil {
 		return false
 	}
+	if IsSyntaxEmptyList(v) {
+		return true
+	}
 	pr, ok := v.(*SyntaxPair)
 	if ok {
 		return pr.IsList()
@@ -117,22 +120,7 @@ func IsSyntaxVoid(v SyntaxValue) bool {
 	return v == nil || v.IsVoid()
 }
 
-// IsSyntaxEmptyList returns true if the value is the empty syntax list.
-// Checks syntaxEmptyListType (dedicated empty list type), SyntaxPair
-// (legacy empty list), and SyntaxObject wrapping values.EmptyList
-// (e.g., from quasisyntax expansion).
+// IsSyntaxEmptyList returns true if the value is the syntax empty list singleton.
 func IsSyntaxEmptyList(v SyntaxValue) bool {
-	if v == nil {
-		return false
-	}
-	switch sv := v.(type) {
-	case syntaxEmptyListType:
-		return true
-	case *SyntaxPair:
-		return sv.IsEmptyList()
-	case *SyntaxObject:
-		return sv.IsEmptyList()
-	default:
-		return false
-	}
+	return v == SyntaxEmptyList
 }

@@ -28,7 +28,10 @@ import (
 // Helper function to build syntax lists
 func syntaxList(sctx *syntax.SourceContext, items ...syntax.SyntaxValue) *syntax.SyntaxPair {
 	if len(items) == 0 {
-		return syntax.NewSyntaxEmptyList(sctx)
+		panic("syntaxList requires at least one element")
+	}
+	if len(items) == 1 {
+		return syntax.NewSyntaxCons(items[0], syntax.SyntaxEmptyList, sctx)
 	}
 	return syntax.NewSyntaxCons(items[0], syntaxList(sctx, items[1:]...), sctx)
 }

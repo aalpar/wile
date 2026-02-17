@@ -56,7 +56,8 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 
 	// Second element should be the literals list (could be empty)
 	literalsExpr := elements[1]
-	if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
+	if syntax.IsSyntaxEmptyList(literalsExpr) { //nolint:revive // empty block: empty literals list is valid
+	} else if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
 		if !literalsPair.IsEmptyList() && !literalsPair.IsList() {
 			result.addError(getSourceContext(literalsExpr), "syntax-rules", "syntax-rules literals must be a proper list")
 			return nil

@@ -223,7 +223,7 @@ func TestAddScopeToSyntax(t *testing.T) {
 	// Test with SyntaxPair
 	pair := syntax.NewSyntaxCons(
 		syntax.NewSyntaxSymbol("a", srcCtx),
-		syntax.NewSyntaxEmptyList(srcCtx),
+		syntax.SyntaxEmptyList,
 		srcCtx,
 	)
 	result = addScopeToSyntax(pair, scope)
@@ -270,7 +270,7 @@ func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
 		syntax.NewSyntaxSymbol("if", srcCtx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("x", srcCtx),
-			syntax.NewSyntaxEmptyList(srcCtx),
+			syntax.SyntaxEmptyList,
 			srcCtx,
 		),
 		srcCtx,
@@ -300,18 +300,12 @@ func TestAddScopeToPairSkipFreeIds(t *testing.T) {
 	result := addScopeToPairSkipFreeIds(nil, scope, freeIds)
 	qt.Assert(t, result, qt.IsNil)
 
-	// Test with empty list
-	emptyList := syntax.NewSyntaxEmptyList(srcCtx)
-	result = addScopeToPairSkipFreeIds(emptyList, scope, freeIds)
-	// Empty list should be returned as-is
-	qt.Assert(t, result, qt.Equals, emptyList)
-
 	// Test with pair containing symbols
 	pair := syntax.NewSyntaxCons(
 		syntax.NewSyntaxSymbol("a", srcCtx),
 		syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("b", srcCtx),
-			syntax.NewSyntaxEmptyList(srcCtx),
+			syntax.SyntaxEmptyList,
 			srcCtx,
 		),
 		srcCtx,

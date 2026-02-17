@@ -31,23 +31,13 @@ func TestSyntaxEmptyList_EqualTo(t *testing.T) {
 		want  bool
 	}{
 		{
-			name:  "equal to another syntaxEmptyListType",
-			other: syntaxEmptyListType{},
-			want:  true,
-		},
-		{
-			name:  "equal to SyntaxEmptyList constant",
+			name:  "equal to SyntaxEmptyList singleton",
 			other: SyntaxEmptyList,
 			want:  true,
 		},
 		{
 			name:  "not equal to values.EmptyList",
 			other: values.EmptyList,
-			want:  false,
-		},
-		{
-			name:  "not equal to *SyntaxPair empty list",
-			other: NewSyntaxEmptyList(nil),
 			want:  false,
 		},
 		{
@@ -64,8 +54,7 @@ func TestSyntaxEmptyList_EqualTo(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			empty := syntaxEmptyListType{}
-			got := empty.EqualTo(tc.other)
+			got := SyntaxEmptyList.EqualTo(tc.other)
 			c.Assert(got, qt.Equals, tc.want)
 		})
 	}
@@ -73,88 +62,61 @@ func TestSyntaxEmptyList_EqualTo(t *testing.T) {
 
 func TestSyntaxEmptyList_SchemeString(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	c.Assert(empty.SchemeString(), qt.Equals, "#'()")
+	c.Assert(SyntaxEmptyList.SchemeString(), qt.Equals, "#'()")
 }
 
 func TestSyntaxEmptyList_IsEmptyList(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	c.Assert(empty.IsEmptyList(), qt.Equals, true)
+	c.Assert(SyntaxEmptyList.IsEmptyList(), qt.Equals, true)
 }
 
 func TestSyntaxEmptyList_IsList(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	c.Assert(empty.IsList(), qt.Equals, true)
+	c.Assert(SyntaxEmptyList.IsList(), qt.Equals, true)
 }
 
 func TestSyntaxEmptyList_Length(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	c.Assert(empty.Length(), qt.Equals, 0)
+	c.Assert(SyntaxEmptyList.Length(), qt.Equals, 0)
 }
 
 func TestSyntaxEmptyList_Unwrap(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	unwrapped := empty.Unwrap()
-	c.Assert(unwrapped, qt.Equals, values.EmptyList)
+	c.Assert(SyntaxEmptyList.Unwrap(), qt.Equals, values.EmptyList)
 }
 
 func TestSyntaxEmptyList_UnwrapAll(t *testing.T) {
 	c := qt.New(t)
-	empty := syntaxEmptyListType{}
-	unwrapped := empty.UnwrapAll()
-	c.Assert(unwrapped, qt.Equals, values.EmptyList)
+	c.Assert(SyntaxEmptyList.UnwrapAll(), qt.Equals, values.EmptyList)
 }
 
 func TestSyntaxEmptyList_AddScope(t *testing.T) {
 	c := qt.New(t)
 
 	scope := NewScope()
-	empty := syntaxEmptyListType{sourceContext: nil}
-
+	empty := SyntaxEmptyList.(*syntaxEmptyListType)
 	result := empty.AddScope(scope)
 
-	// Should return a new syntaxEmptyListType with scope in source context
-	resultEmpty, ok := result.(syntaxEmptyListType)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(resultEmpty.sourceContext, qt.IsNotNil)
-	c.Assert(len(resultEmpty.sourceContext.Scopes), qt.Equals, 1)
-	c.Assert(resultEmpty.sourceContext.Scopes[0], qt.Equals, scope)
+	// AddScope returns the singleton unchanged — empty lists have no symbols
+	c.Assert(result, qt.Equals, SyntaxEmptyList)
 }
 
-func TestSyntaxEmptyList_AddScope_WithExistingContext(t *testing.T) {
+func TestSyntaxEmptyList_SourceContext(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(SyntaxEmptyList.SourceContext(), qt.IsNil)
+}
+
+func TestSyntaxEmptyList_SingletonIdentity(t *testing.T) {
 	c := qt.New(t)
 
-	scope1 := NewScope()
-	scope2 := NewScope()
-
-	sctx := NewSourceContext("", "", SourceIndexes{}, SourceIndexes{}).WithScope(scope1)
-	empty := syntaxEmptyListType{sourceContext: sctx}
-
-	result := empty.AddScope(scope2)
-
-	resultEmpty, ok := result.(syntaxEmptyListType)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(resultEmpty.sourceContext.Scopes), qt.Equals, 2)
-	c.Assert(resultEmpty.sourceContext.Scopes[0], qt.Equals, scope2) // prepended
-	c.Assert(resultEmpty.sourceContext.Scopes[1], qt.Equals, scope1)
+	// AddScope returns the exact same pointer
+	scope := NewScope()
+	empty := SyntaxEmptyList.(*syntaxEmptyListType)
+	after := empty.AddScope(scope)
+	c.Assert(after, qt.Equals, SyntaxEmptyList)
 }
 
-func TestNewSyntaxEmptyListWithContext(t *testing.T) {
-	c := qt.New(t)
-
-	sctx := NewSourceContext("test", "test.scm", SourceIndexes{}, SourceIndexes{})
-	result := NewSyntaxEmptyListWithContext(sctx)
-
-	empty, ok := result.(syntaxEmptyListType)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(empty.sourceContext, qt.Equals, sctx)
-}
-
-func TestIsSyntaxEmptyList_RecognizesSyntaxEmptyListType(t *testing.T) {
+func TestIsSyntaxEmptyList_RecognizesSingleton(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -163,23 +125,13 @@ func TestIsSyntaxEmptyList_RecognizesSyntaxEmptyListType(t *testing.T) {
 		want  bool
 	}{
 		{
-			name:  "syntaxEmptyListType",
-			value: syntaxEmptyListType{},
-			want:  true,
-		},
-		{
-			name:  "SyntaxEmptyList constant",
+			name:  "SyntaxEmptyList singleton",
 			value: SyntaxEmptyList,
 			want:  true,
 		},
 		{
-			name:  "*SyntaxPair empty list",
-			value: NewSyntaxEmptyList(nil),
-			want:  true,
-		},
-		{
-			name:  "non-empty *SyntaxPair",
-			value: NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxEmptyList(nil), nil),
+			name:  "non-empty SyntaxPair",
+			value: NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), SyntaxEmptyList, nil),
 			want:  false,
 		},
 		{

@@ -42,8 +42,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 	template := argsPair.SyntaxCar()
 
 	// Check no extra arguments
-	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || !rest.IsEmptyList() {
+	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
 		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
 	}
 

@@ -86,9 +86,9 @@ func Test_EqualTo(t *testing.T) {
 		},
 		{
 			name:   "empty lists",
-			a:      NewSyntaxEmptyList(nil),
-			b:      NewSyntaxEmptyList(nil),
-			expect: false,
+			a:      SyntaxEmptyList,
+			b:      SyntaxEmptyList,
+			expect: true,
 		},
 		{
 			name:   "equal lists",
@@ -126,7 +126,7 @@ func Test_IsSyntaxList(t *testing.T) {
 		},
 		{
 			name:   "empty list",
-			value:  NewSyntaxEmptyList(nil),
+			value:  SyntaxEmptyList,
 			expect: true,
 		},
 		{
@@ -173,7 +173,7 @@ func Test_IsSyntaxVoid(t *testing.T) {
 		},
 		{
 			name:   "empty list",
-			value:  NewSyntaxEmptyList(nil),
+			value:  SyntaxEmptyList,
 			expect: false,
 		},
 		{
@@ -205,7 +205,7 @@ func Test_IsSyntaxEmptyList(t *testing.T) {
 		},
 		{
 			name:   "empty list",
-			value:  NewSyntaxEmptyList(nil),
+			value:  SyntaxEmptyList,
 			expect: true,
 		},
 		{
@@ -232,26 +232,26 @@ func Test_IsSyntaxEmptyList(t *testing.T) {
 func Test_SyntaxList(t *testing.T) {
 	tcs := []struct {
 		name   string
-		in     *SyntaxPair
-		out    *SyntaxPair
+		in     SyntaxValue
+		out    SyntaxValue
 		expect bool
 	}{
 		{
 			name:   "0",
 			in:     SyntaxList(nil),
-			out:    NewSyntaxEmptyList(nil),
+			out:    SyntaxEmptyList,
 			expect: true,
 		},
 		{
 			name:   "1",
 			in:     SyntaxList(nil, nil),
-			out:    NewSyntaxCons(nil, NewSyntaxEmptyList(nil), nil),
+			out:    NewSyntaxCons(nil, SyntaxEmptyList, nil),
 			expect: true,
 		},
 		{
 			name:   "2",
 			in:     SyntaxList(nil, NewSyntaxSymbol("first", nil)),
-			out:    NewSyntaxCons(NewSyntaxSymbol("first", nil), NewSyntaxEmptyList(nil), nil),
+			out:    NewSyntaxCons(NewSyntaxSymbol("first", nil), SyntaxEmptyList, nil),
 			expect: true,
 		},
 		{
@@ -263,7 +263,7 @@ func Test_SyntaxList(t *testing.T) {
 				NewSyntaxSymbol("first", nil),
 				NewSyntaxCons(
 					NewSyntaxSymbol("second", nil),
-					NewSyntaxEmptyList(nil),
+					SyntaxEmptyList,
 					nil,
 				),
 				nil,

@@ -529,7 +529,7 @@ func TestSyntaxDatumLabelAssignment_SchemeString(t *testing.T) {
 func TestSyntaxPair_AddScope(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	sym := NewSyntaxSymbol("foo", sctx)
-	pair := NewSyntaxCons(sym, NewSyntaxEmptyList(sctx), sctx)
+	pair := NewSyntaxCons(sym, SyntaxEmptyList, sctx)
 
 	scope := NewScope()
 	newPair := pair.AddScope(scope)
@@ -565,7 +565,7 @@ func TestSyntaxPair_Unwrap(t *testing.T) {
 func TestSyntaxPair_SyntaxCar_SyntaxCdr(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	car := NewSyntaxObject(values.NewInteger(1), sctx)
-	cdr := NewSyntaxEmptyList(sctx)
+	cdr := SyntaxEmptyList
 	pair := NewSyntaxCons(car, cdr, sctx)
 
 	qt.Assert(t, pair.SyntaxCar(), qt.Equals, car)
@@ -592,7 +592,7 @@ func TestSyntaxPair_ForEach(t *testing.T) {
 			NewSyntaxObject(values.NewInteger(2), sctx),
 			NewSyntaxCons(
 				NewSyntaxObject(values.NewInteger(3), sctx),
-				NewSyntaxEmptyList(sctx), sctx), sctx), sctx)
+				SyntaxEmptyList, sctx), sctx), sctx)
 
 	count := 0
 	sum := int64(0)
@@ -611,7 +611,7 @@ func TestSyntaxPair_ForEach(t *testing.T) {
 func TestSyntaxPair_IsPair(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	car := NewSyntaxObject(values.NewInteger(1), sctx)
-	cdr := NewSyntaxEmptyList(sctx)
+	cdr := SyntaxEmptyList
 	pair := NewSyntaxCons(car, cdr, sctx)
 	qt.Assert(t, pair.IsPair(), qt.IsTrue)
 }
@@ -708,12 +708,10 @@ func TestNewScope(t *testing.T) {
 	qt.Assert(t, scope1 != scope2, qt.IsTrue) // Different pointers
 }
 
-// Test NewSyntaxNil
-func TestNewSyntaxNil(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	syntaxNil := NewSyntaxNil(sctx)
-	qt.Assert(t, syntaxNil, qt.IsNotNil)
-	qt.Assert(t, syntaxNil.IsEmptyList(), qt.IsTrue)
+// Test SyntaxEmptyList singleton
+func TestSyntaxEmptyListCoverage(t *testing.T) {
+	qt.Assert(t, SyntaxEmptyList, qt.IsNotNil)
+	qt.Assert(t, SyntaxEmptyList.IsEmptyList(), qt.IsTrue)
 }
 
 // Test SyntaxEquals checker
@@ -758,10 +756,12 @@ func TestSyntaxList_ElementSourceContext(t *testing.T) {
 	list := SyntaxList(containerSc, elem1, elem2, elem3)
 
 	// The first pair should use elem1's source context
-	c.Assert(list.SourceContext(), qt.Equals, sc1)
+	listPair, ok := list.(*SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(listPair.SourceContext(), qt.Equals, sc1)
 
 	// Get second pair (cdr of first)
-	cdr1, ok := list.Cdr().(*SyntaxPair)
+	cdr1, ok := listPair.Cdr().(*SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(cdr1.SourceContext(), qt.Equals, sc2)
 
@@ -797,8 +797,8 @@ func TestSyntaxList_EmptyList(t *testing.T) {
 	sc := NewSourceContext("()", "file.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(2, 2, 1))
 	list := SyntaxList(sc)
 
-	c.Assert(list.IsEmptyList(), qt.IsTrue)
-	c.Assert(list.SourceContext(), qt.Equals, sc)
+	c.Assert(IsSyntaxEmptyList(list), qt.IsTrue)
+	c.Assert(list, qt.Equals, SyntaxEmptyList)
 }
 
 // TestSyntaxList_SingleElement verifies single element list behavior.

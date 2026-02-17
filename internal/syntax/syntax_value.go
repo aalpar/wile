@@ -67,15 +67,6 @@ func (p *Scope) ID() uint64 {
 	return p.id
 }
 
-// NewSyntaxNil creates a syntax empty list.
-//
-// Deprecated: Use NewSyntaxEmptyList instead.
-//
-// This function exists for backward compatibility but delegates to NewSyntaxEmptyList.
-func NewSyntaxNil(sctx *SourceContext) *SyntaxPair {
-	return NewSyntaxEmptyList(sctx)
-}
-
 // syntaxBase provides common SourceContext() implementation for syntax types.
 // This embedded struct eliminates boilerplate SourceContext() methods across 9 syntax types.
 //
