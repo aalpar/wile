@@ -247,9 +247,14 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 
 	// Get the bindings list
 	bindingsStx := argsPair.SyntaxCar()
-	bindingsPair, ok := bindingsStx.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings list", formName)
+	bindingsEmpty := syntax.IsSyntaxEmptyList(bindingsStx)
+	var bindingsPair *syntax.SyntaxPair
+	if !bindingsEmpty {
+		var pairOk bool
+		bindingsPair, pairOk = bindingsStx.(*syntax.SyntaxPair)
+		if !pairOk {
+			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected bindings list", formName)
+		}
 	}
 
 	// Get the body
@@ -261,14 +266,17 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 
 	// Count bindings for local environment allocation
 	numBindings := 0
-	current := bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
-		numBindings++
-		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
-			current = nextPair
-		} else {
-			break
+	var current *syntax.SyntaxPair
+	if !bindingsEmpty {
+		current = bindingsPair
+		for !syntax.IsSyntaxEmptyList(current) {
+			numBindings++
+			cdr := current.SyntaxCdr()
+			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+				current = nextPair
+			} else {
+				break
+			}
 		}
 	}
 
@@ -288,7 +296,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	letScope := syntax.NewRebindingScope()
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
-	if recursive {
+	if recursive && !bindingsEmpty {
 		current = bindingsPair
 		for !syntax.IsSyntaxEmptyList(current) {
 			bindingStx := current.SyntaxCar()
@@ -315,8 +323,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	}
 
 	// Compile each transformer and store in child expand environment
-	current = bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
+	if !bindingsEmpty {
+		current = bindingsPair
+	}
+	for !bindingsEmpty && !syntax.IsSyntaxEmptyList(current) {
 		bindingStx := current.SyntaxCar()
 		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
