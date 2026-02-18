@@ -411,35 +411,21 @@ func (p *CompileTimeContinuation) emitPatchableSaveContinuation() int {
 // current position.
 func (p *CompileTimeContinuation) patchSaveContinuationOffset(idx int) {
 	offset := p.template.CodeLen() - idx
-	if len(p.template.Code()) > 0 {
-		// Integer dispatch mode: patch the instruction's Arg field directly
-		p.template.PatchInstructionArg(idx, int32(offset))
-	} else {
-		// Interface dispatch mode: patch the side table operation
-		p.template.PatchSideTableOp(idx, NewOperationSaveContinuationOffsetImmediate(offset))
-	}
+	p.template.PatchInstructionArg(idx, int32(offset))
 }
 
 // patchBranchOnFalseValueOffset patches a previously emitted BranchOnFalseValue
 // instruction with the target offset.
 func (p *CompileTimeContinuation) patchBranchOnFalseValueOffset(idx, targetIdx int) {
 	offset := targetIdx - idx
-	if len(p.template.Code()) > 0 {
-		p.template.PatchInstructionArg(idx, int32(offset))
-	} else {
-		p.template.PatchSideTableOp(idx, NewOperationBranchOnFalseValueOffsetImmediate(offset))
-	}
+	p.template.PatchInstructionArg(idx, int32(offset))
 }
 
 // patchBranchOffset patches a previously emitted Branch instruction with the
 // target offset.
 func (p *CompileTimeContinuation) patchBranchOffset(idx, targetIdx int) {
 	offset := targetIdx - idx
-	if len(p.template.Code()) > 0 {
-		p.template.PatchInstructionArg(idx, int32(offset))
-	} else {
-		p.template.PatchSideTableOp(idx, NewOperationBranchOffsetImmediate(offset))
-	}
+	p.template.PatchInstructionArg(idx, int32(offset))
 }
 
 func (p *CompileTimeContinuation) pushSource(src *syntax.SourceContext) {

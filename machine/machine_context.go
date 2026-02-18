@@ -502,10 +502,7 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
-// Dispatch mode: If the current template has integer-dispatch bytecode
-// (template.code is populated), Run uses the switch-dispatch loop. Otherwise
-// it falls back to the interface-dispatch loop (Operation.Apply calls).
-// During migration, a template has one or the other, never both.
+// Dispatch: Run always uses switch-dispatch over integer opcodes.
 //
 // Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:

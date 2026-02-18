@@ -200,7 +200,7 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 	}
 }
 
-// operationToInstruction converts Wave 1 and Wave 2 operations to direct Instructions.
+// operationToInstruction converts Wave 1, Wave 2, and Wave 3 operations to direct Instructions.
 // Returns (instruction, true) if the operation has a dedicated opcode,
 // or (Instruction{}, false) if it should go through the sideTable.
 func operationToInstruction(op Operation) (Instruction, bool) {
@@ -425,17 +425,7 @@ func (p *NativeTemplate) CodeLen() int {
 	return len(p.code)
 }
 
-// PatchSideTableOp replaces the sideTable operation referenced by code[codeIdx].
-// The instruction at code[codeIdx] must be OpComplex.
-func (p *NativeTemplate) PatchSideTableOp(codeIdx int, op Operation) {
-	p.sideTable[p.code[codeIdx].Arg] = op
-}
 
-// SideTableOpAt returns the sideTable operation referenced by code[codeIdx].
-// The instruction at code[codeIdx] must be OpComplex.
-func (p *NativeTemplate) SideTableOpAt(codeIdx int) Operation {
-	return p.sideTable[p.code[codeIdx].Arg]
-}
 
 // PatchInstructionArg updates the Arg field of the instruction at code[codeIdx].
 // Used for patching branch offsets and continuation save offsets after the
