@@ -506,6 +506,11 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
+// Dispatch mode: If the current template has integer-dispatch bytecode
+// (template.code is populated), Run uses the switch-dispatch loop. Otherwise
+// it falls back to the interface-dispatch loop (Operation.Apply calls).
+// During migration, a template has one or the other, never both.
+//
 // Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:
 //   - Test timeouts that actually stop execution
@@ -514,12 +519,19 @@ func (p *MachineContext) Context() context.Context {
 //
 // Set the context via SetContext() before calling Run().
 func (p *MachineContext) Run() error {
+	if len(p.template.code) > 0 {
+		return p.runIntegerDispatch()
+	}
+	return p.runInterfaceDispatch()
+}
+
+// runInterfaceDispatch executes the interface-dispatch VM loop.
+// Each operation is an interface value whose Apply method advances the pc
+// and mutates the MachineContext. This is the original execution path.
+func (p *MachineContext) runInterfaceDispatch() error {
 	var err error
 	mc := p
 	for mc.pc < len(mc.template.operations) {
-		// Check for context cancellation every 1024 ops instead of every op.
-		// A non-blocking select is cheap but not free; batching keeps the
-		// tight dispatch loop fast while maintaining <1ms cancel latency.
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
@@ -528,7 +540,6 @@ func (p *MachineContext) Run() error {
 			}
 		}
 
-		// Check for debugger breaks
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
 			if bp != nil {
@@ -541,13 +552,58 @@ func (p *MachineContext) Run() error {
 		mc.counters.OpsExecuted++
 		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
 		if err != nil {
-			// errHalt is a success sentinel — the continuation chain is
-			// exhausted, which means execution completed normally.
-			// Translate it to nil so callers use plain "if err != nil".
 			if errors.Is(err, errHalt) {
 				return nil
 			}
 			return err
+		}
+	}
+	return nil
+}
+
+// runIntegerDispatch executes the switch-dispatch VM loop using integer
+// opcodes. Hot-path operations are inlined as switch cases; complex
+// operations (closures, macros, FFI) are dispatched via OpComplex to
+// the template's sideTable.
+//
+// During migration, only OpComplex is implemented. Each wave adds more
+// inlined cases until all 17 hot-path operations are covered.
+func (p *MachineContext) runIntegerDispatch() error {
+	mc := p
+	for mc.pc < len(mc.template.code) {
+		if mc.counters.OpsExecuted&contextCheckMask == 0 {
+			select {
+			case <-mc.ctx.Done():
+				return mc.ctx.Err()
+			default:
+			}
+		}
+
+		if mc.debugger != nil {
+			bp := mc.debugger.CheckBreakpoint(mc)
+			if bp != nil {
+				mc.debugger.TriggerBreak(mc, bp)
+			} else if mc.debugger.ShouldStep(mc) {
+				mc.debugger.TriggerBreak(mc, nil)
+			}
+		}
+
+		instr := mc.template.code[mc.pc]
+		mc.counters.OpsExecuted++
+
+		switch instr.Op {
+		case OpComplex:
+			var err error
+			mc, err = mc.template.sideTable[instr.Arg].Apply(mc.ctx, mc)
+			if err != nil {
+				if errors.Is(err, errHalt) {
+					return nil
+				}
+				return err
+			}
+		default:
+			return values.WrapForeignErrorf(values.ErrUnknownOpCode,
+				"unimplemented opcode: %s", instr.Op)
 		}
 	}
 	return nil

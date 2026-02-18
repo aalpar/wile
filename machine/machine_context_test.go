@@ -1270,3 +1270,118 @@ func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
 		t.Fatalf("thread sub-context maxCallDepth = %d, want 99", sub.MaxCallDepth())
 	}
 }
+
+// --- Dual-mode dispatch tests (Phase 6.2) ---
+
+func TestRunDispatch_InterfacePath(t *testing.T) {
+	c := qt.New(t)
+	// Template with only operations (no code) uses runInterfaceDispatch.
+	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Void)
+}
+
+func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
+	c := qt.New(t)
+	// Template with code + sideTable uses runIntegerDispatch.
+	tpl := NewNativeTemplate(0, 0, false)
+	instr := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	tpl.AppendInstruction(instr)
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Void)
+}
+
+func TestRunDispatch_IntegerPathErrHalt(t *testing.T) {
+	c := qt.New(t)
+	// OpComplex dispatching to OperationRestoreContinuation with cont=nil
+	// should trigger errHalt, which Run translates to nil.
+	tpl := NewNativeTemplate(0, 0, false)
+	instr := tpl.AppendSideTableOp(NewOperationRestoreContinuation())
+	tpl.AppendInstruction(instr)
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+}
+
+func TestRunDispatch_EmptyTemplate(t *testing.T) {
+	c := qt.New(t)
+	// Empty template (neither operations nor code) returns nil immediately.
+	tpl := NewNativeTemplate(0, 0, false)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+}
+
+func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
+	c := qt.New(t)
+	// An opcode with no switch case returns ErrUnknownOpCode.
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendInstruction(Instruction{Op: OpPush, Arg: 0})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrUnknownOpCode), qt.IsTrue)
+}
+
+func TestRunDispatch_IntegerPathContextCancellation(t *testing.T) {
+	c := qt.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	tpl := NewNativeTemplate(0, 0, false)
+	instr := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	tpl.AppendInstruction(instr)
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(ctx, cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
+	c := qt.New(t)
+	// Multiple OpComplex instructions in sequence.
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// First: LoadVoid (sets value to Void, advances pc)
+	instr0 := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	tpl.AppendInstruction(instr0)
+
+	// Second: LoadVoid again (still Void, advances pc)
+	instr1 := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	tpl.AppendInstruction(instr1)
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Void)
+	c.Assert(mc.counters.OpsExecuted, qt.Equals, uint64(2))
+}
