@@ -502,10 +502,7 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
-// Dispatch mode: If the current template has integer-dispatch bytecode
-// (template.code is populated), Run uses the switch-dispatch loop. Otherwise
-// it falls back to the interface-dispatch loop (Operation.Apply calls).
-// During migration, a template has one or the other, never both.
+// Dispatch: Run always uses switch-dispatch over integer opcodes.
 //
 // Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:
@@ -513,55 +510,13 @@ func (p *MachineContext) Context() context.Context {
 //   - REPL interrupt support (Ctrl+C)
 //   - Resource management for long-running computations
 //
-// Set the context via SetContext() before calling Run().
-func (p *MachineContext) Run() error {
-	if len(p.template.code) > 0 {
-		return p.runIntegerDispatch()
-	}
-	return p.runInterfaceDispatch()
-}
-
-// runInterfaceDispatch executes the interface-dispatch VM loop.
-// Each operation is an interface value whose Apply method advances the pc
-// and mutates the MachineContext. This is the original execution path.
-func (p *MachineContext) runInterfaceDispatch() error {
-	var err error
-	mc := p
-	for mc.pc < len(mc.template.operations) {
-		if mc.counters.OpsExecuted&contextCheckMask == 0 {
-			select {
-			case <-mc.ctx.Done():
-				return mc.ctx.Err()
-			default:
-			}
-		}
-
-		if mc.debugger != nil {
-			bp := mc.debugger.CheckBreakpoint(mc)
-			if bp != nil {
-				mc.debugger.TriggerBreak(mc, bp)
-			} else if mc.debugger.ShouldStep(mc) {
-				mc.debugger.TriggerBreak(mc, nil)
-			}
-		}
-
-		mc.counters.OpsExecuted++
-		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
-		if err != nil {
-			if errors.Is(err, errHalt) {
-				return nil
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-// runIntegerDispatch executes the switch-dispatch VM loop using integer
-// opcodes. Hot-path operations are inlined as switch cases; complex
+// Run executes the VM loop using switch-dispatch with integer opcodes.
+// Hot-path operations (Wave 1-3) are inlined as switch cases; complex
 // operations (closures, macros, FFI) are dispatched via OpComplex to
 // the template's sideTable.
-func (p *MachineContext) runIntegerDispatch() error {
+//
+// Set the context via SetContext() before calling Run().
+func (p *MachineContext) Run() error {
 	mc := p
 	for mc.pc < len(mc.template.code) {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
@@ -635,6 +590,97 @@ func (p *MachineContext) runIntegerDispatch() error {
 				return nil
 			}
 			mc.RestoreAndRelease(mc.cont)
+
+		// --- Wave 2: single-operand operations ---
+
+		case OpBranchOnFalseValue:
+			if !values.ValueToBool(mc.GetValue()) {
+				mc.pc += int(instr.Arg)
+			} else {
+				mc.pc++
+			}
+
+		case OpBranch:
+			mc.pc += int(instr.Arg)
+
+		case OpSaveContinuation:
+			err := mc.SaveContinuation(int(instr.Arg))
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpLoadLiteral:
+			o := mc.template.literals[instr.Arg]
+			mc.SetValue(o)
+			mc.pc++
+
+		case OpLoadGlobal:
+			o := mc.template.literals[instr.Arg]
+			if o == nil {
+				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
+			}
+			gi, ok := o.(*environment.GlobalIndex)
+			if !ok {
+				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
+			}
+			var bd *environment.Binding
+			if gi.Env != nil {
+				bd = gi.Env.GetOwnGlobalBinding(gi)
+			} else {
+				bd = mc.env.GetGlobalBinding(gi)
+			}
+			if bd == nil {
+				return mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+			}
+			mc.SetValue(bd.Value())
+			mc.pc++
+
+		case OpStoreGlobal:
+			o := mc.template.literals[instr.Arg]
+			if o == nil {
+				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
+			}
+			gi, ok := o.(*environment.GlobalIndex)
+			if !ok {
+				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
+			}
+			val := mc.evals.Pop()
+			var err error
+			if gi.Env != nil {
+				err = gi.Env.SetOwnGlobalValue(gi, val)
+			} else {
+				err = mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
+			}
+			if err != nil {
+				return mc.WrapError(err, fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+			}
+			mc.pc++
+
+		case OpPeekK:
+			mc.SetValue(mc.evals.PeekK(int(instr.Arg)))
+			mc.pc++
+
+		// --- Wave 3: two-operand operations (bit-packed slot|depth) ---
+
+		case OpLoadLocal:
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			li := environment.NewLocalIndex(slot, depth)
+			bd := mc.env.GetLocalBinding(li)
+			if bd == nil {
+				return mc.Error(fmt.Sprintf("no such local binding %s", li))
+			}
+			mc.SetValue(bd.Value())
+			mc.pc++
+
+		case OpStoreLocal:
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			li := environment.NewLocalIndex(slot, depth)
+			err := mc.env.SetLocalValue(li, mc.evals.Pop())
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc.pc++
 
 		// --- Fallback: complex operations via side table ---
 

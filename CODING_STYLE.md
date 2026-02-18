@@ -2,6 +2,8 @@
 
 This document describes the coding conventions used throughout the Wile Scheme interpreter codebase.
 
+Always use sentinel error wrapping patterns (not `fmt.Errorf`) per project conventions. Run `go vet` and `golangci-lint run` before committing.
+
 ## Functions
 
 Never write single-line functions. Always spread function bodies across multiple lines, even for simple implementations.

@@ -119,7 +119,7 @@ func TestNativeTemplate_Copy(t *testing.T) {
 	qt.Assert(t, cpy.valueCount, qt.Equals, tpl.valueCount)
 	qt.Assert(t, cpy.isVariadic, qt.Equals, tpl.isVariadic)
 	qt.Assert(t, len(cpy.literals), qt.Equals, len(tpl.literals))
-	qt.Assert(t, len(cpy.operations), qt.Equals, len(tpl.operations))
+	qt.Assert(t, cpy.CodeLen(), qt.Equals, tpl.CodeLen())
 }
 
 func TestNativeTemplate_Copy_Nil(t *testing.T) {

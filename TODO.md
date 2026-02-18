@@ -18,7 +18,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phase 1-5 complete. Phase 6 in progress (6.1–6.3 done). `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Performance refactoring (8 phases) | Performance | In Progress | Phases 0-6 complete. Phase 7 remaining. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
 | P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
 | P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |
@@ -216,3 +216,9 @@ Three-tier feature flag system for controlling Wile behavior at different lifecy
 - [ ] Thread-safe reads/writes for runtime flags (concurrent Scheme goroutines)
 - [ ] Immutability enforcement: compile-time flags reject mutation attempts
 - [ ] Integration with R7RS `cond-expand` for feature-based conditional compilation in Scheme
+
+**Other**
+- [ ] MachineContext `Error` should be `Errorf`.  I cannot find an instance that does not use `fmt.Sprintf`.  Migrate `Error(` to `Errorf` that takes a `form` and a `args ...` paramter that feed into `fmt.Sprintf` inside `Errorf(`
+- [x] Hand-unrolled patching functions in `compile_time_continuation.go` — Phase 6 complete with 3 patching functions. Consolidation criterion (4th function) not met. No action needed.
+- [x] Error format verb drift in `machine_context.go` Wave 2 switch cases — Fixed: aligned `LoadGlobal`/`StoreGlobal` to use `%v` like original operations.
+

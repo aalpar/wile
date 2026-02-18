@@ -148,8 +148,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Patch all success jumps to point here (end of syntax-case)
 	endIndex := p.template.CodeLen()
 	for _, patch := range successJumps {
-		op := p.template.SideTableOpAt(patch.opIndex).(*OperationBranchOffsetImmediate)
-		op.Offset = endIndex - patch.opIndex
+		p.patchBranchOffset(patch.opIndex, endIndex)
 	}
 
 	// Clear the syntax-case input global
@@ -160,8 +159,9 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 
 // jumpPatch represents a branch operation that needs to be patched later
 type jumpPatch struct {
-	clauseIndex int
-	opIndex     int
+	clauseIndex          int
+	opIndex              int
+	isBranchOnFalseValue bool // true = BranchOnFalseValue, false = Branch
 }
 
 // compileSyntaxCaseClause compiles a single syntax-case clause.
@@ -218,7 +218,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Branch on match failure (reads value register directly, no Push needed)
 	failBranchIdx := p.template.CodeLen()
 	p.AppendOperations(NewOperationBranchOnFalseValueOffsetImmediate(0)) // Offset patched later
-	*failJumps = append(*failJumps, jumpPatch{clauseIndex, failBranchIdx})
+	*failJumps = append(*failJumps, jumpPatch{clauseIndex, failBranchIdx, true})
 
 	// Create environment with pattern variables bound (shared between fender and body)
 	bodyEnv := p.createPatternVarEnvironment(patternVars)
@@ -265,14 +265,13 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Jump to end on success
 	successJumpIdx := p.template.CodeLen()
 	p.AppendOperations(NewOperationBranchOffsetImmediate(0)) // Offset patched later
-	*successJumps = append(*successJumps, jumpPatch{clauseIndex, successJumpIdx})
+	*successJumps = append(*successJumps, jumpPatch{clauseIndex, successJumpIdx, false})
 
 	// If there was a fender, add cleanup block: PopEnv, then branch to next clause
 	if fender != nil {
 		// Patch fender branch to jump here (cleanup block start)
 		cleanupStart := p.template.CodeLen()
-		fenderOp := p.template.SideTableOpAt(fenderBranchIdx).(*OperationBranchOnFalseValueOffsetImmediate)
-		fenderOp.Offset = cleanupStart - fenderBranchIdx
+		p.patchBranchOnFalseValueOffset(fenderBranchIdx, cleanupStart)
 
 		// Restore parent environment
 		p.AppendOperations(NewOperationPopEnv())
@@ -280,7 +279,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		// Branch to next clause (will be patched below)
 		cleanupBranchIdx := p.template.CodeLen()
 		p.AppendOperations(NewOperationBranchOffsetImmediate(0))
-		*failJumps = append(*failJumps, jumpPatch{clauseIndex, cleanupBranchIdx})
+		*failJumps = append(*failJumps, jumpPatch{clauseIndex, cleanupBranchIdx, false})
 	}
 
 	// Patch fail jumps for this clause to point to the next clause
@@ -288,12 +287,11 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	for i := len(*failJumps) - 1; i >= 0; i-- {
 		patch := (*failJumps)[i]
 		if patch.clauseIndex == clauseIndex {
-			offset := nextClauseStart - patch.opIndex
-			switch op := p.template.SideTableOpAt(patch.opIndex).(type) {
-			case *OperationBranchOnFalseValueOffsetImmediate:
-				op.Offset = offset
-			case *OperationBranchOffsetImmediate:
-				op.Offset = offset
+			// Use the stored branch type to call the appropriate patch function
+			if patch.isBranchOnFalseValue {
+				p.patchBranchOnFalseValueOffset(patch.opIndex, nextClauseStart)
+			} else {
+				p.patchBranchOffset(patch.opIndex, nextClauseStart)
 			}
 		}
 	}

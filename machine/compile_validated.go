@@ -157,8 +157,8 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 
 	// Fix up branch targets
 	endIndex := p.template.CodeLen()
-	p.template.PatchSideTableOp(branchOnFalseIndex, NewOperationBranchOnFalseValueOffsetImmediate(altStart-branchOnFalseIndex))
-	p.template.PatchSideTableOp(branchToEndIndex, NewOperationBranchOffsetImmediate(endIndex-branchToEndIndex))
+	p.patchBranchOnFalseValueOffset(branchOnFalseIndex, altStart)
+	p.patchBranchOffset(branchToEndIndex, endIndex)
 
 	return nil
 }

@@ -205,7 +205,7 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 func TestMachineContinuationMethodsAdditional(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationRestoreContinuation())
 
@@ -227,7 +227,7 @@ func TestMachineContinuationMethodsAdditional(t *testing.T) {
 func TestMachineContinuationFromMachineContext(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(42))),
 		NewOperationRestoreContinuation(),
 	)

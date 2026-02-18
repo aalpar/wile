@@ -37,7 +37,7 @@ func TestSourceAt_WithSource(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.appendOperationsWithSource(source,
+	tpl.AppendOperationsWithSource(source,
 		NewOperationLoadVoid(),
 		NewOperationLoadVoid(),
 	)
@@ -66,8 +66,8 @@ func TestSourceAt_MixedSources(t *testing.T) {
 	source1 := &syntax.SourceContext{File: "file1.scm"}
 	source2 := &syntax.SourceContext{File: "file2.scm"}
 
-	tpl.appendOperationsWithSource(source1, NewOperationLoadVoid())
-	tpl.appendOperationsWithSource(source2, NewOperationLoadVoid())
+	tpl.AppendOperationsWithSource(source1, NewOperationLoadVoid())
+	tpl.AppendOperationsWithSource(source2, NewOperationLoadVoid())
 	tpl.AppendOperations(NewOperationLoadVoid()) // nil source
 
 	c.Assert(tpl.SourceAt(0).File, qt.Equals, "file1.scm")
@@ -119,7 +119,7 @@ func TestCopy_PreservesSourceRefs(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
-	tpl.appendOperationsWithSource(source, NewOperationLoadVoid())
+	tpl.AppendOperationsWithSource(source, NewOperationLoadVoid())
 	tpl.AppendOperations(NewOperationLoadVoid())
 
 	copied := tpl.Copy()

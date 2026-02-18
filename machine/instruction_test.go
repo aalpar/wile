@@ -79,3 +79,65 @@ func TestInstructionStringComplex(t *testing.T) {
 	instr := Instruction{Op: OpComplex, Arg: 7}
 	c.Assert(instr.String(), qt.Equals, "Complex 7")
 }
+
+func TestLocalIndexBitPackingEdgeCases(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name  string
+		slot  int
+		depth int
+	}{
+		{"negative slot", -1, 0},
+		{"negative depth", 0, -1},
+		{"both negative", -10, -20},
+		{"min int16", -32768, -32768},
+		{"mixed signs", -100, 200},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			li := environment.NewLocalIndex(tc.slot, tc.depth)
+			encoded := EncodeLocalIndex(li)
+			slot, depth := DecodeLocalIndex(encoded)
+			c.Assert(slot, qt.Equals, tc.slot)
+			c.Assert(depth, qt.Equals, tc.depth)
+		})
+	}
+}
+
+func TestOperationToInstructionWave3(t *testing.T) {
+	c := qt.New(t)
+	li := environment.NewLocalIndex(7, 4)
+
+	tests := []struct {
+		name       string
+		op         Operation
+		expectedOp OpCode
+	}{
+		{
+			"LoadLocal",
+			NewOperationLoadLocalByLocalIndexImmediate(li),
+			OpLoadLocal,
+		},
+		{
+			"StoreLocal",
+			NewOperationStoreLocalByLocalIndexImmediate(li),
+			OpStoreLocal,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			instr, ok := operationToInstruction(tc.op)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("operationToInstruction should succeed"))
+			c.Assert(instr.Op, qt.Equals, tc.expectedOp)
+
+			// Verify round-trip
+			roundtrip := instructionToOperation(instr)
+			c.Assert(roundtrip, qt.Not(qt.IsNil))
+			c.Assert(tc.op.EqualTo(roundtrip), qt.IsTrue,
+				qt.Commentf("round-trip should preserve operation equality"))
+		})
+	}
+}

@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** IN PROGRESS — Phases 0–5 complete, Phase 6 in progress (6.1–6.3 done), Phase 7 remaining
+**Status:** IN PROGRESS — Phases 0–6 complete, Phase 7 remaining
 
 ## Overview
 
@@ -28,6 +28,7 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 | **3** | Expansion allocation optimization | Complete |
 | **4** | WithScope/AddScope idempotency | Complete |
 | **5** | Compiler optimizations — ops prealloc, constant folding, peephole | Complete |
+| **6** | Switch dispatch — opcode enum, compact instruction struct, switch-based VM loop | Complete |
 
 ### Phase 5 Details
 
@@ -44,18 +45,21 @@ Three optimizations applied to the compiler:
    - `(if <truthy-literal> X Y)` → compiles only X
    - Per R7RS, only `#f` is false; all other values are truthy
 
+### Phase 6 Details
+
+Replaced interface-based operation dispatch with switch-based dispatch using integer opcodes. Migrated 17 hot-path operations to integer dispatch in 3 waves:
+
+**Wave 1 (Zero-operand):** Push, Pop, Pull, LoadVoid, Drop, PopEnv, Apply, RestoreContinuation
+**Wave 2 (Single-operand):** BranchOnFalseValue, Branch, SaveContinuation, LoadLiteral, LoadGlobal, StoreGlobal, PeekK
+**Wave 3 (Two-operand):** LoadLocal, StoreLocal (bit-packed LocalIndex)
+
+See `PHASE6_SWITCH_DISPATCH.md` for full implementation details.
+
 ## Remaining Phases
 
 | Phase | Description | Impact | Risk | Deps | Plan |
 |-------|-------------|--------|------|------|------|
-| **6** | Switch dispatch — opcode enum, compact instruction struct, switch-based VM loop (6.1–6.3 complete) | 10–20% CPU | High | 5 | `PHASE6_SWITCH_DISPATCH.md` |
 | **7** | Advanced — tagged integers (unsafe), compilation caching, library pre-compilation | Variable | High | 5, 6 | TBD |
-
-```
-Phase 6 ──→ Phase 7
-```
-
-**Phase 6 Detail:** See `PHASE6_SWITCH_DISPATCH.md` for full implementation plan. Summary: incremental migration in 3 waves (zero-operand → single-operand → two-operand), hybrid approach with integer dispatch for hot-path ops and side table for complex ops. Phases 6.1 (infrastructure — OpCode enum, Instruction struct, NativeTemplate fields), 6.2 (dual-mode VM loop — switch dispatch alongside interface dispatch), and 6.3 (Wave 1 — 8 zero-operand ops migrated) are complete.
 
 ## Critical Files
 

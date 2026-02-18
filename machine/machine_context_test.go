@@ -780,7 +780,7 @@ func TestMachineContextNewSubContext(t *testing.T) {
 func TestMachineContextSetValues(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationRestoreContinuation())
 
@@ -799,7 +799,7 @@ func TestMachineContextSetValues(t *testing.T) {
 func TestMachineContextSetValue(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationRestoreContinuation())
 
@@ -1271,11 +1271,11 @@ func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
 	}
 }
 
-// --- Dual-mode dispatch tests (Phase 6.2) ---
+// --- Dispatch tests (Phase 6) ---
 
-func TestRunDispatch_InterfacePath(t *testing.T) {
+func TestRunDispatch_InitialOperations(t *testing.T) {
 	c := qt.New(t)
-	// Template with only operations (no code) uses runInterfaceDispatch.
+	// Template created with initial operations converts them to bytecode.
 	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
