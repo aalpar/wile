@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
@@ -333,8 +332,6 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.counters.BindingsCopied += uint64(len(bnds))
 	p.counters.KeysShared++
 
-	// Measure time spent copying parameters to bindings
-	copyStart := time.Now()
 	if !tpl.IsVariadic() {
 		for i := range bnds[:l] {
 			bnds[i].SetValue(vs[i])
@@ -345,7 +342,6 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		}
 		bnds[l-1].SetValue(values.List(vs[l-1:]...))
 	}
-	p.counters.ParamCopyTimeNanos += uint64(time.Since(copyStart).Nanoseconds())
 
 	p.template = tpl
 	p.env = env
