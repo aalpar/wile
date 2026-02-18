@@ -57,11 +57,13 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
 	}
 	if len(operations) > 0 {
+		// Direct construction with initial operations (e.g., NewForeignClosure).
+		// Uses the interface-dispatch path.
 		q.operations = operations
 		q.sourceRefs = make([]uint16, len(operations))
 	} else {
-		// Pre-allocate for the compilation path to reduce append growth.
-		q.operations = make(Operations, 0, initialOpsCap)
+		// Compilation path: pre-allocate code[] for integer dispatch.
+		q.code = make([]Instruction, 0, initialOpsCap)
 		q.sourceRefs = make([]uint16, 0, initialOpsCap)
 	}
 	return q
@@ -87,6 +89,50 @@ func (p *NativeTemplate) IsVariadic() bool {
 
 func (p *NativeTemplate) Operations() Operations {
 	return p.operations
+}
+
+// EffectiveOperations returns the logical operation sequence regardless of
+// dispatch mode. For interface-dispatch templates, returns operations directly.
+// For integer-dispatch templates, reconstructs operations from code[]+sideTable[].
+// Used by tests to verify compiled bytecode without depending on dispatch representation.
+func (p *NativeTemplate) EffectiveOperations() Operations {
+	if len(p.operations) > 0 {
+		return p.operations
+	}
+	ops := make(Operations, len(p.code))
+	for i, instr := range p.code {
+		if instr.Op == OpComplex {
+			ops[i] = p.sideTable[instr.Arg]
+		} else {
+			ops[i] = instructionToOperation(instr)
+		}
+	}
+	return ops
+}
+
+// instructionToOperation converts a direct instruction back to its
+// corresponding Operation value. Used by EffectiveOperations for test support.
+func instructionToOperation(instr Instruction) Operation {
+	switch instr.Op {
+	case OpPush:
+		return NewOperationPush()
+	case OpPop:
+		return NewOperationPop()
+	case OpPull:
+		return NewOperationPull()
+	case OpLoadVoid:
+		return NewOperationLoadVoid()
+	case OpDrop:
+		return NewOperationDrop()
+	case OpPopEnv:
+		return NewOperationPopEnv()
+	case OpApply:
+		return NewOperationApply()
+	case OpRestoreContinuation:
+		return NewOperationRestoreContinuation()
+	default:
+		return nil
+	}
 }
 
 // SourceAt returns the source location for the operation at pc.
@@ -123,6 +169,47 @@ func (p *NativeTemplate) appendOperationsWithSource(src *syntax.SourceContext, o
 	p.operations = append(p.operations, ops...)
 	for range ops {
 		p.sourceRefs = append(p.sourceRefs, idx)
+	}
+}
+
+// appendInstructionsWithSource routes operations to the integer-dispatch code[]
+// path. Wave 1 (zero-operand) operations are converted to direct instructions;
+// all other operations are placed in the sideTable and referenced via OpComplex.
+func (p *NativeTemplate) appendInstructionsWithSource(src *syntax.SourceContext, ops ...Operation) {
+	idx := p.internSource(src)
+	for _, op := range ops {
+		instr, ok := operationToInstruction(op)
+		if !ok {
+			instr = p.AppendSideTableOp(op)
+		}
+		p.code = append(p.code, instr)
+		p.sourceRefs = append(p.sourceRefs, idx)
+	}
+}
+
+// operationToInstruction converts a Wave 1 operation to a direct Instruction.
+// Returns (instruction, true) if the operation has a dedicated opcode,
+// or (Instruction{}, false) if it should go through the sideTable.
+func operationToInstruction(op Operation) (Instruction, bool) {
+	switch op.(type) {
+	case *OperationPush:
+		return Instruction{Op: OpPush}, true
+	case *OperationPop:
+		return Instruction{Op: OpPop}, true
+	case *OperationPull:
+		return Instruction{Op: OpPull}, true
+	case *OperationLoadVoid:
+		return Instruction{Op: OpLoadVoid}, true
+	case *OperationDrop:
+		return Instruction{Op: OpDrop}, true
+	case *OperationPopEnv:
+		return Instruction{Op: OpPopEnv}, true
+	case *OperationApply:
+		return Instruction{Op: OpApply}, true
+	case *OperationRestoreContinuation:
+		return Instruction{Op: OpRestoreContinuation}, true
+	default:
+		return Instruction{}, false
 	}
 }
 
@@ -259,8 +346,14 @@ func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
 }
 
 // AppendOperations appends operations with no source attribution (index 0 = nil).
-// This is the fallback for direct template calls outside the compiler.
+// Routes to integer dispatch (code[]) or interface dispatch (operations[])
+// based on which path this template uses.
 func (p *NativeTemplate) AppendOperations(ops ...Operation) {
+	if p.code != nil {
+		// Integer-dispatch path: route through instruction conversion.
+		p.appendInstructionsWithSource(nil, ops...)
+		return
+	}
 	p.operations = append(p.operations, ops...)
 	for range ops {
 		p.sourceRefs = append(p.sourceRefs, 0)
@@ -299,6 +392,22 @@ func (p *NativeTemplate) SideTable() []Operation {
 	return p.sideTable
 }
 
+// CodeLen returns the current code[] length (number of instructions emitted).
+func (p *NativeTemplate) CodeLen() int {
+	return len(p.code)
+}
+
+// PatchSideTableOp replaces the sideTable operation referenced by code[codeIdx].
+// The instruction at code[codeIdx] must be OpComplex.
+func (p *NativeTemplate) PatchSideTableOp(codeIdx int, op Operation) {
+	p.sideTable[p.code[codeIdx].Arg] = op
+}
+
+// SideTableOpAt returns the sideTable operation referenced by code[codeIdx].
+// The instruction at code[codeIdx] must be OpComplex.
+func (p *NativeTemplate) SideTableOpAt(codeIdx int) Operation {
+	return p.sideTable[p.code[codeIdx].Arg]
+}
 func (p *NativeTemplate) SchemeString() string {
 	return "#<native-template>"
 }

@@ -1334,7 +1334,7 @@ func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
 	c := qt.New(t)
 	// An opcode with no switch case returns ErrUnknownOpCode.
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.AppendInstruction(Instruction{Op: OpPush, Arg: 0})
+	tpl.AppendInstruction(Instruction{Op: OpInvalid, Arg: 0})
 
 	env := environment.NewTopLevelEnvironment().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)

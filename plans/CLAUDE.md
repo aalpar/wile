@@ -27,7 +27,7 @@ When investigating R7RS conformance issues:
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
 | `COMPILER_OPTIMIZER.md` | Bytecode optimizer: peephole, constant folding, ops prealloc (Phase 5) | Proposed |
 | `INTEGER_OPCODE_DISPATCH.md` | Integer opcode dispatch — replace interface dispatch with switch for hot-path ops | Design |
-| `PHASE6_SWITCH_DISPATCH.md` | Phase 6 implementation plan: switch dispatch for 17 hot-path ops, 3 waves | Ready to start |
+| `PHASE6_SWITCH_DISPATCH.md` | Phase 6 implementation plan: switch dispatch for 17 hot-path ops, 3 waves | In progress (6.1–6.3 complete) |
 | `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
 | `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
 

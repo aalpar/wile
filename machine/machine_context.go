@@ -565,9 +565,6 @@ func (p *MachineContext) runInterfaceDispatch() error {
 // opcodes. Hot-path operations are inlined as switch cases; complex
 // operations (closures, macros, FFI) are dispatched via OpComplex to
 // the template's sideTable.
-//
-// During migration, only OpComplex is implemented. Each wave adds more
-// inlined cases until all 17 hot-path operations are covered.
 func (p *MachineContext) runIntegerDispatch() error {
 	mc := p
 	for mc.pc < len(mc.template.code) {
@@ -592,6 +589,59 @@ func (p *MachineContext) runIntegerDispatch() error {
 		mc.counters.OpsExecuted++
 
 		switch instr.Op {
+		// --- Wave 1: zero-operand operations ---
+
+		case OpPush:
+			if mc.multiValues != nil {
+				mc.evals.PushAll(mc.multiValues)
+			} else if mc.singleValue != nil {
+				mc.evals.Push(mc.singleValue)
+			}
+			mc.pc++
+
+		case OpPop:
+			mc.SetValue(mc.evals.Pop())
+			mc.pc++
+
+		case OpPull:
+			mc.SetValue(mc.evals.Pull())
+			mc.pc++
+
+		case OpLoadVoid:
+			mc.SetValue(values.Void)
+			mc.pc++
+
+		case OpDrop:
+			mc.evals.Pop()
+			mc.pc++
+
+		case OpPopEnv:
+			parent := mc.env.Parent()
+			if parent == nil {
+				return values.WrapForeignErrorf(values.ErrNilParentEnvironment,
+					"PopEnv: cannot pop top-level environment")
+			}
+			mc.env = parent
+			mc.pc++
+
+		case OpApply:
+			vs := mc.evals.PopAll()
+			mc.counters.StackPopAlls++
+			mc.counters.StackElementsCopied += uint64(len(vs))
+			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc = result
+
+		case OpRestoreContinuation:
+			if mc.cont == nil {
+				return nil
+			}
+			mc.RestoreAndRelease(mc.cont)
+
+		// --- Fallback: complex operations via side table ---
+
 		case OpComplex:
 			var err error
 			mc, err = mc.template.sideTable[instr.Arg].Apply(mc.ctx, mc)
@@ -601,6 +651,7 @@ func (p *MachineContext) runIntegerDispatch() error {
 				}
 				return err
 			}
+
 		default:
 			return values.WrapForeignErrorf(values.ErrUnknownOpCode,
 				"unimplemented opcode: %s", instr.Op)

@@ -127,7 +127,7 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 	}
 
 	// Set up branch-on-false to skip consequent (reads value register directly)
-	branchOnFalseIndex := p.template.operations.Len()
+	branchOnFalseIndex := p.template.CodeLen()
 	p.AppendOperations(NewOperationBranchOnFalseValueOffsetImmediate(0)) // placeholder
 
 	// Compile consequent (inherits tail position)
@@ -137,11 +137,11 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 	}
 
 	// Set up unconditional branch to skip alternative
-	branchToEndIndex := p.template.operations.Len()
+	branchToEndIndex := p.template.CodeLen()
 	p.AppendOperations(NewOperationBranchOffsetImmediate(0)) // placeholder
 
 	// Target for branch-on-false
-	altStart := p.template.operations.Len()
+	altStart := p.template.CodeLen()
 
 	// Compile alternative (or load void if none)
 	if v.Alt != nil {
@@ -156,9 +156,9 @@ func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContex
 	}
 
 	// Fix up branch targets
-	endIndex := p.template.operations.Len()
-	p.template.operations[branchOnFalseIndex] = NewOperationBranchOnFalseValueOffsetImmediate(altStart - branchOnFalseIndex)
-	p.template.operations[branchToEndIndex] = NewOperationBranchOffsetImmediate(endIndex - branchToEndIndex)
+	endIndex := p.template.CodeLen()
+	p.template.PatchSideTableOp(branchOnFalseIndex, NewOperationBranchOnFalseValueOffsetImmediate(altStart-branchOnFalseIndex))
+	p.template.PatchSideTableOp(branchToEndIndex, NewOperationBranchOffsetImmediate(endIndex-branchToEndIndex))
 
 	return nil
 }
