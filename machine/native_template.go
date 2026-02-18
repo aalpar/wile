@@ -30,15 +30,14 @@ type NativeTemplate struct {
 	valueCount     int
 	isVariadic     bool
 	literals       MultipleValues
-	operations     Operations
-	sourceRefs     []uint16                // parallel to operations, index into sourceTable
+	sourceRefs     []uint16                // parallel to code, index into sourceTable
 	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
 	name           string                  // Function name (for stack traces)
 
-	// Integer dispatch fields (Phase 6). During migration, a template has
-	// either operations (interface dispatch) or code+sideTable (integer
-	// dispatch), never both. The VM's Run() checks which is populated.
-	code      []Instruction // integer-dispatched bytecode
+	// Integer dispatch: all operations compiled to Instructions.
+	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
+	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
+	code      []Instruction // bytecode instructions
 	sideTable []Operation   // complex ops referenced by OpComplex
 }
 
@@ -55,16 +54,13 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		valueCount:     vcnt,
 		isVariadic:     vd,
 		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
+		code:           make([]Instruction, 0, initialOpsCap),
+		sourceRefs:     make([]uint16, 0, initialOpsCap),
 	}
 	if len(operations) > 0 {
-		// Direct construction with initial operations (e.g., NewForeignClosure).
-		// Uses the interface-dispatch path.
-		q.operations = operations
-		q.sourceRefs = make([]uint16, len(operations))
-	} else {
-		// Compilation path: pre-allocate code[] for integer dispatch.
-		q.code = make([]Instruction, 0, initialOpsCap)
-		q.sourceRefs = make([]uint16, 0, initialOpsCap)
+		// Direct construction with initial operations (e.g., test fixtures).
+		// Convert operations to instructions via AppendOperations.
+		q.AppendOperations(operations...)
 	}
 	return q
 }
@@ -87,18 +83,10 @@ func (p *NativeTemplate) IsVariadic() bool {
 	return p.isVariadic
 }
 
+// Operations reconstructs the operation sequence from the bytecode.
+// Converts Instructions back to Operation values for compatibility with
+// existing code that expects Operations (e.g., tests, EqualTo).
 func (p *NativeTemplate) Operations() Operations {
-	return p.operations
-}
-
-// EffectiveOperations returns the logical operation sequence regardless of
-// dispatch mode. For interface-dispatch templates, returns operations directly.
-// For integer-dispatch templates, reconstructs operations from code[]+sideTable[].
-// Used by tests to verify compiled bytecode without depending on dispatch representation.
-func (p *NativeTemplate) EffectiveOperations() Operations {
-	if len(p.operations) > 0 {
-		return p.operations
-	}
 	ops := make(Operations, len(p.code))
 	for i, instr := range p.code {
 		if instr.Op == OpComplex {
@@ -110,10 +98,17 @@ func (p *NativeTemplate) EffectiveOperations() Operations {
 	return ops
 }
 
+// EffectiveOperations is an alias for Operations() for backward compatibility.
+// Both return the reconstructed operation sequence from bytecode.
+func (p *NativeTemplate) EffectiveOperations() Operations {
+	return p.Operations()
+}
+
 // instructionToOperation converts a direct instruction back to its
 // corresponding Operation value. Used by EffectiveOperations for test support.
 func instructionToOperation(instr Instruction) Operation {
 	switch instr.Op {
+	// --- Wave 1: zero-operand operations ---
 	case OpPush:
 		return NewOperationPush()
 	case OpPop:
@@ -130,6 +125,33 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationApply()
 	case OpRestoreContinuation:
 		return NewOperationRestoreContinuation()
+
+	// --- Wave 2: single-operand operations ---
+	case OpBranchOnFalseValue:
+		return NewOperationBranchOnFalseValueOffsetImmediate(int(instr.Arg))
+	case OpBranch:
+		return NewOperationBranchOffsetImmediate(int(instr.Arg))
+	case OpSaveContinuation:
+		return NewOperationSaveContinuationOffsetImmediate(int(instr.Arg))
+	case OpLoadLiteral:
+		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpLoadGlobal:
+		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpStoreGlobal:
+		return NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPeekK:
+		return NewOperationPeekK(int(instr.Arg))
+
+	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
+	case OpLoadLocal:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationLoadLocalByLocalIndexImmediate(li)
+	case OpStoreLocal:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationStoreLocalByLocalIndexImmediate(li)
+
 	default:
 		return nil
 	}
@@ -162,20 +184,11 @@ func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint16 {
 	return idx
 }
 
-// appendOperationsWithSource appends operations and tags each with the given source.
-// This is the source-aware path used by the compiler's AppendOperations method.
-func (p *NativeTemplate) appendOperationsWithSource(src *syntax.SourceContext, ops ...Operation) {
-	idx := p.internSource(src)
-	p.operations = append(p.operations, ops...)
-	for range ops {
-		p.sourceRefs = append(p.sourceRefs, idx)
-	}
-}
-
-// appendInstructionsWithSource routes operations to the integer-dispatch code[]
-// path. Wave 1 (zero-operand) operations are converted to direct instructions;
-// all other operations are placed in the sideTable and referenced via OpComplex.
-func (p *NativeTemplate) appendInstructionsWithSource(src *syntax.SourceContext, ops ...Operation) {
+// AppendOperationsWithSource converts operations to instructions and tags
+// each with the given source. Wave 1-3 operations become direct switch cases;
+// complex operations go through the sideTable and are dispatched via OpComplex.
+// This is a public method for test use.
+func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, ops ...Operation) {
 	idx := p.internSource(src)
 	for _, op := range ops {
 		instr, ok := operationToInstruction(op)
@@ -187,11 +200,12 @@ func (p *NativeTemplate) appendInstructionsWithSource(src *syntax.SourceContext,
 	}
 }
 
-// operationToInstruction converts a Wave 1 operation to a direct Instruction.
+// operationToInstruction converts Wave 1 and Wave 2 operations to direct Instructions.
 // Returns (instruction, true) if the operation has a dedicated opcode,
 // or (Instruction{}, false) if it should go through the sideTable.
 func operationToInstruction(op Operation) (Instruction, bool) {
-	switch op.(type) {
+	switch v := op.(type) {
+	// --- Wave 1: zero-operand operations ---
 	case *OperationPush:
 		return Instruction{Op: OpPush}, true
 	case *OperationPop:
@@ -208,6 +222,29 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 		return Instruction{Op: OpApply}, true
 	case *OperationRestoreContinuation:
 		return Instruction{Op: OpRestoreContinuation}, true
+
+	// --- Wave 2: single-operand operations ---
+	case *OperationBranchOnFalseValueOffsetImmediate:
+		return Instruction{Op: OpBranchOnFalseValue, Arg: int32(v.Offset)}, true
+	case *OperationBranchOffsetImmediate:
+		return Instruction{Op: OpBranch, Arg: int32(v.Offset)}, true
+	case *OperationSaveContinuationOffsetImmediate:
+		return Instruction{Op: OpSaveContinuation, Arg: int32(v.Offset)}, true
+	case *OperationLoadLiteralByLiteralIndexImmediate:
+		return Instruction{Op: OpLoadLiteral, Arg: int32(v.LiteralIndex)}, true
+	case *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate:
+		return Instruction{Op: OpLoadGlobal, Arg: int32(v.LiteralIndex)}, true
+	case *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate:
+		return Instruction{Op: OpStoreGlobal, Arg: int32(v.LiteralIndex)}, true
+	case *OperationPeekK:
+		return Instruction{Op: OpPeekK, Arg: int32(v.Depth)}, true
+
+	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
+	case *OperationLoadLocalByLocalIndexImmediate:
+		return Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(v.LocalIndex)}, true
+	case *OperationStoreLocalByLocalIndexImmediate:
+		return Instruction{Op: OpStoreLocal, Arg: EncodeLocalIndex(v.LocalIndex)}, true
+
 	default:
 		return Instruction{}, false
 	}
@@ -346,18 +383,9 @@ func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
 }
 
 // AppendOperations appends operations with no source attribution (index 0 = nil).
-// Routes to integer dispatch (code[]) or interface dispatch (operations[])
-// based on which path this template uses.
+// Converts operations to instructions using AppendOperationsWithSource.
 func (p *NativeTemplate) AppendOperations(ops ...Operation) {
-	if p.code != nil {
-		// Integer-dispatch path: route through instruction conversion.
-		p.appendInstructionsWithSource(nil, ops...)
-		return
-	}
-	p.operations = append(p.operations, ops...)
-	for range ops {
-		p.sourceRefs = append(p.sourceRefs, 0)
-	}
+	p.AppendOperationsWithSource(nil, ops...)
 }
 
 // AppendInstructionWithSource appends a single instruction to the integer-dispatch
@@ -408,6 +436,14 @@ func (p *NativeTemplate) PatchSideTableOp(codeIdx int, op Operation) {
 func (p *NativeTemplate) SideTableOpAt(codeIdx int) Operation {
 	return p.sideTable[p.code[codeIdx].Arg]
 }
+
+// PatchInstructionArg updates the Arg field of the instruction at code[codeIdx].
+// Used for patching branch offsets and continuation save offsets after the
+// target PC is known.
+func (p *NativeTemplate) PatchInstructionArg(codeIdx int, arg int32) {
+	p.code[codeIdx].Arg = arg
+}
+
 func (p *NativeTemplate) SchemeString() string {
 	return "#<native-template>"
 }
@@ -458,20 +494,6 @@ func (p *NativeTemplate) EqualTo(o values.Value) bool {
 			return false
 		}
 	}
-	// Compare interface-dispatch operations if present.
-	if len(p.operations) != len(v.operations) {
-		return false
-	}
-	for i := range p.operations {
-		op0, ok0 := p.operations[i].(values.Value)
-		op1, ok1 := v.operations[i].(values.Value)
-		if !ok0 || !ok1 {
-			return false
-		}
-		if !op0.EqualTo(op1) {
-			return false
-		}
-	}
 	return true
 }
 
@@ -486,7 +508,6 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		name:           p.name,
 	}
 	q.literals = slices.Clone(p.literals)
-	q.operations = slices.Clone(p.operations)
 	q.code = slices.Clone(p.code)
 	q.sideTable = slices.Clone(p.sideTable)
 	q.sourceRefs = slices.Clone(p.sourceRefs)

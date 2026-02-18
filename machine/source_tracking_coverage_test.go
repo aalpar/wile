@@ -31,7 +31,7 @@ import (
 // Used by tests that need a template with source-tagged operations.
 func addOpsWithSource(tpl *NativeTemplate, count int, source *syntax.SourceContext) {
 	for range count {
-		tpl.appendOperationsWithSource(source, NewOperationLoadVoid())
+		tpl.AppendOperationsWithSource(source, NewOperationLoadVoid())
 	}
 }
 
@@ -609,7 +609,7 @@ func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 	// Add operations with source tracking
 	lit := values.NewInteger(42)
 	tpl.literals = append(tpl.literals, lit)
-	tpl.appendOperationsWithSource(source,
+	tpl.AppendOperationsWithSource(source,
 		NewOperationLoadVoid(),
 		NewOperationLoadVoid(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(0),
@@ -655,7 +655,7 @@ func TestRun_WithDebugger_StepInto(t *testing.T) {
 	// Add operations with source tracking
 	lit := values.NewInteger(42)
 	tpl.literals = append(tpl.literals, lit)
-	tpl.appendOperationsWithSource(source,
+	tpl.AppendOperationsWithSource(source,
 		NewOperationLoadVoid(),
 		NewOperationLoadVoid(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(0),

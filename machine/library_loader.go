@@ -214,7 +214,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 
 	// Execute the library's compiled template to populate bindings
 	// The library's code (begin blocks, defines) is in compiledLib.Template
-	if compiledLib.Template != nil && (len(compiledLib.Template.operations) > 0 || compiledLib.Template.CodeLen() > 0) {
+	if compiledLib.Template != nil && compiledLib.Template.CodeLen() > 0 {
 		cont := NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
 		mc := NewMachineContext(ctx, cont)
 		err := mc.Run()

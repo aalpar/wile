@@ -780,7 +780,7 @@ func TestMachineContextNewSubContext(t *testing.T) {
 func TestMachineContextSetValues(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationRestoreContinuation())
 
@@ -799,7 +799,7 @@ func TestMachineContextSetValues(t *testing.T) {
 func TestMachineContextSetValue(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationRestoreContinuation())
 

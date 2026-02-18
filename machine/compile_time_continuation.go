@@ -391,10 +391,10 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 }
 
 // AppendOperations appends operations tagged with the current source from the source stack.
-// Routes through the integer-dispatch code[] path: Wave 1 operations become
+// Routes through the integer-dispatch code[] path: Wave 1-3 operations become
 // direct instructions, everything else goes via OpComplex to the sideTable.
 func (p *CompileTimeContinuation) AppendOperations(ops ...Operation) {
-	p.template.appendInstructionsWithSource(p.currentSource(), ops...)
+	p.template.AppendOperationsWithSource(p.currentSource(), ops...)
 }
 
 // emitPatchableSaveContinuation emits a SaveContinuation with a placeholder
@@ -410,9 +410,36 @@ func (p *CompileTimeContinuation) emitPatchableSaveContinuation() int {
 // placeholder with the correct relative offset from the placeholder to the
 // current position.
 func (p *CompileTimeContinuation) patchSaveContinuationOffset(idx int) {
-	p.template.PatchSideTableOp(idx, NewOperationSaveContinuationOffsetImmediate(
-		p.template.CodeLen()-idx,
-	))
+	offset := p.template.CodeLen() - idx
+	if len(p.template.Code()) > 0 {
+		// Integer dispatch mode: patch the instruction's Arg field directly
+		p.template.PatchInstructionArg(idx, int32(offset))
+	} else {
+		// Interface dispatch mode: patch the side table operation
+		p.template.PatchSideTableOp(idx, NewOperationSaveContinuationOffsetImmediate(offset))
+	}
+}
+
+// patchBranchOnFalseValueOffset patches a previously emitted BranchOnFalseValue
+// instruction with the target offset.
+func (p *CompileTimeContinuation) patchBranchOnFalseValueOffset(idx, targetIdx int) {
+	offset := targetIdx - idx
+	if len(p.template.Code()) > 0 {
+		p.template.PatchInstructionArg(idx, int32(offset))
+	} else {
+		p.template.PatchSideTableOp(idx, NewOperationBranchOnFalseValueOffsetImmediate(offset))
+	}
+}
+
+// patchBranchOffset patches a previously emitted Branch instruction with the
+// target offset.
+func (p *CompileTimeContinuation) patchBranchOffset(idx, targetIdx int) {
+	offset := targetIdx - idx
+	if len(p.template.Code()) > 0 {
+		p.template.PatchInstructionArg(idx, int32(offset))
+	} else {
+		p.template.PatchSideTableOp(idx, NewOperationBranchOffsetImmediate(offset))
+	}
 }
 
 func (p *CompileTimeContinuation) pushSource(src *syntax.SourceContext) {

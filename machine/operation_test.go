@@ -720,12 +720,12 @@ func TestNativeTemplateOperationsArray(t *testing.T) {
 	tpl := NewNativeTemplate(2, 1, false)
 
 	// Add operations
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationLoadVoid(),
 		NewOperationPush(),
 		NewOperationRestoreContinuation())
 
-	qt.Assert(t, tpl.operations.Len(), qt.Equals, 3)
+	qt.Assert(t, tpl.CodeLen(), qt.Equals, 3)
 }
 
 // TestMultipleValuesOperationMethods tests MultipleValues methods
@@ -801,7 +801,7 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 	})
 
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		NewOperationForeignFunctionCall(fn),
 		NewOperationRestoreContinuation(),
 	)
@@ -817,7 +817,7 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 func TestOperationMakeClosureError(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	tpl.operations = append(tpl.operations,
+	tpl.AppendOperations(
 		// Push something that's not an environment frame
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(42))),
 		NewOperationPush(),
