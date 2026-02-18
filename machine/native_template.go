@@ -34,6 +34,12 @@ type NativeTemplate struct {
 	sourceRefs     []uint16                // parallel to operations, index into sourceTable
 	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
 	name           string                  // Function name (for stack traces)
+
+	// Integer dispatch fields (Phase 6). During migration, a template has
+	// either operations (interface dispatch) or code+sideTable (integer
+	// dispatch), never both. The VM's Run() checks which is populated.
+	code      []Instruction // integer-dispatched bytecode
+	sideTable []Operation   // complex ops referenced by OpComplex
 }
 
 // initialOpsCap is the pre-allocated capacity for the operations and sourceRefs
@@ -261,6 +267,38 @@ func (p *NativeTemplate) AppendOperations(ops ...Operation) {
 	}
 }
 
+// AppendInstructionWithSource appends a single instruction to the integer-dispatch
+// bytecode and tags it with the given source context.
+func (p *NativeTemplate) AppendInstructionWithSource(src *syntax.SourceContext, instr Instruction) {
+	idx := p.internSource(src)
+	p.code = append(p.code, instr)
+	p.sourceRefs = append(p.sourceRefs, idx)
+}
+
+// AppendInstruction appends a single instruction with no source attribution.
+func (p *NativeTemplate) AppendInstruction(instr Instruction) {
+	p.code = append(p.code, instr)
+	p.sourceRefs = append(p.sourceRefs, 0)
+}
+
+// AppendSideTableOp adds a complex operation to the side table and returns
+// an OpComplex instruction that references it.
+func (p *NativeTemplate) AppendSideTableOp(op Operation) Instruction {
+	idx := int32(len(p.sideTable))
+	p.sideTable = append(p.sideTable, op)
+	return Instruction{Op: OpComplex, Arg: idx}
+}
+
+// Code returns the integer-dispatch bytecode slice.
+func (p *NativeTemplate) Code() []Instruction {
+	return p.code
+}
+
+// SideTable returns the complex operations referenced by OpComplex instructions.
+func (p *NativeTemplate) SideTable() []Operation {
+	return p.sideTable
+}
+
 func (p *NativeTemplate) SchemeString() string {
 	return "#<native-template>"
 }
@@ -294,6 +332,24 @@ func (p *NativeTemplate) EqualTo(o values.Value) bool {
 			return false
 		}
 	}
+	// Compare integer-dispatch bytecode if present.
+	if len(p.code) != len(v.code) {
+		return false
+	}
+	for i := range p.code {
+		if p.code[i] != v.code[i] {
+			return false
+		}
+	}
+	if len(p.sideTable) != len(v.sideTable) {
+		return false
+	}
+	for i := range p.sideTable {
+		if !p.sideTable[i].EqualTo(v.sideTable[i]) {
+			return false
+		}
+	}
+	// Compare interface-dispatch operations if present.
 	if len(p.operations) != len(v.operations) {
 		return false
 	}
@@ -322,6 +378,8 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	}
 	q.literals = slices.Clone(p.literals)
 	q.operations = slices.Clone(p.operations)
+	q.code = slices.Clone(p.code)
+	q.sideTable = slices.Clone(p.sideTable)
 	q.sourceRefs = slices.Clone(p.sourceRefs)
 	q.sourceTable = slices.Clone(p.sourceTable)
 	return q

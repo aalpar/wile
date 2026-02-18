@@ -1,6 +1,6 @@
 # Integer Opcode Dispatch
 
-**Status:** Discussion / Design
+**Status:** Design (implementation plan: `PHASE6_SWITCH_DISPATCH.md`)
 **Date:** 2026-02-17
 
 ## Problem
@@ -19,7 +19,7 @@ Each cycle pays:
 3. Indirect call through vtable
 4. The operation struct is a separate heap allocation (~48-64 bytes each)
 
-~35 distinct operation types, each a separate struct implementing `Operation` (which embeds `values.Value`).
+30 distinct operation types, each a separate struct implementing `Operation` (which embeds `values.Value`).
 
 ## Current Architecture
 
@@ -48,7 +48,7 @@ Operations participate in Scheme equality and display. Some carry complex payloa
 |--------|---------------|-----------|
 | Cache locality | 2-5x on dispatch | `[]uint64` or `[]Instruction` is contiguous; `[]Operation` chases two pointers per op through scattered heap |
 | Switch vs itab | ~2-3ns/op | Interface dispatch (~3-5ns: load itab, indirect call) → jump table (~1-2ns) |
-| Memory footprint | ~4-6x smaller | Push: 8 bytes vs ~48 bytes. BranchOnFalse: 16 bytes vs ~56 bytes |
+| Memory footprint | ~3x smaller | Push: 16 bytes (`Instruction{OpCode, int}`) vs ~48 bytes. BranchOnFalseValue: 16 bytes vs ~56 bytes |
 | Allocation pressure | Moderate | No per-operation heap allocs during compilation |
 
 ### Where It Doesn't Help
@@ -115,7 +115,7 @@ type Instruction struct {
 Dispatch: `switch instr.Op { case OpPush: ... case OpBranchOnFalse: pc += instr.Arg1 ... }`
 
 **Pros:** Fixed-width keeps source maps 1:1 with pc. No variable-width decoding. No interface overhead.
-**Cons:** Wastes Arg fields on zero-operand ops. Complex payloads still need side table. Full migration required (all 35 ops at once).
+**Cons:** Wastes Arg fields on zero-operand ops. Complex payloads still need side table. Full migration required (all 30 ops at once).
 
 ### Option D: Hybrid — Integer Dispatch + Interface Fallback (Recommended)
 
@@ -145,21 +145,21 @@ case OpPop:
 case OpLoadLocal:
     mc.singleValue = mc.env.GetByIndex(instr.Arg)
     mc.pc++
-case OpBranchOnFalse:
-    v := mc.evals.Pop()
-    if !values.ValueToBool(v) {
+case OpBranchOnFalseValue:
+    // Phase 5 peephole: reads value register directly (no stack pop)
+    if !values.ValueToBool(mc.GetValue()) {
         mc.pc += instr.Arg
     } else {
         mc.pc++
     }
-// ...~15 more simple ops inlined...
+// ...~14 more simple ops inlined...
 case OpComplex:
     mc, err = tmpl.sideTable[instr.Arg].Apply(ctx, mc)
 }
 ```
 
 **Pros:**
-- Gets cache/dispatch wins for the ~20 simple ops dominating execution
+- Gets cache/dispatch wins for the 17 simple ops dominating execution
 - Complex ops keep current representation unchanged
 - Incremental migration — one op at a time, benchmark at each step
 - No breakage to values.Value semantics for complex ops
@@ -170,17 +170,27 @@ case OpComplex:
 
 ## Multi-Parameter Instruction Encoding
 
-For operations with two int32 parameters (e.g., LoadLocal with slot + depth):
+For operations with two parameters (e.g., LoadLocal with slot + depth):
 
-**struct{int32, int32} vs int64 analysis:** Both are 8 bytes, but struct has 4-byte alignment (int64 has 8-byte), direct field access (no shift/mask), and clearer semantics. Micro-benchmarks show int64 is ~25% faster (0.28ns vs 0.37ns) but this is negligible compared to VM dispatch overhead. Atomicity is irrelevant (operations are immutable). Debugger displays struct as `{Slot: 5, Depth: 2}` vs `0x0000000500000002`.
+**Actual type:** `LocalIndex` is `[2]int` (see `environment/local_index.go:32`), where `[0]` = slot (over), `[1]` = depth (up). On 64-bit platforms, each `int` is 8 bytes, so `LocalIndex` is 16 bytes total.
 
-**Recommendation:** Use struct for readability, debuggability, and standard Go idioms. The performance difference is unmeasurable in real workloads.
+**Encoding into `Instruction{Op OpCode; Arg int}`:** Since the `Arg` field is a single `int` (8 bytes on 64-bit), pack both values: slot in low 32 bits, depth in high 32 bits. Safe because slot/depth values are small integers in practice (never exceed 32-bit range).
+
+```go
+// Encode:
+arg := (depth << 32) | (slot & 0xFFFFFFFF)
+// Decode:
+slot := int(int32(instr.Arg))        // sign-extend low 32 bits
+depth := int(int32(instr.Arg >> 32)) // sign-extend high 32 bits
+```
+
+**Recommendation:** Bit-packing into the existing `Arg int` field avoids changing the Instruction struct for two-operand ops. The encode/decode helpers are confined to LoadLocal/StoreLocal emission and dispatch.
 
 ## Recommendation: Option D
 
 ### Rationale
 
-1. **80/20 rule.** ~8 operation types dominate the hot path: Push, Pop, LoadLocal, StoreLocal, Branch, BranchOnFalse, Apply, RestoreContinuation. Making these integer-dispatched captures most of the win.
+1. **80/20 rule.** ~8 operation types dominate the hot path: Push, Pop, LoadLocal, StoreLocal, Branch, BranchOnFalseValue, Apply, RestoreContinuation. Making these integer-dispatched captures most of the win.
 
 2. **Complex ops are rare per-execution.** SyntaxRulesTransform fires once per macro expansion, not in tight loops. Keeping them as interface objects costs nothing.
 
@@ -192,58 +202,59 @@ For operations with two int32 parameters (e.g., LoadLocal with slot + depth):
 
 ### If Maximum Simplicity Is Preferred
 
-Option C (fixed-size struct, no interface) is the cleanest final state but requires porting all ~35 operations and solving the values.Value requirement for all of them simultaneously.
+Option C (fixed-size struct, no interface) is the cleanest final state but requires porting all 30 operations and solving the values.Value requirement for all of them simultaneously.
 
 ## Hot-Path Operations (Migration Priority)
 
-These ops should be converted first — they execute most frequently:
+These ops should be converted first — they execute most frequently.
+
+**Verified inventory: 30 total operations, 17 migrable, 13 complex (keep as interface).**
 
 | Priority | Operation | Fields | Notes |
 |----------|-----------|--------|-------|
 | 1 | Push | none | |
 | 1 | Pop | none | |
-| 1 | LoadLocalByLocalIndexImmediate | LocalIndex struct{Slot, Depth int32} | Two-operand: struct is clearer than bit-packing, same 8-byte size |
-| 1 | StoreLocalByLocalIndexImmediate | LocalIndex struct{Slot, Depth int32} | Two-operand: same struct as LoadLocal |
-| 1 | BranchOnFalseOffsetImmediate | Offset int | |
-| 1 | BranchOnNotFalseOffsetImmediate | Offset int | |
+| 1 | Apply | none | Body is complex but opcode dispatch itself is trivial |
+| 1 | RestoreContinuation | none | |
+| 1 | LoadLocalByLocalIndexImmediate | `*LocalIndex` (`[2]int`) | Two-operand: bit-pack slot/depth into single `int` Arg |
+| 1 | StoreLocalByLocalIndexImmediate | `*LocalIndex` (`[2]int`) | Two-operand: same encoding as LoadLocal |
+| 1 | BranchOnFalseValueOffsetImmediate | Offset int | Phase 5 peephole; reads value register directly (no stack pop) |
 | 1 | BranchOffsetImmediate | Offset int | |
-| 2 | LoadLiteralByLiteralIndexImmediate | Index LiteralIndex | |
-| 2 | LoadLiteralInteger | Value int | |
+| 2 | LoadLiteralByLiteralIndexImmediate | LiteralIndex (int) | |
 | 2 | LoadVoid | none | |
-| 2 | Apply | none | Body is complex but opcode dispatch itself is trivial |
-| 2 | RestoreContinuation | none | |
 | 2 | SaveContinuationOffsetImmediate | Offset int | |
+| 2 | LoadGlobalByGlobalIndexLiteralIndexImmediate | LiteralIndex int | Single-operand: indexes into literals pool to find GlobalIndex |
+| 2 | StoreGlobalByGlobalIndexLiteralIndexImmediate | LiteralIndex int | Single-operand: same as LoadGlobal |
 | 3 | Pull | none | |
-| 3 | PeekK | K int | |
-| 3 | Drop | Count int | |
-| 3 | PopAll | none | |
+| 3 | PeekK | Depth int | |
+| 3 | Drop | none | Discards top of eval stack (no count param) |
 | 3 | PopEnv | none | |
-| 3 | ForeignFunctionCall | fn pointer | Needs side table |
-| 3 | LoadGlobalByGlobalIndexLiteralIndexImmediate | LiteralIndex int | Single-operand: indexes into literals pool to find GlobalIndex |
-| 3 | StoreGlobalByGlobalIndexLiteralIndexImmediate | LiteralIndex int | Single-operand: same as LoadGlobal |
 
-### Complex Ops (Keep as Interface)
+**Note:** `ForeignFunctionCall` is kept as interface (complex payload) but is the dominant hot-path for scripting workloads. See Phase 6.7 in `PHASE6_SWITCH_DISPATCH.md` for dedicated function table optimization.
+
+### Complex Ops (Keep as Interface — 13 total)
 
 These carry payloads that don't reduce to integers:
 
-- OperationSyntaxRulesTransform
-- OperationSyntaxCaseMatch
-- OperationBindPatternVars
-- OperationSyntaxCaseNoMatch
-- OperationSyntaxTemplateExpand
+- OperationSyntaxRulesTransform (clauses wrapper, scopes)
+- OperationSyntaxCaseMatch (matcher, pattern data)
+- OperationBindPatternVars (pattern bindings)
+- OperationSyntaxCaseNoMatch (error data)
+- OperationSyntaxTemplateExpand (template data)
 - OperationStoreSyntaxCaseInput
 - OperationClearSyntaxCaseInput
-- OperationBuildSyntaxList
+- OperationBuildSyntaxList (syntax builder config)
 - OperationMakeClosure (template pointer)
-- OperationMakeCaseLambdaClosure (template pointers)
-- OperationPushWind / OperationPopWind
-- OperationBrk (debugger)
+- OperationMakeCaseLambdaClosure (multiple template pointers)
+- OperationPushWind (thunk closures)
+- OperationPopWind (thunk closures)
+- OperationForeignFunctionCall (Go function pointer)
 
 ## Open Questions
 
 1. **Benchmarking baseline.** Need microbenchmarks isolating dispatch overhead before starting. Tight loop like `(do ((i 0 (+ i 1))) ((= i 1000000)))` and a cons-heavy workload like `(map (lambda (x) (+ x 1)) long-list)`.
 
-2. **Two-operand ops.** LoadLocal and StoreLocal carry `LocalIndex struct{Slot, Depth int32}` (slot + depth). **Recommendation: use struct fields, not bit-packing.** Both `struct{int32, int32}` and `int64` are 8 bytes, but the struct has clearer semantics, direct field access (no shift/mask), and better debugger display. Go packs the struct with no padding (4-byte aligned). Bit-packing `up<<16|over` saves nothing and adds encoding overhead. LoadGlobal/StoreGlobal are single-operand (one LiteralIndex) despite the misleading name.
+2. **Two-operand ops.** LoadLocal and StoreLocal carry `*environment.LocalIndex` (which is `[2]int`, see `environment/local_index.go:32`). Pack slot in low 32 bits and depth in high 32 bits of the single `int` Arg field. Safe because slot/depth values are small. LoadGlobal/StoreGlobal are single-operand (one LiteralIndex) despite the misleading name.
 
 3. **ForeignFunctionCall.** Currently carries a Go function pointer. Side table reference is straightforward but adds an indirection. Alternative: dedicate an `[]ForeignFunc` table separate from the general side table.
 
