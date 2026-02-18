@@ -16,8 +16,11 @@ package values
 
 import "math/big"
 
-// FNV-1a hash constants.
-// See Fowler-Noll-Vo hash function.
+// FNV-1a (Fowler-Noll-Vo): a non-cryptographic hash function chosen for
+// simplicity and good distribution. The type seed byte ensures that values
+// with identical content but different types (e.g., symbol "x" vs string "x")
+// produce different hashes.
+// See BIBLIOGRAPHY.md "FNV-1a Hash Function".
 const (
 	fnvOffset uint64 = 14695981039346656037
 	fnvPrime  uint64 = 1099511628211

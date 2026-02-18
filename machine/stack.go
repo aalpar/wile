@@ -33,7 +33,10 @@ func (p *Stack) Push(v values.Value) {
 	*p = append(*p, v)
 }
 
-// Pull removes and returns the bottom value from the stack.
+// Pull removes and returns the bottom value from the stack. In the SECD
+// model (Landin 1964), the procedure is evaluated first but needed last.
+// Pull retrieves it from the bottom after all arguments have been pushed
+// on top. See BIBLIOGRAPHY.md "Stack-Based Virtual Machines".
 func (p *Stack) Pull() values.Value {
 	if len(*p) == 0 {
 		panic(values.ErrStackUnderflow)
@@ -52,6 +55,28 @@ func (p *Stack) Pop() values.Value {
 	v := (*p)[l-1]
 	*p = (*p)[:l-1]
 	return v
+}
+
+// PopN removes and returns the top n values from the stack.
+// Values are returned in stack order (top-most element last).
+// This is more efficient than calling Pop() n times.
+func (p *Stack) PopN(n int) []values.Value {
+	l := len(*p)
+	if n < 0 {
+		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PopN: negative count %d", n))
+	}
+	if n > l {
+		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PopN: requested %d elements from stack of length %d", n, l))
+	}
+	if n == 0 {
+		return nil
+	}
+
+	// Allocate result and copy in one operation
+	result := make([]values.Value, n)
+	copy(result, (*p)[l-n:])
+	*p = (*p)[:l-n]
+	return result
 }
 
 // AsList converts the stack to a Scheme list (values.Tuple).

@@ -271,11 +271,13 @@ func TestCaseLambdaClosureFindMatching(t *testing.T) {
 
 	// Create clauses with different arities
 	tpl1 := NewNativeTemplate(1, 1, false)
-	tpl1.AppendOperations(NewOperationLoadLiteralInteger(1), NewOperationRestoreContinuation())
+	litIdx1 := tpl1.MaybeAppendLiteral(values.NewInteger(1))
+	tpl1.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx1), NewOperationRestoreContinuation())
 	cls1 := NewClosureWithTemplate(tpl1, env)
 
 	tpl2 := NewNativeTemplate(2, 2, false)
-	tpl2.AppendOperations(NewOperationLoadLiteralInteger(2), NewOperationRestoreContinuation())
+	litIdx2 := tpl2.MaybeAppendLiteral(values.NewInteger(2))
+	tpl2.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx2), NewOperationRestoreContinuation())
 	cls2 := NewClosureWithTemplate(tpl2, env)
 
 	caseCls := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})

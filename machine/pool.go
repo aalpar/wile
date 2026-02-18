@@ -19,6 +19,11 @@ import (
 	"sync"
 )
 
+// Object pooling (sync.Pool) recycles short-lived allocations that follow
+// an acquire/release lifecycle. Each non-tail call creates a continuation
+// frame and eval stack; pooling avoids per-call heap allocations.
+// See BIBLIOGRAPHY.md "Object Pooling".
+
 // stackPool recycles Stack allocations. Stacks are created on every
 // non-tail call (SaveContinuation) and discarded on return (Restore).
 // Pooling avoids repeated heap allocation of the backing slice.

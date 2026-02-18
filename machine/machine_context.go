@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
@@ -30,10 +31,11 @@ import (
 var errHalt = values.NewStaticError("machine halt: no more operations to run")
 
 // contextCheckMask gates how often the VM loop checks ctx.Done().
-// A non-blocking select is cheap (~15ns) but not free; checking every
-// 1024 ops eliminates ~99.9% of them while keeping worst-case
-// cancellation latency under 1ms at typical throughput.
+// Amortized batch checking: a non-blocking select is cheap (~15ns) but
+// not free; checking every 1024 ops eliminates ~99.9% of them while
+// keeping worst-case cancellation latency under 1ms at typical throughput.
 // Power of 2 so the check is a single AND instruction.
+// See BIBLIOGRAPHY.md "Amortized Batch Checking".
 const contextCheckMask = 1023
 
 var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
@@ -304,6 +306,21 @@ func (p *MachineContext) CallDepth() int {
 
 func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*MachineContext, error) {
 	tpl := mcls.Template()
+	l := tpl.ParameterCount()
+
+	// Check arity before copying environment (fast-fail path).
+	// Wrong-arity calls are common enough (dynamic typing, variadic dispatch)
+	// that avoiding the copy overhead is worthwhile.
+	if !tpl.IsVariadic() {
+		if len(vs) != l {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected %d arguments, got %d", l, len(vs))
+		}
+	} else {
+		if len(vs) < l-1 {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected at least %d arguments, got %d", l-1, len(vs))
+		}
+	}
+
 	// Create a fresh copy of the local environment for this call.
 	// This is critical for recursive functions: without copying, all invocations
 	// share the same bindings, causing parameter corruption when evaluating
@@ -315,23 +332,21 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.counters.EnvsCopied++
 	p.counters.BindingsCopied += uint64(len(bnds))
 	p.counters.KeysShared++
-	l := tpl.ParameterCount()
+
+	// Measure time spent copying parameters to bindings
+	copyStart := time.Now()
 	if !tpl.IsVariadic() {
-		if len(vs) != l {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected %d arguments, got %d", l, len(vs))
-		}
 		for i := range bnds[:l] {
 			bnds[i].SetValue(vs[i])
 		}
 	} else {
-		if len(vs) < l-1 {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected at least %d arguments, got %d", l-1, len(vs))
-		}
 		for i := range bnds[:l-1] {
 			bnds[i].SetValue(vs[i])
 		}
 		bnds[l-1].SetValue(values.List(vs[l-1:]...))
 	}
+	p.counters.ParamCopyTimeNanos += uint64(time.Since(copyStart).Nanoseconds())
+
 	p.template = tpl
 	p.env = env
 	p.pc = 0

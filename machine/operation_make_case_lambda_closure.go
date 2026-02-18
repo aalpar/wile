@@ -37,12 +37,16 @@ func NewOperationMakeCaseLambdaClosure(closureCount int) *OperationMakeCaseLambd
 }
 
 func (p *OperationMakeCaseLambdaClosure) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+	// Batch pop all closures from the stack
+	// PopN returns elements in stack order (bottom to top)
+	elements := mc.evals.PopN(p.closureCount)
+
+	// Convert elements to closures, preserving order
 	closures := make([]*MachineClosure, p.closureCount)
-	for i := p.closureCount - 1; i >= 0; i-- {
-		v := mc.evals.Pop()
-		cls, ok := v.(*MachineClosure)
+	for i := 0; i < p.closureCount; i++ {
+		cls, ok := elements[i].(*MachineClosure)
 		if !ok {
-			err := mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", v))
+			err := mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", elements[i]))
 			return mc, err
 		}
 		closures[i] = cls

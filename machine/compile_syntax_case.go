@@ -215,12 +215,9 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Result (#t or #f) goes into value register
 	p.AppendOperations(NewOperationSyntaxCaseMatch())
 
-	// Push match result to stack for BranchOnFalse (which pops from stack)
-	p.AppendOperations(NewOperationPush())
-
-	// Branch on match failure
+	// Branch on match failure (reads value register directly, no Push needed)
 	failBranchIdx := len(p.template.operations)
-	p.AppendOperations(NewOperationBranchOnFalseOffsetImmediate(0)) // Offset patched later
+	p.AppendOperations(NewOperationBranchOnFalseValueOffsetImmediate(0)) // Offset patched later
 	*failJumps = append(*failJumps, jumpPatch{clauseIndex, failBranchIdx})
 
 	// Create environment with pattern variables bound (shared between fender and body)
@@ -250,12 +247,9 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 			return values.WrapForeignErrorf(err, "error compiling fender")
 		}
 
-		// Push fender result to stack for BranchOnFalse
-		p.AppendOperations(NewOperationPush())
-
-		// Branch on false fender to cleanup block (patched below)
+		// Branch on false fender to cleanup block (reads value register directly)
 		fenderBranchIdx = len(p.template.operations)
-		p.AppendOperations(NewOperationBranchOnFalseOffsetImmediate(0))
+		p.AppendOperations(NewOperationBranchOnFalseValueOffsetImmediate(0))
 	}
 
 	// Expand and compile the body
@@ -277,7 +271,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	if fender != nil {
 		// Patch fender branch to jump here (cleanup block start)
 		cleanupStart := len(p.template.operations)
-		fenderOp := p.template.operations[fenderBranchIdx].(*OperationBranchOnFalseOffsetImmediate)
+		fenderOp := p.template.operations[fenderBranchIdx].(*OperationBranchOnFalseValueOffsetImmediate)
 		fenderOp.Offset = cleanupStart - fenderBranchIdx
 
 		// Restore parent environment
@@ -296,7 +290,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		if patch.clauseIndex == clauseIndex {
 			offset := nextClauseStart - patch.opIndex
 			switch op := p.template.operations[patch.opIndex].(type) {
-			case *OperationBranchOnFalseOffsetImmediate:
+			case *OperationBranchOnFalseValueOffsetImmediate:
 				op.Offset = offset
 			case *OperationBranchOffsetImmediate:
 				op.Offset = offset

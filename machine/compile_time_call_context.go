@@ -27,6 +27,11 @@ import (
 //
 // # Tail Call Optimization
 //
+// Tail call optimization (Steele 1977, R7RS §3.5): tail calls reuse the
+// caller's continuation frame instead of allocating a new one, making
+// recursive procedures in tail position run in constant stack space.
+// See BIBLIOGRAPHY.md "Tail Call Optimization".
+//
 // The inTail flag tracks whether an expression is in tail position. An expression is in
 // tail position if its value will be the final result of the enclosing procedure. When
 // inTail is true, the compiler can generate a tail call that reuses the current stack

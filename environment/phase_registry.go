@@ -16,6 +16,11 @@ package environment
 
 import "sync"
 
+// Phase-dependent binding: the same symbol can bind to different values at
+// different phases (runtime, expand, compile). This follows Racket's phase
+// model. See Flatt 2002, "Composable and Compilable Macros".
+// See BIBLIOGRAPHY.md "Composable and Compilable Macros (Flatt 2002)".
+
 // Phase level constants for standard Scheme phases.
 // These match Racket's phase numbering convention.
 const (

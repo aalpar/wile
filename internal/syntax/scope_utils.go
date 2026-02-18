@@ -111,8 +111,11 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 			newCdr = mapSyntaxTree(s.Values[1], fn)
 		}
 
-		// Structural sharing: if children are unchanged, return original pair.
-		// Only symbols accumulate scopes, so most pairs pass this check.
+		// Structural sharing: when a tree transformation leaves children unchanged,
+		// the original node is returned instead of allocating a new one. This is
+		// the core idea behind persistent data structures (Okasaki, 1998). Most
+		// syntax tree nodes are not symbols, so most pairs pass the identity check.
+		// See BIBLIOGRAPHY.md "Structural Sharing".
 		if newCar == s.Values[0] && newCdr == s.Values[1] {
 			return s
 		}

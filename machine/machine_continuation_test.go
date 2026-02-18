@@ -263,7 +263,8 @@ func TestMachineContinuationEqualToDifferentTemplates(t *testing.T) {
 
 	// Test with different templates
 	tpl2 := NewNativeTemplate(1, 1, true)
-	tpl2.AppendOperations(NewOperationLoadLiteralInteger(1), NewOperationRestoreContinuation())
+	litIdx := tpl2.MaybeAppendLiteral(values.NewInteger(1))
+	tpl2.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx), NewOperationRestoreContinuation())
 	cont2 := NewMachineContinuation(nil, tpl2, env)
 	qt.Assert(t, cont.EqualTo(cont2), qt.IsFalse) // Different templates
 }

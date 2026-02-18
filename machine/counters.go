@@ -35,10 +35,12 @@ type VMCounters struct {
 	SubContextPoolReleases   uint64
 	ContinuationPoolReleases uint64
 	KeysShared               uint64
+	ParamCopyTimeNanos       uint64 // Time spent copying parameters to bindings in Apply
 }
 
 // String returns a tabular summary of all counters.
 func (c VMCounters) String() string {
+	paramCopyMs := float64(c.ParamCopyTimeNanos) / 1_000_000.0
 	return fmt.Sprintf(
 		"ops_executed:                 %d\n"+
 			"closures_applied:             %d\n"+
@@ -53,7 +55,8 @@ func (c VMCounters) String() string {
 			"stack_pool_releases:          %d\n"+
 			"sub_context_pool_releases:    %d\n"+
 			"continuation_pool_releases:   %d\n"+
-			"keys_shared:                  %d",
+			"keys_shared:                  %d\n"+
+			"param_copy_time_ns:           %d (%.3f ms)",
 		c.OpsExecuted,
 		c.ClosuresApplied,
 		c.EnvsCopied,
@@ -68,5 +71,7 @@ func (c VMCounters) String() string {
 		c.SubContextPoolReleases,
 		c.ContinuationPoolReleases,
 		c.KeysShared,
+		c.ParamCopyTimeNanos,
+		paramCopyMs,
 	)
 }

@@ -102,6 +102,8 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 
 // Copy creates a deep copy of the global environment frame.
 // Note that topLevel is shared (not copied) between original and copy.
+// Bindings are batch-allocated (contiguous array) for cache locality
+// and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
@@ -114,10 +116,21 @@ func (p *GlobalEnvironmentFrame) Copy() values.Value {
 	q := &GlobalEnvironmentFrame{
 		topLevel: p.topLevel, // Shared, not copied
 	}
-	q.bindings = slices.Clone(p.bindings)
-	for i := range p.bindings {
-		q.bindings[i] = p.bindings[i].Copy().(*Binding)
+
+	// Batch allocation: allocate all Bindings contiguously (1 allocation)
+	// instead of N separate heap objects.
+	allBindings := make([]Binding, len(p.bindings))
+	q.bindings = make([]*Binding, len(p.bindings))
+	for i, b := range p.bindings {
+		allBindings[i] = Binding{
+			value:       b.value,
+			bindingType: b.bindingType,
+			scopes:      b.scopes,
+			source:      b.source,
+		}
+		q.bindings[i] = &allBindings[i]
 	}
+
 	if p.keys != nil {
 		q.keys = make(map[values.Symbol]int)
 		maps.Copy(q.keys, p.keys)
