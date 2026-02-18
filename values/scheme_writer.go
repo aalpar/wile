@@ -37,8 +37,10 @@ const (
 )
 
 // SchemeWriter provides cycle-aware writing of Scheme values.
-// It detects shared and circular structures and outputs them using
-// datum labels (#n= for definitions and #n# for references) per R7RS §2.4.
+// Two-pass datum label output (R7RS §2.4): pass 1 (findShared) traverses
+// the value graph to identify multiply-referenced objects; pass 2 (write)
+// emits #n= definitions on first encounter and #n# references thereafter.
+// See BIBLIOGRAPHY.md "Two-Pass Datum Label Output".
 //
 // Implementation note: Uses maps with concrete *Pair and *Vector keys (not Tuple/Indexable
 // interfaces) because:

@@ -56,6 +56,12 @@ type ffiSpec struct {
 // RegisterFunc registers a Go function as a Scheme primitive using
 // natural Go signatures.
 //
+// Reflection-based FFI bridging: pre-computes argument and return converters
+// at registration time using Go's reflect package. Each call uses the cached
+// converters to translate between Scheme values and Go types, avoiding
+// per-call reflection overhead.
+// See BIBLIOGRAPHY.md "Reflection-Based FFI Bridging".
+//
 // # Supported Types
 //
 // Parameter types: int64, int, float64, string, bool, []byte, []T (typed

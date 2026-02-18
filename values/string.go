@@ -26,8 +26,11 @@ var (
 	_ fmt.Stringer = (*String)(nil)
 )
 
-// String interning for commonly used strings.
-// Short strings (up to 64 bytes) are automatically interned.
+// String interning: ensures that structurally equal short strings share
+// a single allocation, reducing memory use and enabling fast pointer
+// comparison. The 64-byte threshold balances memory savings against the
+// cost of the sync.Map lookup.
+// See BIBLIOGRAPHY.md "String Interning".
 const stringInternMaxLen = 64
 
 var stringInterns sync.Map // map[string]*String

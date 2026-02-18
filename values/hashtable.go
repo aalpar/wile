@@ -29,6 +29,11 @@ type hashtableEntry struct {
 
 // Hashtable represents a Scheme hash table mapping hashable values to values.
 //
+// Separate chaining (Cormen et al., CLRS Ch. 11): collisions are resolved
+// by storing all entries with the same hash in a linked list (here, a Go
+// slice). O(1) amortized with a good hash function.
+// See BIBLIOGRAPHY.md "Separate Chaining Hash Table".
+//
 // Keys must implement the Hashable interface (Value + HashCode()).
 // Uses bucket chaining with FNV-1a hashing for O(1) amortized operations
 // and EqualTo() for key comparison within buckets.

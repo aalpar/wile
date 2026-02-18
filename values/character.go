@@ -24,8 +24,12 @@ var (
 	_ Hashable = (*Character)(nil)
 )
 
+// Flyweight pattern (GoF, 1994): pre-allocates a pool of frequently-used
+// immutable objects and returns shared references instead of new allocations.
+// Python caches [-5, 256], Java caches [-128, 127]; Wile caches ASCII [0, 127].
+// See BIBLIOGRAPHY.md "Flyweight Pattern / Value Caching".
+//
 // Character cache for ASCII characters (0 to 127).
-// This avoids allocations for commonly used character values.
 const charCacheMax = 127
 
 var charCache [charCacheMax + 1]*Character

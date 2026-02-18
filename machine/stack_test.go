@@ -206,6 +206,48 @@ func TestStackPull(t *testing.T) {
 	qt.Assert(t, s.Len(), qt.Equals, 2)
 }
 
+// TestStackPopN tests stack PopN operation
+func TestStackPopN(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(1))
+	s.Push(values.NewInteger(2))
+	s.Push(values.NewInteger(3))
+	s.Push(values.NewInteger(4))
+	s.Push(values.NewInteger(5))
+
+	// Pop 3 elements from top
+	vs := s.PopN(3)
+	qt.Assert(t, len(vs), qt.Equals, 3)
+	qt.Assert(t, s.Len(), qt.Equals, 2) // 2 elements remain
+
+	// PopN returns elements in stack order (bottom to top of the popped range)
+	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(3)) // Bottom of popped range
+	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(4))
+	qt.Assert(t, vs[2], values.SchemeEquals, values.NewInteger(5)) // Top of stack (last popped)
+
+	// Remaining elements
+	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(1))
+}
+
+// TestStackPopN_EdgeCases tests PopN edge cases
+func TestStackPopN_EdgeCases(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(1))
+	s.Push(values.NewInteger(2))
+
+	// PopN(0) should return nil
+	vs := s.PopN(0)
+	qt.Assert(t, vs, qt.IsNil)
+	qt.Assert(t, s.Len(), qt.Equals, 2)
+
+	// PopN with negative count should panic
+	qt.Assert(t, func() { s.PopN(-1) }, qt.PanicMatches, ".*negative count.*")
+
+	// PopN more than available should panic
+	qt.Assert(t, func() { s.PopN(3) }, qt.PanicMatches, ".*requested 3 elements from stack of length 2.*")
+}
+
 // TestStackPopAll tests stack PopAll operation
 func TestStackPopAll(t *testing.T) {
 	s := NewStack()

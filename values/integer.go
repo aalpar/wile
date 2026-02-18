@@ -27,9 +27,9 @@ var (
 	_ Hashable   = (*Integer)(nil)
 )
 
-// Integer cache for small integers (-32768 to 32767).
-// This avoids allocations for commonly used integer values.
-// Uses 16-bit range to cover most practical small integers.
+// Small integer cache: same flyweight technique as character caching. The
+// range [-32768, 32767] covers most loop counters and small constants.
+// See BIBLIOGRAPHY.md "Flyweight Pattern / Value Caching".
 const (
 	intCacheMin = -32768
 	intCacheMax = 32767
@@ -117,6 +117,8 @@ func (p *Integer) toBigComplex() *BigComplex {
 //   - Multiplication: after computing prod = a * b, verify prod/a == b.
 //   - Negation: only math.MinInt64 overflows (its absolute value is
 //     2^63, which exceeds math.MaxInt64 by 1).
+//
+// See BIBLIOGRAPHY.md "Hacker's Delight Overflow Detection".
 
 // addInt64 adds two int64 values, promoting to BigInteger on overflow.
 func addInt64(a, b int64) Number {

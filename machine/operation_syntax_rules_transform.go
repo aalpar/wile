@@ -319,9 +319,9 @@ func addScopeToPairSkipFreeIds(pair *syntax.SyntaxPair, scope *syntax.Scope, fre
 		}
 	}
 
-	// Structural sharing: if children are unchanged, return original pair.
-	// Free IDs are returned unchanged, so pairs containing only free IDs
-	// and unchanged subtrees avoid allocation entirely.
+	// Structural sharing: avoids allocation when the intro-scope transform
+	// leaves both car and cdr unchanged. See scope_utils.go for the same pattern.
+	// See BIBLIOGRAPHY.md "Structural Sharing".
 	if newCar == pair.SyntaxCar() && newCdr == pair.SyntaxCdr() {
 		return pair
 	}

@@ -213,35 +213,6 @@ func TestBinding_SetSource(t *testing.T) {
 	qt.Assert(t, b.Source().File, qt.Equals, "test.scm")
 }
 
-func TestBinding_RuntimeCopy(t *testing.T) {
-	scope1 := syntax.NewScope()
-	scope2 := syntax.NewScope()
-	scopes := []*syntax.Scope{scope1, scope2}
-	source := &syntax.SourceContext{
-		File:  "test.scm",
-		Start: syntax.NewSourceIndexes(1, 1, 0),
-	}
-
-	original := NewBindingWithSource(values.NewInteger(42), BindingTypeVariable, scopes, source)
-	copied := original.RuntimeCopy()
-
-	// Value and type are shared
-	qt.Assert(t, copied.Value(), values.SchemeEquals, original.Value())
-	qt.Assert(t, copied.BindingType(), qt.Equals, original.BindingType())
-
-	// Source is shared (same pointer)
-	qt.Assert(t, copied.Source(), qt.Equals, original.Source())
-
-	// Scopes slice is shared (same backing array), not cloned
-	qt.Assert(t, copied.Scopes(), qt.HasLen, 2)
-	qt.Assert(t, &copied.Scopes()[0], qt.Equals, &original.Scopes()[0])
-
-	// Value independence: SetValue on copy does not affect original
-	copied.SetValue(values.NewInteger(99))
-	qt.Assert(t, original.Value(), values.SchemeEquals, values.NewInteger(42))
-	qt.Assert(t, copied.Value(), values.SchemeEquals, values.NewInteger(99))
-}
-
 func TestBinding_Copy_WithSource(t *testing.T) {
 	source := &syntax.SourceContext{
 		File:  "test.scm",

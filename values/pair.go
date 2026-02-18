@@ -66,6 +66,7 @@ func (p *Pair) SetCdr(v Value) {
 // IsList checks if the Pair represents a proper list.
 // Uses Floyd's cycle detection (tortoise-and-hare) to handle circular lists.
 // Returns false for circular lists per R7RS §6.4.
+// See BIBLIOGRAPHY.md "Floyd's Cycle Detection".
 //
 // Implementation note: This method must use *Pair (not Tuple) for cycle
 // detection because it requires pointer identity comparison (slow == fast).

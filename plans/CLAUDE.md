@@ -23,6 +23,12 @@ When investigating R7RS conformance issues:
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
 | `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | Planned |
+| `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
+| `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
+| `COMPILER_OPTIMIZER.md` | Bytecode optimizer: peephole, constant folding, ops prealloc (Phase 5) | Proposed |
+| `INTEGER_OPCODE_DISPATCH.md` | Integer opcode dispatch — replace interface dispatch with switch for hot-path ops | Design |
+| `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
+| `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
 
 ### Proposed Designs (Future)
 

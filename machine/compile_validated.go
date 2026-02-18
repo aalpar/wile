@@ -93,6 +93,12 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 
 // CompileValidatedIf compiles a validated (if test conseq [alt]) form.
 // The structure is guaranteed to be valid by the validator.
+//
+// Constant folding (Aho et al., Compilers §8.5): when the test is a
+// compile-time literal, the entire if-form reduces to one branch. This
+// is the simplest form of constant folding — evaluating known expressions
+// at compile time rather than runtime.
+// See BIBLIOGRAPHY.md "Constant Folding".
 func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedIf) error {
 	// Constant folding: if the test is a compile-time-known literal, fold the
 	// if form to just the consequent or alternative. Per R7RS, only #f is false;
