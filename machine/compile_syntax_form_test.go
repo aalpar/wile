@@ -39,7 +39,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
+	c.Assert(tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 func TestCompileSyntax_Error_NoArgs(t *testing.T) {
@@ -191,7 +191,7 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 
 	// Verify NO OperationSyntaxTemplateExpand was generated
 	// (escape forms should compile to direct literal loads, not runtime expansion)
-	for _, op := range tpl.operations {
+	for _, op := range tpl.EffectiveOperations() {
 		_, isTemplateExpand := op.(*OperationSyntaxTemplateExpand)
 		c.Assert(isTemplateExpand, qt.IsFalse,
 			qt.Commentf("escape form should not generate OperationSyntaxTemplateExpand"))
@@ -219,7 +219,7 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 
 	// Verify OperationSyntaxTemplateExpand WAS generated
 	hasTemplateExpand := false
-	for _, op := range tpl.operations {
+	for _, op := range tpl.EffectiveOperations() {
 		_, ok := op.(*OperationSyntaxTemplateExpand)
 		if ok {
 			hasTemplateExpand = true

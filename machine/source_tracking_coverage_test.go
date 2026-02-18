@@ -588,7 +588,7 @@ func TestSourceRecording_CaseLambda(t *testing.T) {
 	tpl := compileScheme(t, "(case-lambda ((x) x) ((x y) y))")
 
 	// The outer template should have source for all operations
-	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
+	c.Assert(tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 // =============================================================================

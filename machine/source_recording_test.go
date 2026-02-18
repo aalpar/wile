@@ -91,13 +91,13 @@ func TestSourceRecording_DefineFunction(t *testing.T) {
 func TestSourceRecording_Lambda(t *testing.T) {
 	tpl := compileScheme(t, "(lambda (x) x)")
 
-	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
+	qt.Assert(t, tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_Begin(t *testing.T) {
 	tpl := compileScheme(t, "(begin 1 2 3)")
 
-	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
+	qt.Assert(t, tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_Call(t *testing.T) {
@@ -162,7 +162,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 func TestSourceRecording_Quasiquote(t *testing.T) {
 	tpl := compileScheme(t, "`(1 2 3)")
 
-	qt.Assert(t, len(tpl.operations) > 0, qt.IsTrue)
+	qt.Assert(t, tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
@@ -211,10 +211,11 @@ func TestSourceRecording_IfAllOpsHaveSource(t *testing.T) {
 
 	// Every operation in the template should have source, including
 	// BranchOnFalse and BranchOffset infrastructure ops
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }
 
@@ -225,10 +226,11 @@ func TestSourceRecording_LambdaAllOpsHaveSource(t *testing.T) {
 	// Uses only core syntax (no primitives needed).
 	tpl := compileScheme(t, "(lambda (x) x)")
 
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }
 
@@ -237,10 +239,11 @@ func TestSourceRecording_BeginAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "(begin 1 2 3)")
 
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }
 
@@ -252,10 +255,11 @@ func TestSourceRecording_NestedIfAllOpsHaveSource(t *testing.T) {
 	// ops inherit the enclosing form's source
 	tpl := compileScheme(t, "(if #t (if #f 42 0) -1)")
 
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }
 
@@ -264,10 +268,11 @@ func TestSourceRecording_DefineAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "(define x 42)")
 
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }
 
@@ -276,9 +281,10 @@ func TestSourceRecording_QuoteAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "'(a b c)")
 
-	for pc := 0; pc < len(tpl.operations); pc++ {
+	effOps := tpl.EffectiveOperations()
+	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
-			qt.Commentf("PC %d (%T) has no source", pc, tpl.operations[pc]))
+			qt.Commentf("PC %d (%T) has no source", pc, effOps[pc]))
 	}
 }

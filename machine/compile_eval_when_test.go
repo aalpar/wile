@@ -126,7 +126,7 @@ func TestCompileEvalWhen_RunPhase(t *testing.T) {
 
 	err := ccnt.CompileEvalWhen(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(tpl.operations) > 0, qt.IsTrue)
+	c.Assert(tpl.CodeLen() > 0, qt.IsTrue)
 }
 
 func TestCompileEvalWhen_EmptyPhases(t *testing.T) {

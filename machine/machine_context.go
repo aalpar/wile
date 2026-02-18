@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
@@ -333,8 +332,6 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.counters.BindingsCopied += uint64(len(bnds))
 	p.counters.KeysShared++
 
-	// Measure time spent copying parameters to bindings
-	copyStart := time.Now()
 	if !tpl.IsVariadic() {
 		for i := range bnds[:l] {
 			bnds[i].SetValue(vs[i])
@@ -345,7 +342,6 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		}
 		bnds[l-1].SetValue(values.List(vs[l-1:]...))
 	}
-	p.counters.ParamCopyTimeNanos += uint64(time.Since(copyStart).Nanoseconds())
 
 	p.template = tpl
 	p.env = env
@@ -506,6 +502,11 @@ func (p *MachineContext) Context() context.Context {
 // This design allows continuation resumption (e.g., raise-continuable) to work correctly
 // by preserving the pc set by Restore rather than unconditionally resetting to 0.
 //
+// Dispatch mode: If the current template has integer-dispatch bytecode
+// (template.code is populated), Run uses the switch-dispatch loop. Otherwise
+// it falls back to the interface-dispatch loop (Operation.Apply calls).
+// During migration, a template has one or the other, never both.
+//
 // Context cancellation: The loop checks p.ctx.Done() every 1024 ops, allowing
 // preemption via context.WithTimeout or context.WithCancel. This enables:
 //   - Test timeouts that actually stop execution
@@ -514,12 +515,19 @@ func (p *MachineContext) Context() context.Context {
 //
 // Set the context via SetContext() before calling Run().
 func (p *MachineContext) Run() error {
+	if len(p.template.code) > 0 {
+		return p.runIntegerDispatch()
+	}
+	return p.runInterfaceDispatch()
+}
+
+// runInterfaceDispatch executes the interface-dispatch VM loop.
+// Each operation is an interface value whose Apply method advances the pc
+// and mutates the MachineContext. This is the original execution path.
+func (p *MachineContext) runInterfaceDispatch() error {
 	var err error
 	mc := p
 	for mc.pc < len(mc.template.operations) {
-		// Check for context cancellation every 1024 ops instead of every op.
-		// A non-blocking select is cheap but not free; batching keeps the
-		// tight dispatch loop fast while maintaining <1ms cancel latency.
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
@@ -528,7 +536,6 @@ func (p *MachineContext) Run() error {
 			}
 		}
 
-		// Check for debugger breaks
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
 			if bp != nil {
@@ -541,13 +548,109 @@ func (p *MachineContext) Run() error {
 		mc.counters.OpsExecuted++
 		mc, err = mc.template.operations[mc.pc].Apply(mc.ctx, mc)
 		if err != nil {
-			// errHalt is a success sentinel — the continuation chain is
-			// exhausted, which means execution completed normally.
-			// Translate it to nil so callers use plain "if err != nil".
 			if errors.Is(err, errHalt) {
 				return nil
 			}
 			return err
+		}
+	}
+	return nil
+}
+
+// runIntegerDispatch executes the switch-dispatch VM loop using integer
+// opcodes. Hot-path operations are inlined as switch cases; complex
+// operations (closures, macros, FFI) are dispatched via OpComplex to
+// the template's sideTable.
+func (p *MachineContext) runIntegerDispatch() error {
+	mc := p
+	for mc.pc < len(mc.template.code) {
+		if mc.counters.OpsExecuted&contextCheckMask == 0 {
+			select {
+			case <-mc.ctx.Done():
+				return mc.ctx.Err()
+			default:
+			}
+		}
+
+		if mc.debugger != nil {
+			bp := mc.debugger.CheckBreakpoint(mc)
+			if bp != nil {
+				mc.debugger.TriggerBreak(mc, bp)
+			} else if mc.debugger.ShouldStep(mc) {
+				mc.debugger.TriggerBreak(mc, nil)
+			}
+		}
+
+		instr := mc.template.code[mc.pc]
+		mc.counters.OpsExecuted++
+
+		switch instr.Op {
+		// --- Wave 1: zero-operand operations ---
+
+		case OpPush:
+			if mc.multiValues != nil {
+				mc.evals.PushAll(mc.multiValues)
+			} else if mc.singleValue != nil {
+				mc.evals.Push(mc.singleValue)
+			}
+			mc.pc++
+
+		case OpPop:
+			mc.SetValue(mc.evals.Pop())
+			mc.pc++
+
+		case OpPull:
+			mc.SetValue(mc.evals.Pull())
+			mc.pc++
+
+		case OpLoadVoid:
+			mc.SetValue(values.Void)
+			mc.pc++
+
+		case OpDrop:
+			mc.evals.Pop()
+			mc.pc++
+
+		case OpPopEnv:
+			parent := mc.env.Parent()
+			if parent == nil {
+				return values.WrapForeignErrorf(values.ErrNilParentEnvironment,
+					"PopEnv: cannot pop top-level environment")
+			}
+			mc.env = parent
+			mc.pc++
+
+		case OpApply:
+			vs := mc.evals.PopAll()
+			mc.counters.StackPopAlls++
+			mc.counters.StackElementsCopied += uint64(len(vs))
+			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc = result
+
+		case OpRestoreContinuation:
+			if mc.cont == nil {
+				return nil
+			}
+			mc.RestoreAndRelease(mc.cont)
+
+		// --- Fallback: complex operations via side table ---
+
+		case OpComplex:
+			var err error
+			mc, err = mc.template.sideTable[instr.Arg].Apply(mc.ctx, mc)
+			if err != nil {
+				if errors.Is(err, errHalt) {
+					return nil
+				}
+				return err
+			}
+
+		default:
+			return values.WrapForeignErrorf(values.ErrUnknownOpCode,
+				"unimplemented opcode: %s", instr.Op)
 		}
 	}
 	return nil

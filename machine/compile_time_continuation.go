@@ -391,17 +391,17 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 }
 
 // AppendOperations appends operations tagged with the current source from the source stack.
-// This routes through the template's source-aware append so every emitted op
-// automatically gets the innermost source context.
+// Routes through the integer-dispatch code[] path: Wave 1 operations become
+// direct instructions, everything else goes via OpComplex to the sideTable.
 func (p *CompileTimeContinuation) AppendOperations(ops ...Operation) {
-	p.template.appendOperationsWithSource(p.currentSource(), ops...)
+	p.template.appendInstructionsWithSource(p.currentSource(), ops...)
 }
 
 // emitPatchableSaveContinuation emits a SaveContinuation with a placeholder
-// offset of 0. Returns the operation index for later patching via
+// offset of 0. Returns the code[] index for later patching via
 // patchSaveContinuationOffset.
 func (p *CompileTimeContinuation) emitPatchableSaveContinuation() int {
-	idx := p.template.operations.Len()
+	idx := p.template.CodeLen()
 	p.AppendOperations(NewOperationSaveContinuationOffsetImmediate(0))
 	return idx
 }
@@ -410,9 +410,9 @@ func (p *CompileTimeContinuation) emitPatchableSaveContinuation() int {
 // placeholder with the correct relative offset from the placeholder to the
 // current position.
 func (p *CompileTimeContinuation) patchSaveContinuationOffset(idx int) {
-	p.template.operations[idx] = NewOperationSaveContinuationOffsetImmediate(
-		p.template.operations.Len() - idx,
-	)
+	p.template.PatchSideTableOp(idx, NewOperationSaveContinuationOffsetImmediate(
+		p.template.CodeLen()-idx,
+	))
 }
 
 func (p *CompileTimeContinuation) pushSource(src *syntax.SourceContext) {

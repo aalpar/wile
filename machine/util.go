@@ -17,7 +17,8 @@ package machine
 import "github.com/aalpar/wile/environment"
 
 func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool, fn ForeignFunction) *MachineClosure {
-	tpl := NewNativeTemplate(pcnt, 0, vardiac,
+	tpl := NewNativeTemplate(pcnt, 0, vardiac)
+	tpl.AppendOperations(
 		NewOperationForeignFunctionCall(fn),
 		NewOperationRestoreContinuation(),
 	)

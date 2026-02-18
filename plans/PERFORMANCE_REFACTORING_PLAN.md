@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** IN PROGRESS — Phases 0–5 complete, Phases 6–7 remaining
+**Status:** IN PROGRESS — Phases 0–5 complete, Phase 6 in progress (6.1–6.3 done), Phase 7 remaining
 
 ## Overview
 
@@ -46,23 +46,27 @@ Three optimizations applied to the compiler:
 
 ## Remaining Phases
 
-| Phase | Description | Impact | Risk | Deps |
-|-------|-------------|--------|------|------|
-| **6** | Switch dispatch — opcode enum, compact instruction struct, switch-based VM loop | 10–20% CPU | High | 5 |
-| **7** | Advanced — tagged integers (unsafe), compilation caching, library pre-compilation | Variable | High | 5, 6 |
+| Phase | Description | Impact | Risk | Deps | Plan |
+|-------|-------------|--------|------|------|------|
+| **6** | Switch dispatch — opcode enum, compact instruction struct, switch-based VM loop (6.1–6.3 complete) | 10–20% CPU | High | 5 | `PHASE6_SWITCH_DISPATCH.md` |
+| **7** | Advanced — tagged integers (unsafe), compilation caching, library pre-compilation | Variable | High | 5, 6 | TBD |
 
 ```
 Phase 6 ──→ Phase 7
 ```
 
+**Phase 6 Detail:** See `PHASE6_SWITCH_DISPATCH.md` for full implementation plan. Summary: incremental migration in 3 waves (zero-operand → single-operand → two-operand), hybrid approach with integer dispatch for hot-path ops and side table for complex ops. Phases 6.1 (infrastructure — OpCode enum, Instruction struct, NativeTemplate fields), 6.2 (dual-mode VM loop — switch dispatch alongside interface dispatch), and 6.3 (Wave 1 — 8 zero-operand ops migrated) are complete.
+
 ## Critical Files
 
 | File | Phases |
 |------|--------|
-| `machine/machine_context.go` | 6 |
-| `machine/native_template.go` | 5 (done) |
-| `machine/compile_validated.go` | 5 (done) |
-| `machine/compile_syntax_case.go` | 5 (done) |
+| `machine/machine_context.go` | 6 (runIntegerDispatch) |
+| `machine/opcode.go` | 6 (new) |
+| `machine/instruction.go` | 6 (new) |
+| `machine/native_template.go` | 5 (done), 6 (code/sideTable fields) |
+| `machine/compile_validated.go` | 5 (done), 6 (emit Instructions) |
+| `machine/compile_syntax_case.go` | 5 (done), 6 (emit Instructions) |
 | `machine/operation_branch_on_false_value_offset_immediate.go` | 5 (new) |
 | `values/foreign_error.go` | (ForeignError stack depth — deferred from Phase 1) |
 
