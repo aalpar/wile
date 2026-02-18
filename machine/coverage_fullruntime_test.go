@@ -2640,7 +2640,13 @@ func TestCoverageIncludeError(t *testing.T) {
 }
 
 // TestCoverageSyntaxCaseFender tests syntax-case with fender (guard).
-// Exercises compileSyntaxCaseClause fender path.
+// TestCoverageSyntaxCaseFender tests syntax-case with fender (guard).
+// Exercises compileSyntaxCaseClause fender path including branch patching logic:
+// - BranchOnFalseValue for fender test (line 2650)
+// - Branch for fender cleanup block to next clause
+// - Multiple clauses with overlapping patterns requiring correct offset patching
+// This test provides regression coverage for the jumpPatch refactoring (PR #285)
+// that eliminated redundant branch type inspection by storing branch type in the patch struct.
 func TestCoverageSyntaxCaseFender(t *testing.T) {
 	env := newFullRuntimeEnv(t)
 
