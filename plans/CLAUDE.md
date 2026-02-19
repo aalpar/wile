@@ -17,7 +17,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phase 7 remaining) | Phases 0–6 complete, Phase 7 remaining |
+| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring | Phases 0–6 complete, Phase 7 deferred |
 | `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Allocation reduction for continuation-heavy workloads (6 optimizations) | Complete |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
@@ -56,6 +56,12 @@ When investigating R7RS conformance issues:
 | File | Purpose | Status |
 |------|---------|--------|
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
+
+## Developer Documentation (outside plans/)
+
+| File | Purpose |
+|------|---------|
+| `docs/dev/CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Performance optimization guide — explains why Apply/continuation/stack code is complex and what breaks if simplified |
 
 ## Design Documents (outside plans/)
 
