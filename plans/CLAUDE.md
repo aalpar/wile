@@ -17,7 +17,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phases 6–7 remaining) | Phases 0–5 complete, Phase 6+ remaining |
+| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring (Phase 7 remaining) | Phases 0–6 complete, Phase 7 remaining |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
@@ -25,9 +25,11 @@ When investigating R7RS conformance issues:
 | `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | Planned |
 | `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
-| `COMPILER_OPTIMIZER.md` | Bytecode optimizer: peephole, constant folding, ops prealloc (Phase 5) | Proposed |
-| `INTEGER_OPCODE_DISPATCH.md` | Integer opcode dispatch — replace interface dispatch with switch for hot-path ops | Design |
-| `PHASE6_SWITCH_DISPATCH.md` | Phase 6 implementation plan: switch dispatch for 17 hot-path ops, 3 waves | In progress (6.1–6.3 complete) |
+| `COMPILER_OPTIMIZER.md` | Bytecode optimizer: peephole, constant folding, ops prealloc (Phase 5) | Complete |
+| `INTEGER_OPCODE_DISPATCH.md` | Integer opcode dispatch — replace interface dispatch with switch for hot-path ops | Complete (design doc for Phase 6) |
+| `PHASE6_SWITCH_DISPATCH.md` | Phase 6 implementation plan: switch dispatch for 17 hot-path ops, 3 waves | Complete |
+| `APPLY_OPTIMIZATION_OPPORTUNITIES.md` | Apply call path optimization opportunities | Reference |
+| `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
 | `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
 | `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
 

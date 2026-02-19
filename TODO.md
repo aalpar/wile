@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-02-18
 
 ### Current Project Status
 
@@ -219,6 +219,4 @@ Three-tier feature flag system for controlling Wile behavior at different lifecy
 
 **Other**
 - [ ] MachineContext `Error` should be `Errorf`.  I cannot find an instance that does not use `fmt.Sprintf`.  Migrate `Error(` to `Errorf` that takes a `form` and a `args ...` paramter that feed into `fmt.Sprintf` inside `Errorf(`
-- [x] Hand-unrolled patching functions in `compile_time_continuation.go` — Phase 6 complete with 3 patching functions. Consolidation criterion (4th function) not met. No action needed.
-- [x] Error format verb drift in `machine_context.go` Wave 2 switch cases — Fixed: aligned `LoadGlobal`/`StoreGlobal` to use `%v` like original operations.
 

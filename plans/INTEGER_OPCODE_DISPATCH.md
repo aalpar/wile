@@ -1,6 +1,6 @@
 # Integer Opcode Dispatch
 
-**Status:** Design (implementation plan: `PHASE6_SWITCH_DISPATCH.md`)
+**Status:** COMPLETE — implemented as Phase 6 (see `PHASE6_SWITCH_DISPATCH.md`)
 **Date:** 2026-02-17
 
 ## Problem

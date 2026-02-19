@@ -8,13 +8,7 @@ Full-pipeline performance refactoring: parsing → expansion → compilation →
 
 ## Current Bottlenecks (Remaining)
 
-```
-┌─────────────┬──────────────────────────────────────────────┐
-│ VM          │ interface dispatch (2 ptr indirections/op)   │
-├─────────────┼──────────────────────────────────────────────┤
-│ Values      │ ForeignError: 50-frame stack trace every err │
-└─────────────┴──────────────────────────────────────────────┘
-```
+None identified — Phase 6 (switch dispatch) addressed the last known hot-path bottleneck (interface dispatch). Phase 7 items are speculative/advanced optimizations without profiling evidence yet.
 
 **Existing infrastructure**: `make bench`, `make profile-cpu/mem`, `make bench-schelog`, parser benchmarks, VMCounters, integer/string/symbol/boolean caching.
 
@@ -72,7 +66,6 @@ See `PHASE6_SWITCH_DISPATCH.md` for full implementation details.
 | `machine/compile_validated.go` | 5 (done), 6 (emit Instructions) |
 | `machine/compile_syntax_case.go` | 5 (done), 6 (emit Instructions) |
 | `machine/operation_branch_on_false_value_offset_immediate.go` | 5 (new) |
-| `values/foreign_error.go` | (ForeignError stack depth — deferred from Phase 1) |
 
 ## Out of Scope
 

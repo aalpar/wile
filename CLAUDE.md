@@ -57,6 +57,17 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 
 ## Wile Architecture
 
+1. **Language**: R7RS Scheme with hygienic macros (sets of scopes per Flatt 2016), first-class continuations, numeric tower
+2. **Execution**: Bytecode VM with explicit PC loop (`machine_context.go:522-706`), separate eval stack — NOT tree-walking interpreter
+3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
+4. **Pipeline**: `Tokenizer → Parser → Expander → Compiler → VM` (string → tokens → SyntaxValue → bytecode → execution)
+5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `registry/` (primitives/extensions)
+6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match}`
+7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
+8. **Error handling**: Sentinel + wrap pattern — `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` for context; never `fmt.Errorf`
+9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
+10. **Concurrency**: Engine not thread-safe (one per goroutine); SRFI-18 threads within Engine safe (VM manages coordination)
+
 ### Pipeline
 
 ```
