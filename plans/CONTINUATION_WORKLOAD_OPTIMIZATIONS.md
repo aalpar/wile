@@ -1,9 +1,10 @@
 # Continuation-Heavy Workload Optimizations
 
-**Status:** Proposed
+**Status:** In Progress (2 of 6 complete)
 **Date:** 2026-02-18
 **Benchmark:** Zebra puzzle (Schelog logic programming)
 **Baseline:** 24.22s, 36.2 GB allocated, 907.8M allocations (Apple M4 Max, GOGC=100)
+**Current:** 23.76s, 33.1 GB allocated, 684.0M allocations (after optimization #2)
 
 ## Profile Summary
 
@@ -41,33 +42,31 @@
 
 ## Optimizations
 
-### 1. Eliminate `NewLocalIndex` Heap Allocation
+### 1. Eliminate `NewLocalIndex` Heap Allocation ✓
 
 **Impact:** ~1.7 GB (4.9%), ~105M fewer allocations
 **Effort:** Low | **Risk:** Low
+**Status:** Complete — PR #286, merged 2026-02-19
 
 `NewLocalIndex` returns `*LocalIndex` (pointer to `[2]int`), forcing a heap allocation on every `OpLoadLocal` and `OpStoreLocal` in the VM loop (`machine_context.go:666-683`).
 
 The VM already has `slot` and `depth` as raw integers from `DecodeLocalIndex`. Fix: add `GetLocalBindingBySlotDepth(slot, depth int)` and `SetLocalValueBySlotDepth(slot, depth int, v values.Value)` to `EnvironmentFrame`, bypassing the `*LocalIndex` allocation entirely.
 
+**Measured result:** -1.8 GB bytes, -110.7M allocations (34.4 GB / 797.1M vs baseline 36.2 GB / 907.8M)
+
 **Files:** `environment/environment_frame.go`, `machine/machine_context.go` (OpLoadLocal/OpStoreLocal cases)
 
-### 2. Binding Storage: `[]*Binding` → `[]Binding`
+### 2. Binding Storage: `[]*Binding` → `[]Binding` ✓
 
 **Impact:** ~2-3 GB (est.), ~112.9M fewer allocations
 **Effort:** Medium | **Risk:** Medium
+**Status:** Complete — implemented 2026-02-18
 
-`CopyForApply` allocates two slices per call:
-```go
-allBindings := make([]Binding, len(p.bindings))   // batch values
-q.bindings = make([]*Binding, len(p.bindings))     // pointer slice
-```
+Changed `LocalEnvironmentFrame.bindings` from `[]*Binding` to `[]Binding`. Eliminates one allocation per `CopyForApply` (pointer slice) and N allocations per `NewLocalEnvironment` (individual Binding heap objects). All accessors return `&p.bindings[i]` (pointer to slice element); mutation sites use direct index access. Audit confirmed no code holds `*Binding` across frame copies.
 
-If `LocalEnvironmentFrame.bindings` were `[]Binding` instead of `[]*Binding`, only one allocation per `CopyForApply`. Every accessor that dereferences `*Binding` needs updating — mechanical but touches many call sites.
+**Measured result:** -1.3 GB bytes, -113.1M allocations (33.1 GB / 684.0M vs post-#1 34.4 GB / 797.1M). Wall time 23.76s (vs 24.52s).
 
-**Audit required:** Every place holding a `*Binding` pointer must not persist across mutations.
-
-**Files:** `environment/local_environment_frame.go`, `environment/environment_frame.go`, all binding accessors
+**Files:** `environment/local_environment_frame.go`, `environment/environment_frame.go`, `machine/compile_validated.go`, test files
 
 ### 3. EnvironmentFrame Struct Pooling or Fusion
 
@@ -123,8 +122,8 @@ Many closures are called in tail position or are non-recursive. The compiler cou
 
 | # | Optimization | Alloc Savings | Effort | Risk |
 |---|-------------|---------------|--------|------|
-| 1 | LocalIndex → value type | ~1.7 GB (4.9%) | Low | Low |
-| 2 | `[]*Binding` → `[]Binding` | ~2-3 GB (est.) | Medium | Medium |
+| 1 | LocalIndex → value type | **-1.8 GB measured** | Low | ✓ Complete |
+| 2 | `[]*Binding` → `[]Binding` | ~2-3 GB (est.) | Medium | ✓ Complete |
 | 3 | EnvironmentFrame pool/fusion | ~5.6 GB (16%) | Medium | Medium |
 | 4 | Stack capacity tuning | ~1-3 GB (est.) | Low | Low |
 | 5 | CoW continuation sharing | ~2.9 GB (8.5%) | High | High |
