@@ -665,18 +665,16 @@ func (p *MachineContext) Run() error {
 
 		case OpLoadLocal:
 			slot, depth := DecodeLocalIndex(instr.Arg)
-			li := environment.NewLocalIndex(slot, depth)
-			bd := mc.env.GetLocalBinding(li)
+			bd := mc.env.GetLocalBindingBySlotDepth(slot, depth)
 			if bd == nil {
-				return mc.Error(fmt.Sprintf("no such local binding %s", li))
+				return mc.Error(fmt.Sprintf("no such local binding %d:%d", slot, depth))
 			}
 			mc.SetValue(bd.Value())
 			mc.pc++
 
 		case OpStoreLocal:
 			slot, depth := DecodeLocalIndex(instr.Arg)
-			li := environment.NewLocalIndex(slot, depth)
-			err := mc.env.SetLocalValue(li, mc.evals.Pop())
+			err := mc.env.SetLocalValueBySlotDepth(slot, depth, mc.evals.Pop())
 			if err != nil {
 				return mc.WrapError(err, "")
 			}
