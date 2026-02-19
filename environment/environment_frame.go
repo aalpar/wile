@@ -567,7 +567,7 @@ func (p *EnvironmentFrame) GetLocalBindingBySlotDepth(slot, depth int) *Binding 
 		}
 		env = env.parent
 	}
-	if env.local == nil {
+	if env == nil || env.local == nil {
 		return nil
 	}
 	return env.local.bindings[slot]
@@ -597,10 +597,13 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Value) error {
 	env := p
 	for range depth {
+		if env == nil {
+			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
+		}
 		env = env.parent
 	}
-	if env.local == nil {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "setLocalValue: no local frame at depth %d", depth)
+	if env == nil || env.local == nil {
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
 	}
 	env.local.bindings[slot].value = v
 	return nil

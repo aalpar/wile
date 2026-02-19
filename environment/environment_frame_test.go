@@ -547,7 +547,13 @@ func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
 	qt.Assert(t, bd, qt.IsNotNil)
 	qt.Assert(t, bd.Value().EqualTo(values.NewInteger(20)), qt.IsTrue)
 
-	// depth beyond parent chain -> nil
+	// depth exactly one past last frame -> nil (off-by-one boundary)
+	// Chain is: child(0) -> parent(1) -> topLevel(2, no local)
+	// depth=3 walks past topLevel to nil
+	bd = child.GetLocalBindingBySlotDepth(0, 3)
+	qt.Assert(t, bd, qt.IsNil)
+
+	// depth well beyond parent chain -> nil
 	bd = child.GetLocalBindingBySlotDepth(0, 5)
 	qt.Assert(t, bd, qt.IsNil)
 }
@@ -573,6 +579,12 @@ func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
 	// No local frame -> error
 	topOnly := NewTopLevelEnvironmentFrame()
 	err = topOnly.SetLocalValueBySlotDepth(0, 0, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+
+	// depth exactly one past last frame -> error (off-by-one boundary)
+	// Chain is: child(0) -> parent(1) -> topLevel(2, no local)
+	// depth=3 walks past topLevel to nil
+	err = child.SetLocalValueBySlotDepth(0, 3, values.NewInteger(1))
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
