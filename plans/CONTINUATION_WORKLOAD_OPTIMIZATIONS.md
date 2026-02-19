@@ -1,10 +1,10 @@
 # Continuation-Heavy Workload Optimizations
 
-**Status:** In Progress (3 of 6 complete)
+**Status:** In Progress (4 of 6 complete)
 **Date:** 2026-02-18
 **Benchmark:** Zebra puzzle (Schelog logic programming)
 **Baseline:** 24.22s, 36.2 GB allocated, 907.8M allocations (Apple M4 Max, GOGC=100)
-**Current:** 21.5s, 28.6 GB allocated, 491.3M allocations (after optimization #4)
+**Current:** 18.5s, 27.1 GB allocated, 378.2M allocations (after optimization #3)
 
 ## Profile Summary
 
@@ -68,16 +68,17 @@ Changed `LocalEnvironmentFrame.bindings` from `[]*Binding` to `[]Binding`. Elimi
 
 **Files:** `environment/local_environment_frame.go`, `environment/environment_frame.go`, `machine/compile_validated.go`, test files
 
-### 3. EnvironmentFrame Struct Pooling or Fusion
+### 3. EnvironmentFrame Struct Fusion ✓
 
 **Impact:** ~5.6 GB (16%), ~112.9M fewer allocations
 **Effort:** Medium | **Risk:** Medium
+**Status:** Complete — PR #289, merged 2026-02-18
 
-Each `Apply` creates both a `LocalEnvironmentFrame` (via `CopyForApply`) and an `EnvironmentFrame` (via `NewEnvironmentFrameWithParent`). The `EnvironmentFrame` is a thin wrapper (~56 bytes).
+Each `Apply` created both a `LocalEnvironmentFrame` (via `CopyForApply`) and an `EnvironmentFrame` (via `NewEnvironmentFrameWithParent`). The `EnvironmentFrame` was a thin wrapper (~56 bytes).
 
-**Option A — Pool:** `sync.Pool` for `EnvironmentFrame`. Lifetime follows acquire/release: created in `Apply`, dead when `RestoreAndRelease` overwrites `mc.env`. A "captured" flag set by `OperationMakeClosure` prevents pooling captured frames.
+**Fix:** Embedded `LocalEnvironmentFrame` by value in `EnvironmentFrame`, eliminating one allocation per `Apply`.
 
-**Option B — Fuse:** Single struct embedding both `EnvironmentFrame` and `LocalEnvironmentFrame`. Eliminates one allocation per `Apply`.
+**Measured result:** -1.6 GB bytes, -113.1M allocations (27.1 GB / 378.2M vs post-#4 28.6 GB / 491.3M). Wall time 18.5s (vs 21.5s). The -113.1M alloc count matches `closures_applied` exactly — one allocation eliminated per Apply.
 
 **Files:** `environment/environment_frame.go`, `machine/machine_context.go` (Apply), `machine/operation_make_closure.go`
 
@@ -141,7 +142,7 @@ Many closures are called in tail position or are non-recursive. The compiler cou
 |---|-------------|---------------|--------|------|
 | 1 | LocalIndex → value type | **-1.8 GB measured** | Low | ✓ Complete |
 | 2 | `[]*Binding` → `[]Binding` | ~2-3 GB (est.) | Medium | ✓ Complete |
-| 3 | EnvironmentFrame pool/fusion | ~5.6 GB (16%) | Medium | Medium |
+| 3 | EnvironmentFrame fusion | ~5.6 GB (16%) | Medium | ✓ Complete |
 | 4 | Stack PopAll array retention | **-4.5 GB measured** | Low | ✓ Complete |
 | 5 | CoW continuation sharing | ~2.9 GB (8.5%) | High | High |
 | 6 | CopyForApply avoidance | ~15.5 GB (44.6%) | Very High | Very High |
