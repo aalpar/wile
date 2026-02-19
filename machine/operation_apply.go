@@ -52,6 +52,7 @@ func (p *OperationApply) Apply(_ context.Context, mc *MachineContext) (*MachineC
 	vs := mc.evals.PopAll()
 	mc.counters.StackPopAlls++
 	mc.counters.StackElementsCopied += uint64(len(vs))
+	mc.counters.RecordStackDepth(len(vs))
 	result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 	if err != nil {
 		return result, mc.WrapError(err, "")

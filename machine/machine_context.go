@@ -579,6 +579,7 @@ func (p *MachineContext) Run() error {
 			vs := mc.evals.PopAll()
 			mc.counters.StackPopAlls++
 			mc.counters.StackElementsCopied += uint64(len(vs))
+			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 			if err != nil {
 				return mc.WrapError(err, "")

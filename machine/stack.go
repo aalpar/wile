@@ -102,11 +102,20 @@ func (p *Stack) PushAll(vs []values.Value) {
 }
 
 // PopAll removes and returns all values from the stack.
-// The caller gets exclusive ownership of the returned slice's backing array.
+// The caller gets exclusive ownership of the returned slice.
+// The stack retains its backing array for reuse (avoids re-allocation on
+// subsequent pushes). References in the retained portion are cleared so the
+// GC can collect the values.
 func (p *Stack) PopAll() []values.Value {
-	old := []values.Value(*p)
-	*p = nil
-	return old
+	n := len(*p)
+	if n == 0 {
+		return nil
+	}
+	result := make([]values.Value, n)
+	copy(result, *p)
+	clear((*p)[:n])
+	*p = (*p)[:0]
+	return result
 }
 
 // PeekK returns the kth value from the top of the stack without removing it.

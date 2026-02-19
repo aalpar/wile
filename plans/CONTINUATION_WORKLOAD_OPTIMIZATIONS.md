@@ -1,10 +1,10 @@
 # Continuation-Heavy Workload Optimizations
 
-**Status:** In Progress (2 of 6 complete)
+**Status:** In Progress (3 of 6 complete)
 **Date:** 2026-02-18
 **Benchmark:** Zebra puzzle (Schelog logic programming)
 **Baseline:** 24.22s, 36.2 GB allocated, 907.8M allocations (Apple M4 Max, GOGC=100)
-**Current:** 23.76s, 33.1 GB allocated, 684.0M allocations (after optimization #2)
+**Current:** 21.5s, 28.6 GB allocated, 491.3M allocations (after optimization #4)
 
 ## Profile Summary
 
@@ -81,16 +81,33 @@ Each `Apply` creates both a `LocalEnvironmentFrame` (via `CopyForApply`) and an 
 
 **Files:** `environment/environment_frame.go`, `machine/machine_context.go` (Apply), `machine/operation_make_closure.go`
 
-### 4. Stack Capacity Tuning
+### 4. Stack PopAll Backing Array Retention ✓
 
-**Impact:** Unknown (potentially 1-3 GB)
+**Impact:** -4.5 GB (-13.5%), -192.7M fewer allocations
 **Effort:** Low | **Risk:** Low
+**Status:** Complete — implemented 2026-02-18
 
-Stack pool capacity is 8 (`machine/pool.go:32`). Average stack depth at PopAll is ~1.4, but a long tail of deeper stacks triggers growth allocations. Measure actual depth distribution; bump to 16 or 32 if warranted.
+**Investigation result:** Stack depth histogram (added to VMCounters) showed 97.4% of PopAll events at depth 0-2. Only 3 out of 112.7M exceeded the pool capacity of 8. The pool capacity is adequate — capacity tuning is unnecessary.
 
-**Investigation:** Add max-depth tracking to VMCounters, run zebra benchmark, check distribution.
+**Root cause found:** `PopAll` set `*p = nil`, giving away the backing array. After every `Apply` (112.9M times), the stack was nil. The next `OpPush` did `append(nil, v)`, allocating a fresh backing array. This growth chain produced 264.7M allocations (7.8 GB) — 38.7% of all allocations.
 
-**Files:** `machine/pool.go`, `machine/machine_context.go` (counters)
+**Fix:** Changed `PopAll` to copy data out and retain the backing array. The stack keeps its cap-8 backing array from the pool across Apply cycles. One `make([]values.Value, n)` per non-empty PopAll instead of a growth chain from nil.
+
+**Stack depth distribution (zebra benchmark):**
+
+| Bucket | Count | % |
+|--------|-------|---|
+| 0-2 | 109,805,111 | 97.4% |
+| 3-4 | 2,812,184 | 2.5% |
+| 5-8 | 64,376 | 0.06% |
+| 9+ | 3 | ~0% |
+| Max depth | 42 | — |
+
+**Measured result:** -4.5 GB bytes, -192.7M allocations (28.6 GB / 491.3M vs post-#2 33.1 GB / 684.0M). Wall time 21.5s (vs 23.76s).
+
+**Residual:** Stack.Push still accounts for 3.4 GB (74M allocs), likely from stacks restored via `Restore` (call/cc path) where `slices.Clone` creates right-sized copies that need to grow on reuse.
+
+**Files:** `machine/stack.go` (PopAll), `machine/counters.go` (depth histogram), `machine/machine_context.go` (instrumentation), `machine/operation_apply.go` (instrumentation)
 
 ### 5. Copy-on-Write Continuation Sharing
 
@@ -125,7 +142,7 @@ Many closures are called in tail position or are non-recursive. The compiler cou
 | 1 | LocalIndex → value type | **-1.8 GB measured** | Low | ✓ Complete |
 | 2 | `[]*Binding` → `[]Binding` | ~2-3 GB (est.) | Medium | ✓ Complete |
 | 3 | EnvironmentFrame pool/fusion | ~5.6 GB (16%) | Medium | Medium |
-| 4 | Stack capacity tuning | ~1-3 GB (est.) | Low | Low |
+| 4 | Stack PopAll array retention | **-4.5 GB measured** | Low | ✓ Complete |
 | 5 | CoW continuation sharing | ~2.9 GB (8.5%) | High | High |
 | 6 | CopyForApply avoidance | ~15.5 GB (44.6%) | Very High | Very High |
 

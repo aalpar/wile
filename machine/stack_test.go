@@ -409,7 +409,7 @@ func TestStackPeekKBoundary(t *testing.T) {
 }
 
 // TestStackPopAllThenPush verifies that Push works after PopAll
-// (PopAll sets the stack to nil; append on nil allocates a fresh slice).
+// (PopAll copies data out and retains the backing array for reuse).
 func TestStackPopAllThenPush(t *testing.T) {
 	s := NewStack()
 	s.Push(values.NewInteger(1))
