@@ -34,6 +34,7 @@ type VMCounters struct {
 	StackPoolReleases        uint64
 	SubContextPoolReleases   uint64
 	ContinuationPoolReleases uint64
+	SharedFrameRestores      uint64
 	KeysShared               uint64
 
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
@@ -81,6 +82,7 @@ func (c VMCounters) String() string {
 			"stack_pool_releases:          %d\n"+
 			"sub_context_pool_releases:    %d\n"+
 			"continuation_pool_releases:   %d\n"+
+			"shared_frame_restores:        %d\n"+
 			"keys_shared:                  %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
@@ -101,6 +103,7 @@ func (c VMCounters) String() string {
 		c.StackPoolReleases,
 		c.SubContextPoolReleases,
 		c.ContinuationPoolReleases,
+		c.SharedFrameRestores,
 		c.KeysShared,
 		c.StackMaxDepth,
 		c.StackDepth0to2,
