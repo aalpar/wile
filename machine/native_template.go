@@ -34,6 +34,12 @@ type NativeTemplate struct {
 	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
 	name           string                  // Function name (for stack traces)
 
+	// noCopyApply is true when the template's bindings never escape:
+	// no OpSaveContinuation in code[] and no *OperationMakeClosure in sideTable[].
+	// When true, Apply can reuse the closure's own environment frame
+	// instead of allocating a fresh copy via NewApplyFrame().
+	noCopyApply bool
+
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
@@ -268,6 +274,34 @@ func (p *NativeTemplate) SetName(name string) {
 	p.name = name
 }
 
+// NoCopyApply returns true if Apply can reuse the closure's environment
+// frame instead of copying it. This is safe when the template contains no
+// OpSaveContinuation (which captures mc.env into the continuation chain)
+// and no *OperationMakeClosure (which captures mc.env as a closure parent).
+func (p *NativeTemplate) NoCopyApply() bool {
+	return p.noCopyApply
+}
+
+// computeNoCopyApply scans the compiled bytecode to determine whether
+// this template's bindings can escape the call. Sets noCopyApply = true
+// when neither OpSaveContinuation nor *OperationMakeClosure is present.
+func (p *NativeTemplate) computeNoCopyApply() {
+	for _, instr := range p.code {
+		if instr.Op == OpSaveContinuation {
+			p.noCopyApply = false
+			return
+		}
+	}
+	for _, op := range p.sideTable {
+		_, ok := op.(*OperationMakeClosure)
+		if ok {
+			p.noCopyApply = false
+			return
+		}
+	}
+	p.noCopyApply = true
+}
+
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	// Don't deduplicate environments - each closure needs its own instance
 	// because environments are mutable and context-dependent. The parent
@@ -493,6 +527,7 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		parameterCount: p.parameterCount,
 		valueCount:     p.valueCount,
 		isVariadic:     p.isVariadic,
+		noCopyApply:    p.noCopyApply,
 		name:           p.name,
 	}
 	q.literals = slices.Clone(p.literals)

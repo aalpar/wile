@@ -334,16 +334,32 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		}
 	}
 
-	// Create a fresh frame with copied local bindings for this call (single allocation).
-	// This is critical for recursive functions: without copying, all invocations
-	// share the same bindings, causing parameter corruption when evaluating
-	// arguments like (+ (f (- n 1)) (f (- n 2))).
-	env := mcls.env.NewApplyFrame()
-	bnds := env.LocalEnvironment().Bindings()
 	p.counters.ClosuresApplied++
-	p.counters.EnvsCopied++
-	p.counters.BindingsCopied += uint64(len(bnds))
-	p.counters.KeysShared++
+
+	var env *environment.EnvironmentFrame
+	var bnds []environment.Binding
+
+	if tpl.NoCopyApply() {
+		// No-copy path: the template contains no SaveContinuation and no
+		// MakeClosure, so mc.env is never captured. Safe to mutate the
+		// closure's own bindings in place, eliminating both the
+		// EnvironmentFrame and []Binding allocations.
+		env = mcls.env
+		bnds = env.LocalEnvironment().Bindings()
+		p.counters.NoCopyApplies++
+		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
+	} else {
+		// Copy path: create a fresh frame with copied local bindings.
+		// Critical for recursive functions with SaveContinuation: without
+		// copying, all invocations share the same bindings, causing
+		// parameter corruption when evaluating arguments like
+		// (+ (f (- n 1)) (f (- n 2))).
+		env = mcls.env.NewApplyFrame()
+		bnds = env.LocalEnvironment().Bindings()
+		p.counters.EnvsCopied++
+		p.counters.BindingsCopied += uint64(len(bnds))
+		p.counters.KeysShared++
+	}
 
 	if !tpl.IsVariadic() {
 		for i := range bnds[:l] {

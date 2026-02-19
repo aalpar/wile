@@ -1,6 +1,6 @@
 # Performance Refactoring Plan
 
-**Status:** IN PROGRESS — Phases 0–6 complete, Phase 7 remaining
+**Status:** Phases 0–6 complete. Phase 7 deferred — no profiling evidence; needs a real-world workload to justify.
 
 ## Overview
 
@@ -53,7 +53,7 @@ See `PHASE6_SWITCH_DISPATCH.md` for full implementation details.
 
 | Phase | Description | Impact | Risk | Deps | Plan |
 |-------|-------------|--------|------|------|------|
-| **7** | Advanced — tagged integers (unsafe), compilation caching, library pre-compilation | Variable | High | 5, 6 | TBD |
+| **7** | Advanced — tagged integers (unsafe), compilation caching, library pre-compilation | Variable | High | 5, 6 | Deferred — needs real-world workload |
 
 ## Critical Files
 

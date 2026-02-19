@@ -1,10 +1,10 @@
 # Continuation-Heavy Workload Optimizations
 
-**Status:** In Progress (4 of 6 complete)
+**Status:** Complete (6 of 6)
 **Date:** 2026-02-18
 **Benchmark:** Zebra puzzle (Schelog logic programming)
 **Baseline:** 24.22s, 36.2 GB allocated, 907.8M allocations (Apple M4 Max, GOGC=100)
-**Current:** 18.5s, 27.1 GB allocated, 378.2M allocations (after optimization #3)
+**Current:** 18.6s, 21.5 GB allocated, 300.9M allocations (after optimization #6)
 
 ## Profile Summary
 
@@ -28,14 +28,16 @@
 | `MachineContinuation.Copy` | 2.9 GB | 8.5% | — | `machine/machine_continuation.go:123` |
 | `NewLocalIndex` | 1.7 GB | 4.9% | ~105M | `environment/local_index.go:35` |
 
-### VM Counters
+### VM Counters (post-#6)
 
 | Counter | Value |
 |---------|-------|
 | ops_executed | 1,051,582,741 |
 | closures_applied | 112,882,037 |
-| envs_copied | 112,882,037 |
-| bindings_copied | 158,631,258 |
+| envs_copied | 100,585,309 |
+| bindings_copied | 145,647,350 |
+| no_copy_applies | 12,296,728 |
+| no_copy_bindings_saved | 12,983,908 |
 | continuations_saved | 74,785,918 |
 | continuations_restored | 74,531,801 |
 | foreign_calls | 66,207,132 |
@@ -110,31 +112,46 @@ Each `Apply` created both a `LocalEnvironmentFrame` (via `CopyForApply`) and an 
 
 **Files:** `machine/stack.go` (PopAll), `machine/counters.go` (depth histogram), `machine/machine_context.go` (instrumentation), `machine/operation_apply.go` (instrumentation)
 
-### 5. Copy-on-Write Continuation Sharing
+### 5. Shared-Flag Continuation Optimization ✓
 
-**Impact:** ~2.9 GB (8.5%)
+**Impact:** ~2.9 GB (8.5%), ~21M fewer frame copies
 **Effort:** High | **Risk:** High
+**Status:** Complete — PR #290, merged 2026-02-18
 
-`CurrentContinuation()` calls `DeepCopy()`, deep-copying the entire continuation chain. This is needed because `RestoreAndRelease` pools frames — if captured continuations share frames with the live chain, pooling corrupts the capture.
+`CurrentContinuation()` called `DeepCopy()`, deep-copying the entire continuation chain. This was needed because `RestoreAndRelease` pools frames — if captured continuations share frames with the live chain, pooling corrupts the capture.
 
-**Alternative:** Mark frames as "shared" when captured. Normal return (`RestoreAndRelease`) checks the flag and skips pooling for shared frames (falls through to GC). `DeepCopy` becomes unnecessary.
+**Fix:** Added `shared bool` to `MachineContinuation`. `MarkChainShared()` walks the chain setting `shared=true` (early-exits on already-shared frames — all ancestors must already be shared from a prior capture). `RestoreAndRelease` checks the flag: unshared frames follow the existing transfer-and-pool fast path; shared frames copy evals and skip pooling, preserving them for re-invocation. `DeepCopy` eliminated from the call/cc path.
 
-**Correctness concern:** Any bug silently corrupts continuations. Requires exhaustive testing with coroutines, dynamic-wind, and composable continuations.
+The ~0.7 GB of evals copies moves from `DeepCopy` to `RestoreAndRelease` — same work, different location.
 
-**Files:** `machine/machine_continuation.go`, `machine/machine_context.go` (SaveContinuation, RestoreAndRelease, CurrentContinuation)
+**Measured result:** -3.8 GB bytes, -52.8M allocations (23.3 GB / 325.4M vs post-#3 27.1 GB / 378.2M). Wall time 17.6s (vs 18.5s). Savings exceeded the ~2.2 GB estimate — likely second-order effects from reduced GC pressure.
 
-### 6. CopyForApply Avoidance (Escape Analysis)
+**Scope:** call/cc path only. Composable continuation `DeepCopy` (`applyComposableContinuation`) is unchanged.
 
-**Impact:** Up to 15.5 GB (44.6%)
-**Effort:** Very High | **Risk:** Very High
+**Files:** `machine/machine_continuation.go`, `machine/machine_context.go` (RestoreAndRelease, CurrentContinuation, RestoreWithWindingFrom, RunWithEscapeHandling), `registry/core/prim_control.go` (PrimCallCC), `machine/counters.go`, `machine/pool.go`
 
-The largest single allocation source. Every closure application copies the local environment to prevent recursive parameter corruption.
+### 6. CopyForApply Avoidance (Escape Analysis) ✓
 
-Many closures are called in tail position or are non-recursive. The compiler could emit a "no-copy apply" for templates where escape analysis proves bindings aren't accessed concurrently. Effectively: lightweight stack frames for safe closures.
+**Impact:** -1.8 GB (-7.7%), -24.6M fewer allocations
+**Effort:** Medium | **Risk:** Low
+**Status:** Complete — implemented 2026-02-18
 
-**Prerequisite:** Compiler escape analysis pass — needs to prove that no `SaveContinuation` intervenes between binding creation and last use within a template.
+Added compile-time escape analysis: `NativeTemplate.computeNoCopyApply()` scans `code[]` for `OpSaveContinuation` and `sideTable[]` for `*OperationMakeClosure`. If neither is present, the template's bindings cannot escape the call frame (no continuation capture, no inner closure). `Apply` branches on the flag: safe templates reuse the closure's own `EnvironmentFrame` in place (0 allocations); unsafe templates take the existing `NewApplyFrame()` copy path.
 
-**Files:** `machine/compile_validated.go`, `machine/machine_context.go` (Apply), `environment/local_environment_frame.go`
+The analysis is conservative — any `SaveContinuation` or `MakeClosure` anywhere in the template disables the optimization, even if unreachable. 10.9% of closure applications (12.3M of 112.9M) take the no-copy path in the zebra benchmark.
+
+**Measured result:** -1.8 GB bytes, -24.6M allocations (21.5 GB / 300.9M vs post-#5 23.3 GB / 325.4M). Wall time ~18.6s (vs ~17.6s post-#5; variance within run-to-run noise).
+
+**VM counter changes:**
+
+| Counter | Before | After | Delta |
+|---------|--------|-------|-------|
+| `envs_copied` | 112,882,037 | 100,585,309 | -12,296,728 |
+| `bindings_copied` | 158,631,258 | 145,647,350 | -12,983,908 |
+| `no_copy_applies` | — | 12,296,728 | new |
+| `no_copy_bindings_saved` | — | 12,983,908 | new |
+
+**Files:** `machine/native_template.go` (flag + analysis), `machine/compile_validated.go` (hook after `compileBody`), `machine/machine_context.go` (Apply branch), `machine/counters.go` (instrumentation)
 
 ## Priority Order
 
@@ -144,8 +161,8 @@ Many closures are called in tail position or are non-recursive. The compiler cou
 | 2 | `[]*Binding` → `[]Binding` | ~2-3 GB (est.) | Medium | ✓ Complete |
 | 3 | EnvironmentFrame fusion | ~5.6 GB (16%) | Medium | ✓ Complete |
 | 4 | Stack PopAll array retention | **-4.5 GB measured** | Low | ✓ Complete |
-| 5 | CoW continuation sharing | ~2.9 GB (8.5%) | High | High |
-| 6 | CopyForApply avoidance | ~15.5 GB (44.6%) | Very High | Very High |
+| 5 | Shared-flag continuations | **-3.8 GB measured** | High | ✓ Complete |
+| 6 | CopyForApply avoidance | **-1.8 GB measured** | Medium | ✓ Complete |
 
 ## Verification
 

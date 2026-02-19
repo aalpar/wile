@@ -179,8 +179,8 @@ func NewList(vals ...Value) Value {
 	return wrapValue(result)
 }
 
-// Null is the empty list.
-var Null = wrapValue(values.EmptyList)
+// EmptyList is the empty list.
+var EmptyList = wrapValue(values.EmptyList)
 
 // Void is the void value.
 var Void = wrapValue(values.Void)

@@ -422,6 +422,11 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 		return err
 	}
 
+	// Phase 4b: Escape analysis — determine whether Apply can skip copying
+	// the closure's environment frame. Safe when the body contains no
+	// OpSaveContinuation and no MakeClosure (the two paths that capture mc.env).
+	tpl.computeNoCopyApply()
+
 	// Phase 5: Emit bytecode to construct the closure at runtime.
 	// The closure captures the current environment (for lexical scoping) and
 	// references the compiled template. The sequence is:
@@ -607,6 +612,15 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 		if err != nil {
 			return err
 		}
+
+		// Escape analysis — same as compileClosure Phase 4b.
+		// TODO: the no-copy path reuses the closure's own EnvironmentFrame,
+		// which is unsafe if the same closure is invoked concurrently from
+		// multiple SRFI-18 threads. This applies to both compileClosure and
+		// case-lambda clauses. Investigate a thread-aware guard (e.g., disable
+		// no-copy when the Engine has threads enabled, or track an in-use flag
+		// on MachineClosure).
+		tpl.computeNoCopyApply()
 
 		// Emit bytecode to construct this clause's closure and push it to the stack.
 		// After processing all clauses, the stack will contain [clause0, clause1, ...].

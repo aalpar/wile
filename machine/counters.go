@@ -36,6 +36,8 @@ type VMCounters struct {
 	ContinuationPoolReleases uint64
 	SharedFrameRestores      uint64
 	KeysShared               uint64
+	NoCopyApplies            uint64
+	NoCopyBindingsSaved      uint64
 
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
 	// showed cap-8 is sufficient for observed workloads)
@@ -84,6 +86,8 @@ func (c VMCounters) String() string {
 			"continuation_pool_releases:   %d\n"+
 			"shared_frame_restores:        %d\n"+
 			"keys_shared:                  %d\n"+
+			"no_copy_applies:              %d\n"+
+			"no_copy_bindings_saved:       %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
 			"stack_depth_3to4:             %d\n"+
@@ -105,6 +109,8 @@ func (c VMCounters) String() string {
 		c.ContinuationPoolReleases,
 		c.SharedFrameRestores,
 		c.KeysShared,
+		c.NoCopyApplies,
+		c.NoCopyBindingsSaved,
 		c.StackMaxDepth,
 		c.StackDepth0to2,
 		c.StackDepth3to4,
