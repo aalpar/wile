@@ -318,10 +318,9 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	sym := p.declareDefineBinding(v)
 
 	// Step 2: Set up the closure's environment and bytecode template.
-	// The local environment holds parameter bindings; the child environment
-	// frame links it to the current lexical scope for closure capture.
+	// The local environment holds parameter bindings; compileClosure creates
+	// the child environment frame after binding parameters.
 	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Record the function name for stack traces and debugging.
@@ -330,7 +329,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err := p.compileClosure(ctctx, childEnv, tpl, lenv, v)
+	err := p.compileClosure(ctctx, tpl, lenv, v)
 	if err != nil {
 		return err
 	}
@@ -369,7 +368,7 @@ func setScopesOnLastBinding(scopes []*syntax.Scope, lenv *environment.LocalEnvir
 // compileClosure compiles a complete closure (lambda or define-fn body).
 // It binds required and rest parameters to the local environment, compiles body expressions,
 // and emits MakeClosure operations. Used by both lambda and function-style define.
-func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure) error {
+func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure) error {
 	// Phase 1: Bind required parameters to the local environment.
 	// Each parameter becomes a local variable slot that the VM will populate
 	// with argument values when the closure is called. Parameters are processed
@@ -403,6 +402,11 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, c
 	if err != nil {
 		return err
 	}
+
+	// Create the child environment after all lenv mutations are complete.
+	// The EnvironmentFrame embeds LocalEnvironmentFrame by value, so lenv
+	// must be fully populated before being passed to the constructor.
+	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 
 	// Phase 3: Register the template and environment in the parent's literals pool.
 	// These will be loaded at runtime to construct the closure. The literals pool
@@ -439,12 +443,12 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, c
 
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedLambda) error {
-	// Create child environment and template for lambda body
+	// Create local environment and template for lambda body.
+	// compileClosure creates the child environment frame after binding parameters.
 	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 	tpl := NewNativeTemplate(0, 0, false)
 
-	err := p.compileClosure(ctctx, childEnv, tpl, lenv, v)
+	err := p.compileClosure(ctctx, tpl, lenv, v)
 	if err != nil {
 		return err
 	}
@@ -564,7 +568,6 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 		// Each clause gets its own environment and template, since each has
 		// independent parameters and body. This is similar to compiling separate lambdas.
 		lenv := environment.NewLocalEnvironment(0)
-		childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 		tpl := NewNativeTemplate(0, 0, false)
 
 		// Bind parameters for this clause. The parameter list determines which
@@ -591,6 +594,9 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 			}
 		}
 		// Note: clause.Params() == nil represents a clause that takes no arguments: (() ...)
+
+		// Create the child environment after all lenv mutations are complete.
+		childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 
 		// Register the clause's template and environment in the literals pool.
 		tpli := p.template.MaybeAppendLiteral(tpl)

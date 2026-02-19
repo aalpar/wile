@@ -97,7 +97,6 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 	global := newGlobalEnvironmentFrameWithTopLevel(q)
 	q.runtime = &EnvironmentFrame{
 		parent:     nil,
-		local:      nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
 		topLevel:   q,
@@ -408,7 +407,6 @@ func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment
 	global := newGlobalEnvironmentFrameWithTopLevel(q)
 	q.runtime = &EnvironmentFrame{
 		parent:     nil,
-		local:      nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
 		topLevel:   q,
@@ -438,7 +436,6 @@ func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
 	// Create the runtime frame for the child
 	runtime := &EnvironmentFrame{
 		parent:     nil,
-		local:      nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
 		topLevel:   p, // Share the TopLevelEnvironment

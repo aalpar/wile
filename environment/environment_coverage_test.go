@@ -34,7 +34,8 @@ func TestNewEnvironmentFrame_Isolated(t *testing.T) {
 	}
 	env := NewEnvironmentFrame(local, global)
 	c.Assert(env, qt.IsNotNil)
-	c.Assert(env.local, qt.Equals, local)
+	c.Assert(env.LocalEnvironment(), qt.IsNotNil)
+	c.Assert(len(env.LocalEnvironment().Bindings()), qt.Equals, len(local.Bindings()))
 	c.Assert(env.global, qt.Equals, global)
 	c.Assert(env.phaseLevel, qt.Equals, PhaseRuntime)
 	c.Assert(env.phases, qt.IsNil)

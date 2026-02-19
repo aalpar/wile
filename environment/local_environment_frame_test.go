@@ -216,3 +216,45 @@ func TestCopyForApply_EnsureLocalBindingCowsKeys(t *testing.T) {
 	qt.Assert(t, len(le.Keys()), qt.Equals, 1)
 	qt.Assert(t, len(copied.Keys()), qt.Equals, 2)
 }
+
+func TestCopyInto_CopiesBindings(t *testing.T) {
+	le := NewLocalEnvironment(2)
+	li0 := &LocalIndex{0, 0}
+	li1 := &LocalIndex{1, 0}
+	le.SetLocalValue(li0, values.NewInteger(10))
+	le.SetLocalValue(li1, values.NewInteger(20))
+
+	var dst LocalEnvironmentFrame
+	le.copyInto(&dst)
+
+	// Bindings are independent copies
+	qt.Assert(t, len(dst.bindings), qt.Equals, 2)
+	qt.Assert(t, dst.bindings[0].Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, dst.bindings[1].Value(), values.SchemeEquals, values.NewInteger(20))
+
+	// Keys are shared
+	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.Keys()).Pointer())
+	qt.Assert(t, dst.keysShared, qt.IsTrue)
+
+	// Mutating dst does not affect source
+	dst.bindings[0].SetValue(values.NewInteger(99))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(10))
+}
+
+func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
+	le := NewLocalEnvironment(1)
+	li0 := &LocalIndex{0, 0}
+	le.SetLocalValue(li0, values.NewInteger(42))
+
+	var dst LocalEnvironmentFrame
+	le.copyForApplyInto(&dst)
+
+	// Both source and dest have keysShared set
+	qt.Assert(t, le.keysShared, qt.IsTrue)
+	qt.Assert(t, dst.keysShared, qt.IsTrue)
+
+	// Bindings are independent
+	qt.Assert(t, dst.bindings[0].Value(), values.SchemeEquals, values.NewInteger(42))
+	dst.bindings[0].SetValue(values.NewInteger(99))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(42))
+}

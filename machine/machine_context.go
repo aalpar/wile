@@ -320,13 +320,12 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		}
 	}
 
-	// Create a fresh copy of the local environment for this call.
+	// Create a fresh frame with copied local bindings for this call (single allocation).
 	// This is critical for recursive functions: without copying, all invocations
 	// share the same bindings, causing parameter corruption when evaluating
 	// arguments like (+ (f (- n 1)) (f (- n 2))).
-	localEnv := mcls.env.LocalEnvironment().CopyForApply()
-	env := environment.NewEnvironmentFrameWithParent(localEnv, mcls.env.Parent())
-	bnds := localEnv.Bindings()
+	env := mcls.env.NewApplyFrame()
+	bnds := env.LocalEnvironment().Bindings()
 	p.counters.ClosuresApplied++
 	p.counters.EnvsCopied++
 	p.counters.BindingsCopied += uint64(len(bnds))

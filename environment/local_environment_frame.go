@@ -193,3 +193,39 @@ func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 	}
 	return q
 }
+
+// copyInto copies bindings into an existing destination frame.
+// The keys map is shared (copy-on-write). Used by EnvironmentFrame.Copy().
+func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
+	dst.keys = p.keys
+	dst.keysShared = true
+	dst.bindings = make([]Binding, len(p.bindings))
+	for i := range p.bindings {
+		b := &p.bindings[i]
+		dst.bindings[i] = Binding{
+			value:       b.value,
+			bindingType: b.bindingType,
+			scopes:      b.scopes,
+			source:      b.source,
+		}
+	}
+}
+
+// copyForApplyInto copies bindings into an existing destination frame,
+// marking both source and destination as sharing keys (CoW).
+// Used by EnvironmentFrame.NewApplyFrame().
+func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
+	dst.keys = p.keys
+	dst.keysShared = true
+	p.keysShared = true
+	dst.bindings = make([]Binding, len(p.bindings))
+	for i := range p.bindings {
+		b := &p.bindings[i]
+		dst.bindings[i] = Binding{
+			value:       b.value,
+			bindingType: b.bindingType,
+			scopes:      b.scopes,
+			source:      b.source,
+		}
+	}
+}
