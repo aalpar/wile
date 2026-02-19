@@ -613,6 +613,15 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 			return err
 		}
 
+		// Escape analysis — same as compileClosure Phase 4b.
+		// TODO: the no-copy path reuses the closure's own EnvironmentFrame,
+		// which is unsafe if the same closure is invoked concurrently from
+		// multiple SRFI-18 threads. This applies to both compileClosure and
+		// case-lambda clauses. Investigate a thread-aware guard (e.g., disable
+		// no-copy when the Engine has threads enabled, or track an in-use flag
+		// on MachineClosure).
+		tpl.computeNoCopyApply()
+
 		// Emit bytecode to construct this clause's closure and push it to the stack.
 		// After processing all clauses, the stack will contain [clause0, clause1, ...].
 		p.AppendOperations(
