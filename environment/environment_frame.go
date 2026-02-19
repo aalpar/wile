@@ -43,7 +43,7 @@ import (
 //	│  (Lexical scope node: links local/global bindings, parent chain)       │
 //	│                                                                         │
 //	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)     │
-//	│  local ──────────── *LocalEnvironmentFrame (lambda params, let vars)   │
+//	│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)    │
 //	│  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
 //	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
 //	│  phases ─────────── *PhaseRegistry (shared reference)                  │
@@ -93,8 +93,10 @@ import (
 type EnvironmentFrame struct {
 	// parent links to enclosing lexical scope (nil for TopLevel)
 	parent *EnvironmentFrame
-	// local holds local bindings for this frame (parameters, let-bound variables)
-	local *LocalEnvironmentFrame
+	// local holds local bindings for this frame (parameters, let-bound variables).
+	// Embedded by value to eliminate a separate heap allocation per closure call.
+	// Sentinel: local.keys == nil means "no local environment" (zero value).
+	local LocalEnvironmentFrame
 	// global holds global bindings for this phase
 	global *GlobalEnvironmentFrame
 	// phaseLevel indicates which phase this frame represents (0=runtime, 1=expand, etc.)
@@ -120,10 +122,12 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 // The parent field is set to nil. This is typically used for isolated environments.
 func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
-		local:      local,
 		global:     global,
 		phaseLevel: PhaseRuntime,
 		phases:     nil, // No phase registry for isolated environments
+	}
+	if local != nil {
+		q.local = *local
 	}
 	return q
 }
@@ -142,12 +146,37 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 	}
 	q := &EnvironmentFrame{
 		parent:     parent,
-		local:      local,
 		global:     parent.global,
 		phaseLevel: parent.phaseLevel,
 		phases:     parent.phases,
 		topLevel:   parent.topLevel,
 	}
+	if local != nil {
+		q.local = *local
+	}
+	return q
+}
+
+// NewApplyFrame creates a new EnvironmentFrame for a closure application,
+// fusing CopyForApply + NewEnvironmentFrameWithParent into one allocation.
+// The source frame's local bindings are copied into the new frame, and the
+// parent chain is set from the source's parent.
+func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
+	parent := p.parent
+	if parent == nil {
+		panic(values.WrapForeignErrorf(
+			values.ErrNilParentEnvironment,
+			"NewApplyFrame called on frame with nil parent - closure environments must have a parent",
+		))
+	}
+	q := &EnvironmentFrame{
+		parent:     parent,
+		global:     parent.global,
+		phaseLevel: parent.phaseLevel,
+		phases:     parent.phases,
+		topLevel:   parent.topLevel,
+	}
+	p.local.copyForApplyInto(&q.local)
 	return q
 }
 
@@ -237,9 +266,18 @@ func (p *EnvironmentFrame) LoadPathStack() *LoadPathStack {
 	return p.topLevel.LoadPathStack()
 }
 
-// LocalEnvironment returns the local environment frame.
+// hasLocal returns true if this frame has local bindings.
+// The sentinel for "no local environment" is local.keys == nil (zero value).
+func (p *EnvironmentFrame) hasLocal() bool {
+	return p.local.keys != nil
+}
+
+// LocalEnvironment returns the local environment frame, or nil if none.
 func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
-	return p.local
+	if !p.hasLocal() {
+		return nil
+	}
+	return &p.local
 }
 
 // resolveLocal walks local bindings up the parent chain, calling visitor
@@ -260,7 +298,7 @@ func (p *EnvironmentFrame) resolveLocal(
 ) any {
 	env := p
 	depth := 0
-	for env != nil && env.local != nil {
+	for env != nil && env.hasLocal() {
 		i, ok := env.local.keys[*key]
 		if ok {
 			binding := &env.local.bindings[i]
@@ -384,7 +422,7 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 // or (index, false) if the binding already existed.
 // Returns (nil, false) if the receiver is nil or has no local environment.
 func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
-	if p == nil || p.local == nil {
+	if p == nil || !p.hasLocal() {
 		return nil, false
 	}
 	return p.local.EnsureLocalBinding(key, bt)
@@ -394,7 +432,7 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 // It returns the LocalIndex of the new binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*LocalIndex, bool) {
-	if p == nil || p.local == nil {
+	if p == nil || !p.hasLocal() {
 		return nil, false
 	}
 	i, ok := p.local.keys[*key]
@@ -420,7 +458,7 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 // lookup delegates to LocalEnvironmentFrame.GetLocalIndex.
 func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	env := p
-	if env.local == nil {
+	if !env.hasLocal() {
 		return nil, false
 	}
 	depth := 0
@@ -429,7 +467,7 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt Bindin
 		if li != nil {
 			return NewLocalIndex(li[0], depth), false
 		}
-		if env.IsTopLevel() || env.parent.local == nil {
+		if env.IsTopLevel() || !env.parent.hasLocal() {
 			break
 		}
 		env = env.parent
@@ -443,7 +481,7 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt Bindin
 // searching local bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
 func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
-	if p == nil || p.local == nil {
+	if p == nil || !p.hasLocal() {
 		return nil
 	}
 	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
@@ -470,7 +508,7 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 // chain (Flatt's "collect-then-maximize" algorithm). A simple delegate-and-
 // adjust-depth pattern cannot express the cross-frame maximization.
 func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
-	if p == nil || p.local == nil {
+	if p == nil || !p.hasLocal() {
 		return nil
 	}
 
@@ -483,7 +521,7 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 
 	env := p
 	j := 0
-	for env != nil && env.local != nil {
+	for env != nil && env.hasLocal() {
 		i, ok := env.local.keys[*key]
 		if ok {
 			binding := &env.local.bindings[i]
@@ -538,7 +576,7 @@ func (p *EnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
 		env = env.parent
 		j++
 	}
-	if env.local == nil {
+	if !env.hasLocal() {
 		return nil
 	}
 	return &env.local.bindings[li[0]]
@@ -562,7 +600,7 @@ func (p *EnvironmentFrame) GetLocalBindingBySlotDepth(slot, depth int) *Binding 
 		}
 		env = env.parent
 	}
-	if env == nil || env.local == nil {
+	if env == nil || !env.hasLocal() {
 		return nil
 	}
 	return &env.local.bindings[slot]
@@ -577,7 +615,7 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 		env = env.parent
 		j++
 	}
-	if env.local == nil {
+	if !env.hasLocal() {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %q", li)
 	}
 	env.local.bindings[li[0]].value = v
@@ -595,7 +633,7 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 		}
 		env = env.parent
 	}
-	if env == nil || env.local == nil {
+	if env == nil || !env.hasLocal() {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
 	}
 	env.local.bindings[slot].value = v
@@ -669,11 +707,13 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent:     p.parent,
-		local:      p.local.Copy().(*LocalEnvironmentFrame),
 		global:     p.global.Copy().(*GlobalEnvironmentFrame),
 		phaseLevel: p.phaseLevel,
 		phases:     p.phases,
 		topLevel:   p.topLevel,
+	}
+	if p.hasLocal() {
+		p.local.copyInto(&q.local)
 	}
 	return q
 }
@@ -699,7 +739,7 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 	if p == nil || v == nil {
 		return p == v
 	}
-	if !p.local.EqualTo(v.local) {
+	if !p.local.EqualTo(&v.local) {
 		return false
 	}
 	if !p.global.EqualTo(v.global) {

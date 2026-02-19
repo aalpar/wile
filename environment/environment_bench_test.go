@@ -191,7 +191,7 @@ func BenchmarkFrameCopyAndCreate(b *testing.B) {
 }
 
 // BenchmarkFrameCopyForApplyAndCreate measures CopyForApply + NewEnvironmentFrameWithParent combined.
-// This simulates the optimized Apply path for non-tail calls.
+// This simulates the old Apply path for non-tail calls (two allocations).
 func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 	for _, n := range []int{1, 5, 10, 25, 50} {
 		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
@@ -202,6 +202,20 @@ func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				copied := local.CopyForApply()
 				_ = NewEnvironmentFrameWithParent(copied, parent)
+			}
+		})
+	}
+}
+
+// BenchmarkNewApplyFrame measures the fused NewApplyFrame path.
+// This is the optimized Apply path: single allocation instead of two.
+func BenchmarkNewApplyFrame(b *testing.B) {
+	for _, n := range []int{1, 5, 10, 25, 50} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = env.NewApplyFrame()
 			}
 		})
 	}

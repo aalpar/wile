@@ -93,7 +93,6 @@ func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 
 	q := &EnvironmentFrame{
 		parent:     p.topLevelEnvFrm, // Phase envs parent to runtime frame
-		local:      nil,
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
