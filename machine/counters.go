@@ -35,6 +35,33 @@ type VMCounters struct {
 	SubContextPoolReleases   uint64
 	ContinuationPoolReleases uint64
 	KeysShared               uint64
+
+	// Stack depth instrumentation (investigation for pool capacity tuning)
+	StackMaxDepth   uint64
+	StackDepth0to2  uint64 // depth 0-2: fits trivially
+	StackDepth3to4  uint64 // depth 3-4: typical calls
+	StackDepth5to8  uint64 // depth 5-8: fits in pool cap 8
+	StackDepth9to16 uint64 // depth 9-16: requires 1 growth from cap 8
+	StackDepth17p   uint64 // depth 17+: requires 2+ growths
+}
+
+// RecordStackDepth updates the depth histogram and max tracker.
+func (c *VMCounters) RecordStackDepth(n int) {
+	if uint64(n) > c.StackMaxDepth {
+		c.StackMaxDepth = uint64(n)
+	}
+	switch {
+	case n <= 2:
+		c.StackDepth0to2++
+	case n <= 4:
+		c.StackDepth3to4++
+	case n <= 8:
+		c.StackDepth5to8++
+	case n <= 16:
+		c.StackDepth9to16++
+	default:
+		c.StackDepth17p++
+	}
 }
 
 // String returns a tabular summary of all counters.
@@ -53,7 +80,13 @@ func (c VMCounters) String() string {
 			"stack_pool_releases:          %d\n"+
 			"sub_context_pool_releases:    %d\n"+
 			"continuation_pool_releases:   %d\n"+
-			"keys_shared:                  %d",
+			"keys_shared:                  %d\n"+
+			"stack_max_depth:              %d\n"+
+			"stack_depth_0to2:             %d\n"+
+			"stack_depth_3to4:             %d\n"+
+			"stack_depth_5to8:             %d\n"+
+			"stack_depth_9to16:            %d\n"+
+			"stack_depth_17p:              %d",
 		c.OpsExecuted,
 		c.ClosuresApplied,
 		c.EnvsCopied,
@@ -68,5 +101,11 @@ func (c VMCounters) String() string {
 		c.SubContextPoolReleases,
 		c.ContinuationPoolReleases,
 		c.KeysShared,
+		c.StackMaxDepth,
+		c.StackDepth0to2,
+		c.StackDepth3to4,
+		c.StackDepth5to8,
+		c.StackDepth9to16,
+		c.StackDepth17p,
 	)
 }
