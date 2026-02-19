@@ -263,8 +263,8 @@ func (p *EnvironmentFrame) resolveLocal(
 	for env != nil && env.local != nil {
 		i, ok := env.local.keys[*key]
 		if ok {
-			binding := env.local.bindings[i]
-			if binding != nil && (!checkScopes || scopesCompatible(binding, scopes)) {
+			binding := &env.local.bindings[i]
+			if !checkScopes || scopesCompatible(binding, scopes) {
 				result := visitor(binding, i, depth)
 				if result != nil {
 					return result
@@ -400,15 +400,14 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 	i, ok := p.local.keys[*key]
 	if ok {
 		// Binding already exists - update scopes if needed
-		binding := p.local.bindings[i]
-		if binding.Scopes() == nil && scopes != nil {
-			binding.SetScopes(scopes)
+		if p.local.bindings[i].Scopes() == nil && scopes != nil {
+			p.local.bindings[i].SetScopes(scopes)
 		}
 		return NewLocalIndex(i, 0), false
 	}
 	i = len(p.local.bindings)
 	p.local.keys[*key] = i
-	p.local.bindings = append(p.local.bindings, NewBindingWithScopes(values.Void, bt, scopes))
+	p.local.bindings = append(p.local.bindings, Binding{value: values.Void, bindingType: bt, scopes: scopes})
 	return NewLocalIndex(i, 0), true
 }
 
@@ -487,25 +486,23 @@ func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []
 	for env != nil && env.local != nil {
 		i, ok := env.local.keys[*key]
 		if ok {
-			binding := env.local.bindings[i]
-			if binding != nil {
-				bindingScopes := binding.Scopes()
-				// Check if scopes match
-				if len(bindingScopes) == 0 {
-					// Binding has no scopes (top-level or pre-hygiene)
-					// This is a valid candidate with scope count 0
-					candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})
-				} else if syntax.ScopesMatch(scopes, bindingScopes) {
-					// Perfect match — maximally specific, no need to search further
-					if len(bindingScopes) == len(scopes) {
-						return NewLocalIndex(i, j)
-					}
-					// Scopes match - count how many scopes are in common
-					// (which equals len(bindingScopes) since it's a subset)
-					candidates = append(candidates, candidate{NewLocalIndex(i, j), len(bindingScopes)})
+			binding := &env.local.bindings[i]
+			bindingScopes := binding.Scopes()
+			// Check if scopes match
+			if len(bindingScopes) == 0 {
+				// Binding has no scopes (top-level or pre-hygiene)
+				// This is a valid candidate with scope count 0
+				candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})
+			} else if syntax.ScopesMatch(scopes, bindingScopes) {
+				// Perfect match — maximally specific, no need to search further
+				if len(bindingScopes) == len(scopes) {
+					return NewLocalIndex(i, j)
 				}
-				// If scopes don't match, skip this binding
+				// Scopes match - count how many scopes are in common
+				// (which equals len(bindingScopes) since it's a subset)
+				candidates = append(candidates, candidate{NewLocalIndex(i, j), len(bindingScopes)})
 			}
+			// If scopes don't match, skip this binding
 		}
 		if env.IsTopLevel() {
 			break
@@ -544,16 +541,14 @@ func (p *EnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
 	if env.local == nil {
 		return nil
 	}
-	i := li[0]
-	q := env.local.bindings[i]
-	return q
+	return &env.local.bindings[li[0]]
 }
 
 // GetLocalBindingByIndex returns the local binding at the given index in the current local environment.
 // It does not search parent environments.
 // It returns nil if the binding does not exist.
 func (p *EnvironmentFrame) GetLocalBindingByIndex(i int) *Binding {
-	return p.local.bindings[i]
+	return &p.local.bindings[i]
 }
 
 // GetLocalBindingBySlotDepth returns the binding at the given slot and depth
@@ -570,7 +565,7 @@ func (p *EnvironmentFrame) GetLocalBindingBySlotDepth(slot, depth int) *Binding 
 	if env == nil || env.local == nil {
 		return nil
 	}
-	return env.local.bindings[slot]
+	return &env.local.bindings[slot]
 }
 
 // SetLocalValue sets the value of the binding for the given LocalIndex.
@@ -585,9 +580,7 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 	if env.local == nil {
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %q", li)
 	}
-	i := li[0]
-	bd := env.local.bindings[i]
-	bd.value = v
+	env.local.bindings[li[0]].value = v
 	return nil
 }
 

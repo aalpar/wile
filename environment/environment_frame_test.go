@@ -531,11 +531,11 @@ func TestEnvironmentFrame_SetLocalValue_NoLocal(t *testing.T) {
 func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
 	parent := NewTopLevelEnvironmentFrame()
 	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(2), parent)
-	parent.local.bindings[0] = NewBinding(values.NewInteger(10), BindingTypeVariable)
-	parent.local.bindings[1] = NewBinding(values.NewInteger(20), BindingTypeVariable)
+	parent.local.bindings[0] = Binding{value: values.NewInteger(10), bindingType: BindingTypeVariable}
+	parent.local.bindings[1] = Binding{value: values.NewInteger(20), bindingType: BindingTypeVariable}
 
 	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
-	child.local.bindings[0] = NewBinding(values.NewInteger(30), BindingTypeVariable)
+	child.local.bindings[0] = Binding{value: values.NewInteger(30), bindingType: BindingTypeVariable}
 
 	// depth=0, slot=0 in child
 	bd := child.GetLocalBindingBySlotDepth(0, 0)
@@ -561,10 +561,10 @@ func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
 func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
 	parent := NewTopLevelEnvironmentFrame()
 	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
-	parent.local.bindings[0] = NewBinding(values.NewInteger(10), BindingTypeVariable)
+	parent.local.bindings[0] = Binding{value: values.NewInteger(10), bindingType: BindingTypeVariable}
 
 	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
-	child.local.bindings[0] = NewBinding(values.NewInteger(30), BindingTypeVariable)
+	child.local.bindings[0] = Binding{value: values.NewInteger(30), bindingType: BindingTypeVariable}
 
 	// Set in child (depth=0)
 	err := child.SetLocalValueBySlotDepth(0, 0, values.NewInteger(99))

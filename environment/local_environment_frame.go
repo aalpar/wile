@@ -27,7 +27,7 @@ import (
 // managed by EnvironmentFrame via its parent field.
 type LocalEnvironmentFrame struct {
 	keys       map[values.Symbol]int
-	bindings   []*Binding
+	bindings   []Binding
 	keysShared bool // true when keys map is shared with another frame (CoW)
 }
 
@@ -37,21 +37,21 @@ type LocalEnvironmentFrame struct {
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 	q := &LocalEnvironmentFrame{
 		keys:     make(map[values.Symbol]int),
-		bindings: make([]*Binding, pcnt),
+		bindings: make([]Binding, pcnt),
 	}
 	for i := range pcnt {
-		q.bindings[i] = NewBinding(values.Void, BindingTypeUnknown)
+		q.bindings[i] = Binding{value: values.Void, bindingType: BindingTypeUnknown}
 	}
 	return q
 }
 
 // Bindings returns the slice of bindings in this local environment.
-func (p *LocalEnvironmentFrame) Bindings() []*Binding {
+func (p *LocalEnvironmentFrame) Bindings() []Binding {
 	return p.bindings
 }
 
 // SetBindings replaces the bindings slice in this local environment.
-func (p *LocalEnvironmentFrame) SetBindings(v []*Binding) {
+func (p *LocalEnvironmentFrame) SetBindings(v []Binding) {
 	p.bindings = v
 }
 
@@ -78,7 +78,7 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 	}
 	i = len(p.bindings)
 	p.keys[*key] = i
-	p.bindings = append(p.bindings, NewBinding(values.Void, bt))
+	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: bt})
 	return &LocalIndex{i, 0}, true
 }
 
@@ -94,14 +94,12 @@ func (p *LocalEnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 
 // GetLocalBinding returns the binding at the given LocalIndex.
 func (p *LocalEnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
-	lb := p.bindings[li[0]]
-	return lb
+	return &p.bindings[li[0]]
 }
 
 // SetLocalValue sets the value of the binding at the given LocalIndex.
 func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
-	lb := p.bindings[li[0]]
-	lb.value = v
+	p.bindings[li[0]].value = v
 	return nil
 }
 
@@ -129,7 +127,7 @@ func (p *LocalEnvironmentFrame) EqualTo(o values.Value) bool {
 		return false
 	}
 	for i := range p.bindings {
-		if !p.bindings[i].EqualTo(v.bindings[i]) {
+		if !p.bindings[i].EqualTo(&v.bindings[i]) {
 			return false
 		}
 	}
@@ -148,21 +146,20 @@ func (p *LocalEnvironmentFrame) Copy() values.Value {
 		return (*LocalEnvironmentFrame)(nil)
 	}
 	n := len(p.bindings)
-	block := make([]Binding, n)
-	ptrs := make([]*Binding, n)
-	for i, b := range p.bindings {
-		block[i] = Binding{
+	bindings := make([]Binding, n)
+	for i := range p.bindings {
+		b := &p.bindings[i]
+		bindings[i] = Binding{
 			value:       b.value,
 			bindingType: b.bindingType,
 			scopes:      b.scopes,
 			source:      b.source,
 		}
-		ptrs[i] = &block[i]
 	}
 	return &LocalEnvironmentFrame{
 		keys:       p.keys,
 		keysShared: true,
-		bindings:   ptrs,
+		bindings:   bindings,
 	}
 }
 
@@ -182,19 +179,17 @@ func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 	}
 	p.keysShared = true
 
-	// Batch allocation: allocate all Bindings contiguously (1 allocation)
-	// instead of N separate heap objects. Benchmarks show 27-37% speedup
-	// and 67-82% fewer allocations for typical frame sizes (3-10 bindings).
-	allBindings := make([]Binding, len(p.bindings))
-	q.bindings = make([]*Binding, len(p.bindings))
-	for i, b := range p.bindings {
-		allBindings[i] = Binding{
+	// Single contiguous allocation: []Binding stores values directly,
+	// eliminating the former []*Binding pointer slice entirely.
+	q.bindings = make([]Binding, len(p.bindings))
+	for i := range p.bindings {
+		b := &p.bindings[i]
+		q.bindings[i] = Binding{
 			value:       b.value,
 			bindingType: b.bindingType,
 			scopes:      b.scopes,
 			source:      b.source,
 		}
-		q.bindings[i] = &allBindings[i]
 	}
 	return q
 }

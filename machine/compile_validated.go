@@ -363,10 +363,7 @@ func setScopesOnLastBinding(scopes []*syntax.Scope, lenv *environment.LocalEnvir
 	if len(bindings) == 0 {
 		return
 	}
-	binding := bindings[len(bindings)-1]
-	if binding != nil {
-		binding.SetScopes(scopes)
-	}
+	bindings[len(bindings)-1].SetScopes(scopes)
 }
 
 // compileClosure compiles a complete closure (lambda or define-fn body).

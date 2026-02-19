@@ -89,9 +89,9 @@ func TestLocalEnvironmentFrame_SetBindings(t *testing.T) {
 	le.EnsureLocalBinding(sym, BindingTypeVariable)
 
 	// Create new bindings
-	newBindings := []*Binding{
-		NewBinding(values.NewInteger(1), BindingTypeVariable),
-		NewBinding(values.NewInteger(2), BindingTypeVariable),
+	newBindings := []Binding{
+		{value: values.NewInteger(1), bindingType: BindingTypeVariable},
+		{value: values.NewInteger(2), bindingType: BindingTypeVariable},
 	}
 
 	le.SetBindings(newBindings)
