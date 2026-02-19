@@ -163,6 +163,12 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 // parent chain is set from the source's parent.
 func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 	parent := p.parent
+	if parent == nil {
+		panic(values.WrapForeignErrorf(
+			values.ErrNilParentEnvironment,
+			"NewApplyFrame called on frame with nil parent - closure environments must have a parent",
+		))
+	}
 	q := &EnvironmentFrame{
 		parent:     parent,
 		global:     parent.global,
