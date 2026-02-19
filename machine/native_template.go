@@ -425,8 +425,6 @@ func (p *NativeTemplate) CodeLen() int {
 	return len(p.code)
 }
 
-
-
 // PatchInstructionArg updates the Arg field of the instruction at code[codeIdx].
 // Used for patching branch offsets and continuation save offsets after the
 // target PC is known.

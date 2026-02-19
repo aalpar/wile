@@ -556,6 +556,23 @@ func (p *EnvironmentFrame) GetLocalBindingByIndex(i int) *Binding {
 	return p.local.bindings[i]
 }
 
+// GetLocalBindingBySlotDepth returns the binding at the given slot and depth
+// without requiring a *LocalIndex allocation. This is the hot-path variant
+// used by the VM's OpLoadLocal dispatch.
+func (p *EnvironmentFrame) GetLocalBindingBySlotDepth(slot, depth int) *Binding {
+	env := p
+	for range depth {
+		if env == nil {
+			return nil
+		}
+		env = env.parent
+	}
+	if env.local == nil {
+		return nil
+	}
+	return env.local.bindings[slot]
+}
+
 // SetLocalValue sets the value of the binding for the given LocalIndex.
 // It returns an error if the binding does not exist.
 func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
@@ -571,6 +588,21 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 	i := li[0]
 	bd := env.local.bindings[i]
 	bd.value = v
+	return nil
+}
+
+// SetLocalValueBySlotDepth sets the value of the binding at the given slot and
+// depth without requiring a *LocalIndex allocation. This is the hot-path variant
+// used by the VM's OpStoreLocal dispatch.
+func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Value) error {
+	env := p
+	for range depth {
+		env = env.parent
+	}
+	if env.local == nil {
+		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "setLocalValue: no local frame at depth %d", depth)
+	}
+	env.local.bindings[slot].value = v
 	return nil
 }
 

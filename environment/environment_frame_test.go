@@ -528,6 +528,54 @@ func TestEnvironmentFrame_SetLocalValue_NoLocal(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
+func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
+	parent := NewTopLevelEnvironmentFrame()
+	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(2), parent)
+	parent.local.bindings[0] = NewBinding(values.NewInteger(10), BindingTypeVariable)
+	parent.local.bindings[1] = NewBinding(values.NewInteger(20), BindingTypeVariable)
+
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+	child.local.bindings[0] = NewBinding(values.NewInteger(30), BindingTypeVariable)
+
+	// depth=0, slot=0 in child
+	bd := child.GetLocalBindingBySlotDepth(0, 0)
+	qt.Assert(t, bd, qt.IsNotNil)
+	qt.Assert(t, bd.Value().EqualTo(values.NewInteger(30)), qt.IsTrue)
+
+	// depth=1, slot=1 in parent
+	bd = child.GetLocalBindingBySlotDepth(1, 1)
+	qt.Assert(t, bd, qt.IsNotNil)
+	qt.Assert(t, bd.Value().EqualTo(values.NewInteger(20)), qt.IsTrue)
+
+	// depth beyond parent chain -> nil
+	bd = child.GetLocalBindingBySlotDepth(0, 5)
+	qt.Assert(t, bd, qt.IsNil)
+}
+
+func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
+	parent := NewTopLevelEnvironmentFrame()
+	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+	parent.local.bindings[0] = NewBinding(values.NewInteger(10), BindingTypeVariable)
+
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+	child.local.bindings[0] = NewBinding(values.NewInteger(30), BindingTypeVariable)
+
+	// Set in child (depth=0)
+	err := child.SetLocalValueBySlotDepth(0, 0, values.NewInteger(99))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, child.local.bindings[0].Value().EqualTo(values.NewInteger(99)), qt.IsTrue)
+
+	// Set in parent (depth=1)
+	err = child.SetLocalValueBySlotDepth(0, 1, values.NewInteger(77))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, parent.local.bindings[0].Value().EqualTo(values.NewInteger(77)), qt.IsTrue)
+
+	// No local frame -> error
+	topOnly := NewTopLevelEnvironmentFrame()
+	err = topOnly.SetLocalValueBySlotDepth(0, 0, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+}
+
 func TestEnvironmentFrame_EqualTo_NilAndDifferent(t *testing.T) {
 	var env1 *EnvironmentFrame
 	env2 := NewTopLevelEnvironmentFrame()
