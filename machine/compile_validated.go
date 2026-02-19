@@ -422,6 +422,11 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 		return err
 	}
 
+	// Phase 4b: Escape analysis — determine whether Apply can skip copying
+	// the closure's environment frame. Safe when the body contains no
+	// OpSaveContinuation and no MakeClosure (the two paths that capture mc.env).
+	tpl.computeNoCopyApply()
+
 	// Phase 5: Emit bytecode to construct the closure at runtime.
 	// The closure captures the current environment (for lexical scoping) and
 	// references the compiled template. The sequence is:
