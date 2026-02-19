@@ -26,6 +26,7 @@ type MachineContinuation struct {
 	vmState
 	parent        *MachineContinuation
 	promptHandler *MachineClosure // Handler invoked on abort to this prompt
+	shared        bool            // true if this frame is part of a captured continuation chain
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -172,6 +173,21 @@ func (p *MachineContinuation) DeepCopy() *MachineContinuation {
 		current = parentCopy
 	}
 	return q
+}
+
+// MarkChainShared marks every frame in the continuation chain as shared.
+// Shared frames are not pooled by RestoreAndRelease — their evals are
+// copied instead of transferred, preserving them for re-invocation.
+//
+// Early-exits when a frame is already shared: all ancestors must already
+// be shared from a prior capture (sharing propagates toward the root).
+func (p *MachineContinuation) MarkChainShared() {
+	for frame := p; frame != nil; frame = frame.parent {
+		if frame.shared {
+			return
+		}
+		frame.shared = true
+	}
 }
 
 func (p *MachineContinuation) SchemeString() string {

@@ -225,24 +225,38 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 // consumed frame. This is safe because normal return consumes the frame
 // exactly once; call/cc and escape paths must use Restore (which copies).
 //
-// The sequence is:
+// Shared frames (marked by MarkChainShared during call/cc capture) cannot be
+// pooled because a captured continuation may re-invoke them. For shared frames,
+// evals are copied (like Restore) and the frame is left for GC instead of pooling.
+//
+// The sequence for unshared frames:
 //  1. Release mc's current evals to the stack pool (it's dead after restore)
 //  2. Transfer cont's evals directly to mc (no copy)
 //  3. Nil cont.evals so releaseContinuation won't double-release it
 //  4. Pool the consumed continuation frame
 func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
-	p.counters.StackPoolReleases++
-	p.counters.ContinuationPoolReleases++
 
 	old := p.evals
 	p.env = cont.env
 	p.template = cont.template
-	p.evals = cont.evals // transfer, not copy
 	p.cont = cont.parent
 	p.pc = cont.pc
 	p.callDepth = cont.callDepth
 
+	if cont.shared {
+		// Shared frame: copy evals (preserve for re-invocation), don't pool.
+		p.counters.SharedFrameRestores++
+		p.counters.StackPoolReleases++
+		p.evals = cont.evals.Copy()
+		releaseStack(old)
+		return
+	}
+
+	// Unshared frame: transfer evals ownership and pool the frame.
+	p.counters.StackPoolReleases++
+	p.counters.ContinuationPoolReleases++
+	p.evals = cont.evals // transfer, not copy
 	releaseStack(old)
 
 	// Break the evals reference before pooling so the transferred stack
@@ -294,8 +308,8 @@ func (p *MachineContext) SaveContinuation(off int) error {
 }
 
 func (p *MachineContext) CurrentContinuation() *MachineContinuation {
-	q := p.cont.DeepCopy()
-	return q
+	p.cont.MarkChainShared()
+	return p.cont
 }
 
 // CallDepth returns the depth of the current continuation stack.
@@ -1043,14 +1057,11 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 	}
 
 	// Restore the machine state (if we have a valid continuation).
-	// DeepCopy is required for two reasons:
-	//  1. Restore copies evals but shares the parent chain. Without deep-copying,
-	//     subsequent re-invocations of the same continuation would share parent
-	//     frames that RestoreAndRelease may have already pooled.
-	//  2. Each invocation gets a fully independent disposable chain that can be
-	//     safely consumed by the normal-return pooling path.
+	// The continuation chain was already marked shared at capture time
+	// (MarkChainShared in CurrentContinuation / PrimCallCC), so
+	// RestoreAndRelease will copy evals and skip pooling for these frames.
 	if cont != nil {
-		p.Restore(cont.DeepCopy())
+		p.Restore(cont)
 	}
 	return nil
 }
@@ -1196,7 +1207,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			if p.pendingEscape != nil {
 				escapeCont := p.pendingEscape
 				p.pendingEscape = nil
-				p.Restore(escapeCont.DeepCopy())
+				p.Restore(escapeCont)
 				continue
 			}
 

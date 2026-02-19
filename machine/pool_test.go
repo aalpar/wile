@@ -246,6 +246,7 @@ func TestAcquireContinuation_ReturnsZeroedFrame(t *testing.T) {
 	qt.Assert(t, cont.callDepth, qt.Equals, uint64(0))
 	qt.Assert(t, cont.promptHandler, qt.IsNil)
 	qt.Assert(t, cont.promptTag, qt.IsNil)
+	qt.Assert(t, cont.shared, qt.IsFalse)
 }
 
 func TestReleaseContinuation_NilIsNoop(t *testing.T) {
@@ -360,6 +361,103 @@ func TestRestoreAndRelease_IncrementsCounters(t *testing.T) {
 
 	qt.Assert(t, mc.counters.ContinuationsRestored, qt.Equals, uint64(1))
 	qt.Assert(t, mc.counters.StackPoolReleases, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.ContinuationPoolReleases, qt.Equals, uint64(1))
+}
+
+// ---------------------------------------------------------------------------
+// Shared frame behavior
+// ---------------------------------------------------------------------------
+
+func TestMarkChainShared_MarksAllFrames(t *testing.T) {
+	c := &MachineContinuation{}
+	b := &MachineContinuation{parent: c}
+	a := &MachineContinuation{parent: b}
+
+	a.MarkChainShared()
+
+	qt.Assert(t, a.shared, qt.IsTrue)
+	qt.Assert(t, b.shared, qt.IsTrue)
+	qt.Assert(t, c.shared, qt.IsTrue)
+}
+
+func TestMarkChainShared_EarlyExitOnAlreadyShared(t *testing.T) {
+	c := &MachineContinuation{shared: true}
+	b := &MachineContinuation{parent: c}
+	a := &MachineContinuation{parent: b}
+
+	a.MarkChainShared()
+
+	// a and b should be marked, c was already shared.
+	qt.Assert(t, a.shared, qt.IsTrue)
+	qt.Assert(t, b.shared, qt.IsTrue)
+	qt.Assert(t, c.shared, qt.IsTrue)
+}
+
+func TestMarkChainShared_NilIsNoop(t *testing.T) {
+	// Must not panic.
+	var p *MachineContinuation
+	p.MarkChainShared()
+}
+
+func TestCopy_DoesNotPropagateShared(t *testing.T) {
+	orig := &MachineContinuation{}
+	orig.shared = true
+	orig.evals = NewStack()
+
+	cp := orig.Copy()
+	qt.Assert(t, cp.shared, qt.IsFalse)
+}
+
+func TestRestoreAndRelease_SharedFrameCopiesEvals(t *testing.T) {
+	// Build a shared continuation with known evals.
+	cont := acquireContinuation()
+	evalsStack := acquireStack()
+	evalsStack.Push(values.NewInteger(10))
+	evalsStack.Push(values.NewInteger(20))
+	cont.evals = evalsStack
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.pc = 7
+	cont.shared = true
+
+	// Build an mc with its own evals.
+	mc := &MachineContext{}
+	mc.evals = acquireStack()
+	mc.evals.Push(values.NewInteger(99))
+
+	mc.RestoreAndRelease(cont)
+
+	// mc.evals should be a COPY (not the same pointer as cont.evals).
+	qt.Assert(t, mc.evals != evalsStack, qt.IsTrue)
+	qt.Assert(t, mc.evals.Len(), qt.Equals, 2)
+	qt.Assert(t, mc.pc, qt.Equals, 7)
+
+	// The original evals in cont should be preserved for re-invocation.
+	qt.Assert(t, cont.evals, qt.Equals, evalsStack)
+	qt.Assert(t, cont.evals.Len(), qt.Equals, 2)
+
+	qt.Assert(t, mc.counters.SharedFrameRestores, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.ContinuationPoolReleases, qt.Equals, uint64(0))
+}
+
+func TestRestoreAndRelease_UnsharedFrameStillPools(t *testing.T) {
+	// Verify the unshared path is unchanged.
+	cont := acquireContinuation()
+	evalsStack := acquireStack()
+	evalsStack.Push(values.NewInteger(10))
+	cont.evals = evalsStack
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.pc = 3
+
+	mc := &MachineContext{}
+	mc.evals = acquireStack()
+
+	mc.RestoreAndRelease(cont)
+
+	// mc.evals should be the transferred stack (same pointer).
+	qt.Assert(t, mc.evals, qt.Equals, evalsStack)
+	qt.Assert(t, mc.counters.SharedFrameRestores, qt.Equals, uint64(0))
 	qt.Assert(t, mc.counters.ContinuationPoolReleases, qt.Equals, uint64(1))
 }
 

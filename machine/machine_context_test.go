@@ -187,9 +187,10 @@ func TestMachineContext_CurrentContinuation(t *testing.T) {
 
 	curr := mc.CurrentContinuation()
 
-	// Should be a copy of the parent continuation
+	// Returns the same pointer (no DeepCopy), but chain is marked shared.
 	qt.Assert(t, curr, qt.IsNotNil)
-	qt.Assert(t, curr != mc.cont, qt.IsTrue) // Different object
+	qt.Assert(t, curr == mc.cont, qt.IsTrue)
+	qt.Assert(t, curr.shared, qt.IsTrue)
 }
 
 func TestMachineContext_NewSubContext(t *testing.T) {

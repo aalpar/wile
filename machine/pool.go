@@ -117,6 +117,9 @@ func acquireContinuation() *MachineContinuation {
 // releaseContinuation returns the continuation's evals stack to the stack
 // pool, zeros all fields (breaking GC references), and returns the frame
 // to the continuation pool. Nil-safe.
+//
+// Shared frames (shared == true) must NOT be passed to this function.
+// RestoreAndRelease skips pooling for shared frames, leaving them for GC.
 func releaseContinuation(cont *MachineContinuation) {
 	if cont == nil {
 		return
