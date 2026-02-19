@@ -251,7 +251,7 @@ func TestValue_IsVoid(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(Void.IsVoid(), qt.IsTrue)
 	c.Assert(NewInteger(1).IsVoid(), qt.IsFalse)
-	c.Assert(Null.IsVoid(), qt.IsFalse)
+	c.Assert(EmptyList.IsVoid(), qt.IsFalse)
 }
 
 func TestValue_Internal(t *testing.T) {
@@ -608,20 +608,20 @@ func TestRuntimeError_Unwrap(t *testing.T) {
 func TestIsList(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(IsList(NewList(NewInteger(1), NewInteger(2))), qt.IsTrue)
-	c.Assert(IsList(Null), qt.IsTrue)
+	c.Assert(IsList(EmptyList), qt.IsTrue)
 	c.Assert(IsList(NewInteger(5)), qt.IsFalse)
 }
 
 func TestIsPair(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(IsPair(NewList(NewInteger(1))), qt.IsTrue)
-	c.Assert(IsPair(Null), qt.IsFalse)
+	c.Assert(IsPair(EmptyList), qt.IsFalse)
 	c.Assert(IsPair(NewInteger(5)), qt.IsFalse)
 }
 
 func TestIsNull(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(IsNull(Null), qt.IsTrue)
+	c.Assert(IsNull(EmptyList), qt.IsTrue)
 	c.Assert(IsNull(NewList(NewInteger(1))), qt.IsFalse)
 	c.Assert(IsNull(NewInteger(5)), qt.IsFalse)
 }
@@ -682,7 +682,7 @@ func TestCar(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(v.SchemeString(), qt.Equals, "1")
 
-	_, ok = Car(Null)
+	_, ok = Car(EmptyList)
 	c.Assert(ok, qt.IsFalse)
 
 	_, ok = Car(NewInteger(5))
@@ -696,7 +696,7 @@ func TestCdr(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(v.SchemeString(), qt.Equals, "(2)")
 
-	_, ok = Cdr(Null)
+	_, ok = Cdr(EmptyList)
 	c.Assert(ok, qt.IsFalse)
 }
 
@@ -712,7 +712,7 @@ func TestToSlice(t *testing.T) {
 	})
 
 	t.Run("empty list", func(t *testing.T) {
-		sl, ok := ToSlice(context.Background(), Null)
+		sl, ok := ToSlice(context.Background(), EmptyList)
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(len(sl), qt.Equals, 0)
 	})
