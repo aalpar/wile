@@ -36,7 +36,8 @@ type VMCounters struct {
 	ContinuationPoolReleases uint64
 	KeysShared               uint64
 
-	// Stack depth instrumentation (investigation for pool capacity tuning)
+	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
+	// showed cap-8 is sufficient for observed workloads)
 	StackMaxDepth   uint64
 	StackDepth0to2  uint64 // depth 0-2: fits trivially
 	StackDepth3to4  uint64 // depth 3-4: typical calls
