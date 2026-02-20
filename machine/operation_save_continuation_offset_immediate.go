@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -31,16 +30,6 @@ func NewOperationSaveContinuationOffsetImmediate(off int) *OperationSaveContinua
 		OperationBase: NewOperationBase("machine-operation-save-continuation-offset-immediate"),
 		Offset:        off,
 	}
-}
-
-func (p *OperationSaveContinuationOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	// copy the current continuation and push it onto the eval stack
-	err := mc.SaveContinuation(p.Offset)
-	if err != nil {
-		return nil, err
-	}
-	mc.pc++
-	return mc, nil
 }
 
 // SchemeString overrides OperationBase to include offset value.

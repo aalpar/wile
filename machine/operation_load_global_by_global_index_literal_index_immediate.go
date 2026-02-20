@@ -15,10 +15,8 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
 
@@ -45,33 +43,4 @@ func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() s
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadGlobalByGlobalIndexLiteralIndexImmediate)
 	return fieldMatches(p, v, ok, func(op *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
-}
-
-// Apply executes the operation, loading the global variable's value.
-func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	o := mc.template.literals[p.LiteralIndex]
-	if o == nil {
-		return nil, mc.Error(fmt.Sprintf("literal index %v does not exist", p.LiteralIndex))
-	}
-	gi, ok := o.(*environment.GlobalIndex)
-	if !ok {
-		return nil, mc.Error(fmt.Sprintf("literal %v is not a global index", o))
-	}
-	// If the GlobalIndex carries a definition-site environment (cross-library
-	// macro hygiene), look up directly in that frame. Otherwise fall back to
-	// GetGlobalBinding which traverses the parent chain — necessary for
-	// cross-phase lookups (e.g., expand-time primitives accessed from
-	// syntax-case fenders running in a child environment).
-	var bd *environment.Binding
-	if gi.Env != nil {
-		bd = gi.Env.GetOwnGlobalBinding(gi)
-	} else {
-		bd = mc.env.GetGlobalBinding(gi)
-	}
-	if bd == nil {
-		return nil, mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
-	}
-	mc.SetValue(bd.Value())
-	mc.pc++
-	return mc, nil
 }

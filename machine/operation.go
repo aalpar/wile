@@ -20,7 +20,19 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// Operation is the base interface for all bytecode operations. Every operation
+// is also a values.Value so it can appear in the literals pool and be printed.
+// Operations that are inlined into the Run() switch loop only need this base
+// interface. Operations dispatched through the side table (OpComplex) must
+// additionally implement InlinedOperation.
 type Operation interface {
 	values.Value
+}
+
+// InlinedOperation is the interface for operations dispatched through the
+// side table via OpComplex. These operations carry their own Apply method
+// because the Run() loop delegates to them rather than inlining the logic.
+type InlinedOperation interface {
+	Operation
 	Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error)
 }

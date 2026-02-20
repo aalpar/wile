@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -40,22 +38,4 @@ func NewOperationApply() *OperationApply {
 func (p *OperationApply) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationApply)
 	return sameType(p, v, ok)
-}
-
-// Apply pops all arguments from the eval stack and delegates to
-// MachineContext.ApplyCallable for type dispatch. See ApplyCallable for
-// the supported callable types and their calling conventions.
-//
-// Errors from ApplyCallable are wrapped with the current source location
-// so that bytecode-path failures include file/line context for debugging.
-func (p *OperationApply) Apply(_ context.Context, mc *MachineContext) (*MachineContext, error) {
-	vs := mc.evals.PopAll()
-	mc.counters.StackPopAlls++
-	mc.counters.StackElementsCopied += uint64(len(vs))
-	mc.counters.RecordStackDepth(len(vs))
-	result, err := mc.ApplyCallable(mc.GetValue(), vs...)
-	if err != nil {
-		return result, mc.WrapError(err, "")
-	}
-	return result, nil
 }

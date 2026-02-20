@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -33,10 +31,4 @@ func NewOperationPull() *OperationPull {
 func (p *OperationPull) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPull)
 	return sameType(p, v, ok)
-}
-
-func (*OperationPull) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.SetValue(mc.evals.Pull())
-	mc.pc++
-	return mc, nil
 }

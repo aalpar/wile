@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -31,12 +29,6 @@ func NewOperationDrop() *OperationDrop {
 	return &OperationDrop{
 		OperationBase: NewOperationBase("machine-operation-drop"),
 	}
-}
-
-func (*OperationDrop) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.evals.Pop() // Discard the value
-	mc.pc++
-	return mc, nil
 }
 
 func (p *OperationDrop) EqualTo(o values.Value) bool {

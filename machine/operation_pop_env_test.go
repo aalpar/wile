@@ -15,10 +15,8 @@
 package machine
 
 import (
-	"context"
 	"testing"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -60,38 +58,4 @@ func TestOperationPopEnv_EqualTo(t *testing.T) {
 
 	c.Assert(op1.EqualTo(op2), qt.IsTrue)
 	c.Assert(op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-}
-
-func TestOperationPopEnv_Apply_Success(t *testing.T) {
-	c := qt.New(t)
-
-	parentEnv := environment.NewTopLevelEnvironment().Runtime()
-	childEnv := environment.NewEnvironmentFrameWithParent(nil, parentEnv)
-
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, childEnv))
-
-	op := NewOperationPopEnv()
-	result, err := op.Apply(context.Background(), mc)
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.env, qt.Equals, parentEnv)
-	c.Assert(mc.pc, qt.Equals, 1)
-}
-
-func TestOperationPopEnv_Apply_Error_NoParent(t *testing.T) {
-	c := qt.New(t)
-
-	env := environment.NewTopLevelEnvironment().Runtime()
-	// env has no parent (Parent() returns nil)
-
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
-
-	op := NewOperationPopEnv()
-	_, err := op.Apply(context.Background(), mc)
-
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "PopEnv")
 }
