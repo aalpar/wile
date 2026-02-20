@@ -192,7 +192,7 @@ Times are approximate and vary by hardware/implementation.
 
 ### Performance Philosophy
 
-**Performance is explicitly deprioritized in Wile's design.** Wile is optimized for correctness, simplicity, and embeddability. The target workloads (configuration, policy evaluation, data transformation, scripting) are not bottlenecked on interpreter speed.
+Wile is a bytecode interpreter optimized for correctness, simplicity, and embeddability.
 
 ### Expected Performance Tier
 

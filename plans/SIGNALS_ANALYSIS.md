@@ -94,7 +94,7 @@ Multiple Engine instances share this cache — one engine's workload grows anoth
 - Transient impact: None
 - Overload impact: Memory exhaustion curve is linear, not cliff — the system degrades gradually
 
-**Proposed direction**: For Wile's stated use case (scripting, config, policy), this is likely acceptable. If long-running embeds become a product concern, consider: (1) per-engine intern maps instead of global, (2) a bounded LRU cache with configurable size, or (3) `sync.Map` with periodic sweep of unreferenced entries. Given "performance is explicitly deprioritized," option (1) alone removes the cross-engine leak without adding complexity.
+**Proposed direction**: For Wile's stated use case (scripting, config, policy), this is likely acceptable. If long-running embeds become a product concern, consider: (1) per-engine intern maps instead of global, (2) a bounded LRU cache with configurable size, or (3) `sync.Map` with periodic sweep of unreferenced entries. Option (1) alone removes the cross-engine leak without adding complexity.
 
 ---
 
@@ -166,7 +166,7 @@ The system's response is overdamped: allocation spikes, GC eventually reclaims t
 - Transient impact: Allocation spikes after GC (microseconds to milliseconds)
 - Overload impact: Potential for GC-allocation oscillation under sustained high load
 
-**Proposed direction**: No action needed given Wile's stated priority. "Performance is explicitly deprioritized." If benchmarking stability matters, consider `debug.SetGCPercent(-1)` in benchmarks to disable GC-induced pool drain (already a Go benchmarking best practice).
+**Proposed direction**: If benchmarking stability matters, consider `debug.SetGCPercent(-1)` in benchmarks to disable GC-induced pool drain (already a Go benchmarking best practice).
 
 ---
 

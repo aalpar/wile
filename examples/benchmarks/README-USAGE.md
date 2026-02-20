@@ -71,18 +71,12 @@ The **Total time** is what matters for comparison.
 
 ## Expected Performance
 
-**Performance is explicitly deprioritized in Wile's design.** Wile is a bytecode interpreter optimized for correctness, simplicity, and embeddability - not raw speed.
-
-When comparing against native compilers:
+Wile is a bytecode interpreter. When comparing against native compilers:
 - **1,000-2,000x slower** than native compilers (Chez Scheme, Gambit)
 - **10-50x slower** than JIT compilers (Racket with JIT)
 - **Similar to** other bytecode interpreters (Guile, Chibi)
 
-**This is completely normal and expected.** It's the architectural tradeoff of bytecode interpretation vs. native compilation.
-
-For example, `tak(18,12,6)` runs in ~0.0007s on Chez vs. ~1.15s on Wile (~1,580x difference). This is acceptable because Wile's target workloads (configuration, scripting, policy evaluation) are not bottlenecked on interpreter speed.
-
-For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
+This is the architectural tradeoff of bytecode interpretation vs. native compilation. For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
 
 ## Tracking Performance Over Time
 

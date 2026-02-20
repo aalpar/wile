@@ -76,9 +76,7 @@ The core benchmarks from Richard Gabriel's classic Lisp/Scheme benchmark suite:
 
 ## Performance Expectations
 
-**Wile is a bytecode interpreter optimized for correctness, simplicity, and embeddability - not raw speed.**
-
-Performance is explicitly deprioritized in Wile's design. The target workloads (configuration, policy evaluation, data transformation, scripting) are not bottlenecked on interpreter speed. For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
+Wile is a bytecode interpreter. For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
 
 ### Expected Performance vs. Native Compilers
 

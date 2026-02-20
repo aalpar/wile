@@ -12,7 +12,6 @@ Wile is **a Scheme scripting layer that feels native to Go**, not a Scheme that 
 
 - **Full R7RS compliance is the baseline.** Compliance is the floor, not the ceiling.
 - **Embedding is the product.** Pure Go (no CGo), `go get` dependency, idiomatic API for Go developers.
-- **Performance is explicitly deprioritized.** Correctness, ergonomics, and embedding quality matter more. Target workloads (config, policy, scripting) are not bottlenecked on interpreter speed.
 
 ## Imperatives (Never Deviate)
 

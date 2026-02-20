@@ -47,6 +47,8 @@ Replaced interface-based operation dispatch with switch-based dispatch using int
 **Wave 2 (Single-operand):** BranchOnFalseValue, Branch, SaveContinuation, LoadLiteral, LoadGlobal, StoreGlobal, PeekK
 **Wave 3 (Two-operand):** LoadLocal, StoreLocal (bit-packed LocalIndex)
 
+**Interface split (finalization):** Split `Operation` into base interface (`values.Value` only, 17 inlined ops) and `InlinedOperation` (adds `Apply`, 14 complex ops dispatched via `OpComplex` side table). Removed dead `Apply` methods from all 17 inlined ops. Updated `NativeTemplate.sideTable` typing from `[]Operation` to `[]InlinedOperation`.
+
 See `PHASE6_SWITCH_DISPATCH.md` for full implementation details.
 
 ## Remaining Phases

@@ -198,7 +198,7 @@ depth := int(int32(instr.Arg >> 32)) // sign-extend high 32 bits
 
 4. **Operations-as-values.** Complex ops that need values.Value semantics keep it. Simple ops rarely need it.
 
-5. **Aligns with project vision.** Performance is deprioritized but "free" wins from better cache behavior are worth taking when the migration path is incremental.
+5. **Aligns with project vision.** Better cache behavior is worth taking when the migration path is incremental.
 
 ### If Maximum Simplicity Is Preferred
 
