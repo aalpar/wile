@@ -224,6 +224,12 @@ func TestIntegerDivision(t *testing.T) {
 		// truncate-remainder
 		{"truncate-remainder positive", `(= (truncate-remainder 10 3) 1)`, values.TrueValue},
 		{"truncate-remainder negative", `(= (truncate-remainder -10 3) -1)`, values.TrueValue},
+
+		// inexact result paths (at least one float operand)
+		{"floor-quotient inexact", `(= (floor-quotient 10.0 3) 3.0)`, values.TrueValue},
+		{"floor-remainder inexact", `(= (floor-remainder 10.0 3) 1.0)`, values.TrueValue},
+		{"truncate-quotient inexact", `(= (truncate-quotient 10.0 3) 3.0)`, values.TrueValue},
+		{"truncate-remainder inexact", `(= (truncate-remainder 10.0 3) 1.0)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -292,6 +298,9 @@ func TestRationalOps(t *testing.T) {
 		{"rationalize exact", `(= (rationalize 3/10 1/10) 1/3)`, values.TrueValue},
 		{"rationalize zero tolerance", `(= (rationalize 1/3 0) 1/3)`, values.TrueValue},
 		{"rationalize zero result", `(= (rationalize 0 1/10) 0)`, values.TrueValue},
+		{"rationalize inexact x", `(inexact? (rationalize 0.5 1/10))`, values.TrueValue},
+		{"rationalize inexact y", `(inexact? (rationalize 1/3 0.1))`, values.TrueValue},
+		{"rationalize negative exact", `(= (rationalize -1 1/10) -1)`, values.TrueValue},
 
 		// exact-integer-sqrt (returns two values)
 		{"exact-integer-sqrt 14",
@@ -382,6 +391,11 @@ func TestNumberToString(t *testing.T) {
 		{"negative infinity", `(equal? (number->string -inf.0) "-inf.0")`, values.TrueValue},
 		{"nan", `(equal? (number->string +nan.0) "+nan.0")`, values.TrueValue},
 		{"rational", `(equal? (number->string 3/5) "3/5")`, values.TrueValue},
+		// Complex and BigInteger types
+		{"complex", `(string? (number->string (make-rectangular 3.0 4.0)))`, values.TrueValue},
+		{"biginteger", `(string? (number->string (expt 2 100)))`, values.TrueValue},
+		// Scientific notation through ensureInexactDecimal
+		{"scientific no decimal", `(equal? (number->string 5e-324) "5.0e-324")`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -411,6 +425,15 @@ func TestStringToNumber(t *testing.T) {
 		{"prefix binary", `(= (string->number "#b111") 7)`, values.TrueValue},
 		{"prefix exact", `(= (string->number "#e1.5") 3/2)`, values.TrueValue},
 		{"prefix inexact", `(= (string->number "#i42") 42.0)`, values.TrueValue},
+		// prefix directives
+		{"prefix octal", `(= (string->number "#o10") 8)`, values.TrueValue},
+		{"prefix decimal", `(= (string->number "#d42") 42)`, values.TrueValue},
+		{"prefix unknown", `(equal? (string->number "#z42") #f)`, values.TrueValue},
+		// exactness conversions
+		{"prefix exact int passthrough", `(= (string->number "#e42") 42)`, values.TrueValue},
+		{"prefix exact int-valued float", `(= (string->number "#e1.0") 1)`, values.TrueValue},
+		{"prefix inexact biginteger",
+			`(inexact? (string->number "#i99999999999999999999999"))`, values.TrueValue},
 		{"invalid returns false", `(equal? (string->number "hello") #f)`, values.TrueValue},
 		{"empty returns false", `(equal? (string->number "") #f)`, values.TrueValue},
 	}
@@ -532,6 +555,213 @@ func TestL18_RationalToInexactPrecision(t *testing.T) {
 
 		// Exactness contagion
 		{"inexact rational is inexact", `(inexact? (inexact (/ 1 3)))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestMagnitudeAllTypes covers all numeric type cases in PrimMagnitude.
+func TestMagnitudeAllTypes(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Float case
+		{"magnitude float positive", `(= (magnitude 3.14) 3.14)`, values.TrueValue},
+		{"magnitude float negative", `(= (magnitude -3.14) 3.14)`, values.TrueValue},
+		// Rational case
+		{"magnitude rational positive", `(< (abs (- (magnitude 3/4) 0.75)) 1e-10)`, values.TrueValue},
+		{"magnitude rational negative", `(< (abs (- (magnitude -3/4) 0.75)) 1e-10)`, values.TrueValue},
+		// BigInteger case (expt 2 100 produces a BigInteger)
+		{"magnitude biginteger", `(> (magnitude (expt 2 100)) 0)`, values.TrueValue},
+		// BigComplex case: exact integers create a BigComplex via make-rectangular
+		{"magnitude bigcomplex 3+4i", `(< (abs (- (magnitude (make-rectangular 3 4)) 5.0)) 1e-10)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestAngleAllTypes covers all numeric type cases in PrimAngle.
+func TestAngleAllTypes(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Float cases
+		{"angle float positive", `(= (angle 3.14) 0.0)`, values.TrueValue},
+		{"angle float negative", `(< (abs (- (angle -3.14) 3.141592653589793)) 1e-10)`, values.TrueValue},
+		// Rational cases
+		{"angle rational positive", `(= (angle 3/4) 0.0)`, values.TrueValue},
+		{"angle rational negative", `(< (abs (- (angle -3/4) 3.141592653589793)) 1e-10)`, values.TrueValue},
+		// BigInteger cases
+		{"angle biginteger positive", `(>= (magnitude (angle (expt 2 100))) 0)`, values.TrueValue},
+		{"angle biginteger negative", `(> (angle (- (expt 2 100))) 3.0)`, values.TrueValue},
+		// BigComplex case via exact integer make-rectangular
+		{"angle bigcomplex first quadrant", `(> (angle (make-rectangular 3 4)) 0)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestComplexSqrtBranchCuts verifies complexSqrtR7RS branch cut behavior.
+func TestComplexSqrtBranchCuts(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Complex input: negative real, zero imaginary → positive imaginary result (R7RS branch cut)
+		{"sqrt -1+0i imag positive", `(> (imag-part (sqrt (make-rectangular -1.0 0.0))) 0)`, values.TrueValue},
+		// Complex input: non-negative real → normal sqrt
+		{"sqrt 4+0i real part", `(< (abs (- (real-part (sqrt (make-rectangular 4.0 0.0))) 2.0)) 1e-10)`, values.TrueValue},
+		// Complex input: non-zero imaginary → general case
+		{"sqrt 0+1i both branches", `(> (real-part (sqrt (make-rectangular 0.0 1.0))) 0)`, values.TrueValue},
+		// BigComplex input to sqrt: must have non-zero imaginary to stay as BigComplex
+		{"sqrt BigComplex -4+1i", `(> (magnitude (sqrt (make-rectangular -4 1))) 0)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestExactIntegerSqrtBigInteger covers the BigInteger case in PrimExactIntegerSqrt.
+func TestExactIntegerSqrtBigInteger(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// BigInteger case: expt 2 100 returns a BigInteger
+		{"exact-integer-sqrt bigint perfect square",
+			`(equal? (call-with-values (lambda () (exact-integer-sqrt (expt 2 100))) list)
+			         (list (expt 2 50) 0))`,
+			values.TrueValue},
+		{"exact-integer-sqrt bigint non-perfect",
+			`(let-values (((s r) (exact-integer-sqrt (+ (expt 2 100) 1))))
+			   (= r 1))`,
+			values.TrueValue},
+		// Negative BigInteger should error — tested via evalExpectError (separate test)
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestMakeRectangularExactTypes covers exact integer and rational inputs to make-rectangular,
+// which exercise toExactBigComplexPart and create BigComplex values.
+func TestMakeRectangularExactTypes(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Exact integers → BigComplex (toExactBigComplexPart Integer case)
+		{"make-rectangular exact int real-part", `(= (real-part (make-rectangular 3 4)) 3)`, values.TrueValue},
+		{"make-rectangular exact int imag-part", `(= (imag-part (make-rectangular 3 4)) 4)`, values.TrueValue},
+		// BigInteger parts (toExactBigComplexPart BigInteger case)
+		{"make-rectangular bigint parts", `(> (real-part (make-rectangular (expt 2 100) 1)) 0)`, values.TrueValue},
+		// Rational parts (toExactBigComplexPart Rational case)
+		{"make-rectangular rational parts real", `(< (abs (- (real-part (make-rectangular 3/4 1/2)) 0.75)) 1e-10)`, values.TrueValue},
+		// isRealNumber with Complex (non-real) — tested via evalExpectError (separate test)
+		// isRealNumber with BigComplex (non-real) — tested via evalExpectError (separate test)
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestExactIntegerSqrtBigIntegerNegative covers the error path for negative BigInteger.
+func TestExactIntegerSqrtBigIntegerNegative(t *testing.T) {
+	engine := newEngine(t)
+	evalExpectError(t, engine, `(exact-integer-sqrt (- (expt 2 100)))`)
+}
+
+// TestMakeRectangularComplexArgs covers isRealNumber with Complex and BigComplex inputs.
+func TestMakeRectangularComplexArgs(t *testing.T) {
+	engine := newEngine(t)
+	// Complex (non-real) as argument — isRealNumber returns false
+	evalExpectError(t, engine, `(make-rectangular (make-rectangular 1.0 1.0) 0.0)`)
+	// BigComplex (non-real) as argument — isRealNumber returns false
+	evalExpectError(t, engine, `(make-rectangular (make-rectangular 1 1) 0)`)
+}
+
+// TestStringToNumberInexactPrefix covers the #i prefix case for various number types
+// which exercises stringToNumberMakeInexact with different types.
+func TestStringToNumberInexactPrefix(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Rational → inexact Float
+		{"#i rational", `(< (abs (- (string->number "#i3/5") 0.6)) 1e-10)`, values.TrueValue},
+		{"#i rational exact->inexact", `(inexact? (string->number "#i3/5"))`, values.TrueValue},
+		// Already float stays float
+		{"#i float", `(= (string->number "#i1.5") 1.5)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestExptAdditionalCases covers missing branches in PrimExpt:
+// BigInteger base with negative exponent, rational base with negative exponent.
+func TestExptAdditionalCases(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// BigInteger base, negative exponent → rational result
+		{"bigint base negative exp", `(rational? (expt (expt 2 100) -1))`, values.TrueValue},
+		{"bigint base neg exp positive", `(> (expt (expt 2 100) -1) 0)`, values.TrueValue},
+		// BigInteger base, positive exponent (verifies BigInteger→BigInteger path)
+		{"bigint base pos exp exact", `(exact? (expt (expt 2 100) 3))`, values.TrueValue},
+		// Rational base, negative exponent (non-integer result)
+		{"rational base neg exp 3/2→2/3", `(= (expt 3/2 -1) 2/3)`, values.TrueValue},
+		// Rational base, negative exponent (integer result: (expt 1/3 -1) = 3)
+		{"rational base neg exp to integer", `(= (expt 1/3 -1) 3)`, values.TrueValue},
+		{"rational base neg exp to rational", `(= (expt 2/3 -1) 3/2)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

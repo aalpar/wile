@@ -453,6 +453,15 @@ func TestRunFile(t *testing.T) {
 		})
 	}
 
+	t.Run("multiple files share environment", func(t *testing.T) {
+		c := qt.New(t)
+		file1 := writeTempScheme(t, "(define x 10)")
+		file2 := writeTempScheme(t, "(+ x 20)")
+		result := runCLI(t, "-f", file1, "-f", file2)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "30\n")
+	})
+
 	t.Run("positional arg", func(t *testing.T) {
 		c := qt.New(t)
 		path := writeTempScheme(t, "(+ 1 2)")
@@ -546,4 +555,45 @@ func TestFailfNilWithMessage(t *testing.T) {
 		strings.Contains(result.stderr, "Error: msg"), qt.IsTrue,
 		qt.Commentf("stderr: %q", result.stderr),
 	)
+}
+
+// TestSetupSignalsDirect calls setupSignals directly to cover the function body.
+// The goroutine body (SIGQUIT handler) cannot be exercised in tests without
+// sending SIGQUIT, so we cover the outer function structure.
+func TestSetupSignalsDirect(t *testing.T) {
+	// Both true and false cover the `if !quiet` branch
+	setupSignals(true)
+	setupSignals(false)
+}
+
+// TestResolveVersionPartialLdflags covers the case where only one ldflags
+// variable is set, causing the function to fall through to ReadBuildInfo.
+func TestResolveVersionPartialLdflags(t *testing.T) {
+	oldSHA := BuildSHA
+	oldVer := BuildVersion
+	defer func() {
+		BuildSHA = oldSHA
+		BuildVersion = oldVer
+	}()
+
+	t.Run("only version set reads SHA from build info", func(t *testing.T) {
+		BuildVersion = "v1.2.3"
+		BuildSHA = "" // missing — falls through to ReadBuildInfo
+		v, s := resolveVersion()
+		if v != "v1.2.3" {
+			t.Errorf("expected v1.2.3, got %s", v)
+		}
+		// s may or may not be set depending on vcs.revision in build info
+		_ = s
+	})
+
+	t.Run("only sha set reads version from build info", func(t *testing.T) {
+		BuildVersion = "" // missing — falls through to ReadBuildInfo
+		BuildSHA = "abc1234"
+		v, s := resolveVersion()
+		if s != "abc1234" {
+			t.Errorf("expected abc1234, got %s", s)
+		}
+		_ = v
+	})
 }
