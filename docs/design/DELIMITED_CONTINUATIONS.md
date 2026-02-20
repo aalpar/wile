@@ -1,6 +1,6 @@
 # Delimited Continuations
 
-This document describes Wile's implementation of delimited continuations and the problem they solve. It covers the interaction between `call/cc`, `dynamic-wind`, Go-implemented primitives, and the new prompt/abort/composable mechanism.
+This document describes Wile's implementation of delimited continuations and the problem they solve. It covers the interaction between `call/cc`, `dynamic-wind`, Go-implemented primitives, and the prompt/abort/composable mechanism.
 
 ## The Problem: Truncated Continuations in Go Primitives
 
@@ -100,37 +100,38 @@ A prompt can be either:
 
 ### Error propagation
 
-`ErrPromptAbort` follows the same propagation pattern as `ErrContinuationEscape`:
+`ErrPromptAbort` propagates through the call stack:
 
 ```
-Scheme code calls abort-current-continuation
-    |
-    v
-PrimAbortCurrentContinuation returns ErrPromptAbort
-    |
-    v
-OperationForeignFunctionCall.Apply sees ErrPromptAbort, propagates it
-    |                                    (does NOT wrap in ErrExceptionEscape)
-    v
+Scheme code calls abort-current-continuation (or call/cc escape closure)
+    │
+    ▼
+Returns ErrPromptAbort
+    │
+    ▼
+OperationForeignFunctionCall sees ErrPromptAbort, propagates it
+    │                         (does NOT wrap in ErrExceptionEscape)
+    ▼
 Run() returns ErrPromptAbort to caller
-    |
-    v
+    │
+    ▼
 Caught by either:
-  - PrimCallWithContinuationPrompt (if in a sub-context)
-  - RunWithEscapeHandling (if at the top level)
+  ┌─ PrimCallWithContinuationPrompt (sub-context, user prompt tag)
+  ├─ PrimCallCC sub-context mode    (call/cc escapes to DefaultPromptTag)
+  └─ RunWithEscapeHandling          (top-level, all aborts via FindPrompt)
 ```
 
-The key detail in `OperationForeignFunctionCall`: the error type check was added to the existing priority chain:
+The key detail in `OperationForeignFunctionCall`: `ErrPromptAbort` is checked before wrapping errors as exceptions:
 
 ```go
 // Priority order for error handling:
-1. ErrContinuationEscape  (call/cc escapes)
-2. ErrPromptAbort          (prompt aborts)      <-- new
-3. ErrExceptionEscape      (Scheme exceptions)
-4. Any other error         (wrapped in ErrExceptionEscape)
+1. Panic recovery (deferred)  — Go panics from values.Number arithmetic
+2. ErrPromptAbort             — prompt aborts and call/cc escapes
+3. ErrExceptionEscape         — Scheme exceptions (propagated as-is)
+4. Any other error            — wrapped in ErrExceptionEscape
 ```
 
-Without step 2, the abort would be wrapped in a Scheme exception and the prompt handler would never see it.
+Without the `ErrPromptAbort` check, the abort would be wrapped in a Scheme exception and the prompt handler would never see it.
 
 ## How Each Primitive Works
 
@@ -166,8 +167,8 @@ Simply returns `&ErrPromptAbort{Tag: tag, Values: vs}`. The error propagates up 
 
 This is the most complex primitive. Implementation:
 
-1. `FindPrompt(tag)` -- walk the continuation chain and check the context-level prompt.
-2. `SliceContinuationAt(prompt)` -- deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment.
+1. `FindPrompt(tag)` — walk the continuation chain and check the context-level prompt.
+2. `SliceContinuationAt(prompt)` — deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment.
 3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack.
 4. Run `proc` with the composable continuation in a sub-context.
 5. After `proc` returns, abort to the prompt with `proc`'s result. This is critical: the abort skips past the captured frames in the current context, delivering the result directly to the prompt boundary.
@@ -176,14 +177,15 @@ Step 5 is what distinguishes composable continuations from undelimited ones. Wit
 
 ### Applying a composable continuation
 
-When a `ComposableContinuation` is called as a procedure (dispatched by `OperationApply`):
+When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCallable`):
 
-1. Deep-copy the segment for safe re-invocation.
-2. Graft the segment's bottom frame onto the current continuation chain.
-3. Handle dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack.
-4. Restore from the segment's top frame and set the argument as the value.
+1. Thread check: reject if invoked from a different SRFI-18 thread.
+2. Deep-copy the segment for safe re-invocation.
+3. Graft the segment's bottom frame onto the current continuation chain.
+4. Handle dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack.
+5. Restore from the segment's top frame and set the argument as the value.
 
-The deep copy in step 1 is essential. Without it, re-invoking the composable continuation would corrupt the continuation chain (the frames are mutable and get modified during execution).
+The deep copy in step 2 is essential. Without it, re-invoking the composable continuation would corrupt the continuation chain (the frames are mutable and get modified during execution).
 
 ## Interaction with dynamic-wind
 
@@ -212,55 +214,37 @@ Consider a composable continuation K captured with winding `[D1, D3]`, applied i
 
 ```
 FindCommonWindingPrefix([D1, D2], [D1, D3]) = 1
-Unwind: call after(D2)   -> stack becomes [D1]
-Rewind: call before(D3)  -> stack becomes [D1, D3]
+Unwind: call after(D2)   → stack becomes [D1]
+Rewind: call before(D3)  → stack becomes [D1, D3]
 ```
 
 This is correct: D2 is exited, D3 is entered, and D1 (the common ancestor) is left undisturbed.
 
-## Continuation chain operations
+## Unified continuation control flow
 
-### SliceContinuationAt
-
-Creates a standalone copy of the continuation chain from the current position to a boundary:
+All continuation control flow — both `call/cc` escapes and delimited continuations — uses `ErrPromptAbort` as the single error propagation mechanism. Call/cc uses the composable-continuation-then-abort model: the escape closure applies a composable continuation in a sub-context, then aborts to `DefaultPromptTag` with the result. This follows Racket's model where `call/cc` is defined in terms of composable continuations and abort.
 
 ```
-Before:                        After slicing at P:
-  mc.cont -> F1 -> F2 -> P -> F3 -> nil
-                                      Segment: F1' -> F2' -> nil
-                                      (deep copy, parent = nil)
+┌──────────────────┬─────────────────────────┬────────────────────────────┐
+│                  │ call/cc escape           │ Prompt abort               │
+├──────────────────┼─────────────────────────┼────────────────────────────┤
+│ Error type       │ ErrPromptAbort           │ ErrPromptAbort             │
+│                  │ (to DefaultPromptTag)    │ (to user tag)              │
+├──────────────────┼─────────────────────────┼────────────────────────────┤
+│ Carries          │ Result value (from       │ Prompt tag + values        │
+│                  │ composable cont. run)    │                            │
+├──────────────────┼─────────────────────────┼────────────────────────────┤
+│ Caught by        │ PrimCallCC sub-context   │ PrimCallWithContinuation   │
+│                  │ or RunWithEscapeHandling │   Prompt (sub-context)     │
+│                  │ (unified FindPrompt)     │ or RunWithEscapeHandling   │
+│                  │                         │   (top-level)              │
+├──────────────────┼─────────────────────────┼────────────────────────────┤
+│ Effect           │ Replaces current         │ Unwinds to prompt,         │
+│                  │ continuation             │ invokes handler             │
+├──────────────────┼─────────────────────────┼────────────────────────────┤
+│ Composable       │ No (aborts computation)  │ Yes (via ComposableCont.)  │
+└──────────────────┴─────────────────────────┴────────────────────────────┘
 ```
-
-When the prompt is at the context boundary (not a continuation frame), `SliceContinuationAt(nil)` copies the entire chain.
-
-### GraftContinuation
-
-Splices a segment onto a target chain by walking the segment to its bottom and setting `parent = target`:
-
-```
-Before:
-  segment: F1 -> F2 -> nil
-  target:  G1 -> G2 -> nil
-
-After:
-  segment: F1 -> F2 -> G1 -> G2 -> nil
-```
-
-### DeepCopy
-
-Creates an independent copy of an entire continuation chain. Every frame is `Copy()`'d with parent pointers relinked to the copies. Used before grafting to ensure re-invocation safety.
-
-## Relationship to existing continuation design
-
-The delimited continuation mechanism builds on the existing `ErrContinuationEscape` pattern. Both are error-based propagation mechanisms that the VM catches and handles. The key differences:
-
-| | `call/cc` escape | Prompt abort |
-|---|---|---|
-| **Error type** | `ErrContinuationEscape` | `ErrPromptAbort` |
-| **Carries** | Target continuation + value + winding stack | Prompt tag + values |
-| **Caught by** | `RunWithEscapeHandling` or `PrimCallCC` | `PrimCallWithContinuationPrompt` or `RunWithEscapeHandling` |
-| **Effect** | Replaces current continuation | Unwinds to prompt, invokes handler |
-| **Composable** | No (aborts current computation) | Yes (via `ComposableContinuation`) |
 
 `ComposableContinuation` is the qualitatively new capability. Unlike `call/cc` escapes which discard the current computation, composable continuations splice frames in and resume normally. This enables patterns like:
 
@@ -280,6 +264,38 @@ The delimited continuation mechanism builds on the existing `ErrContinuationEsca
 ;; prompt returns 7, outer + 10 = 17
 ```
 
+## Continuation chain operations
+
+### SliceContinuationAt
+
+Creates a standalone copy of the continuation chain from the current position to a boundary:
+
+```
+Before:                        After slicing at P:
+  mc.cont → F1 → F2 → P → F3 → nil
+                                      Segment: F1' → F2' → nil
+                                      (deep copy, parent = nil)
+```
+
+When the prompt is at the context boundary (not a continuation frame), `SliceContinuationAt(nil)` copies the entire chain.
+
+### GraftContinuation
+
+Splices a segment onto a target chain by walking the segment to its bottom and setting `parent = target`:
+
+```
+Before:
+  segment: F1 → F2 → nil
+  target:  G1 → G2 → nil
+
+After:
+  segment: F1 → F2 → G1 → G2 → nil
+```
+
+### DeepCopy
+
+Creates an independent copy of an entire continuation chain. Every frame is `Copy()`'d with parent pointers relinked to the copies. Used before grafting to ensure re-invocation safety.
+
 ## Code locations
 
 | File | Contents |
@@ -287,11 +303,13 @@ The delimited continuation mechanism builds on the existing `ErrContinuationEsca
 | `machine/prompt_tag.go` | `PromptTag` type, `DefaultPromptTag` |
 | `machine/composable_continuation.go` | `ComposableContinuation` callable value |
 | `machine/prompt_abort.go` | `ErrPromptAbort` error type |
+| `machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
 | `machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
-| `machine/machine_context.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation`, abort handling in `RunWithEscapeHandling` |
-| `machine/operation_apply.go` | `ComposableContinuation` dispatch in `OperationApply` |
+| `machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
+| `machine/machine_context.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation`, `RestoreWithWindingFrom`, `RunWithEscapeHandling`, `applyComposableContinuation` |
 | `machine/operation_foreign_function_call.go` | `ErrPromptAbort` passthrough |
-| `registry/core/prim_prompt.go` | All prompt primitive implementations |
+| `registry/core/prim_prompt.go` | Prompt primitive implementations |
+| `registry/core/prim_control.go` | `PrimCallCC`, `newComposeAbortEscapeClosure` |
 | `registry/core/prompts.go` | Primitive registration |
 | `registry/core/bootstrap.go` | Scheme `map`/`for-each` definitions |
 

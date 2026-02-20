@@ -34,6 +34,10 @@ func addControl(r *registry.Registry) error {
 		{Name: "call/cc", ParamCount: 1, Impl: PrimCallCC,
 			Doc: "Shorthand for call-with-current-continuation.", ParamNames: []string{"proc"}, Category: "control"},
 		// dynamic-wind is now a compiled form, not a primitive (see machine/compile_validated.go)
+		{Name: "call-with-exit", ParamCount: 1, Impl: PrimCallWithExit,
+			Doc: "Calls proc with a lightweight one-shot escape procedure valid only during the call.", ParamNames: []string{"proc"}, Category: "control"},
+		{Name: "call-with-continuation-barrier", ParamCount: 1, Impl: PrimCallWithContinuationBarrier,
+			Doc: "Calls thunk, preventing continuations from crossing the barrier boundary.", ParamNames: []string{"thunk"}, Category: "control"},
 	}, registry.PhaseRuntime)
 
 	// Multiple values

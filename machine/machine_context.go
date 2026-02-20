@@ -50,20 +50,6 @@ var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC:
 // a new NativeTemplate instance instead of changing this one.
 var immediateReturnTemplate = &NativeTemplate{}
 
-// ErrContinuationEscape is used to signal that a continuation was invoked from within
-// a sub-context. This allows the escape to propagate up through nested foreign function calls.
-type ErrContinuationEscape struct {
-	Continuation *MachineContinuation // Where to resume (inside sub-context for call/cc in dynamic-wind)
-	Value        values.Value
-	Handled      bool                 // Set to true after the escape has been handled and mc has been restored
-	WindingStack WindingStack         // Target winding stack for proper dynamic-wind handling
-	EscapeCont   *MachineContinuation // Outer continuation to restore after Continuation completes (for sub-context escapes)
-}
-
-func (p *ErrContinuationEscape) Error() string {
-	return "continuation escape"
-}
-
 // MachineContext represents the execution context of a virtual machine.
 // It holds the current environment, values, evaluation stack, continuation, and program counter.
 // It is created from a MachineContinuation and can be modified during execution.
@@ -75,8 +61,8 @@ type MachineContext struct {
 	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
 	debugger         *Debugger            // optional debugger for breakpoints and stepping
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
-	pendingEscape    *MachineContinuation // continuation to restore after current execution completes (for sub-context escapes)
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
+	barrierValid     *BarrierToken        // non-nil when inside a with-continuation-barrier; pointer identity identifies the barrier
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
@@ -125,6 +111,23 @@ func (p *MachineContext) EscapeCont() *MachineContinuation {
 // SetEscapeCont sets the escape continuation for this context.
 func (p *MachineContext) SetEscapeCont(cont *MachineContinuation) {
 	p.escapeCont = cont
+}
+
+// BarrierValid returns the barrier validity flag for the current context.
+// Non-nil means execution is inside a with-continuation-barrier; the pointer
+// identity distinguishes which barrier. Nil means no active barrier.
+//
+// Escape closures and composable continuations use this to detect barrier
+// crossings: if the capture-time pointer differs from the invocation-time
+// pointer, the continuation would cross a barrier boundary.
+func (p *MachineContext) BarrierValid() *BarrierToken {
+	return p.barrierValid
+}
+
+// SetBarrierValid sets the barrier identity token on this context.
+// Called by PrimCallWithContinuationBarrier to mark the sub-context as inside a barrier.
+func (p *MachineContext) SetBarrierValid(v *BarrierToken) {
+	p.barrierValid = v
 }
 
 func (p *MachineContext) Template() *NativeTemplate {
@@ -492,11 +495,16 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 			cc.threadID, p.threadID)
 	}
 
+	// Reject barrier crossing: pointer inequality means different barrier contexts.
+	// nil != non-nil: captured outside, invoked inside (or vice versa).
+	// ptr-A != ptr-B: captured inside barrier A, invoked inside barrier B.
+	if cc.BarrierValid() != p.barrierValid {
+		return p, values.WrapForeignErrorf(values.ErrContinuationBarrier,
+			"composable continuation: cannot cross continuation barrier")
+	}
+
 	// Deep-copy the segment for safe re-invocation
 	segment := cc.Cont().DeepCopy()
-
-	// Graft the segment's bottom frame onto the current continuation chain
-	GraftContinuation(segment, p.cont)
 
 	// Handle dynamic-wind: unwind current extents not in captured stack,
 	// rewind captured extents not in current stack.
@@ -504,6 +512,17 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	if err != nil {
 		return p, err
 	}
+
+	if segment == nil {
+		// Empty composable continuation: captured at a tail-call site with no
+		// saved frames above it (e.g., call/cc inside a sub-context where
+		// the call was in tail position). Applying it just returns the value.
+		p.SetValue(args[0])
+		return p.returnImmediate(), nil
+	}
+
+	// Graft the segment's bottom frame onto the current continuation chain
+	GraftContinuation(segment, p.cont)
 
 	// Restore from the top of the segment (resume captured computation)
 	p.Restore(segment)
@@ -756,6 +775,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.thread = p.thread
 	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
+	mc.barrierValid = p.barrierValid // inherit barrier context
 	return mc
 }
 
@@ -1205,6 +1225,7 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 // When execution completes normally (Run returns nil), any remaining
 // frames on the winding stack are unwound (after thunks are called).
 func (p *MachineContext) RunWithEscapeHandling() error {
+	p.promptTag = DefaultPromptTag // install default prompt for call/cc escapes
 	for {
 		err := p.Run()
 
@@ -1218,40 +1239,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				}
 			}
 
-			// If there's a pending escape continuation (from a sub-context escape),
-			// restore to it and continue execution
-			if p.pendingEscape != nil {
-				escapeCont := p.pendingEscape
-				p.pendingEscape = nil
-				p.Restore(escapeCont)
-				continue
-			}
-
 			return nil
-		}
-
-		var escapeErr *ErrContinuationEscape
-		if errors.As(err, &escapeErr) && !escapeErr.Handled {
-			if escapeErr.Continuation == nil {
-				// Continuation was nil (truly truncated) - can't recover
-				return err
-			}
-
-			// Use the current winding stack as the source for unwinding.
-			// Restore with proper winding handling
-			restoreErr := p.RestoreWithWindingFrom(escapeErr.Continuation, p.windingStack, escapeErr.WindingStack)
-			if restoreErr != nil {
-				return restoreErr
-			}
-			p.SetValue(escapeErr.Value)
-
-			// If there's an escape continuation (for sub-context escapes), save it
-			// so we can restore to it after the inner execution completes
-			if escapeErr.EscapeCont != nil {
-				p.pendingEscape = escapeErr.EscapeCont
-			}
-
-			continue
 		}
 
 		var abortErr *ErrPromptAbort
@@ -1262,30 +1250,44 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			}
 
 			// Unwind dynamic-wind from current to prompt's winding depth.
-			// The prompt frame's winding stack captures the extent at prompt installation.
-			targetStack := prompt.windingStack
+			// When prompt is nil (context-level prompt), the target winding stack
+			// is nil — the context boundary has no saved winding state.
+			var targetStack WindingStack
+			if prompt != nil {
+				targetStack = prompt.windingStack
+			}
 			restoreErr := p.RestoreWithWindingFrom(nil, p.windingStack, targetStack)
 			if restoreErr != nil {
 				return restoreErr
 			}
 
-			// Restore to the prompt frame (skip past it)
-			p.Restore(prompt)
+			// Restore to the prompt frame (skip past it).
+			// When prompt is nil (context-level), there's no frame to restore —
+			// the context itself is the boundary.
+			if prompt != nil {
+				p.Restore(prompt)
+			}
 
-			// Invoke the handler with the abort values
-			handler := prompt.PromptHandler()
-			if handler != nil {
-				_, applyErr := p.Apply(handler, abortErr.Values...)
+			// Invoke the handler with the abort values.
+			// Context-level prompts have no handler (prompt is nil).
+			if prompt != nil && prompt.PromptHandler() != nil {
+				_, applyErr := p.Apply(prompt.PromptHandler(), abortErr.Values...)
 				if applyErr != nil {
 					return applyErr
 				}
-				// Compensate: Apply sets pc=0, but Run() will start from pc.
-				// No compensation needed since we just Apply'd fresh.
 			} else {
 				if len(abortErr.Values) > 0 {
 					p.SetValue(abortErr.Values[0])
 				} else {
 					p.SetValue(values.Void)
+				}
+				// Context-level abort (prompt == nil): the composable continuation
+				// has already run to completion inside the escape closure's sub-context.
+				// The abort value is the final result; p.pc was not advanced (FFC
+				// returned error without incrementing), so there is no remaining code
+				// to execute. Returning nil avoids re-running the FFC at p.pc.
+				if prompt == nil {
+					return nil
 				}
 			}
 			continue

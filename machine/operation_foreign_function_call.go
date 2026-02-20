@@ -85,23 +85,17 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 	mc.counters.ForeignCalls++
 	err := p.Function(ctx, mc)
 	if err != nil {
-		// Check if this is a continuation escape.
-		// Continuation escapes propagate up through foreign function calls until they reach
-		// the PrimCallCC that captured the continuation, which then handles the escape.
-		var escapeErr *ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			if escapeErr.Handled {
-				// Already handled by PrimCallCC - mc has been restored to target continuation
-				return mc, nil
-			}
-			// Unhandled escape - propagate up so it can reach PrimCallCC
+		// Check if this is a prompt abort - propagate up to the matching
+		// call-with-continuation-prompt handler (or DefaultPromptTag for call/cc escapes).
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
 			return nil, err
 		}
 
-		// Check if this is a prompt abort - propagate up to the matching
-		// call-with-continuation-prompt handler.
-		var abortErr *ErrPromptAbort
-		if errors.As(err, &abortErr) {
+		// Check if this is a call-with-exit escape - propagate up to the matching
+		// PrimCallWithExit handler that holds the same *ExitTag.
+		var exitErr *ErrExitEscape
+		if errors.As(err, &exitErr) {
 			return nil, err
 		}
 

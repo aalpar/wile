@@ -14,23 +14,16 @@
 
 package machine
 
-import (
-	"fmt"
-
-	"github.com/aalpar/wile/values"
-)
-
-// ErrPromptAbort signals an abort to the nearest continuation prompt matching
-// the given tag. It propagates up through Run() and is caught by
-// RunWithEscapeHandling() or by call-with-continuation-prompt sub-contexts.
+// BarrierToken is an opaque identity for a with-continuation-barrier scope.
+// Each call to call-with-continuation-barrier creates a fresh token. Barrier
+// crossing is detected by pointer identity comparison: if the capture-time
+// token differs from the invocation-time token, the continuation would cross
+// a barrier boundary.
 //
-// When caught, the handler finds the matching prompt frame, unwinds dynamic-wind
-// extents, and invokes the prompt's handler with the abort values.
-type ErrPromptAbort struct {
-	Tag    *PromptTag
-	Values []values.Value
-}
+// nil means "not inside any barrier."
+type BarrierToken struct{}
 
-func (p *ErrPromptAbort) Error() string {
-	return fmt.Sprintf("abort to prompt %s", p.Tag.SchemeString())
+// NewBarrierToken creates a fresh barrier identity token.
+func NewBarrierToken() *BarrierToken {
+	return &BarrierToken{}
 }

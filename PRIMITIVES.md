@@ -583,6 +583,13 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `abort-current-continuation` | Escape to nearest prompt |
 | `call-with-composable-continuation` | Capture composable delimited continuation |
 
+## Escape Continuations
+
+| Primitive | Description |
+|-----------|-------------|
+| `call-with-exit` | Call procedure with one-shot escape continuation |
+| `with-continuation-barrier` | Prevent continuation re-entry across barrier |
+
 ## Multiple Values
 
 | Primitive | Description |

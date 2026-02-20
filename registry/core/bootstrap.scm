@@ -324,3 +324,14 @@
      var)
     ((do "step" var step)
      step)))
+
+;; Continuation barriers (S7-compatible)
+(define-syntax with-continuation-barrier
+  (syntax-rules ()
+    ((_ body ...)
+     (call-with-continuation-barrier (lambda () body ...)))))
+
+(define-syntax with-baffle
+  (syntax-rules ()
+    ((_ body ...)
+     (call-with-continuation-barrier (lambda () body ...)))))

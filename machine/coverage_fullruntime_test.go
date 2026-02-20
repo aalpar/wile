@@ -758,96 +758,6 @@ func TestNestedQuasiquoteUnquote(t *testing.T) {
 	}
 }
 
-// TestContinuationEscapeHandled tests OperationForeignFunctionCall with handled continuation escape
-func TestContinuationEscapeHandled(t *testing.T) {
-	env := newFullRuntimeEnv(t)
-
-	// Create a ForeignFunction that returns a handled continuation escape
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
-		// Set a result value and return handled escape
-		mc.SetValue(values.NewInteger(42))
-		escape := &machine.ErrContinuationEscape{
-			Handled: true,
-		}
-		return escape
-	}
-
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-
-	// Call Apply directly - this tests the handled escape branch.
-	// We can't use mc.Run() here because a real handled escape involves
-	// mc.Restore() which changes the entire machine state (template, pc, env).
-	// Without that, the same instruction would execute forever.
-	_, err := op.Apply(context.Background(), mc)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
-}
-
-// TestContinuationEscapeUnhandledWithValidContinuation tests that unhandled continuation escapes with valid
-// continuations are properly handled by RunWithEscapeHandling at the top level.
-func TestContinuationEscapeUnhandledWithValidContinuation(t *testing.T) {
-	env := newFullRuntimeEnv(t)
-
-	// Create a target continuation that immediately halts (empty template)
-	// This simulates returning from a call/cc where the escape value becomes the result
-	targetTpl := machine.NewNativeTemplate(0, 0, false)
-	// No operations - will halt immediately after restoration
-	targetCont := machine.NewMachineContinuation(nil, targetTpl, env)
-
-	// Create a ForeignFunction that returns an unhandled escape with a valid continuation
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
-		escape := &machine.ErrContinuationEscape{
-			Handled:      false,
-			Continuation: targetCont,
-			Value:        values.NewInteger(42),
-		}
-		return escape
-	}
-
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-
-	// Use RunWithEscapeHandling to catch and handle the escape at top level
-	err := mc.RunWithEscapeHandling()
-	// No error expected - continuation was restored and machine halted normally
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
-}
-
-// TestContinuationEscapeUnhandledNilContinuation tests that RunWithEscapeHandling returns an error
-// when encountering an unhandled continuation escape with nil continuation.
-// This represents a continuation that was truly truncated and cannot be restored.
-func TestContinuationEscapeUnhandledNilContinuation(t *testing.T) {
-	env := newFullRuntimeEnv(t)
-
-	// Create a ForeignFunction that returns an unhandled continuation escape with nil continuation
-	// This simulates a continuation captured inside a sub-context where the continuation chain is truncated
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
-		escape := &machine.ErrContinuationEscape{
-			Handled:      false,
-			Continuation: nil, // Truncated continuation from sub-context
-		}
-		return escape
-	}
-
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-	err := mc.RunWithEscapeHandling()
-	// Should return an error because nil continuation cannot be restored
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "continuation escape")
-}
-
 // TestForeignFunctionNilError tests OperationForeignFunctionCall with nil function
 func TestForeignFunctionNilError(t *testing.T) {
 	env := newFullRuntimeEnv(t)
@@ -2997,7 +2907,7 @@ func TestCoverageNamedLetLoop(t *testing.T) {
 
 // TestCoverageCallCCEscapeThroughDynamicWind tests call/cc capturing inside
 // dynamic-wind thunk and invoking from outside. This exercises the
-// ErrContinuationEscape path in RunWithEscapeHandling, RestoreWithWindingFrom,
+// continuation escape path in RunWithEscapeHandling, RestoreWithWindingFrom,
 // UnwindTo, and RewindTo.
 func TestCoverageCallCCEscapeThroughDynamicWind(t *testing.T) {
 	env := newFullRuntimeEnv(t)

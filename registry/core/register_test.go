@@ -204,7 +204,7 @@ func TestAddToRegistry_RegistersControl(t *testing.T) {
 		primNames[p.Spec.Name] = true
 	}
 
-	expectedPrims := []string{"apply", "call/cc", "call-with-current-continuation", "values", "call-with-values"}
+	expectedPrims := []string{"apply", "call/cc", "call-with-current-continuation", "values", "call-with-values", "call-with-exit", "call-with-continuation-barrier"}
 	for _, name := range expectedPrims {
 		c.Assert(primNames[name], qt.IsTrue, qt.Commentf("expected control primitive %q", name))
 	}

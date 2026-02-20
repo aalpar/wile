@@ -80,18 +80,6 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 
 	err = sub.Run()
 
-	// Handler raised another exception - propagate it
-	var innerExc *machine.ErrExceptionEscape
-	if errors.As(err, &innerExc) {
-		return nil, err
-	}
-
-	// Continuation escape - propagate it
-	var contErr *machine.ErrContinuationEscape
-	if errors.As(err, &contErr) {
-		return nil, err
-	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -182,13 +170,6 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 			mc.PopExceptionHandler()
 			excErr = newExcErr
 			continue // Loop to handle new exception
-		}
-
-		// Check for continuation escape from resumed code
-		var contErr *machine.ErrContinuationEscape
-		if errors.As(resumeErr, &contErr) {
-			mc.PopExceptionHandler()
-			return resumeErr // Propagate the escape
 		}
 
 		// Clean up handler stack

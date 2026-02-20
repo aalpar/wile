@@ -108,10 +108,6 @@ func PrimCallWithContinuationPrompt(ctx context.Context, mc *machine.MachineCont
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
 		var abortErr *machine.ErrPromptAbort
 		if errors.As(err, &abortErr) {
 			if abortErr.Tag != tag {
@@ -225,8 +221,9 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	// Capture the current winding stack
 	windingStack := mc.WindingStack().Copy()
 
-	// Create the composable continuation value
-	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID())
+	// Create the composable continuation value, recording the barrier context at
+	// capture time so applyComposableContinuation can detect barrier crossings.
+	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 
 	// Call proc with the composable continuation.
 	// The result of proc becomes the value delivered to the prompt boundary.
@@ -239,10 +236,6 @@ func PrimCallWithComposableContinuation(ctx context.Context, mc *machine.Machine
 	}
 	err = sub.Run()
 	if err != nil {
-		var escapeErr *machine.ErrContinuationEscape
-		if errors.As(err, &escapeErr) {
-			return err
-		}
 		return err
 	}
 
