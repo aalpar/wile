@@ -82,6 +82,21 @@ func TestWithContinuationBarrier_Success(t *testing.T) {
 			code:     `(with-baffle 42)`,
 			expected: values.NewInteger(42),
 		},
+		{
+			name: "exit propagates through barrier from outside",
+			code: `(call-with-exit (lambda (exit)
+			  (with-continuation-barrier (exit 42))))`,
+			expected: values.NewInteger(42), // ErrExitEscape is upward-only, not blocked by barriers
+		},
+		{
+			name: "raise-continuable propagates through barrier",
+			code: `(with-exception-handler
+			  (lambda (e) (+ e 100))
+			  (lambda ()
+			    (with-continuation-barrier
+			      (raise-continuable 5))))`,
+			expected: values.NewInteger(105),
+		},
 	}
 
 	for _, tc := range tcs {
@@ -106,6 +121,13 @@ func TestWithContinuationBarrier_Errors(t *testing.T) {
 			  (with-continuation-barrier
 			    (call/cc (lambda (c) (set! k c) 42)))
 			  (k 99))`,
+		},
+		{
+			name: "continuation crosses between distinct barriers",
+			code: `(let ((k #f))
+			  (with-continuation-barrier
+			    (call/cc (lambda (c) (set! k c) 42)))
+			  (with-continuation-barrier (k 99)))`,
 		},
 		{
 			name: "composable continuation blocked at barrier boundary",

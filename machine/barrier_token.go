@@ -21,7 +21,13 @@ package machine
 // a barrier boundary.
 //
 // nil means "not inside any barrier."
-type BarrierToken struct{}
+//
+// The _ field ensures non-zero struct size. Go may return the same pointer for
+// all zero-sized allocations (runtime.zerobase), which would defeat pointer
+// identity comparison.
+type BarrierToken struct {
+	_ byte
+}
 
 // NewBarrierToken creates a fresh barrier identity token.
 func NewBarrierToken() *BarrierToken {
