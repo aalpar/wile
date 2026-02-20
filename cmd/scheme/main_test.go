@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -561,8 +563,10 @@ func TestFailfNilWithMessage(t *testing.T) {
 // The goroutine body (SIGQUIT handler) cannot be exercised in tests without
 // sending SIGQUIT, so we cover the outer function structure.
 func TestSetupSignalsDirect(t *testing.T) {
-	// Both true and false cover the `if !quiet` branch
-	setupSignals(true)
+	t.Cleanup(func() {
+		signal.Reset(syscall.SIGQUIT)
+	})
+	// quiet=false covers both the signal registration and the if-!quiet print
 	setupSignals(false)
 }
 
