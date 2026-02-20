@@ -309,8 +309,8 @@ clean: buildclean testclean modclean
 	for dir in "$(DIST_DIR)" "$(GO_BUILD_DIR)"; do \
 	    if [ -e "$$dir" ]; then rm -rvf "$$dir"; fi \
 	done; \
-	for dir in "$(SOURCE_DIRS)"; do \
-	    if [ -e "$$dir" ]; then find $$dir -name "*.test" -type f -exec rm -v \{\} \; ; fi \
+	for dir in $(SOURCE_DIRS); do \
+	    if [ -e "$$dir" ]; then find "$$dir" -name "*.test" -type f -exec rm -v \{\} \; ; fi \
 	done
 
 # Clear the Go build cache.
