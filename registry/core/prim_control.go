@@ -75,6 +75,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
+	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
@@ -375,6 +376,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 	// Call producer with no arguments
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
+	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.Apply(producerCls)
 	if err != nil {
 		return err
@@ -390,6 +392,7 @@ func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
 	// Call consumer with all produced values as arguments
 	sub2 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub2)
+	sub2.SetWindingStack(mc.WindingStack())
 	_, err = sub2.Apply(consumerCls, producedValues...)
 	if err != nil {
 		return err
