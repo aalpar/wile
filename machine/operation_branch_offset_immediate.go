@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -41,9 +40,4 @@ func (p *OperationBranchOffsetImmediate) SchemeString() string {
 func (p *OperationBranchOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationBranchOffsetImmediate)
 	return fieldMatches(p, v, ok, func(op *OperationBranchOffsetImmediate) int { return op.Offset })
-}
-
-func (p *OperationBranchOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.pc += p.Offset
-	return mc, nil
 }

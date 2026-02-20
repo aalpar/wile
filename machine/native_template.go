@@ -43,8 +43,8 @@ type NativeTemplate struct {
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
-	code      []Instruction // bytecode instructions
-	sideTable []Operation   // complex ops referenced by OpComplex
+	code      []Instruction      // bytecode instructions
+	sideTable []InlinedOperation // complex ops referenced by OpComplex
 }
 
 // initialOpsCap is the pre-allocated capacity for the operations and sourceRefs
@@ -199,7 +199,7 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 	for _, op := range ops {
 		instr, ok := operationToInstruction(op)
 		if !ok {
-			instr = p.AppendSideTableOp(op)
+			instr = p.AppendSideTableOp(op.(InlinedOperation))
 		}
 		p.code = append(p.code, instr)
 		p.sourceRefs = append(p.sourceRefs, idx)
@@ -438,7 +438,7 @@ func (p *NativeTemplate) AppendInstruction(instr Instruction) {
 
 // AppendSideTableOp adds a complex operation to the side table and returns
 // an OpComplex instruction that references it.
-func (p *NativeTemplate) AppendSideTableOp(op Operation) Instruction {
+func (p *NativeTemplate) AppendSideTableOp(op InlinedOperation) Instruction {
 	idx := int32(len(p.sideTable))
 	p.sideTable = append(p.sideTable, op)
 	return Instruction{Op: OpComplex, Arg: idx}
@@ -450,7 +450,7 @@ func (p *NativeTemplate) Code() []Instruction {
 }
 
 // SideTable returns the complex operations referenced by OpComplex instructions.
-func (p *NativeTemplate) SideTable() []Operation {
+func (p *NativeTemplate) SideTable() []InlinedOperation {
 	return p.sideTable
 }
 

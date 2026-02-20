@@ -15,10 +15,8 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
 
@@ -44,27 +42,4 @@ func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() 
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationStoreGlobalByGlobalIndexLiteralIndexImmediate)
 	return fieldMatches(p, v, ok, func(op *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
-}
-
-func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	o := mc.template.literals[p.LiteralIndex]
-	if o == nil {
-		return nil, mc.Error(fmt.Sprintf("literal index %v does not exist", p.LiteralIndex))
-	}
-	gi, ok := o.(*environment.GlobalIndex)
-	if !ok {
-		return nil, mc.Error(fmt.Sprintf("literal %v is not a global index", o))
-	}
-	val := mc.evals.Pop()
-	var err error
-	if gi.Env != nil {
-		err = gi.Env.SetOwnGlobalValue(gi, val)
-	} else {
-		err = mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
-	}
-	if err != nil {
-		return nil, mc.WrapError(err, fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
-	}
-	mc.pc++
-	return mc, nil
 }

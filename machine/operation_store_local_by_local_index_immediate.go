@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/environment"
@@ -47,13 +46,4 @@ func (p *OperationStoreLocalByLocalIndexImmediate) EqualTo(o values.Value) bool 
 		func(a, b *environment.LocalIndex) bool {
 			return a.EqualTo(b)
 		})
-}
-
-func (p *OperationStoreLocalByLocalIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	err := mc.env.SetLocalValue(p.LocalIndex, mc.evals.Pop())
-	if err != nil {
-		return mc, err
-	}
-	mc.pc++
-	return mc, nil
 }

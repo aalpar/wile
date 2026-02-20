@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -53,13 +52,4 @@ func (p *OperationBranchOnFalseValueOffsetImmediate) EqualTo(o values.Value) boo
 	return fieldMatches(p, v, ok, func(op *OperationBranchOnFalseValueOffsetImmediate) int {
 		return op.Offset
 	})
-}
-
-func (p *OperationBranchOnFalseValueOffsetImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	if !values.ValueToBool(mc.GetValue()) {
-		mc.pc += p.Offset
-	} else {
-		mc.pc++
-	}
-	return mc, nil
 }

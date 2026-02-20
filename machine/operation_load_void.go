@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -30,12 +28,6 @@ func NewOperationLoadVoid() *OperationLoadVoid {
 	return &OperationLoadVoid{
 		OperationBase: NewOperationBase("machine-operation-load-void"),
 	}
-}
-
-func (p *OperationLoadVoid) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.SetValue(values.Void)
-	mc.pc++
-	return mc, nil
 }
 
 func (p *OperationLoadVoid) EqualTo(o values.Value) bool {

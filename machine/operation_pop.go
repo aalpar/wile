@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -28,12 +26,6 @@ func NewOperationPop() *OperationPop {
 	return &OperationPop{
 		OperationBase: NewOperationBase("machine-operation-pop"),
 	}
-}
-
-func (*OperationPop) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.SetValue(mc.evals.Pop())
-	mc.pc++
-	return mc, nil
 }
 
 func (p *OperationPop) EqualTo(o values.Value) bool {

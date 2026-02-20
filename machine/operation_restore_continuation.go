@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -28,14 +26,6 @@ func NewOperationRestoreContinuation() *OperationRestoreContinuation {
 	return &OperationRestoreContinuation{
 		OperationBase: NewOperationBase("machine-operation-restore-continuation"),
 	}
-}
-
-func (p *OperationRestoreContinuation) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	if mc.cont == nil {
-		return nil, errHalt
-	}
-	mc.RestoreAndRelease(mc.cont)
-	return mc, nil
 }
 
 func (p *OperationRestoreContinuation) EqualTo(o values.Value) bool {

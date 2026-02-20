@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/environment"
@@ -47,14 +46,4 @@ func (p *OperationLoadLocalByLocalIndexImmediate) EqualTo(o values.Value) bool {
 		func(a, b *environment.LocalIndex) bool {
 			return a.EqualTo(b)
 		})
-}
-
-func (p *OperationLoadLocalByLocalIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	bd := mc.env.GetLocalBinding(p.LocalIndex)
-	if bd == nil {
-		return nil, mc.Error(fmt.Sprintf("no such local binding %s", p.LocalIndex))
-	}
-	mc.SetValue(bd.Value())
-	mc.pc++
-	return mc, nil
 }

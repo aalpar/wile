@@ -15,10 +15,8 @@
 package machine
 
 import (
-	"context"
 	"testing"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -64,24 +62,4 @@ func TestOperationDrop_EqualTo_NilCases(t *testing.T) {
 	c.Assert(op.EqualTo(nilOp), qt.IsFalse)
 	c.Assert(nilOp.EqualTo(op), qt.IsFalse)
 	c.Assert(nilOp.EqualTo(nilOp), qt.IsTrue)
-}
-
-func TestOperationDrop_Apply(t *testing.T) {
-	c := qt.New(t)
-
-	env := environment.NewTopLevelEnvironment().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
-
-	// Push value to stack
-	mc.evals.Push(values.NewInteger(42))
-	c.Assert(mc.evals.Len(), qt.Equals, 1)
-
-	op := NewOperationDrop()
-	result, err := op.Apply(context.Background(), mc)
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.evals.Len(), qt.Equals, 0)
-	c.Assert(mc.pc, qt.Equals, 1)
 }

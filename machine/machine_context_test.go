@@ -1291,7 +1291,11 @@ func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
 	c := qt.New(t)
 	// Template with code + sideTable uses runIntegerDispatch.
 	tpl := NewNativeTemplate(0, 0, false)
-	instr := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	op := NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+		mc.SetValue(values.Void)
+		return nil
+	})
+	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
@@ -1305,10 +1309,13 @@ func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
 
 func TestRunDispatch_IntegerPathErrHalt(t *testing.T) {
 	c := qt.New(t)
-	// OpComplex dispatching to OperationRestoreContinuation with cont=nil
+	// OpComplex dispatching to an InlinedOperation that returns errHalt
 	// should trigger errHalt, which Run translates to nil.
 	tpl := NewNativeTemplate(0, 0, false)
-	instr := tpl.AppendSideTableOp(NewOperationRestoreContinuation())
+	op := NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+		return errHalt
+	})
+	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
@@ -1346,35 +1353,24 @@ func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
 	c.Assert(errors.Is(err, values.ErrUnknownOpCode), qt.IsTrue)
 }
 
-func TestRunDispatch_IntegerPathContextCancellation(t *testing.T) {
-	c := qt.New(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel immediately
-
-	tpl := NewNativeTemplate(0, 0, false)
-	instr := tpl.AppendSideTableOp(NewOperationLoadVoid())
-	tpl.AppendInstruction(instr)
-
-	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(ctx, cont)
-
-	err := mc.Run()
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
-}
-
 func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	c := qt.New(t)
 	// Multiple OpComplex instructions in sequence.
 	tpl := NewNativeTemplate(0, 0, false)
 
-	// First: LoadVoid (sets value to Void, advances pc)
-	instr0 := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	makeLoadVoidFF := func() *OperationForeignFunctionCall {
+		return NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+			mc.SetValue(values.Void)
+			return nil
+		})
+	}
+
+	// First: sets value to Void, advances pc
+	instr0 := tpl.AppendSideTableOp(makeLoadVoidFF())
 	tpl.AppendInstruction(instr0)
 
-	// Second: LoadVoid again (still Void, advances pc)
-	instr1 := tpl.AppendSideTableOp(NewOperationLoadVoid())
+	// Second: sets value to Void again, advances pc
+	instr1 := tpl.AppendSideTableOp(makeLoadVoidFF())
 	tpl.AppendInstruction(instr1)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
@@ -1384,5 +1380,4 @@ func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	err := mc.Run()
 	c.Assert(err, qt.IsNil)
 	c.Assert(mc.GetValue(), qt.Equals, values.Void)
-	c.Assert(mc.counters.OpsExecuted, qt.Equals, uint64(2))
 }

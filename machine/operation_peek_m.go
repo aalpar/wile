@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -31,12 +30,6 @@ func NewOperationPeekK(depth int) *OperationPeekK {
 		OperationBase: NewOperationBase("machine-operation-peek-k"),
 		Depth:         depth,
 	}
-}
-
-func (p *OperationPeekK) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	mc.SetValue(mc.evals.PeekK(p.Depth))
-	mc.pc++
-	return mc, nil
 }
 
 // SchemeString overrides OperationBase to include depth value.

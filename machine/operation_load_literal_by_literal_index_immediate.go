@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -33,14 +32,6 @@ func NewOperationLoadLiteralByLiteralIndexImmediate(li LiteralIndex) *OperationL
 		OperationBase: NewOperationBase("machine-operation-load-literal-by-literal-index-immediate"),
 		LiteralIndex:  li,
 	}
-}
-
-// Apply executes the operation, loading the literal value.
-func (p *OperationLoadLiteralByLiteralIndexImmediate) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
-	o := mc.template.literals[p.LiteralIndex]
-	mc.SetValue(o)
-	mc.pc++
-	return mc, nil
 }
 
 // SchemeString returns the Scheme representation of the operation.
