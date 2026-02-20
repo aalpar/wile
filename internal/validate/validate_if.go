@@ -43,10 +43,9 @@ func validateIf(ctx context.Context, env *environment.EnvironmentFrame, pair *sy
 	}
 
 	return &ValidatedIf{
-		formName: "if",
-		source:   source,
-		Test:     test,
-		Conseq:   conseq,
-		Alt:      alt,
+		validatedBase: validatedBase{formName: "if", source: source},
+		Test:          test,
+		Conseq:        conseq,
+		Alt:           alt,
 	}
 }

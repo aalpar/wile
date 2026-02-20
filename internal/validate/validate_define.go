@@ -61,11 +61,10 @@ func validateDefineVariable(ctx context.Context, env *environment.EnvironmentFra
 	}
 
 	return &ValidatedDefine{
-		formName:   "define",
-		source:     source,
-		name:       name,
-		subExp:     value,
-		IsFunction: false,
+		validatedBase: validatedBase{formName: "define", source: source},
+		name:          name,
+		subExp:        value,
+		IsFunction:    false,
 	}
 }
 
@@ -103,12 +102,11 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 	}
 
 	return &ValidatedDefine{
-		formName:   "define",
-		source:     source,
-		name:       name,
-		IsFunction: true,
-		params:     params,
-		body:       body,
+		validatedBase: validatedBase{formName: "define", source: source},
+		name:          name,
+		IsFunction:    true,
+		params:        params,
+		body:          body,
 	}
 }
 

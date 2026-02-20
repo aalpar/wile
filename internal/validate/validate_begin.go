@@ -44,8 +44,7 @@ func validateBegin(ctx context.Context, env *environment.EnvironmentFrame, pair 
 	}
 
 	return &ValidatedBegin{
-		formName: "begin",
-		source:   source,
-		body:     body,
+		validatedBase: validatedBase{formName: "begin", source: source},
+		body:          body,
 	}
 }

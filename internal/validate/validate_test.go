@@ -143,13 +143,13 @@ func TestValidateIf(t *testing.T) {
 			name:     "valid 3-arg if",
 			input:    values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1), values.NewInteger(2)),
 			wantOk:   true,
-			wantType: &ValidatedIf{formName: "if"},
+			wantType: &ValidatedIf{validatedBase: validatedBase{formName: "if"}},
 		},
 		{
 			name:     "valid 2-arg if",
 			input:    values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1)),
 			wantOk:   true,
-			wantType: &ValidatedIf{formName: "if"},
+			wantType: &ValidatedIf{validatedBase: validatedBase{formName: "if"}},
 		},
 		{
 			name:   "too few args",

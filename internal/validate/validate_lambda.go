@@ -51,10 +51,9 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 	}
 
 	return &ValidatedLambda{
-		formName: "lambda",
-		source:   source,
-		params:   params,
-		body:     body,
+		validatedBase: validatedBase{formName: "lambda", source: source},
+		params:        params,
+		body:          body,
 	}
 }
 

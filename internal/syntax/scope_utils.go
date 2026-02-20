@@ -189,14 +189,8 @@ func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
 		sctx = &SourceContext{}
 	}
 	newScopes := FlipScopeInSet(sctx.Scopes, scope)
-	newSctx := &SourceContext{
-		Text:   sctx.Text,
-		File:   sctx.File,
-		Start:  sctx.Start,
-		End:    sctx.End,
-		Scopes: newScopes,
-		Origin: sctx.Origin,
-	}
+	newSctx := sctx.Clone()
+	newSctx.Scopes = newScopes
 	return &SyntaxSymbol{
 		Sym: sym.Sym,
 		syntaxBase: syntaxBase{
