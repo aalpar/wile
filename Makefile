@@ -212,7 +212,7 @@ profile-zebra:
 .PHONY: profile-cpu
 profile-cpu:
 	@mkdir -p $(PROFILE_DIR)/cpu
-	@rm -f $(PROFILE_DIR)/cpu/*.prof
+	@rm -vf $(PROFILE_DIR)/cpu/*.prof
 	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
 		name=$$(echo "$$pkg" | tr '/' '_'); \
 		$(GO_TEST) -run='^$$' -bench=. -cpuprofile=$(PROFILE_DIR)/cpu/$$name.prof -benchmem "$$pkg"; \
@@ -234,7 +234,7 @@ profile-cpu:
 .PHONY: profile-mem
 profile-mem:
 	@mkdir -p $(PROFILE_DIR)/mem
-	@rm -f $(PROFILE_DIR)/mem/*.prof
+	@rm -vf $(PROFILE_DIR)/mem/*.prof
 	@for pkg in $$($(GO) list $(or $(PKG),./...)); do \
 		name=$$(echo "$$pkg" | tr '/' '_'); \
 		$(GO_TEST) -run='^$$' -bench=. -memprofile=$(PROFILE_DIR)/mem/$$name.prof -benchmem "$$pkg"; \
@@ -306,8 +306,11 @@ tidy:
 #   make clean
 .PHONY: clean
 clean: buildclean testclean modclean
-	for dir in "$(DIST_DIR)" "$(TEST_DIR)"; do \
-	    if [ -e "$$dir" ]; then rm -rf "$$dir"; fi \
+	for dir in "$(DIST_DIR)" "$(GO_BUILD_DIR)"; do \
+	    if [ -e "$$dir" ]; then rm -rvf "$$dir"; fi \
+	done; \
+	for dir in "$(SOURCE_DIRS)"; do \
+	    if [ -e "$$dir" ]; then find $$dir -name "*.test" -type f -exec rm -v \{\} \; ; fi \
 	done
 
 # Clear the Go build cache.
