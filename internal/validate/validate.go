@@ -40,16 +40,16 @@ func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr s
 		// Empty list '() is a self-evaluating literal, not a form.
 		// R7RS §4.1.2: The empty list is a literal expression.
 		if e.IsEmptyList() {
-			return &ValidatedLiteral{source: e.SourceContext(), formName: "@literal", Value: e}
+			return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: e.SourceContext()}, Value: e}
 		}
 		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
-		return &ValidatedSymbol{source: e.SourceContext(), formName: "@symbol", Symbol: e}
+		return &ValidatedSymbol{validatedBase: validatedBase{formName: "@symbol", source: e.SourceContext()}, Symbol: e}
 	case *syntax.SyntaxObject:
 		return validateSyntaxObject(e, result)
 	default:
 		// Self-evaluating: numbers, strings, booleans, etc.
-		return &ValidatedLiteral{source: nil, formName: "@literal", Value: expr}
+		return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal"}, Value: expr}
 	}
 }
 
@@ -63,7 +63,7 @@ func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) Va
 		return nil
 	default:
 		// Self-evaluating literal wrapped in syntax
-		return &ValidatedLiteral{source: obj.SourceContext(), formName: "@literal", Value: obj}
+		return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: obj.SourceContext()}, Value: obj}
 	}
 }
 

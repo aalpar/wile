@@ -420,14 +420,8 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			localScopes := lsp.GetLocalScopes()
 			if len(localScopes) > 0 {
 				// Local binding - use definition-site scopes
-				scopedCtx := &syntax.SourceContext{
-					Text:   srcCtx.Text,
-					File:   srcCtx.File,
-					Start:  srcCtx.Start,
-					End:    srcCtx.End,
-					Origin: srcCtx.Origin,
-					Scopes: localScopes,
-				}
+				scopedCtx := srcCtx.Clone()
+				scopedCtx.Scopes = localScopes
 				return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
 			}
 		}
@@ -438,13 +432,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			if globalBinding != nil {
 				symCtx := srcCtx
 				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-					symCtx = &syntax.SourceContext{
-						Text:   srcCtx.Text,
-						File:   srcCtx.File,
-						Start:  srcCtx.Start,
-						End:    srcCtx.End,
-						Origin: srcCtx.Origin,
-					}
+					symCtx = srcCtx.WithoutScopes()
 				}
 				newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
 				return newSym.WithResolvedBinding(globalBinding)

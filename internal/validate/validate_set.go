@@ -42,9 +42,8 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	}
 
 	return &ValidatedSetBang{
-		formName: "set!",
-		source:   source,
-		Name:     name,
-		subExp:   value,
+		validatedBase: validatedBase{formName: "set!", source: source},
+		Name:          name,
+		subExp:        value,
 	}
 }

@@ -73,6 +73,18 @@ func NewZeroValueSourceContext() *SourceContext {
 	return q
 }
 
+// Clone returns a shallow copy of the SourceContext.
+// The Scopes slice and Origin pointer are shared with the original;
+// callers that need to mutate those fields should assign new values
+// after cloning (which is exactly what the With* methods do).
+func (p *SourceContext) Clone() *SourceContext {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	return &c
+}
+
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
 	return fmt.Sprintf("<source-context %s:%d-%d>", p.File, p.Start, p.End)
@@ -114,14 +126,9 @@ func (p *SourceContext) WithOrigin(origin *OriginInfo) *SourceContext {
 	if p == nil {
 		return &SourceContext{Origin: origin}
 	}
-	return &SourceContext{
-		Text:   p.Text,
-		File:   p.File,
-		Start:  p.Start,
-		End:    p.End,
-		Scopes: p.Scopes,
-		Origin: origin,
-	}
+	c := p.Clone()
+	c.Origin = origin
+	return c
 }
 
 // WithoutScopes returns a new SourceContext with scopes cleared.
@@ -131,14 +138,9 @@ func (p *SourceContext) WithoutScopes() *SourceContext {
 	if p == nil {
 		return nil
 	}
-	return &SourceContext{
-		Text:   p.Text,
-		File:   p.File,
-		Start:  p.Start,
-		End:    p.End,
-		Origin: p.Origin,
-		// Scopes intentionally omitted
-	}
+	c := p.Clone()
+	c.Scopes = nil
+	return c
 }
 
 // WithScope returns a new SourceContext with an additional scope.
@@ -167,14 +169,9 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 	newScopes := make([]*Scope, len(p.Scopes)+1)
 	newScopes[0] = scope
 	copy(newScopes[1:], p.Scopes)
-	return &SourceContext{
-		Text:   p.Text,
-		File:   p.File,
-		Start:  p.Start,
-		End:    p.End,
-		Origin: p.Origin,
-		Scopes: newScopes,
-	}
+	c := p.Clone()
+	c.Scopes = newScopes
+	return c
 }
 
 // WithScopes returns a new SourceContext with additional scopes
@@ -200,14 +197,9 @@ func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
 	newScopes := make([]*Scope, len(scopes)+len(p.Scopes))
 	copy(newScopes, scopes)
 	copy(newScopes[len(scopes):], p.Scopes)
-	return &SourceContext{
-		Text:   p.Text,
-		File:   p.File,
-		Start:  p.Start,
-		End:    p.End,
-		Origin: p.Origin,
-		Scopes: newScopes,
-	}
+	c := p.Clone()
+	c.Scopes = newScopes
+	return c
 }
 
 // FormatOriginChain returns a formatted string showing the macro expansion chain.
