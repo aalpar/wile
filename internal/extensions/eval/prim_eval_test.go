@@ -89,6 +89,10 @@ func TestEval(t *testing.T) {
 	t.Run("wrong environment type", func(t *testing.T) {
 		evalExpectError(t, engine, `(eval '(+ 1 2) 42)`)
 	})
+
+	t.Run("expansion error in eval", func(t *testing.T) {
+		evalExpectError(t, engine, `(eval '(let) (interaction-environment))`)
+	})
 }
 
 func TestLoad(t *testing.T) {
@@ -112,6 +116,17 @@ func TestLoad(t *testing.T) {
 
 	t.Run("load nonexistent file", func(t *testing.T) {
 		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, filepath.Join(dir, "nonexistent.scm")))
+	})
+
+	t.Run("load parse error", func(t *testing.T) {
+		path := writeTestFile(t, dir, "bad-syntax.scm", `"unterminated string`)
+		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
+	})
+
+	t.Run("load expansion error", func(t *testing.T) {
+		code := "(define-syntax bad-macro (syntax-rules () ((bad-macro a b) a)))\n(bad-macro 1)"
+		path := writeTestFile(t, dir, "bad-expand.scm", code)
+		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
 	})
 
 	t.Run("wrong argument type", func(t *testing.T) {
@@ -290,6 +305,15 @@ func TestCompile(t *testing.T) {
 		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(10))
 	})
 
+	t.Run("compile syntax object input", func(t *testing.T) {
+		result := eval(t, engine, `(procedure? (compile (syntax (+ 1 2))))`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("compile expansion error", func(t *testing.T) {
+		evalExpectError(t, engine, `(compile '(let))`)
+	})
+
 	t.Run("wrong argument count", func(t *testing.T) {
 		evalExpectError(t, engine, `(compile)`)
 	})
@@ -400,4 +424,130 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestEnvironmentWithLibraryRegistry covers the library import path in PrimEnvironment.
+// Using WithLibraryPaths() enables the registry so ForEach is entered.
+func TestEnvironmentWithLibraryRegistry(t *testing.T) {
+	c := qt.New(t)
+
+	// lib/ is at repo root, test is at internal/extensions/eval/
+	libDir := filepath.Join("..", "..", "..", "lib")
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithLibraryPaths(libDir),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Run("nonexistent library covers ForEach body", func(t *testing.T) {
+		// Entering the ForEach with a valid import spec covers ParseImportSetFromDatum
+		// and the LoadLibrary call (which fails because the library doesn't exist).
+		_, err := engine.Eval(context.Background(), `(environment '(nonexistent lib))`)
+		qt.Assert(t, err, qt.IsNotNil)
+	})
+
+	t.Run("for-syntax phase modifier parses correctly", func(t *testing.T) {
+		// for-syntax variant covers the phase-shift parsing in ParseImportSetFromDatum.
+		_, err := engine.Eval(context.Background(), `(environment '(for-syntax (nonexistent lib)))`)
+		qt.Assert(t, err, qt.IsNotNil)
+	})
+
+	t.Run("successful library import", func(t *testing.T) {
+		result, err := engine.Eval(context.Background(),
+			`(eval '(caar '((1 2) 3)) (environment '(scheme cxr)))`)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(1))
+	})
+}
+
+// TestExpandInExpansionContext covers the expanderCtx != nil path in PrimExpand.
+// When called from within a macro transformer, the ExpanderContext is set.
+func TestExpandInExpansionContext(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("expand in macro transformer uses expansion context", func(t *testing.T) {
+		result := eval(t, engine, `
+			(define-syntax test-expand-ctx
+			  (lambda (stx)
+			    (expand (syntax (+ 1 2)))))
+			(test-expand-ctx)
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+	})
+}
+
+// TestExpandOnceInExpansionContext covers the expanderCtx != nil path in PrimExpandOnce.
+func TestExpandOnceInExpansionContext(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("expand-once in macro transformer uses expansion context", func(t *testing.T) {
+		result := eval(t, engine, `
+			(define-syntax test-expand-once-ctx
+			  (lambda (stx)
+			    (expand-once (syntax (+ 1 2)))))
+			(test-expand-once-ctx)
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+	})
+}
+
+// TestSyntaxLocalValueInMacro covers the success path of PrimSyntaxLocalValue.
+// When called from within a macro transformer, it looks up bindings in the expand env.
+// The definition and invocation are in a single eval call so the expand env is shared.
+func TestSyntaxLocalValueInMacro(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("looks up macro binding in expansion context", func(t *testing.T) {
+		// Define target-macro and use-slv together; invoke in the same form.
+		// The eval helper asserts no error, confirming syntax-local-value succeeded.
+		result := eval(t, engine, `
+			(define-syntax target-macro
+			  (syntax-rules () ((target-macro) 42)))
+			(define-syntax use-slv
+			  (lambda (stx)
+			    (let ((v (syntax-local-value (syntax target-macro))))
+			      ; v is the transformer — ignore it and return #t
+			      (syntax #t))))
+			(use-slv)
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+	})
+}
+
+// TestSyntaxLocalIntroduceInMacro covers PrimSyntaxLocalIntroduce in expansion context.
+func TestSyntaxLocalIntroduceInMacro(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("syntax-local-introduce in macro expansion context", func(t *testing.T) {
+		result := eval(t, engine, `
+			(define-syntax test-introduce
+			  (lambda (stx)
+			    (let ((introduced (syntax-local-introduce (syntax x))))
+			      (syntax #t))))
+			(test-introduce)
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+	})
+}
+
+// TestSyntaxLocalIdentifierAsBindingInMacro covers PrimSyntaxLocalIdentifierAsBinding
+// in expansion context.
+func TestSyntaxLocalIdentifierAsBindingInMacro(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("syntax-local-identifier-as-binding in macro expansion context", func(t *testing.T) {
+		result := eval(t, engine, `
+			(define-syntax test-as-binding
+			  (lambda (stx)
+			    (let ((bound-id (syntax-local-identifier-as-binding (syntax my-id))))
+			      (syntax #t))))
+			(test-as-binding)
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+	})
 }

@@ -396,3 +396,52 @@ func TestExceptionHandlerInheritanceInDynamicWind(t *testing.T) {
 		c.Assert(sym.Key, qt.Equals, "after-error")
 	})
 }
+
+// TestErrorObjectHappyPath verifies that error-object-message and
+// error-object-irritants return correct values from a caught error object.
+// Uses call/cc to escape the handler non-locally (avoids non-continuable error).
+func TestErrorObjectHappyPath(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("error-object-message returns message string", func(t *testing.T) {
+		result := eval(t, engine, `
+			(call-with-current-continuation
+			  (lambda (k)
+			    (with-exception-handler
+			      (lambda (e) (k (error-object-message e)))
+			      (lambda () (error "test message" 1 2 3)))))
+		`)
+		str, ok := result.Internal().(*values.String)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected string, got %T: %v", result.Internal(), result.Internal()))
+		c.Assert(str.Value, qt.Equals, "test message")
+	})
+
+	t.Run("error-object-irritants returns irritants list", func(t *testing.T) {
+		result := eval(t, engine, `
+			(call-with-current-continuation
+			  (lambda (k)
+			    (with-exception-handler
+			      (lambda (e) (k (error-object-irritants e)))
+			      (lambda () (error "test" 1 2 3)))))
+		`)
+		c.Assert(result.Internal(), qt.IsNotNil)
+		// Irritants should be a list containing 1, 2, 3
+		pair, ok := result.Internal().(values.Tuple)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected list, got %T: %v", result.Internal(), result.Internal()))
+		c.Assert(pair, qt.IsNotNil)
+	})
+
+	t.Run("error-object-message with no irritants", func(t *testing.T) {
+		result := eval(t, engine, `
+			(call-with-current-continuation
+			  (lambda (k)
+			    (with-exception-handler
+			      (lambda (e) (k (error-object-message e)))
+			      (lambda () (error "just a message")))))
+		`)
+		str, ok := result.Internal().(*values.String)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(str.Value, qt.Equals, "just a message")
+	})
+}
