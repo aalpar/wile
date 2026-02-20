@@ -19,6 +19,7 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring | Phases 0–6 complete, Phase 7 deferred |
 | `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Allocation reduction for continuation-heavy workloads (6 optimizations) | Complete |
+| `PROMPT_SUBCONTEXT_REFACTORING.md` | Sub-context winding stack inheritance bug fix + lifecycle refactoring proposal | Bug fix complete, Layer 1 refactoring proposed |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |

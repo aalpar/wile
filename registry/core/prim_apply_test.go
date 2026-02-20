@@ -109,6 +109,94 @@ func TestApplyMultipleValues(t *testing.T) {
 	}
 }
 
+// TestApplyWindingStackInheritance verifies that continuations captured inside
+// apply preserve the enclosing dynamic-wind context. Without winding stack
+// inheritance, call/cc inside apply's sub-context captures an empty winding
+// stack, so re-invocation skips before/after thunks.
+//
+// The outer call-with-continuation-prompt delimits the continuation so it only
+// captures the dynamic-wind section, preventing infinite re-invocation.
+func TestApplyWindingStackInheritance(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name: "baseline: call/cc directly in dynamic-wind",
+			code: `
+			(let ((k #f)
+			      (before-count 0))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (set! before-count (+ before-count 1)))
+			        (lambda ()
+			          (call/cc (lambda (cont) (set! k cont) 'first)))
+			        (lambda () #f)))
+			    (default-continuation-prompt-tag)
+			    #f)
+			  (call-with-continuation-prompt
+			    (lambda () (k 'second))
+			    (default-continuation-prompt-tag)
+			    (lambda (v) v))
+			  before-count)`,
+			expected: values.NewInteger(2),
+		},
+		{
+			name: "call/cc inside apply in dynamic-wind",
+			code: `
+			(let ((k #f)
+			      (before-count 0))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (set! before-count (+ before-count 1)))
+			        (lambda ()
+			          (apply
+			            (lambda ()
+			              (call/cc (lambda (cont) (set! k cont) 'first)))
+			            '()))
+			        (lambda () #f)))
+			    (default-continuation-prompt-tag)
+			    #f)
+			  (call-with-continuation-prompt
+			    (lambda () (k 'second))
+			    (default-continuation-prompt-tag)
+			    (lambda (v) v))
+			  before-count)`,
+			expected: values.NewInteger(2),
+		},
+		{
+			name: "call/cc inside call-with-values in dynamic-wind",
+			code: `
+			(let ((k #f)
+			      (before-count 0))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (set! before-count (+ before-count 1)))
+			        (lambda ()
+			          (call-with-values
+			            (lambda ()
+			              (call/cc (lambda (cont) (set! k cont) 'first)))
+			            (lambda (v) v)))
+			        (lambda () #f)))
+			    (default-continuation-prompt-tag)
+			    #f)
+			  (call-with-continuation-prompt
+			    (lambda () (k 'second))
+			    (default-continuation-prompt-tag)
+			    (lambda (v) v))
+			  before-count)`,
+			expected: values.NewInteger(2),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestApplyErrors(t *testing.T) {
 	tcs := []schemeCodeErrorTestCase{
 		{name: "apply non-procedure", code: `(apply 5 '(1 2))`},

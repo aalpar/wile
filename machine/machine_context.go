@@ -453,6 +453,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 			converter := param.Converter()
 			sub := p.NewSubContext()
 			defer ReleaseSubContext(sub)
+			sub.SetWindingStack(p.WindingStack())
 			_, err := sub.Apply(converter, newVal)
 			if err != nil {
 				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
