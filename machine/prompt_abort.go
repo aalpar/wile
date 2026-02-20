@@ -21,8 +21,8 @@ import (
 )
 
 // ErrPromptAbort signals an abort to the nearest continuation prompt matching
-// the given tag. This parallels ErrContinuationEscape: it propagates up through
-// Run() and is caught by RunWithEscapeHandling().
+// the given tag. It propagates up through Run() and is caught by
+// RunWithEscapeHandling() or by call-with-continuation-prompt sub-contexts.
 //
 // When caught, the handler finds the matching prompt frame, unwinds dynamic-wind
 // extents, and invokes the prompt's handler with the abort values.

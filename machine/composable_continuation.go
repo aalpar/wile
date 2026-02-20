@@ -29,17 +29,20 @@ import (
 type ComposableContinuation struct {
 	cont         *MachineContinuation
 	windingStack WindingStack
-	threadID     uint64 // SRFI-18: thread that captured this continuation (0 = primordial)
+	threadID     uint64        // SRFI-18: thread that captured this continuation (0 = primordial)
+	barrierValid *BarrierToken // barrier context at capture time; nil = no active barrier
 }
 
 // NewComposableContinuation creates a composable continuation from a
 // continuation chain segment and the winding stack captured at the point
-// of capture.
-func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, threadID uint64) *ComposableContinuation {
+// of capture. barrierValid is mc.BarrierValid() at capture time; nil means
+// the capture happened outside any with-continuation-barrier.
+func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, threadID uint64, barrierValid *BarrierToken) *ComposableContinuation {
 	q := &ComposableContinuation{
 		cont:         cont,
 		windingStack: windingStack,
 		threadID:     threadID,
+		barrierValid: barrierValid,
 	}
 	return q
 }
@@ -47,6 +50,12 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 func (p *ComposableContinuation) Cont() *MachineContinuation { return p.cont }
 func (p *ComposableContinuation) WindingStack() WindingStack { return p.windingStack }
 func (p *ComposableContinuation) ThreadID() uint64           { return p.threadID }
+
+// BarrierValid returns the barrier identity token captured when this continuation
+// was created. Used by applyComposableContinuation to detect barrier crossings.
+func (p *ComposableContinuation) BarrierValid() *BarrierToken {
+	return p.barrierValid
+}
 
 func (p *ComposableContinuation) SchemeString() string {
 	return "#<composable-continuation>"

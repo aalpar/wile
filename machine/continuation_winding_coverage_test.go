@@ -690,42 +690,6 @@ func TestRestoreWithWindingFrom_RewindError(t *testing.T) {
 
 // --- RunWithEscapeHandling additional coverage ---
 
-// TestRunWithEscapeHandling_EscapeWithEscapeCont exercises the pendingEscape
-// path: an ErrContinuationEscape with EscapeCont saves the escape cont for
-// later restoration after inner execution completes.
-func TestRunWithEscapeHandling_EscapeWithEscapeCont(t *testing.T) {
-	c := qt.New(t)
-	env := newFullRuntimeEnv(t)
-
-	// Target continuation that immediately halts
-	targetTpl := machine.NewNativeTemplate(0, 0, false)
-	targetCont := machine.NewMachineContinuation(nil, targetTpl, env)
-
-	// Escape continuation that also halts
-	escapeTpl := machine.NewNativeTemplate(0, 0, false)
-	escapeCont := machine.NewMachineContinuation(nil, escapeTpl, env)
-
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
-		return &machine.ErrContinuationEscape{
-			Handled:      false,
-			Continuation: targetCont,
-			Value:        values.NewInteger(77),
-			EscapeCont:   escapeCont,
-		}
-	}
-
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	mc := machine.NewMachineContext(ctx, cont)
-
-	err := mc.RunWithEscapeHandling()
-	c.Assert(err, qt.IsNil)
-}
-
 // TestRunWithEscapeHandling_PromptAbortNotFound exercises the branch where
 // no prompt matches the abort tag.
 func TestRunWithEscapeHandling_PromptAbortNotFound(t *testing.T) {

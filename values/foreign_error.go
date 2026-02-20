@@ -140,6 +140,10 @@ var (
 	// Recursion depth
 	ErrCallDepthExceeded = NewStaticError("call depth exceeded")
 
+	// Escape continuations
+	ErrExpiredEscape       = NewStaticError("expired escape procedure")
+	ErrContinuationBarrier = NewStaticError("continuation barrier violation")
+
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 	ErrInvalidLoadPath        = NewStaticError("invalid load path")

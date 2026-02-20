@@ -2,185 +2,93 @@
 
 ## Summary
 
-**Are all three fields needed?**
-
-| Field | Verdict | Reason |
-|-------|---------|--------|
-| WindingStack | **Required** | Target state - where we're going |
-| SourceWindingStack | **Removed** | Redundant - `sub.WindingStack()` always provides correct source state |
-| EscapeCont | **Architectural debt** | Only needed because primitives use sub-contexts |
-
-### Why SourceWindingStack Was Removed
-
-Initially added to fix `after` thunks not running on escape from bytecode-based dynamic-wind. However, analysis showed it was redundant:
-
-1. **Escape via primitives** (apply, for-each): Inner sub-context has nil winding stack (from `NewSubContext()`), so `SourceWindingStack = nil`, triggering fallback to `sub.WindingStack()` in `PrimCallCC`
-2. **Direct escape**: `innerMC = sub`, so `SourceWindingStack = sub.WindingStack()` anyway
-
-In all cases, `sub.WindingStack()` in `PrimCallCC` provides the correct source state for unwinding. The field was removed and all tests pass.
-
-## Overview
-
-When a captured continuation is invoked, it creates an `ErrContinuationEscape` that propagates up through the call stack. This document explains the three winding-related fields and why each is needed.
-
-## The Current Fields
-
-```
-ErrContinuationEscape {
-    Continuation  *MachineContinuation  // WHERE to jump
-    Value         values.Value          // WHAT value to return
-    WindingStack  WindingStack          // TARGET winding state (from capture time)
-    EscapeCont    *MachineContinuation  // OUTER continuation (for nested escapes)
-}
-```
-
-Note: `SourceWindingStack` was removed - the source state is obtained from `sub.WindingStack()` in `PrimCallCC`.
-
-## Field Purposes
-
-### WindingStack (Target)
-
-**Captured when**: call/cc creates the continuation
-**Contains**: The winding stack at the point where call/cc was called
-**Used for**: Knowing what dynamic-wind frames should be active AFTER the escape
+Call/cc escapes use the composable-continuation-then-abort model, following
+Racket's approach where `call/cc` is defined in terms of composable
+continuations and prompt abort:
 
 ```scheme
-(dynamic-wind
-  (lambda () (print "A-before"))
-  (lambda ()
-    (call/cc (lambda (k) ...))  ; WindingStack = [frame-A] captured here
-    ...)
-  (lambda () (print "A-after")))
+(call/cc f) ≡
+  (call-with-composable-continuation
+    (lambda (k)
+      (f (lambda (v) (abort-current-continuation default-prompt-tag (k v)))))
+    default-prompt-tag)
 ```
 
-### Source Winding Stack (Current)
+The escape closure captures a `ComposableContinuation` at call/cc time.
+When invoked, it applies the composable continuation in a sub-context (running
+the captured frames to completion), then aborts to `DefaultPromptTag` with
+the result. This produces a regular `ErrPromptAbort` that the standard prompt
+handling path catches — no special-case escape detection needed.
 
-**Note**: No longer stored in `ErrContinuationEscape`. Instead, obtained from `sub.WindingStack()` in `PrimCallCC`.
+## Design Rationale
 
-**Obtained when**: Handling continuation escape in `PrimCallCC`
-**Contains**: The winding stack at the point of invocation
-**Used for**: Knowing what dynamic-wind frames need to be UNWOUND
+### Why composable-continuation-then-abort?
 
-```scheme
-(define saved-k #f)
+The previous design used a `continuationEscapePayload` carrier tunneled
+through `ErrPromptAbort`, with a dedicated `HandleContinuationEscapeAbort`
+function to detect and process escape payloads. This required:
+- A carrier type implementing `values.Value` (solely for transport)
+- Special-case detection in two places (PrimCallCC sub-context + RunWithEscapeHandling)
+- A `pendingEscape` field for nested escape scenarios
+- `escapeCont` tracking for sub-context chain breaks
 
-(dynamic-wind
-  (lambda () (print "A-before"))
-  (lambda ()
-    (call/cc (lambda (k) (set! saved-k k)))
-    ...)
-  (lambda () (print "A-after")))
+The composable-continuation-then-abort model eliminates all of this:
+- The escape closure does its own work (applies cc, runs frames, aborts with result)
+- `RunWithEscapeHandling` handles all aborts uniformly via `FindPrompt`
+- No special carrier type, no detection logic, no pending escape mechanism
 
-; Later, invoke from inside a different dynamic-wind:
-(dynamic-wind
-  (lambda () (print "B-before"))
-  (lambda ()
-    (saved-k 'value))  ; SourceWindingStack = [frame-B] captured here
-  (lambda () (print "B-after")))
-```
+### Dynamic-wind integration
 
-When `saved-k` is invoked:
-- SourceWindingStack = [frame-B] (where we ARE)
-- WindingStack = [frame-A] (where we're GOING)
+When the escape closure applies the composable continuation,
+`applyComposableContinuation` calls `RestoreWithWindingFrom` which handles
+all dynamic-wind transitions (unwinding source frames, rewinding target
+frames). The escape closure's sub-context runs the restored frames to
+completion, executing any dynamic-wind thunks along the way.
 
-The escape handler must:
-1. Unwind frame-B (call B-after)
-2. Rewind frame-A (call A-before)
-3. Resume at the captured continuation
+The abort to `DefaultPromptTag` then propagates to `RunWithEscapeHandling`,
+which does a final `RestoreWithWindingFrom` from the current winding state
+to the prompt's winding state (nil for the context-level prompt), unwinding
+any remaining frames.
 
-### EscapeCont (Outer Continuation)
+### Thread and barrier checks
 
-**Set when**: call/cc is invoked inside a sub-context (like a foreign function's sub.Run())
-**Contains**: The continuation to resume after the inner escape completes
-**Used for**: Complex nested scenarios where escaping from a sub-context
+Both checks happen at the point of escape closure invocation, before any
+continuation manipulation:
 
-This handles the case where call/cc captures inside a primitive's sub-context:
+1. **Thread check**: Compares capture-time thread ID with invocation-time
+   thread ID. Prevents cross-thread continuation invocation that would
+   corrupt VM state (per SRFI-18 semantics).
 
-```scheme
-(+ 1 (call/cc (lambda (k)
-       (dynamic-wind
-         before
-         (lambda () (k 42))  ; Escape from inside dynamic-wind's sub-context
-         after))))
-```
+2. **Barrier check**: Compares capture-time `*BarrierToken` pointer with
+   invocation-time pointer. Pointer inequality means the continuation
+   would cross a `with-continuation-barrier` boundary. `BarrierToken` is
+   an opaque identity type — only pointer identity matters.
 
-## Flow Diagram
+### Two execution modes in PrimCallCC
 
-```
-CAPTURE TIME (call/cc):
-┌─────────────────────────────────┐
-│ WindingStack = [A, B]           │  ← Winding state when captured
-│ Continuation = PC, env, stack   │  ← Machine state when captured
-└─────────────────────────────────┘
+**Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the
+current VM context via `mc.Apply()`. This preserves the full continuation
+chain, critical for cooperative coroutines and patterns that capture/invoke
+multiple continuations. PC is compensated for `OperationForeignFunctionCall`'s
+post-increment.
 
-INVOKE TIME (calling the continuation):
-┌─────────────────────────────────┐
-│ SourceWindingStack = [A, C, D]  │  ← Winding state NOW
-│ Value = 'result                 │  ← Value to return
-└─────────────────────────────────┘
-
-ESCAPE HANDLING:
-┌─────────────────────────────────┐
-│ 1. Find common prefix: [A]      │
-│ 2. Unwind [D, C]: call afters   │
-│ 3. Rewind [B]: call befores     │
-│ 4. Restore Continuation         │
-│ 5. Set Value                    │
-└─────────────────────────────────┘
-```
-
-## Why These Fields Are Needed
-
-| Field | Purpose | Without it... |
-|-------|---------|---------------|
-| WindingStack | Know target state | Can't rewind to correct dynamic extent |
-| EscapeCont | Handle sub-context escapes | Lose outer context in nested scenarios |
-
-**Source winding state** is obtained from `sub.WindingStack()` in `PrimCallCC`, not stored in the error struct.
-
-## Simplification Possibility
-
-**EscapeCont** might be eliminable if we restructure how sub-contexts work. Currently it handles a specific edge case where:
-1. call/cc is called inside a sub-context (mc.NewSubContext())
-2. The sub-context has no continuation chain (cont = nil)
-3. We need to remember where to return after the escape
-
-If all execution happened on a single MachineContext without sub-contexts, EscapeCont wouldn't be needed. However, foreign functions (primitives) currently use sub-contexts for isolation.
-
-## Implementation Notes
-
-1. **WindingStack** (target) is captured when the escape closure is created in `PrimCallCC`
-2. **Source winding stack** is obtained from `sub.WindingStack()` when handling escape in `PrimCallCC`
-3. **EscapeCont** is set only for sub-context escapes (when mc.Parent() == nil)
-
-The escape handling in `PrimCallCC` and `RunWithEscapeHandling` uses these to:
-```go
-// In PrimCallCC, after catching ErrContinuationEscape:
-sourceStack := sub.WindingStack()  // Current winding state
-targetStack := escapeErr.WindingStack  // Captured target state
-
-// RestoreWithWindingFrom handles:
-// 1. Find common prefix
-// 2. Unwind source frames (call after thunks)
-// 3. Rewind target frames (call before thunks)
-// 4. Restore continuation state
-mc.RestoreWithWindingFrom(escapeErr.Continuation, sourceStack, targetStack)
-```
+**Sub-context mode** (`mc.Parent() == nil`): Falls back to an isolated
+sub-context when call/cc is inside a foreign function's sub-context. The
+escape closure's abort to `DefaultPromptTag` is caught directly by PrimCallCC
+(tag match → extract value → return nil), ensuring call/cc works in contexts
+without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
 
 ## Code Locations
 
-| Field | Set in | Used in |
-|-------|--------|---------|
-| WindingStack | `PrimCallCC` - escape closure creation | `PrimCallCC` - escape handling |
-| Source stack | (from `sub.WindingStack()`) | `PrimCallCC` - `RestoreWithWindingFrom` |
-| EscapeCont | `PrimCallCC` | `RunWithEscapeHandling` |
+| Component | File | Line |
+|-----------|------|------|
+| `PrimCallCC` | `registry/core/prim_control.go` | 115 |
+| `newComposeAbortEscapeClosure` | `registry/core/prim_control.go` | 192 |
+| `ComposableContinuation` | `machine/composable_continuation.go` | 29 |
+| `BarrierToken` | `machine/barrier_token.go` | 23 |
+| `applyComposableContinuation` | `machine/machine_context.go` | 485 |
+| `RunWithEscapeHandling` | `machine/machine_context.go` | 1227 |
+| `RestoreWithWindingFrom` | `machine/machine_context.go` | 1079 |
 
-## Future Simplification
-
-The `EscapeCont` field exists because foreign functions (Go primitives) use `NewSubContext()` to call Scheme closures. This creates a new execution context with `cont = nil`, breaking the continuation chain.
-
-**Potential fix**: If primitives used the same MachineContext (just saving/restoring continuation like bytecode does), EscapeCont wouldn't be needed. This would require:
-1. Changing `Apply` on primitives to use SaveContinuation instead of NewSubContext
-2. Updating all primitives that call Scheme closures (map, for-each, apply, call-with-values, etc.)
-
-This is significant refactoring but would simplify the continuation model.
+For operational details (error propagation paths, RunWithEscapeHandling
+pseudocode, end-to-end examples), see `docs/dev/PROMPT_ABORT_SYSTEM.md`.
