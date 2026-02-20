@@ -66,16 +66,19 @@ The error handling in `Apply()` has a strict priority order:
 // 2. ErrPromptAbort check (errors.As)
 //    → pass through unchanged
 //
-// 3. ErrExceptionEscape check (errors.As)
+// 3. ErrExitEscape check (errors.As)
+//    → pass through unchanged (propagates to matching call-with-exit)
+//
+// 4. ErrExceptionEscape check (errors.As)
 //    → pass through unchanged
 //
-// 4. any other Go error
+// 5. any other Go error
 //    → wrap via goErrorToSchemeException → ErrExceptionEscape
 ```
 
 Panic recovery is deferred, so it runs after all other checks. The priority
-of step 2 over step 3 is critical: without it, prompt aborts would be
-wrapped as Scheme exceptions and never reach the prompt handler.
+of steps 2-3 over step 4 is critical: without it, prompt aborts and exit
+escapes would be wrapped as Scheme exceptions and never reach their handlers.
 
 ## RunWithEscapeHandling
 
