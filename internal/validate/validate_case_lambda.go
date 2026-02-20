@@ -89,7 +89,7 @@ func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentF
 	}
 
 	return &ValidatedCaseLambdaClause{
-		validatedBase: validatedBase{formName: "@clause"},
+		validatedBase: validatedBase{formName: "@clause", source: source},
 		params:        params,
 		body:          body,
 	}

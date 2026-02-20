@@ -133,23 +133,16 @@ func TestFormPrologueImproperList(t *testing.T) {
 
 // TestValidateIf tests the if form validator
 func TestValidateIf(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    values.Value
-		wantOk   bool
-		wantType any
-	}{
+	tests := []validationTestCase{
 		{
-			name:     "valid 3-arg if",
-			input:    values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1), values.NewInteger(2)),
-			wantOk:   true,
-			wantType: &ValidatedIf{validatedBase: validatedBase{formName: "if"}},
+			name:   "valid 3-arg if",
+			input:  values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1), values.NewInteger(2)),
+			wantOk: true,
 		},
 		{
-			name:     "valid 2-arg if",
-			input:    values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1)),
-			wantOk:   true,
-			wantType: &ValidatedIf{validatedBase: validatedBase{formName: "if"}},
+			name:   "valid 2-arg if",
+			input:  values.List(values.NewSymbol("if"), values.TrueValue, values.NewInteger(1)),
+			wantOk: true,
 		},
 		{
 			name:   "too few args",
@@ -169,7 +162,8 @@ func TestValidateIf(t *testing.T) {
 			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
 			if tt.wantOk {
 				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
-				c.Assert(result.Expr, qt.IsNotNil)
+				_, ok := result.Expr.(*ValidatedIf)
+				c.Assert(ok, qt.IsTrue)
 			} else {
 				c.Assert(result.Ok(), qt.IsFalse)
 				c.Assert(len(result.Errors), qt.Not(qt.Equals), 0)
