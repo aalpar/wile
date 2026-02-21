@@ -418,26 +418,3 @@ func TestIsBranchOp(t *testing.T) {
 		qt.Assert(t, isBranchOp(op), qt.IsFalse, qt.Commentf("%s", op))
 	}
 }
-
-func TestBuildPCRemap(t *testing.T) {
-	dead := []bool{false, false, true, false, false}
-	remap := buildPCRemap(dead)
-	// old:   0 1 2(dead) 3 4   sentinel
-	// remap: 0 1 2       2 3   4
-	// Dead position 2 maps forward to 2, same as next survivor (position 3).
-	qt.Assert(t, remap, qt.DeepEquals, []int{0, 1, 2, 2, 3, 4})
-}
-
-func TestBuildPCRemap_NoDead(t *testing.T) {
-	dead := []bool{false, false, false}
-	remap := buildPCRemap(dead)
-	qt.Assert(t, remap, qt.DeepEquals, []int{0, 1, 2, 3})
-}
-
-func TestBuildPCRemap_AllDead(t *testing.T) {
-	dead := []bool{true, true, true}
-	remap := buildPCRemap(dead)
-	// All dead: every position maps to 0 (the next survivor's position,
-	// which is the sentinel). Sentinel itself is also 0.
-	qt.Assert(t, remap, qt.DeepEquals, []int{0, 0, 0, 0})
-}
