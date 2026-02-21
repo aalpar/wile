@@ -309,7 +309,7 @@ func TestMachineContext_ExceptionHandler(t *testing.T) {
 
 	c.Assert(mc.ExceptionHandler(), qt.IsNil)
 
-	h := NewExceptionHandler(values.NewString("handler"), nil)
+	h := NewExceptionHandler(NewParameter(values.NewString("handler"), nil), nil)
 	mc.SetExceptionHandler(h)
 	c.Assert(mc.ExceptionHandler(), qt.Equals, h)
 }
@@ -325,17 +325,19 @@ func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
 
 	// Push two handlers
-	mc.PushExceptionHandler(values.NewString("h1"))
-	mc.PushExceptionHandler(values.NewString("h2"))
+	p1 := NewParameter(values.NewString("h1"), nil)
+	p2 := NewParameter(values.NewString("h2"), nil)
+	mc.PushExceptionHandler(p1)
+	mc.PushExceptionHandler(p2)
 
 	// Pop returns most recent first
 	h2 := mc.PopExceptionHandler()
 	c.Assert(h2, qt.IsNotNil)
-	c.Assert(h2.Handler(), valuestest.SchemeEquals, values.NewString("h2"))
+	c.Assert(h2.Handler(), qt.Equals, p2)
 
 	h1 := mc.PopExceptionHandler()
 	c.Assert(h1, qt.IsNotNil)
-	c.Assert(h1.Handler(), valuestest.SchemeEquals, values.NewString("h1"))
+	c.Assert(h1.Handler(), qt.Equals, p1)
 
 	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
 }

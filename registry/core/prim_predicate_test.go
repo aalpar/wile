@@ -159,6 +159,12 @@ func TestTypePredicates(t *testing.T) {
 			prog: values.List(values.NewSymbol("procedure?"), values.NewInteger(5)),
 			out:  values.FalseValue,
 		},
+		{
+			name: "procedure? on parameter",
+			prog: values.List(values.NewSymbol("procedure?"),
+				values.List(values.NewSymbol("make-parameter"), values.NewInteger(0))),
+			out: values.TrueValue,
+		},
 		// vector?
 		{
 			name: "vector? on vector",

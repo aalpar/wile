@@ -1061,7 +1061,7 @@ func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	handler := values.NewInteger(42)
+	handler := NewParameter(values.NewInteger(42), nil)
 	parent.PushExceptionHandler(handler)
 
 	sub := parent.NewSubContext()
@@ -1078,8 +1078,8 @@ func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	handler1 := values.NewSymbol("outer")
-	handler2 := values.NewSymbol("inner")
+	handler1 := NewParameter(values.NewSymbol("outer"), nil)
+	handler2 := NewParameter(values.NewSymbol("inner"), nil)
 
 	parent.PushExceptionHandler(handler1)
 	parent.PushExceptionHandler(handler2)
@@ -1113,11 +1113,11 @@ func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	handler := values.NewSymbol("thread-handler")
+	handler := NewParameter(values.NewSymbol("thread-handler"), nil)
 	parent.PushExceptionHandler(handler)
 
 	params := parent.CaptureSubContextParams()
-	thunk := values.NewSymbol("thunk-placeholder")
+	thunk := NewParameter(nil, nil)
 	thread := values.NewThread(thunk, "test-thread")
 	sub := NewThreadSubContext(params, thread)
 
@@ -1256,7 +1256,7 @@ func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
 	mc.SetMaxCallDepth(99)
 
 	params := mc.CaptureSubContextParams()
-	thunk := values.NewSymbol("thunk-placeholder")
+	thunk := NewParameter(nil, nil)
 	thread := values.NewThread(thunk, "test-thread")
 	sub := NewThreadSubContext(params, thread)
 	if sub.MaxCallDepth() != 99 {

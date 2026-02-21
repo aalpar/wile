@@ -24,7 +24,7 @@ import (
 )
 
 func TestPromise_NewPromise(t *testing.T) {
-	thunk := values.NewSymbol("thunk-placeholder")
+	thunk := newStubCallable(values.NewSymbol("thunk-placeholder"))
 	p := values.NewPromise(thunk)
 
 	qt.Assert(t, p.Forced, qt.IsFalse)
@@ -42,7 +42,7 @@ func TestPromise_NewForcedPromise(t *testing.T) {
 }
 
 func TestPromise_IsVoid(t *testing.T) {
-	p := values.NewPromise(values.NewSymbol("thunk"))
+	p := values.NewPromise(newStubCallable(values.NewSymbol("thunk")))
 	qt.Assert(t, p.IsVoid(), qt.IsFalse)
 
 	var nilPromise *values.Promise
@@ -50,8 +50,8 @@ func TestPromise_IsVoid(t *testing.T) {
 }
 
 func TestPromise_EqualTo(t *testing.T) {
-	p1 := values.NewPromise(values.NewSymbol("thunk"))
-	p2 := values.NewPromise(values.NewSymbol("thunk"))
+	p1 := values.NewPromise(newStubCallable(values.NewSymbol("thunk")))
+	p2 := values.NewPromise(newStubCallable(values.NewSymbol("thunk")))
 
 	// Identity only
 	qt.Assert(t, p1.EqualTo(p1), qt.IsTrue)
@@ -60,7 +60,7 @@ func TestPromise_EqualTo(t *testing.T) {
 }
 
 func TestPromise_SchemeString(t *testing.T) {
-	unforced := values.NewPromise(values.NewSymbol("thunk"))
+	unforced := values.NewPromise(newStubCallable(values.NewSymbol("thunk")))
 	qt.Assert(t, unforced.SchemeString(), qt.Equals, "#<promise>")
 
 	forced := values.NewForcedPromise(values.NewInteger(42))

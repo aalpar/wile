@@ -91,6 +91,40 @@ func TestCaseLambdaClosure_FindMatchingClause_Variadic(t *testing.T) {
 	qt.Assert(t, match5, qt.Equals, cls)
 }
 
+func TestCaseLambdaClosure_AcceptsArity(t *testing.T) {
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	// clause 1: fixed arity 1
+	tpl1 := NewNativeTemplate(1, 0, false)
+	cls1 := NewClosureWithTemplate(tpl1, env)
+	// clause 2: fixed arity 3
+	tpl2 := NewNativeTemplate(3, 0, false)
+	cls2 := NewClosureWithTemplate(tpl2, env)
+
+	caseLambda := NewCaseLambdaClosure([]*MachineClosure{cls1, cls2})
+
+	tcs := []struct {
+		name string
+		n    int
+		want bool
+	}{
+		{"0 args", 0, false},
+		{"1 arg", 1, true},
+		{"2 args", 2, false},
+		{"3 args", 3, true},
+		{"4 args", 4, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, caseLambda.AcceptsArity(tc.n), qt.Equals, tc.want)
+		})
+	}
+
+	// nil receiver
+	var nilCL *CaseLambdaClosure
+	qt.Assert(t, nilCL.AcceptsArity(0), qt.IsFalse)
+}
+
 func TestCaseLambdaClosure_Clauses(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 

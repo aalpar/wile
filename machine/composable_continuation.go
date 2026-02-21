@@ -18,6 +18,8 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+var _ values.Callable = (*ComposableContinuation)(nil)
+
 // ComposableContinuation is a callable value wrapping a delimited continuation
 // segment (a chain of MachineContinuation frames) plus the captured winding stack.
 // When applied, it splices its frames onto the current continuation, effectively
@@ -55,6 +57,13 @@ func (p *ComposableContinuation) ThreadID() uint64           { return p.threadID
 // was created. Used by applyComposableContinuation to detect barrier crossings.
 func (p *ComposableContinuation) BarrierValid() *BarrierToken {
 	return p.barrierValid
+}
+
+// AcceptsArity reports whether this composable continuation can be called with
+// n arguments. Composable continuations accept exactly 1 argument — the value
+// to resume with.
+func (p *ComposableContinuation) AcceptsArity(n int) bool {
+	return n == 1
 }
 
 func (p *ComposableContinuation) SchemeString() string {

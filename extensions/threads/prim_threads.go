@@ -102,7 +102,11 @@ func PrimThreadQ(mc *machine.MachineContext) error {
 // PrimMakeThread creates a new thread
 // (make-thread thunk [name]) -> thread
 func PrimMakeThread(mc *machine.MachineContext) error {
-	thunk := mc.Arg(0)
+	thunk, ok := mc.Arg(0).(values.Callable)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"make-thread: thunk must be a procedure")
+	}
 	restVal := mc.Arg(1)
 
 	name := parseOptionalName(restVal)
@@ -115,13 +119,7 @@ func PrimMakeThread(mc *machine.MachineContext) error {
 	params := mc.CaptureSubContextParams()
 
 	// Set the run function that will execute the thunk
-	thread.RunFunc = func(ctx context.Context, thunk values.Value) (values.Value, error) {
-		// Get closure
-		cls, ok := thunk.(*machine.MachineClosure)
-		if !ok {
-			return nil, values.WrapForeignErrorf(values.ErrNotAProcedure, "make-thread: thunk must be a procedure")
-		}
-
+	thread.RunFunc = func(ctx context.Context, thunk values.Callable) (values.Value, error) {
 		// Create a new machine context for this thread using captured parent state.
 		// This is safe to call from a different goroutine because it doesn't access
 		// the parent MachineContext fields.
@@ -132,7 +130,7 @@ func PrimMakeThread(mc *machine.MachineContext) error {
 		thread.CleanupFunc = func() {
 			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
 		}
-		_, err := sub.Apply(cls)
+		_, err := sub.ApplyCallable(thunk)
 		if err != nil {
 			return nil, err
 		}

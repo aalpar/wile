@@ -119,11 +119,11 @@ type Thread struct {
 	done   chan struct{}
 
 	// The thunk to execute (set at creation)
-	thunk Value
+	thunk Callable
 
 	// RunFunc is set by the machine package to actually run the thread
 	// This avoids circular dependency between values and machine
-	RunFunc func(ctx context.Context, thunk Value) (Value, error)
+	RunFunc func(ctx context.Context, thunk Callable) (Value, error)
 
 	// CleanupFunc is injected by the machine package to run dynamic-wind
 	// after thunks (UnwindTo(0)) on thread exit. Called on both normal exit
@@ -136,8 +136,8 @@ type Thread struct {
 	mutexMu      sync.Mutex // protects ownedMutexes
 }
 
-// NewThread creates a new thread that will execute the given thunk
-func NewThread(thunk Value, name string) *Thread {
+// NewThread creates a new thread that will execute the given thunk.
+func NewThread(thunk Callable, name string) *Thread {
 	id := atomic.AddUint64(&threadIDCounter, 1)
 	if name == "" {
 		name = fmt.Sprintf("thread-%d", id)

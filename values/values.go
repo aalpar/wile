@@ -79,6 +79,28 @@ type Value interface {
 }
 
 // ---------------------------------------------------------------------------
+// Callable — procedure interface
+// ---------------------------------------------------------------------------
+
+// Callable represents a Scheme procedure — any value that can be applied
+// to arguments.
+//
+// R7RS §6.1: The procedure? predicate returns #t for all callable types.
+// This includes lambdas, case-lambdas, parameter objects (R7RS §4.2.6),
+// and composable continuations.
+//
+// AcceptsArity reports whether the procedure can be called with exactly n
+// arguments. This captures arity constraints that are otherwise scattered
+// across per-type checks in the VM apply path.
+//
+// Implemented by: MachineClosure, CaseLambdaClosure, Parameter,
+// ComposableContinuation.
+type Callable interface {
+	Value
+	AcceptsArity(n int) bool
+}
+
+// ---------------------------------------------------------------------------
 // Hashable — hashtable key interface
 // ---------------------------------------------------------------------------
 

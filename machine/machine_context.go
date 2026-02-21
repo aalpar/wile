@@ -855,7 +855,7 @@ func (p *MachineContext) SetExceptionHandler(h *ExceptionHandler) {
 }
 
 // PushExceptionHandler pushes a new exception handler onto the handler stack.
-func (p *MachineContext) PushExceptionHandler(handler values.Value) {
+func (p *MachineContext) PushExceptionHandler(handler values.Callable) {
 	p.exceptionHandler = NewExceptionHandler(handler, p.exceptionHandler)
 }
 

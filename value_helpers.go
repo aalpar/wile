@@ -17,7 +17,6 @@ package wile
 import (
 	"context"
 
-	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
@@ -64,14 +63,10 @@ func IsBoolean(v Value) bool {
 }
 
 // IsProcedure returns true if v is a callable procedure
-// (lambda, case-lambda, or parameter).
+// (lambda, case-lambda, parameter, or composable continuation).
 func IsProcedure(v Value) bool {
-	switch unwrapValue(v).(type) {
-	case *machine.MachineClosure, *machine.CaseLambdaClosure, *machine.Parameter:
-		return true
-	default:
-		return false
-	}
+	_, ok := unwrapValue(v).(values.Callable)
+	return ok
 }
 
 // Car returns the car of a pair or other Tuple type. Returns (value, true)

@@ -79,7 +79,7 @@ func TestMutex_LockUnlock_NoOwner(t *testing.T) {
 
 func TestMutex_LockUnlock_WithOwner(t *testing.T) {
 	m := values.NewMutex("test")
-	th := values.NewThread(values.NewSymbol("thunk"), "owner")
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
 
 	ok, err := m.Lock(nil, th)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -99,7 +99,7 @@ func TestMutex_StateValue(t *testing.T) {
 	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
 
 	// Locked with owner
-	th := values.NewThread(values.NewSymbol("thunk"), "owner")
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
 	m.Lock(nil, th)
 	sv = m.StateValue()
 	qt.Assert(t, sv.EqualTo(th), qt.IsTrue)
@@ -114,7 +114,7 @@ func TestMutex_StateValue(t *testing.T) {
 
 func TestMutex_MarkAbandoned(t *testing.T) {
 	m := values.NewMutex("test")
-	th := values.NewThread(values.NewSymbol("thunk"), "owner")
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
 	m.Lock(nil, th)
 
 	m.MarkAbandoned()
@@ -123,7 +123,7 @@ func TestMutex_MarkAbandoned(t *testing.T) {
 
 func TestMutex_LockAbandoned(t *testing.T) {
 	m := values.NewMutex("test")
-	th := values.NewThread(values.NewSymbol("thunk"), "owner")
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
 	m.Lock(nil, th)
 	m.MarkAbandoned()
 

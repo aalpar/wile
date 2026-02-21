@@ -20,15 +20,14 @@ import "github.com/aalpar/wile/values"
 // Handlers form a linked list (stack) for dynamic exception handling.
 // When an exception is raised, handlers are invoked in reverse order
 // of installation (most recent first).
-// DEAD?
 type ExceptionHandler struct {
-	handler values.Value      // The handler procedure (closure)
+	handler values.Callable   // The handler procedure
 	parent  *ExceptionHandler // Previous handler in chain
 }
 
 // NewExceptionHandler creates a new exception handler with the given
 // handler procedure and parent handler.
-func NewExceptionHandler(handler values.Value, parent *ExceptionHandler) *ExceptionHandler {
+func NewExceptionHandler(handler values.Callable, parent *ExceptionHandler) *ExceptionHandler {
 	return &ExceptionHandler{
 		handler: handler,
 		parent:  parent,
@@ -36,7 +35,7 @@ func NewExceptionHandler(handler values.Value, parent *ExceptionHandler) *Except
 }
 
 // Handler returns the handler procedure.
-func (p *ExceptionHandler) Handler() values.Value {
+func (p *ExceptionHandler) Handler() values.Callable {
 	return p.handler
 }
 

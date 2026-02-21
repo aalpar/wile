@@ -93,6 +93,37 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	qt.Assert(t, cls1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 }
 
+func TestMachineClosure_AcceptsArity(t *testing.T) {
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	tcs := []struct {
+		name     string
+		params   int
+		variadic bool
+		n        int
+		want     bool
+	}{
+		{"fixed-2 accepts 2", 2, false, 2, true},
+		{"fixed-2 rejects 1", 2, false, 1, false},
+		{"fixed-2 rejects 3", 2, false, 3, false},
+		{"fixed-0 accepts 0", 0, false, 0, true},
+		{"fixed-0 rejects 1", 0, false, 1, false},
+		{"variadic-1 accepts 0", 1, true, 0, true},
+		{"variadic-1 accepts 1", 1, true, 1, true},
+		{"variadic-1 accepts 5", 1, true, 5, true},
+		{"variadic-3 rejects 1", 3, true, 1, false},
+		{"variadic-3 accepts 2", 3, true, 2, true},
+		{"variadic-3 accepts 3", 3, true, 3, true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			tpl := NewNativeTemplate(tc.params, 0, tc.variadic)
+			cls := NewClosureWithTemplate(tpl, env)
+			qt.Assert(t, cls.AcceptsArity(tc.n), qt.Equals, tc.want)
+		})
+	}
+}
+
 // Tests moved from coverage_additional_test.go
 // TestMachineClosureMethodsAdditional tests MachineClosure methods
 func TestMachineClosureMethodsAdditional(t *testing.T) {
