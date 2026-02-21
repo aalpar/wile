@@ -150,6 +150,7 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 - `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` — Documented R7RS specification deviations
 - `docs/dev/ENVIRONMENT_SYSTEM.md` — Environment system architecture
 - `docs/dev/NUMERIC_TOWER.md` — Numeric tower architecture
+- `docs/dev/DEBUG_METHODOLOGY.md` — Systematic debug logging methodology and Go gotchas
 - `docs/EXTENSIONS.md` — Extension system architecture and authoring guide
 - `docs/EXTENSION_LIBRARIES.md` — R7RS library integration for extensions
 - `plans/CLAUDE.md` — Active plan files and design documents

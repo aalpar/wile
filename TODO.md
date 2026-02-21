@@ -223,3 +223,8 @@ Other
 ### Other
 - [ ] MachineContext `Error` should be `Errorf`.  I cannot find an instance that does not use `fmt.Sprintf`.  Migrate `Error(` to `Errorf` that takes a `form` and a `args ...` paramter that feed into `fmt.Sprintf` inside `Errorf(`
 - [x] Prim functions (eg. PrimSyntaxLocalIntroduce) already have a context through MachineContext.  Supplying a context here is redundant.  Remove initial context.Context parameter from the Prim function.  Add a type for `func(context.Context, *MachineContext)`.  Done: `context.Context` removed from `ForeignFunction`, `InlinedOperation.Apply`, all `Prim*` functions, and `argConverter`. Type `machine.ForeignFunction` defined as `func(mc *MachineContext) error`.
+
+### Small Refactorings (P5)
+- [ ] Extract post-escape unwinding helper: `PrimCallWithExit:87` and `PrimCallWithContinuationPrompt:118` share identical `sub.WindingStack().Depth() > mc.WindingStack().Depth()` → `sub.UnwindTo()` logic. Extract to `MachineContext.UnwindSubContextToParent(sub)`.
+- [ ] Validator prologue deduplication: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
+- [ ] Optional fill argument extraction: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
