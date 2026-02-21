@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestHashtable_MakeAndPredicate(t *testing.T) {
@@ -34,7 +35,7 @@ func TestHashtable_MakeAndPredicate(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -89,7 +90,7 @@ func TestHashtable_SetAndRef(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -132,7 +133,7 @@ func TestHashtable_Delete(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -159,7 +160,7 @@ func TestHashtable_Size(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -173,7 +174,7 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 		  (hashtable-set! ht 'only 1)
 		  (car (hashtable-keys ht)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("only"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("only"))
 
 	// Values returns a list of values
 	result, err = runSchemeCode(t, `
@@ -181,16 +182,16 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 		  (hashtable-set! ht 'only 99)
 		  (car (hashtable-values ht)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(99))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(99))
 
 	// Empty hashtable returns empty lists
 	result, err = runSchemeCode(t, `(null? (hashtable-keys (make-hashtable)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.TrueValue)
+	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(null? (hashtable-values (make-hashtable)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.TrueValue)
+	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestHashtable_Copy(t *testing.T) {
@@ -204,7 +205,7 @@ func TestHashtable_Copy(t *testing.T) {
 		    (hashtable-set! ht 'b 2)
 		    (hashtable-size cp)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(1))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Copy preserves content
 	result, err = runSchemeCode(t, `
@@ -213,7 +214,7 @@ func TestHashtable_Copy(t *testing.T) {
 		  (let ((cp (hashtable-copy ht)))
 		    (hashtable-ref cp 'a)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(1))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestHashtable_Clear(t *testing.T) {
@@ -225,7 +226,7 @@ func TestHashtable_Clear(t *testing.T) {
 		  (hashtable-clear! ht)
 		  (hashtable-size ht))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(0))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(0))
 }
 
 func TestHashtable_EqualQ(t *testing.T) {
@@ -239,7 +240,7 @@ func TestHashtable_EqualQ(t *testing.T) {
 		  (hashtable-set! b 'x 1)
 		  (equal? a b))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.TrueValue)
+	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 
 	// equal? on different content
 	result, err = runSchemeCode(t, `
@@ -249,7 +250,7 @@ func TestHashtable_EqualQ(t *testing.T) {
 		  (hashtable-set! b 'x 2)
 		  (equal? a b))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.FalseValue)
+	c.Assert(result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestHashtable_TypeErrors(t *testing.T) {

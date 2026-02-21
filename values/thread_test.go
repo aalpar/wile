@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"context"
@@ -21,45 +21,48 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestThread_NewThread(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test-thread")
+	th := values.NewThread(values.NewSymbol("thunk"), "test-thread")
 	qt.Assert(t, th, qt.Not(qt.IsNil))
 	qt.Assert(t, th.Name(), qt.Equals, "test-thread")
 	qt.Assert(t, th.ID() > 0, qt.IsTrue)
-	qt.Assert(t, th.State(), qt.Equals, ThreadNew)
+	qt.Assert(t, th.State(), qt.Equals, values.ThreadNew)
 }
 
 func TestThread_DefaultName(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "")
+	th := values.NewThread(values.NewSymbol("thunk"), "")
 	qt.Assert(t, strings.HasPrefix(th.Name(), "thread-"), qt.IsTrue)
 }
 
 func TestThread_Specific(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
 	qt.Assert(t, th.Specific() == nil, qt.IsTrue)
 
-	th.SetSpecific(NewInteger(42))
-	qt.Assert(t, th.Specific(), SchemeEquals, NewInteger(42))
+	th.SetSpecific(values.NewInteger(42))
+	qt.Assert(t, th.Specific(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestThread_StateSymbol(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
 	sym := th.StateSymbol()
 	qt.Assert(t, sym.Key, qt.Equals, "new")
 }
 
 func TestThreadState_String(t *testing.T) {
 	tcs := []struct {
-		state ThreadState
+		state values.ThreadState
 		str   string
 	}{
-		{ThreadNew, "new"},
-		{ThreadRunnable, "runnable"},
-		{ThreadBlocked, "blocked"},
-		{ThreadTerminated, "terminated"},
-		{ThreadState(99), "unknown"},
+		{values.ThreadNew, "new"},
+		{values.ThreadRunnable, "runnable"},
+		{values.ThreadBlocked, "blocked"},
+		{values.ThreadTerminated, "terminated"},
+		{values.ThreadState(99), "unknown"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.str, func(t *testing.T) {
@@ -69,15 +72,15 @@ func TestThreadState_String(t *testing.T) {
 }
 
 func TestThread_StartNoRunFunc(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
 	err := th.Start(context.Background())
 	qt.Assert(t, err, qt.Not(qt.IsNil))
 	qt.Assert(t, strings.Contains(err.Error(), "no run function"), qt.IsTrue)
 }
 
 func TestThread_StartAlreadyStarted(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
-	th.RunFunc = func(_ context.Context, _ Value) (Value, error) {
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
+	th.RunFunc = func(_ context.Context, _ values.Value) (values.Value, error) {
 		return nil, nil
 	}
 	err := th.Start(context.Background())
@@ -85,72 +88,72 @@ func TestThread_StartAlreadyStarted(t *testing.T) {
 	<-th.Done()
 
 	err = th.Start(context.Background())
-	qt.Assert(t, errors.Is(err, ErrThreadAlreadyStarted), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrThreadAlreadyStarted), qt.IsTrue)
 }
 
 func TestThread_IsVoid(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
 	qt.Assert(t, th.IsVoid(), qt.IsFalse)
 
-	var nilTh *Thread
+	var nilTh *values.Thread
 	qt.Assert(t, nilTh.IsVoid(), qt.IsTrue)
 }
 
 func TestThread_EqualTo(t *testing.T) {
-	th1 := NewThread(NewSymbol("thunk"), "a")
-	th2 := NewThread(NewSymbol("thunk"), "b")
+	th1 := values.NewThread(values.NewSymbol("thunk"), "a")
+	th2 := values.NewThread(values.NewSymbol("thunk"), "b")
 	qt.Assert(t, th1.EqualTo(th1), qt.IsTrue)
 	qt.Assert(t, th1.EqualTo(th2), qt.IsFalse)
-	qt.Assert(t, th1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, th1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestThread_SchemeString(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "my-thread")
+	th := values.NewThread(values.NewSymbol("thunk"), "my-thread")
 	s := th.SchemeString()
 	qt.Assert(t, strings.Contains(s, "my-thread"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(s, "new"), qt.IsTrue)
 
-	var nilTh *Thread
+	var nilTh *values.Thread
 	qt.Assert(t, nilTh.SchemeString(), qt.Equals, "#<thread:void>")
 }
 
 func TestThread_Done(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test")
+	th := values.NewThread(values.NewSymbol("thunk"), "test")
 	qt.Assert(t, th.Done(), qt.Not(qt.IsNil))
 }
 
 // --- Thread Exception Types ---
 
 func TestJoinTimeoutException_Error(t *testing.T) {
-	e := &JoinTimeoutException{}
+	e := &values.JoinTimeoutException{}
 	qt.Assert(t, e.Error(), qt.Equals, "thread-join!: timeout")
 }
 
 func TestTerminatedThreadException_Error(t *testing.T) {
-	th := NewThread(NewSymbol("thunk"), "test-thread")
-	e := &TerminatedThreadException{Thread: th}
+	th := values.NewThread(values.NewSymbol("thunk"), "test-thread")
+	e := &values.TerminatedThreadException{Thread: th}
 	qt.Assert(t, strings.Contains(e.Error(), "test-thread"), qt.IsTrue)
 
-	e2 := &TerminatedThreadException{Thread: nil}
+	e2 := &values.TerminatedThreadException{Thread: nil}
 	qt.Assert(t, e2.Error(), qt.Equals, "thread terminated")
 }
 
 func TestUncaughtThreadException_Error(t *testing.T) {
 	cause := errors.New("something broke")
-	e := &UncaughtThreadException{Reason: cause}
+	e := &values.UncaughtThreadException{Reason: cause}
 	qt.Assert(t, strings.Contains(e.Error(), "something broke"), qt.IsTrue)
 
-	e2 := &UncaughtThreadException{Reason: nil}
+	e2 := &values.UncaughtThreadException{Reason: nil}
 	qt.Assert(t, e2.Error(), qt.Equals, "uncaught exception in thread")
 }
 
 func TestUncaughtThreadException_Unwrap(t *testing.T) {
 	cause := errors.New("root cause")
-	e := &UncaughtThreadException{Reason: cause}
+	e := &values.UncaughtThreadException{Reason: cause}
 	qt.Assert(t, errors.Unwrap(e), qt.Equals, cause)
 }
 
 func TestAbandonedMutexException_Error(t *testing.T) {
-	e := &AbandonedMutexException{}
+	e := &values.AbandonedMutexException{}
 	qt.Assert(t, e.Error(), qt.Equals, "mutex abandoned by terminated thread")
 }

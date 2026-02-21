@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -62,7 +63,7 @@ func (p *SyntaxValueSuite) TestEqualTo_SameValue(c *qt.C) {
 	stx1 := NewSyntaxSymbol("foob", NewSourceContext("", "bar", sidx10, sidx11))
 
 	c.Assert(stx0, qt.Not(qt.Equals), stx1)
-	c.Assert(stx0, qt.Not(values.SchemeEquals), stx1)
+	c.Assert(stx0, qt.Not(valuestest.SchemeEquals), stx1)
 }
 
 // Test EqualTo and SchemeEquals methods for different values
@@ -72,7 +73,7 @@ func (p *SyntaxValueSuite) TestEqualTo_DifferentValue(c *qt.C) {
 	stx1 := p.makeSyntaxSymbol("bars")
 
 	c.Assert(stx0, qt.Not(qt.Equals), stx1)
-	c.Assert(stx0, qt.Not(values.SchemeEquals), stx1)
+	c.Assert(stx0, qt.Not(valuestest.SchemeEquals), stx1)
 }
 
 // Test EqualTo and SchemeEquals methods for different source contexts
@@ -86,7 +87,7 @@ func (p *SyntaxValueSuite) TestEqualTo_DifferentSourceContext(c *qt.C) {
 	stx1 := NewSyntaxSymbol("foob", sctx1)
 
 	c.Assert(stx0, qt.Not(qt.Equals), stx1)
-	c.Assert(stx0, qt.Not(values.SchemeEquals), stx1)
+	c.Assert(stx0, qt.Not(valuestest.SchemeEquals), stx1)
 }
 
 func (p *SyntaxValueSuite) TestUnwrap_Symbol(c *qt.C) {
@@ -100,7 +101,7 @@ func (p *SyntaxValueSuite) TestUnwrap_Integer(c *qt.C) {
 	// SyntaxObject can wrap integers
 	stx := p.makeSyntaxObject(values.NewInteger(42))
 	v := stx.Unwrap()
-	c.Assert(v, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(v, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func (p *SyntaxValueSuite) TestUnwrapAll_Symbol(c *qt.C) {
@@ -114,7 +115,7 @@ func (p *SyntaxValueSuite) TestUnwrapAll_Integer(c *qt.C) {
 	// SyntaxObject can wrap integers
 	stx := p.makeSyntaxObject(values.NewInteger(42))
 	v := stx.UnwrapAll()
-	c.Assert(v, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(v, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func (p *SyntaxValueSuite) TestUnwrapAll_Pair(c *qt.C) {
@@ -125,7 +126,7 @@ func (p *SyntaxValueSuite) TestUnwrapAll_Pair(c *qt.C) {
 
 	pr1 := values.List(values.NewSymbol("foob"), values.NewSymbol("barb"))
 	v := pr0.UnwrapAll()
-	c.Assert(v, values.SchemeEquals, pr1)
+	c.Assert(v, valuestest.SchemeEquals, pr1)
 }
 
 func TestSyntaxValue(t *testing.T) {

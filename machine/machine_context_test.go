@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -55,7 +56,7 @@ func TestNewMachineContext(t *testing.T) {
 	qt.Assert(t, mc.cont, qt.Equals, parentCont) // cont field should be cont.parent
 	qt.Assert(t, mc.pc, qt.Equals, 5)
 	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 1)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 2)
 }
 
@@ -111,7 +112,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 	qt.Assert(t, mc.cont.CallDepth(), qt.Equals, 0)
 	qt.Assert(t, mc.cont, qt.IsNil)
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
-	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
+	qt.Assert(t, mc.EnvironmentFrame(), valuestest.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
 	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
@@ -125,7 +126,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 	qt.Assert(t, mc.Parent(), qt.IsNotNil)
 	qt.Assert(t, mc.Parent().PC(), qt.Equals, 10)
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
-	qt.Assert(t, mc.EnvironmentFrame(), values.SchemeEquals, mc.env)
+	qt.Assert(t, mc.EnvironmentFrame(), valuestest.SchemeEquals, mc.env)
 	qt.Assert(t, mc.Template(), qt.IsNil)
 	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
@@ -141,7 +142,7 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 	bottom2 := mc.cont
 	qt.Assert(t, mc.cont, qt.IsNotNil)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 2)
-	qt.Assert(t, mc.Parent(), values.SchemeEquals, bottom2)
+	qt.Assert(t, mc.Parent(), valuestest.SchemeEquals, bottom2)
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
 	mc.PopContinuation()
 	qt.Assert(t, mc.cont, qt.Equals, bottom1)
@@ -163,17 +164,17 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	vs := mc.GetValues()
 	qt.Assert(t, vs.Len(), qt.Equals, 3)
-	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(2))
-	qt.Assert(t, vs[2], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, vs[2], valuestest.SchemeEquals, values.NewInteger(3))
 
 	// GetValue returns first value
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Test empty values
 	mc.SetValues()
 	qt.Assert(t, mc.GetValues().Len(), qt.Equals, 0)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.Void)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.Void)
 }
 
 func TestMachineContext_CurrentContinuation(t *testing.T) {
@@ -265,8 +266,8 @@ func TestMachineContext_Apply_FixedArity(t *testing.T) {
 	// Check bindings were set in the NEW call environment (not the closure's env)
 	// Apply now creates a fresh environment for each call to support recursion
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 
 	// Check context was updated
 	qt.Assert(t, mc.template, qt.Equals, tpl)
@@ -306,11 +307,11 @@ func TestMachineContext_Apply_Variadic(t *testing.T) {
 
 	// Check bindings in the NEW call environment (not the closure's env)
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, bnds[1].Value(), valuestest.SchemeEquals, values.NewInteger(2))
 	// Rest parameter should be a list
 	rest := bnds[2].Value()
-	qt.Assert(t, rest, values.SchemeEquals, values.List(values.NewInteger(3), values.NewInteger(4)))
+	qt.Assert(t, rest, valuestest.SchemeEquals, values.List(values.NewInteger(3), values.NewInteger(4)))
 }
 
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
@@ -426,9 +427,9 @@ func TestMachineContext_Apply_VariadicExactlyRequiredArgs(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.NewInteger(20))
-	qt.Assert(t, bnds[2].Value(), values.SchemeEquals, values.EmptyList)
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, bnds[2].Value(), valuestest.SchemeEquals, values.EmptyList)
 }
 
 func TestMachineContext_Apply_VariadicRestOnly(t *testing.T) {
@@ -446,7 +447,7 @@ func TestMachineContext_Apply_VariadicRestOnly(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.List(
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.List(
 		values.NewInteger(1), values.NewInteger(2), values.NewInteger(3),
 	))
 }
@@ -465,7 +466,7 @@ func TestMachineContext_Apply_VariadicRestOnlyNoArgs(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.EmptyList)
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.EmptyList)
 }
 
 func TestMachineContext_Apply_EnvironmentIsolation(t *testing.T) {
@@ -497,8 +498,8 @@ func TestMachineContext_Apply_EnvironmentIsolation(t *testing.T) {
 	// Modifying one must not affect the other
 	bnds1 := env1.LocalEnvironment().Bindings()
 	bnds2 := env2.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds1[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, bnds2[0].Value(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, bnds1[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds2[0].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 func TestMachineContext_Apply_PCResetFromNonZero(t *testing.T) {
@@ -623,8 +624,8 @@ func TestMachineContext_ApplyCaseLambda_VariadicClause(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.template, qt.Equals, tpl2)
 	bnds := mc.env.LocalEnvironment().Bindings()
-	qt.Assert(t, bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, bnds[1].Value(), values.SchemeEquals, values.List(values.NewInteger(20), values.NewInteger(30)))
+	qt.Assert(t, bnds[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, bnds[1].Value(), valuestest.SchemeEquals, values.List(values.NewInteger(20), values.NewInteger(30)))
 }
 
 func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
@@ -732,7 +733,7 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValues(), qt.IsNotNil)
 	qt.Assert(t, mc.GetValues().Len() > 0, qt.IsTrue)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestExecuteVariadicProcedure tests running a variadic procedure
@@ -783,8 +784,8 @@ func TestMachineContextSetValues(t *testing.T) {
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2))
 	vs := mc.GetValues()
 	qt.Assert(t, len(vs), qt.Equals, 2)
-	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestMachineContextSetValue tests SetValue and GetValue
@@ -801,7 +802,7 @@ func TestMachineContextSetValue(t *testing.T) {
 	// SetValue
 	mc.SetValue(values.NewInteger(42))
 	v := mc.GetValue()
-	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestMachineContextApplySimple tests mc.Apply with a simple closure
@@ -817,7 +818,7 @@ func TestMachineContextApplySimple(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 // TestMachineContextValueMethods tests MachineContext value get/set
@@ -830,7 +831,7 @@ func TestMachineContextValueMethods(t *testing.T) {
 
 	// Test SetValue and GetValue
 	mc.SetValue(values.NewInteger(42))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Test SetValues and GetValues
 	mc.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
@@ -870,8 +871,8 @@ func TestApplyCallable_MachineClosure(t *testing.T) {
 	c.Assert(mc.pc, qt.Equals, 0)
 
 	bnds := mc.env.LocalEnvironment().Bindings()
-	c.Assert(bnds[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	c.Assert(bnds[1].Value(), values.SchemeEquals, values.NewInteger(20))
+	c.Assert(bnds[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	c.Assert(bnds[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 func TestApplyCallable_CaseLambdaClosure(t *testing.T) {
@@ -945,8 +946,8 @@ func TestApplyCallable_Parameter(t *testing.T) {
 			err = sub.Run()
 			c.Assert(err, qt.IsNil)
 
-			c.Assert(sub.GetValue(), values.SchemeEquals, tc.wantValue)
-			c.Assert(param.Value(), values.SchemeEquals, tc.wantParam)
+			c.Assert(sub.GetValue(), valuestest.SchemeEquals, tc.wantValue)
+			c.Assert(param.Value(), valuestest.SchemeEquals, tc.wantParam)
 		})
 	}
 }
@@ -982,7 +983,7 @@ func TestApplyCallable_Parameter_WithContinuation(t *testing.T) {
 
 	_, err := mc.ApplyCallable(param)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestApplyCallable_ComposableContinuation(t *testing.T) {
@@ -1000,7 +1001,7 @@ func TestApplyCallable_ComposableContinuation(t *testing.T) {
 
 	_, err := mc.ApplyCallable(cc, values.NewInteger(7))
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {

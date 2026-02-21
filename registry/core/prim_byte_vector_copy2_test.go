@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -71,7 +72,7 @@ func TestBytevectorCopyIndependence(t *testing.T) {
 	         (bytevector-u8-ref bv1 0))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestBytevectorCopyPartialIndependence(t *testing.T) {
@@ -81,5 +82,5 @@ func TestBytevectorCopyPartialIndependence(t *testing.T) {
 	         (list (bytevector-u8-ref bv1 1) (bytevector-u8-ref bv2 0)))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.List(values.NewInteger(20), values.NewInteger(99)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewInteger(20), values.NewInteger(99)))
 }

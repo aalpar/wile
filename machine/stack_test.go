@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -34,7 +35,7 @@ func TestStack_Push(t *testing.T) {
 	qt.Assert(t, func() { q.Pop() }, qt.PanicMatches, "stack underflow.*")
 	q.Push(values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 1)
-	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, q.Pop(), valuestest.SchemeEquals, values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
@@ -49,7 +50,7 @@ func TestStack_Clear(t *testing.T) {
 func TestStack_Pop(t *testing.T) {
 	q := NewStack()
 	q.Push(values.NewInteger(10))
-	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, q.Pop(), valuestest.SchemeEquals, values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
@@ -60,10 +61,10 @@ func TestStack_Copy(t *testing.T) {
 	r.Push(values.NewInteger(20))
 	qt.Assert(t, q.Len(), qt.Equals, 1)
 	qt.Assert(t, r.Len(), qt.Equals, 2)
-	qt.Assert(t, q.Pop(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, q.Pop(), valuestest.SchemeEquals, values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 0)
-	qt.Assert(t, r.Pop(), values.SchemeEquals, values.NewInteger(20))
-	qt.Assert(t, r.Pop(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, r.Pop(), valuestest.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, r.Pop(), valuestest.SchemeEquals, values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 0)
 }
 
@@ -82,8 +83,8 @@ func TestStack_PopAll(t *testing.T) {
 	q.Push(values.NewInteger(20))
 	qs := q.PopAll()
 	qt.Assert(t, qs, qt.HasLen, 2)
-	qt.Assert(t, qs[0], values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, qs[1], values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, qs[0], valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, qs[1], valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 func TestStack_Pull(t *testing.T) {
@@ -92,8 +93,8 @@ func TestStack_Pull(t *testing.T) {
 	q.Push(values.NewInteger(20))
 	r := q.Pull()
 	qt.Assert(t, q.Len(), qt.Equals, 1)
-	qt.Assert(t, (*q)[0], values.SchemeEquals, values.NewInteger(20))
-	qt.Assert(t, r, values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, (*q)[0], valuestest.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, r, valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 func TestStack_AsList(t *testing.T) {
@@ -137,7 +138,7 @@ func TestStackOperations(t *testing.T) {
 	pr, ok := list.(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
 	// Stack order: push 1, push 2, push 3 - AsList builds from top
-	qt.Assert(t, pr.Car(), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, pr.Car(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Test Clear
 	s.Clear()
@@ -145,7 +146,7 @@ func TestStackOperations(t *testing.T) {
 
 	// AsList on empty stack
 	emptyList := s.AsList()
-	qt.Assert(t, emptyList, values.SchemeEquals, values.EmptyList)
+	qt.Assert(t, emptyList, valuestest.SchemeEquals, values.EmptyList)
 
 	// Single element stack
 	s.Push(values.NewInteger(42))
@@ -166,14 +167,14 @@ func TestStackMoreOperations(t *testing.T) {
 	// Pop all
 	for i := 9; i >= 0; i-- {
 		v := s.Pop()
-		qt.Assert(t, v, values.SchemeEquals, values.NewInteger(int64(i)))
+		qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(int64(i)))
 	}
 	qt.Assert(t, s.Len(), qt.Equals, 0)
 
 	// PeekK to peek at stack
 	s.Push(values.NewInteger(42))
 	v := s.PeekK(0) // PeekK(0) gets top of stack
-	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(42))
 	qt.Assert(t, s.Len(), qt.Equals, 1) // Still there
 }
 
@@ -202,7 +203,7 @@ func TestStackPull(t *testing.T) {
 
 	// Pull removes from front (FIFO)
 	v := s.Pull()
-	qt.Assert(t, v, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(1))
 	qt.Assert(t, s.Len(), qt.Equals, 2)
 }
 
@@ -221,13 +222,13 @@ func TestStackPopN(t *testing.T) {
 	qt.Assert(t, s.Len(), qt.Equals, 2) // 2 elements remain
 
 	// PopN returns elements in stack order (bottom to top of the popped range)
-	qt.Assert(t, vs[0], values.SchemeEquals, values.NewInteger(3)) // Bottom of popped range
-	qt.Assert(t, vs[1], values.SchemeEquals, values.NewInteger(4))
-	qt.Assert(t, vs[2], values.SchemeEquals, values.NewInteger(5)) // Top of stack (last popped)
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(3)) // Bottom of popped range
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(4))
+	qt.Assert(t, vs[2], valuestest.SchemeEquals, values.NewInteger(5)) // Top of stack (last popped)
 
 	// Remaining elements
-	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(2))
-	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, s.Pop(), valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, s.Pop(), valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 // TestStackPopN_EdgeCases tests PopN edge cases
@@ -297,7 +298,7 @@ func TestStackAsListEmpty(t *testing.T) {
 	s2 := NewStack(values.NewInteger(1))
 	s2.Pop()
 	list2 := s2.AsList()
-	qt.Assert(t, list2, values.SchemeEquals, values.EmptyList) // empty (non-nil) slice returns EmptyList
+	qt.Assert(t, list2, valuestest.SchemeEquals, values.EmptyList) // empty (non-nil) slice returns EmptyList
 }
 
 // TestStackSchemeString tests stack SchemeString
@@ -372,11 +373,11 @@ func TestStackPeekKMultiple(t *testing.T) {
 	s.Push(values.NewInteger(3))
 
 	// PeekK(0) is top of stack (last pushed)
-	qt.Assert(t, s.PeekK(0), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, s.PeekK(0), valuestest.SchemeEquals, values.NewInteger(3))
 	// PeekK(1) is one below top
-	qt.Assert(t, s.PeekK(1), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, s.PeekK(1), valuestest.SchemeEquals, values.NewInteger(2))
 	// PeekK(2) is bottom
-	qt.Assert(t, s.PeekK(2), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, s.PeekK(2), valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 // TestStackNilLength tests Length on nil stack
@@ -403,9 +404,9 @@ func TestStackPeekKBoundary(t *testing.T) {
 	s := NewStack(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 
 	// Peek at different positions
-	qt.Assert(t, s.PeekK(0), values.SchemeEquals, values.NewInteger(3)) // top
-	qt.Assert(t, s.PeekK(1), values.SchemeEquals, values.NewInteger(2)) // second
-	qt.Assert(t, s.PeekK(2), values.SchemeEquals, values.NewInteger(1)) // third/bottom
+	qt.Assert(t, s.PeekK(0), valuestest.SchemeEquals, values.NewInteger(3)) // top
+	qt.Assert(t, s.PeekK(1), valuestest.SchemeEquals, values.NewInteger(2)) // second
+	qt.Assert(t, s.PeekK(2), valuestest.SchemeEquals, values.NewInteger(1)) // third/bottom
 }
 
 // TestStackPopAllThenPush verifies that Push works after PopAll
@@ -422,11 +423,11 @@ func TestStackPopAllThenPush(t *testing.T) {
 	// Push after PopAll must work and must not corrupt the returned slice.
 	s.Push(values.NewInteger(99))
 	qt.Assert(t, s.Len(), qt.Equals, 1)
-	qt.Assert(t, s.Pop(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, s.Pop(), valuestest.SchemeEquals, values.NewInteger(99))
 
 	// Original slice unchanged.
-	qt.Assert(t, got[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, got[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, got[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, got[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestStackPeekKPanics tests that Stack.PeekK panics on invalid indices

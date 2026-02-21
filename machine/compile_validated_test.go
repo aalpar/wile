@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -93,7 +94,7 @@ func TestCompileValidatedDynamicWind_ReturnValue(t *testing.T) {
 	})
 
 	mc := compileAndRun(t, env, "(dynamic-wind noop ret42 noop)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileValidatedDynamicWind_CallOrder verifies that before, thunk, and after
@@ -124,7 +125,7 @@ func TestCompileValidatedDynamicWind_CallOrder(t *testing.T) {
 	mc := compileAndRun(t, env, "(dynamic-wind before-fn thunk-fn after-fn)")
 
 	qt.Assert(t, log, qt.DeepEquals, []string{"before", "thunk", "after"})
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("result"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewString("result"))
 }
 
 // TestCompileValidatedDynamicWind_WithLambdas verifies dynamic-wind works with
@@ -153,7 +154,7 @@ func TestCompileValidatedDynamicWind_WithLambdas(t *testing.T) {
 			(lambda () (log-after)))`)
 
 	qt.Assert(t, log, qt.DeepEquals, []string{"before", "after"})
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCompileValidatedDynamicWind_Nested verifies correct ordering when
@@ -198,7 +199,7 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 		"inner-after",
 		"outer-after",
 	})
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 // TestCompileValidated_UnknownExprType verifies the default branch in
@@ -310,11 +311,11 @@ func TestCompileValidatedCaseLambda_ZeroArgClause(t *testing.T) {
 
 	// Call with zero args
 	mc := compileAndRun(t, env, "(f)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(0))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(0))
 
 	// Call with one arg
 	mc = compileAndRun(t, env, "(f 10)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 }
 
 // TestCompileValidatedCaseLambda_VariadicClause verifies case-lambda with
@@ -328,13 +329,13 @@ func TestCompileValidatedCaseLambda_VariadicClause(t *testing.T) {
 
 	// Call with one arg (matches first clause)
 	mc := compileAndRun(t, env, "(g 42)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Call with two args (matches second clause, returns y)
 	mc = compileAndRun(t, env, "(g 1 2)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 
 	// Call with three args (matches second clause, returns y)
 	mc = compileAndRun(t, env, "(g 1 2 3)")
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }

@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package syntax
+// Package syntaxtest provides test helpers for the syntax package.
+package syntaxtest
 
 import (
 	"errors"
 	"fmt"
 	"reflect"
+
+	"github.com/aalpar/wile/internal/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -37,7 +40,7 @@ func (p *syntaxEqualsChecker) Check(got any, args []any, note func(key string, v
 		// A panic is raised when the provided args are not comparable.
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("%v", r) //nolint:gocritic // quicktest checker, not Scheme runtime
+			err = fmt.Errorf("%v", r) //nolint:gocritic // test helper, not Scheme runtime
 		}
 	}()
 
@@ -46,7 +49,7 @@ func (p *syntaxEqualsChecker) Check(got any, args []any, note func(key string, v
 	// Customize error message for non-nil errors.
 	_, ok := got.(error)
 	if ok && got == nil {
-		return errors.New("got non-nil error") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("got non-nil error") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
 	// Show error types when comparing errors with different types.
@@ -61,20 +64,20 @@ func (p *syntaxEqualsChecker) Check(got any, args []any, note func(key string, v
 				note("want type", qt.Unquoted(wantType.String()))
 			}
 		}
-		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("values are not equal") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
-	gotSyntaxValue, ok0 := got.(SyntaxValue)
-	wantSyntaxValue, ok1 := want.(SyntaxValue)
+	gotSyntaxValue, ok0 := got.(syntax.SyntaxValue)
+	wantSyntaxValue, ok1 := want.(syntax.SyntaxValue)
 	if !ok0 || !ok1 {
-		return errors.New("got and want must be of type Datum") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("got and want must be of type Datum") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
 	if !gotSyntaxValue.SourceContext().EqualTo(wantSyntaxValue.SourceContext()) {
-		return errors.New("source contexts are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("source contexts are not equal") //nolint:gocritic // test helper, not Scheme runtime
 	}
 	if !gotSyntaxValue.UnwrapAll().EqualTo(wantSyntaxValue.UnwrapAll()) {
-		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("values are not equal") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
 	return nil

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -26,13 +27,13 @@ import (
 func TestFileExistsWithExistingFile(t *testing.T) {
 	result, err := runSchemeCode(t, `(file-exists? "test_helpers_test.go")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestFileExistsWithNonexistentFile(t *testing.T) {
 	result, err := runSchemeCode(t, `(file-exists? "nonexistent-file-xyz.txt")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestGetEnvironmentVariableWithPATH(t *testing.T) {
@@ -48,7 +49,7 @@ func TestGetEnvironmentVariableWithPATH(t *testing.T) {
 func TestGetEnvironmentVariableWithNonexistentVar(t *testing.T) {
 	result, err := runSchemeCode(t, `(get-environment-variable "WILE_NONEXISTENT_VAR_12345")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestGetEnvironmentVariableWithTestVar(t *testing.T) {
@@ -57,7 +58,7 @@ func TestGetEnvironmentVariableWithTestVar(t *testing.T) {
 
 	result, err := runSchemeCode(t, `(get-environment-variable "WILE_TEST_VAR")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("test_value"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("test_value"))
 }
 
 func TestGetEnvironmentVariablesReturnsAlist(t *testing.T) {

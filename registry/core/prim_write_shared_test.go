@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -82,5 +83,5 @@ func TestWriteSharedDefaultPort(t *testing.T) {
 	// write-shared with only one argument should use current-output-port
 	result, err := runSchemeCode(t, `(begin (write-shared 42) #t)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

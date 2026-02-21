@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"bufio"
@@ -22,48 +22,50 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestCharacterInputPort_NewCharacterInputPort(t *testing.T) {
 	reader := strings.NewReader("test")
-	port := NewCharacterInputPort(bufio.NewReader(reader))
+	port := values.NewCharacterInputPort(bufio.NewReader(reader))
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestCharacterInputPort_NewCharacterInputPortFromReader(t *testing.T) {
 	reader := strings.NewReader("test")
-	port := NewCharacterInputPortFromReader(reader)
+	port := values.NewCharacterInputPortFromReader(reader)
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestCharacterInputPort_IsVoid(t *testing.T) {
 	reader := strings.NewReader("test")
-	port := NewCharacterInputPortFromReader(reader)
+	port := values.NewCharacterInputPortFromReader(reader)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *CharacterInputPort
+	var nilPort *values.CharacterInputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestCharacterInputPort_Datum(t *testing.T) {
 	reader := strings.NewReader("test")
-	port := NewCharacterInputPortFromReader(reader)
+	port := values.NewCharacterInputPortFromReader(reader)
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestCharacterInputPort_EqualTo(t *testing.T) {
 	reader1 := strings.NewReader("test")
-	port1 := NewCharacterInputPortFromReader(reader1)
+	port1 := values.NewCharacterInputPortFromReader(reader1)
 	reader2 := strings.NewReader("test")
-	port2 := NewCharacterInputPortFromReader(reader2)
+	port2 := values.NewCharacterInputPortFromReader(reader2)
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
 }
 func TestCharacterInputPort_ReadRune(t *testing.T) {
 	reader := strings.NewReader("te")
-	port := NewCharacterInputPortFromReader(reader)
+	port := values.NewCharacterInputPortFromReader(reader)
 	c, n, err := port.ReadRune()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, n, qt.Equals, 1)
@@ -81,38 +83,38 @@ func TestCharacterInputPort_ReadRune(t *testing.T) {
 
 func TestCharacterInputPort_SchemeString(t *testing.T) {
 	reader := strings.NewReader("test")
-	port := NewCharacterInputPortFromReader(reader)
+	port := values.NewCharacterInputPortFromReader(reader)
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "character-input-port"), qt.IsTrue)
 }
 
 func TestCharacterOutputPort_NewCharacterOutputPort(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPortFromWriter(&buf)
+	port := values.NewCharacterOutputPortFromWriter(&buf)
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestCharacterOutputPort_IsVoid(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPortFromWriter(&buf)
+	port := values.NewCharacterOutputPortFromWriter(&buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *CharacterOutputPort
+	var nilPort *values.CharacterOutputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestCharacterOutputPort_Datum(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPortFromWriter(&buf)
+	port := values.NewCharacterOutputPortFromWriter(&buf)
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestCharacterOutputPort_EqualTo(t *testing.T) {
 	var buf1 bytes.Buffer
-	port1 := NewCharacterOutputPortFromWriter(&buf1)
+	port1 := values.NewCharacterOutputPortFromWriter(&buf1)
 	var buf2 bytes.Buffer
-	port2 := NewCharacterOutputPortFromWriter(&buf2)
+	port2 := values.NewCharacterOutputPortFromWriter(&buf2)
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
@@ -120,7 +122,7 @@ func TestCharacterOutputPort_EqualTo(t *testing.T) {
 
 func TestCharacterOutputPort_SchemeString(t *testing.T) {
 	var buf bytes.Buffer
-	port := NewCharacterOutputPortFromWriter(&buf)
+	port := values.NewCharacterOutputPortFromWriter(&buf)
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "character-output-port"), qt.IsTrue)
 }

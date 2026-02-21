@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
 
@@ -143,7 +144,7 @@ func TestRecordAccessors(t *testing.T) {
 			(y point-y))
 		(point-x (make-point 3 4))
 	`)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(3))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(3))
 
 	result = evalScheme(t, `
 		(define-record-type :point
@@ -153,7 +154,7 @@ func TestRecordAccessors(t *testing.T) {
 			(y point-y))
 		(point-y (make-point 3 4))
 	`)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(4))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(4))
 }
 
 func TestRecordModifiers(t *testing.T) {
@@ -170,7 +171,7 @@ func TestRecordModifiers(t *testing.T) {
 			(set-point-x! p 10)
 			(point-x p))
 	`)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(10))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 func TestRecordPartialConstructor(t *testing.T) {
@@ -187,7 +188,7 @@ func TestRecordPartialConstructor(t *testing.T) {
 			(set-person-age! p 30)
 			(person-age p))
 	`)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(30))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 func TestRecordEquality(t *testing.T) {
@@ -299,5 +300,5 @@ func TestNestedRecords(t *testing.T) {
 		(let ((l (make-line (make-point 0 0) (make-point 10 10))))
 			(point-x (line-end l)))
 	`)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(10))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(10))
 }

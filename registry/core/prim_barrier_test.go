@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -103,7 +104,7 @@ func TestWithContinuationBarrier_Success(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -158,5 +159,5 @@ func TestWithContinuationBarrier_ExceptionPassthrough(t *testing.T) {
 	result, err := runSchemeCode(t, `(guard (e (#t 'caught))
 	  (with-continuation-barrier (error "boom")))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("caught"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("caught"))
 }

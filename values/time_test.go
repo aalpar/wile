@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"strings"
@@ -20,17 +20,19 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestTime_NewTime(t *testing.T) {
 	goTime := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
-	tm := NewTime(goTime)
+	tm := values.NewTime(goTime)
 	qt.Assert(t, tm, qt.Not(qt.IsNil))
 	qt.Assert(t, tm.GoTime().Equal(goTime), qt.IsTrue)
 }
 
 func TestTime_NewTimeFromSeconds(t *testing.T) {
-	tm := NewTimeFromSeconds(1000.5)
+	tm := values.NewTimeFromSeconds(1000.5)
 	qt.Assert(t, tm, qt.Not(qt.IsNil))
 
 	// Round-trip check
@@ -41,9 +43,9 @@ func TestTime_NewTimeFromSeconds(t *testing.T) {
 
 func TestTime_Seconds_RoundTrip(t *testing.T) {
 	goTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	tm := NewTime(goTime)
+	tm := values.NewTime(goTime)
 	secs := tm.Seconds()
-	tm2 := NewTimeFromSeconds(secs)
+	tm2 := values.NewTimeFromSeconds(secs)
 
 	// Should be within a microsecond
 	diff := tm.GoTime().Sub(tm2.GoTime())
@@ -52,7 +54,7 @@ func TestTime_Seconds_RoundTrip(t *testing.T) {
 
 func TestTime_CurrentTime(t *testing.T) {
 	before := time.Now()
-	tm := CurrentTime()
+	tm := values.CurrentTime()
 	after := time.Now()
 
 	qt.Assert(t, !tm.GoTime().Before(before), qt.IsTrue)
@@ -61,7 +63,7 @@ func TestTime_CurrentTime(t *testing.T) {
 
 func TestTime_Add(t *testing.T) {
 	goTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	tm := NewTime(goTime)
+	tm := values.NewTime(goTime)
 	tm2 := tm.Add(time.Hour)
 
 	expected := goTime.Add(time.Hour)
@@ -69,16 +71,16 @@ func TestTime_Add(t *testing.T) {
 }
 
 func TestTime_Sub(t *testing.T) {
-	t1 := NewTime(time.Date(2025, 1, 1, 1, 0, 0, 0, time.UTC))
-	t2 := NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	t1 := values.NewTime(time.Date(2025, 1, 1, 1, 0, 0, 0, time.UTC))
+	t2 := values.NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	d := t1.Sub(t2)
 	qt.Assert(t, d, qt.Equals, time.Hour)
 }
 
 func TestTime_BeforeAfter(t *testing.T) {
-	t1 := NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-	t2 := NewTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))
+	t1 := values.NewTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	t2 := values.NewTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))
 
 	qt.Assert(t, t1.Before(t2), qt.IsTrue)
 	qt.Assert(t, t2.Before(t1), qt.IsFalse)
@@ -87,29 +89,29 @@ func TestTime_BeforeAfter(t *testing.T) {
 }
 
 func TestTime_IsVoid(t *testing.T) {
-	tm := CurrentTime()
+	tm := values.CurrentTime()
 	qt.Assert(t, tm.IsVoid(), qt.IsFalse)
 
-	var nilTime *Time
+	var nilTime *values.Time
 	qt.Assert(t, nilTime.IsVoid(), qt.IsTrue)
 }
 
 func TestTime_EqualTo(t *testing.T) {
 	goTime := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
-	t1 := NewTime(goTime)
-	t2 := NewTime(goTime)
-	t3 := NewTime(goTime.Add(time.Second))
+	t1 := values.NewTime(goTime)
+	t2 := values.NewTime(goTime)
+	t3 := values.NewTime(goTime.Add(time.Second))
 
 	qt.Assert(t, t1.EqualTo(t2), qt.IsTrue)
 	qt.Assert(t, t1.EqualTo(t3), qt.IsFalse)
-	qt.Assert(t, t1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, t1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestTime_SchemeString(t *testing.T) {
-	tm := CurrentTime()
+	tm := values.CurrentTime()
 	s := tm.SchemeString()
 	qt.Assert(t, strings.Contains(s, "#<time"), qt.IsTrue)
 
-	var nilTime *Time
+	var nilTime *values.Time
 	qt.Assert(t, nilTime.SchemeString(), qt.Equals, "#<time:void>")
 }

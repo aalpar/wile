@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -196,7 +197,7 @@ func TestRecordConstructor(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -301,7 +302,7 @@ func TestRecordAccessor(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -379,7 +380,7 @@ func TestRecordModifier(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -519,7 +520,7 @@ func TestDefineRecordType(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -573,7 +574,7 @@ func TestMakePromise(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -606,7 +607,7 @@ func TestForce(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -634,7 +635,7 @@ func TestDelayForce(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -656,7 +657,7 @@ func TestMakeLazyPromise(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -698,7 +699,7 @@ func TestR7RSPromiseSemantics(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

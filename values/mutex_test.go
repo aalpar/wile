@@ -12,46 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestMutex_NewMutex(t *testing.T) {
-	m := NewMutex("test-mutex")
+	m := values.NewMutex("test-mutex")
 	qt.Assert(t, m, qt.Not(qt.IsNil))
 	qt.Assert(t, m.Name(), qt.Equals, "test-mutex")
 	qt.Assert(t, m.ID() > 0, qt.IsTrue)
-	qt.Assert(t, m.State(), qt.Equals, MutexUnlocked)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexUnlocked)
 }
 
 func TestMutex_DefaultName(t *testing.T) {
-	m := NewMutex("")
+	m := values.NewMutex("")
 	qt.Assert(t, strings.HasPrefix(m.Name(), "mutex-"), qt.IsTrue)
 }
 
 func TestMutex_Specific(t *testing.T) {
-	m := NewMutex("test")
+	m := values.NewMutex("test")
 	qt.Assert(t, m.Specific() == nil, qt.IsTrue)
 
-	m.SetSpecific(NewInteger(42))
-	qt.Assert(t, m.Specific(), SchemeEquals, NewInteger(42))
+	m.SetSpecific(values.NewInteger(42))
+	qt.Assert(t, m.Specific(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestMutexState_String(t *testing.T) {
 	tcs := []struct {
-		state MutexState
+		state values.MutexState
 		str   string
 	}{
-		{MutexUnlocked, "not-owned"},
-		{MutexLockedOwned, "owned"},
-		{MutexLockedNotOwned, "not-owned"},
-		{MutexAbandoned, "abandoned"},
-		{MutexState(99), "unknown"},
+		{values.MutexUnlocked, "not-owned"},
+		{values.MutexLockedOwned, "owned"},
+		{values.MutexLockedNotOwned, "not-owned"},
+		{values.MutexAbandoned, "abandoned"},
+		{values.MutexState(99), "unknown"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.str, func(t *testing.T) {
@@ -61,27 +64,27 @@ func TestMutexState_String(t *testing.T) {
 }
 
 func TestMutex_LockUnlock_NoOwner(t *testing.T) {
-	m := NewMutex("test")
+	m := values.NewMutex("test")
 
 	ok, err := m.Lock(nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, m.State(), qt.Equals, MutexLockedNotOwned)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexLockedNotOwned)
 	qt.Assert(t, m.Owner() == nil, qt.IsTrue)
 
 	ok = m.Unlock(nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, m.State(), qt.Equals, MutexUnlocked)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexUnlocked)
 }
 
 func TestMutex_LockUnlock_WithOwner(t *testing.T) {
-	m := NewMutex("test")
-	th := NewThread(NewSymbol("thunk"), "owner")
+	m := values.NewMutex("test")
+	th := values.NewThread(values.NewSymbol("thunk"), "owner")
 
 	ok, err := m.Lock(nil, th)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, m.State(), qt.Equals, MutexLockedOwned)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexLockedOwned)
 	qt.Assert(t, m.Owner(), qt.Equals, th)
 
 	m.Unlock(nil, nil)
@@ -89,14 +92,14 @@ func TestMutex_LockUnlock_WithOwner(t *testing.T) {
 }
 
 func TestMutex_StateValue(t *testing.T) {
-	m := NewMutex("test")
+	m := values.NewMutex("test")
 
 	// Unlocked
 	sv := m.StateValue()
-	qt.Assert(t, sv, SchemeEquals, NewSymbol("not-owned"))
+	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
 
 	// Locked with owner
-	th := NewThread(NewSymbol("thunk"), "owner")
+	th := values.NewThread(values.NewSymbol("thunk"), "owner")
 	m.Lock(nil, th)
 	sv = m.StateValue()
 	qt.Assert(t, sv.EqualTo(th), qt.IsTrue)
@@ -106,21 +109,21 @@ func TestMutex_StateValue(t *testing.T) {
 	m.Lock(nil, th)
 	m.MarkAbandoned()
 	sv = m.StateValue()
-	qt.Assert(t, sv, SchemeEquals, NewSymbol("abandoned"))
+	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("abandoned"))
 }
 
 func TestMutex_MarkAbandoned(t *testing.T) {
-	m := NewMutex("test")
-	th := NewThread(NewSymbol("thunk"), "owner")
+	m := values.NewMutex("test")
+	th := values.NewThread(values.NewSymbol("thunk"), "owner")
 	m.Lock(nil, th)
 
 	m.MarkAbandoned()
-	qt.Assert(t, m.State(), qt.Equals, MutexAbandoned)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexAbandoned)
 }
 
 func TestMutex_LockAbandoned(t *testing.T) {
-	m := NewMutex("test")
-	th := NewThread(NewSymbol("thunk"), "owner")
+	m := values.NewMutex("test")
+	th := values.NewThread(values.NewSymbol("thunk"), "owner")
 	m.Lock(nil, th)
 	m.MarkAbandoned()
 
@@ -129,32 +132,32 @@ func TestMutex_LockAbandoned(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, err, qt.Not(qt.IsNil))
 
-	_, isAbandoned := err.(*AbandonedMutexException)
+	_, isAbandoned := err.(*values.AbandonedMutexException)
 	qt.Assert(t, isAbandoned, qt.IsTrue)
 }
 
 func TestMutex_IsVoid(t *testing.T) {
-	m := NewMutex("test")
+	m := values.NewMutex("test")
 	qt.Assert(t, m.IsVoid(), qt.IsFalse)
 
-	var nilM *Mutex
+	var nilM *values.Mutex
 	qt.Assert(t, nilM.IsVoid(), qt.IsTrue)
 }
 
 func TestMutex_EqualTo(t *testing.T) {
-	m1 := NewMutex("a")
-	m2 := NewMutex("b")
+	m1 := values.NewMutex("a")
+	m2 := values.NewMutex("b")
 	qt.Assert(t, m1.EqualTo(m1), qt.IsTrue)
 	qt.Assert(t, m1.EqualTo(m2), qt.IsFalse)
-	qt.Assert(t, m1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, m1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestMutex_SchemeString(t *testing.T) {
-	m := NewMutex("my-mutex")
+	m := values.NewMutex("my-mutex")
 	s := m.SchemeString()
 	qt.Assert(t, strings.Contains(s, "mutex"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(s, "my-mutex"), qt.IsTrue)
 
-	var nilM *Mutex
+	var nilM *values.Mutex
 	qt.Assert(t, nilM.SchemeString(), qt.Equals, "#<mutex:void>")
 }

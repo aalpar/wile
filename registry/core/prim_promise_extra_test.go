@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -54,7 +55,7 @@ func TestMakeLazyPromise(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -73,7 +74,7 @@ func TestPromiseMemoization(t *testing.T) {
 	`)
 	qt.Assert(t, err, qt.IsNil)
 	// count should be 1 because the promise body is only evaluated once
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 // TestForceIdempotent tests that force is idempotent
@@ -103,7 +104,7 @@ func TestForceIdempotent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -128,7 +129,7 @@ func TestPromiseWithSideEffects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -173,7 +174,7 @@ func TestPromiseQEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -206,7 +207,7 @@ func TestForceWithComplexExpressions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -237,7 +238,7 @@ func TestMakePromiseIdentity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -290,10 +291,10 @@ func TestDelayForceTailCall(t *testing.T) {
 				// Just verify it returns a pair starting with 10
 				pair, ok := result.(*values.Pair)
 				qt.Assert(t, ok, qt.IsTrue)
-				qt.Assert(t, pair.Car(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, pair.Car(), valuestest.SchemeEquals, values.NewInteger(10))
 			} else {
 				qt.Assert(t, err, qt.IsNil)
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -340,7 +341,7 @@ func TestForceExceptionInDelayBody(t *testing.T) {
 				qt.Assert(t, err, qt.IsNotNil)
 			} else {
 				qt.Assert(t, err, qt.IsNil)
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -379,7 +380,7 @@ func TestForceCircularPromise(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -417,7 +418,7 @@ func TestMakePromiseEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }

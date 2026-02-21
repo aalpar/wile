@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -210,7 +211,7 @@ func TestCondExpandWithElse(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCondExpandR7RS tests cond-expand with r7rs feature
@@ -226,7 +227,7 @@ func TestCondExpandR7RS(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 // TestCondExpandAnd tests cond-expand with and requirement
@@ -241,7 +242,7 @@ func TestCondExpandAnd(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(200))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(200))
 }
 
 // TestCondExpandOr tests cond-expand with or requirement
@@ -256,7 +257,7 @@ func TestCondExpandOr(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(300))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(300))
 }
 
 // TestCondExpandNot tests cond-expand with not requirement
@@ -271,7 +272,7 @@ func TestCondExpandNot(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(400))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(400))
 }
 
 // TestFeatureRequirementIsSatisfied tests various feature requirements

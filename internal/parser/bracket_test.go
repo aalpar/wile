@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -96,7 +97,7 @@ func TestParser_Brackets(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			stx, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
-			c.Assert(stx.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(stx.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -187,7 +188,7 @@ func TestParser_BracketDatumLabels(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 			// For datum label assignments, unwrap the assignment to get the actual list
 			unwrapped := stx.UnwrapAll()
-			c.Assert(unwrapped, values.SchemeEquals, tc.expect)
+			c.Assert(unwrapped, valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }

@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // ── MakeTypePredicate ────────────────────────────────────────────────
@@ -50,7 +51,7 @@ func TestMakeTypePredicate(t *testing.T) {
 			mc := makeMC(tc.arg)
 			err := isInteger(context.Background(), mc)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -83,7 +84,7 @@ func TestMakeNumericPredicate(t *testing.T) {
 			mc := makeMC(tc.arg)
 			err := isExact(context.Background(), mc)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -177,7 +178,7 @@ func TestChainEquality(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := ChainEquality(mc, "boolean=?", boolTypeCheck, boolEquals)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

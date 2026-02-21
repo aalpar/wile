@@ -333,18 +333,18 @@ func TestInteger_Add(t *testing.T) {
     }
     for _, tc := range tcs {
         result := tc.in0.Add(tc.in1)
-        qt.Assert(t, result, SchemeEquals, tc.out)
+        qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
     }
 }
 ```
 
 ### Testing Framework
 
-Use `quicktest` (`qt`) with `SchemeEquals` custom checker:
+Use `quicktest` (`qt`) with `valuestest.SchemeEquals` custom checker (import `"github.com/aalpar/wile/values/valuestest"`):
 
 ```go
 qt.Assert(t, actual, qt.Equals, expected)
-qt.Assert(t, actual, SchemeEquals, expected)  // For Value comparison
+qt.Assert(t, actual, valuestest.SchemeEquals, expected)  // For Value comparison
 qt.Assert(t, err, qt.IsNil)
 qt.Assert(t, result, qt.IsNotNil)
 ```

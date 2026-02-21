@@ -12,74 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestString_EqualTo(t *testing.T) {
-	s1 := NewString("hello")
-	s2 := NewString("hello")
+	s1 := values.NewString("hello")
+	s2 := values.NewString("hello")
 	qt.Assert(t, s1.EqualTo(s2), qt.IsTrue)
 
-	s3 := NewString("world")
+	s3 := values.NewString("world")
 	qt.Assert(t, s1.EqualTo(s3), qt.IsFalse)
 
-	i := NewInteger(42)
+	i := values.NewInteger(42)
 	qt.Assert(t, s1.EqualTo(i), qt.IsFalse)
 }
 
 func TestString_Datum(t *testing.T) {
-	s := NewString("hello")
+	s := values.NewString("hello")
 	qt.Assert(t, s.Datum(), qt.Equals, "hello")
 }
 
 func TestString_String(t *testing.T) {
-	s := NewString("hello")
+	s := values.NewString("hello")
 	qt.Assert(t, s.String(), qt.Equals, "hello")
 }
 
 func TestString_SchemeString(t *testing.T) {
-	s := NewString("hello")
+	s := values.NewString("hello")
 	qt.Assert(t, s.SchemeString(), qt.Equals, `"hello"`)
 }
 
 func TestString_IsVoid(t *testing.T) {
-	s := NewString("hello")
+	s := values.NewString("hello")
 	qt.Assert(t, s.IsVoid(), qt.IsFalse)
 
-	var nilString *String
+	var nilString *values.String
 	qt.Assert(t, nilString.IsVoid(), qt.IsTrue)
 }
 
 func TestString_Interning(t *testing.T) {
 	// Short strings should be interned (same pointer)
-	s1 := NewString("hello")
-	s2 := NewString("hello")
+	s1 := values.NewString("hello")
+	s2 := values.NewString("hello")
 	qt.Assert(t, s1 == s2, qt.IsTrue, qt.Commentf("short strings should return same pointer"))
 
 	// Different strings should have different pointers
-	s3 := NewString("world")
+	s3 := values.NewString("world")
 	qt.Assert(t, s1 != s3, qt.IsTrue, qt.Commentf("different strings should have different pointers"))
 
 	// Empty string should be interned
-	sEmpty1 := NewString("")
-	sEmpty2 := NewString("")
+	sEmpty1 := values.NewString("")
+	sEmpty2 := values.NewString("")
 	qt.Assert(t, sEmpty1 == sEmpty2, qt.IsTrue, qt.Commentf("empty strings should return same pointer"))
 
 	// Strings at the boundary (64 chars) should be interned
 	boundary := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 64 chars
-	sBoundary1 := NewString(boundary)
-	sBoundary2 := NewString(boundary)
+	sBoundary1 := values.NewString(boundary)
+	sBoundary2 := values.NewString(boundary)
 	qt.Assert(t, sBoundary1 == sBoundary2, qt.IsTrue, qt.Commentf("64-char strings should be interned"))
 
 	// Long strings (>64 chars) should NOT be interned
 	longStr := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 65 chars
-	sLong1 := NewString(longStr)
-	sLong2 := NewString(longStr)
+	sLong1 := values.NewString(longStr)
+	sLong2 := values.NewString(longStr)
 	qt.Assert(t, sLong1 != sLong2, qt.IsTrue, qt.Commentf("strings over 64 chars should not be interned"))
 
 	// Interned strings should still have correct values
@@ -90,13 +92,13 @@ func TestString_Interning(t *testing.T) {
 func TestString_InternString(t *testing.T) {
 	// InternString should always intern regardless of length
 	longStr := "this is a very long string that exceeds the automatic interning threshold of 64 characters"
-	sIntern1 := InternString(longStr)
-	sIntern2 := InternString(longStr)
+	sIntern1 := values.InternString(longStr)
+	sIntern2 := values.InternString(longStr)
 	qt.Assert(t, sIntern1 == sIntern2, qt.IsTrue, qt.Commentf("InternString should always return same pointer"))
 
 	// InternString should work for short strings too
-	sShort1 := InternString("short")
-	sShort2 := InternString("short")
+	sShort1 := values.InternString("short")
+	sShort2 := values.InternString("short")
 	qt.Assert(t, sShort1 == sShort2, qt.IsTrue)
 
 	// Values should be correct
@@ -107,67 +109,67 @@ func TestStringImmutability(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("interned strings are immutable", func(t *testing.T) {
-		s := NewString("hello") // ≤64 bytes, gets interned
+		s := values.NewString("hello") // ≤64 bytes, gets interned
 		c.Assert(s.IsImmutable(), qt.IsTrue)
 	})
 
 	t.Run("mutable strings are mutable", func(t *testing.T) {
-		s := NewMutableString("hello")
+		s := values.NewMutableString("hello")
 		c.Assert(s.IsImmutable(), qt.IsFalse)
 	})
 
 	t.Run("SetChar fails on immutable", func(t *testing.T) {
-		s := NewString("x")
+		s := values.NewString("x")
 		err := s.SetChar(0, 'y')
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
 	})
 
 	t.Run("SetChar succeeds on mutable", func(t *testing.T) {
-		s := NewMutableString("x")
+		s := values.NewMutableString("x")
 		err := s.SetChar(0, 'y')
 		c.Assert(err, qt.IsNil)
 		c.Assert(s.Value, qt.Equals, "y")
 	})
 
 	t.Run("Fill fails on immutable", func(t *testing.T) {
-		s := NewString("hello")
+		s := values.NewString("hello")
 		err := s.Fill('x', 0, 5)
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
 	})
 
 	t.Run("Fill succeeds on mutable", func(t *testing.T) {
-		s := NewMutableString("hello")
+		s := values.NewMutableString("hello")
 		err := s.Fill('x', 0, 5)
 		c.Assert(err, qt.IsNil)
 		c.Assert(s.Value, qt.Equals, "xxxxx")
 	})
 
 	t.Run("SetValue fails on immutable", func(t *testing.T) {
-		s := NewString("hello")
+		s := values.NewString("hello")
 		err := s.SetValue("world")
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
 	})
 
 	t.Run("SetValue succeeds on mutable", func(t *testing.T) {
-		s := NewMutableString("hello")
+		s := values.NewMutableString("hello")
 		err := s.SetValue("world")
 		c.Assert(err, qt.IsNil)
 		c.Assert(s.Value, qt.Equals, "world")
 	})
 
 	t.Run("Set fails on immutable", func(t *testing.T) {
-		s := NewString("hello")
-		err := s.Set(0, NewCharacter('H'))
+		s := values.NewString("hello")
+		err := s.Set(0, values.NewCharacter('H'))
 		c.Assert(err, qt.Not(qt.IsNil))
 		c.Assert(err, qt.ErrorMatches, ".*immutable.*")
 	})
 
 	t.Run("Set succeeds on mutable", func(t *testing.T) {
-		s := NewMutableString("hello")
-		err := s.Set(0, NewCharacter('H'))
+		s := values.NewMutableString("hello")
+		err := s.Set(0, values.NewCharacter('H'))
 		c.Assert(err, qt.IsNil)
 		c.Assert(s.Value, qt.Equals, "Hello")
 	})
@@ -176,8 +178,8 @@ func TestStringImmutability(t *testing.T) {
 func TestStringInternPreserved(t *testing.T) {
 	c := qt.New(t)
 
-	s1 := NewString("test")
-	s2 := NewString("test")
+	s1 := values.NewString("test")
+	s2 := values.NewString("test")
 
 	// Same interned pointer
 	c.Assert(s1 == s2, qt.IsTrue)

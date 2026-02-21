@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -111,5 +112,5 @@ func TestWriteSimpleDefaultPort(t *testing.T) {
 	// We can't easily capture stdout, so we just verify it doesn't error
 	result, err := runSchemeCode(t, `(begin (write-simple 42) #t)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

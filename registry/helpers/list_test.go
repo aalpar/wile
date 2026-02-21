@@ -21,6 +21,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // ── ListToVector ─────────────────────────────────────────────────────
@@ -60,7 +61,7 @@ func TestListToVector(t *testing.T) {
 			mc := makeMC(tc.arg)
 			err := ListToVector(mc, "test")
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -233,7 +234,7 @@ func TestAssocLookup(t *testing.T) {
 			mc := makeMC(tc.key, tc.list)
 			err := AssocLookup(mc, "test", tc.eq)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

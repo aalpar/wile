@@ -12,38 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // --- RWMutex ---
 
 func TestRWMutex_NewRWMutex(t *testing.T) {
-	m := NewRWMutex("test-rw")
+	m := values.NewRWMutex("test-rw")
 	qt.Assert(t, m, qt.Not(qt.IsNil))
 	qt.Assert(t, m.Name(), qt.Equals, "test-rw")
 	qt.Assert(t, m.ID() > 0, qt.IsTrue)
 }
 
 func TestRWMutex_DefaultName(t *testing.T) {
-	m := NewRWMutex("")
+	m := values.NewRWMutex("")
 	qt.Assert(t, strings.HasPrefix(m.Name(), "rwmutex-"), qt.IsTrue)
 }
 
 func TestRWMutex_LockUnlock(t *testing.T) {
-	m := NewRWMutex("test")
+	m := values.NewRWMutex("test")
 	m.Lock()
 	qt.Assert(t, m, qt.Not(qt.IsNil)) // verify lock held
 	m.Unlock()
 }
 
 func TestRWMutex_RLockRUnlock(t *testing.T) {
-	m := NewRWMutex("test")
+	m := values.NewRWMutex("test")
 	m.RLock()
 	qt.Assert(t, m, qt.Not(qt.IsNil)) // verify rlock held
 	m.RLock()
@@ -53,14 +55,14 @@ func TestRWMutex_RLockRUnlock(t *testing.T) {
 }
 
 func TestRWMutex_TryLock(t *testing.T) {
-	m := NewRWMutex("test")
+	m := values.NewRWMutex("test")
 	qt.Assert(t, m.TryLock(), qt.IsTrue)
 	qt.Assert(t, m.TryLock(), qt.IsFalse) // already locked
 	m.Unlock()
 }
 
 func TestRWMutex_TryRLock(t *testing.T) {
-	m := NewRWMutex("test")
+	m := values.NewRWMutex("test")
 	qt.Assert(t, m.TryRLock(), qt.IsTrue)
 	qt.Assert(t, m.TryRLock(), qt.IsTrue) // multiple readers
 	m.RUnlock()
@@ -68,41 +70,41 @@ func TestRWMutex_TryRLock(t *testing.T) {
 }
 
 func TestRWMutex_IsVoid(t *testing.T) {
-	m := NewRWMutex("test")
+	m := values.NewRWMutex("test")
 	qt.Assert(t, m.IsVoid(), qt.IsFalse)
 
-	var nilM *RWMutex
+	var nilM *values.RWMutex
 	qt.Assert(t, nilM.IsVoid(), qt.IsTrue)
 }
 
 func TestRWMutex_EqualTo(t *testing.T) {
-	m1 := NewRWMutex("test")
-	m2 := NewRWMutex("test")
+	m1 := values.NewRWMutex("test")
+	m2 := values.NewRWMutex("test")
 	qt.Assert(t, m1.EqualTo(m1), qt.IsTrue)
 	qt.Assert(t, m1.EqualTo(m2), qt.IsFalse)
-	qt.Assert(t, m1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, m1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestRWMutex_SchemeString(t *testing.T) {
-	m := NewRWMutex("test-rw")
+	m := values.NewRWMutex("test-rw")
 	s := m.SchemeString()
 	qt.Assert(t, strings.Contains(s, "rw-mutex"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(s, "test-rw"), qt.IsTrue)
 
-	var nilM *RWMutex
+	var nilM *values.RWMutex
 	qt.Assert(t, nilM.SchemeString(), qt.Equals, "#<rw-mutex:void>")
 }
 
 // --- Once ---
 
 func TestOnce_NewOnce(t *testing.T) {
-	o := NewOnce()
+	o := values.NewOnce()
 	qt.Assert(t, o, qt.Not(qt.IsNil))
 	qt.Assert(t, o.ID() > 0, qt.IsTrue)
 }
 
 func TestOnce_Do(t *testing.T) {
-	o := NewOnce()
+	o := values.NewOnce()
 	qt.Assert(t, o.Done(), qt.IsFalse)
 
 	count := 0
@@ -118,23 +120,23 @@ func TestOnce_Do(t *testing.T) {
 }
 
 func TestOnce_IsVoid(t *testing.T) {
-	o := NewOnce()
+	o := values.NewOnce()
 	qt.Assert(t, o.IsVoid(), qt.IsFalse)
 
-	var nilO *Once
+	var nilO *values.Once
 	qt.Assert(t, nilO.IsVoid(), qt.IsTrue)
 }
 
 func TestOnce_EqualTo(t *testing.T) {
-	o1 := NewOnce()
-	o2 := NewOnce()
+	o1 := values.NewOnce()
+	o2 := values.NewOnce()
 	qt.Assert(t, o1.EqualTo(o1), qt.IsTrue)
 	qt.Assert(t, o1.EqualTo(o2), qt.IsFalse)
-	qt.Assert(t, o1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, o1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestOnce_SchemeString(t *testing.T) {
-	o := NewOnce()
+	o := values.NewOnce()
 	s := o.SchemeString()
 	qt.Assert(t, strings.Contains(s, "once"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(s, "pending"), qt.IsTrue)
@@ -143,20 +145,20 @@ func TestOnce_SchemeString(t *testing.T) {
 	s2 := o.SchemeString()
 	qt.Assert(t, strings.Contains(s2, "done"), qt.IsTrue)
 
-	var nilO *Once
+	var nilO *values.Once
 	qt.Assert(t, nilO.SchemeString(), qt.Equals, "#<once:void>")
 }
 
 // --- WaitGroup ---
 
 func TestWaitGroup_NewWaitGroup(t *testing.T) {
-	wg := NewWaitGroup()
+	wg := values.NewWaitGroup()
 	qt.Assert(t, wg, qt.Not(qt.IsNil))
 	qt.Assert(t, wg.ID() > 0, qt.IsTrue)
 }
 
 func TestWaitGroup_AddDoneWait(t *testing.T) {
-	wg := NewWaitGroup()
+	wg := values.NewWaitGroup()
 	wg.Add(1)
 
 	done := make(chan struct{})
@@ -170,26 +172,26 @@ func TestWaitGroup_AddDoneWait(t *testing.T) {
 }
 
 func TestWaitGroup_IsVoid(t *testing.T) {
-	wg := NewWaitGroup()
+	wg := values.NewWaitGroup()
 	qt.Assert(t, wg.IsVoid(), qt.IsFalse)
 
-	var nilWG *WaitGroup
+	var nilWG *values.WaitGroup
 	qt.Assert(t, nilWG.IsVoid(), qt.IsTrue)
 }
 
 func TestWaitGroup_EqualTo(t *testing.T) {
-	wg1 := NewWaitGroup()
-	wg2 := NewWaitGroup()
+	wg1 := values.NewWaitGroup()
+	wg2 := values.NewWaitGroup()
 	qt.Assert(t, wg1.EqualTo(wg1), qt.IsTrue)
 	qt.Assert(t, wg1.EqualTo(wg2), qt.IsFalse)
-	qt.Assert(t, wg1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, wg1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestWaitGroup_SchemeString(t *testing.T) {
-	wg := NewWaitGroup()
+	wg := values.NewWaitGroup()
 	s := wg.SchemeString()
 	qt.Assert(t, strings.Contains(s, "wait-group"), qt.IsTrue)
 
-	var nilWG *WaitGroup
+	var nilWG *values.WaitGroup
 	qt.Assert(t, nilWG.SchemeString(), qt.Equals, "#<wait-group:void>")
 }

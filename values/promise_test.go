@@ -12,54 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestPromise_NewPromise(t *testing.T) {
-	thunk := NewSymbol("thunk-placeholder")
-	p := NewPromise(thunk)
+	thunk := values.NewSymbol("thunk-placeholder")
+	p := values.NewPromise(thunk)
 
 	qt.Assert(t, p.Forced, qt.IsFalse)
-	qt.Assert(t, p.Thunk, SchemeEquals, thunk)
+	qt.Assert(t, p.Thunk, valuestest.SchemeEquals, thunk)
 	qt.Assert(t, p.Result == nil, qt.IsTrue)
 }
 
 func TestPromise_NewForcedPromise(t *testing.T) {
-	val := NewInteger(42)
-	p := NewForcedPromise(val)
+	val := values.NewInteger(42)
+	p := values.NewForcedPromise(val)
 
 	qt.Assert(t, p.Forced, qt.IsTrue)
 	qt.Assert(t, p.Thunk == nil, qt.IsTrue)
-	qt.Assert(t, p.Result, SchemeEquals, val)
+	qt.Assert(t, p.Result, valuestest.SchemeEquals, val)
 }
 
 func TestPromise_IsVoid(t *testing.T) {
-	p := NewPromise(NewSymbol("thunk"))
+	p := values.NewPromise(values.NewSymbol("thunk"))
 	qt.Assert(t, p.IsVoid(), qt.IsFalse)
 
-	var nilPromise *Promise
+	var nilPromise *values.Promise
 	qt.Assert(t, nilPromise.IsVoid(), qt.IsTrue)
 }
 
 func TestPromise_EqualTo(t *testing.T) {
-	p1 := NewPromise(NewSymbol("thunk"))
-	p2 := NewPromise(NewSymbol("thunk"))
+	p1 := values.NewPromise(values.NewSymbol("thunk"))
+	p2 := values.NewPromise(values.NewSymbol("thunk"))
 
 	// Identity only
 	qt.Assert(t, p1.EqualTo(p1), qt.IsTrue)
 	qt.Assert(t, p1.EqualTo(p2), qt.IsFalse)
-	qt.Assert(t, p1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, p1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestPromise_SchemeString(t *testing.T) {
-	unforced := NewPromise(NewSymbol("thunk"))
+	unforced := values.NewPromise(values.NewSymbol("thunk"))
 	qt.Assert(t, unforced.SchemeString(), qt.Equals, "#<promise>")
 
-	forced := NewForcedPromise(NewInteger(42))
+	forced := values.NewForcedPromise(values.NewInteger(42))
 	qt.Assert(t, forced.SchemeString(), qt.Equals, "#<promise (forced)>")
 }

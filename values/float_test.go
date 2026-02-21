@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"errors"
@@ -20,19 +20,22 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestFloat_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  Value
+		in  values.Value
 		out string
 	}{
 		{
-			in:  NewFloat(1.1),
+			in:  values.NewFloat(1.1),
 			out: "1.1",
 		},
 		{
-			in:  NewFloat(1.2),
+			in:  values.NewFloat(1.2),
 			out: "1.2",
 		},
 	}
@@ -45,18 +48,18 @@ func TestFloat_SchemeString(t *testing.T) {
 
 func TestFloat_EqualTo(t *testing.T) {
 	tcs := []struct {
-		in0 Value
-		in1 Value
+		in0 values.Value
+		in1 values.Value
 		out bool
 	}{
 		{
-			in0: NewFloat(1.1),
-			in1: NewFloat(1.1),
+			in0: values.NewFloat(1.1),
+			in1: values.NewFloat(1.1),
 			out: true,
 		},
 		{
-			in0: NewFloat(1.0),
-			in1: NewFloat(1.1),
+			in0: values.NewFloat(1.0),
+			in1: values.NewFloat(1.1),
 			out: false,
 		},
 	}
@@ -68,124 +71,124 @@ func TestFloat_EqualTo(t *testing.T) {
 }
 
 func TestFloat_Datum(t *testing.T) {
-	f := NewFloat(3.14)
+	f := values.NewFloat(3.14)
 	qt.Assert(t, f.Datum(), qt.Equals, 3.14)
 }
 
 func TestFloat_String(t *testing.T) {
-	f := NewFloat(3.14)
+	f := values.NewFloat(3.14)
 	qt.Assert(t, f.String(), qt.Equals, "3.14")
 }
 
 func TestFloat_Add(t *testing.T) {
-	f1 := NewFloat(5.5)
-	f2 := NewFloat(2.5)
+	f1 := values.NewFloat(5.5)
+	f2 := values.NewFloat(2.5)
 	result := f1.Add(f2)
-	qt.Assert(t, result, SchemeEquals, NewFloat(8.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(8.0))
 
-	f3 := NewFloat(0.0)
+	f3 := values.NewFloat(0.0)
 	result = f1.Add(f3)
-	qt.Assert(t, result, SchemeEquals, NewFloat(5.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(5.5))
 
-	i1 := NewInteger(3)
+	i1 := values.NewInteger(3)
 	result = f1.Add(i1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(8.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(8.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = f1.Add(r1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(6.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(6.0))
 
-	c1 := NewComplex(complex(1, 2))
+	c1 := values.NewComplex(complex(1, 2))
 	result = f1.Add(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(6.5, 2)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(6.5, 2)))
 }
 
 func TestFloat_Subtract(t *testing.T) {
-	f1 := NewFloat(10.5)
-	f2 := NewFloat(2.5)
+	f1 := values.NewFloat(10.5)
+	f2 := values.NewFloat(2.5)
 	result := f1.Subtract(f2)
-	qt.Assert(t, result, SchemeEquals, NewFloat(8.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(8.0))
 
-	f3 := NewFloat(0.0)
+	f3 := values.NewFloat(0.0)
 	result = f1.Subtract(f3)
-	qt.Assert(t, result, SchemeEquals, NewFloat(10.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(10.5))
 
-	i1 := NewInteger(3)
+	i1 := values.NewInteger(3)
 	result = f1.Subtract(i1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(7.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(7.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = f1.Subtract(r1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(10.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(10.0))
 
-	c1 := NewComplex(complex(1, 2))
+	c1 := values.NewComplex(complex(1, 2))
 	result = f1.Subtract(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(9.5, -2)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(9.5, -2)))
 }
 
 func TestFloat_Multiply(t *testing.T) {
-	f1 := NewFloat(5.0)
-	f2 := NewFloat(2.5)
+	f1 := values.NewFloat(5.0)
+	f2 := values.NewFloat(2.5)
 	result := f1.Multiply(f2)
-	qt.Assert(t, result, SchemeEquals, NewFloat(12.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(12.5))
 
-	f3 := NewFloat(0.0)
+	f3 := values.NewFloat(0.0)
 	result = f1.Multiply(f3)
-	qt.Assert(t, result, SchemeEquals, NewFloat(0.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(0.0))
 
-	i1 := NewInteger(3)
+	i1 := values.NewInteger(3)
 	result = f1.Multiply(i1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(15.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(15.0))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = f1.Multiply(r1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(2.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(2.5))
 
-	c1 := NewComplex(complex(2, 3))
+	c1 := values.NewComplex(complex(2, 3))
 	result = f1.Multiply(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(10, 15)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(10, 15)))
 }
 
 func TestFloat_Divide(t *testing.T) {
-	f1 := NewFloat(10.0)
-	f2 := NewFloat(2.0)
+	f1 := values.NewFloat(10.0)
+	f2 := values.NewFloat(2.0)
 	result := f1.Divide(f2)
-	qt.Assert(t, result, SchemeEquals, NewFloat(5.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(5.0))
 
-	i1 := NewInteger(4)
+	i1 := values.NewInteger(4)
 	result = f1.Divide(i1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(2.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(2.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = f1.Divide(r1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(20.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(20.0))
 
-	c1 := NewComplex(complex(2, 0))
+	c1 := values.NewComplex(complex(2, 0))
 	result = f1.Divide(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(5, 0)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
 }
 
 func TestFloat_IsZero(t *testing.T) {
-	f1 := NewFloat(0.0)
+	f1 := values.NewFloat(0.0)
 	qt.Assert(t, f1.IsZero(), qt.IsTrue)
 
-	f2 := NewFloat(5.5)
+	f2 := values.NewFloat(5.5)
 	qt.Assert(t, f2.IsZero(), qt.IsFalse)
 }
 
 func TestFloat_LessThan(t *testing.T) {
-	f1 := NewFloat(5.5)
-	f2 := NewFloat(10.5)
+	f1 := values.NewFloat(5.5)
+	f2 := values.NewFloat(10.5)
 	qt.Assert(t, f1.LessThan(f2), qt.IsTrue)
 	qt.Assert(t, f2.LessThan(f1), qt.IsFalse)
 
-	i1 := NewInteger(7)
+	i1 := values.NewInteger(7)
 	qt.Assert(t, f1.LessThan(i1), qt.IsTrue)
 
-	r1 := NewRational(11, 2)
+	r1 := values.NewRational(11, 2)
 	qt.Assert(t, f1.LessThan(r1), qt.IsFalse)
 
-	c1 := NewComplex(complex(7, 0))
+	c1 := values.NewComplex(complex(7, 0))
 	qt.Assert(t, f1.LessThan(c1), qt.IsTrue)
 }
 
@@ -195,30 +198,30 @@ func TestFloat_ToExact(t *testing.T) {
 	tcs := []struct {
 		name  string
 		input float64
-		want  Value
+		want  values.Value
 	}{
 		{
 			name:  "integer value",
 			input: 5.0,
-			want:  NewInteger(5),
+			want:  values.NewInteger(5),
 		},
 		{
 			name:  "rational value",
 			input: 2.5,
-			want:  NewRational(5, 2),
+			want:  values.NewRational(5, 2),
 		},
 		{
 			name:  "negative integer",
 			input: -3.0,
-			want:  NewInteger(-3),
+			want:  values.NewInteger(-3),
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			f := NewFloat(tc.input)
+			f := values.NewFloat(tc.input)
 			result := f.ToExact()
-			c.Assert(result, SchemeEquals, tc.want)
+			c.Assert(result, valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -255,16 +258,16 @@ func TestFloat_ToExact_NonFinite(t *testing.T) {
 					t.Fatal("expected panic for non-finite float")
 				}
 				// Verify it's a ForeignError wrapping ErrExactnessConversion
-				fe, ok := r.(*ForeignError)
+				fe, ok := r.(*values.ForeignError)
 				if !ok {
 					t.Fatalf("expected ForeignError, got %T: %v", r, r)
 				}
-				if !errors.Is(fe, ErrExactnessConversion) {
+				if !errors.Is(fe, values.ErrExactnessConversion) {
 					t.Fatalf("expected error wrapping ErrExactnessConversion, got: %v", fe)
 				}
 			}()
 
-			f := NewFloat(tc.input)
+			f := values.NewFloat(tc.input)
 			// This should panic with a ForeignError
 			_ = f.ToExact()
 		})

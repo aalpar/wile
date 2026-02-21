@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestByte_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  Value
+		in  values.Value
 		out string
 	}{
 		{
-			in:  NewByte(10),
+			in:  values.NewByte(10),
 			out: "10",
 		},
 		{
-			in:  NewByte(20),
+			in:  values.NewByte(20),
 			out: "20",
 		},
 	}
@@ -43,18 +45,18 @@ func TestByte_SchemeString(t *testing.T) {
 
 func TestByte_EqualTo(t *testing.T) {
 	tcs := []struct {
-		in0 Value
-		in1 Value
+		in0 values.Value
+		in1 values.Value
 		out bool
 	}{
 		{
-			in0: NewByte(1),
-			in1: NewByte(1),
+			in0: values.NewByte(1),
+			in1: values.NewByte(1),
 			out: true,
 		},
 		{
-			in0: NewByte(1),
-			in1: NewByte(0),
+			in0: values.NewByte(1),
+			in1: values.NewByte(0),
 			out: false,
 		},
 	}

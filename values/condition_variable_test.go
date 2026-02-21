@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"runtime"
@@ -21,30 +21,33 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestConditionVariable_NewConditionVariable(t *testing.T) {
-	cv := NewConditionVariable("test-cv")
+	cv := values.NewConditionVariable("test-cv")
 	qt.Assert(t, cv, qt.Not(qt.IsNil))
 	qt.Assert(t, cv.Name(), qt.Equals, "test-cv")
 	qt.Assert(t, cv.ID() > 0, qt.IsTrue)
 }
 
 func TestConditionVariable_DefaultName(t *testing.T) {
-	cv := NewConditionVariable("")
+	cv := values.NewConditionVariable("")
 	qt.Assert(t, strings.HasPrefix(cv.Name(), "condvar-"), qt.IsTrue)
 }
 
 func TestConditionVariable_Specific(t *testing.T) {
-	cv := NewConditionVariable("test")
+	cv := values.NewConditionVariable("test")
 	qt.Assert(t, cv.Specific() == nil, qt.IsTrue)
 
-	cv.SetSpecific(NewInteger(42))
-	qt.Assert(t, cv.Specific(), SchemeEquals, NewInteger(42))
+	cv.SetSpecific(values.NewInteger(42))
+	qt.Assert(t, cv.Specific(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestConditionVariable_SignalBroadcast_NoWaiters(t *testing.T) {
-	cv := NewConditionVariable("test")
+	cv := values.NewConditionVariable("test")
 	qt.Assert(t, cv.WaiterCount(), qt.Equals, 0)
 
 	// Signal and Broadcast with no waiters should not panic
@@ -53,33 +56,33 @@ func TestConditionVariable_SignalBroadcast_NoWaiters(t *testing.T) {
 }
 
 func TestConditionVariable_WaiterCount(t *testing.T) {
-	cv := NewConditionVariable("test")
+	cv := values.NewConditionVariable("test")
 	qt.Assert(t, cv.WaiterCount(), qt.Equals, 0)
 }
 
 func TestConditionVariable_IsVoid(t *testing.T) {
-	cv := NewConditionVariable("test")
+	cv := values.NewConditionVariable("test")
 	qt.Assert(t, cv.IsVoid(), qt.IsFalse)
 
-	var nilCV *ConditionVariable
+	var nilCV *values.ConditionVariable
 	qt.Assert(t, nilCV.IsVoid(), qt.IsTrue)
 }
 
 func TestConditionVariable_EqualTo(t *testing.T) {
-	cv1 := NewConditionVariable("a")
-	cv2 := NewConditionVariable("b")
+	cv1 := values.NewConditionVariable("a")
+	cv2 := values.NewConditionVariable("b")
 	qt.Assert(t, cv1.EqualTo(cv1), qt.IsTrue)
 	qt.Assert(t, cv1.EqualTo(cv2), qt.IsFalse)
-	qt.Assert(t, cv1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, cv1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestConditionVariable_SchemeString(t *testing.T) {
-	cv := NewConditionVariable("my-cv")
+	cv := values.NewConditionVariable("my-cv")
 	s := cv.SchemeString()
 	qt.Assert(t, strings.Contains(s, "condition-variable"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(s, "my-cv"), qt.IsTrue)
 
-	var nilCV *ConditionVariable
+	var nilCV *values.ConditionVariable
 	qt.Assert(t, nilCV.SchemeString(), qt.Equals, "#<condition-variable:void>")
 }
 
@@ -91,7 +94,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	cv := NewConditionVariable("leak-test")
+	cv := values.NewConditionVariable("leak-test")
 	timeout := 10 * time.Millisecond
 
 	// Run 100 timeouts (old code would leak 100 goroutines)
@@ -112,7 +115,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 
 func TestConditionVariable_Wait_SignalBeforeTimeout(t *testing.T) {
 	c := qt.New(t)
-	cv := NewConditionVariable("signal-test")
+	cv := values.NewConditionVariable("signal-test")
 	timeout := 1 * time.Second
 
 	// Signal after 50ms
@@ -132,7 +135,7 @@ func TestConditionVariable_Wait_SignalBeforeTimeout(t *testing.T) {
 
 func TestConditionVariable_Wait_Timeout(t *testing.T) {
 	c := qt.New(t)
-	cv := NewConditionVariable("timeout-test")
+	cv := values.NewConditionVariable("timeout-test")
 	timeout := 50 * time.Millisecond
 
 	start := time.Now()
@@ -147,7 +150,7 @@ func TestConditionVariable_Wait_Timeout(t *testing.T) {
 
 func TestConditionVariable_Wait_BroadcastBeforeTimeout(t *testing.T) {
 	c := qt.New(t)
-	cv := NewConditionVariable("broadcast-test")
+	cv := values.NewConditionVariable("broadcast-test")
 	timeout := 1 * time.Second
 
 	go func() {
@@ -165,7 +168,7 @@ func TestConditionVariable_Wait_BroadcastBeforeTimeout(t *testing.T) {
 
 func TestConditionVariable_Wait_NilTimeout(t *testing.T) {
 	c := qt.New(t)
-	cv := NewConditionVariable("nil-timeout-test")
+	cv := values.NewConditionVariable("nil-timeout-test")
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -177,7 +180,7 @@ func TestConditionVariable_Wait_NilTimeout(t *testing.T) {
 }
 
 func TestConditionVariable_Wait_RaceCondition(t *testing.T) {
-	cv := NewConditionVariable("race-test")
+	cv := values.NewConditionVariable("race-test")
 	timeout := 50 * time.Millisecond
 
 	// Signal at ~timeout boundary (creates race)
@@ -194,7 +197,7 @@ func TestConditionVariable_Wait_RaceCondition(t *testing.T) {
 
 func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 	c := qt.New(t)
-	cv := NewConditionVariable("concurrent-test")
+	cv := values.NewConditionVariable("concurrent-test")
 	timeout := 100 * time.Millisecond
 
 	const numWaiters = 50

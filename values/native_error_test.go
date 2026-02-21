@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestNativeError_EqualTo(t *testing.T) {
@@ -25,16 +27,16 @@ func TestNativeError_EqualTo(t *testing.T) {
 
 func TestNewFileError_SetsKindFile(t *testing.T) {
 	c := qt.New(t)
-	err := NewFileError("file not found", NewString("/tmp/foo"))
-	c.Assert(err.Kind(), qt.Equals, NativeErrorKindFile)
+	err := values.NewFileError("file not found", values.NewString("/tmp/foo"))
+	c.Assert(err.Kind(), qt.Equals, values.NativeErrorKindFile)
 	c.Assert(err.IsFileError(), qt.IsTrue)
 	c.Assert(err.IsReadError(), qt.IsFalse)
 }
 
 func TestNewReadError_SetsKindRead(t *testing.T) {
 	c := qt.New(t)
-	err := NewReadError("unexpected token")
-	c.Assert(err.Kind(), qt.Equals, NativeErrorKindRead)
+	err := values.NewReadError("unexpected token")
+	c.Assert(err.Kind(), qt.Equals, values.NativeErrorKindRead)
 	c.Assert(err.IsReadError(), qt.IsTrue)
 	c.Assert(err.IsFileError(), qt.IsFalse)
 }
@@ -43,18 +45,18 @@ func TestNewErrorObjectWithCauseAndKind(t *testing.T) {
 	c := qt.New(t)
 	tests := []struct {
 		name string
-		kind NativeErrorKind
+		kind values.NativeErrorKind
 		file bool
 		read bool
 	}{
-		{"generic", NativeErrorKindGeneric, false, false},
-		{"file", NativeErrorKindFile, true, false},
-		{"read", NativeErrorKindRead, false, true},
+		{"generic", values.NativeErrorKindGeneric, false, false},
+		{"file", values.NativeErrorKindFile, true, false},
+		{"read", values.NativeErrorKindRead, false, true},
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			cause := newForeignError("underlying error")
-			err := NewErrorObjectWithCauseAndKind("msg", cause, tt.kind)
+			cause := values.ExportNewForeignError("underlying error")
+			err := values.NewErrorObjectWithCauseAndKind("msg", cause, tt.kind)
 			c.Assert(err.Kind(), qt.Equals, tt.kind)
 			c.Assert(err.IsFileError(), qt.Equals, tt.file)
 			c.Assert(err.IsReadError(), qt.Equals, tt.read)

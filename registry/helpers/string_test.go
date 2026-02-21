@@ -21,6 +21,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func strLT(a, b string) bool {
@@ -92,7 +93,7 @@ func TestStringCompare(t *testing.T) {
 			mc := makeMC(tc.a, tc.b)
 			err := StringCompare(mc, "test", tc.cmp)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -193,7 +194,7 @@ func TestStringCompareVariadic(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := StringCompareVariadic(mc, "test", tc.cmp)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

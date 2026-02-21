@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -30,9 +31,9 @@ func TestMultipleValues_NewMultipleValues(t *testing.T) {
 	)
 
 	qt.Assert(t, mv, qt.HasLen, 3)
-	qt.Assert(t, mv[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, mv[1], values.SchemeEquals, values.NewInteger(2))
-	qt.Assert(t, mv[2], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mv[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mv[1], valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mv[2], valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 func TestMultipleValues_Length(t *testing.T) {
@@ -56,8 +57,8 @@ func TestMultipleValues_Copy(t *testing.T) {
 	cp := mv.Copy()
 
 	qt.Assert(t, cp.Len(), qt.Equals, 2)
-	qt.Assert(t, cp[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, cp[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, cp[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cp[1], valuestest.SchemeEquals, values.NewInteger(2))
 	// Verify it's a different slice
 	qt.Assert(t, &cp[0] != &mv[0], qt.IsTrue)
 }

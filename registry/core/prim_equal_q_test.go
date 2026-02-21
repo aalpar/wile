@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -69,7 +70,7 @@ func TestEqualQComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -98,7 +99,7 @@ func TestEqualityHierarchy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -113,7 +114,7 @@ func TestEqualQCircular_SelfReferentialList(t *testing.T) {
 		  (equal? x x))
 	`, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEqualQCircular_TwoIdenticalCircularLists(t *testing.T) {
@@ -125,7 +126,7 @@ func TestEqualQCircular_TwoIdenticalCircularLists(t *testing.T) {
 		  (equal? a b))
 	`, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEqualQCircular_DifferentCircularLists(t *testing.T) {
@@ -137,7 +138,7 @@ func TestEqualQCircular_DifferentCircularLists(t *testing.T) {
 		  (equal? a b))
 	`, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestEqualQCircular_CircularVector(t *testing.T) {
@@ -147,7 +148,7 @@ func TestEqualQCircular_CircularVector(t *testing.T) {
 		  (equal? v v))
 	`, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEqualQCircular_PairContainingCircularVector(t *testing.T) {
@@ -159,5 +160,5 @@ func TestEqualQCircular_PairContainingCircularVector(t *testing.T) {
 		    (equal? a b)))
 	`, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

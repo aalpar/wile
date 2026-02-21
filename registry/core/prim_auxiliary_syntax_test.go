@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // TestAuxiliarySyntax_CondElse verifies that auxiliary syntax `else` works
@@ -30,7 +31,7 @@ func TestAuxiliarySyntax_CondElse(t *testing.T) {
 
 	result, err := testhelpers.RunSchemeCode(t, "(cond (else 42))")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestAuxiliarySyntax_CondArrow verifies that auxiliary syntax `=>` works
@@ -40,7 +41,7 @@ func TestAuxiliarySyntax_CondArrow(t *testing.T) {
 
 	result, err := testhelpers.RunSchemeCode(t, "(cond (#t => (lambda (x) x)))")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.TrueValue)
+	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestAuxiliarySyntax_CaseElse verifies that auxiliary syntax `else` works
@@ -50,5 +51,5 @@ func TestAuxiliarySyntax_CaseElse(t *testing.T) {
 
 	result, err := testhelpers.RunSchemeCode(t, "(case 1 (else 'ok))")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("ok"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("ok"))
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -94,7 +95,7 @@ func TestCoverage_BinaryIntegers(t *testing.T) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
+			c.Assert(syn.Unwrap(), valuestest.SchemeEquals, tt.expect)
 		})
 	}
 }
@@ -117,7 +118,7 @@ func TestCoverage_OctalIntegers(t *testing.T) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
+			c.Assert(syn.Unwrap(), valuestest.SchemeEquals, tt.expect)
 		})
 	}
 }
@@ -141,7 +142,7 @@ func TestCoverage_HexIntegers(t *testing.T) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
+			c.Assert(syn.Unwrap(), valuestest.SchemeEquals, tt.expect)
 		})
 	}
 }
@@ -171,7 +172,7 @@ func TestCoverage_BinaryRationals(t *testing.T) {
 			v := syn.Unwrap()
 			r := new(big.Rat).SetFrac64(tt.expectNum, tt.expectDen)
 			expected := values.Simplify(values.NewRationalFromRat(r))
-			c.Assert(v, values.SchemeEquals, expected)
+			c.Assert(v, valuestest.SchemeEquals, expected)
 		})
 	}
 }
@@ -185,7 +186,7 @@ func TestCoverage_OctalRationals(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	r := new(big.Rat).SetFrac64(7, 3)
 	expected := values.Simplify(values.NewRationalFromRat(r))
-	c.Assert(syn.Unwrap(), values.SchemeEquals, expected)
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, expected)
 }
 
 func TestCoverage_HexRationals(t *testing.T) {
@@ -196,7 +197,7 @@ func TestCoverage_HexRationals(t *testing.T) {
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	// #x10 = 16, #x8 = 8 => 16/8 = 2
-	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(2))
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // ---------------------------------------------------------------------------
@@ -591,15 +592,15 @@ func TestCoverage_MultipleReads(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("1 2 3"))
 	syn1, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn1.Unwrap(), values.SchemeEquals, values.NewInteger(1))
+	c.Assert(syn1.Unwrap(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	syn2, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn2.Unwrap(), values.SchemeEquals, values.NewInteger(2))
+	c.Assert(syn2.Unwrap(), valuestest.SchemeEquals, values.NewInteger(2))
 
 	syn3, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn3.Unwrap(), values.SchemeEquals, values.NewInteger(3))
+	c.Assert(syn3.Unwrap(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 func TestCoverage_FoldCaseDirective(t *testing.T) {
@@ -929,7 +930,7 @@ func TestCoverage_BlockComment(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("#| block comment |# 42"))
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // ---------------------------------------------------------------------------
@@ -1256,7 +1257,7 @@ func TestCoverage_SkipTopLevelComment(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("; comment\n42"))
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1334,7 @@ func TestCoverage_Base10Prefix(t *testing.T) {
 	p := NewParser(env, false, strings.NewReader("#d42"))
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // ---------------------------------------------------------------------------
@@ -1402,7 +1403,7 @@ func TestCoverage_SignedRational(t *testing.T) {
 			p := NewParser(env, false, strings.NewReader(tt.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.Unwrap(), values.SchemeEquals, tt.expect)
+			c.Assert(syn.Unwrap(), valuestest.SchemeEquals, tt.expect)
 		})
 	}
 }
@@ -1537,7 +1538,7 @@ func TestCoverage_ParserWithFile(t *testing.T) {
 	p := NewParserWithFile(env, true, strings.NewReader("42"), "test.scm")
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.Unwrap(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.Unwrap(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // ---------------------------------------------------------------------------

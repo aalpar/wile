@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -173,7 +174,7 @@ func TestStringUpcase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -200,7 +201,7 @@ func TestStringDowncase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -222,7 +223,7 @@ func TestStringFoldcase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -279,7 +280,7 @@ func TestStringCopyTo(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -340,7 +341,7 @@ func TestStringFill(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -397,7 +398,7 @@ func TestStringMap(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -462,7 +463,7 @@ func TestStringForEach(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 

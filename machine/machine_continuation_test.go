@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -78,8 +79,8 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 
 	cont.PushValues(values.NewInteger(1), values.NewInteger(2))
 	qt.Assert(t, len(cont.multiValues), qt.Equals, 2)
-	qt.Assert(t, cont.multiValues[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, cont.multiValues[1], values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, cont.multiValues[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cont.multiValues[1], valuestest.SchemeEquals, values.NewInteger(2))
 
 	cont.PushValues(values.NewInteger(3))
 	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
@@ -97,9 +98,9 @@ func TestMachineContinuation_PushValues_PromoteSingleToMulti(t *testing.T) {
 	cont.PushValues(values.NewInteger(2), values.NewInteger(3))
 
 	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
-	qt.Assert(t, cont.multiValues[0], values.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, cont.multiValues[1], values.SchemeEquals, values.NewInteger(2))
-	qt.Assert(t, cont.multiValues[2], values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, cont.multiValues[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, cont.multiValues[1], valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, cont.multiValues[2], valuestest.SchemeEquals, values.NewInteger(3))
 	qt.Assert(t, cont.singleValue, qt.IsNil)
 }
 
@@ -123,7 +124,7 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	qt.Assert(t, cpy.template, qt.Equals, cont.template)
 	qt.Assert(t, cpy.pc, qt.Equals, cont.pc)
 	// Verify singleValue is copied
-	qt.Assert(t, cpy.singleValue, values.SchemeEquals, cont.singleValue)
+	qt.Assert(t, cpy.singleValue, valuestest.SchemeEquals, cont.singleValue)
 	// Verify evals stack is copied
 	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }

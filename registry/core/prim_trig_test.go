@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -75,7 +76,7 @@ func TestSin(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -113,7 +114,7 @@ func TestCos(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -145,7 +146,7 @@ func TestTan(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -183,7 +184,7 @@ func TestAsin(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -221,7 +222,7 @@ func TestAcos(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -265,7 +266,7 @@ func TestAtan(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -303,7 +304,7 @@ func TestExp(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -346,7 +347,7 @@ func TestLog(t *testing.T) {
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
 			} else {
-				qt.Assert(t, result, values.SchemeEquals, tc.out)
+				qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}

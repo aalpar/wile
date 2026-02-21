@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // makeMC constructs a MachineContext with the given values as local bindings.
@@ -332,7 +333,7 @@ func TestIntegerFold_GCD(t *testing.T) {
 			mc := makeMC(tc.args)
 			err := IntegerFold(mc, FoldOpGCD, 0, gcdCombiner)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -367,7 +368,7 @@ func TestIntegerFold_GCD_Inexact(t *testing.T) {
 			mc := makeMC(tc.args)
 			err := IntegerFold(mc, FoldOpGCD, 0, gcdCombiner)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -436,7 +437,7 @@ func TestIntegerFold_LCM(t *testing.T) {
 			mc := makeMC(tc.args)
 			err := IntegerFold(mc, FoldOpLCM, 1, lcmCombiner)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -512,7 +513,7 @@ func TestIntegerFold_LCM_Inexact(t *testing.T) {
 			mc := makeMC(tc.args)
 			err := IntegerFold(mc, FoldOpLCM, 1, lcmCombiner)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

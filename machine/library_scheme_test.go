@@ -28,6 +28,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -213,19 +214,19 @@ func TestSchemeLibraryImportsWithUsage(t *testing.T) {
 	sv = parseSchemeExpr(t, env, "(car '(1 2 3))")
 	result, err := compileAndRun(t, env, sv)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(1))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Test (scheme char) - char-upcase
 	sv = parseSchemeExpr(t, env, "(char-upcase #\\a)")
 	result, err = compileAndRun(t, env, sv)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewCharacter('A'))
+	c.Assert(result, valuestest.SchemeEquals, values.NewCharacter('A'))
 
 	// Test (scheme inexact) - exp
 	sv = parseSchemeExpr(t, env, "(exp 0)")
 	result, err = compileAndRun(t, env, sv)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewFloat(1.0))
+	c.Assert(result, valuestest.SchemeEquals, values.NewFloat(1.0))
 }
 
 // TestLibraryInternalMacroHygiene tests that macros defined in a library can
@@ -297,7 +298,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	sv = parseSchemeExpr(t, env, useCode)
 	result, err := compileAndRun(t, env, sv)
 	c.Assert(err, qt.IsNil, qt.Commentf("macro using non-exported helper should work"))
-	c.Assert(result, values.SchemeEquals, values.NewInteger(6))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(6))
 }
 
 // TestIndividualSchemeLibraries tests each scheme library can be imported individually

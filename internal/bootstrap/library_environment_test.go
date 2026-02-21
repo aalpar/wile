@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -127,7 +128,7 @@ func TestNewLibraryEnvironmentFrame_PrimitivesAvailable(t *testing.T) {
 	// Evaluate a simple expression in the library environment
 	result, err := evalScheme(t, libEnv, `(+ 1 2)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(3))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable verifies that
@@ -158,7 +159,7 @@ func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 		c.Run(tt.name, func(c *qt.C) {
 			result, err := evalScheme(t, libEnv, tt.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tt.expected)
+			c.Assert(result, valuestest.SchemeEquals, tt.expected)
 		})
 	}
 }
@@ -199,11 +200,11 @@ func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 	// Each sees its own
 	result, err := evalScheme(t, callerEnv, `caller-var`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(100))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(100))
 
 	result, err = evalScheme(t, libEnv, `lib-var`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(200))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(200))
 }
 
 // ===========================================================================
@@ -231,7 +232,7 @@ func TestNewTopLevelEnvironmentFrameTiny_IndependentEnvironments(t *testing.T) {
 
 	result, err := evalScheme(t, env1, `unique-var`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 
 	// env2 should not have unique-var
 	_, err = evalScheme(t, env2, `unique-var`)
@@ -270,7 +271,7 @@ func TestNewTopLevelEnvironmentFrameTiny_BootstrapMacrosLoaded(t *testing.T) {
 		c.Run(tt.name, func(c *qt.C) {
 			result, err := evalScheme(t, env, tt.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tt.expected)
+			c.Assert(result, valuestest.SchemeEquals, tt.expected)
 		})
 	}
 }
@@ -351,7 +352,7 @@ func TestLoadBootstrapMacros_ValidMacro(t *testing.T) {
 	// Use the macro
 	result, err := evalScheme(t, env, `(my-add 3 4)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(7))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 // TestLoadBootstrapMacros_MultipleSources verifies that multiple macro source
@@ -375,7 +376,7 @@ func TestLoadBootstrapMacros_MultipleSources(t *testing.T) {
 
 	result, err := evalScheme(t, env, `(quadruple 5)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(20))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 // ===========================================================================

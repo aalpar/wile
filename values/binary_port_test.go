@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"bytes"
@@ -22,12 +22,14 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // --- BinaryInputPort ---
 
 func TestBinaryInputPort_ReadByte(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{42, 99}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{42, 99}))
 
 	b1, err := port.ReadByte()
 	qt.Assert(t, err, qt.IsNil)
@@ -42,7 +44,7 @@ func TestBinaryInputPort_ReadByte(t *testing.T) {
 }
 
 func TestBinaryInputPort_Read(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1, 2, 3, 4, 5}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1, 2, 3, 4, 5}))
 
 	buf := make([]byte, 3)
 	n, err := port.Read(buf)
@@ -52,7 +54,7 @@ func TestBinaryInputPort_Read(t *testing.T) {
 }
 
 func TestBinaryInputPort_UnreadByte(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1, 2}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1, 2}))
 
 	b, _ := port.ReadByte()
 	qt.Assert(t, b, qt.Equals, byte(1))
@@ -65,55 +67,55 @@ func TestBinaryInputPort_UnreadByte(t *testing.T) {
 }
 
 func TestBinaryInputPort_Close(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	err := port.Close()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port.IsClosed(), qt.IsTrue)
 
 	// Operations after close return ErrPortClosed
 	_, err = port.ReadByte()
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 
 	err = port.UnreadByte()
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 
 	_, err = port.Read(make([]byte, 1))
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 }
 
 func TestBinaryInputPort_CloseWithCloser(t *testing.T) {
 	// io.ReadCloser integrates Closer
 	rc := io.NopCloser(bytes.NewReader([]byte{1}))
-	port := NewBinaryInputPortFromReader(rc)
+	port := values.NewBinaryInputPortFromReader(rc)
 	err := port.Close()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port.IsClosed(), qt.IsTrue)
 }
 
 func TestBinaryInputPort_IsVoid(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *BinaryInputPort
+	var nilPort *values.BinaryInputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBinaryInputPort_EqualTo(t *testing.T) {
-	port1 := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
-	port2 := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port1 := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port2 := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
-	qt.Assert(t, port1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, port1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestBinaryInputPort_SchemeString(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "binary-input-port"), qt.IsTrue)
 }
 
 func TestBinaryInputPort_Datum(t *testing.T) {
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	qt.Assert(t, port.Datum(), qt.Not(qt.IsNil))
 }
 
@@ -121,7 +123,7 @@ func TestBinaryInputPort_Datum(t *testing.T) {
 
 func TestBinaryOutputPort_WriteByte(t *testing.T) {
 	buf := &bytes.Buffer{}
-	port := NewBinaryOutputPortFromWriter(buf)
+	port := values.NewBinaryOutputPortFromWriter(buf)
 
 	err := port.WriteByte(42)
 	qt.Assert(t, err, qt.IsNil)
@@ -134,7 +136,7 @@ func TestBinaryOutputPort_WriteByte(t *testing.T) {
 
 func TestBinaryOutputPort_Write(t *testing.T) {
 	buf := &bytes.Buffer{}
-	port := NewBinaryOutputPortFromWriter(buf)
+	port := values.NewBinaryOutputPortFromWriter(buf)
 
 	n, err := port.Write([]byte{1, 2, 3})
 	qt.Assert(t, err, qt.IsNil)
@@ -147,46 +149,46 @@ func TestBinaryOutputPort_Write(t *testing.T) {
 
 func TestBinaryOutputPort_Close(t *testing.T) {
 	buf := &bytes.Buffer{}
-	port := NewBinaryOutputPortFromWriter(buf)
+	port := values.NewBinaryOutputPortFromWriter(buf)
 	err := port.Close()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port.IsClosed(), qt.IsTrue)
 
 	// Operations after close return ErrPortClosed
 	err = port.WriteByte(1)
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 
 	_, err = port.Write([]byte{1})
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 
 	err = port.Flush()
-	qt.Assert(t, errors.Is(err, ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
 }
 
 func TestBinaryOutputPort_IsVoid(t *testing.T) {
 	buf := &bytes.Buffer{}
-	port := NewBinaryOutputPortFromWriter(buf)
+	port := values.NewBinaryOutputPortFromWriter(buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *BinaryOutputPort
+	var nilPort *values.BinaryOutputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBinaryOutputPort_EqualTo(t *testing.T) {
-	port1 := NewBinaryOutputPortFromWriter(&bytes.Buffer{})
-	port2 := NewBinaryOutputPortFromWriter(&bytes.Buffer{})
+	port1 := values.NewBinaryOutputPortFromWriter(&bytes.Buffer{})
+	port2 := values.NewBinaryOutputPortFromWriter(&bytes.Buffer{})
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
-	qt.Assert(t, port1.EqualTo(NewInteger(1)), qt.IsFalse)
+	qt.Assert(t, port1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestBinaryOutputPort_SchemeString(t *testing.T) {
-	port := NewBinaryOutputPortFromWriter(&bytes.Buffer{})
+	port := values.NewBinaryOutputPortFromWriter(&bytes.Buffer{})
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "binary-output-port"), qt.IsTrue)
 }
 
 func TestBinaryOutputPort_Datum(t *testing.T) {
-	port := NewBinaryOutputPortFromWriter(&bytes.Buffer{})
+	port := values.NewBinaryOutputPortFromWriter(&bytes.Buffer{})
 	qt.Assert(t, port.Datum(), qt.Not(qt.IsNil))
 }

@@ -12,75 +12,78 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestCompileTimeValue_NewCompileTimeValue(t *testing.T) {
-	inner := NewInteger(42)
-	ctv := NewCompileTimeValue(inner)
-	qt.Assert(t, ctv.Value, SchemeEquals, inner)
+	inner := values.NewInteger(42)
+	ctv := values.NewCompileTimeValue(inner)
+	qt.Assert(t, ctv.Value, valuestest.SchemeEquals, inner)
 }
 
 func TestCompileTimeValue_Unwrap(t *testing.T) {
-	inner := NewString("hello")
-	ctv := NewCompileTimeValue(inner)
-	qt.Assert(t, ctv.Unwrap(), SchemeEquals, inner)
+	inner := values.NewString("hello")
+	ctv := values.NewCompileTimeValue(inner)
+	qt.Assert(t, ctv.Unwrap(), valuestest.SchemeEquals, inner)
 }
 
 func TestCompileTimeValue_IsVoid(t *testing.T) {
-	ctv := NewCompileTimeValue(NewInteger(1))
+	ctv := values.NewCompileTimeValue(values.NewInteger(1))
 	qt.Assert(t, ctv.IsVoid(), qt.IsFalse)
 
-	var nilCTV *CompileTimeValue
+	var nilCTV *values.CompileTimeValue
 	qt.Assert(t, nilCTV.IsVoid(), qt.IsTrue)
 }
 
 func TestCompileTimeValue_EqualTo(t *testing.T) {
 	tcs := []struct {
 		name string
-		a    Value
-		b    Value
+		a    values.Value
+		b    values.Value
 		out  bool
 	}{
 		{
 			name: "same object",
-			a:    NewCompileTimeValue(NewInteger(1)),
+			a:    values.NewCompileTimeValue(values.NewInteger(1)),
 			b:    nil, // will be set to a
 			out:  true,
 		},
 		{
 			name: "equal wrapped values",
-			a:    NewCompileTimeValue(NewInteger(42)),
-			b:    NewCompileTimeValue(NewInteger(42)),
+			a:    values.NewCompileTimeValue(values.NewInteger(42)),
+			b:    values.NewCompileTimeValue(values.NewInteger(42)),
 			out:  true,
 		},
 		{
 			name: "different wrapped values",
-			a:    NewCompileTimeValue(NewInteger(1)),
-			b:    NewCompileTimeValue(NewInteger(2)),
+			a:    values.NewCompileTimeValue(values.NewInteger(1)),
+			b:    values.NewCompileTimeValue(values.NewInteger(2)),
 			out:  false,
 		},
 		{
 			name: "type mismatch",
-			a:    NewCompileTimeValue(NewInteger(1)),
-			b:    NewInteger(1),
+			a:    values.NewCompileTimeValue(values.NewInteger(1)),
+			b:    values.NewInteger(1),
 			out:  false,
 		},
 		{
 			name: "both nil wrapped",
-			a:    NewCompileTimeValue(nil),
-			b:    NewCompileTimeValue(nil),
+			a:    values.NewCompileTimeValue(nil),
+			b:    values.NewCompileTimeValue(nil),
 			out:  true,
 		},
 		{
 			name: "one nil wrapped",
-			a:    NewCompileTimeValue(nil),
-			b:    NewCompileTimeValue(NewInteger(1)),
+			a:    values.NewCompileTimeValue(nil),
+			b:    values.NewCompileTimeValue(values.NewInteger(1)),
 			out:  false,
 		},
 	}
@@ -96,9 +99,9 @@ func TestCompileTimeValue_EqualTo(t *testing.T) {
 }
 
 func TestCompileTimeValue_SchemeString(t *testing.T) {
-	ctv := NewCompileTimeValue(NewInteger(42))
+	ctv := values.NewCompileTimeValue(values.NewInteger(42))
 	qt.Assert(t, ctv.SchemeString(), qt.Equals, "#<compile-time-value 42>")
 
-	ctv2 := NewCompileTimeValue(NewString("hello"))
+	ctv2 := values.NewCompileTimeValue(values.NewString("hello"))
 	qt.Assert(t, ctv2.SchemeString(), qt.Equals, "#<compile-time-value \"hello\">")
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"fmt"
@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // NumericTowerCoverageTest tests all 245 type combinations (7 types × 7 operands × 5 operations)
@@ -33,32 +35,32 @@ import (
 // testNumber holds a test value and its type name
 type testNumber struct {
 	name  string
-	value Number
+	value values.Number
 }
 
 // makeTestNumbers creates one test value of each numeric type
 func makeTestNumbers() []testNumber {
 	return []testNumber{
-		{"Integer", NewInteger(5)},
-		{"BigInteger", NewBigIntegerFromInt64(5)},
-		{"Float", NewFloat(5.0)},
-		{"BigFloat", NewBigFloatFromFloat64(5.0)},
-		{"Rational", NewRational(5, 1)},
-		{"Complex", NewComplex(complex(5, 0))},
-		{"BigComplex", NewBigComplexFromBigFloats(NewBigFloatFromFloat64(5), NewBigFloatFromFloat64(0))},
+		{"Integer", values.NewInteger(5)},
+		{"BigInteger", values.NewBigIntegerFromInt64(5)},
+		{"Float", values.NewFloat(5.0)},
+		{"BigFloat", values.NewBigFloatFromFloat64(5.0)},
+		{"Rational", values.NewRational(5, 1)},
+		{"Complex", values.NewComplex(complex(5, 0))},
+		{"BigComplex", values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(5), values.NewBigFloatFromFloat64(0))},
 	}
 }
 
 // makeTestZeros creates zero values of each numeric type for division-by-zero testing
 func makeTestZeros() []testNumber {
 	return []testNumber{
-		{"Integer", NewInteger(0)},
-		{"BigInteger", NewBigIntegerFromInt64(0)},
-		{"Float", NewFloat(0.0)},
-		{"BigFloat", NewBigFloatFromFloat64(0.0)},
-		{"Rational", NewRational(0, 1)},
-		{"Complex", NewComplex(complex(0, 0))},
-		{"BigComplex", NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), NewBigFloatFromFloat64(0))},
+		{"Integer", values.NewInteger(0)},
+		{"BigInteger", values.NewBigIntegerFromInt64(0)},
+		{"Float", values.NewFloat(0.0)},
+		{"BigFloat", values.NewBigFloatFromFloat64(0.0)},
+		{"Rational", values.NewRational(0, 1)},
+		{"Complex", values.NewComplex(complex(0, 0))},
+		{"BigComplex", values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(0), values.NewBigFloatFromFloat64(0))},
 	}
 }
 
@@ -71,7 +73,7 @@ type operationResult struct {
 }
 
 // tryOperation safely executes an operation and captures the result
-func tryOperation(op func() Number) (result operationResult) {
+func tryOperation(op func() values.Number) (result operationResult) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -99,7 +101,7 @@ func TestNumericTower_Add(t *testing.T) {
 		for _, operand := range numbers {
 			name := fmt.Sprintf("%s+%s", receiver.name, operand.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return receiver.value.Add(operand.value)
 				})
 
@@ -127,7 +129,7 @@ func TestNumericTower_Subtract(t *testing.T) {
 		for _, operand := range numbers {
 			name := fmt.Sprintf("%s-%s", receiver.name, operand.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return receiver.value.Subtract(operand.value)
 				})
 
@@ -154,7 +156,7 @@ func TestNumericTower_Multiply(t *testing.T) {
 		for _, operand := range numbers {
 			name := fmt.Sprintf("%s*%s", receiver.name, operand.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return receiver.value.Multiply(operand.value)
 				})
 
@@ -181,7 +183,7 @@ func TestNumericTower_Divide(t *testing.T) {
 		for _, operand := range numbers {
 			name := fmt.Sprintf("%s/%s", receiver.name, operand.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return receiver.value.Divide(operand.value)
 				})
 
@@ -241,7 +243,7 @@ func TestNumericTower_DivideByZero(t *testing.T) {
 		for _, zero := range zeros {
 			name := fmt.Sprintf("%s/zero_%s", receiver.name, zero.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return receiver.value.Divide(zero.value)
 				})
 
@@ -274,22 +276,22 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 
 	// Create test values for receivers (a)
 	// Using different values for receiver and operand to avoid simplification
-	integerA := NewInteger(2)
-	bigIntegerA := NewBigIntegerFromInt64(3)
-	rationalA := NewRational(5, 2)
-	floatA := NewFloat(2.5)
-	bigFloatA := NewBigFloatFromFloat64(3.5)
-	complexA := NewComplexFromParts(2.0, 1.0)
-	bigComplexA := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(2), NewBigFloatFromFloat64(1))
+	integerA := values.NewInteger(2)
+	bigIntegerA := values.NewBigIntegerFromInt64(3)
+	rationalA := values.NewRational(5, 2)
+	floatA := values.NewFloat(2.5)
+	bigFloatA := values.NewBigFloatFromFloat64(3.5)
+	complexA := values.NewComplexFromParts(2.0, 1.0)
+	bigComplexA := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2), values.NewBigFloatFromFloat64(1))
 
 	// Create test values for operands (b) - different values to avoid simplification
-	integerB := NewInteger(7)
-	bigIntegerB := NewBigIntegerFromInt64(11)
-	rationalB := NewRational(3, 4)
-	floatB := NewFloat(1.5)
-	bigFloatB := NewBigFloatFromFloat64(2.5)
-	complexB := NewComplexFromParts(3.0, 2.0)
-	bigComplexB := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(5), NewBigFloatFromFloat64(3))
+	integerB := values.NewInteger(7)
+	bigIntegerB := values.NewBigIntegerFromInt64(11)
+	rationalB := values.NewRational(3, 4)
+	floatB := values.NewFloat(1.5)
+	bigFloatB := values.NewBigFloatFromFloat64(2.5)
+	complexB := values.NewComplexFromParts(3.0, 2.0)
+	bigComplexB := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(5), values.NewBigFloatFromFloat64(3))
 
 	// Expected result types for addition (same pattern for subtraction and multiplication)
 	// Format: "ReceiverType+OperandType" -> "ExpectedResultType"
@@ -354,7 +356,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 
 	receivers := []struct {
 		name  string
-		value Number
+		value values.Number
 	}{
 		{"Integer", integerA},
 		{"BigInteger", bigIntegerA},
@@ -367,7 +369,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 
 	operands := []struct {
 		name  string
-		value Number
+		value values.Number
 	}{
 		{"Integer", integerB},
 		{"BigInteger", bigIntegerB},
@@ -429,22 +431,22 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 	c := qt.New(t)
 
 	// Receivers (a) - numerators
-	integerA := NewInteger(5)
-	bigIntegerA := NewBigIntegerFromInt64(7)
-	rationalA := NewRational(5, 2)
-	floatA := NewFloat(2.5)
-	bigFloatA := NewBigFloatFromFloat64(3.5)
-	complexA := NewComplexFromParts(2.0, 1.0)
-	bigComplexA := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(2), NewBigFloatFromFloat64(1))
+	integerA := values.NewInteger(5)
+	bigIntegerA := values.NewBigIntegerFromInt64(7)
+	rationalA := values.NewRational(5, 2)
+	floatA := values.NewFloat(2.5)
+	bigFloatA := values.NewBigFloatFromFloat64(3.5)
+	complexA := values.NewComplexFromParts(2.0, 1.0)
+	bigComplexA := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2), values.NewBigFloatFromFloat64(1))
 
 	// Operands (b) - denominators that won't divide evenly into receivers
-	integerB := NewInteger(3)
-	bigIntegerB := NewBigIntegerFromInt64(11)
-	rationalB := NewRational(3, 4)
-	floatB := NewFloat(1.5)
-	bigFloatB := NewBigFloatFromFloat64(2.5)
-	complexB := NewComplexFromParts(3.0, 2.0)
-	bigComplexB := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(5), NewBigFloatFromFloat64(3))
+	integerB := values.NewInteger(3)
+	bigIntegerB := values.NewBigIntegerFromInt64(11)
+	rationalB := values.NewRational(3, 4)
+	floatB := values.NewFloat(1.5)
+	bigFloatB := values.NewBigFloatFromFloat64(2.5)
+	complexB := values.NewComplexFromParts(3.0, 2.0)
+	bigComplexB := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(5), values.NewBigFloatFromFloat64(3))
 
 	// Division result types
 	// Note: Integer/Integer returns Rational when not exact (5/3), Integer when exact (6/2)
@@ -509,7 +511,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 
 	receivers := []struct {
 		name  string
-		value Number
+		value values.Number
 	}{
 		{"Integer", integerA},
 		{"BigInteger", bigIntegerA},
@@ -522,7 +524,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 
 	operands := []struct {
 		name  string
-		value Number
+		value values.Number
 	}{
 		{"Integer", integerB},
 		{"BigInteger", bigIntegerB},
@@ -553,16 +555,16 @@ func TestNumericTower_ExactnessPreservation(t *testing.T) {
 	c := qt.New(t)
 
 	// Exact types
-	exactInt := NewInteger(3)
-	exactBigInt := NewBigIntegerFromInt64(5)
-	exactRational := NewRational(1, 2)
-	exactBigComplex := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))
+	exactInt := values.NewInteger(3)
+	exactBigInt := values.NewBigIntegerFromInt64(5)
+	exactRational := values.NewRational(1, 2)
+	exactBigComplex := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2))
 
 	// Inexact types
-	inexactFloat := NewFloat(3.0)
-	inexactBigFloat := NewBigFloatFromFloat64(5.0)
-	inexactComplex := NewComplexFromParts(1.0, 2.0)
-	inexactBigComplex := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(1), NewBigFloatFromFloat64(2))
+	inexactFloat := values.NewFloat(3.0)
+	inexactBigFloat := values.NewBigFloatFromFloat64(5.0)
+	inexactComplex := values.NewComplexFromParts(1.0, 2.0)
+	inexactBigComplex := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(1), values.NewBigFloatFromFloat64(2))
 
 	// Test exact + exact = exact
 	t.Run("exact+exact=exact", func(t *testing.T) {
@@ -642,29 +644,29 @@ func TestNumericTower_ExactComplexArithmetic(t *testing.T) {
 	c := qt.New(t)
 
 	// Create exact complex: 3+4i using BigComplex with BigInteger parts
-	exactComplex := NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4))
+	exactComplex := values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))
 	c.Assert(exactComplex.IsExact(), qt.IsTrue, qt.Commentf("3+4i should be exact"))
 
 	// exact complex + exact integer = exact complex
 	t.Run("exact_complex+integer", func(t *testing.T) {
-		result := exactComplex.Add(NewInteger(5))
+		result := exactComplex.Add(values.NewInteger(5))
 		c.Assert(result.IsExact(), qt.IsTrue)
 		// Result should be 8+4i
-		bc, ok := result.(*BigComplex)
+		bc, ok := result.(*values.BigComplex)
 		c.Assert(ok, qt.IsTrue)
-		c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(8))
-		c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(4))
+		c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(8))
+		c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(4))
 	})
 
 	// exact complex + exact rational = exact complex
 	t.Run("exact_complex+rational", func(t *testing.T) {
-		result := exactComplex.Add(NewRational(1, 2))
+		result := exactComplex.Add(values.NewRational(1, 2))
 		c.Assert(result.IsExact(), qt.IsTrue)
 		// Result should be 7/2+4i (3.5+4i as exact)
-		bc, ok := result.(*BigComplex)
+		bc, ok := result.(*values.BigComplex)
 		c.Assert(ok, qt.IsTrue)
 		// Real part should be Rational 7/2
-		rat, ok := bc.Real().(*Rational)
+		rat, ok := bc.Real().(*values.Rational)
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(rat.Num().Int64(), qt.Equals, int64(7))
 		c.Assert(rat.Denom().Int64(), qt.Equals, int64(2))
@@ -673,18 +675,18 @@ func TestNumericTower_ExactComplexArithmetic(t *testing.T) {
 	// exact complex * exact complex = exact complex
 	t.Run("exact_complex*exact_complex", func(t *testing.T) {
 		// (3+4i) * (1+2i) = 3 + 6i + 4i + 8i² = 3 + 10i - 8 = -5 + 10i
-		other := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))
+		other := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2))
 		result := exactComplex.Multiply(other)
 		c.Assert(result.IsExact(), qt.IsTrue)
-		bc, ok := result.(*BigComplex)
+		bc, ok := result.(*values.BigComplex)
 		c.Assert(ok, qt.IsTrue)
-		c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(-5))
-		c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(10))
+		c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(-5))
+		c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(10))
 	})
 
 	// exact complex + inexact float = inexact
 	t.Run("exact_complex+float=inexact", func(t *testing.T) {
-		result := exactComplex.Add(NewFloat(1.5))
+		result := exactComplex.Add(values.NewFloat(1.5))
 		c.Assert(result.IsExact(), qt.IsFalse)
 	})
 }
@@ -698,12 +700,12 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 	numbers := makeTestNumbers()
 	operations := []struct {
 		name string
-		op   func(a, b Number) Number
+		op   func(a, b values.Number) values.Number
 	}{
-		{"Add", func(a, b Number) Number { return a.Add(b) }},
-		{"Sub", func(a, b Number) Number { return a.Subtract(b) }},
-		{"Mul", func(a, b Number) Number { return a.Multiply(b) }},
-		{"Div", func(a, b Number) Number { return a.Divide(b) }},
+		{"Add", func(a, b values.Number) values.Number { return a.Add(b) }},
+		{"Sub", func(a, b values.Number) values.Number { return a.Subtract(b) }},
+		{"Mul", func(a, b values.Number) values.Number { return a.Multiply(b) }},
+		{"Div", func(a, b values.Number) values.Number { return a.Divide(b) }},
 	}
 
 	for _, op := range operations {
@@ -719,7 +721,7 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 			var row strings.Builder
 			row.WriteString(receiver.name[:3])
 			for _, operand := range numbers {
-				result := tryOperation(func() Number {
+				result := tryOperation(func() values.Number {
 					return op.op(receiver.value, operand.value)
 				})
 				switch {

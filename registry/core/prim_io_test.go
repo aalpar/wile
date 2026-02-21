@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -585,7 +586,7 @@ func TestStringPorts(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, &values.String{Value: "hello world"})
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, &values.String{Value: "hello world"})
 }
 
 func TestStringInputPort(t *testing.T) {
@@ -617,7 +618,7 @@ func TestStringInputPort(t *testing.T) {
 
 	// Read should return the list (+ 1 2)
 	expected := values.List(values.NewSymbol("+"), values.NewInteger(1), values.NewInteger(2))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 func TestBytevectorPorts(t *testing.T) {
@@ -651,7 +652,7 @@ func TestBytevectorPorts(t *testing.T) {
 
 	// "AB" as bytes
 	expected := values.ByteVector{{Value: 65}, {Value: 66}}
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, &expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, &expected)
 }
 
 func TestBytevectorInputPort(t *testing.T) {
@@ -679,7 +680,7 @@ func TestBytevectorInputPort(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestPortPredicates(t *testing.T) {
@@ -761,7 +762,7 @@ func TestPortPredicates(t *testing.T) {
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.out)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.out)
 		})
 	}
 }

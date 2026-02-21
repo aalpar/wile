@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -138,7 +139,7 @@ func TestLetShadowsMacro(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCodeForShadowTest(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.want)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -186,7 +187,7 @@ func TestHygienePreservedWithShadowing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCodeForShadowTest(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.want)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

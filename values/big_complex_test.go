@@ -12,40 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestBigComplex_Constructors(t *testing.T) {
 	c := qt.New(t)
 
 	// From BigIntegers (exact)
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	c.Assert(bc1.Real().(*BigInteger).Int64(), qt.Equals, int64(3))
-	c.Assert(bc1.Imag().(*BigInteger).Int64(), qt.Equals, int64(4))
+	c.Assert(bc1.Real().(*values.BigInteger).Int64(), qt.Equals, int64(3))
+	c.Assert(bc1.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(4))
 	c.Assert(bc1.IsExact(), qt.IsTrue)
 
 	// From BigFloats (inexact)
-	bc2 := NewBigComplexFromBigFloats(
-		NewBigFloatFromFloat64(1.5),
-		NewBigFloatFromFloat64(2.5),
+	bc2 := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(1.5),
+		values.NewBigFloatFromFloat64(2.5),
 	)
 	c.Assert(bc2.RealAsBigFloat().Float64(), qt.Equals, 1.5)
 	c.Assert(bc2.ImagAsBigFloat().Float64(), qt.Equals, 2.5)
 	c.Assert(bc2.IsExact(), qt.IsFalse)
 
 	// Mixed parts (inexact due to BigFloat)
-	bc3 := NewBigComplex(
-		NewBigIntegerFromInt64(1),
-		NewBigFloatFromFloat64(2.0),
+	bc3 := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigFloatFromFloat64(2.0),
 	)
 	c.Assert(bc3.IsExact(), qt.IsFalse)
 }
@@ -53,69 +56,69 @@ func TestBigComplex_Constructors(t *testing.T) {
 func TestBigComplex_Arithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(1),
-		NewBigIntegerFromInt64(2),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(2),
 	)
 
 	// Add: (3+4i) + (1+2i) = (4+6i)
 	sum := bc1.Add(bc2)
 	c.Assert(sum, qt.IsNotNil)
-	bc := sum.(*BigComplex)
-	c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(4))
-	c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(6))
+	bc := sum.(*values.BigComplex)
+	c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(4))
+	c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(6))
 
 	// Subtract: (3+4i) - (1+2i) = (2+2i)
 	diff := bc1.Subtract(bc2)
 	c.Assert(diff, qt.IsNotNil)
-	bc = diff.(*BigComplex)
-	c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(2))
-	c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(2))
+	bc = diff.(*values.BigComplex)
+	c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(2))
+	c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(2))
 
 	// Multiply: (3+4i) * (1+2i) = (3*1 - 4*2) + (3*2 + 4*1)i = -5 + 10i
 	prod := bc1.Multiply(bc2)
 	c.Assert(prod, qt.IsNotNil)
-	bc = prod.(*BigComplex)
-	c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(-5))
-	c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(10))
+	bc = prod.(*values.BigComplex)
+	c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(-5))
+	c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(10))
 
 	// Negate
 	neg := bc1.Negate()
 	c.Assert(neg, qt.IsNotNil)
-	bc = neg.(*BigComplex)
-	c.Assert(bc.Real().(*BigInteger).Int64(), qt.Equals, int64(-3))
-	c.Assert(bc.Imag().(*BigInteger).Int64(), qt.Equals, int64(-4))
+	bc = neg.(*values.BigComplex)
+	c.Assert(bc.Real().(*values.BigInteger).Int64(), qt.Equals, int64(-3))
+	c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(-4))
 }
 
 func TestBigComplex_Division(t *testing.T) {
 	c := qt.New(t)
 
 	// (3+4i) / (1+2i) = ((3*1+4*2) + (4*1-3*2)i) / (1+4) = (11 - 2i) / 5 = 2.2 - 0.4i
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(1),
-		NewBigIntegerFromInt64(2),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(2),
 	)
 
 	quot := bc1.Divide(bc2)
 	c.Assert(quot, qt.IsNotNil)
 	// Division always produces BigFloat parts
-	realPart := quot.(*BigComplex).RealAsBigFloat().Float64()
-	imagPart := quot.(*BigComplex).ImagAsBigFloat().Float64()
+	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64()
+	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64()
 	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
 	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
 
 	// Division by zero panics
-	zero := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(0),
-		NewBigIntegerFromInt64(0),
+	zero := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(0),
+		values.NewBigIntegerFromInt64(0),
 	)
 	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
@@ -123,67 +126,67 @@ func TestBigComplex_Division(t *testing.T) {
 func TestBigComplex_MixedArithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
 
 	// Add with BigInteger: (3+4i) + 5 = (8+4i)
-	sum1 := bc.Add(NewBigIntegerFromInt64(5))
-	c.Assert(sum1.(*BigComplex).Real().(*BigInteger).Int64(), qt.Equals, int64(8))
-	c.Assert(sum1.(*BigComplex).Imag().(*BigInteger).Int64(), qt.Equals, int64(4))
+	sum1 := bc.Add(values.NewBigIntegerFromInt64(5))
+	c.Assert(sum1.(*values.BigComplex).Real().(*values.BigInteger).Int64(), qt.Equals, int64(8))
+	c.Assert(sum1.(*values.BigComplex).Imag().(*values.BigInteger).Int64(), qt.Equals, int64(4))
 
 	// Add with BigFloat: (3+4i) + 1.5 = (4.5+4i) - becomes inexact
-	sum2 := bc.Add(NewBigFloatFromFloat64(1.5))
-	c.Assert(sum2.(*BigComplex).IsExact(), qt.IsFalse)
-	c.Assert(sum2.(*BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.5)
+	sum2 := bc.Add(values.NewBigFloatFromFloat64(1.5))
+	c.Assert(sum2.(*values.BigComplex).IsExact(), qt.IsFalse)
+	c.Assert(sum2.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.5)
 
 	// Add with Integer: promotes Integer to BigInteger
-	sum3 := bc.Add(NewInteger(10))
-	c.Assert(sum3.(*BigComplex).Real().(*BigInteger).Int64(), qt.Equals, int64(13))
+	sum3 := bc.Add(values.NewInteger(10))
+	c.Assert(sum3.(*values.BigComplex).Real().(*values.BigInteger).Int64(), qt.Equals, int64(13))
 
 	// Add with Float: becomes inexact
-	sum4 := bc.Add(NewFloat(2.5))
-	c.Assert(sum4.(*BigComplex).IsExact(), qt.IsFalse)
+	sum4 := bc.Add(values.NewFloat(2.5))
+	c.Assert(sum4.(*values.BigComplex).IsExact(), qt.IsFalse)
 
 	// Add with Complex
-	cplx := NewComplexFromParts(1.0, 1.0)
+	cplx := values.NewComplexFromParts(1.0, 1.0)
 	sum5 := bc.Add(cplx)
-	c.Assert(sum5.(*BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.0)
-	c.Assert(sum5.(*BigComplex).ImagAsBigFloat().Float64(), qt.Equals, 5.0)
+	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.0)
+	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64(), qt.Equals, 5.0)
 }
 
 func TestBigComplex_Exactness(t *testing.T) {
 	c := qt.New(t)
 
 	// Exact complex (both parts BigInteger)
-	exact := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	exact := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
 	c.Assert(exact.IsExact(), qt.IsTrue)
 
 	// Inexact complex (both parts BigFloat)
-	inexact := NewBigComplexFromBigFloats(
-		NewBigFloatFromFloat64(3.0),
-		NewBigFloatFromFloat64(4.0),
+	inexact := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(3.0),
+		values.NewBigFloatFromFloat64(4.0),
 	)
 	c.Assert(inexact.IsExact(), qt.IsFalse)
 
 	// Mixed (one BigInteger, one BigFloat) - inexact
-	mixed := NewBigComplex(
-		NewBigIntegerFromInt64(3),
-		NewBigFloatFromFloat64(4.0),
+	mixed := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigFloatFromFloat64(4.0),
 	)
 	c.Assert(mixed.IsExact(), qt.IsFalse)
 
 	// ToInexact
 	inexactFromExact := exact.ToInexact()
-	c.Assert(inexactFromExact.(*BigComplex).IsExact(), qt.IsFalse)
+	c.Assert(inexactFromExact.(*values.BigComplex).IsExact(), qt.IsFalse)
 
 	// ToExact
 	exactFromInexact := inexact.ToExact()
-	c.Assert(exactFromInexact.(*BigComplex).IsExact(), qt.IsTrue)
+	c.Assert(exactFromInexact.(*values.BigComplex).IsExact(), qt.IsTrue)
 }
 
 // TestBigComplex_ToExactFractionalParts tests H4 regression:
@@ -257,9 +260,9 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			bc := NewBigComplexFromBigFloats(
-				NewBigFloatFromFloat64(tc.real),
-				NewBigFloatFromFloat64(tc.imag),
+			bc := values.NewBigComplexFromBigFloats(
+				values.NewBigFloatFromFloat64(tc.real),
+				values.NewBigFloatFromFloat64(tc.imag),
 			)
 			exact := bc.ToExact()
 			c.Assert(exact.IsExact(), qt.IsTrue)
@@ -268,14 +271,14 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			if tc.simplifiesToReal {
 				switch tc.wantRealType {
 				case "Rational":
-					rat, ok := exact.(*Rational)
+					rat, ok := exact.(*values.Rational)
 					c.Assert(ok, qt.IsTrue, qt.Commentf("Result should be Rational, got %T: %v", exact, exact.SchemeString()))
 					c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
 				case "Integer":
 					switch v := exact.(type) {
-					case *Integer:
+					case *values.Integer:
 						c.Assert(float64(v.Value), qt.Equals, tc.wantRealValue)
-					case *BigInteger:
+					case *values.BigInteger:
 						c.Assert(float64(v.Int64()), qt.Equals, tc.wantRealValue)
 					default:
 						t.Fatalf("Result should be Integer or BigInteger, got %T: %v", exact, exact.SchemeString())
@@ -285,7 +288,7 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			}
 
 			// Otherwise, result should be BigComplex
-			bcExact, ok := exact.(*BigComplex)
+			bcExact, ok := exact.(*values.BigComplex)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("Result should be BigComplex, got %T: %v", exact, exact.SchemeString()))
 
 			// Check real part
@@ -294,15 +297,15 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			case "zero":
 				c.Assert(realPart.IsZero(), qt.IsTrue, qt.Commentf("Real part should be zero"))
 			case "Rational":
-				rat, ok := realPart.(*Rational)
+				rat, ok := realPart.(*values.Rational)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("Real part should be Rational, got %T: %v", realPart, realPart.SchemeString()))
 				c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
 			case "Integer":
 				// Could be Integer or BigInteger depending on value
 				switch v := realPart.(type) {
-				case *Integer:
+				case *values.Integer:
 					c.Assert(float64(v.Value), qt.Equals, tc.wantRealValue)
-				case *BigInteger:
+				case *values.BigInteger:
 					c.Assert(float64(v.Int64()), qt.Equals, tc.wantRealValue)
 				default:
 					t.Fatalf("Real part should be Integer or BigInteger, got %T: %v", realPart, realPart.SchemeString())
@@ -315,14 +318,14 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			case "zero":
 				c.Assert(imagPart.IsZero(), qt.IsTrue, qt.Commentf("Imaginary part should be zero"))
 			case "Rational":
-				rat, ok := imagPart.(*Rational)
+				rat, ok := imagPart.(*values.Rational)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("Imaginary part should be Rational, got %T: %v", imagPart, imagPart.SchemeString()))
 				c.Assert(rat.Float64(), qt.Equals, tc.wantImagValue)
 			case "Integer":
 				switch v := imagPart.(type) {
-				case *Integer:
+				case *values.Integer:
 					c.Assert(float64(v.Value), qt.Equals, tc.wantImagValue)
-				case *BigInteger:
+				case *values.BigInteger:
 					c.Assert(float64(v.Int64()), qt.Equals, tc.wantImagValue)
 				default:
 					t.Fatalf("Imaginary part should be Integer or BigInteger, got %T: %v", imagPart, imagPart.SchemeString())
@@ -336,29 +339,29 @@ func TestBigComplex_Simplification(t *testing.T) {
 	c := qt.New(t)
 
 	// When imaginary part becomes 0, should simplify to real number
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(2),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(2),
 	)
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(0),
-		NewBigIntegerFromInt64(2),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(0),
+		values.NewBigIntegerFromInt64(2),
 	)
 
 	// (3+2i) - (0+2i) = 3 (should simplify to BigInteger)
 	result := bc1.Subtract(bc2)
-	_, isBigInt := result.(*BigInteger)
+	_, isBigInt := result.(*values.BigInteger)
 	c.Assert(isBigInt, qt.IsTrue)
-	c.Assert(result.(*BigInteger).Int64(), qt.Equals, int64(3))
+	c.Assert(result.(*values.BigInteger).Int64(), qt.Equals, int64(3))
 }
 
 func TestBigComplex_MagnitudePhase(t *testing.T) {
 	c := qt.New(t)
 
 	// 3+4i has magnitude 5 and phase atan2(4, 3)
-	bc := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
 
 	mag := bc.Magnitude()
@@ -370,58 +373,58 @@ func TestBigComplex_MagnitudePhase(t *testing.T) {
 
 	// Conjugate: (3+4i)* = 3-4i
 	conj := bc.Conjugate()
-	c.Assert(conj.Real().(*BigInteger).Int64(), qt.Equals, int64(3))
-	c.Assert(conj.Imag().(*BigInteger).Int64(), qt.Equals, int64(-4))
+	c.Assert(conj.Real().(*values.BigInteger).Int64(), qt.Equals, int64(3))
+	c.Assert(conj.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(-4))
 }
 
 func TestBigComplex_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	bc3 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(1),
-		NewBigIntegerFromInt64(2),
+	bc3 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(2),
 	)
 
 	c.Assert(bc1.EqualTo(bc2), qt.IsTrue)
 	c.Assert(bc1.EqualTo(bc3), qt.IsFalse)
 
 	// Equal to regular Complex with same values
-	cplx := NewComplexFromParts(3.0, 4.0)
+	cplx := values.NewComplexFromParts(3.0, 4.0)
 	c.Assert(bc1.EqualTo(cplx), qt.IsTrue)
 
 	// Not equal to different type
-	c.Assert(bc1.EqualTo(NewInteger(3)), qt.IsFalse)
+	c.Assert(bc1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 
 func TestBigComplex_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
 	// Positive imaginary
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
 	c.Assert(bc1.SchemeString(), qt.Equals, "3+4i")
 
 	// Negative imaginary
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(-4),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(-4),
 	)
 	c.Assert(bc2.SchemeString(), qt.Equals, "3-4i")
 
 	// With BigFloat parts
-	bc3 := NewBigComplexFromBigFloats(
-		NewBigFloatFromFloat64(1.5),
-		NewBigFloatFromFloat64(2.5),
+	bc3 := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(1.5),
+		values.NewBigFloatFromFloat64(2.5),
 	)
 	str := bc3.SchemeString()
 	c.Assert(str, qt.Contains, "1.5")
@@ -432,17 +435,17 @@ func TestBigComplex_SchemeString(t *testing.T) {
 func TestBigComplex_Properties(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	zero := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(0),
-		NewBigIntegerFromInt64(0),
+	zero := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(0),
+		values.NewBigIntegerFromInt64(0),
 	)
-	realOnly := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(5),
-		NewBigIntegerFromInt64(0),
+	realOnly := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(5),
+		values.NewBigIntegerFromInt64(0),
 	)
 
 	c.Assert(bc.IsZero(), qt.IsFalse)
@@ -450,23 +453,23 @@ func TestBigComplex_Properties(t *testing.T) {
 	c.Assert(bc.IsReal(), qt.IsFalse)
 	c.Assert(realOnly.IsReal(), qt.IsTrue)
 	c.Assert(bc.IsVoid(), qt.IsFalse)
-	c.Assert((*BigComplex)(nil).IsVoid(), qt.IsTrue)
+	c.Assert((*values.BigComplex)(nil).IsVoid(), qt.IsTrue)
 }
 
 func TestBigComplex_Comparison(t *testing.T) {
 	c := qt.New(t)
 
-	bc1 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc1 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	bc2 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(5),
-		NewBigIntegerFromInt64(1),
+	bc2 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(5),
+		values.NewBigIntegerFromInt64(1),
 	)
-	bc3 := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(100),
+	bc3 := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(100),
 	)
 
 	// Compare by real parts only
@@ -475,27 +478,27 @@ func TestBigComplex_Comparison(t *testing.T) {
 	c.Assert(bc1.LessThan(bc3), qt.IsFalse) // 3 == 3 (imaginary ignored)
 
 	// Compare with other numeric types
-	c.Assert(bc1.Compare(NewBigIntegerFromInt64(5)), qt.Equals, -1) // 3 < 5
-	c.Assert(bc1.Compare(NewBigIntegerFromInt64(2)), qt.Equals, 1)  // 3 > 2
-	c.Assert(bc1.Compare(NewBigIntegerFromInt64(3)), qt.Equals, 0)  // 3 == 3
+	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(5)), qt.Equals, -1) // 3 < 5
+	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(2)), qt.Equals, 1)  // 3 > 2
+	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(3)), qt.Equals, 0)  // 3 == 3
 }
 
 func TestBigComplex_ZeroOptimizations(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplexFromBigIntegers(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
 	)
-	zero := NewBigIntegerFromInt64(0)
+	zero := values.NewBigIntegerFromInt64(0)
 
 	// Add zero returns equal value (not necessarily same pointer)
 	result := bc.Add(zero)
-	c.Assert(result, SchemeEquals, bc)
+	c.Assert(result, valuestest.SchemeEquals, bc)
 
 	// Subtract zero returns equal value (not necessarily same pointer)
 	result = bc.Subtract(zero)
-	c.Assert(result, SchemeEquals, bc)
+	c.Assert(result, valuestest.SchemeEquals, bc)
 
 	// Multiply by zero returns zero
 	result = bc.Multiply(zero)
@@ -506,23 +509,23 @@ func TestBigComplex_RationalParts(t *testing.T) {
 	c := qt.New(t)
 
 	// Create BigComplex with Rational parts (exact)
-	bc := NewBigComplex(
-		NewRational(3, 2), // 3/2
-		NewRational(1, 2), // 1/2
+	bc := values.NewBigComplex(
+		values.NewRational(3, 2), // 3/2
+		values.NewRational(1, 2), // 1/2
 	)
 
 	// Should be exact
 	c.Assert(bc.IsExact(), qt.IsTrue)
-	c.Assert(bc.Real().(*Rational).Float64(), qt.Equals, 1.5)
-	c.Assert(bc.Imag().(*Rational).Float64(), qt.Equals, 0.5)
+	c.Assert(bc.Real().(*values.Rational).Float64(), qt.Equals, 1.5)
+	c.Assert(bc.Imag().(*values.Rational).Float64(), qt.Equals, 0.5)
 
 	// SchemeString should format correctly
 	c.Assert(bc.SchemeString(), qt.Equals, "3/2+1/2i")
 
 	// Negative imaginary
-	bcNeg := NewBigComplex(
-		NewRational(3, 2),
-		NewRational(-1, 2),
+	bcNeg := values.NewBigComplex(
+		values.NewRational(3, 2),
+		values.NewRational(-1, 2),
 	)
 	c.Assert(bcNeg.SchemeString(), qt.Equals, "3/2-1/2i")
 }
@@ -530,36 +533,36 @@ func TestBigComplex_RationalParts(t *testing.T) {
 func TestBigComplex_RationalArithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bc1 := NewBigComplex(
-		NewRational(3, 2), // 3/2
-		NewRational(1, 2), // 1/2
+	bc1 := values.NewBigComplex(
+		values.NewRational(3, 2), // 3/2
+		values.NewRational(1, 2), // 1/2
 	)
-	bc2 := NewBigComplex(
-		NewRational(1, 2), // 1/2
-		NewRational(1, 4), // 1/4
+	bc2 := values.NewBigComplex(
+		values.NewRational(1, 2), // 1/2
+		values.NewRational(1, 4), // 1/4
 	)
 
 	// Add: (3/2 + 1/2i) + (1/2 + 1/4i) = (2 + 3/4i)
 	sum := bc1.Add(bc2)
-	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
-	realPart := sum.(*BigComplex).Real().(*Rational)
-	imagPart := sum.(*BigComplex).Imag().(*Rational)
+	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
+	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
+	imagPart := sum.(*values.BigComplex).Imag().(*values.Rational)
 	c.Assert(realPart.Float64(), qt.Equals, 2.0)
 	c.Assert(imagPart.Float64(), qt.Equals, 0.75)
 
 	// Subtract: (3/2 + 1/2i) - (1/2 + 1/4i) = (1 + 1/4i)
 	diff := bc1.Subtract(bc2)
-	c.Assert(diff.(*BigComplex).IsExact(), qt.IsTrue)
-	realPart = diff.(*BigComplex).Real().(*Rational)
-	imagPart = diff.(*BigComplex).Imag().(*Rational)
+	c.Assert(diff.(*values.BigComplex).IsExact(), qt.IsTrue)
+	realPart = diff.(*values.BigComplex).Real().(*values.Rational)
+	imagPart = diff.(*values.BigComplex).Imag().(*values.Rational)
 	c.Assert(realPart.Float64(), qt.Equals, 1.0)
 	c.Assert(imagPart.Float64(), qt.Equals, 0.25)
 
 	// Multiply: (3/2 + 1/2i) * (1/2 + 1/4i) = (3/4 - 1/8) + (3/8 + 1/4)i = 5/8 + 5/8i
 	prod := bc1.Multiply(bc2)
-	c.Assert(prod.(*BigComplex).IsExact(), qt.IsTrue)
-	realPart = prod.(*BigComplex).Real().(*Rational)
-	imagPart = prod.(*BigComplex).Imag().(*Rational)
+	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
+	realPart = prod.(*values.BigComplex).Real().(*values.Rational)
+	imagPart = prod.(*values.BigComplex).Imag().(*values.Rational)
 	c.Assert(realPart.Float64(), qt.Equals, 0.625) // 5/8
 	c.Assert(imagPart.Float64(), qt.Equals, 0.625) // 5/8
 }
@@ -567,26 +570,26 @@ func TestBigComplex_RationalArithmetic(t *testing.T) {
 func TestBigComplex_RationalWithScalar(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplex(
-		NewRational(3, 2), // 3/2
-		NewRational(1, 2), // 1/2
+	bc := values.NewBigComplex(
+		values.NewRational(3, 2), // 3/2
+		values.NewRational(1, 2), // 1/2
 	)
 
 	// Add Rational: (3/2 + 1/2i) + 1/4 = (7/4 + 1/2i)
-	sum := bc.Add(NewRational(1, 4))
-	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
-	realPart := sum.(*BigComplex).Real().(*Rational)
+	sum := bc.Add(values.NewRational(1, 4))
+	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
+	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
 	c.Assert(realPart.Float64(), qt.Equals, 1.75) // 7/4
 
 	// Multiply Rational: (3/2 + 1/2i) * 2 = (3 + 1i)
-	prod := bc.Multiply(NewRational(2, 1))
-	c.Assert(prod.(*BigComplex).IsExact(), qt.IsTrue)
+	prod := bc.Multiply(values.NewRational(2, 1))
+	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
 
 	// Divide by Rational: (3/2 + 1/2i) / (1/2) = (3 + 1i)
-	quot := bc.Divide(NewRational(1, 2))
-	c.Assert(quot.(*BigComplex).IsExact(), qt.IsTrue)
-	realPart = quot.(*BigComplex).Real().(*Rational)
-	imagPart := quot.(*BigComplex).Imag().(*Rational)
+	quot := bc.Divide(values.NewRational(1, 2))
+	c.Assert(quot.(*values.BigComplex).IsExact(), qt.IsTrue)
+	realPart = quot.(*values.BigComplex).Real().(*values.Rational)
+	imagPart := quot.(*values.BigComplex).Imag().(*values.Rational)
 	c.Assert(realPart.Float64(), qt.Equals, 3.0)
 	c.Assert(imagPart.Float64(), qt.Equals, 1.0)
 }
@@ -594,49 +597,49 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 func TestBigComplex_RationalExactnessContagion(t *testing.T) {
 	c := qt.New(t)
 
-	exact := NewBigComplex(
-		NewRational(3, 2),
-		NewRational(1, 2),
+	exact := values.NewBigComplex(
+		values.NewRational(3, 2),
+		values.NewRational(1, 2),
 	)
 
 	// Adding a Float makes it inexact
-	sumFloat := exact.Add(NewFloat(1.0))
-	c.Assert(sumFloat.(*BigComplex).IsExact(), qt.IsFalse)
+	sumFloat := exact.Add(values.NewFloat(1.0))
+	c.Assert(sumFloat.(*values.BigComplex).IsExact(), qt.IsFalse)
 
 	// Adding a BigFloat makes it inexact
-	sumBigFloat := exact.Add(NewBigFloatFromFloat64(1.0))
-	c.Assert(sumBigFloat.(*BigComplex).IsExact(), qt.IsFalse)
+	sumBigFloat := exact.Add(values.NewBigFloatFromFloat64(1.0))
+	c.Assert(sumBigFloat.(*values.BigComplex).IsExact(), qt.IsFalse)
 
 	// Adding an Integer keeps it exact (Integer promotes to BigInteger)
-	sumInt := exact.Add(NewInteger(1))
-	c.Assert(sumInt.(*BigComplex).IsExact(), qt.IsTrue)
+	sumInt := exact.Add(values.NewInteger(1))
+	c.Assert(sumInt.(*values.BigComplex).IsExact(), qt.IsTrue)
 
 	// Adding a BigInteger keeps it exact
-	sumBigInt := exact.Add(NewBigIntegerFromInt64(1))
-	c.Assert(sumBigInt.(*BigComplex).IsExact(), qt.IsTrue)
+	sumBigInt := exact.Add(values.NewBigIntegerFromInt64(1))
+	c.Assert(sumBigInt.(*values.BigComplex).IsExact(), qt.IsTrue)
 
 	// Adding another exact Rational keeps it exact
-	sumRat := exact.Add(NewRational(1, 4))
-	c.Assert(sumRat.(*BigComplex).IsExact(), qt.IsTrue)
+	sumRat := exact.Add(values.NewRational(1, 4))
+	c.Assert(sumRat.(*values.BigComplex).IsExact(), qt.IsTrue)
 }
 
 func TestBigComplex_MixedRationalBigInteger(t *testing.T) {
 	c := qt.New(t)
 
 	// Mixed: Rational real, BigInteger imag
-	bc := NewBigComplex(
-		NewRational(3, 2),
-		NewBigIntegerFromInt64(4),
+	bc := values.NewBigComplex(
+		values.NewRational(3, 2),
+		values.NewBigIntegerFromInt64(4),
 	)
 
 	// Should still be exact
 	c.Assert(bc.IsExact(), qt.IsTrue)
 
 	// Add another mixed
-	bc2 := NewBigComplex(
-		NewBigIntegerFromInt64(1),
-		NewRational(1, 2),
+	bc2 := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(1),
+		values.NewRational(1, 2),
 	)
 	sum := bc.Add(bc2)
-	c.Assert(sum.(*BigComplex).IsExact(), qt.IsTrue)
+	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
 }

@@ -24,7 +24,9 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/internal/syntax/syntaxtest"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -577,11 +579,11 @@ func TestParser_Read(t *testing.T) {
 				return
 			}
 			if tc.sexpect != nil {
-				c.Assert(syn, syntax.SyntaxEquals, tc.sexpect)
+				c.Assert(syn, syntaxtest.SyntaxEquals, tc.sexpect)
 			}
 			if tc.expect != nil {
 				v := syn.UnwrapAll()
-				c.Assert(v, values.SchemeEquals, tc.expect)
+				c.Assert(v, valuestest.SchemeEquals, tc.expect)
 			}
 		})
 	}
@@ -593,7 +595,7 @@ func TestParse(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	syn, err := NewParser(env, true, strings.NewReader("42")).ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestParser_Close tests the Close function.
@@ -606,7 +608,7 @@ func TestParser_Close(t *testing.T) {
 	// Read first expression
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(10))
+	c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(10))
 
 	// Close the parser
 	err = p.Close()
@@ -677,7 +679,7 @@ func TestParser_Quasiquote(t *testing.T) {
 			p.skipComment = false
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -718,7 +720,7 @@ func TestParser_Quasisyntax(t *testing.T) {
 			p.skipComment = false
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -783,7 +785,7 @@ func TestParser_Strings(t *testing.T) {
 			p.skipComment = false
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -813,7 +815,7 @@ func TestParser_MoreCharacters(t *testing.T) {
 			p.skipComment = false
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -953,7 +955,7 @@ func TestParser_CommentsFollowedByCode(t *testing.T) {
 					got = syn.UnwrapAll()
 				}
 				// For datum comments, just check the type since the inner form varies
-				c.Assert(got, values.SchemeEquals, expect, qt.Commentf("mismatch at index %d", i))
+				c.Assert(got, valuestest.SchemeEquals, expect, qt.Commentf("mismatch at index %d", i))
 			}
 
 			// Verify we've consumed everything
@@ -1017,7 +1019,7 @@ func TestParser_CommentsInsideLists(t *testing.T) {
 
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 
 			// Verify we've consumed everything
 			_, err = p.ReadSyntax(context.TODO())
@@ -1970,7 +1972,7 @@ func TestParser_ExtendedExponentMarkers(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(tc.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }
@@ -2423,17 +2425,17 @@ func TestParser_MultipleReads(t *testing.T) {
 	// First read
 	syn1, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn1.UnwrapAll(), values.SchemeEquals, values.NewInteger(10))
+	c.Assert(syn1.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(10))
 
 	// Second read - tokenizer should be preserved
 	syn2, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn2.UnwrapAll(), values.SchemeEquals, values.NewInteger(20))
+	c.Assert(syn2.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(20))
 
 	// Third read
 	syn3, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn3.UnwrapAll(), values.SchemeEquals, values.NewInteger(30))
+	c.Assert(syn3.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(30))
 
 	// Fourth read should hit EOF
 	_, err = p.ReadSyntax(context.TODO())
@@ -2481,7 +2483,7 @@ func TestParser_SingleElementVector(t *testing.T) {
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(*vec), qt.Equals, 1)
-	c.Assert((*vec)[0], values.SchemeEquals, values.NewInteger(42))
+	c.Assert((*vec)[0], valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestParser_NestedLists tests lists within lists (tests listSyntax with multiple elements)
@@ -2519,10 +2521,10 @@ func TestParser_VectorWithMixedTypes(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(*vec), qt.Equals, 4)
 
-	c.Assert((*vec)[0], values.SchemeEquals, values.NewInteger(42))
-	c.Assert((*vec)[1], values.SchemeEquals, values.NewString("hello"))
-	c.Assert((*vec)[2], values.SchemeEquals, values.TrueValue)
-	c.Assert((*vec)[3], values.SchemeEquals, values.NewSymbol("foo"))
+	c.Assert((*vec)[0], valuestest.SchemeEquals, values.NewInteger(42))
+	c.Assert((*vec)[1], valuestest.SchemeEquals, values.NewString("hello"))
+	c.Assert((*vec)[2], valuestest.SchemeEquals, values.TrueValue)
+	c.Assert((*vec)[3], valuestest.SchemeEquals, values.NewSymbol("foo"))
 }
 
 // TestParser_ListSyntaxMultipleElements tests listSyntax with more than 2 elements
@@ -2537,7 +2539,7 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 
 	// Should be (quote (a b c d))
 	pair := syn.UnwrapAll().(*values.Pair)
-	c.Assert(pair.Car(), values.SchemeEquals, values.NewSymbol("quote"))
+	c.Assert(pair.Car(), valuestest.SchemeEquals, values.NewSymbol("quote"))
 
 	// The cdr should be the list (a b c d)
 	quotedList := pair.Cdr().(*values.Pair).Car().(*values.Pair)
@@ -2656,7 +2658,7 @@ func TestParser_ReadSyntaxEOFHandling(t *testing.T) {
 	// First read succeeds
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Second read hits EOF (but this is OK, tokenizer advances)
 	_, err = p.ReadSyntax(context.TODO())
@@ -2715,7 +2717,7 @@ func TestParser_EmptyList(t *testing.T) {
 	p := NewParser(env, true, strings.NewReader("()"))
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
-	c.Assert(syn.UnwrapAll(), values.SchemeEquals, values.EmptyList)
+	c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, values.EmptyList)
 }
 
 // TestParser_ImproperList tests improper list (dotted pair) parsing
@@ -2729,7 +2731,7 @@ func TestParser_ImproperList(t *testing.T) {
 
 	// Should be a pair with a and a pair with b and c
 	pair := syn.UnwrapAll().(*values.Pair)
-	c.Assert(pair.Car(), values.SchemeEquals, values.NewSymbol("a"))
+	c.Assert(pair.Car(), valuestest.SchemeEquals, values.NewSymbol("a"))
 }
 
 // TestParser_QuasiquoteSingleElement tests listSyntax with 1 element
@@ -2743,7 +2745,7 @@ func TestParser_QuasiquoteSingleElement(t *testing.T) {
 
 	// Should be (quasiquote x)
 	list := syn.UnwrapAll().(*values.Pair)
-	c.Assert(list.Car(), values.SchemeEquals, values.NewSymbol("quasiquote"))
+	c.Assert(list.Car(), valuestest.SchemeEquals, values.NewSymbol("quasiquote"))
 	c.Assert(list.Length(), qt.Equals, 2) // (quasiquote x) is length 2
 }
 
@@ -2758,7 +2760,7 @@ func TestParser_UnquoteSplicing(t *testing.T) {
 
 	// Should be (unquote-splicing foo)
 	list := syn.UnwrapAll().(*values.Pair)
-	c.Assert(list.Car(), values.SchemeEquals, values.NewSymbol("unquote-splicing"))
+	c.Assert(list.Car(), valuestest.SchemeEquals, values.NewSymbol("unquote-splicing"))
 	c.Assert(list.Length(), qt.Equals, 2)
 }
 
@@ -2780,7 +2782,7 @@ func TestParser_SignedNumbers(t *testing.T) {
 			p := NewParser(env, true, strings.NewReader(tc.input))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
-			c.Assert(syn.UnwrapAll(), values.SchemeEquals, tc.expect)
+			c.Assert(syn.UnwrapAll(), valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }

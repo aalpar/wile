@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -25,177 +26,177 @@ import (
 func TestPortPredicateWithInputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (open-input-string "test"))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestPortPredicateWithOutputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (open-output-string))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestPortPredicateWithNonPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? 42)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestPortPredicateWithString(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? "not a port")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestInputPortPredicateWithInputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port? (open-input-string "test"))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestInputPortPredicateWithOutputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port? (open-output-string))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestInputPortPredicateWithNonPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port? 42)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestOutputPortPredicateWithOutputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port? (open-output-string))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestOutputPortPredicateWithInputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port? (open-input-string "test"))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestOutputPortPredicateWithNonPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port? "not a port")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestInputPortOpenPredicate(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port-open? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestOutputPortOpenPredicate(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port-open? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObject(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.EOFObject)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.EOFObject)
 }
 
 func TestEofObjectPredicateWithEof(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object? (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectPredicateWithNonEof(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object? 42)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestEofObjectPredicateWithString(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object? "not eof")`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestEofObjectPredicateWithBoolean(t *testing.T) {
 	result, err := runSchemeCode(t, `(eof-object? #f)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestPortPredicatesOnBytevectorPorts(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (open-input-bytevector #u8(1 2 3)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(port? (open-output-bytevector))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(input-port? (open-input-bytevector #u8(1 2 3)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(output-port? (open-output-bytevector))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestPortOpenPredicatesOnBytevectorPorts(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port-open? (open-input-bytevector #u8(1 2 3)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(output-port-open? (open-output-bytevector))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestPortOpenPredicatesOnStringPorts(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port-open? (open-input-string "test"))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(output-port-open? (open-output-string))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(let ((p (open-input-string "test"))) (close-input-port p) (input-port-open? p))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 
 	result, err = runSchemeCode(t, `(let ((p (open-output-string))) (close-output-port p) (output-port-open? p))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestPortPredicatesWithCurrentPorts(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(input-port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `(output-port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestInputPortOpenWithCurrentPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port-open? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestOutputPortOpenWithCurrentPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port-open? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

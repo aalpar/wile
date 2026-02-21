@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -58,7 +59,7 @@ func TestMutexQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -67,21 +68,21 @@ func TestMakeMutex(t *testing.T) {
 	// make-mutex should return a mutex
 	result, err := runSchemeCode(t, "(mutex? (make-mutex))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMakeMutexWithName(t *testing.T) {
 	code := `(mutex-name (make-mutex "test-mutex"))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("test-mutex"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("test-mutex"))
 }
 
 func TestMutexName(t *testing.T) {
 	code := `(mutex-name (make-mutex "my-mutex"))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("my-mutex"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("my-mutex"))
 }
 
 func TestMutexNameError(t *testing.T) {
@@ -94,7 +95,7 @@ func TestMutexSpecific(t *testing.T) {
 	code := `(void? (mutex-specific (make-mutex)))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMutexSpecificSet(t *testing.T) {
@@ -105,7 +106,7 @@ func TestMutexSpecificSet(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("my-data"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("my-data"))
 }
 
 func TestMutexSpecificError(t *testing.T) {
@@ -123,7 +124,7 @@ func TestMutexState(t *testing.T) {
 	code := "(mutex-state (make-mutex))"
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("not-owned"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
 }
 
 func TestMutexStateError(t *testing.T) {
@@ -140,14 +141,14 @@ func TestMutexLockAndUnlock(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMutexLockReturnsTrue(t *testing.T) {
 	code := "(mutex-lock! (make-mutex))"
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMutexLockError(t *testing.T) {
@@ -169,7 +170,7 @@ func TestMutexLockWithTimeout(t *testing.T) {
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
 	// Should succeed since mutex is available
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMutexProtectsCriticalSection(t *testing.T) {
@@ -184,5 +185,5 @@ func TestMutexProtectsCriticalSection(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
 }

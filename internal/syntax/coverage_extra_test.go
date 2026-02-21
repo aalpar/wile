@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -44,11 +45,11 @@ func TestSyntaxVoid_SourceContext(t *testing.T) {
 }
 
 func TestSyntaxVoid_Unwrap(t *testing.T) {
-	qt.Assert(t, SyntaxVoid.Unwrap(), values.SchemeEquals, values.Void)
+	qt.Assert(t, SyntaxVoid.Unwrap(), valuestest.SchemeEquals, values.Void)
 }
 
 func TestSyntaxVoid_UnwrapAll(t *testing.T) {
-	qt.Assert(t, SyntaxVoid.UnwrapAll(), values.SchemeEquals, values.Void)
+	qt.Assert(t, SyntaxVoid.UnwrapAll(), valuestest.SchemeEquals, values.Void)
 }
 
 // SourceIndexes.Tab

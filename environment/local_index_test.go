@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -47,7 +48,7 @@ func TestLocalIndex_GetBinding(t *testing.T) {
 	// Use LocalIndex.GetBinding method
 	binding := li.GetBinding(env)
 	qt.Assert(t, binding, qt.Not(qt.IsNil))
-	qt.Assert(t, binding.Value(), values.SchemeEquals, val)
+	qt.Assert(t, binding.Value(), valuestest.SchemeEquals, val)
 }
 
 func TestLocalIndex_String(t *testing.T) {

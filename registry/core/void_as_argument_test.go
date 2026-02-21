@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // TestVoidReturningExpressionAsArgument is a regression test for a bug where
@@ -100,7 +101,7 @@ func TestVoidReturningExpressionAsArgument(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -148,7 +149,7 @@ func TestCaseLambdaWithArithmetic(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 
 	// Call with 3 args
 	sv = parseSchemeExprExt(t, env, "(cl 1 2 3)")
@@ -157,7 +158,7 @@ func TestCaseLambdaWithArithmetic(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(6))
 }
 
 // TestDefineSyntaxWithMacroUsage tests define-syntax and macro expansion
@@ -182,7 +183,7 @@ func TestDefineSyntaxWithMacroUsage(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 // TestMapWithLambda tests map with lambda (exercises closure + multiple calls)
@@ -208,7 +209,7 @@ func TestApplyWithPrimitives(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(15))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(15))
 }
 
 // TestLetBindings tests let, let*, letrec forms
@@ -233,7 +234,7 @@ func TestLetBindings(t *testing.T) {
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(tc.expected))
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(tc.expected))
 		})
 	}
 }
@@ -261,7 +262,7 @@ func TestCondArrow(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestCondArrowFalseTest tests cond with => when test is false
@@ -275,7 +276,7 @@ func TestCondArrowFalseTest(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("not-found"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("not-found"))
 }
 
 // TestCondArrowWithLambda tests cond with => using a lambda
@@ -289,7 +290,7 @@ func TestCondArrowWithLambda(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestCaseArrow tests case with => clause (R7RS §4.2.1)
@@ -305,7 +306,7 @@ func TestCaseArrow(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	// (case 6 ...) should match (1 4 6 8 9) and return (composite 6)
 	expected := values.List(values.NewSymbol("composite"), values.NewInteger(6))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestQuasiquoteComplexList tests compileQuasiquoteComplexList path
@@ -368,7 +369,7 @@ func TestCompileSymbolWithScopesFullEnv(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestQuasiquoteDirectUnquote tests direct unquote at top level of quasiquote
@@ -382,7 +383,7 @@ func TestQuasiquoteDirectUnquote(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestRecursiveFunction tests recursive function with full runtime
@@ -407,7 +408,7 @@ func TestRecursiveFunction(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(120))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(120))
 }
 
 // TestLetrecBindings tests letrec for mutual recursion
@@ -425,7 +426,7 @@ func TestLetrecBindings(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestForEachWithSideEffects tests for-each primitive
@@ -441,7 +442,7 @@ func TestForEachWithSideEffects(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(15))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(15))
 }
 
 // TestCallWithValues tests call-with-values
@@ -454,7 +455,7 @@ func TestCallWithValues(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(6))
 }
 
 // TestVectorOperations tests vector primitives
@@ -467,7 +468,7 @@ func TestVectorOperations(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestStringOperations tests string primitives
@@ -480,7 +481,7 @@ func TestStringOperations(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("hello world"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewString("hello world"))
 }
 
 // TestHigherOrderClosure tests closures captured in higher-order functions
@@ -510,7 +511,7 @@ func TestHigherOrderClosure(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(15))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(15))
 }
 
 // TestNestedConditions tests nested if/cond expressions
@@ -552,7 +553,7 @@ func TestAndOrForms(t *testing.T) {
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -606,7 +607,7 @@ func TestComplexLambdaWithDefine(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 // TestNestedLambdaClosure tests nested closures
@@ -620,7 +621,7 @@ func TestNestedLambdaClosure(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestQuasiquoteWithDeepNesting tests deeply nested quasiquote structures
@@ -656,7 +657,7 @@ func TestVariadicLambda(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(15))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(15))
 }
 
 // TestListOperations tests various list operations
@@ -686,7 +687,7 @@ func TestListOperations(t *testing.T) {
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -721,7 +722,7 @@ func TestNumericOperations(t *testing.T) {
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -942,7 +943,7 @@ func TestCompileSymbolVariants(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(100))
 
 	// Test local symbol resolution
 	sv = parseSchemeExprExt(t, env, "(let ((local-var 50)) local-var)")
@@ -951,7 +952,7 @@ func TestCompileSymbolVariants(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(50))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(50))
 }
 
 // TestCondExpandFeature tests cond-expand with features
@@ -997,7 +998,7 @@ func TestMutualRecursion(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestSymbolIdentityAcrossCompilationBoundaries tests R7RS 6.5 symbol identity.
@@ -1089,7 +1090,7 @@ func TestQuasiquoteImproperList(t *testing.T) {
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1115,7 +1116,7 @@ func TestCompileSyntaxCase_SimpleMatch(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 }
 
 // TestCompileSyntaxCase_PatternVars tests syntax-case with pattern variables in body.
@@ -1140,7 +1141,7 @@ func TestCompileSyntaxCase_PatternVars(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	expected := values.List(values.NewInteger(2), values.NewInteger(1))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCompileSyntaxCase_MultiClause tests syntax-case with multiple clauses.
@@ -1166,7 +1167,7 @@ func TestCompileSyntaxCase_MultiClause(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 // TestCompileSyntaxCase_NoMatch tests syntax-case when no clause matches.
@@ -1240,7 +1241,7 @@ func TestCompileQuasisyntax_RoundTrip(t *testing.T) {
 			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1255,7 +1256,7 @@ func TestCompileEvalWhen_ExpandPhase(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestCompileEvalWhen_MultiPhase tests eval-when with both expand and run phases.
@@ -1268,7 +1269,7 @@ func TestCompileEvalWhen_MultiPhase(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 // TestCompileEvalWhen_MultiBody tests eval-when with a body expression that uses begin.
@@ -1281,7 +1282,7 @@ func TestCompileEvalWhen_MultiBody(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 // TestCompileBeginForSyntax_Success tests begin-for-syntax with expressions.
@@ -1455,7 +1456,7 @@ func TestCoverageSyntaxRulesWithEllipsis(t *testing.T) {
 			}
 			mc, err := runSchemeExpr(t, testEnv, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 
@@ -1473,11 +1474,11 @@ func TestCoverageSyntaxRulesWithEllipsis(t *testing.T) {
 
 		mc, err := runSchemeExpr(t, testEnv, "(my-cond (#t 42))")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 		mc, err = runSchemeExpr(t, testEnv, "(my-cond (#f 1) (else 99))")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 	})
 }
 
@@ -1539,7 +1540,7 @@ func TestCoverageLetSyntax(t *testing.T) {
 			testEnv := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, testEnv, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1614,7 +1615,7 @@ func TestCoverageDelimitedContinuations(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1635,7 +1636,7 @@ func TestCoverageDynamicWindWithCallCC(t *testing.T) {
 						(lambda () (set! wind-log (cons 'after wind-log))))))`,
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 		// Verify the after thunk ran
 		mc, err = runSchemeExpr(t, env, "(memq 'after wind-log)")
@@ -1654,13 +1655,13 @@ func TestCoverageDynamicWindWithCallCC(t *testing.T) {
 				(lambda () (set! result (cons 'out result))))`,
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 		mc, err = runSchemeExpr(t, testEnv, "result")
 		qt.Assert(t, err, qt.IsNil)
 		// result should be (out body in) - reverse order of cons
 		expected := values.List(values.NewSymbol("out"), values.NewSymbol("body"), values.NewSymbol("in"))
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 	})
 }
 
@@ -1722,7 +1723,7 @@ func TestCoverageParameterObjects(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExprs(t, env, tc.codes...)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1763,7 +1764,7 @@ func TestCoverageWithSyntax(t *testing.T) {
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 			}
 		})
 	}
@@ -1778,7 +1779,7 @@ func TestCoverageWithSyntax(t *testing.T) {
 
 		mc, err := runSchemeExpr(t, env, "(add-ten 5)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(15))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(15))
 	})
 }
 
@@ -1826,7 +1827,7 @@ func TestCoverageQuasisyntax(t *testing.T) {
 			}
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1869,7 +1870,7 @@ func TestCoverageExceptionHandling(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1905,7 +1906,7 @@ func TestCoverageDoForm(t *testing.T) {
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 			}
 		})
 	}
@@ -1947,7 +1948,7 @@ func TestCoverageCondExpandLibrary(t *testing.T) {
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 			}
 		})
 	}
@@ -1965,7 +1966,7 @@ func TestCoverageTailCallOptimization(t *testing.T) {
 			"(loop 1000 0)",
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(500500))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(500500))
 	})
 
 	t.Run("mutual tail recursion", func(t *testing.T) {
@@ -1975,7 +1976,7 @@ func TestCoverageTailCallOptimization(t *testing.T) {
 				  (my-odd? (lambda (n) (if (= n 0) #f (my-even? (- n 1))))))
 				(my-even? 100))`)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 	})
 }
 
@@ -2009,7 +2010,7 @@ func TestCoverageMultipleValues(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2050,7 +2051,7 @@ func TestCoverageNamedLet(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2083,7 +2084,7 @@ func TestCoverageLetValues(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2119,7 +2120,7 @@ func TestCoverageCallCCBasic(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2130,15 +2131,15 @@ func TestCoveragePromptTagPredicate(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(continuation-prompt-tag? (default-continuation-prompt-tag))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "(continuation-prompt-tag? (make-continuation-prompt-tag 'test))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "(continuation-prompt-tag? 42)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.FalseValue)
 }
 
 // TestCoverageBoxOperations tests box operations (mutable cells).
@@ -2150,18 +2151,18 @@ func TestCoverageBoxOperations(t *testing.T) {
 		"(unbox b)",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 
 	mc, err = runSchemeExprs(t, env,
 		"(set-box! b 20)",
 		"(unbox b)",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(20))
 
 	mc, err = runSchemeExpr(t, env, "(box? b)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestCoverageHashtableOperations tests hashtable operations.
@@ -2175,11 +2176,11 @@ func TestCoverageHashtableOperations(t *testing.T) {
 		"(hashtable-ref ht 'a #f)",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	mc, err = runSchemeExpr(t, env, "(hashtable-size ht)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 // TestCoverageSyntaxCaseWithFender tests syntax-case with fender (guard) expressions.
@@ -2197,7 +2198,7 @@ func TestCoverageSyntaxCaseWithFender(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(checked-add 3 4)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(7))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
 // TestCoverageInclude tests include and include-ci forms.
@@ -2238,7 +2239,7 @@ func TestCoverageComplexMacroPatterns(t *testing.T) {
 			"(list x y)",
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 			values.List(values.NewInteger(2), values.NewInteger(1)))
 	})
 
@@ -2255,7 +2256,7 @@ func TestCoverageComplexMacroPatterns(t *testing.T) {
 			"counter",
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(5))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(5))
 	})
 }
 
@@ -2324,15 +2325,15 @@ func TestCoverageRecordType(t *testing.T) {
 		"(point? p)",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "(point-x p)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 
 	mc, err = runSchemeExpr(t, env, "(point-y p)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(4))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(4))
 }
 
 // TestCoveragePromises tests delay, force, and delay-force (bootstrap macros).
@@ -2367,7 +2368,7 @@ func TestCoveragePromises(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExprs(t, env, tc.codes...)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2385,7 +2386,7 @@ func TestCoverageDynamicWindFull(t *testing.T) {
 				(lambda () (set! log (cons 'after log))))`,
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 
 	t.Run("dynamic-wind with callcc escape", func(t *testing.T) {
@@ -2435,7 +2436,7 @@ func TestCoverageCallCCReentry(t *testing.T) {
 					(k 42)
 					99))`)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 }
 
@@ -2489,7 +2490,7 @@ func TestCoverageCondExpand(t *testing.T) {
 			env := newFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -2533,7 +2534,7 @@ func TestCoverageQuasiquoteEdgeCases(t *testing.T) {
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 			}
 		})
 	}
@@ -2571,11 +2572,11 @@ func TestCoverageSyntaxCaseFender(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(check-positive 5)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("positive")))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("positive")))
 
 	mc, err = runSchemeExpr(t, env, "(check-positive -3)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("non-positive")))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("non-positive")))
 }
 
 // TestCoverageParameterObjectsExtended tests parameterize with nested scoping.
@@ -2590,7 +2591,7 @@ func TestCoverageParameterObjectsExtended(t *testing.T) {
 				(my-param)))`,
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCoverageSyntaxCaseEllipsis tests syntax-case with ellipsis patterns.
@@ -2606,7 +2607,7 @@ func TestCoverageSyntaxCaseEllipsis(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(my-list 1 2 3)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 		values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)))
 }
 
@@ -2624,7 +2625,7 @@ func TestCoverageQuasisyntaxRuntime(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(wrap-in-list 42)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 		values.List(values.NewInteger(42)))
 }
 
@@ -2636,7 +2637,7 @@ func TestCoverageLetrecStar(t *testing.T) {
 	mc, err := runSchemeExpr(t, env,
 		`(letrec* ((x 1) (y (+ x 1))) (+ x y))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestCoverageWhenUnless tests when and unless forms.
@@ -2645,11 +2646,11 @@ func TestCoverageWhenUnless(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(when #t 42)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	mc, err = runSchemeExpr(t, env, "(unless #f 99)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCoverageRaiseAndGuard tests raise with guard handler.
@@ -2682,7 +2683,7 @@ func TestCoverageSyntaxRulesFreeIdentifiers(t *testing.T) {
 	)
 	qt.Assert(t, err, qt.IsNil)
 	// Due to hygiene, (reveal) should reference the outer secret=42
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCoverageQuasiquoteImproper tests quasiquote with improper list.
@@ -2711,7 +2712,7 @@ func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
 			"`(a ,x . c)",
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 			values.NewCons(
 				values.NewSymbol("a"),
 				values.NewCons(values.NewInteger(10), values.NewSymbol("c")),
@@ -2726,7 +2727,7 @@ func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
 			"`(,x ,y . z)",
 		)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+		qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 			values.NewCons(
 				values.NewInteger(1),
 				values.NewCons(values.NewInteger(2), values.NewSymbol("z")),
@@ -2744,7 +2745,7 @@ func TestCoverageQuasiquoteSplicingInList(t *testing.T) {
 		"`(1 ,@xs 4)",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals,
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals,
 		values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4)))
 }
 
@@ -2784,7 +2785,7 @@ func TestCoverageDefineValues(t *testing.T) {
 			(define b 2)
 			(+ a b)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestCoverageInternalDefineSyntax tests internal define-syntax.
@@ -2799,7 +2800,7 @@ func TestCoverageInternalDefineSyntax(t *testing.T) {
 					((double x) (+ x x))))
 			(double 21))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCoverageTailPosition tests various tail position scenarios.
@@ -2811,19 +2812,19 @@ func TestCoverageTailPosition(t *testing.T) {
 	mc, err := runSchemeExpr(t, env,
 		`((lambda (x) (if (> x 0) x (- x))) 5)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(5))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(5))
 
 	// begin in tail position
 	mc, err = runSchemeExpr(t, env,
 		`((lambda () (begin 1 2 3)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 
 	// let in tail position
 	mc, err = runSchemeExpr(t, env,
 		`((lambda () (let ((x 10)) (+ x 1))))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 
 	// case-lambda
 	mc, err = runSchemeExpr(t, env,
@@ -2831,7 +2832,7 @@ func TestCoverageTailPosition(t *testing.T) {
 			((x) (+ x 1))
 			((x y) (+ x y))) 10)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 }
 
 // TestCoverageDynamicWindReentry tests dynamic-wind with continuation re-entry.
@@ -2863,12 +2864,12 @@ func TestCoverageApplyProcedure(t *testing.T) {
 	// Apply with explicit args and rest list
 	mc, err := runSchemeExpr(t, env, "(apply + 1 2 '(3 4))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 
 	// Apply with just a list
 	mc, err = runSchemeExpr(t, env, "(apply + '(1 2 3))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(6))
 
 	// Apply with case-lambda
 	mc, err = runSchemeExpr(t, env,
@@ -2876,7 +2877,7 @@ func TestCoverageApplyProcedure(t *testing.T) {
 			((x) x)
 			((x y) (+ x y))) '(10 20))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 // TestCoverageSetBangTop tests set! at top level.
@@ -2890,7 +2891,7 @@ func TestCoverageSetBangTop(t *testing.T) {
 		"x",
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCoverageNamedLetLoop tests named let with a simple accumulator loop.
@@ -2902,7 +2903,7 @@ func TestCoverageNamedLetLoop(t *testing.T) {
 		`(let loop ((i 0) (acc 0))
 			(if (= i 10) acc (loop (+ i 1) (+ acc i))))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(45))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(45))
 }
 
 // TestCoverageCallCCEscapeThroughDynamicWind tests call/cc capturing inside
@@ -2925,14 +2926,14 @@ func TestCoverageCallCCEscapeThroughDynamicWind(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// First run: k captured a continuation, result is 1
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Invoke the captured continuation from outside
 	mc, err = runSchemeExpr(t, env, `(k 42)`)
 	// k invokes the continuation, which escapes and gets caught by RunWithEscapeHandling
 	// It should trigger before thunk (rewind) and after thunk (unwind)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCoveragePromptAbortHandling tests abort-current-continuation which
@@ -2950,7 +2951,7 @@ func TestCoveragePromptAbortHandling(t *testing.T) {
 			(default-continuation-prompt-tag)
 			(lambda (v) (* v 2)))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 // TestCoveragePromptAbortIdentity tests abort with identity handler.
@@ -2968,7 +2969,7 @@ func TestCoveragePromptAbortIdentity(t *testing.T) {
 			(default-continuation-prompt-tag)
 			(lambda (v) v))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 // TestCoverageParameterObjectConverter tests parameter objects with converter.
@@ -2983,14 +2984,14 @@ func TestCoverageParameterObjectConverter(t *testing.T) {
 	)
 	qt.Assert(t, err, qt.IsNil)
 	// 10 passed through converter → 20
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(20))
 
 	// parameterize also goes through converter
 	mc, err = runSchemeExpr(t, env,
 		`(parameterize ((p 5)) (p))`)
 	qt.Assert(t, err, qt.IsNil)
 	// 5 through converter → 10
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 // TestCoverageParameterObjectSet tests parameter set! path.
@@ -3004,7 +3005,7 @@ func TestCoverageParameterObjectSet(t *testing.T) {
 		`(p)`,
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(100))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 // TestCoverageSyntaxRulesRecursive tests recursive macros with free identifiers.
@@ -3023,11 +3024,11 @@ func TestCoverageSyntaxRulesRecursive(t *testing.T) {
 		`(my-and 1 2 3)`,
 	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 
 	mc, err = runSchemeExpr(t, env, `(my-and 1 #f 3)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.FalseValue)
 }
 
 // TestCoverageVectorQuasiquoteSplicing tests quasiquote with unquote-splicing
@@ -3048,7 +3049,7 @@ func TestCoverageVectorQuasiquoteSplicing(t *testing.T) {
 		values.NewInteger(4),
 		values.NewInteger(5),
 	)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageNestedQuasiquoteDepth tests nested quasiquote at depth > 1.
@@ -3065,7 +3066,7 @@ func TestCoverageNestedQuasiquoteDepth(t *testing.T) {
 	// Should be ((a 3) 42)
 	inner := values.NewCons(values.NewSymbol("a"), values.NewCons(values.NewInteger(3), values.EmptyList))
 	expected := values.NewCons(inner, values.NewCons(values.NewInteger(42), values.EmptyList))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageCondExpandFeatures tests cond-expand with various feature identifiers.
@@ -3079,7 +3080,7 @@ func TestCoverageCondExpandFeatures(t *testing.T) {
 			(r7rs 'r7rs-supported)
 			(else 'not-r7rs))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("r7rs-supported"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("r7rs-supported"))
 
 	// cond-expand with implementation feature
 	mc, err = runSchemeExpr(t, env,
@@ -3087,7 +3088,7 @@ func TestCoverageCondExpandFeatures(t *testing.T) {
 			(wile 'wile-detected)
 			(else 'unknown))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewSymbol("wile-detected"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("wile-detected"))
 }
 
 // TestCoverageEvalWhen tests eval-when form.
@@ -3100,7 +3101,7 @@ func TestCoverageEvalWhen(t *testing.T) {
 		`(eval-when (eval load)
 			(+ 1 2))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestCoverageGuardWithCond tests guard with multiple clauses.
@@ -3114,7 +3115,7 @@ func TestCoverageGuardWithCond(t *testing.T) {
 				 (string-append "caught: " (error-object-message exn))))
 			(error "test" "details"))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewString("caught: test"))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewString("caught: test"))
 }
 
 // TestCoverageCaseLambdaDispatch tests case-lambda with multiple clauses.
@@ -3137,7 +3138,7 @@ func TestCoverageCaseLambdaDispatch(t *testing.T) {
 			values.NewCons(values.NewInteger(3),
 				values.NewCons(values.NewInteger(10),
 					values.EmptyList))))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageDoLoop tests do loop form.
@@ -3150,7 +3151,7 @@ func TestCoverageDoLoop(t *testing.T) {
 			  (sum 0 (+ sum i)))
 			 ((= i 5) sum))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 // TestCoverageLetValuesMultiBinding tests let-values with multiple bindings.
@@ -3163,7 +3164,7 @@ func TestCoverageLetValuesMultiBinding(t *testing.T) {
 					  ((c) (values 3)))
 			(+ a b c))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(6))
 }
 
 // TestCoverageSyntaxCaseWithTemplate tests syntax-case with (syntax ...) template.
@@ -3188,7 +3189,7 @@ func TestCoverageSyntaxCaseWithTemplate(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	expected := values.NewCons(values.NewInteger(2),
 		values.NewCons(values.NewInteger(1), values.EmptyList))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageDynamicWindNested tests deeply nested dynamic-wind.
@@ -3214,7 +3215,7 @@ func TestCoverageDynamicWindNested(t *testing.T) {
 		values.NewCons(values.NewSymbol("b-in"),
 			values.NewCons(values.NewSymbol("b-out"),
 				values.NewCons(values.NewSymbol("a-out"), values.EmptyList))))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageExceptionReRaise tests exception re-raising with guard.
@@ -3233,7 +3234,7 @@ func TestCoverageExceptionReRaise(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	// Inner guard catches 1 (< 5), re-raises 11
 	// Outer guard catches 11 (number?), returns 111
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(111))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(111))
 }
 
 // TestCoverageDefineRecordType tests define-record-type.
@@ -3254,7 +3255,7 @@ func TestCoverageDefineRecordType(t *testing.T) {
 	expected := values.NewCons(values.TrueValue,
 		values.NewCons(values.NewInteger(3),
 			values.NewCons(values.NewInteger(4), values.EmptyList)))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestCoverageSyntaxRulesCustomEllipsis tests syntax-rules with custom ellipsis.
@@ -3272,7 +3273,7 @@ func TestCoverageSyntaxRulesCustomEllipsis(t *testing.T) {
 	expected := values.NewCons(values.NewInteger(1),
 		values.NewCons(values.NewInteger(2),
 			values.NewCons(values.NewInteger(3), values.EmptyList)))
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, expected)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestEmptyListExpression verifies that a bare () in expression position
@@ -3283,5 +3284,5 @@ func TestEmptyListExpression(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "()")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.EmptyList)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.EmptyList)
 }

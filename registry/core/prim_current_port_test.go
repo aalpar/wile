@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -27,23 +28,23 @@ import (
 func TestCurrentInputPortIsInputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(input-port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentOutputPortIsOutputPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(output-port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentInputPortIsPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentOutputPortIsPort(t *testing.T) {
 	result, err := runSchemeCode(t, `(port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

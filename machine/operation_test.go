@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -39,7 +40,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, (*mc.evals), qt.HasLen, 1)
-				qt.Assert(t, (*mc.evals)[0], values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, (*mc.evals)[0], valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -48,7 +49,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -65,7 +66,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -77,7 +78,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -94,7 +95,7 @@ func TestOperation(t *testing.T) {
 				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 				li := mc.env.LocalEnvironment().GetLocalIndex(sym)
 				bd := mc.env.LocalEnvironment().GetLocalBinding(li)
-				qt.Assert(t, bd.Value(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, bd.Value(), valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -110,7 +111,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 			},
 		},
@@ -129,7 +130,7 @@ func TestOperation(t *testing.T) {
 				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 				gi := mc.env.GlobalEnvironment().GetGlobalIndex(sym)
 				v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi).Value()
-				qt.Assert(t, v, values.SchemeEquals, values.NewInteger(10))
+				qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(10))
 			},
 		},
 		{
@@ -142,7 +143,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(2))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 			},
 		},
 		{
@@ -191,7 +192,7 @@ func TestOperation(t *testing.T) {
 				// Closure executed: value = 42; returned via RestoreContinuation.
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-				qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+				qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
 			},
 		},
@@ -428,9 +429,9 @@ func TestOperations_Copy(t *testing.T) {
 	copied := ops.Copy()
 	qt.Assert(t, copied, qt.IsNotNil)
 	qt.Assert(t, copied.Len(), qt.Equals, 3)
-	qt.Assert(t, copied[0], values.SchemeEquals, ops[0])
-	qt.Assert(t, copied[1], values.SchemeEquals, ops[1])
-	qt.Assert(t, copied[2], values.SchemeEquals, ops[2])
+	qt.Assert(t, copied[0], valuestest.SchemeEquals, ops[0])
+	qt.Assert(t, copied[1], valuestest.SchemeEquals, ops[1])
+	qt.Assert(t, copied[2], valuestest.SchemeEquals, ops[2])
 }
 
 func TestOperations_EqualTo(t *testing.T) {

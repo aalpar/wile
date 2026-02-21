@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math"
@@ -20,6 +20,9 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // TestIntegerPredicates covers IsInteger, IsRational, IsFinite, IsNaN, IsPositive,
@@ -29,14 +32,14 @@ func TestIntegerPredicates(t *testing.T) {
 
 	tcs := []struct {
 		name       string
-		val        *Integer
+		val        *values.Integer
 		isPositive bool
 		isNegative bool
 		sign       int
 	}{
-		{"positive", NewInteger(42), true, false, 1},
-		{"negative", NewInteger(-7), false, true, -1},
-		{"zero", NewInteger(0), false, false, 0},
+		{"positive", values.NewInteger(42), true, false, 1},
+		{"negative", values.NewInteger(-7), false, true, -1},
+		{"zero", values.NewInteger(0), false, false, 0},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,13 +56,13 @@ func TestIntegerPredicates(t *testing.T) {
 
 func TestIntegerExactness(t *testing.T) {
 	c := qt.New(t)
-	i := NewInteger(5)
+	i := values.NewInteger(5)
 
 	exact := i.ToExact()
-	c.Assert(exact, SchemeEquals, i)
+	c.Assert(exact, valuestest.SchemeEquals, i)
 
 	inexact := i.ToInexact()
-	f, ok := inexact.(*Float)
+	f, ok := inexact.(*values.Float)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(f.Value, qt.Equals, 5.0)
 }
@@ -69,22 +72,22 @@ func TestIntegerCompare(t *testing.T) {
 
 	tcs := []struct {
 		name string
-		a    *Integer
-		b    Number
+		a    *values.Integer
+		b    values.Number
 		want int
 	}{
-		{"int<int", NewInteger(1), NewInteger(2), -1},
-		{"int=int", NewInteger(5), NewInteger(5), 0},
-		{"int>int", NewInteger(9), NewInteger(3), 1},
-		{"int<float", NewInteger(1), NewFloat(1.5), -1},
-		{"int=float", NewInteger(2), NewFloat(2.0), 0},
-		{"int>float", NewInteger(3), NewFloat(2.5), 1},
-		{"int<rational", NewInteger(1), NewRational(3, 2), -1},
-		{"int<bigint", NewInteger(1), NewBigIntegerFromInt64(2), -1},
-		{"int<bigfloat", NewInteger(1), NewBigFloatFromFloat64(1.5), -1},
-		{"int<complex", NewInteger(1), NewComplexFromParts(2.0, 0.0), -1},
-		{"int=complex", NewInteger(2), NewComplexFromParts(2.0, 0.0), 0},
-		{"int<bigcomplex", NewInteger(1), NewBigComplex(NewBigIntegerFromInt64(2), NewBigIntegerFromInt64(0)), -1},
+		{"int<int", values.NewInteger(1), values.NewInteger(2), -1},
+		{"int=int", values.NewInteger(5), values.NewInteger(5), 0},
+		{"int>int", values.NewInteger(9), values.NewInteger(3), 1},
+		{"int<float", values.NewInteger(1), values.NewFloat(1.5), -1},
+		{"int=float", values.NewInteger(2), values.NewFloat(2.0), 0},
+		{"int>float", values.NewInteger(3), values.NewFloat(2.5), 1},
+		{"int<rational", values.NewInteger(1), values.NewRational(3, 2), -1},
+		{"int<bigint", values.NewInteger(1), values.NewBigIntegerFromInt64(2), -1},
+		{"int<bigfloat", values.NewInteger(1), values.NewBigFloatFromFloat64(1.5), -1},
+		{"int<complex", values.NewInteger(1), values.NewComplexFromParts(2.0, 0.0), -1},
+		{"int=complex", values.NewInteger(2), values.NewComplexFromParts(2.0, 0.0), 0},
+		{"int<bigcomplex", values.NewInteger(1), values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(0)), -1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +103,7 @@ func TestFloatPredicates(t *testing.T) {
 
 	tcs := []struct {
 		name       string
-		val        *Float
+		val        *values.Float
 		isInteger  bool
 		isRational bool
 		isFinite   bool
@@ -109,13 +112,13 @@ func TestFloatPredicates(t *testing.T) {
 		isNegative bool
 		sign       int
 	}{
-		{"positive", NewFloat(3.14), false, true, true, false, true, false, 1},
-		{"negative", NewFloat(-2.5), false, true, true, false, false, true, -1},
-		{"zero", NewFloat(0.0), true, true, true, false, false, false, 0},
-		{"integer value", NewFloat(7.0), true, true, true, false, true, false, 1},
-		{"+inf", NewFloat(math.Inf(1)), false, false, false, false, true, false, 1},
-		{"-inf", NewFloat(math.Inf(-1)), false, false, false, false, false, true, -1},
-		{"NaN", NewFloat(math.NaN()), false, false, false, true, false, false, 0},
+		{"positive", values.NewFloat(3.14), false, true, true, false, true, false, 1},
+		{"negative", values.NewFloat(-2.5), false, true, true, false, false, true, -1},
+		{"zero", values.NewFloat(0.0), true, true, true, false, false, false, 0},
+		{"integer value", values.NewFloat(7.0), true, true, true, false, true, false, 1},
+		{"+inf", values.NewFloat(math.Inf(1)), false, false, false, false, true, false, 1},
+		{"-inf", values.NewFloat(math.Inf(-1)), false, false, false, false, false, true, -1},
+		{"NaN", values.NewFloat(math.NaN()), false, false, false, true, false, false, 0},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,29 +136,29 @@ func TestFloatPredicates(t *testing.T) {
 func TestFloatAbsNegate(t *testing.T) {
 	c := qt.New(t)
 
-	f := NewFloat(-3.5)
+	f := values.NewFloat(-3.5)
 	abs := f.Abs()
-	c.Assert(abs, SchemeEquals, NewFloat(3.5))
+	c.Assert(abs, valuestest.SchemeEquals, values.NewFloat(3.5))
 
 	neg := f.Negate()
-	c.Assert(neg, SchemeEquals, NewFloat(3.5))
+	c.Assert(neg, valuestest.SchemeEquals, values.NewFloat(3.5))
 }
 
 func TestFloatExactness(t *testing.T) {
 	c := qt.New(t)
 
-	f := NewFloat(2.5)
+	f := values.NewFloat(2.5)
 	exact := f.ToExact()
 	c.Assert(exact.IsExact(), qt.IsTrue)
 
 	inexact := f.ToInexact()
-	c.Assert(inexact, SchemeEquals, f)
+	c.Assert(inexact, valuestest.SchemeEquals, f)
 }
 
 func TestFloatHashCode(t *testing.T) {
 	c := qt.New(t)
-	f1 := NewFloat(3.14)
-	f2 := NewFloat(3.14)
+	f1 := values.NewFloat(3.14)
+	f2 := values.NewFloat(3.14)
 	c.Assert(f1.HashCode(), qt.Equals, f2.HashCode())
 }
 
@@ -164,20 +167,20 @@ func TestFloatCompare(t *testing.T) {
 
 	tcs := []struct {
 		name string
-		a    *Float
-		b    Number
+		a    *values.Float
+		b    values.Number
 		want int
 	}{
-		{"float<float", NewFloat(1.0), NewFloat(2.0), -1},
-		{"float=float", NewFloat(5.0), NewFloat(5.0), 0},
-		{"float>float", NewFloat(9.0), NewFloat(3.0), 1},
-		{"float<int", NewFloat(1.0), NewInteger(2), -1},
-		{"float<bigint", NewFloat(1.0), NewBigIntegerFromInt64(2), -1},
-		{"float<bigfloat", NewFloat(1.0), NewBigFloatFromFloat64(2.0), -1},
-		{"float<rational", NewFloat(1.0), NewRational(3, 2), -1},
-		{"float<complex", NewFloat(1.0), NewComplexFromParts(2.0, 0.0), -1},
-		{"float=complex", NewFloat(2.0), NewComplexFromParts(2.0, 3.0), 0},
-		{"float<bigcomplex", NewFloat(1.0), NewBigComplex(NewBigIntegerFromInt64(2), NewBigIntegerFromInt64(0)), -1},
+		{"float<float", values.NewFloat(1.0), values.NewFloat(2.0), -1},
+		{"float=float", values.NewFloat(5.0), values.NewFloat(5.0), 0},
+		{"float>float", values.NewFloat(9.0), values.NewFloat(3.0), 1},
+		{"float<int", values.NewFloat(1.0), values.NewInteger(2), -1},
+		{"float<bigint", values.NewFloat(1.0), values.NewBigIntegerFromInt64(2), -1},
+		{"float<bigfloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(2.0), -1},
+		{"float<rational", values.NewFloat(1.0), values.NewRational(3, 2), -1},
+		{"float<complex", values.NewFloat(1.0), values.NewComplexFromParts(2.0, 0.0), -1},
+		{"float=complex", values.NewFloat(2.0), values.NewComplexFromParts(2.0, 3.0), 0},
+		{"float<bigcomplex", values.NewFloat(1.0), values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(0)), -1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -193,17 +196,17 @@ func TestComplexPredicates(t *testing.T) {
 
 	tcs := []struct {
 		name       string
-		val        *Complex
+		val        *values.Complex
 		isInteger  bool
 		isRational bool
 		isFinite   bool
 		isNaN      bool
 	}{
-		{"standard", NewComplexFromParts(1.0, 2.0), false, false, true, false},
-		{"real integer", NewComplexFromParts(5.0, 0.0), true, true, true, false},
-		{"with inf", NewComplexFromParts(math.Inf(1), 0.0), false, false, false, false},
-		{"with NaN real", NewComplexFromParts(math.NaN(), 0.0), false, false, false, true},
-		{"with NaN imag", NewComplexFromParts(0.0, math.NaN()), false, false, false, true},
+		{"standard", values.NewComplexFromParts(1.0, 2.0), false, false, true, false},
+		{"real integer", values.NewComplexFromParts(5.0, 0.0), true, true, true, false},
+		{"with inf", values.NewComplexFromParts(math.Inf(1), 0.0), false, false, false, false},
+		{"with NaN real", values.NewComplexFromParts(math.NaN(), 0.0), false, false, false, true},
+		{"with NaN imag", values.NewComplexFromParts(0.0, math.NaN()), false, false, false, true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,34 +221,34 @@ func TestComplexPredicates(t *testing.T) {
 func TestComplexMethods(t *testing.T) {
 	c := qt.New(t)
 
-	z := NewComplexFromParts(3.0, 4.0)
+	z := values.NewComplexFromParts(3.0, 4.0)
 
 	neg := z.Negate()
-	negC := neg.(*Complex)
+	negC := neg.(*values.Complex)
 	c.Assert(real(negC.Value), qt.Equals, -3.0)
 	c.Assert(imag(negC.Value), qt.Equals, -4.0)
 
 	abs := z.Abs()
-	absF := abs.(*Float)
+	absF := abs.(*values.Float)
 	c.Assert(absF.Value, qt.Equals, 5.0)
 
 	realPart := z.RealPart()
-	c.Assert(realPart, SchemeEquals, NewFloat(3.0))
+	c.Assert(realPart, valuestest.SchemeEquals, values.NewFloat(3.0))
 
 	imagPart := z.ImagPart()
-	c.Assert(imagPart, SchemeEquals, NewFloat(4.0))
+	c.Assert(imagPart, valuestest.SchemeEquals, values.NewFloat(4.0))
 }
 
 func TestComplexExactness(t *testing.T) {
 	c := qt.New(t)
 
-	z := NewComplexFromParts(2.0, 3.0)
+	z := values.NewComplexFromParts(2.0, 3.0)
 
 	exact := z.ToExact()
 	c.Assert(exact.IsExact(), qt.IsTrue)
 
 	inexact := z.ToInexact()
-	c.Assert(inexact, SchemeEquals, z)
+	c.Assert(inexact, valuestest.SchemeEquals, z)
 }
 
 func TestComplexCompare(t *testing.T) {
@@ -253,18 +256,18 @@ func TestComplexCompare(t *testing.T) {
 
 	tcs := []struct {
 		name string
-		a    *Complex
-		b    Number
+		a    *values.Complex
+		b    values.Number
 		want int
 	}{
-		{"complex<complex", NewComplexFromParts(1.0, 0.0), NewComplexFromParts(2.0, 0.0), -1},
-		{"complex=complex", NewComplexFromParts(5.0, 1.0), NewComplexFromParts(5.0, 2.0), 0},
-		{"complex<float", NewComplexFromParts(1.0, 0.0), NewFloat(2.0), -1},
-		{"complex<int", NewComplexFromParts(1.0, 0.0), NewInteger(2), -1},
-		{"complex<bigint", NewComplexFromParts(1.0, 0.0), NewBigIntegerFromInt64(2), -1},
-		{"complex<bigfloat", NewComplexFromParts(1.0, 0.0), NewBigFloatFromFloat64(2.0), -1},
-		{"complex<rational", NewComplexFromParts(1.0, 0.0), NewRational(3, 1), -1},
-		{"complex<bigcomplex", NewComplexFromParts(1.0, 0.0), NewBigComplex(NewBigIntegerFromInt64(2), NewBigIntegerFromInt64(0)), -1},
+		{"complex<complex", values.NewComplexFromParts(1.0, 0.0), values.NewComplexFromParts(2.0, 0.0), -1},
+		{"complex=complex", values.NewComplexFromParts(5.0, 1.0), values.NewComplexFromParts(5.0, 2.0), 0},
+		{"complex<float", values.NewComplexFromParts(1.0, 0.0), values.NewFloat(2.0), -1},
+		{"complex<int", values.NewComplexFromParts(1.0, 0.0), values.NewInteger(2), -1},
+		{"complex<bigint", values.NewComplexFromParts(1.0, 0.0), values.NewBigIntegerFromInt64(2), -1},
+		{"complex<bigfloat", values.NewComplexFromParts(1.0, 0.0), values.NewBigFloatFromFloat64(2.0), -1},
+		{"complex<rational", values.NewComplexFromParts(1.0, 0.0), values.NewRational(3, 1), -1},
+		{"complex<bigcomplex", values.NewComplexFromParts(1.0, 0.0), values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(0)), -1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -280,14 +283,14 @@ func TestRationalPredicates(t *testing.T) {
 
 	tcs := []struct {
 		name       string
-		val        *Rational
+		val        *values.Rational
 		isPositive bool
 		isNegative bool
 		sign       int
 	}{
-		{"positive", NewRational(3, 4), true, false, 1},
-		{"negative", NewRational(-1, 3), false, true, -1},
-		{"zero", NewRational(0, 1), false, false, 0},
+		{"positive", values.NewRational(3, 4), true, false, 1},
+		{"negative", values.NewRational(-1, 3), false, true, -1},
+		{"zero", values.NewRational(0, 1), false, false, 0},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -304,32 +307,32 @@ func TestRationalPredicates(t *testing.T) {
 func TestRationalAbsNegate(t *testing.T) {
 	c := qt.New(t)
 
-	r := NewRational(-3, 4)
+	r := values.NewRational(-3, 4)
 	abs := r.Abs()
-	c.Assert(abs.(*Rational).value.Sign(), qt.Equals, 1)
+	c.Assert(abs.(*values.Rational).Rat().Sign(), qt.Equals, 1)
 
 	neg := r.Negate()
-	c.Assert(neg.(*Rational).value.Sign(), qt.Equals, 1)
+	c.Assert(neg.(*values.Rational).Rat().Sign(), qt.Equals, 1)
 }
 
 func TestRationalExactness(t *testing.T) {
 	c := qt.New(t)
 
-	r := NewRational(1, 3)
+	r := values.NewRational(1, 3)
 	exact := r.ToExact()
-	c.Assert(exact, SchemeEquals, r)
+	c.Assert(exact, valuestest.SchemeEquals, r)
 
 	inexact := r.ToInexact()
 	// L18: ToInexact now returns BigFloat for precision
-	bf, ok := inexact.(*BigFloat)
+	bf, ok := inexact.(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(bf.Float64() > 0.33, qt.IsTrue)
 }
 
 func TestRationalHashCode(t *testing.T) {
 	c := qt.New(t)
-	r1 := NewRational(1, 2)
-	r2 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
+	r2 := values.NewRational(1, 2)
 	c.Assert(r1.HashCode(), qt.Equals, r2.HashCode())
 }
 
@@ -338,19 +341,19 @@ func TestRationalCompare(t *testing.T) {
 
 	tcs := []struct {
 		name string
-		a    *Rational
-		b    Number
+		a    *values.Rational
+		b    values.Number
 		want int
 	}{
-		{"rat<rat", NewRational(1, 4), NewRational(1, 2), -1},
-		{"rat=rat", NewRational(1, 2), NewRational(1, 2), 0},
-		{"rat>rat", NewRational(3, 4), NewRational(1, 4), 1},
-		{"rat<int", NewRational(1, 2), NewInteger(1), -1},
-		{"rat<bigint", NewRational(1, 2), NewBigIntegerFromInt64(1), -1},
-		{"rat<float", NewRational(1, 2), NewFloat(0.75), -1},
-		{"rat<bigfloat", NewRational(1, 2), NewBigFloatFromFloat64(0.75), -1},
-		{"rat<complex", NewRational(1, 2), NewComplexFromParts(1.0, 0.0), -1},
-		{"rat<bigcomplex", NewRational(1, 2), NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(0)), -1},
+		{"rat<rat", values.NewRational(1, 4), values.NewRational(1, 2), -1},
+		{"rat=rat", values.NewRational(1, 2), values.NewRational(1, 2), 0},
+		{"rat>rat", values.NewRational(3, 4), values.NewRational(1, 4), 1},
+		{"rat<int", values.NewRational(1, 2), values.NewInteger(1), -1},
+		{"rat<bigint", values.NewRational(1, 2), values.NewBigIntegerFromInt64(1), -1},
+		{"rat<float", values.NewRational(1, 2), values.NewFloat(0.75), -1},
+		{"rat<bigfloat", values.NewRational(1, 2), values.NewBigFloatFromFloat64(0.75), -1},
+		{"rat<complex", values.NewRational(1, 2), values.NewComplexFromParts(1.0, 0.0), -1},
+		{"rat<bigcomplex", values.NewRational(1, 2), values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(0)), -1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -364,9 +367,9 @@ func TestRationalCompare(t *testing.T) {
 func TestBigIntegerPredicates(t *testing.T) {
 	c := qt.New(t)
 
-	pos := NewBigIntegerFromInt64(42)
-	neg := NewBigIntegerFromInt64(-7)
-	zero := NewBigIntegerFromInt64(0)
+	pos := values.NewBigIntegerFromInt64(42)
+	neg := values.NewBigIntegerFromInt64(-7)
+	zero := values.NewBigIntegerFromInt64(0)
 
 	c.Assert(pos.IsInteger(), qt.IsTrue)
 	c.Assert(pos.IsRational(), qt.IsTrue)
@@ -377,13 +380,13 @@ func TestBigIntegerPredicates(t *testing.T) {
 	c.Assert(zero.Sign(), qt.Equals, 0)
 
 	abs := neg.Abs()
-	c.Assert(abs.(*BigInteger).value.Int64(), qt.Equals, int64(7))
+	c.Assert(abs.(*values.BigInteger).BigInt().Int64(), qt.Equals, int64(7))
 }
 
 func TestBigIntegerHashCode(t *testing.T) {
 	c := qt.New(t)
-	b1 := NewBigIntegerFromInt64(999)
-	b2 := NewBigIntegerFromInt64(999)
+	b1 := values.NewBigIntegerFromInt64(999)
+	b2 := values.NewBigIntegerFromInt64(999)
 	c.Assert(b1.HashCode(), qt.Equals, b2.HashCode())
 }
 
@@ -392,9 +395,9 @@ func TestBigIntegerHashCode(t *testing.T) {
 func TestBigFloatPredicates(t *testing.T) {
 	c := qt.New(t)
 
-	pos := NewBigFloatFromFloat64(3.14)
-	neg := NewBigFloatFromFloat64(-2.5)
-	intVal := NewBigFloatFromFloat64(7.0)
+	pos := values.NewBigFloatFromFloat64(3.14)
+	neg := values.NewBigFloatFromFloat64(-2.5)
+	intVal := values.NewBigFloatFromFloat64(7.0)
 
 	c.Assert(pos.IsRational(), qt.IsTrue)
 	c.Assert(pos.IsFinite(), qt.IsTrue)
@@ -405,7 +408,7 @@ func TestBigFloatPredicates(t *testing.T) {
 	c.Assert(neg.Sign(), qt.Equals, -1)
 
 	abs := neg.Abs()
-	absF := abs.(*BigFloat)
+	absF := abs.(*values.BigFloat)
 	f, _ := absF.BigFloatValue().Float64()
 	c.Assert(f, qt.Equals, 2.5)
 }
@@ -415,7 +418,7 @@ func TestBigFloatPredicates(t *testing.T) {
 func TestBigComplexPredicates(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4))
+	bc := values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))
 
 	c.Assert(bc.IsFinite(), qt.IsTrue)
 	c.Assert(bc.IsNaN(), qt.IsFalse)
@@ -423,7 +426,7 @@ func TestBigComplexPredicates(t *testing.T) {
 	c.Assert(bc.IsRational(), qt.IsFalse)
 
 	// Real-only BigComplex
-	bcReal := NewBigComplex(NewBigIntegerFromInt64(5), NewBigIntegerFromInt64(0))
+	bcReal := values.NewBigComplex(values.NewBigIntegerFromInt64(5), values.NewBigIntegerFromInt64(0))
 	c.Assert(bcReal.IsInteger(), qt.IsTrue)
 	c.Assert(bcReal.IsRational(), qt.IsTrue)
 }
@@ -431,16 +434,16 @@ func TestBigComplexPredicates(t *testing.T) {
 func TestBigComplexParts(t *testing.T) {
 	c := qt.New(t)
 
-	bc := NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4))
+	bc := values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))
 
 	realPart := bc.RealPart()
-	c.Assert(realPart, SchemeEquals, NewBigIntegerFromInt64(3))
+	c.Assert(realPart, valuestest.SchemeEquals, values.NewBigIntegerFromInt64(3))
 
 	imagPart := bc.ImagPart()
-	c.Assert(imagPart, SchemeEquals, NewBigIntegerFromInt64(4))
+	c.Assert(imagPart, valuestest.SchemeEquals, values.NewBigIntegerFromInt64(4))
 
 	abs := bc.Abs()
-	absF := abs.(*BigFloat)
+	absF := abs.(*values.BigFloat)
 	f, _ := absF.BigFloatValue().Float64()
 	c.Assert(f, qt.Equals, 5.0)
 }
@@ -451,19 +454,19 @@ func TestFloatToExactConversions(t *testing.T) {
 	c := qt.New(t)
 
 	// Float that is an integer -> BigInteger
-	intFloat := NewFloat(42.0)
+	intFloat := values.NewFloat(42.0)
 	exact := intFloat.ToExact()
-	_, isBigInt := exact.(*BigInteger)
+	_, isBigInt := exact.(*values.BigInteger)
 	c.Assert(isBigInt, qt.IsTrue)
 
 	// Float that is not an integer -> Rational
-	fracFloat := NewFloat(0.5)
+	fracFloat := values.NewFloat(0.5)
 	exactFrac := fracFloat.ToExact()
-	_, isRat := exactFrac.(*Rational)
+	_, isRat := exactFrac.(*values.Rational)
 	c.Assert(isRat, qt.IsTrue)
 
 	// Large float
-	largeFloat := NewFloat(1e18)
+	largeFloat := values.NewFloat(1e18)
 	exactLarge := largeFloat.ToExact()
 	c.Assert(exactLarge.IsExact(), qt.IsTrue)
 }
@@ -473,34 +476,34 @@ func TestNumericTowerUtilities(t *testing.T) {
 	c := qt.New(t)
 
 	// ExactnessOf
-	c.Assert(ExactnessOf(NewInteger(1)), qt.Equals, Exact)
-	c.Assert(ExactnessOf(NewFloat(1.0)), qt.Equals, Inexact)
-	c.Assert(ExactnessOf(NewRational(1, 2)), qt.Equals, Exact)
-	c.Assert(ExactnessOf(NewBigIntegerFromInt64(1)), qt.Equals, Exact)
-	c.Assert(ExactnessOf(NewBigFloatFromFloat64(1.0)), qt.Equals, Inexact)
-	c.Assert(ExactnessOf(NewComplexFromParts(1.0, 0.0)), qt.Equals, Inexact)
+	c.Assert(values.ExactnessOf(values.NewInteger(1)), qt.Equals, values.Exact)
+	c.Assert(values.ExactnessOf(values.NewFloat(1.0)), qt.Equals, values.Inexact)
+	c.Assert(values.ExactnessOf(values.NewRational(1, 2)), qt.Equals, values.Exact)
+	c.Assert(values.ExactnessOf(values.NewBigIntegerFromInt64(1)), qt.Equals, values.Exact)
+	c.Assert(values.ExactnessOf(values.NewBigFloatFromFloat64(1.0)), qt.Equals, values.Inexact)
+	c.Assert(values.ExactnessOf(values.NewComplexFromParts(1.0, 0.0)), qt.Equals, values.Inexact)
 
 	// Simplify
-	bigInt := NewBigIntegerFromInt64(42)
-	simplified := Simplify(bigInt)
-	_, isInt := simplified.(*Integer)
+	bigInt := values.NewBigIntegerFromInt64(42)
+	simplified := values.Simplify(bigInt)
+	_, isInt := simplified.(*values.Integer)
 	c.Assert(isInt, qt.IsTrue)
 
 	// Simplify a BigComplex with zero imaginary part
-	bc := NewBigComplex(NewBigIntegerFromInt64(5), NewBigIntegerFromInt64(0))
-	simplifiedBC := Simplify(bc)
-	_, isInt2 := simplifiedBC.(*Integer)
+	bc := values.NewBigComplex(values.NewBigIntegerFromInt64(5), values.NewBigIntegerFromInt64(0))
+	simplifiedBC := values.Simplify(bc)
+	_, isInt2 := simplifiedBC.(*values.Integer)
 	c.Assert(isInt2, qt.IsTrue)
 
 	// Simplify a BigFloat that is integer-valued
-	bf := NewBigFloat(new(big.Float).SetInt64(100))
-	simplifiedBF := Simplify(bf)
-	_, isInt3 := simplifiedBF.(*Integer)
+	bf := values.NewBigFloat(new(big.Float).SetInt64(100))
+	simplifiedBF := values.Simplify(bf)
+	_, isInt3 := simplifiedBF.(*values.Integer)
 	c.Assert(isInt3, qt.IsTrue)
 
 	// Simplify a Rational that is integer-valued
-	r := NewRational(6, 2)
-	simplifiedR := Simplify(r)
-	_, isInt4 := simplifiedR.(*Integer)
+	r := values.NewRational(6, 2)
+	simplifiedR := values.Simplify(r)
+	_, isInt4 := simplifiedR.(*values.Integer)
 	c.Assert(isInt4, qt.IsTrue)
 }

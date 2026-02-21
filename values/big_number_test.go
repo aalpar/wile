@@ -12,54 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestBigInteger_Constructors(t *testing.T) {
 	c := qt.New(t)
 
 	// From int64
-	bi1 := NewBigIntegerFromInt64(42)
+	bi1 := values.NewBigIntegerFromInt64(42)
 	c.Assert(bi1.Int64(), qt.Equals, int64(42))
 
 	// From string
-	bi2 := NewBigIntegerFromString("12345678901234567890", 10)
+	bi2 := values.NewBigIntegerFromString("12345678901234567890", 10)
 	c.Assert(bi2, qt.IsNotNil)
 	c.Assert(bi2.BigInt().String(), qt.Equals, "12345678901234567890")
 
 	// From big.Int
 	bigVal := big.NewInt(99)
-	bi3 := NewBigInteger(bigVal)
+	bi3 := values.NewBigInteger(bigVal)
 	c.Assert(bi3.Int64(), qt.Equals, int64(99))
 
 	// Invalid string returns nil
-	bi4 := NewBigIntegerFromString("invalid", 10)
+	bi4 := values.NewBigIntegerFromString("invalid", 10)
 	c.Assert(bi4, qt.IsNil)
 }
 
 func TestBigInteger_Arithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bi1 := NewBigIntegerFromInt64(100)
-	bi2 := NewBigIntegerFromInt64(50)
+	bi1 := values.NewBigIntegerFromInt64(100)
+	bi2 := values.NewBigIntegerFromInt64(50)
 
 	// Add
 	sum := bi1.Add(bi2)
-	c.Assert(sum.(*BigInteger).Int64(), qt.Equals, int64(150))
+	c.Assert(sum.(*values.BigInteger).Int64(), qt.Equals, int64(150))
 
 	// Subtract
 	diff := bi1.Subtract(bi2)
-	c.Assert(diff.(*BigInteger).Int64(), qt.Equals, int64(50))
+	c.Assert(diff.(*values.BigInteger).Int64(), qt.Equals, int64(50))
 
 	// Multiply
 	prod := bi1.Multiply(bi2)
-	c.Assert(prod.(*BigInteger).Int64(), qt.Equals, int64(5000))
+	c.Assert(prod.(*values.BigInteger).Int64(), qt.Equals, int64(5000))
 
 	// Divide (returns Rational for exact division)
 	quot := bi1.Divide(bi2)
@@ -67,15 +70,15 @@ func TestBigInteger_Arithmetic(t *testing.T) {
 
 	// Negate
 	neg := bi1.Negate()
-	c.Assert(neg.(*BigInteger).Int64(), qt.Equals, int64(-100))
+	c.Assert(neg.(*values.BigInteger).Int64(), qt.Equals, int64(-100))
 }
 
 func TestBigInteger_Comparison(t *testing.T) {
 	c := qt.New(t)
 
-	bi1 := NewBigIntegerFromInt64(100)
-	bi2 := NewBigIntegerFromInt64(50)
-	bi3 := NewBigIntegerFromInt64(100)
+	bi1 := values.NewBigIntegerFromInt64(100)
+	bi2 := values.NewBigIntegerFromInt64(50)
+	bi3 := values.NewBigIntegerFromInt64(100)
 
 	c.Assert(bi1.Compare(bi2), qt.Equals, 1)
 	c.Assert(bi2.Compare(bi1), qt.Equals, -1)
@@ -88,9 +91,9 @@ func TestBigInteger_Comparison(t *testing.T) {
 func TestBigInteger_Properties(t *testing.T) {
 	c := qt.New(t)
 
-	positive := NewBigIntegerFromInt64(42)
-	negative := NewBigIntegerFromInt64(-42)
-	zero := NewBigIntegerFromInt64(0)
+	positive := values.NewBigIntegerFromInt64(42)
+	negative := values.NewBigIntegerFromInt64(-42)
+	zero := values.NewBigIntegerFromInt64(0)
 
 	c.Assert(positive.IsPositive(), qt.IsTrue)
 	c.Assert(positive.IsNegative(), qt.IsFalse)
@@ -110,14 +113,14 @@ func TestBigInteger_Properties(t *testing.T) {
 func TestBigInteger_Conversions(t *testing.T) {
 	c := qt.New(t)
 
-	bi := NewBigIntegerFromInt64(42)
+	bi := values.NewBigIntegerFromInt64(42)
 
 	// ToExact should return itself
-	c.Assert(bi.ToExact(), SchemeEquals, bi)
+	c.Assert(bi.ToExact(), valuestest.SchemeEquals, bi)
 
 	// ToInexact should return Float
 	inexact := bi.ToInexact()
-	f, ok := inexact.(*Float)
+	f, ok := inexact.(*values.Float)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(f.Value, qt.Equals, float64(42))
 
@@ -128,37 +131,37 @@ func TestBigInteger_Conversions(t *testing.T) {
 func TestBigInteger_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	bi1 := NewBigIntegerFromInt64(42)
-	bi2 := NewBigIntegerFromInt64(42)
-	bi3 := NewBigIntegerFromInt64(99)
-	int1 := NewInteger(42)
+	bi1 := values.NewBigIntegerFromInt64(42)
+	bi2 := values.NewBigIntegerFromInt64(42)
+	bi3 := values.NewBigIntegerFromInt64(99)
+	int1 := values.NewInteger(42)
 
 	c.Assert(bi1.EqualTo(bi2), qt.IsTrue)
 	c.Assert(bi1.EqualTo(bi3), qt.IsFalse)
 	c.Assert(bi1.EqualTo(int1), qt.IsTrue) // Should equal regular Integer
-	c.Assert(bi1.EqualTo(NewFloat(42.0)), qt.IsFalse)
+	c.Assert(bi1.EqualTo(values.NewFloat(42.0)), qt.IsFalse)
 }
 
 func TestBigInteger_MixedArithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bi := NewBigIntegerFromInt64(100)
+	bi := values.NewBigIntegerFromInt64(100)
 
 	// Add with Integer
-	sum := bi.Add(NewInteger(50))
-	c.Assert(sum.(*BigInteger).Int64(), qt.Equals, int64(150))
+	sum := bi.Add(values.NewInteger(50))
+	c.Assert(sum.(*values.BigInteger).Int64(), qt.Equals, int64(150))
 
 	// Add with Float - now returns BigFloat for precision preservation
-	sumF := bi.Add(NewFloat(0.5))
+	sumF := bi.Add(values.NewFloat(0.5))
 	// Result must be BigFloat (inexact) to preserve exactness contagion
-	bf, ok := sumF.(*BigFloat)
+	bf, ok := sumF.(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", sumF))
 	c.Assert(bf.Float64(), qt.Equals, float64(100.5))
 	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
 
 	// Add with Complex
-	sumC := bi.Add(NewComplex(complex(1, 2)))
-	comp, ok := sumC.(*Complex)
+	sumC := bi.Add(values.NewComplex(complex(1, 2)))
+	comp, ok := sumC.(*values.Complex)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(real(comp.Datum()), qt.Equals, float64(101))
 }
@@ -167,56 +170,56 @@ func TestBigFloat_Constructors(t *testing.T) {
 	c := qt.New(t)
 
 	// From float64
-	bf1 := NewBigFloatFromFloat64(3.14)
+	bf1 := values.NewBigFloatFromFloat64(3.14)
 	c.Assert(bf1.Float64(), qt.Equals, float64(3.14))
 
 	// From string
-	bf2 := NewBigFloatFromString("3.14159265358979323846")
+	bf2 := values.NewBigFloatFromString("3.14159265358979323846")
 	c.Assert(bf2, qt.IsNotNil)
 
 	// From big.Float
 	bigVal := big.NewFloat(2.71)
-	bf3 := NewBigFloat(bigVal)
+	bf3 := values.NewBigFloat(bigVal)
 	c.Assert(bf3.Float64(), qt.Equals, float64(2.71))
 
 	// Invalid string returns nil
-	bf4 := NewBigFloatFromString("invalid")
+	bf4 := values.NewBigFloatFromString("invalid")
 	c.Assert(bf4, qt.IsNil)
 }
 
 func TestBigFloat_Arithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bf1 := NewBigFloatFromFloat64(100.0)
-	bf2 := NewBigFloatFromFloat64(50.0)
+	bf1 := values.NewBigFloatFromFloat64(100.0)
+	bf2 := values.NewBigFloatFromFloat64(50.0)
 
 	// Add
 	sum := bf1.Add(bf2)
-	c.Assert(sum.(*BigFloat).Float64(), qt.Equals, float64(150.0))
+	c.Assert(sum.(*values.BigFloat).Float64(), qt.Equals, float64(150.0))
 
 	// Subtract
 	diff := bf1.Subtract(bf2)
-	c.Assert(diff.(*BigFloat).Float64(), qt.Equals, float64(50.0))
+	c.Assert(diff.(*values.BigFloat).Float64(), qt.Equals, float64(50.0))
 
 	// Multiply
 	prod := bf1.Multiply(bf2)
-	c.Assert(prod.(*BigFloat).Float64(), qt.Equals, float64(5000.0))
+	c.Assert(prod.(*values.BigFloat).Float64(), qt.Equals, float64(5000.0))
 
 	// Divide
 	quot := bf1.Divide(bf2)
-	c.Assert(quot.(*BigFloat).Float64(), qt.Equals, float64(2.0))
+	c.Assert(quot.(*values.BigFloat).Float64(), qt.Equals, float64(2.0))
 
 	// Negate
 	neg := bf1.Negate()
-	c.Assert(neg.(*BigFloat).Float64(), qt.Equals, float64(-100.0))
+	c.Assert(neg.(*values.BigFloat).Float64(), qt.Equals, float64(-100.0))
 }
 
 func TestBigFloat_Comparison(t *testing.T) {
 	c := qt.New(t)
 
-	bf1 := NewBigFloatFromFloat64(100.0)
-	bf2 := NewBigFloatFromFloat64(50.0)
-	bf3 := NewBigFloatFromFloat64(100.0)
+	bf1 := values.NewBigFloatFromFloat64(100.0)
+	bf2 := values.NewBigFloatFromFloat64(50.0)
+	bf3 := values.NewBigFloatFromFloat64(100.0)
 
 	c.Assert(bf1.Compare(bf2), qt.Equals, 1)
 	c.Assert(bf2.Compare(bf1), qt.Equals, -1)
@@ -229,9 +232,9 @@ func TestBigFloat_Comparison(t *testing.T) {
 func TestBigFloat_Properties(t *testing.T) {
 	c := qt.New(t)
 
-	positive := NewBigFloatFromFloat64(3.14)
-	negative := NewBigFloatFromFloat64(-3.14)
-	zero := NewBigFloatFromFloat64(0.0)
+	positive := values.NewBigFloatFromFloat64(3.14)
+	negative := values.NewBigFloatFromFloat64(-3.14)
+	zero := values.NewBigFloatFromFloat64(0.0)
 
 	c.Assert(positive.IsPositive(), qt.IsTrue)
 	c.Assert(positive.IsNegative(), qt.IsFalse)
@@ -251,14 +254,14 @@ func TestBigFloat_Properties(t *testing.T) {
 func TestBigFloat_Conversions(t *testing.T) {
 	c := qt.New(t)
 
-	bf := NewBigFloatFromFloat64(3.14)
+	bf := values.NewBigFloatFromFloat64(3.14)
 
 	// ToInexact should return itself
-	c.Assert(bf.ToInexact(), SchemeEquals, bf)
+	c.Assert(bf.ToInexact(), valuestest.SchemeEquals, bf)
 
 	// ToExact should return Rational
 	exact := bf.ToExact()
-	_, ok := exact.(*Rational)
+	_, ok := exact.(*values.Rational)
 	c.Assert(ok, qt.IsTrue)
 
 	// SchemeString
@@ -268,48 +271,48 @@ func TestBigFloat_Conversions(t *testing.T) {
 func TestBigFloat_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	bf1 := NewBigFloatFromFloat64(3.14)
-	bf2 := NewBigFloatFromFloat64(3.14)
-	bf3 := NewBigFloatFromFloat64(2.71)
-	f1 := NewFloat(3.14)
+	bf1 := values.NewBigFloatFromFloat64(3.14)
+	bf2 := values.NewBigFloatFromFloat64(3.14)
+	bf3 := values.NewBigFloatFromFloat64(2.71)
+	f1 := values.NewFloat(3.14)
 
 	c.Assert(bf1.EqualTo(bf2), qt.IsTrue)
 	c.Assert(bf1.EqualTo(bf3), qt.IsFalse)
 	c.Assert(bf1.EqualTo(f1), qt.IsTrue) // Should equal regular Float
-	c.Assert(bf1.EqualTo(NewInteger(3)), qt.IsFalse)
+	c.Assert(bf1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 
 func TestBigFloat_MixedArithmetic(t *testing.T) {
 	c := qt.New(t)
 
-	bf := NewBigFloatFromFloat64(100.0)
+	bf := values.NewBigFloatFromFloat64(100.0)
 
 	// Add with Integer
-	sum := bf.Add(NewInteger(50))
-	c.Assert(sum.(*BigFloat).Float64(), qt.Equals, float64(150.0))
+	sum := bf.Add(values.NewInteger(50))
+	c.Assert(sum.(*values.BigFloat).Float64(), qt.Equals, float64(150.0))
 
 	// Add with Float
-	sumF := bf.Add(NewFloat(0.5))
-	c.Assert(sumF.(*BigFloat).Float64(), qt.Equals, float64(100.5))
+	sumF := bf.Add(values.NewFloat(0.5))
+	c.Assert(sumF.(*values.BigFloat).Float64(), qt.Equals, float64(100.5))
 
 	// Add with BigInteger
-	sumBI := bf.Add(NewBigIntegerFromInt64(25))
-	c.Assert(sumBI.(*BigFloat).Float64(), qt.Equals, float64(125.0))
+	sumBI := bf.Add(values.NewBigIntegerFromInt64(25))
+	c.Assert(sumBI.(*values.BigFloat).Float64(), qt.Equals, float64(125.0))
 
 	// Add with Complex (returns BigComplex to preserve BigFloat precision)
-	sumC := bf.Add(NewComplex(complex(1, 2)))
-	bc, ok := sumC.(*BigComplex)
+	sumC := bf.Add(values.NewComplex(complex(1, 2)))
+	bc, ok := sumC.(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue)
 	// Real part should be 100 + 1 = 101
 	realPart := bc.Real()
-	c.Assert(realPart.(*BigFloat).Float64(), qt.Equals, float64(101))
+	c.Assert(realPart.(*values.BigFloat).Float64(), qt.Equals, float64(101))
 }
 
 func TestBigInteger_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
 
-	bi := NewBigIntegerFromInt64(100)
-	zero := NewBigIntegerFromInt64(0)
+	bi := values.NewBigIntegerFromInt64(100)
+	zero := values.NewBigIntegerFromInt64(0)
 
 	c.Assert(func() { bi.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
@@ -317,8 +320,8 @@ func TestBigInteger_DivisionByZero(t *testing.T) {
 func TestBigFloat_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
 
-	bf := NewBigFloatFromFloat64(100.0)
-	zero := NewBigFloatFromFloat64(0.0)
+	bf := values.NewBigFloatFromFloat64(100.0)
+	zero := values.NewBigFloatFromFloat64(0.0)
 
 	c.Assert(func() { bf.Divide(zero) }, qt.PanicMatches, "division by zero")
 }
@@ -326,36 +329,36 @@ func TestBigFloat_DivisionByZero(t *testing.T) {
 func TestBigInteger_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	bi := NewBigIntegerFromInt64(42)
+	bi := values.NewBigIntegerFromInt64(42)
 	c.Assert(bi.IsVoid(), qt.IsFalse)
 
-	var nilBI *BigInteger
+	var nilBI *values.BigInteger
 	c.Assert(nilBI.IsVoid(), qt.IsTrue)
 }
 
 func TestBigFloat_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	bf := NewBigFloatFromFloat64(3.14)
+	bf := values.NewBigFloatFromFloat64(3.14)
 	c.Assert(bf.IsVoid(), qt.IsFalse)
 
-	var nilBF *BigFloat
+	var nilBF *values.BigFloat
 	c.Assert(nilBF.IsVoid(), qt.IsTrue)
 }
 
 func TestBigInteger_ZeroOptimizations(t *testing.T) {
 	c := qt.New(t)
 
-	bi := NewBigIntegerFromInt64(100)
-	zero := NewBigIntegerFromInt64(0)
+	bi := values.NewBigIntegerFromInt64(100)
+	zero := values.NewBigIntegerFromInt64(0)
 
 	// Add with zero returns original
 	sum := bi.Add(zero)
-	c.Assert(sum, SchemeEquals, bi)
+	c.Assert(sum, valuestest.SchemeEquals, bi)
 
 	// Zero + bi returns bi
 	sum2 := zero.Add(bi)
-	c.Assert(sum2, SchemeEquals, bi)
+	c.Assert(sum2, valuestest.SchemeEquals, bi)
 
 	// Multiply by zero — returns exact zero (may be Integer due to R7RS exact-zero rule)
 	prod := bi.Multiply(zero)
@@ -366,18 +369,18 @@ func TestBigInteger_ZeroOptimizations(t *testing.T) {
 func TestBigFloat_ZeroOptimizations(t *testing.T) {
 	c := qt.New(t)
 
-	bf := NewBigFloatFromFloat64(100.0)
-	zero := NewBigFloatFromFloat64(0.0)
+	bf := values.NewBigFloatFromFloat64(100.0)
+	zero := values.NewBigFloatFromFloat64(0.0)
 
 	// Add with zero returns original
 	sum := bf.Add(zero)
-	c.Assert(sum, SchemeEquals, bf)
+	c.Assert(sum, valuestest.SchemeEquals, bf)
 
 	// Zero + bf returns bf
 	sum2 := zero.Add(bf)
-	c.Assert(sum2, SchemeEquals, bf)
+	c.Assert(sum2, valuestest.SchemeEquals, bf)
 
 	// Multiply by zero
 	prod := bf.Multiply(zero)
-	c.Assert(prod.(*BigFloat).IsZero(), qt.IsTrue)
+	c.Assert(prod.(*values.BigFloat).IsZero(), qt.IsTrue)
 }
