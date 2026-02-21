@@ -92,14 +92,18 @@ func markDeadLoadVoid(code []Instruction, dead []bool) int {
 // positions after dead instructions are removed. The returned slice
 // has length len(dead)+1 so that pcRemap[len(dead)] gives the total
 // count of surviving instructions (used for targets at code end).
+//
+// Dead positions map to the same new index as the next surviving
+// instruction, so a branch targeting a dead position correctly lands
+// on the first survivor after it.
 func buildPCRemap(dead []bool) []int {
 	remap := make([]int, len(dead)+1)
 	removed := 0
 	for i, d := range dead {
+		remap[i] = i - removed
 		if d {
 			removed++
 		}
-		remap[i] = i - removed
 	}
 	remap[len(dead)] = len(dead) - removed
 	return remap
