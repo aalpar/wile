@@ -7,9 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-02-20
+
+### Added
+
+- Unify `call/cc` via composable-continuation-then-abort model — adds escape continuations, continuation barriers, and `call-with-composable-continuation`; full continuations now compose correctly across barrier boundaries (#293)
+- Expose extensions as importable R7RS libraries — extensions register as `(wile <name>)` libraries, loadable via `(import (wile regex))` etc. (#297 follow-up)
+- Add `WithLibraryPaths` engine option to enable R7RS library system with configurable search paths
+- Add `Engine.RegisterFuncs` for batch registration of Go functions (map-based variant of `RegisterFunc`)
+- Add stage-isolated benchmarks for VM and environment subsystems
+- Add coverage tests for math, exceptions, eval, and CLI (#296)
+
 ### Changed
 
 - Split VM value register into single-value fast path (`singleValue values.Value`) and multi-value slow path (`multiValues MultipleValues`), eliminating a `[]values.Value{v}` heap allocation on every bytecode instruction — reduces allocations by ~20% and wall time by ~8% on call-heavy workloads
+- Split `Operation` into base `Operation` and `InlinedOperation` interfaces — inlined ops carry their operand directly, simplifying dispatch (#292)
+- Move 6 Tier 1 extensions from `internal/extensions/` to public `extensions/` package for direct embedder access
+- Remove `ApplyContext` interface — `InitFunc` now takes `*registry.Registry` directly, simplifying extension authoring
+- Add `Registry.AddGlobalValue` for registering non-function global values; eliminate `ApplyContext.Environment()` usage
+- Move bool predicates (`IsTrue`, `IsFalse`, `BoolToBoolean`) from `internal/schemeutil` to `values/`
+- Move `SchemeEquals` to `valuestest/` package, externalize `values/` tests (#297)
+- Extract `validatedBase` helper and `SourceContext.Clone` method (#295)
+- Move `LibraryEnvFactory` from package global to `TopLevelEnvironment` field (#282)
+- Migrate `SyntaxEmptyList` to pointer singleton (#278)
+- Use `IsEmptyList` in `PrimListQ` instead of direct `== EmptyList` (#279)
+- Consolidate benchmarks into table-driven Eval/Run format
+- Enable `modernize` linter and apply all fixes
+
+### Fixed
+
+- Fix winding stack not inherited by sub-contexts in `PrimApply`, `PrimCallWithValues`, and `applyParameter` — `dynamic-wind` before/after thunks now execute correctly through apply chains (#294)
+- Fix `callDepth` `uint64` underflow — derive depth from parent pointer instead of decrementing, preventing wrap-around panic in deeply nested contexts
+- Fix multi-extension primitive leakage — extensions loaded after engine creation no longer pollute earlier engines' environments
+- Fix evals stack leak in `ReleaseSubContext` — pooled sub-contexts now properly clear the eval stack
+- Fix version display falling back to `(unknown)` when ldflags are absent — now reads version from `debug.ReadBuildInfo`
+
+### Performance
+
+- Compile-time escape analysis to skip `CopyForApply` — the compiler marks non-escaping closures, avoiding unnecessary environment copies in the common case (#291)
+- Shared-flag continuation optimization for `call/cc` path — continuation capture skips deep-copy when no mutation has occurred since the last capture (#290)
+- Embed `LocalEnvironmentFrame` by value in `EnvironmentFrame`, reducing pointer indirection and GC pressure (#289)
+- Retain stack backing array across `PopAll` cycles instead of reallocating (#288)
+- Change `LocalEnvironmentFrame.bindings` from `[]*Binding` to `[]Binding`, eliminating per-binding heap allocations (#287)
+- Eliminate `*LocalIndex` heap allocation in VM hot path (#286)
+- Migrate 8 zero-operand ops to switch dispatch, eliminating interface method call overhead (Phase 6) (#284, #285)
+- Compiler optimizations: ops slice preallocation, peephole optimization, constant folding (Phase 5) (#283)
+- Pool `MachineContext` for macro expansion call sites (#281)
+- Structural sharing in syntax tree scope propagation (Phase 4.1–4.2) — `AddScope`/`WithScope` now return the receiver unchanged when the scope is already present (#280)
+- Environment copy-on-write for `Apply` hot path (Phase 3) (#274)
+- Copy-on-write for environment frame keys and shallow binding copies (#271)
+- Continuation frame pooling via `sync.Pool` (Phase 2) (#270)
+- `sync.Pool` for `Stack` and `MachineContext` sub-contexts
+- Cache ASCII characters (0–127) to avoid allocation in `NewCharacter`
+- Cache `callDepth` and ellipsis tail count for O(1) access instead of chain traversal
+- Batch `ctx.Done()` check every 1024 ops in VM loop instead of every instruction
+- Eliminate `PopAll` clone by swapping backing array ownership
 
 ## [1.3.0] - 2026-02-14
 
@@ -202,7 +254,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/aalpar/wile/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aalpar/wile/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aalpar/wile/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aalpar/wile/compare/v1.0.4...v1.1.0
