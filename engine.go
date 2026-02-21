@@ -474,6 +474,7 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 		return nil, &CompilationError{Message: "compilation error", Cause: err}
 	}
 
+	tpl.Optimize()
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
 
@@ -554,6 +555,7 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 		return err
 	}
 
+	tpl.Optimize()
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(ctx, cont)
 	err = mc.Run()

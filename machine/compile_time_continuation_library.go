@@ -159,6 +159,9 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		return values.WrapForeignErrorf(err, "define-library: error processing declarations")
 	}
 
+	// Peephole optimization on the library template.
+	libTemplate.Optimize()
+
 	// Store the compiled template in the library
 	lib.Template = libTemplate
 
