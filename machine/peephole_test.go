@@ -208,7 +208,7 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 				{Op: OpLoadVoid},
 				{Op: OpLoadLiteral, Arg: 1},
 			},
-			// dead[2] removed; target was 0+3=3, remap: 0→0,1→1,2→1,3→2
+			// dead[2] removed; target was 0+3=3, remap: 0→0,1→1,2→2,3→2
 			// new arg = remap[3] - remap[0] = 2 - 0 = 2
 			wantArg: map[int]int32{0: 2},
 		},
@@ -250,6 +250,34 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPeephole_BranchTargetSentinel(t *testing.T) {
+	// SaveContinuation targeting len(code) — the sentinel position
+	// (one past the last instruction). This exercises pcRemap[len(dead)].
+	//
+	// [0] SaveContinuation +5  → target is [5] (sentinel)
+	// [1] LoadLiteral
+	// [2] Push
+	// [3] LoadVoid             ← dead
+	// [4] LoadGlobal
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpSaveContinuation, Arg: 5},
+		{Op: OpLoadLiteral, Arg: 0},
+		{Op: OpPush},
+		{Op: OpLoadVoid},
+		{Op: OpLoadGlobal, Arg: 1},
+	}
+	tpl.sourceRefs = make([]uint16, 5)
+
+	tpl.Optimize()
+
+	// After: [0] SaveContinuation +4  [1] LoadLiteral  [2] Push  [3] LoadGlobal
+	qt.Assert(t, len(tpl.code), qt.Equals, 4)
+	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpSaveContinuation)
+	qt.Assert(t, tpl.code[0].Arg, qt.Equals, int32(4),
+		qt.Commentf("sentinel target should remap to new len(code)"))
 }
 
 // --- Source Map ---
@@ -395,8 +423,9 @@ func TestBuildPCRemap(t *testing.T) {
 	dead := []bool{false, false, true, false, false}
 	remap := buildPCRemap(dead)
 	// old:   0 1 2(dead) 3 4   sentinel
-	// remap: 0 1 1       2 3   4
-	qt.Assert(t, remap, qt.DeepEquals, []int{0, 1, 1, 2, 3, 4})
+	// remap: 0 1 2       2 3   4
+	// Dead position 2 maps forward to 2, same as next survivor (position 3).
+	qt.Assert(t, remap, qt.DeepEquals, []int{0, 1, 2, 2, 3, 4})
 }
 
 func TestBuildPCRemap_NoDead(t *testing.T) {
@@ -408,8 +437,7 @@ func TestBuildPCRemap_NoDead(t *testing.T) {
 func TestBuildPCRemap_AllDead(t *testing.T) {
 	dead := []bool{true, true, true}
 	remap := buildPCRemap(dead)
-	// All dead: each position maps to (index - removed), sentinel maps to 0.
-	// In practice, branches never target dead positions, so negative values
-	// are unreachable. We test the formula output directly.
-	qt.Assert(t, remap, qt.DeepEquals, []int{-1, -1, -1, 0})
+	// All dead: every position maps to 0 (the next survivor's position,
+	// which is the sentinel). Sentinel itself is also 0.
+	qt.Assert(t, remap, qt.DeepEquals, []int{0, 0, 0, 0})
 }
