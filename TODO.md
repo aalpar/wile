@@ -5,9 +5,9 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.3.0 (released)
-**Core Language**: R7RS-small complete with hygienic macros, continuations, numeric tower
-**Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all)
+**Version**: v1.4.0 (released)
+**Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
+**Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries
 **Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
@@ -18,8 +18,8 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| P2 | Performance refactoring Phase 7 | Performance | Deferred | Phases 0-6 complete (closed #178). Phase 7 (tagged integers, compilation caching, library pre-compilation) deferred. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
-| P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
+| P2 | Performance refactoring Phase 7 | Performance | Deferred | Phases 0–6 complete (shipped in v1.4.0). Phase 7 (tagged integers, compilation caching, library pre-compilation) deferred. `plans/PERFORMANCE_REFACTORING_PLAN.md` |
+| P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry. Note: `ApplyContext` removed in v1.4.0; `InitFunc` now takes `*registry.Registry` directly |
 | P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
