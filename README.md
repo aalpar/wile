@@ -89,7 +89,7 @@ import "github.com/aalpar/wile/values"
 engine.RegisterPrimitive(wile.PrimitiveSpec{
     Name:       "go-add",
     ParamCount: 2,
-    Impl: func(ctx context.Context, mc *wile.MachineContext) error {
+    Impl: func(mc *wile.MachineContext) error {
         a := mc.Arg(0).(*values.Integer).Value
         b := mc.Arg(1).(*values.Integer).Value
         mc.SetValue(values.NewInteger(a + b))

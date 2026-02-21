@@ -618,7 +618,7 @@ func (p *SomeType) Add(o Number) Number {
 All primitives follow this pattern:
 
 ```go
-func PrimXxx(_ context.Context, mc *machine.MachineContext) error {
+func PrimXxx(mc *machine.MachineContext) error {
     // 1. Extract arguments
     arg := mc.Arg(0)
 
@@ -646,7 +646,7 @@ For primitives accepting variable arguments:
 // mc.Arg(0) = first argument (direct)
 // mc.Arg(1) = rest of arguments as Pair
 
-func PrimXxxVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimXxxVariadic(mc *machine.MachineContext) error {
     first := mc.Arg(0)
     rest, ok := mc.Arg(1).(*values.Pair)
     if !ok {
@@ -791,7 +791,7 @@ func addParts(a, b Number) Number {
 When needed, `ctx context.Context` is always the first parameter after receiver:
 
 ```go
-func (p *MachineContext) Run(ctx context.Context) (Value, error) { ... }
+func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, error) { ... }
 ```
 
 ### Temporary Variable Names

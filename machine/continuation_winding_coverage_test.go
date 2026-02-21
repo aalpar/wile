@@ -699,7 +699,7 @@ func TestRunWithEscapeHandling_PromptAbortNotFound(t *testing.T) {
 
 	tag := machine.NewPromptTag("nonexistent")
 
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
+	fn := func(mc *machine.MachineContext) error {
 		return &machine.ErrPromptAbort{
 			Tag:    tag,
 			Values: []values.Value{values.NewInteger(1)},
@@ -791,7 +791,7 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	c := qt.New(t)
 	env := newFullRuntimeEnv(t)
 
-	fn := func(ctx context.Context, mc *machine.MachineContext) error {
+	fn := func(mc *machine.MachineContext) error {
 		return values.NewForeignErrorf("custom test error")
 	}
 

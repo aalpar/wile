@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -24,7 +22,7 @@ import (
 
 // PrimCons implements the cons primitive.
 // Creates a new pair from the car and cdr arguments.
-func PrimCons(_ context.Context, mc *machine.MachineContext) error {
+func PrimCons(mc *machine.MachineContext) error {
 	car := mc.Arg(0)
 	cdr := mc.Arg(1)
 	mc.SetValue(values.NewCons(car, cdr))
@@ -35,7 +33,7 @@ func PrimCons(_ context.Context, mc *machine.MachineContext) error {
 // Returns the first element of a pair.
 //
 // R7RS §6.4: It is an error to take the car of the empty list.
-func PrimCar(_ context.Context, mc *machine.MachineContext) error {
+func PrimCar(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "car")
 	if err != nil {
 		return err
@@ -51,7 +49,7 @@ func PrimCar(_ context.Context, mc *machine.MachineContext) error {
 // Returns the second element of a pair.
 //
 // R7RS §6.4: It is an error to take the cdr of the empty list.
-func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
+func PrimCdr(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "cdr")
 	if err != nil {
 		return err
@@ -64,7 +62,7 @@ func PrimCdr(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSetCar implements the set-car! primitive.
-func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
+func PrimSetCar(mc *machine.MachineContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-car!")
 	if err != nil {
 		return err
@@ -76,7 +74,7 @@ func PrimSetCar(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSetCdr implements the set-cdr! primitive.
-func PrimSetCdr(_ context.Context, mc *machine.MachineContext) error {
+func PrimSetCdr(mc *machine.MachineContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-cdr!")
 	if err != nil {
 		return err
@@ -132,7 +130,7 @@ var cxrSpecs = []struct{ name, ops string }{
 // makeCxrPrimitive returns a ForeignFunction that applies the given car/cdr
 // operation sequence to its argument.
 func makeCxrPrimitive(name, ops string) machine.ForeignFunction {
-	return func(_ context.Context, mc *machine.MachineContext) error {
+	return func(mc *machine.MachineContext) error {
 		v, err := cxrHelper(name, ops, mc.Arg(0))
 		if err != nil {
 			return err

@@ -15,7 +15,6 @@
 package system
 
 import (
-	"context"
 	"os"
 	"strings"
 	"time"
@@ -30,7 +29,7 @@ var ProgramStartTime = time.Now()
 
 // PrimCommandLine implements the (command-line) primitive.
 // Returns a list of command line arguments.
-func PrimCommandLine(_ context.Context, mc *machine.MachineContext) error {
+func PrimCommandLine(mc *machine.MachineContext) error {
 	args := os.Args
 	list := values.EmptyList
 	for i := len(args) - 1; i >= 0; i-- {
@@ -42,7 +41,7 @@ func PrimCommandLine(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimExit implements the (exit) primitive.
 // Exits the program with an optional status code.
-func PrimExit(_ context.Context, mc *machine.MachineContext) error {
+func PrimExit(mc *machine.MachineContext) error {
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
@@ -64,7 +63,7 @@ func PrimExit(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimEmergencyExit implements the (emergency-exit) primitive.
 // Exits the program immediately without cleanup or finalization.
-func PrimEmergencyExit(_ context.Context, mc *machine.MachineContext) error {
+func PrimEmergencyExit(mc *machine.MachineContext) error {
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
@@ -86,7 +85,7 @@ func PrimEmergencyExit(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
 // Gets environment variable value.
-func PrimGetEnvironmentVariable(_ context.Context, mc *machine.MachineContext) error {
+func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 	name, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "get-environment-variable")
 	if err != nil {
 		return err
@@ -102,7 +101,7 @@ func PrimGetEnvironmentVariable(_ context.Context, mc *machine.MachineContext) e
 
 // PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.
 // Returns all environment variables.
-func PrimGetEnvironmentVariables(_ context.Context, mc *machine.MachineContext) error {
+func PrimGetEnvironmentVariables(mc *machine.MachineContext) error {
 	env := os.Environ()
 	list := values.EmptyList
 	for i := len(env) - 1; i >= 0; i-- {
@@ -118,7 +117,7 @@ func PrimGetEnvironmentVariables(_ context.Context, mc *machine.MachineContext) 
 
 // PrimCurrentSecond implements the (current-second) primitive.
 // Returns current time in seconds since Unix epoch.
-func PrimCurrentSecond(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentSecond(mc *machine.MachineContext) error {
 	now := time.Now()
 	secs := float64(now.Unix()) + float64(now.Nanosecond())/1e9
 	mc.SetValue(values.NewFloat(secs))
@@ -127,7 +126,7 @@ func PrimCurrentSecond(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCurrentJiffy implements the (current-jiffy) primitive.
 // Returns current time in jiffies since program start.
-func PrimCurrentJiffy(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentJiffy(mc *machine.MachineContext) error {
 	elapsed := time.Since(ProgramStartTime)
 	jiffies := elapsed.Nanoseconds()
 	mc.SetValue(values.NewInteger(jiffies))
@@ -136,14 +135,14 @@ func PrimCurrentJiffy(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimJiffiesPerSecond implements the (jiffies-per-second) primitive.
 // Returns the number of jiffies per second (1 billion nanoseconds).
-func PrimJiffiesPerSecond(_ context.Context, mc *machine.MachineContext) error {
+func PrimJiffiesPerSecond(mc *machine.MachineContext) error {
 	mc.SetValue(values.NewInteger(1000000000)) // 1 billion nanoseconds per second
 	return nil
 }
 
 // PrimFeatures implements the (features) primitive.
 // Returns list of implementation features.
-func PrimFeatures(_ context.Context, mc *machine.MachineContext) error {
+func PrimFeatures(mc *machine.MachineContext) error {
 	features := machine.AllFeatures()
 
 	// Build a list of symbols

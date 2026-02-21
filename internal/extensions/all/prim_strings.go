@@ -18,7 +18,6 @@
 package all
 
 import (
-	"context"
 	"sync"
 
 	"golang.org/x/text/cases"
@@ -48,7 +47,7 @@ func getCaseFolded(s string) string {
 
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
-func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCopyTo(mc *machine.MachineContext) error {
 	toArg := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -114,7 +113,7 @@ func PrimStringCopyTo(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringFill implements the string-fill! primitive.
 // R7RS §6.7: (string-fill! string fill [start [end]])
-func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringFill(mc *machine.MachineContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-fill!")
 	if err != nil {
 		return err
@@ -153,7 +152,7 @@ func PrimStringFill(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringMap implements the string-map primitive.
 // R7RS §6.7: (string-map proc string1 string2 ...)
-func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringMap(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
@@ -234,7 +233,7 @@ func PrimStringMap(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimStringForEach implements the string-for-each primitive.
 // R7RS §6.7: (string-for-each proc string1 string2 ...)
-func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringForEach(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
@@ -304,35 +303,35 @@ func PrimStringForEach(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimStringCiEqVariadic implements the variadic string-ci=? primitive.
-func PrimStringCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCiEqVariadic(mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci=?", func(a, b string) bool {
 		return getCaseFolded(a) == getCaseFolded(b)
 	})
 }
 
 // PrimStringCiLtVariadic implements the variadic string-ci<? primitive.
-func PrimStringCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCiLtVariadic(mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
 		return getCaseFolded(a) < getCaseFolded(b)
 	})
 }
 
 // PrimStringCiGtVariadic implements the variadic string-ci>? primitive.
-func PrimStringCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCiGtVariadic(mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci>?", func(a, b string) bool {
 		return getCaseFolded(a) > getCaseFolded(b)
 	})
 }
 
 // PrimStringCiLeVariadic implements the variadic string-ci<=? primitive.
-func PrimStringCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCiLeVariadic(mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci<=?", func(a, b string) bool {
 		return getCaseFolded(a) <= getCaseFolded(b)
 	})
 }
 
 // PrimStringCiGeVariadic implements the variadic string-ci>=? primitive.
-func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringCiGeVariadic(mc *machine.MachineContext) error {
 	return helpers.StringCompareVariadic(mc, "string-ci>=?", func(a, b string) bool {
 		return getCaseFolded(a) >= getCaseFolded(b)
 	})
@@ -341,7 +340,7 @@ func PrimStringCiGeVariadic(_ context.Context, mc *machine.MachineContext) error
 // PrimStringUpcase implements the string-upcase primitive.
 // R7RS §6.7: Returns a string whose characters are the uppercase versions of the characters in string.
 // Uses Unicode full case mapping which can expand characters (e.g., ß → SS).
-func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringUpcase(mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-upcase")
 	if err != nil {
 		return err
@@ -357,7 +356,7 @@ func PrimStringUpcase(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringDowncase implements the string-downcase primitive.
 // R7RS §6.7: Returns a string whose characters are the lowercase versions of the characters in string.
 // Uses Unicode full case mapping which can expand characters.
-func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringDowncase(mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-downcase")
 	if err != nil {
 		return err
@@ -373,7 +372,7 @@ func PrimStringDowncase(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringFoldcase implements the string-foldcase primitive.
 // R7RS §6.7: Returns a string whose characters are the case-folded versions of the characters in string.
 // Uses Unicode full case folding which can expand characters (e.g., ß → ss).
-func PrimStringFoldcase(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringFoldcase(mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-foldcase")
 	if err != nil {
 		return err

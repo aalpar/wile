@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -180,7 +179,7 @@ func TestOperationMakeCaseLambdaClosure(t *testing.T) {
 	}
 
 	op := NewOperationMakeCaseLambdaClosure(2)
-	newMc, err := op.Apply(context.TODO(), mc)
+	newMc, err := op.Apply(mc)
 
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, newMc.pc, qt.Equals, 1)
@@ -204,7 +203,7 @@ func TestOperationMakeCaseLambdaClosure_Error(t *testing.T) {
 	}
 
 	op := NewOperationMakeCaseLambdaClosure(2)
-	_, err := op.Apply(context.TODO(), mc)
+	_, err := op.Apply(mc)
 
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "expected closure in case-lambda")

@@ -134,7 +134,7 @@ func ExampleEngine_RegisterPrimitive() {
 	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
 		Name:       "double",
 		ParamCount: 1,
-		Impl: func(_ context.Context, mc *wile.MachineContext) error {
+		Impl: func(mc *wile.MachineContext) error {
 			n := mc.Arg(0).(*values.Integer).Value
 			mc.SetValue(values.NewInteger(n * 2))
 			return nil

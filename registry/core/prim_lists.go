@@ -25,7 +25,7 @@ import (
 
 // PrimList implements the (list) primitive.
 // Creates a list from the given arguments.
-func PrimList(_ context.Context, mc *machine.MachineContext) error {
+func PrimList(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// The variadic args come as a list - just return them
 	mc.SetValue(o)
@@ -33,7 +33,7 @@ func PrimList(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMakeList implements the Scheme make-list primitive.
-func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeList(mc *machine.MachineContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-list")
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func PrimMakeList(_ context.Context, mc *machine.MachineContext) error {
 // - Start with result = '(e) (last element)
 // - Process '(c d): collect [c, d], prepend d then c → result = '(c d e)
 // - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
-func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
+func PrimAppend(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -101,7 +101,7 @@ func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Collect all argument lists into a vector for random access (right-to-left processing)
 	var lists values.Vector
-	v, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		lists = append(lists, elem)
 		return nil
 	})
@@ -134,7 +134,7 @@ func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 		// E.g., for list (a b c), we collect [a, b, c], then prepend c, b, a
 		// to result, yielding (a b c . result).
 		var elems values.Vector
-		v, err = pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		v, err = pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			elems = append(elems, elem)
 			return nil
 		})
@@ -156,7 +156,7 @@ func PrimAppend(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimReverse implements the (reverse) primitive.
 // Returns reversed copy of list.
-func PrimReverse(ctx context.Context, mc *machine.MachineContext) error {
+func PrimReverse(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -167,7 +167,7 @@ func PrimReverse(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
 	var result values.Value = values.EmptyList
-	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		result = values.NewCons(v, result)
 		return nil
 	})
@@ -183,7 +183,7 @@ func PrimReverse(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimLength implements the (length) primitive.
 // Returns the length of a proper list.
-func PrimLength(ctx context.Context, mc *machine.MachineContext) error {
+func PrimLength(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewInteger(0))
@@ -194,7 +194,7 @@ func PrimLength(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a list but got %T", o)
 	}
 	count := int64(0)
-	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, _ values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
 		count++
 		return nil
 	})
@@ -211,7 +211,7 @@ func PrimLength(ctx context.Context, mc *machine.MachineContext) error {
 // PrimListRef implements the (list-ref) primitive.
 // Returns the element at the given index in a list.
 // R7RS §6.4: The index must be an exact non-negative integer.
-func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
+func PrimListRef(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
@@ -244,7 +244,7 @@ func PrimListRef(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
-func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
+func PrimListSet(mc *machine.MachineContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAList, "list-set!")
 	if err != nil {
 		return err
@@ -279,7 +279,7 @@ func PrimListSet(_ context.Context, mc *machine.MachineContext) error {
 // PrimListTail implements the (list-tail) primitive.
 // Returns the sublist starting at the given index.
 // R7RS §6.4: The index must be an exact non-negative integer.
-func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
+func PrimListTail(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
@@ -321,7 +321,7 @@ func PrimListTail(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMemq implements the memq primitive.
 // Finds an element in a list using eq? for comparison.
-func PrimMemq(_ context.Context, mc *machine.MachineContext) error {
+func PrimMemq(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
 	for !values.IsEmptyList(lst) {
@@ -341,7 +341,7 @@ func PrimMemq(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMemv implements the memv primitive.
 // Finds an element in a list using eqv? for comparison.
-func PrimMemv(_ context.Context, mc *machine.MachineContext) error {
+func PrimMemv(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
 	for !values.IsEmptyList(lst) {
@@ -362,7 +362,7 @@ func PrimMemv(_ context.Context, mc *machine.MachineContext) error {
 // PrimMember implements the member primitive.
 // R7RS §6.4: (member obj list [compare])
 // Finds an element in a list using equal? for comparison, or a custom compare procedure.
-func PrimMember(_ context.Context, mc *machine.MachineContext) error {
+func PrimMember(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
 	rest := mc.Arg(2)
@@ -430,19 +430,19 @@ func PrimMember(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAssq implements the assq primitive.
-func PrimAssq(_ context.Context, mc *machine.MachineContext) error {
+func PrimAssq(mc *machine.MachineContext) error {
 	return helpers.AssocLookup(mc, "assq", func(a, b values.Value) bool { return a == b })
 }
 
 // PrimAssv implements the assv primitive.
-func PrimAssv(_ context.Context, mc *machine.MachineContext) error {
+func PrimAssv(mc *machine.MachineContext) error {
 	return helpers.AssocLookup(mc, "assv", helpers.Eqv)
 }
 
 // PrimAssoc implements the assoc primitive.
 // R7RS §6.4: (assoc obj alist [compare])
 // Finds an entry in an alist using equal? for comparison, or a custom compare procedure.
-func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
+func PrimAssoc(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	alist := mc.Arg(1)
 	rest := mc.Arg(2)
@@ -480,7 +480,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 	// Use custom compare procedure
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	v, err := pr.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
@@ -521,7 +521,7 @@ func PrimAssoc(ctx context.Context, mc *machine.MachineContext) error {
 // R7RS §6.4: (list-copy obj)
 // Returns a newly allocated copy of obj if it is a list.
 // Only the pairs are copied; the car elements are shared.
-func PrimListCopy(_ context.Context, mc *machine.MachineContext) error {
+func PrimListCopy(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	// If not a pair, return as-is

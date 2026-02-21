@@ -479,7 +479,7 @@ func TestOperations_Length(t *testing.T) {
 // TestOperationForeignFunctionCallMethods tests the foreign function call operation methods
 func TestOperationForeignFunctionCallMethods(t *testing.T) {
 	// Create a simple foreign function
-	ff := func(ctx context.Context, mc *MachineContext) error {
+	ff := func(mc *MachineContext) error {
 		return nil
 	}
 
@@ -795,7 +795,7 @@ func TestOperationForeignFunctionCallSimple(t *testing.T) {
 
 	// Create a foreign function
 	called := false
-	fn := ForeignFunction(func(ctx context.Context, mc *MachineContext) error {
+	fn := ForeignFunction(func(mc *MachineContext) error {
 		called = true
 		mc.SetValue(values.NewInteger(99))
 		return nil

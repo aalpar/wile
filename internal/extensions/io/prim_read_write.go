@@ -15,7 +15,6 @@
 package io
 
 import (
-	"context"
 	"errors"
 	"io"
 	"unicode/utf8"
@@ -128,7 +127,7 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWrit
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
 // R7RS §6.13.2: read uses datum labels to handle circular and shared structures.
-func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
+func PrimRead(mc *machine.MachineContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -143,7 +142,7 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	cacheMu.Unlock()
 
-	syn, err := prss.ReadSyntax(ctx)
+	syn, err := prss.ReadSyntax(mc.Context())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
@@ -164,7 +163,7 @@ func PrimRead(ctx context.Context, mc *machine.MachineContext) error {
 // PrimReadToken implements the (read-token) primitive.
 // Reads a single token from port.
 // Reads from the current input port if no port is specified.
-func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadToken(mc *machine.MachineContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -196,7 +195,7 @@ func PrimReadToken(_ context.Context, mc *machine.MachineContext) error {
 // PrimReadSyntax implements the (read-syntax) primitive.
 // Reads datum with source information.
 // Reads from the current input port if no port is specified.
-func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
+func PrimReadSyntax(mc *machine.MachineContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -211,7 +210,7 @@ func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 	}
 	cacheMu.Unlock()
 
-	q, err := prss.ReadSyntax(ctx)
+	q, err := prss.ReadSyntax(mc.Context())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
@@ -228,7 +227,7 @@ func PrimReadSyntax(ctx context.Context, mc *machine.MachineContext) error {
 // PrimWrite implements the write primitive.
 // Writes a machine-readable representation of an object to the current output port or to the specified port.
 // R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
-func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
+func PrimWrite(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalOutputPort(mc, 1)
 	if err != nil {
@@ -249,7 +248,7 @@ func PrimWrite(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimWriteChar implements the write-char primitive.
 // Writes a character to the current output port or to the specified output port.
-func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteChar(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "write-char")
 	if err != nil {
 		return err
@@ -288,7 +287,7 @@ func PrimWriteChar(_ context.Context, mc *machine.MachineContext) error {
 // PrimDisplay implements the (display) primitive.
 // Writes a human-readable representation of an object to an output port.
 // R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
-func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
+func PrimDisplay(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalOutputPort(mc, 1)
 	if err != nil {
@@ -309,7 +308,7 @@ func PrimDisplay(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
-func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
+func PrimNewline(mc *machine.MachineContext) error {
 	writer, err := getOptionalOutputPort(mc, 0)
 	if err != nil {
 		return err
@@ -330,7 +329,7 @@ func PrimNewline(_ context.Context, mc *machine.MachineContext) error {
 // Writes a machine-readable representation of an object without using datum labels
 // for shared or circular structure. This is the same as write for non-circular data.
 // (write-simple obj) or (write-simple obj port)
-func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteSimple(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalOutputPort(mc, 1)
 	if err != nil {
@@ -354,7 +353,7 @@ func PrimWriteSimple(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: write-shared always uses datum labels for shared structure.
 //
 // (write-shared obj) or (write-shared obj port)
-func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteShared(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalOutputPort(mc, 1)
 	if err != nil {
@@ -376,7 +375,7 @@ func PrimWriteShared(_ context.Context, mc *machine.MachineContext) error {
 // PrimReadChar implements the read-char primitive.
 // R7RS §6.13.2: (read-char [port])
 // Reads and returns a single character from the input port.
-func PrimReadChar(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadChar(mc *machine.MachineContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -397,7 +396,7 @@ func PrimReadChar(_ context.Context, mc *machine.MachineContext) error {
 // PrimPeekChar implements the peek-char primitive.
 // R7RS §6.13.2: (peek-char [port])
 // Reads and returns a single character from the input port without consuming it.
-func PrimPeekChar(_ context.Context, mc *machine.MachineContext) error {
+func PrimPeekChar(mc *machine.MachineContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -423,7 +422,7 @@ func PrimPeekChar(_ context.Context, mc *machine.MachineContext) error {
 // PrimReadLine implements the read-line primitive.
 // R7RS §6.13.2: (read-line [port])
 // Reads a line of text from the input port, not including the line ending.
-func PrimReadLine(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadLine(mc *machine.MachineContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -463,7 +462,7 @@ func PrimReadLine(_ context.Context, mc *machine.MachineContext) error {
 // PrimCharReadyQ implements the char-ready? primitive.
 // R7RS §6.13.2: (char-ready? [port])
 // Returns #t if a character is ready on the input port, #f otherwise.
-func PrimCharReadyQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharReadyQ(mc *machine.MachineContext) error {
 	// For now, we assume a character is always ready for string input ports
 	// and the character input port (stdin may block, but we can't easily check)
 	// A more accurate implementation would need non-blocking I/O
@@ -474,7 +473,7 @@ func PrimCharReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimReadString implements the read-string primitive.
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
-func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadString(mc *machine.MachineContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-string")
 	if err != nil {
 		return err
@@ -524,7 +523,7 @@ func PrimReadString(_ context.Context, mc *machine.MachineContext) error {
 // PrimWriteString implements the write-string primitive.
 // R7RS §6.13.3: (write-string string [port [start [end]]])
 // Writes the characters of string (optionally between start and end) to port.
-func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteString(mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "write-string")
@@ -578,7 +577,7 @@ func PrimWriteString(_ context.Context, mc *machine.MachineContext) error {
 // PrimWriteU8 implements the write-u8 primitive.
 // R7RS §6.13.3: (write-u8 byte [port])
 // Writes byte to the given binary output port and returns an unspecified value.
-func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteU8(mc *machine.MachineContext) error {
 	byteVal := mc.Arg(0)
 
 	// Validate byte argument (must be exact integer 0-255)
@@ -611,7 +610,7 @@ func PrimWriteU8(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (read-u8 [port])
 // Reads the next byte from the given binary input port and returns it as an exact integer.
 // Returns eof-object at end of file.
-func PrimReadU8(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadU8(mc *machine.MachineContext) error {
 	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "read-u8")
 	if err != nil {
 		return err
@@ -632,7 +631,7 @@ func PrimReadU8(_ context.Context, mc *machine.MachineContext) error {
 // PrimPeekU8 implements the peek-u8 primitive.
 // R7RS §6.13.3: (peek-u8 [port])
 // Like read-u8, but does not consume the byte from the port.
-func PrimPeekU8(_ context.Context, mc *machine.MachineContext) error {
+func PrimPeekU8(mc *machine.MachineContext) error {
 	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "peek-u8")
 	if err != nil {
 		return err
@@ -658,7 +657,7 @@ func PrimPeekU8(_ context.Context, mc *machine.MachineContext) error {
 // PrimU8ReadyQ implements the u8-ready? primitive.
 // R7RS §6.13.3: (u8-ready? [port])
 // Returns #t if a byte is available for reading from the binary input port.
-func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimU8ReadyQ(mc *machine.MachineContext) error {
 	// For now, assume a byte is always ready for bytevector input ports
 	// A more accurate implementation would need non-blocking I/O
 	mc.SetValue(values.TrueValue)
@@ -669,7 +668,7 @@ func PrimU8ReadyQ(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (read-bytevector k [port])
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
-func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadBytevector(mc *machine.MachineContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "read-bytevector")
 	if err != nil {
 		return err
@@ -729,7 +728,7 @@ func PrimReadBytevector(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.13.3: (read-bytevector! bytevector [port [start [end]]])
 // Reads bytes from port into an existing bytevector.
 // Returns the number of bytes read, or eof-object if no bytes available.
-func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error {
+func PrimReadBytevectorBang(mc *machine.MachineContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "read-bytevector!")
 	if err != nil {
 		return err
@@ -779,7 +778,7 @@ func PrimReadBytevectorBang(_ context.Context, mc *machine.MachineContext) error
 // PrimWriteBytevector implements the write-bytevector primitive.
 // R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
 // Writes the bytes of bytevector to port.
-func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
+func PrimWriteBytevector(mc *machine.MachineContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "write-bytevector")
 	if err != nil {
 		return err
@@ -809,7 +808,7 @@ func PrimWriteBytevector(_ context.Context, mc *machine.MachineContext) error {
 // PrimFlushOutputPort implements the flush-output-port primitive.
 // R7RS §6.13.3: (flush-output-port [port])
 // Flushes any buffered output to the underlying output device.
-func PrimFlushOutputPort(_ context.Context, mc *machine.MachineContext) error {
+func PrimFlushOutputPort(mc *machine.MachineContext) error {
 	port, err := getOptionalOutputPort(mc, 0)
 	if err != nil {
 		return err

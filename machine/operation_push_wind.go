@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -41,7 +39,7 @@ func NewOperationPushWind() *OperationPushWind {
 	}
 }
 
-func (*OperationPushWind) Apply(_ context.Context, mc *MachineContext) (*MachineContext, error) {
+func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Get before closure from stack (at depth 2)
 	beforeVal := mc.evals.PeekK(2)
 	before, ok := beforeVal.(*MachineClosure)

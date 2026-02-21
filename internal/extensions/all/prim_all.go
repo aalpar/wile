@@ -31,7 +31,7 @@ import (
 
 // PrimMakeRecordType implements the (make-record-type name field-names) primitive.
 // Creates a new record type descriptor.
-func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
+func PrimMakeRecordType(mc *machine.MachineContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
@@ -40,7 +40,7 @@ func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 		return err
 	}
 
-	fieldNames, err := listToSymbols(ctx, fieldNamesArg)
+	fieldNames, err := listToSymbols(mc.Context(), fieldNamesArg)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "make-record-type: field-names")
 	}
@@ -51,7 +51,7 @@ func PrimMakeRecordType(ctx context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimIsRecordType implements the (record-type? obj) primitive.
-func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
+func PrimIsRecordType(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.RecordType)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -59,7 +59,7 @@ func PrimIsRecordType(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimIsRecord implements the (record? obj) primitive.
-func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
+func PrimIsRecord(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.Record)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -68,7 +68,7 @@ func PrimIsRecord(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
-func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
+func PrimRecordType(mc *machine.MachineContext) error {
 	rec, err := helpers.RequireArg[*values.Record](mc, 0, values.ErrNotARecord, "record-type")
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func PrimRecordType(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimRecordConstructor implements the (record-constructor rt field-tags) primitive.
 // Returns a constructor procedure for the record type.
-func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) error {
+func PrimRecordConstructor(mc *machine.MachineContext) error {
 	rtArg := mc.Arg(0)
 	fieldTagsArg := mc.Arg(1)
 
@@ -88,7 +88,7 @@ func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) erro
 		return err
 	}
 
-	constructorFields, err := listToSymbols(ctx, fieldTagsArg)
+	constructorFields, err := listToSymbols(mc.Context(), fieldTagsArg)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "record-constructor: field-tags")
 	}
@@ -111,7 +111,7 @@ func PrimRecordConstructor(ctx context.Context, mc *machine.MachineContext) erro
 
 // PrimRecordPredicate implements the (record-predicate rt) primitive.
 // Returns a predicate procedure for the record type.
-func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
+func PrimRecordPredicate(mc *machine.MachineContext) error {
 	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-predicate")
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func PrimRecordPredicate(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimRecordAccessor implements the (record-accessor rt field-tag) primitive.
 // Returns an accessor procedure for the specified field.
-func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
+func PrimRecordAccessor(mc *machine.MachineContext) error {
 	fieldTagArg := mc.Arg(1)
 
 	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-accessor")
@@ -149,7 +149,7 @@ func PrimRecordAccessor(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimRecordModifier implements the (record-modifier rt field-tag) primitive.
 // Returns a modifier procedure for the specified field.
-func PrimRecordModifier(_ context.Context, mc *machine.MachineContext) error {
+func PrimRecordModifier(mc *machine.MachineContext) error {
 	fieldTagArg := mc.Arg(1)
 
 	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-modifier")
@@ -192,7 +192,7 @@ func listToSymbols(ctx context.Context, v values.Value) ([]*values.Symbol, error
 // newRecordConstructorClosure creates a closure that constructs records.
 func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, argIndices []int) *machine.MachineClosure {
 	fieldCount := rt.FieldCount()
-	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+	fn := func(innerMC *machine.MachineContext) error {
 		// Create field array with unspecified values
 		fields := make([]values.Value, fieldCount)
 		for i := range fields {
@@ -212,7 +212,7 @@ func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.R
 
 // newRecordPredicateClosure creates a closure that checks if a value is a record of the given type.
 func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.RecordType) *machine.MachineClosure {
-	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
 		innerMC.SetValue(values.BoolToBoolean(ok && rec.RecordType() == rt))
@@ -223,7 +223,7 @@ func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.Rec
 
 // newRecordAccessorClosure creates a closure that accesses a specific field of a record.
 func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.MachineClosure {
-	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
 		if !ok {
@@ -240,7 +240,7 @@ func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.Reco
 
 // newRecordModifierClosure creates a closure that modifies a specific field of a record.
 func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.MachineClosure {
-	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
 		rec, ok := obj.(*values.Record)
@@ -262,7 +262,7 @@ func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.Reco
 // =============================================================================
 
 // PrimPromiseQ tests if an object is a promise.
-func PrimPromiseQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimPromiseQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Promise)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -271,7 +271,7 @@ func PrimPromiseQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakePromise implements the (make-promise) primitive.
 // Creates a promise from a value, wrapping it if not already a promise.
-func PrimMakePromise(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakePromise(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// If already a promise, return it unchanged
 	p, ok := o.(*values.Promise)
@@ -342,7 +342,7 @@ func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.V
 // R7RS §4.2.5: The first time a promise is forced, its body is evaluated
 // and the result is memoized; on subsequent forces, the memoized result
 // is returned.
-func PrimForce(_ context.Context, mc *machine.MachineContext) error {
+func PrimForce(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	promise, ok := o.(*values.Promise)
 	if !ok {
@@ -360,7 +360,7 @@ func PrimForce(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakeLazyPromise implements the (delay-force) primitive.
 // Creates a lazy promise that delays evaluation of a thunk.
-func PrimMakeLazyPromise(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeLazyPromise(mc *machine.MachineContext) error {
 	thunk := mc.Arg(0)
 	mc.SetValue(values.NewPromise(thunk))
 	return nil

@@ -15,7 +15,6 @@
 package core
 
 import (
-	"context"
 	"math"
 	"math/big"
 
@@ -25,26 +24,26 @@ import (
 )
 
 // PrimAdd implements the + primitive.
-func PrimAdd(_ context.Context, mc *machine.MachineContext) error {
+func PrimAdd(mc *machine.MachineContext) error {
 	return helpers.NumericFoldVariadic(mc, "+", values.NewInteger(0),
 		func(acc, val values.Number) values.Number { return acc.Add(val) })
 }
 
 // PrimSub implements the - primitive.
-func PrimSub(_ context.Context, mc *machine.MachineContext) error {
+func PrimSub(mc *machine.MachineContext) error {
 	return helpers.NumericFoldWithFirst(mc, "-",
 		func(val values.Number) values.Number { return values.NewInteger(0).Subtract(val) },
 		func(acc, val values.Number) values.Number { return acc.Subtract(val) })
 }
 
 // PrimMul implements the * primitive.
-func PrimMul(_ context.Context, mc *machine.MachineContext) error {
+func PrimMul(mc *machine.MachineContext) error {
 	return helpers.NumericFoldVariadic(mc, "*", values.NewInteger(1),
 		func(acc, val values.Number) values.Number { return acc.Multiply(val) })
 }
 
 // PrimDiv implements the / primitive.
-func PrimDiv(_ context.Context, mc *machine.MachineContext) error {
+func PrimDiv(mc *machine.MachineContext) error {
 	return helpers.NumericFoldWithFirst(mc, "/",
 		func(val values.Number) values.Number { return values.NewInteger(1).Divide(val) },
 		func(acc, val values.Number) values.Number { return acc.Divide(val) })
@@ -107,7 +106,7 @@ func numericEquals(a, b values.Number) bool {
 // PrimNumEq implements the = primitive.
 //
 // R7RS §6.2.6: Returns #t if its arguments are numerically equal.
-func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumEq(mc *machine.MachineContext) error {
 	return helpers.NumericChainCompare(mc, "=", func(prev, curr values.Number) bool {
 		return !numericEquals(prev, curr)
 	})
@@ -116,7 +115,7 @@ func PrimNumEq(_ context.Context, mc *machine.MachineContext) error {
 // PrimNumLt implements the < primitive.
 //
 // R7RS §6.2.6: Ordering comparisons require real arguments.
-func PrimNumLt(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumLt(mc *machine.MachineContext) error {
 	return helpers.NumericChainCompareReal(mc, "<", func(prev, curr values.Number) bool {
 		return !prev.LessThan(curr)
 	})
@@ -125,7 +124,7 @@ func PrimNumLt(_ context.Context, mc *machine.MachineContext) error {
 // PrimNumGt implements the > primitive.
 //
 // R7RS §6.2.6: Ordering comparisons require real arguments.
-func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumGt(mc *machine.MachineContext) error {
 	return helpers.NumericChainCompareReal(mc, ">", func(prev, curr values.Number) bool {
 		return !curr.LessThan(prev)
 	})
@@ -135,7 +134,7 @@ func PrimNumGt(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nondecreasing.
 // IEEE 754: Any comparison with NaN returns #f.
-func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumLe(mc *machine.MachineContext) error {
 	return helpers.NumericChainCompareReal(mc, "<=", func(prev, curr values.Number) bool {
 		// NaN fails all comparisons per IEEE 754
 		if prev.IsNaN() || curr.IsNaN() {
@@ -149,7 +148,7 @@ func PrimNumLe(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if its arguments are monotonically nonincreasing.
 // IEEE 754: Any comparison with NaN returns #f.
-func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumGe(mc *machine.MachineContext) error {
 	return helpers.NumericChainCompareReal(mc, ">=", func(prev, curr values.Number) bool {
 		// NaN fails all comparisons per IEEE 754
 		if prev.IsNaN() || curr.IsNaN() {
@@ -161,7 +160,7 @@ func PrimNumGe(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimAbs implements the abs primitive.
 // R7RS §6.2.6: abs is only defined for real numbers.
-func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
+func PrimAbs(mc *machine.MachineContext) error {
 	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
 	if err != nil {
 		return err
@@ -176,14 +175,14 @@ func PrimAbs(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMin implements the min primitive.
-func PrimMin(_ context.Context, mc *machine.MachineContext) error {
+func PrimMin(mc *machine.MachineContext) error {
 	return helpers.NumericExtremum(mc, "min", func(candidate, current values.Number) bool {
 		return candidate.LessThan(current)
 	})
 }
 
 // PrimMax implements the max primitive.
-func PrimMax(_ context.Context, mc *machine.MachineContext) error {
+func PrimMax(mc *machine.MachineContext) error {
 	return helpers.NumericExtremum(mc, "max", func(candidate, current values.Number) bool {
 		return current.LessThan(candidate)
 	})
@@ -251,7 +250,7 @@ func integerDivisionOp(
 // PrimQuotient implements the (quotient) primitive.
 // Returns truncated integer quotient.
 // Accepts exact and inexact integers per R7RS.
-func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
+func PrimQuotient(mc *machine.MachineContext) error {
 	return integerDivisionOp(mc, "quotient",
 		func(a, b int64) int64 {
 			return a / b
@@ -262,7 +261,7 @@ func PrimQuotient(_ context.Context, mc *machine.MachineContext) error {
 // PrimRemainder implements the (remainder) primitive.
 // Returns remainder with sign of dividend.
 // Accepts exact and inexact integers per R7RS.
-func PrimRemainder(_ context.Context, mc *machine.MachineContext) error {
+func PrimRemainder(mc *machine.MachineContext) error {
 	return integerDivisionOp(mc, "remainder",
 		func(a, b int64) int64 {
 			return a % b
@@ -293,19 +292,19 @@ func moduloBig(z, x, y *big.Int) *big.Int {
 // PrimModulo implements the modulo primitive.
 // Returns the modulo of two integers with the sign of the divisor.
 // Accepts exact and inexact integers per R7RS.
-func PrimModulo(_ context.Context, mc *machine.MachineContext) error {
+func PrimModulo(mc *machine.MachineContext) error {
 	return integerDivisionOp(mc, "modulo", moduloInt, moduloBig)
 }
 
 // PrimGcd implements the gcd primitive.
-func PrimGcd(_ context.Context, mc *machine.MachineContext) error {
+func PrimGcd(mc *machine.MachineContext) error {
 	return helpers.IntegerFold(mc, helpers.FoldOpGCD, 0, func(a, b int64) (int64, bool) {
 		return helpers.GcdInt(a, b), false
 	})
 }
 
 // PrimLcm implements the lcm primitive.
-func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
+func PrimLcm(mc *machine.MachineContext) error {
 	return helpers.IntegerFold(mc, helpers.FoldOpLCM, 1, func(acc, val int64) (int64, bool) {
 		g := helpers.GcdInt(acc, val)
 		if g == 0 {
@@ -325,7 +324,7 @@ func PrimLcm(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: The exact procedure returns an exact representation
 // of z that is numerically closest to the argument.
-func PrimExact(_ context.Context, mc *machine.MachineContext) error {
+func PrimExact(mc *machine.MachineContext) error {
 	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "exact")
 	if err != nil {
 		return err
@@ -339,7 +338,7 @@ func PrimExact(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: The inexact procedure returns an inexact representation
 // of z that is numerically closest to the argument.
-func PrimInexact(_ context.Context, mc *machine.MachineContext) error {
+func PrimInexact(mc *machine.MachineContext) error {
 	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "inexact")
 	if err != nil {
 		return err

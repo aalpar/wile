@@ -15,16 +15,14 @@
 package helpers
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
 // MakeTypePredicate creates a type predicate primitive function.
 // The check function should return true if the value matches the expected type.
-func MakeTypePredicate(check func(values.Value) bool) func(context.Context, *machine.MachineContext) error {
-	return func(_ context.Context, mc *machine.MachineContext) error {
+func MakeTypePredicate(check func(values.Value) bool) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
 		o := mc.Arg(0)
 		mc.SetValue(values.BoolToBoolean(check(o)))
 		return nil
@@ -41,8 +39,8 @@ func MakeNumericPredicate[T any](
 	name string,
 	sentinel error,
 	test func(T) bool,
-) func(context.Context, *machine.MachineContext) error {
-	return func(_ context.Context, mc *machine.MachineContext) error {
+) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
 		n, err := RequireArg[T](mc, 0, sentinel, name)
 		if err != nil {
 			return err

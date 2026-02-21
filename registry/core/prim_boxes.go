@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -24,14 +22,14 @@ import (
 
 // PrimBox implements the box primitive.
 // Creates a new box containing the given value.
-func PrimBox(_ context.Context, mc *machine.MachineContext) error {
+func PrimBox(mc *machine.MachineContext) error {
 	mc.SetValue(values.NewBox(mc.Arg(0)))
 	return nil
 }
 
 // PrimBoxQ implements the box? predicate.
 // Returns #t if the argument is a box, #f otherwise.
-func PrimBoxQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimBoxQ(mc *machine.MachineContext) error {
 	_, ok := mc.Arg(0).(*values.Box)
 	mc.SetValue(values.BoolToBoolean(ok))
 	return nil
@@ -39,7 +37,7 @@ func PrimBoxQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.
-func PrimUnbox(_ context.Context, mc *machine.MachineContext) error {
+func PrimUnbox(mc *machine.MachineContext) error {
 	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "unbox")
 	if err != nil {
 		return err
@@ -50,7 +48,7 @@ func PrimUnbox(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimSetBox implements the set-box! primitive.
 // Sets the value contained in a box.
-func PrimSetBox(_ context.Context, mc *machine.MachineContext) error {
+func PrimSetBox(mc *machine.MachineContext) error {
 	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "set-box!")
 	if err != nil {
 		return err

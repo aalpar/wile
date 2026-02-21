@@ -15,13 +15,15 @@
 package machine
 
 import (
-	"context"
 	"errors"
 
 	"github.com/aalpar/wile/values"
 )
 
-type ForeignFunction func(ctx context.Context, mc *MachineContext) error
+// ForeignFunction is the signature for Go-implemented Scheme primitives.
+// The MachineContext provides access to arguments, the value register,
+// and the cancellation context (via mc.Context()).
+type ForeignFunction func(mc *MachineContext) error
 
 type OperationForeignFunctionCall struct {
 	OperationBase
@@ -58,7 +60,7 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 	}
 }
 
-func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineContext) (rmc *MachineContext, rerr error) {
+func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineContext, rerr error) {
 	if p.Function == nil {
 		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "foreign function is nil")
 	}
@@ -83,7 +85,7 @@ func (p *OperationForeignFunctionCall) Apply(ctx context.Context, mc *MachineCon
 		rerr = goErrorToSchemeException(mc, err)
 	}()
 	mc.counters.ForeignCalls++
-	err := p.Function(ctx, mc)
+	err := p.Function(mc)
 	if err != nil {
 		// Check if this is a prompt abort - propagate up to the matching
 		// call-with-continuation-prompt handler (or DefaultPromptTag for call/cc escapes).

@@ -148,7 +148,7 @@ type Operation interface {
 
 type InlinedOperation interface {
     Operation
-    Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error)
+    Apply(mc *MachineContext) (*MachineContext, error)
 }
 ```
 

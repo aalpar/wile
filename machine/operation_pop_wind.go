@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -40,7 +38,7 @@ func NewOperationPopWind() *OperationPopWind {
 	}
 }
 
-func (*OperationPopWind) Apply(_ context.Context, mc *MachineContext) (*MachineContext, error) {
+func (*OperationPopWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	mc.PopWindingFrame()
 	mc.pc++
 	return mc, nil

@@ -15,7 +15,6 @@
 package core
 
 import (
-	"context"
 	"math"
 	"math/big"
 
@@ -90,7 +89,7 @@ var PrimProcedureQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimVoidQ implements the void? predicate.
 // Returns #t if the argument is the void value.
-func PrimVoidQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimVoidQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	mc.SetValue(values.BoolToBoolean(o.IsVoid()))
 	return nil
@@ -98,7 +97,7 @@ func PrimVoidQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimNullQ implements the null? predicate.
 // Returns #t if the argument is the empty list '().
-func PrimNullQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimNullQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
 	return nil
@@ -108,7 +107,7 @@ func PrimNullQ(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is a pair (cons cell).
 // EmptyList is not a *Pair (it's a separate type), so the type assertion
 // handles (pair? '()) -> #f at the type level per R7RS §6.4.
-func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimPairQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Pair)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -119,7 +118,7 @@ func PrimPairQ(_ context.Context, mc *machine.MachineContext) error {
 // Returns #t if the argument is a proper list, #f otherwise.
 // R7RS: list? operates on runtime values, not syntax objects.
 // (list? #'()) => #f, (list? '()) => #t
-func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimListQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// Runtime list types only — not syntax pairs.
 	switch t := o.(type) {
@@ -137,7 +136,7 @@ func PrimListQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the argument is an integer (exact or inexact).
 // Inexact integers are floating-point numbers with zero fractional part.
-func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimIntegerQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		mc.SetValue(values.FalseValue)
@@ -151,7 +150,7 @@ func PrimIntegerQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the argument is a real number.
 // Rationals (including integers and BigInteger) are a subset of reals.
-func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimRealQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case values.RealNumber:
@@ -169,7 +168,7 @@ func PrimRealQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the argument is a rational number.
 // Integers (including BigInteger) are a subset of rationals.
-func PrimRationalQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimRationalQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		mc.SetValue(values.FalseValue)
@@ -198,7 +197,7 @@ var PrimInexactQ = helpers.MakeNumericPredicate[values.Number](
 // PrimExactIntegerQ implements the exact-integer? predicate.
 //
 // R7RS §6.2.6: Returns #t if the argument is both exact and an integer.
-func PrimExactIntegerQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimExactIntegerQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		mc.SetValue(values.FalseValue)
@@ -271,7 +270,7 @@ func parityCheck(
 //
 // R7RS §6.2.6: Returns #t if the integer is odd, #f otherwise.
 // Accepts any integer, including inexact integers (e.g., 3.0).
-func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimOddQ(mc *machine.MachineContext) error {
 	return parityCheck(mc, "odd?",
 		func(n int64) bool {
 			return n%2 != 0
@@ -285,7 +284,7 @@ func PrimOddQ(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the integer is even, #f otherwise.
 // Accepts any integer, including inexact integers (e.g., 4.0).
-func PrimEvenQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimEvenQ(mc *machine.MachineContext) error {
 	return parityCheck(mc, "even?",
 		func(n int64) bool {
 			return n%2 == 0

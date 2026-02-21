@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
@@ -37,7 +35,7 @@ func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
 }
 
 // Apply implements the Operation interface.
-func (p *OperationBuildSyntaxList) Apply(_ context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationBuildSyntaxList) Apply(mctx *MachineContext) (*MachineContext, error) {
 	// Batch pop all elements from stack and build a list
 	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
 

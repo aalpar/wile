@@ -220,14 +220,14 @@ wile.WithMaxContinuationCopyDepth(n uint64) EngineOption
 `ForeignFunctionCall` calls arbitrary Go code via the `ForeignFunction` signature:
 
 ```go
-type ForeignFunction func(ctx context.Context, mc *MachineContext) error
+type ForeignFunction func(mc *MachineContext) error
 ```
 
-The `ctx` parameter is already threaded through. The VM cannot impose a step limit on opaque Go code. This is documented as the embedder's responsibility:
+The context is accessible via `mc.Context()`. The VM cannot impose a step limit on opaque Go code. This is documented as the embedder's responsibility:
 
 - Use `context.WithTimeout` or `context.WithDeadline` to bound total execution time.
-- Foreign functions that perform unbounded work (e.g., HTTP calls, file I/O, computation loops) must check `ctx.Done()` internally.
-- The engine's built-in primitives (in `registry/core/`) already follow this contract — they receive `ctx` and delegate to Go standard library functions that respect context cancellation.
+- Foreign functions that perform unbounded work (e.g., HTTP calls, file I/O, computation loops) must check `mc.Context().Done()` internally.
+- The engine's built-in primitives (in `registry/core/`) already follow this contract — they access the context via `MachineContext` and delegate to Go standard library functions that respect context cancellation.
 
 No new API surface is needed for this category.
 

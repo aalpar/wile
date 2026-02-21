@@ -24,7 +24,7 @@ import (
 
 // PrimMakeBytevector implements the (make-bytevector) primitive.
 // Creates a bytevector of the given size, optionally filled with a specified byte value.
-func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeBytevector(mc *machine.MachineContext) error {
 	size, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-bytevector")
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func PrimMakeBytevector(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevector implements the bytevector primitive.
 // Creates bytevector from byte arguments.
-func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
+func PrimBytevector(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -67,7 +67,7 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []*values.Byte
-	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, hasNext bool, v values.Value) error {
+	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
@@ -92,13 +92,13 @@ func PrimBytevector(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevectorLength implements the bytevector-length primitive.
 // Returns length of bytevector.
-func PrimBytevectorLength(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorLength(mc *machine.MachineContext) error {
 	return helpers.SequenceLength[*values.ByteVector](mc, values.ErrNotAByteVector, "bytevector-length")
 }
 
 // PrimBytevectorU8Ref implements the bytevector-u8-ref primitive.
 // Returns byte at index as an exact integer (R7RS §6.9).
-func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorU8Ref(mc *machine.MachineContext) error {
 	return helpers.SequenceRef(mc, values.ErrNotAByteVector, "bytevector-u8-ref",
 		func(bv *values.ByteVector, idx int) values.Value {
 			return values.NewInteger(int64((*bv)[idx].Value))
@@ -108,7 +108,7 @@ func PrimBytevectorU8Ref(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevectorU8Set implements the bytevector-u8-set! primitive.
 // Sets byte at index.
-func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorU8Set(mc *machine.MachineContext) error {
 	return helpers.SequenceSet(mc, values.ErrNotAByteVector, "bytevector-u8-set!",
 		func(bv *values.ByteVector, idx int, mc *machine.MachineContext) error {
 			byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), values.ErrNotAnInteger, "bytevector-u8-set!")
@@ -127,7 +127,7 @@ func PrimBytevectorU8Set(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevectorCopy implements the bytevector-copy primitive.
 // Returns a copy of a bytevector.
-func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorCopy(mc *machine.MachineContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-copy")
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func PrimBytevectorCopy(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimBytevectorCopyBang implements the bytevector-copy! primitive.
 // Copies bytes between bytevectors.
-func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorCopyBang(mc *machine.MachineContext) error {
 	toBv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "bytevector-copy!")
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func PrimBytevectorCopyBang(_ context.Context, mc *machine.MachineContext) error
 
 // PrimBytevectorAppend implements the bytevector-append primitive.
 // Concatenates bytevectors.
-func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error {
+func PrimBytevectorAppend(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -190,7 +190,7 @@ func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error
 		return values.WrapForeignErrorf(values.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
 	result := values.NewByteVector()
-	v, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
@@ -214,7 +214,7 @@ func PrimBytevectorAppend(ctx context.Context, mc *machine.MachineContext) error
 // R7RS §6.9: (utf8->string bytevector [start [end]])
 // Decodes the bytes of a bytevector between start and end (byte positions) and
 // returns the corresponding string.
-func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
+func PrimUtf8ToString(mc *machine.MachineContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, values.ErrNotAByteVector, "utf8->string")
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func PrimUtf8ToString(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.9: (string->utf8 string [start [end]])
 // Returns a newly allocated bytevector containing the UTF-8 encoding of the
 // characters in string between start and end (character positions, not byte positions).
-func PrimStringToUtf8(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringToUtf8(mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->utf8")
 	if err != nil {
 		return err

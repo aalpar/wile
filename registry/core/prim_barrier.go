@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -38,7 +36,7 @@ import (
 // the barrier, since they are upward-only unwinds that do not cross boundaries.
 //
 // See plans/CALL_WITH_EXIT_AND_WITH_BAFFLE.md for full semantics and test cases.
-func PrimCallWithContinuationBarrier(ctx context.Context, mc *machine.MachineContext) error {
+func PrimCallWithContinuationBarrier(mc *machine.MachineContext) error {
 	thunk := mc.Arg(0)
 
 	thunkCls, err := helpers.RequireType[*machine.MachineClosure](thunk, values.ErrNotAProcedure, "call-with-continuation-barrier")

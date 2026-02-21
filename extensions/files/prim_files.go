@@ -15,7 +15,6 @@
 package files
 
 import (
-	"context"
 	"os"
 
 	"github.com/aalpar/wile/machine"
@@ -25,7 +24,7 @@ import (
 
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
-func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
+func PrimOpenInputFile(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-input-file")
 	if err != nil {
 		return err
@@ -40,7 +39,7 @@ func PrimOpenInputFile(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
-func PrimOpenOutputFile(_ context.Context, mc *machine.MachineContext) error {
+func PrimOpenOutputFile(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-output-file")
 	if err != nil {
 		return err
@@ -55,7 +54,7 @@ func PrimOpenOutputFile(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
-func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) error {
+func PrimOpenBinaryInputFile(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-binary-input-file")
 	if err != nil {
 		return err
@@ -70,7 +69,7 @@ func PrimOpenBinaryInputFile(_ context.Context, mc *machine.MachineContext) erro
 
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
-func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) error {
+func PrimOpenBinaryOutputFile(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "open-binary-output-file")
 	if err != nil {
 		return err
@@ -85,7 +84,7 @@ func PrimOpenBinaryOutputFile(_ context.Context, mc *machine.MachineContext) err
 
 // PrimFileExistsQ implements the (file-exists?) primitive.
 // Returns #t if file exists.
-func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimFileExistsQ(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "file-exists?")
 	if err != nil {
 		return err
@@ -97,7 +96,7 @@ func PrimFileExistsQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimDeleteFile implements the (delete-file) primitive.
 // Deletes a file from the filesystem.
-func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
+func PrimDeleteFile(mc *machine.MachineContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "delete-file")
 	if err != nil {
 		return err
@@ -115,7 +114,6 @@ func PrimDeleteFile(_ context.Context, mc *machine.MachineContext) error {
 //
 //nolint:unparam
 func callWithFile(
-	ctx context.Context,
 	mc *machine.MachineContext,
 	name string,
 	opener func(string) (*os.File, error),
@@ -155,14 +153,14 @@ func callWithFile(
 }
 
 // PrimCallWithInputFile implements the call-with-input-file primitive.
-func PrimCallWithInputFile(ctx context.Context, mc *machine.MachineContext) error {
-	return callWithFile(ctx, mc, "call-with-input-file", os.Open,
+func PrimCallWithInputFile(mc *machine.MachineContext) error {
+	return callWithFile(mc, "call-with-input-file", os.Open,
 		func(f *os.File) values.Value { return values.NewCharacterInputPortFromReader(f) })
 }
 
 // PrimCallWithOutputFile implements the call-with-output-file primitive.
-func PrimCallWithOutputFile(ctx context.Context, mc *machine.MachineContext) error {
-	return callWithFile(ctx, mc, "call-with-output-file", os.Create,
+func PrimCallWithOutputFile(mc *machine.MachineContext) error {
+	return callWithFile(mc, "call-with-output-file", os.Create,
 		func(f *os.File) values.Value { return values.NewCharacterOutputPortFromWriter(f) })
 }
 

@@ -79,7 +79,7 @@ func parseOptionalName(rest values.Value) string {
 // Returns the thread object if running inside a thread, or the symbol 'primordial
 // for the main goroutine.
 // (current-thread) -> thread
-func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentThread(mc *machine.MachineContext) error {
 	thread := mc.Thread()
 	if thread == nil {
 		// Return primordial thread placeholder
@@ -92,7 +92,7 @@ func PrimCurrentThread(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadQ tests if an object is a thread
 // (thread? obj) -> boolean
-func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Thread)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -101,7 +101,7 @@ func PrimThreadQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakeThread creates a new thread
 // (make-thread thunk [name]) -> thread
-func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeThread(mc *machine.MachineContext) error {
 	thunk := mc.Arg(0)
 	restVal := mc.Arg(1)
 
@@ -152,7 +152,7 @@ func PrimMakeThread(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadName returns the thread's name
 // (thread-name thread) -> string or symbol
-func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadName(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-name")
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func PrimThreadName(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadSpecific returns the thread's specific field
 // (thread-specific thread) -> value
-func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadSpecific(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-specific")
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func PrimThreadSpecific(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadSpecificSet sets the thread's specific field
 // (thread-specific-set! thread obj) -> void
-func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadSpecificSet(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-specific-set!")
 	if err != nil {
 		return err
@@ -193,13 +193,13 @@ func PrimThreadSpecificSet(_ context.Context, mc *machine.MachineContext) error 
 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
-func PrimThreadStart(ctx context.Context, mc *machine.MachineContext) error {
+func PrimThreadStart(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-start!")
 	if err != nil {
 		return err
 	}
 
-	err = thread.Start(ctx)
+	err = thread.Start(mc.Context())
 	if err != nil {
 		return values.WrapForeignErrorf(err, "thread-start!")
 	}
@@ -210,7 +210,7 @@ func PrimThreadStart(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadYield yields execution to other threads
 // (thread-yield!) -> void
-func PrimThreadYield(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadYield(mc *machine.MachineContext) error {
 	runtime.Gosched()
 	mc.SetValue(values.Void)
 	return nil
@@ -219,7 +219,7 @@ func PrimThreadYield(_ context.Context, mc *machine.MachineContext) error {
 // PrimThreadSleep pauses execution for a time
 // (thread-sleep! timeout) -> void
 // timeout can be a time object or a number (seconds)
-func PrimThreadSleep(ctx context.Context, mc *machine.MachineContext) error {
+func PrimThreadSleep(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 
 	var d time.Duration
@@ -238,8 +238,8 @@ func PrimThreadSleep(ctx context.Context, mc *machine.MachineContext) error {
 
 	select {
 	case <-time.After(d):
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-mc.Context().Done():
+		return mc.Context().Err()
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -247,7 +247,7 @@ func PrimThreadSleep(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadTerminate forcefully terminates a thread
 // (thread-terminate! thread) -> void
-func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadTerminate(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-terminate!")
 	if err != nil {
 		return err
@@ -260,7 +260,7 @@ func PrimThreadTerminate(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimThreadJoin waits for a thread to terminate
 // (thread-join! thread [timeout [timeout-val]]) -> value
-func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
+func PrimThreadJoin(mc *machine.MachineContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, values.ErrNotAThread, "thread-join!")
 	if err != nil {
 		return err
@@ -321,7 +321,7 @@ func PrimThreadJoin(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMutexQ tests if an object is a mutex
 // (mutex? obj) -> boolean
-func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Mutex)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -330,7 +330,7 @@ func PrimMutexQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakeMutex creates a new mutex
 // (make-mutex [name]) -> mutex
-func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeMutex(mc *machine.MachineContext) error {
 	restVal := mc.Arg(0)
 
 	name := parseOptionalName(restVal)
@@ -342,7 +342,7 @@ func PrimMakeMutex(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMutexName returns the mutex's name
 // (mutex-name mutex) -> string or symbol
-func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexName(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-name")
 	if err != nil {
 		return err
@@ -353,7 +353,7 @@ func PrimMutexName(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMutexSpecific returns the mutex's specific field
 // (mutex-specific mutex) -> value
-func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexSpecific(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-specific")
 	if err != nil {
 		return err
@@ -369,7 +369,7 @@ func PrimMutexSpecific(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMutexSpecificSet sets the mutex's specific field
 // (mutex-specific-set! mutex obj) -> void
-func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexSpecificSet(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-specific-set!")
 	if err != nil {
 		return err
@@ -384,7 +384,7 @@ func PrimMutexSpecificSet(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexState returns the mutex's state
 // (mutex-state mutex) -> symbol or thread
 // Returns: 'not-owned, 'abandoned, 'not-abandoned, or the owner thread
-func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexState(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-state")
 	if err != nil {
 		return err
@@ -396,7 +396,7 @@ func PrimMutexState(_ context.Context, mc *machine.MachineContext) error {
 // PrimMutexLock acquires the mutex
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
 // Returns #t if acquired, #f if timeout
-func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexLock(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-lock!")
 	if err != nil {
 		return err
@@ -461,7 +461,7 @@ func PrimMutexLock(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMutexUnlock releases the mutex
 // (mutex-unlock! mutex [condition-variable [timeout]]) -> boolean
-func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
+func PrimMutexUnlock(mc *machine.MachineContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, values.ErrNotAMutex, "mutex-unlock!")
 	if err != nil {
 		return err
@@ -517,7 +517,7 @@ func PrimMutexUnlock(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimConditionVariableQ tests if an object is a condition variable
 // (condition-variable? obj) -> boolean
-func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.ConditionVariable)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -526,7 +526,7 @@ func PrimConditionVariableQ(_ context.Context, mc *machine.MachineContext) error
 
 // PrimMakeConditionVariable creates a new condition variable
 // (make-condition-variable [name]) -> condition-variable
-func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeConditionVariable(mc *machine.MachineContext) error {
 	restVal := mc.Arg(0)
 
 	name := parseOptionalName(restVal)
@@ -538,7 +538,7 @@ func PrimMakeConditionVariable(_ context.Context, mc *machine.MachineContext) er
 
 // PrimConditionVariableName returns the condition variable's name
 // (condition-variable-name cv) -> string or symbol
-func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableName(mc *machine.MachineContext) error {
 	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-name")
 	if err != nil {
 		return err
@@ -549,7 +549,7 @@ func PrimConditionVariableName(_ context.Context, mc *machine.MachineContext) er
 
 // PrimConditionVariableSpecific returns the condition variable's specific field
 // (condition-variable-specific cv) -> value
-func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableSpecific(mc *machine.MachineContext) error {
 	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-specific")
 	if err != nil {
 		return err
@@ -565,7 +565,7 @@ func PrimConditionVariableSpecific(_ context.Context, mc *machine.MachineContext
 
 // PrimConditionVariableSpecificSet sets the condition variable's specific field
 // (condition-variable-specific-set! cv obj) -> void
-func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableSpecificSet(mc *machine.MachineContext) error {
 	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-specific-set!")
 	if err != nil {
 		return err
@@ -579,7 +579,7 @@ func PrimConditionVariableSpecificSet(_ context.Context, mc *machine.MachineCont
 
 // PrimConditionVariableSignal signals one waiting thread
 // (condition-variable-signal! cv) -> void
-func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableSignal(mc *machine.MachineContext) error {
 	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-signal!")
 	if err != nil {
 		return err
@@ -591,7 +591,7 @@ func PrimConditionVariableSignal(_ context.Context, mc *machine.MachineContext) 
 
 // PrimConditionVariableBroadcast signals all waiting threads
 // (condition-variable-broadcast! cv) -> void
-func PrimConditionVariableBroadcast(_ context.Context, mc *machine.MachineContext) error {
+func PrimConditionVariableBroadcast(mc *machine.MachineContext) error {
 	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, values.ErrNotAConditionVariable, "condition-variable-broadcast!")
 	if err != nil {
 		return err
@@ -607,14 +607,14 @@ func PrimConditionVariableBroadcast(_ context.Context, mc *machine.MachineContex
 
 // PrimCurrentTime returns the current time
 // (current-time) -> time
-func PrimCurrentTime(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentTime(mc *machine.MachineContext) error {
 	mc.SetValue(values.CurrentTime())
 	return nil
 }
 
 // PrimTimeQ tests if an object is a time
 // (time? obj) -> boolean
-func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimTimeQ(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(*values.Time)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -623,7 +623,7 @@ func PrimTimeQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimTimeToSeconds converts a time to seconds
 // (time->seconds time) -> number
-func PrimTimeToSeconds(_ context.Context, mc *machine.MachineContext) error {
+func PrimTimeToSeconds(mc *machine.MachineContext) error {
 	t, err := helpers.RequireArg[*values.Time](mc, 0, values.ErrNotATime, "time->seconds")
 	if err != nil {
 		return err
@@ -634,7 +634,7 @@ func PrimTimeToSeconds(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimSecondsToTime converts seconds to a time
 // (seconds->time x) -> time
-func PrimSecondsToTime(_ context.Context, mc *machine.MachineContext) error {
+func PrimSecondsToTime(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 
 	var seconds float64

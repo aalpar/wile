@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/values"
@@ -36,7 +35,7 @@ func NewOperationMakeCaseLambdaClosure(closureCount int) *OperationMakeCaseLambd
 	}
 }
 
-func (p *OperationMakeCaseLambdaClosure) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+func (p *OperationMakeCaseLambdaClosure) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Batch pop all closures from the stack
 	// PopN returns elements in stack order (bottom to top)
 	elements := mc.evals.PopN(p.closureCount)

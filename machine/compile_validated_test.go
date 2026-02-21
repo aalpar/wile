@@ -45,7 +45,7 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 }
 
 // registerForeignFn registers a zero-argument foreign closure in the environment.
-func registerForeignFn(env *environment.EnvironmentFrame, name string, fn func(context.Context, *MachineContext) error) {
+func registerForeignFn(env *environment.EnvironmentFrame, name string, fn func(*MachineContext) error) {
 	sym := env.InternSymbol(values.NewSymbol(name))
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	closure := NewForeignClosure(env, 0, false, fn)
@@ -82,13 +82,13 @@ func TestCompileValidatedDynamicWind_ReturnValue(t *testing.T) {
 	env := newDynamicWindEnv()
 
 	// Register no-op thunks for before/after
-	registerForeignFn(env, "noop", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "noop", func(mc *MachineContext) error {
 		mc.SetValue(values.Void)
 		return nil
 	})
 
 	// Register a thunk that returns 42
-	registerForeignFn(env, "ret42", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "ret42", func(mc *MachineContext) error {
 		mc.SetValue(values.NewInteger(42))
 		return nil
 	})
@@ -104,19 +104,19 @@ func TestCompileValidatedDynamicWind_CallOrder(t *testing.T) {
 
 	var log []string
 
-	registerForeignFn(env, "before-fn", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "before-fn", func(mc *MachineContext) error {
 		log = append(log, "before")
 		mc.SetValue(values.Void)
 		return nil
 	})
 
-	registerForeignFn(env, "thunk-fn", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "thunk-fn", func(mc *MachineContext) error {
 		log = append(log, "thunk")
 		mc.SetValue(values.NewString("result"))
 		return nil
 	})
 
-	registerForeignFn(env, "after-fn", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "after-fn", func(mc *MachineContext) error {
 		log = append(log, "after")
 		mc.SetValue(values.Void)
 		return nil
@@ -135,13 +135,13 @@ func TestCompileValidatedDynamicWind_WithLambdas(t *testing.T) {
 
 	var log []string
 
-	registerForeignFn(env, "log-before", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "log-before", func(mc *MachineContext) error {
 		log = append(log, "before")
 		mc.SetValue(values.Void)
 		return nil
 	})
 
-	registerForeignFn(env, "log-after", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "log-after", func(mc *MachineContext) error {
 		log = append(log, "after")
 		mc.SetValue(values.Void)
 		return nil
@@ -164,8 +164,8 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 
 	var log []string
 
-	makeFn := func(label string) func(context.Context, *MachineContext) error {
-		return func(_ context.Context, mc *MachineContext) error {
+	makeFn := func(label string) func(*MachineContext) error {
+		return func(mc *MachineContext) error {
 			log = append(log, label)
 			mc.SetValue(values.Void)
 			return nil
@@ -176,7 +176,7 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 	registerForeignFn(env, "outer-after", makeFn("outer-after"))
 	registerForeignFn(env, "inner-before", makeFn("inner-before"))
 	registerForeignFn(env, "inner-after", makeFn("inner-after"))
-	registerForeignFn(env, "body", func(_ context.Context, mc *MachineContext) error {
+	registerForeignFn(env, "body", func(mc *MachineContext) error {
 		log = append(log, "body")
 		mc.SetValue(values.NewInteger(7))
 		return nil
@@ -297,7 +297,7 @@ func TestCompileValidatedCaseLambda_ZeroArgClause(t *testing.T) {
 	// Register + primitive for the test
 	addSym := env.InternSymbol(values.NewSymbol("+"))
 	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable)
-	addFn := func(_ context.Context, mc *MachineContext) error {
+	addFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		mc.SetValue(values.NewInteger(a + b))

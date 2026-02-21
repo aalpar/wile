@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -24,7 +22,7 @@ import (
 
 // PrimMakeVector implements the (make-vector) primitive.
 // Creates a vector of the given size, optionally filled with a specified value.
-func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeVector(mc *machine.MachineContext) error {
 	size, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "make-vector")
 	if err != nil {
 		return err
@@ -46,20 +44,20 @@ func PrimMakeVector(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimVector implements the vector primitive.
-func PrimVector(_ context.Context, mc *machine.MachineContext) error {
+func PrimVector(mc *machine.MachineContext) error {
 	return helpers.ListToVector(mc, "vector")
 }
 
 // PrimVectorLength implements the vector-length primitive.
 // Returns the number of elements in a vector as an integer.
-func PrimVectorLength(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorLength(mc *machine.MachineContext) error {
 	return helpers.SequenceLength[*values.Vector](mc, values.ErrNotAVector, "vector-length")
 }
 
 // PrimVectorRef implements the vector-ref primitive.
 // Returns the element of a vector at the given index.
 // R7RS §6.8: The index must be an exact non-negative integer.
-func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorRef(mc *machine.MachineContext) error {
 	return helpers.SequenceRef(mc, values.ErrNotAVector, "vector-ref",
 		(*values.Vector).Get,
 	)
@@ -68,7 +66,7 @@ func PrimVectorRef(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorSet implements the vector-set! primitive.
 // Sets the element of a vector at the given index to a new value.
 // R7RS §6.8: The index must be an exact non-negative integer.
-func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorSet(mc *machine.MachineContext) error {
 	return helpers.SequenceSet(mc, values.ErrNotAVector, "vector-set!",
 		func(v *values.Vector, idx int, mc *machine.MachineContext) error {
 			return v.Set(idx, mc.Arg(2))
@@ -79,7 +77,7 @@ func PrimVectorSet(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorToList implements the vector->list primitive.
 // R7RS §6.8: (vector->list vector [start [end]])
 // Converts a vector (or subvector) to a list with the same elements in the same order.
-func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorToList(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector->list")
 	if err != nil {
 		return err
@@ -100,14 +98,14 @@ func PrimVectorToList(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimListToVector implements the list->vector primitive.
-func PrimListToVector(_ context.Context, mc *machine.MachineContext) error {
+func PrimListToVector(mc *machine.MachineContext) error {
 	return helpers.ListToVector(mc, "list->vector")
 }
 
 // PrimVectorCopy implements the vector-copy primitive.
 // R7RS §6.8: (vector-copy vector [start [end]])
 // Returns a newly allocated copy of the elements of vector between start and end.
-func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorCopy(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-copy")
 	if err != nil {
 		return err
@@ -130,7 +128,7 @@ func PrimVectorCopy(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorCopyTo implements the vector-copy! primitive.
 // R7RS §6.8: (vector-copy! to at from [start [end]])
 // Copies elements from vector from to vector to, starting at index at in to.
-func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorCopyTo(mc *machine.MachineContext) error {
 	to, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-copy!")
 	if err != nil {
 		return err
@@ -173,7 +171,7 @@ func PrimVectorCopyTo(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorFill implements the vector-fill! primitive.
 // R7RS §6.8: (vector-fill! vector fill [start [end]])
 // Sets the elements of vector between start and end to fill.
-func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorFill(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector-fill!")
 	if err != nil {
 		return err
@@ -197,7 +195,7 @@ func PrimVectorFill(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorAppend implements the vector-append primitive.
 // R7RS §6.8: (vector-append vector ...)
 // Returns a newly allocated vector whose elements are the concatenation of the elements of the given vectors.
-func PrimVectorAppend(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorAppend(mc *machine.MachineContext) error {
 	vectors, _, err := helpers.CollectVectors(mc.Arg(0), "vector-append")
 	if err != nil {
 		return err
@@ -222,7 +220,7 @@ func PrimVectorAppend(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorMap implements the vector-map primitive.
 // R7RS §6.8: (vector-map proc vector1 vector2 ...)
 // Returns a new vector containing the results of applying proc element-wise to the vectors.
-func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorMap(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -267,7 +265,7 @@ func PrimVectorMap(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorForEach implements the vector-for-each primitive.
 // R7RS §6.8: (vector-for-each proc vector1 vector2 ...)
 // Applies proc element-wise to the vectors for side effects.
-func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorForEach(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -310,7 +308,7 @@ func PrimVectorForEach(_ context.Context, mc *machine.MachineContext) error {
 // PrimVectorToString implements the vector->string primitive.
 // R7RS §6.8: (vector->string vector [start [end]])
 // Returns a string constructed from the characters in vector between start and end.
-func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
+func PrimVectorToString(mc *machine.MachineContext) error {
 	v, err := helpers.RequireArg[*values.Vector](mc, 0, values.ErrNotAVector, "vector->string")
 	if err != nil {
 		return err
@@ -339,7 +337,7 @@ func PrimVectorToString(_ context.Context, mc *machine.MachineContext) error {
 // PrimStringToVector implements the string->vector primitive.
 // R7RS §6.8: (string->vector string [start [end]])
 // Returns a vector containing the characters of string between start and end.
-func PrimStringToVector(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringToVector(mc *machine.MachineContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->vector")
 	if err != nil {
 		return err

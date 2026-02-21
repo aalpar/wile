@@ -75,7 +75,7 @@ func TestOperationBuildSyntaxList_Apply_Empty(t *testing.T) {
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationBuildSyntaxList(0)
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
@@ -99,7 +99,7 @@ func TestOperationBuildSyntaxList_Apply_WithSyntaxValues(t *testing.T) {
 	mc.evals.Push(stx2)
 
 	op := NewOperationBuildSyntaxList(2)
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
@@ -121,7 +121,7 @@ func TestOperationBuildSyntaxList_Apply_WithValues(t *testing.T) {
 	mc.evals.Push(values.NewInteger(2))
 
 	op := NewOperationBuildSyntaxList(2)
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)

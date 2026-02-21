@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -24,7 +22,7 @@ import (
 
 // PrimEqQ implements the eq? predicate for object identity.
 // Returns #t if both arguments are the same object (pointer equality).
-func PrimEqQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimEqQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	// eq? tests for object identity - same pointer or same immediate value
@@ -41,7 +39,7 @@ func PrimEqQ(_ context.Context, mc *machine.MachineContext) error {
 // Unlike eq?, eqv? treats equivalent numbers/characters as equal even if
 // they are different objects. Unlike equal?, eqv? does not recurse into
 // pairs, vectors, or strings.
-func PrimEqvQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimEqvQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	mc.SetValue(values.BoolToBoolean(helpers.Eqv(o0, o1)))
@@ -50,7 +48,7 @@ func PrimEqvQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimEqualQ implements the equal? predicate for structural equality.
 // Returns #t if both arguments have the same structure and values.
-func PrimEqualQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimEqualQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	mc.SetValue(values.BoolToBoolean(values.EqualTo(o0, o1)))
@@ -59,7 +57,7 @@ func PrimEqualQ(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimNot implements the not primitive.
 // Returns #t if the argument is #f, #f otherwise.
-func PrimNot(_ context.Context, mc *machine.MachineContext) error {
+func PrimNot(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	// In Scheme, only #f is false; everything else is true
 	mc.SetValue(values.BoolToBoolean(!values.ValueToBool(o)))
@@ -69,7 +67,7 @@ func PrimNot(_ context.Context, mc *machine.MachineContext) error {
 // PrimBooleanEq implements the boolean=? primitive.
 // R7RS §6.3: (boolean=? boolean1 boolean2 boolean3 ...)
 // Returns #t if all arguments are booleans and all are the same value.
-func PrimBooleanEq(_ context.Context, mc *machine.MachineContext) error {
+func PrimBooleanEq(mc *machine.MachineContext) error {
 	return helpers.ChainEquality(mc, "boolean=?",
 		func(v values.Value) error {
 			if v != values.TrueValue && v != values.FalseValue {
@@ -86,7 +84,7 @@ func PrimBooleanEq(_ context.Context, mc *machine.MachineContext) error {
 // PrimSymbolEq implements the symbol=? primitive.
 // R7RS §6.5: (symbol=? symbol1 symbol2 symbol3 ...)
 // Returns #t if all arguments are symbols and all are the same symbol.
-func PrimSymbolEq(_ context.Context, mc *machine.MachineContext) error {
+func PrimSymbolEq(mc *machine.MachineContext) error {
 	return helpers.ChainEquality(mc, "symbol=?",
 		func(v values.Value) error {
 			_, err := helpers.RequireType[*values.Symbol](v, values.ErrNotASymbol, "symbol=?")

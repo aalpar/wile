@@ -33,9 +33,9 @@ var (
 )
 
 // argConverter converts a Scheme value to a Go reflect.Value.
-// ctx and mc are provided for composite types (slices, callbacks) that need
-// VM access; scalar converters ignore both.
-type argConverter func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error)
+// mc is provided for composite types (slices, callbacks) that need
+// VM access; scalar converters ignore it.
+type argConverter func(mc *MachineContext, v values.Value) (reflect.Value, error)
 
 // retConverter converts a Go reflect.Value to a Scheme value.
 type retConverter func(v reflect.Value) values.Value
@@ -235,7 +235,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 	// implementers (e.g., *values.Integer) would cause reflect.Call to panic
 	// since the converter produces a *wrappedValue, not the concrete type.
 	if t == valueInterfaceType {
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			return reflect.ValueOf(wrapValue(v)), nil
 		}, nil
 	}
@@ -243,7 +243,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 	switch t.Kind() {
 	case reflect.Int64:
 		targetType := t
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				// Also accept floats that are exact integers.
@@ -261,7 +261,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 	case reflect.Int:
 		targetType := t
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			n, ok := values.ExactInteger(v)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "integer", v)
@@ -277,7 +277,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 	case reflect.Float64:
 		targetType := t
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			switch n := v.(type) {
 			case *values.Float:
 				return reflect.ValueOf(n.Value).Convert(targetType), nil
@@ -299,7 +299,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 	case reflect.String:
 		targetType := t
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			s, ok := v.(*values.String)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "string", v)
@@ -309,7 +309,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 
 	case reflect.Bool:
 		targetType := t
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			b, ok := v.(*values.Boolean)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "boolean", v)
@@ -344,7 +344,7 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 
 	// []byte special case: ByteVector.
 	if elemType.Kind() == reflect.Uint8 {
-		return func(_ context.Context, _ *MachineContext, v values.Value) (reflect.Value, error) {
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
 			bv, ok := v.(*values.ByteVector)
 			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "bytevector", v)
@@ -360,14 +360,14 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 	}
 
 	sliceType := t
-	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+	return func(mc *MachineContext, v values.Value) (reflect.Value, error) {
 		_, isTuple := v.(values.Tuple)
 		if !isTuple {
 			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		result := reflect.MakeSlice(sliceType, 0, 0)
-		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
-			converted, convErr := elemConv(innerCtx, mc, elem)
+		_, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+			converted, convErr := elemConv(mc, elem)
 			if convErr != nil {
 				return convErr
 			}
@@ -404,18 +404,18 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 	}
 
 	mapType := t
-	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+	return func(mc *MachineContext, v values.Value) (reflect.Value, error) {
 		ht, ok := v.(*values.Hashtable)
 		if !ok {
 			return reflect.Value{}, fmtArgError(name, pos, "hashtable", v)
 		}
 		result := reflect.MakeMap(mapType)
 		walkErr := ht.Entries(func(key values.Hashable, val values.Value) error {
-			goKey, keyErr := keyConv(ctx, mc, key)
+			goKey, keyErr := keyConv(mc, key)
 			if keyErr != nil {
 				return keyErr
 			}
-			goVal, valErr := valConv(ctx, mc, val)
+			goVal, valErr := valConv(mc, val)
 			if valErr != nil {
 				return valErr
 			}
@@ -467,13 +467,13 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 	}
 
 	structType := t
-	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+	return func(mc *MachineContext, v values.Value) (reflect.Value, error) {
 		_, isTuple := v.(values.Tuple)
 		if !isTuple {
 			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		result := reflect.New(structType).Elem()
-		_, walkErr := values.ForEach(ctx, v, func(innerCtx context.Context, _ int, _ bool, elem values.Value) error {
+		_, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			entry, ok := elem.(values.Tuple)
 			if !ok {
 				return values.WrapForeignErrorf(
@@ -493,7 +493,7 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 				// Extra keys are silently ignored.
 				return nil
 			}
-			converted, convErr := fi.conv(innerCtx, mc, entry.Cdr())
+			converted, convErr := fi.conv(mc, entry.Cdr())
 			if convErr != nil {
 				return convErr
 			}
@@ -575,7 +575,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 	}
 
 	funcType := t
-	return func(ctx context.Context, mc *MachineContext, v values.Value) (reflect.Value, error) {
+	return func(mc *MachineContext, v values.Value) (reflect.Value, error) {
 		// Validate that the value is a supported callback procedure type.
 		// Note: *machine.ComposableContinuation is callable via ApplyCallable, but is
 		// intentionally not accepted here as a Go callback target because it represents
@@ -602,13 +602,13 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 			}
 
 			if isParam {
-				return callbackParameterResult(ctx, mc, funcType, resultConv, hasErrorReturn, param, schemeArgs)
+				return callbackParameterResult(mc, funcType, resultConv, hasErrorReturn, param, schemeArgs)
 			}
 
 			// Invoke the Scheme procedure in a sub-context.
 			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
-			sub.SetContext(ctx)
+			sub.SetContext(mc.Context())
 
 			_, applyErr := sub.ApplyCallable(v, schemeArgs...)
 			if applyErr != nil {
@@ -621,7 +621,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 			}
 
 			// Build Go return values.
-			return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, sub.GetValue())
+			return callbackSuccessResult(mc, funcType, resultConv, hasErrorReturn, sub.GetValue())
 		})
 
 		return goFunc, nil
@@ -653,7 +653,6 @@ func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) 
 
 // callbackSuccessResult builds reflect return values from a successful callback invocation.
 func callbackSuccessResult(
-	ctx context.Context,
 	mc *MachineContext,
 	funcType reflect.Type,
 	resultConv argConverter,
@@ -664,7 +663,7 @@ func callbackSuccessResult(
 	out := make([]reflect.Value, numOut)
 
 	if resultConv != nil {
-		converted, convErr := resultConv(ctx, mc, schemeResult)
+		converted, convErr := resultConv(mc, schemeResult)
 		if convErr != nil {
 			wrapped := values.WrapForeignErrorWithCause(
 				values.ErrCallbackResultConversion, convErr,
@@ -705,7 +704,6 @@ func callbackSuccessResult(
 // Converter parameters are supported: when setting a value on a parameter
 // that has a converter, the converter closure is invoked via a VM sub-context.
 func callbackParameterResult(
-	ctx context.Context,
 	mc *MachineContext,
 	funcType reflect.Type,
 	resultConv argConverter,
@@ -715,13 +713,13 @@ func callbackParameterResult(
 ) []reflect.Value {
 	switch len(args) {
 	case 0:
-		return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, param.Value())
+		return callbackSuccessResult(mc, funcType, resultConv, hasErrorReturn, param.Value())
 	case 1:
 		newVal := args[0]
 		if param.HasConverter() {
 			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
-			sub.SetContext(ctx)
+			sub.SetContext(mc.Context())
 			_, applyErr := sub.Apply(param.Converter(), newVal)
 			if applyErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
@@ -733,7 +731,7 @@ func callbackParameterResult(
 			newVal = sub.GetValue()
 		}
 		param.SetValue(newVal)
-		return callbackSuccessResult(ctx, mc, funcType, resultConv, hasErrorReturn, values.Void)
+		return callbackSuccessResult(mc, funcType, resultConv, hasErrorReturn, values.Void)
 	default:
 		paramErr := values.WrapForeignErrorf(
 			values.ErrWrongNumberOfArguments,
@@ -912,7 +910,7 @@ func makeStructRetConverter(name string, t reflect.Type) (retConverter, error) {
 // makeWrapper generates the ForeignFunction closure that bridges between
 // the VM calling convention and the Go function.
 func (s *ffiSpec) makeWrapper() ForeignFunction {
-	return func(ctx context.Context, mc *MachineContext) (returnErr error) {
+	return func(mc *MachineContext) (returnErr error) {
 		defer func() {
 			r := recover()
 			if r == nil {
@@ -933,7 +931,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 
 		// Forward context if needed.
 		if s.hasContext {
-			args = append(args, reflect.ValueOf(ctx))
+			args = append(args, reflect.ValueOf(mc.Context()))
 		}
 
 		if s.isVariadic {
@@ -942,7 +940,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			fixedCount := s.paramCount - 1
 
 			for i := range fixedCount {
-				converted, err := s.argConvs[i](ctx, mc, mc.Arg(i))
+				converted, err := s.argConvs[i](mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}
@@ -958,8 +956,8 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
 			}
 
-			_, err := values.ForEach(ctx, varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
-				converted, convErr := variadicConv(ctx, mc, v)
+			_, err := values.ForEach(mc.Context(), varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
+				converted, convErr := variadicConv(mc, v)
 				if convErr != nil {
 					return convErr
 				}
@@ -971,7 +969,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			}
 		} else {
 			for i := range s.paramCount {
-				converted, err := s.argConvs[i](ctx, mc, mc.Arg(i))
+				converted, err := s.argConvs[i](mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}

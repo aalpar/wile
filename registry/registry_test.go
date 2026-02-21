@@ -15,7 +15,6 @@
 package registry
 
 import (
-	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -46,7 +45,7 @@ func TestRegistry_AddPrimitive(t *testing.T) {
 		Name:       "test-prim",
 		ParamCount: 1,
 		IsVariadic: false,
-		Impl:       func(_ context.Context, _ *machine.MachineContext) error { return nil },
+		Impl:       func(_ *machine.MachineContext) error { return nil },
 	}
 
 	r.AddPrimitive(spec, PhaseRuntime)
