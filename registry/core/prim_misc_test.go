@@ -322,6 +322,8 @@ func TestProcedurePredicateComprehensive(t *testing.T) {
 		{name: "continuation is procedure", code: `(call-with-current-continuation (lambda (k) (procedure? k)))`, expected: values.TrueValue},
 		{name: "case-lambda is procedure", code: `(procedure? (case-lambda ((x) x) ((x y) (+ x y))))`, expected: values.TrueValue},
 		{name: "closure with captured state", code: `(let ((x 10)) (procedure? (lambda () x)))`, expected: values.TrueValue},
+		{name: "parameter is procedure", code: `(procedure? (make-parameter 0))`, expected: values.TrueValue},
+		{name: "composable continuation is procedure", code: `(let ((tag (make-continuation-prompt-tag))) (call-with-continuation-prompt (lambda () (call-with-composable-continuation (lambda (k) (procedure? k)) tag)) tag (lambda (v) v)))`, expected: values.TrueValue},
 
 		// Non-procedure types
 		{name: "number", code: `(procedure? 5)`, expected: values.FalseValue},
