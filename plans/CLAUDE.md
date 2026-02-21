@@ -17,12 +17,10 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PROMPT_SUBCONTEXT_REFACTORING.md` | Sub-context unwinding helper extraction (Layer 1) | Low priority |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
-| `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | **Implemented** |
 | `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
 | `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
@@ -38,26 +36,12 @@ When investigating R7RS conformance issues:
 | `MODULE_DECOMPOSITION.md` | Split extensions into separate Go modules: core boundary, extraction order, go workspace | Proposed |
 | `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
 
-### Architectural Review
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Remaining: 2.1 deferred indefinitely; 4.2, 4.4 low-priority | Reference |
-| `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
-
-### Reference
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
-| `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
-| `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
-
 ## Developer Documentation (outside plans/)
 
 | File | Purpose |
 |------|---------|
 | `docs/dev/CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Performance optimization guide — explains why Apply/continuation/stack code is complex and what breaks if simplified |
+| `docs/dev/DEBUG_METHODOLOGY.md` | Systematic debug logging methodology and Go gotchas |
 
 ## Design Documents (outside plans/)
 
