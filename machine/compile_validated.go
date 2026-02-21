@@ -422,7 +422,11 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 		return err
 	}
 
-	// Phase 4b: Escape analysis — determine whether Apply can skip copying
+	// Phase 4b: Peephole optimization — remove dead instructions before
+	// escape analysis, since optimization may change which ops are present.
+	tpl.Optimize()
+
+	// Phase 4c: Escape analysis — determine whether Apply can skip copying
 	// the closure's environment frame. Safe when the body contains no
 	// OpSaveContinuation and no MakeClosure (the two paths that capture mc.env).
 	tpl.computeNoCopyApply()
@@ -613,7 +617,10 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 			return err
 		}
 
-		// Escape analysis — same as compileClosure Phase 4b.
+		// Peephole optimization — same as compileClosure Phase 4b.
+		tpl.Optimize()
+
+		// Escape analysis — same as compileClosure Phase 4c.
 		// TODO: the no-copy path reuses the closure's own EnvironmentFrame,
 		// which is unsafe if the same closure is invoked concurrently from
 		// multiple SRFI-18 threads. This applies to both compileClosure and

@@ -613,6 +613,7 @@ func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*Synt
 		NewOperationLoadLiteralByLiteralIndexImmediate(clausesIdx),
 		NewOperationSyntaxRulesTransform(), // New operation type needed
 	)
+	template.Optimize()
 
 	// Create closure with a local environment frame for the input parameter
 	// This is required because MachineContext.Apply expects LocalEnvironment() to be non-nil
