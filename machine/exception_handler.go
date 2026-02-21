@@ -20,6 +20,7 @@ import "github.com/aalpar/wile/values"
 // Handlers form a linked list (stack) for dynamic exception handling.
 // When an exception is raised, handlers are invoked in reverse order
 // of installation (most recent first).
+// DEAD?
 type ExceptionHandler struct {
 	handler values.Value      // The handler procedure (closure)
 	parent  *ExceptionHandler // Previous handler in chain
