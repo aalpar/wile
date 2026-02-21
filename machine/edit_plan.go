@@ -24,6 +24,15 @@ import (
 // Edits are applied in a single pass via Apply, which rewrites code,
 // sourceRefs, and branch offsets, then garbage-collects unreferenced
 // sideTable entries.
+//
+// Apply remaps these Arg categories automatically:
+//   - PC offsets: Branch, BranchOnFalseValue, SaveContinuation
+//   - SideTable indices: Complex (unreferenced entries are GC'd)
+//
+// These are stable across Apply and not touched:
+//   - Literal pool indices: LoadLiteral, LoadGlobal, StoreGlobal
+//   - Local indices: LoadLocal, StoreLocal
+//   - Stack offsets: PeekK
 type EditPlan struct {
 	tpl   *NativeTemplate
 	edits []edit
@@ -123,6 +132,9 @@ func validateEdits(edits []edit, codeLen int) {
 // instruction in a replaced range land at the replacement.
 func buildEditRemap(edits []edit, codeLen int) []int {
 	remap := make([]int, codeLen+1)
+	// delta tracks the cumulative shift: instructions inserted minus
+	// instructions deleted by all edits processed so far. A surviving
+	// instruction at old position i lands at new position i+delta.
 	delta := 0
 	editIdx := 0
 	i := 0
@@ -130,20 +142,33 @@ func buildEditRemap(edits []edit, codeLen int) []int {
 	for i <= codeLen {
 		if editIdx < len(edits) && i == edits[editIdx].start {
 			e := edits[editIdx]
+
+			// Every old position in the replaced range [start, end) maps
+			// to the same new position — the start of the replacement block.
+			// This is correct for branch targets: a branch into the middle
+			// of a replaced sequence lands at the replacement's first instruction.
 			newStart := i + delta
 			for j := e.start; j < e.end; j++ {
 				remap[j] = newStart
 			}
+
+			// Update delta: the replacement contributes len(replace) new
+			// instructions in place of (end-start) old ones.
 			delta += len(e.replace) - (e.end - e.start)
+
 			if e.end > e.start {
+				// Replacement or deletion: skip past the consumed range.
 				i = e.end
 			} else {
-				// Pure insertion at position i: i itself is not consumed.
+				// Pure insertion (start == end): no old instructions are
+				// consumed, so position i still exists and shifts by the
+				// updated delta.
 				remap[i] = i + delta
 				i++
 			}
 			editIdx++
 		} else {
+			// Surviving instruction — shifted by cumulative delta.
 			remap[i] = i + delta
 			i++
 		}

@@ -51,20 +51,24 @@ func (p *NativeTemplate) optimizeSubTemplates() {
 	}
 }
 
-// isLoadOp returns true for opcodes that write to the value register,
-// making a preceding LoadVoid dead.
-func isLoadOp(op OpCode) bool {
+// writesValueRegister returns true for opcodes that unconditionally write
+// to the value register without reading it first, making a preceding
+// LoadVoid dead.
+func writesValueRegister(op OpCode) bool {
 	return op == OpLoadVoid ||
 		op == OpLoadLiteral ||
 		op == OpLoadGlobal ||
-		op == OpLoadLocal
+		op == OpLoadLocal ||
+		op == OpPop ||
+		op == OpPull ||
+		op == OpPeekK
 }
 
 // markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for
 // LoadVoid instructions immediately followed by a load-family opcode.
 func markDeadLoadVoidEdits(code []Instruction, plan *EditPlan) {
 	for i := 0; i < len(code)-1; i++ {
-		if code[i].Op == OpLoadVoid && isLoadOp(code[i+1].Op) {
+		if code[i].Op == OpLoadVoid && writesValueRegister(code[i+1].Op) {
 			plan.Delete(i, i+1)
 		}
 	}
