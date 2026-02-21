@@ -91,7 +91,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Uses the expand-phase environment so the expression can access other
 	// define-for-syntax bindings and runtime primitives
 	expandEnv := p.env.Expand()
-	expander := NewExpanderTimeContinuation(p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 	result, err := p.expandCompileExecute(ctctx.ctx, ctctx, valueExpr, expandEnv, expander, "define-for-syntax")
 	if err != nil {
 		return err

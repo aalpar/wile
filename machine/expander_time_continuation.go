@@ -52,15 +52,22 @@ import (
 // It walks the syntax tree, detecting and expanding macro invocations.
 // The env field provides access to macro definitions (BindingTypeSyntax bindings).
 type ExpanderTimeContinuation struct {
+	ctx context.Context
 	env *environment.EnvironmentFrame
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
-func NewExpanderTimeContinuation(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
+func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
+		ctx: ctx,
 		env: env,
 	}
 	return q
+}
+
+// Context returns the context associated with this expander continuation.
+func (p *ExpanderTimeContinuation) Context() context.Context {
+	return p.ctx
 }
 
 // hasLocalVariableBinding checks if the symbol has a local variable binding
@@ -100,10 +107,10 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 }
 
 // ExpandExpression expands a syntax expression.
-func (p *ExpanderTimeContinuation) ExpandExpression(ctx context.Context, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case <-p.ctx.Done():
+		return nil, p.ctx.Err()
 	default:
 	}
 	var result syntax.SyntaxValue
@@ -115,47 +122,47 @@ func (p *ExpanderTimeContinuation) ExpandExpression(ctx context.Context, expr sy
 	case *syntax.SyntaxPair:
 		car := stx.SyntaxCar()
 		cdr := stx.SyntaxCdr()
-		result, err = p.ExpandSyntaxOrProcedureCall(ctx, car, cdr)
+		result, err = p.ExpandSyntaxOrProcedureCall(car, cdr)
 		if err != nil {
 			return nil, err
 		}
 		return result, nil
 	case *syntax.SyntaxSymbol:
-		return p.ExpandSymbol(ctx, stx)
+		return p.ExpandSymbol(stx)
 	case *syntax.SyntaxObject:
 		// Self-evaluating value (integer, boolean, string, etc.)
 		return stx, nil
 	}
-	return p.ExpandSelfEvaluating(ctx, expr)
+	return p.ExpandSelfEvaluating(expr)
 }
 
 // ExpandSymbol handles a symbol expression.
-func (p *ExpanderTimeContinuation) ExpandSymbol(_ context.Context, expr *syntax.SyntaxSymbol) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSymbol(expr *syntax.SyntaxSymbol) (syntax.SyntaxValue, error) {
 	return expr, nil
 }
 
 // ExpandSyntaxOrProcedureCall handles a list expression. The car may be a
 // symbol (possibly a macro), a nested pair (computed procedure), or a
 // self-evaluating value (like in quoted data or malformed expressions).
-func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(ctx context.Context, car syntax.SyntaxValue, cdr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(car syntax.SyntaxValue, cdr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	switch v := car.(type) {
 	case *syntax.SyntaxPair:
 		// Car is a pair - expand it (computed procedure), then expand arguments
-		newCar, err := p.ExpandExpression(ctx, v)
+		newCar, err := p.ExpandExpression(v)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "failed to expand car expression")
 		}
-		rest1, err := p.ExpandSyntaxArgumentList(ctx, cdr)
+		rest1, err := p.ExpandSyntaxArgumentList(cdr)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "failed to expand argument list")
 		}
 		return syntax.NewSyntaxCons(newCar, rest1, newCar.SourceContext()), nil
 	case *syntax.SyntaxSymbol:
 		// Car is a symbol - check if it's a macro, expand arguments either way
-		return p.ExpandSyntaxExpression(ctx, v, cdr)
+		return p.ExpandSyntaxExpression(v, cdr)
 	case *syntax.SyntaxObject:
 		// Car is a self-evaluating value - just expand arguments
-		rest1, err := p.ExpandSyntaxArgumentList(ctx, cdr)
+		rest1, err := p.ExpandSyntaxArgumentList(cdr)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "failed to expand argument list")
 		}
@@ -167,7 +174,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(ctx context.Conte
 }
 
 // ExpandSelfEvaluating handles self-evaluating expressions.
-func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(_ context.Context, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return expr, nil
 }
 
@@ -177,14 +184,14 @@ func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(_ context.Context, expr 
 //
 // This function looks up the primitive expander in the expand environment registry.
 // If found, it invokes the expander; otherwise returns the form unchanged.
-func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(ctx context.Context, primName string, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Look up the primitive expander in the registry
 	symVal := p.env.InternSymbol(values.NewSymbol(primName))
 	scopes := sym.Scopes()
 
 	pe := LookupPrimitiveExpander(p.env, symVal, scopes)
 	if pe != nil {
-		return pe.Expand(ctx, p, sym, expr)
+		return pe.Expand(p, sym, expr)
 	}
 	// Unknown primitive - return unchanged (safe default)
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
@@ -202,7 +209,7 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(ctx context.Context, prim
 //   - cond-expand: Feature expressions use special syntax, not macros
 //   - syntax, syntax-case, quasisyntax, unsyntax, unsyntax-splicing, with-syntax:
 //     Compile-time forms handled during compilation
-func (p *ExpanderTimeContinuation) expandUnchanged(_ context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
@@ -211,16 +218,16 @@ func (p *ExpanderTimeContinuation) expandUnchanged(_ context.Context, sym *synta
 // The let-syntax wrapper disappears - only the expanded body remains.
 //
 // R7RS §4.3.1: let-syntax establishes local macro definitions visible only in the body.
-func (p *ExpanderTimeContinuation) expandLetSyntax(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.expandLetSyntaxImpl(ctx, sym, expr, false)
+func (p *ExpanderTimeContinuation) expandLetSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetSyntaxImpl(sym, expr, false)
 }
 
 // expandLetrecSyntax fully expands letrec-syntax during the expansion phase.
 // Like let-syntax but transformers can reference each other (mutual recursion).
 //
 // R7RS §4.3.1: letrec-syntax is like let-syntax but with mutual visibility.
-func (p *ExpanderTimeContinuation) expandLetrecSyntax(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.expandLetSyntaxImpl(ctx, sym, expr, true)
+func (p *ExpanderTimeContinuation) expandLetrecSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetSyntaxImpl(sym, expr, true)
 }
 
 // expandLetSyntaxImpl implements both let-syntax and letrec-syntax expansion.
@@ -232,7 +239,7 @@ func (p *ExpanderTimeContinuation) expandLetrecSyntax(ctx context.Context, sym *
 // 3. Expands body expressions with the child environment
 // 4. Wraps in lambda if body contains defines (for scope isolation)
 // 5. Returns the expanded body - the let-syntax wrapper disappears
-func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, recursive bool) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, recursive bool) (syntax.SyntaxValue, error) {
 	formName := "let-syntax"
 	if recursive {
 		formName = "letrec-syntax"
@@ -369,7 +376,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 		}
 
 		// Compile the syntax-rules transformer
-		closure, err := CompileSyntaxRules(ctx, p.env, transformerPairExpr)
+		closure, err := CompileSyntaxRules(p.ctx, p.env, transformerPairExpr)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}
@@ -402,7 +409,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	}
 
 	// Create expander with child expand environment for body expansion
-	childExpander := NewExpanderTimeContinuation(childExpandEnv)
+	childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv)
 
 	// Expand all body expressions and check for defines
 	var expandedExprs []syntax.SyntaxValue
@@ -410,7 +417,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(ctx context.Context, sym 
 	current = scopedBodyPair
 	for !syntax.IsSyntaxEmptyList(current) {
 		expr := current.SyntaxCar()
-		expandedExpr, err := childExpander.ExpandExpression(ctx, expr)
+		expandedExpr, err := childExpander.ExpandExpression(expr)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "%s: failed to expand body expression", formName)
 		}
@@ -483,7 +490,7 @@ func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
 //
 // The identifier list (x) is currently unused but reserved for future use
 // (e.g., selective scope application or debugging).
-func (p *ExpanderTimeContinuation) expandWithBindingScope(ctx context.Context, _ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// expr is the cdr of (with-binding-scope (id ...) body)
 	// which is ((id ...) body)
 	pair, ok := expr.(*syntax.SyntaxPair)
@@ -536,12 +543,12 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ctx context.Context, _
 		}
 
 		// Continue expansion with the child environment
-		childExpander := NewExpanderTimeContinuation(childExpandEnv)
-		return childExpander.ExpandExpression(ctx, scopedBody)
+		childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv)
+		return childExpander.ExpandExpression(scopedBody)
 	}
 
 	// No bound identifiers - just continue with current environment
-	return p.ExpandExpression(ctx, scopedBody)
+	return p.ExpandExpression(scopedBody)
 }
 
 // expandSyntaxError handles the (syntax-error message arg ...) form.
@@ -555,7 +562,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(ctx context.Context, _
 //	  (syntax-rules ()
 //	    ((must-be-pair (a . b)) 'ok)
 //	    ((must-be-pair x) (syntax-error "expected a pair" x))))
-func (p *ExpanderTimeContinuation) expandSyntaxError(_ context.Context, _ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Extract message (required first argument)
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
@@ -606,7 +613,7 @@ func formatIrritants(irritants []string) string {
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
 // Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
 // ensuring macros defined in begin are available to subsequent forms.
-func (p *ExpanderTimeContinuation) expandBeginForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	exprPair, ok := expr.(*syntax.SyntaxPair)
 	if ok && !syntax.IsSyntaxEmptyList(exprPair) {
 		// Collect forms from the begin body
@@ -617,7 +624,7 @@ func (p *ExpanderTimeContinuation) expandBeginForm(ctx context.Context, sym *syn
 
 		// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
 		// This ensures macros defined in begin are available to subsequent forms
-		expandedForms, err := p.ExpandBodyWithDefineSyntax(ctx, forms)
+		expandedForms, err := p.ExpandBodyWithDefineSyntax(forms)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "failed to expand begin body")
 		}
@@ -633,14 +640,14 @@ func (p *ExpanderTimeContinuation) expandBeginForm(ctx context.Context, sym *syn
 }
 
 // expandIfForm expands (if test consequent [alternative])
-func (p *ExpanderTimeContinuation) expandIfForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
 	// Expand test
-	expandedTest, err := p.ExpandExpression(ctx, pair.SyntaxCar())
+	expandedTest, err := p.ExpandExpression(pair.SyntaxCar())
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "if: failed to expand test")
 	}
@@ -651,7 +658,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ctx context.Context, sym *syntax
 		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "if: missing consequent")
 	}
 
-	expandedConseq, err := p.ExpandExpression(ctx, cdrPair.SyntaxCar())
+	expandedConseq, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "if: failed to expand consequent")
 	}
@@ -665,7 +672,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ctx context.Context, sym *syntax
 	}
 
 	// Expand alternative
-	expandedAlt, err := p.ExpandExpression(ctx, altPair.SyntaxCar())
+	expandedAlt, err := p.ExpandExpression(altPair.SyntaxCar())
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "if: failed to expand alternative")
 	}
@@ -676,7 +683,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(ctx context.Context, sym *syntax
 }
 
 // expandSetForm expands (set! var value)
-func (p *ExpanderTimeContinuation) expandSetForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandSetForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
@@ -691,7 +698,7 @@ func (p *ExpanderTimeContinuation) expandSetForm(ctx context.Context, sym *synta
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	expandedValue, err := p.ExpandExpression(ctx, cdrPair.SyntaxCar())
+	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "set!: failed to expand value")
 	}
@@ -702,7 +709,7 @@ func (p *ExpanderTimeContinuation) expandSetForm(ctx context.Context, sym *synta
 }
 
 // expandDefineForm expands (define var value) or (define (name . args) body ...)
-func (p *ExpanderTimeContinuation) expandDefineForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
@@ -719,7 +726,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ctx context.Context, sym *sy
 	if !isSymbol {
 		// Function definition - first is (name args...)
 		// Expand the body expressions
-		expandedBody, err := p.ExpandSyntaxArgumentList(ctx, cdrPair)
+		expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "define: failed to expand body")
 		}
@@ -728,7 +735,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ctx context.Context, sym *sy
 	}
 
 	// Simple definition (define var value)
-	expandedValue, err := p.ExpandExpression(ctx, cdrPair.SyntaxCar())
+	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "define: failed to expand value")
 	}
@@ -745,7 +752,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(ctx context.Context, sym *sy
 //
 // R7RS §5.2: Import declarations must be processed before expressions that
 // use the imported bindings. For macros, this means processing during expansion.
-func (p *ExpanderTimeContinuation) expandImportForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// expr is the arguments after 'import': (<import-set> ...)
 	if syntax.IsSyntaxEmptyList(expr) {
 		// Empty import is valid, return unchanged
@@ -758,14 +765,14 @@ func (p *ExpanderTimeContinuation) expandImportForm(ctx context.Context, sym *sy
 	}
 
 	// Process each import set to load libraries and copy bindings
-	_, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, parseErr := parseImportSet(ctx, importSetExpr)
+	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		importSet, parseErr := parseImportSet(p.ctx, importSetExpr)
 		if parseErr != nil {
 			return parseErr
 		}
 
 		// Load the library
-		lib, loadErr := LoadLibrary(ctx, importSet.LibraryName, p.env)
+		lib, loadErr := LoadLibrary(p.ctx, importSet.LibraryName, p.env)
 		if loadErr != nil {
 			return values.WrapForeignErrorf(loadErr, "import: failed to load library %s",
 				importSet.LibraryName.SchemeString())
@@ -810,7 +817,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(ctx context.Context, sym *sy
 //
 // R7RS §5.3: Internal define-syntax forms are processed before expanding the
 // rest of the body, so locally-defined macros are visible to subsequent forms.
-func (p *ExpanderTimeContinuation) expandLambdaForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
@@ -857,8 +864,8 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(ctx context.Context, sym *sy
 	unwrappedExprs, wasBeginWrapped := unwrapBeginBodyWithFlag(bodyExprs)
 
 	// Expand body in the child environment, compiling define-syntax as encountered
-	childExpander := NewExpanderTimeContinuation(childEnv)
-	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(ctx, unwrappedExprs)
+	childExpander := NewExpanderTimeContinuation(p.ctx, childEnv)
+	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(unwrappedExprs)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "lambda: failed to expand body")
 	}
@@ -996,7 +1003,6 @@ func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
 // to all initializers. This enables forward references within macros - a macro
 // can reference a definition that appears later in the same body.
 func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
-	ctx context.Context,
 	forms []syntax.SyntaxValue,
 ) ([]syntax.SyntaxValue, error) {
 	// Pre-scan: Register placeholder bindings for all define/define-syntax forms
@@ -1018,7 +1024,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	// Now expand sequentially with all bindings visible
 	var result []syntax.SyntaxValue
 	for _, form := range forms {
-		expanded, err := p.ExpandExpression(ctx, form)
+		expanded, err := p.ExpandExpression(form)
 		if err != nil {
 			return nil, err
 		}
@@ -1026,7 +1032,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
 			pair := expanded.(*syntax.SyntaxPair)
-			err = compileDefineSyntaxFromSyntax(ctx, p.env, pair)
+			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair)
 			if err != nil {
 				return nil, err
 			}
@@ -1157,7 +1163,7 @@ func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
 }
 
 // expandCaseLambdaForm expands (case-lambda (formals body...) ...)
-func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandCaseLambdaForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
@@ -1185,7 +1191,7 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ctx context.Context, sym
 				// No body - keep clause as-is
 				expandedClauses = append(expandedClauses, clauseStx)
 			} else {
-				expandedBody, err := p.ExpandSyntaxArgumentList(ctx, cdrPair)
+				expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
 				if err != nil {
 					return nil, values.WrapForeignErrorf(err, "case-lambda: failed to expand clause body")
 				}
@@ -1228,7 +1234,7 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(ctx context.Context, sym
 //
 // The expanded result may itself contain macro invocations, so the caller
 // should recursively expand it.
-func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	sym0, ok := sym.Unwrap().(*values.Symbol) // Ensure sym is a symbol
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotASymbol, "expected a symbol for syntax, got %T", sym.Unwrap())
@@ -1256,21 +1262,21 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ctx context.Context, s
 		// Check if it's a macro binding
 		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
 			// This is a macro - invoke the transformer
-			return p.expandMacroInvocation(ctx, sym, expr, bnd)
+			return p.expandMacroInvocation(sym, expr, bnd)
 		}
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
 		symVal := p.env.InternSymbol(sym0)
 		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
 		if pe != nil {
-			return pe.Expand(ctx, p, sym, expr)
+			return pe.Expand(p, sym, expr)
 		}
 	}
 
 	// Regular procedure call - expand arguments (they might contain macro calls)
 	exprPair, ok := expr.(*syntax.SyntaxPair)
 	if ok && !syntax.IsSyntaxEmptyList(exprPair) {
-		expandedArgs, err := p.ExpandSyntaxArgumentList(ctx, exprPair)
+		expandedArgs, err := p.ExpandSyntaxArgumentList(exprPair)
 		if err != nil {
 			return nil, values.WrapForeignErrorf(err, "failed to expand arguments")
 		}
@@ -1281,13 +1287,13 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(ctx context.Context, s
 
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
-func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
 	mcls, ok := bnd.Value().(*MachineClosure)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "not a machine closure: %T", bnd.Value())
 	}
 	// Acquire a pooled machine context for the macro transformer.
-	mc := acquireMacroContext(ctx, mcls)
+	mc := acquireMacroContext(p.ctx, mcls)
 	defer ReleaseSubContext(mc)
 
 	// Set the expander context so the transformer can access the use-site environment.
@@ -1296,7 +1302,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 	// For example, in (let ((=> #f)) (cond (#t => 'ok))), the pattern matcher needs
 	// to see that => is bound by the lambda (from let expansion) to correctly
 	// determine that it shouldn't match the literal => in cond's pattern.
-	expanderCtx := NewExpanderContext(ctx, p.env, p)
+	expanderCtx := NewExpanderContext(p.env, p)
 	mc.SetExpanderContext(expanderCtx)
 
 	// For syntax-rules transformers, we pass the entire input form as an argument.
@@ -1327,7 +1333,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
 		// Recursively expand the result to handle nested macro calls
-		return p.ExpandExpression(ctx, stx)
+		return p.ExpandExpression(stx)
 	}
 	return nil, values.WrapForeignErrorf(values.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result)
 }
@@ -1337,7 +1343,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(ctx context.Context, sy
 // If the input is a macro call, it expands it once and returns (result, true, nil).
 // If the input is not a macro call, it returns (input, false, nil).
 // Unlike ExpandExpression, this does NOT recursively expand the result.
-func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	// Only pairs can be macro calls
 	stxPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -1385,7 +1391,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 	}
 
 	// Acquire a pooled machine context for the macro transformer.
-	mc := acquireMacroContext(ctx, mcls)
+	mc := acquireMacroContext(p.ctx, mcls)
 	defer ReleaseSubContext(mc)
 
 	// Build the input form
@@ -1426,7 +1432,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(ctx context.Context, expr syntax.S
 
 // ExpandSyntaxArgumentList expands each argument in the argument list.
 // It returns a new syntax list with the expanded arguments.
-func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context, args syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(args syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// instantiate result list
 	q := syntax.SyntaxEmptyList
 	// go through each argument and expand it
@@ -1434,8 +1440,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context,
 	// if any error, return error
 	// if not a proper list, return error
 	// finally return the new list
-	tail, err := syntax.SyntaxForEach(ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		v0, err := p.ExpandExpression(ctx, v)
+	tail, err := syntax.SyntaxForEach(p.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+		v0, err := p.ExpandExpression(v)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "failed to expand argument list")
 		}
@@ -1455,11 +1461,11 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(ctx context.Context,
 }
 
 // ExpandQuasiquote handles the expansion of quasiquoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuasiquote(_ context.Context, _ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandQuasiquote(_ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return nil, nil
 }
 
 // ExpandQuote handles the expansion of quoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuote(_ context.Context, _ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandQuote(_ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return nil, nil
 }

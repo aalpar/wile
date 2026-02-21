@@ -51,7 +51,7 @@ func evalScheme(t *testing.T, code string) values.Value {
 
 		// Expand
 		ectx := context.Background()
-		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+		expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Compile

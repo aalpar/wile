@@ -33,9 +33,9 @@ type dummyExpandTimeCallContext struct{} //nolint:unused
 
 func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewExpanderTimeContinuation(env)
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 	sym := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
-	result, err := cont.ExpandSymbol(context.Background(), sym)
+	result, err := cont.ExpandSymbol(sym)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,9 +46,9 @@ func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 
 func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewExpanderTimeContinuation(env)
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 	num := syntax.NewSyntaxObject(values.NewInteger(42), nil)
-	result, err := cont.ExpandSelfEvaluating(context.Background(), num)
+	result, err := cont.ExpandSelfEvaluating(num)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,10 +59,9 @@ func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 
 func TestExpandExpression_Symbol(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewExpanderTimeContinuation(env)
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 	sym := syntax.NewSyntaxSymbol("bar", nil)
-	cctx := context.Background()
-	result, err := cont.ExpandExpression(cctx, sym)
+	result, err := cont.ExpandExpression(sym)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestExpandExpression_List(t *testing.T) {
 	})
 	err := env.SetOwnGlobalValue(gi, mcls)
 	qt.Assert(t, err, qt.IsNil)
-	cont := NewExpanderTimeContinuation(env)
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 	lst0 := syntax.SyntaxList(nil,
 		syntax.NewSyntaxSymbol("bar", nil),
 		syntax.NewSyntaxObject(values.NewInteger(10), nil),
@@ -121,16 +120,14 @@ func TestExpandExpression_List(t *testing.T) {
 		syntax.NewSyntaxSymbol("list", nil),
 		syntax.NewSyntaxObject(values.NewInteger(20), nil),
 		syntax.NewSyntaxObject(values.NewInteger(10), nil))
-	cctx := context.Background()
-	result, err := cont.ExpandExpression(cctx, lst0)
+	result, err := cont.ExpandExpression(lst0)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.UnwrapAll(), valuestest.SchemeEquals, lst1.UnwrapAll())
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewExpanderTimeContinuation(env)
-	cctx := context.Background()
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 
 	// (case-lambda ((x) x) ((x y) (+ x y)))
 	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
@@ -146,7 +143,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 
 	clauses := syntax.SyntaxList(nil, clause1, clause2)
 
-	result, err := cont.expandCaseLambdaForm(cctx, sym, clauses)
+	result, err := cont.expandCaseLambdaForm(sym, clauses)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Result should be (case-lambda expanded-clauses...)
@@ -169,13 +166,12 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
-	cont := NewExpanderTimeContinuation(env)
-	cctx := context.Background()
+	cont := NewExpanderTimeContinuation(context.Background(), env)
 
 	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
 	emptyClauses := syntax.SyntaxList(nil)
 
-	result, err := cont.expandCaseLambdaForm(cctx, sym, emptyClauses)
+	result, err := cont.expandCaseLambdaForm(sym, emptyClauses)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return (case-lambda)

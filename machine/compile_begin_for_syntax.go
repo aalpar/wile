@@ -50,7 +50,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	expander := NewExpanderTimeContinuation(p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 
 	// Process each expression
 	current := exprPair

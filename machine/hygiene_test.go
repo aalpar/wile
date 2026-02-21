@@ -108,9 +108,8 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 	`)
 
 	// Expand the macro
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
 	}
@@ -151,9 +150,8 @@ func TestLetMacroExpansion(t *testing.T) {
 	// Test: (my-list 1 2 3) -> (list 1 2 3)
 	testForm := parseString(t, env, `(my-list 1 2 3)`)
 
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
 		t.Fatalf("failed to expand my-list: %v", err)
 	}
@@ -191,9 +189,8 @@ func TestLetMacroSimple(t *testing.T) {
 	// Test: (let1 ((x 1)) x) -> ((lambda (x) x) 1)
 	testForm := parseString(t, env, `(let1 ((x 1)) x)`)
 
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let1: %v", err)
 	}
@@ -228,9 +225,8 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	// Test with just one expression: (begin-with-first x) -> (begin x)
 	testForm := parseString(t, env, `(begin-with-first x)`)
 
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
 		t.Fatalf("failed to expand: %v", err)
 	}
@@ -242,7 +238,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 
 	// Test with multiple expressions: (begin-with-first x y z) -> (begin x y z)
 	testForm2 := parseString(t, env, `(begin-with-first x y z)`)
-	expanded2, err := etc.ExpandExpression(ectx, testForm2)
+	expanded2, err := etc.ExpandExpression(testForm2)
 	if err != nil {
 		t.Fatalf("failed to expand with multiple: %v", err)
 	}
@@ -282,9 +278,8 @@ func TestLetMacroFull(t *testing.T) {
 	// Test: (let ((x 1)) x) -> ((lambda (x) (begin x)) 1)
 	testForm := parseString(t, env, `(let ((x 1)) x)`)
 
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
 		t.Fatalf("failed to expand let: %v", err)
 	}
@@ -336,8 +331,7 @@ func TestScopeCreation(t *testing.T) {
 	//    during expansion (tested in the implementation)
 
 	// Test that we can expand using the ExpanderTimeContinuation
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
 
 	// Debug: Check what the binding actually contains
 	qt.Assert(t, binding.Value(), qt.Not(qt.IsNil))
@@ -354,7 +348,7 @@ func TestScopeCreation(t *testing.T) {
 		}
 	}()
 
-	expanded, err := etc.ExpandExpression(ectx, useForm)
+	expanded, err := etc.ExpandExpression(useForm)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Check that expansion succeeded
@@ -513,9 +507,8 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 					}
 
 					// Expand and compile each setup form
-					etc := machine.NewExpanderTimeContinuation(env)
-					ectx := context.Background()
-					expanded, err := etc.ExpandExpression(ectx, form)
+					etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+					expanded, err := etc.ExpandExpression(form)
 					if err != nil {
 						t.Fatalf("failed to expand setup: %v", err)
 					}
@@ -544,9 +537,8 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 			testForm := parseString(t, env, tt.code)
 
 			// Expand the test form
-			etc := machine.NewExpanderTimeContinuation(env)
-			ectx := context.Background()
-			expanded, err := etc.ExpandExpression(ectx, testForm)
+			etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+			expanded, err := etc.ExpandExpression(testForm)
 			if err != nil {
 				t.Fatalf("failed to expand: %v", err)
 			}
@@ -618,9 +610,8 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	// Test: (m k) should expand to 'bound-identifier=?
 	testForm := parseString(t, env, `(m k)`)
 
-	etc := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := etc.ExpandExpression(ectx, testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to expand (m k)"))
 
 	t.Logf("Expanded: %s", expanded.SchemeString())
@@ -666,8 +657,8 @@ func TestVectorInMacroTemplate(t *testing.T) {
 	testForm := parseString(t, env, testCode)
 
 	// Expand - this is the critical part that tests SyntaxVector.AddScope
-	etc := machine.NewExpanderTimeContinuation(env)
-	expanded, err := etc.ExpandExpression(context.Background(), testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
 
 	t.Logf("Expanded: %s", expanded.SchemeString())
@@ -719,8 +710,8 @@ func TestNestedVectorInMacroTemplate(t *testing.T) {
 	testForm := parseString(t, env, testCode)
 
 	// Expand - this tests that nested vectors propagate scopes correctly
-	etc := machine.NewExpanderTimeContinuation(env)
-	expanded, err := etc.ExpandExpression(context.Background(), testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
 
 	t.Logf("Expanded: %s", expanded.SchemeString())
@@ -763,8 +754,8 @@ func TestVectorWithIdentifiers(t *testing.T) {
 	testForm := parseString(t, env, testCode)
 
 	// Expand - this tests that vector elements receive intro scope
-	etc := machine.NewExpanderTimeContinuation(env)
-	expanded, err := etc.ExpandExpression(context.Background(), testForm)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
 
 	t.Logf("Expanded: %s", expanded.SchemeString())

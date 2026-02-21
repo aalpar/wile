@@ -56,8 +56,8 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 	}
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	expander := NewExpanderTimeContinuation(p.env)
-	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ctctx.ctx, forms)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "library: error expanding forms")
 	}
@@ -946,7 +946,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	// (since cond-expand is not expanded, we must expand the body here)
 	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(_ context.Context, _ int, hasNext bool, expr syntax.SyntaxValue) error {
 		// Expand the expression
-		expanded, expandErr := NewExpanderTimeContinuation(p.env).ExpandExpression(ctctx.ctx, expr)
+		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env).ExpandExpression(expr)
 		if expandErr != nil {
 			return values.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
 		}

@@ -28,7 +28,7 @@ import (
 // newExpanderEnv creates a test environment with expander support.
 func newExpanderEnv() (*environment.EnvironmentFrame, *ExpanderTimeContinuation) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	expander := NewExpanderTimeContinuation(env)
+	expander := NewExpanderTimeContinuation(context.Background(), env)
 	return env, expander
 }
 
@@ -39,7 +39,6 @@ func newExpanderEnv() (*environment.EnvironmentFrame, *ExpanderTimeContinuation)
 func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test with various form names that use expandUnchanged
@@ -48,7 +47,7 @@ func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol(formName, sctx)
 		body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(1), sctx))
 
-		result, err := expander.expandUnchanged(ectx, sym, body)
+		result, err := expander.expandUnchanged(sym, body)
 		c.Assert(err, qt.IsNil, qt.Commentf("form: %s", formName))
 		c.Assert(result, qt.IsNotNil, qt.Commentf("form: %s", formName))
 		// Result is (formName . body) — returned unchanged
@@ -65,14 +64,13 @@ func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 func TestExpandPrimitiveForm_KnownForm(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// "quote" has a registered primitive expander that returns unchanged
 	sym := syntax.NewSyntaxSymbolForSymbol(env.InternSymbol(values.NewSymbol("quote")), sctx)
 	body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(42), sctx))
 
-	result, err := expander.ExpandPrimitiveForm(ectx, "quote", sym, body)
+	result, err := expander.ExpandPrimitiveForm("quote", sym, body)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 }
@@ -81,13 +79,12 @@ func TestExpandPrimitiveForm_KnownForm(t *testing.T) {
 func TestExpandPrimitiveForm_UnknownForm(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	sym := syntax.NewSyntaxSymbol("not-a-real-primitive", sctx)
 	body := syntax.SyntaxList(sctx)
 
-	result, err := expander.ExpandPrimitiveForm(ectx, "not-a-real-primitive", sym, body)
+	result, err := expander.ExpandPrimitiveForm("not-a-real-primitive", sym, body)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 }
@@ -98,19 +95,18 @@ func TestExpandPrimitiveForm_UnknownForm(t *testing.T) {
 func TestExpandOnce_NonPair(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Symbol: not a macro call
 	sym := syntax.NewSyntaxSymbol("x", sctx)
-	result, expanded, err := expander.ExpandOnce(ectx, sym)
+	result, expanded, err := expander.ExpandOnce(sym)
 	c.Assert(err, qt.IsNil)
 	c.Assert(expanded, qt.IsFalse)
 	c.Assert(result, qt.Equals, sym)
 
 	// Self-evaluating: not a macro call
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
-	result, expanded, err = expander.ExpandOnce(ectx, lit)
+	result, expanded, err = expander.ExpandOnce(lit)
 	c.Assert(err, qt.IsNil)
 	c.Assert(expanded, qt.IsFalse)
 	c.Assert(result, qt.Equals, lit)
@@ -120,11 +116,10 @@ func TestExpandOnce_NonPair(t *testing.T) {
 func TestExpandOnce_EmptyList(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	empty := syntax.SyntaxList(sctx)
-	result, expanded, err := expander.ExpandOnce(ectx, empty)
+	result, expanded, err := expander.ExpandOnce(empty)
 	c.Assert(err, qt.IsNil)
 	c.Assert(expanded, qt.IsFalse)
 	c.Assert(result, qt.Equals, empty)
@@ -135,7 +130,6 @@ func TestExpandOnce_EmptyList(t *testing.T) {
 func TestExpandOnce_NonMacroCall(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (bindSymbolWithScopes 1 2) where bindSymbolWithScopes is not a macro
@@ -144,7 +138,7 @@ func TestExpandOnce_NonMacroCall(t *testing.T) {
 		syntax.NewSyntaxObject(values.NewInteger(1), sctx),
 		syntax.NewSyntaxObject(values.NewInteger(2), sctx),
 	)
-	result, expanded, err := expander.ExpandOnce(ectx, form)
+	result, expanded, err := expander.ExpandOnce(form)
 	c.Assert(err, qt.IsNil)
 	c.Assert(expanded, qt.IsFalse)
 	c.Assert(result, qt.Equals, form)
@@ -156,10 +150,9 @@ func TestExpandOnce_NonMacroCall(t *testing.T) {
 func TestExpanderContext_Expand(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
-	expanderCtx := NewExpanderContext(ectx, env, expander)
+	expanderCtx := NewExpanderContext(env, expander)
 
 	// Self-evaluating value should pass through
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
@@ -172,10 +165,9 @@ func TestExpanderContext_Expand(t *testing.T) {
 func TestExpanderContext_ExpandOnce(t *testing.T) {
 	c := qt.New(t)
 	env, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
-	expanderCtx := NewExpanderContext(ectx, env, expander)
+	expanderCtx := NewExpanderContext(env, expander)
 
 	// Non-macro call should return unchanged
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
@@ -191,7 +183,6 @@ func TestExpanderContext_ExpandOnce(t *testing.T) {
 func TestExpandSyntaxError(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (syntax-error "bad thing happened")
@@ -200,7 +191,7 @@ func TestExpandSyntaxError(t *testing.T) {
 		syntax.NewSyntaxObject(values.NewString("bad thing happened"), sctx),
 	)
 
-	result, err := expander.expandSyntaxError(ectx, sym, body)
+	result, err := expander.expandSyntaxError(sym, body)
 	c.Assert(result, qt.IsNil)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, `syntax-error: bad thing happened: .*`)
@@ -210,7 +201,6 @@ func TestExpandSyntaxError(t *testing.T) {
 func TestExpandSyntaxError_WithIrritants(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (syntax-error "bad" x y)
@@ -221,7 +211,7 @@ func TestExpandSyntaxError_WithIrritants(t *testing.T) {
 		syntax.NewSyntaxSymbol("y", sctx),
 	)
 
-	result, err := expander.expandSyntaxError(ectx, sym, body)
+	result, err := expander.expandSyntaxError(sym, body)
 	c.Assert(result, qt.IsNil)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, `syntax-error: bad: .*`)
@@ -231,13 +221,12 @@ func TestExpandSyntaxError_WithIrritants(t *testing.T) {
 func TestExpandSyntaxError_MissingMessage(t *testing.T) {
 	c := qt.New(t)
 	_, expander := newExpanderEnv()
-	ectx := context.Background()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	sym := syntax.NewSyntaxSymbol("syntax-error", sctx)
 	body := syntax.SyntaxList(sctx) // empty
 
-	_, err := expander.expandSyntaxError(ectx, sym, body)
+	_, err := expander.expandSyntaxError(sym, body)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, `syntax-error: missing message argument: .*`)
 }

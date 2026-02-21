@@ -75,6 +75,11 @@ func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool) C
 	}
 }
 
+// Context returns the context associated with this compile-time call context.
+func (p CompileTimeCallContext) Context() context.Context {
+	return p.ctx
+}
+
 // NotInTail returns a copy of the context with inTail set to false.
 // Use this when compiling sub-expressions that are not in tail position:
 //   - Function arguments

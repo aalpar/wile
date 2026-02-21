@@ -38,7 +38,7 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 	expander *ExpanderTimeContinuation,
 	errPrefix string,
 ) (values.Value, error) {
-	expandedExpr, err := expander.ExpandExpression(ctx, expr)
+	expandedExpr, err := expander.ExpandExpression(expr)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "%s: expansion failed", errPrefix)
 	}

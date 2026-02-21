@@ -463,7 +463,7 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
-	expanded, err := machine.NewExpanderTimeContinuation(p.env).ExpandExpression(ctx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, p.env).ExpandExpression(stx)
 	if err != nil {
 		return nil, &CompilationError{Message: "expansion error", Cause: err}
 	}
@@ -543,7 +543,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
 func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) error {
 	tpl := machine.NewEmptyNativeTemplate()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
 	if err != nil {
 		return err
 	}

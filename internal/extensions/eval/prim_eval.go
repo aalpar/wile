@@ -49,7 +49,7 @@ func PrimEval(mc *machine.MachineContext) error {
 	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 
 	// Expand the expression
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(mc.Context(), stx)
+	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: expansion error")
 	}
@@ -131,7 +131,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 		}
 
 		// Expand the expression
-		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(mc.Context(), stx)
+		expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
 		}
@@ -373,8 +373,8 @@ func PrimExpand(mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(env)
-	expanded, err := expander.ExpandExpression(mc.Context(), syntaxVal)
+	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
+	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand: expansion failed")
 	}
@@ -408,8 +408,8 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(env)
-	expanded, didExpand, err := expander.ExpandOnce(mc.Context(), syntaxVal)
+	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
+	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
@@ -446,7 +446,7 @@ func PrimCompile(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame()
 
 	// Step 1: Expand the syntax object
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(mc.Context(), syntaxVal)
+	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: expansion failed")
 	}

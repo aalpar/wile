@@ -354,8 +354,8 @@ func evalSchemeString(code string) (values.Value, error) {
 
 		// Expand
 		ectx := context.Background()
-		econt := NewExpanderTimeContinuation(env)
-		expanded, err := econt.ExpandExpression(ectx, stx)
+		econt := NewExpanderTimeContinuation(ectx, env)
+		expanded, err := econt.ExpandExpression(stx)
 		if err != nil {
 			return nil, err
 		}
@@ -620,8 +620,8 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 	tpl := NewNativeTemplate(0, 0, false)
 	cctx := NewCompiletimeContinuation(tpl, env)
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(env)
-	prog, err := econt.ExpandExpression(ectx, prog)
+	econt := NewExpanderTimeContinuation(ectx, env)
+	prog, err := econt.ExpandExpression(prog)
 	if err != nil {
 		return nil, err
 	}
@@ -945,14 +945,14 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 	// Test quote expansion
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(env)
-	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
+	econt := NewExpanderTimeContinuation(ectx, env)
+	expanded, err := econt.ExpandExpression(schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNotNil)
 
 	// Test quasiquote expansion
 	qqProg := values.List(values.NewSymbol("quasiquote"), values.List(values.NewSymbol("a"), values.NewSymbol("b")))
-	expanded2, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, qqProg))
+	expanded2, err := econt.ExpandExpression(schemeutil.DatumToSyntaxValue(context.Background(), sctx, qqProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded2, qt.IsNotNil)
 }
@@ -1139,8 +1139,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
-	econt := NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	econt := NewExpanderTimeContinuation(context.Background(), env)
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test ExpandQuote - currently returns nil, nil
@@ -1153,7 +1152,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		),
 		sctx,
 	)
-	expanded, err := econt.ExpandQuote(ectx, quoteExpr)
+	expanded, err := econt.ExpandQuote(quoteExpr)
 	// The function returns nil, nil (unimplemented)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNil)
@@ -1168,7 +1167,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		),
 		sctx,
 	)
-	expanded, err = econt.ExpandQuasiquote(ectx, qqExpr)
+	expanded, err = econt.ExpandQuasiquote(qqExpr)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNil)
 }
