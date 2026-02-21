@@ -1283,7 +1283,7 @@ func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
 	c := qt.New(t)
 	// Template with code + sideTable uses runIntegerDispatch.
 	tpl := NewNativeTemplate(0, 0, false)
-	op := NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+	op := NewOperationForeignFunctionCall(func(mc *MachineContext) error {
 		mc.SetValue(values.Void)
 		return nil
 	})
@@ -1304,7 +1304,7 @@ func TestRunDispatch_IntegerPathErrHalt(t *testing.T) {
 	// OpComplex dispatching to an InlinedOperation that returns errHalt
 	// should trigger errHalt, which Run translates to nil.
 	tpl := NewNativeTemplate(0, 0, false)
-	op := NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+	op := NewOperationForeignFunctionCall(func(mc *MachineContext) error {
 		return errHalt
 	})
 	instr := tpl.AppendSideTableOp(op)
@@ -1351,7 +1351,7 @@ func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	makeLoadVoidFF := func() *OperationForeignFunctionCall {
-		return NewOperationForeignFunctionCall(func(_ context.Context, mc *MachineContext) error {
+		return NewOperationForeignFunctionCall(func(mc *MachineContext) error {
 			mc.SetValue(values.Void)
 			return nil
 		})

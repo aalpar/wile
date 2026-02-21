@@ -453,7 +453,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, _ := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)
 	_ = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 
@@ -464,7 +464,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
@@ -486,7 +486,7 @@ func TestSourceRecording_Literal(t *testing.T) {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)

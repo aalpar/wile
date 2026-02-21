@@ -232,13 +232,13 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
 
 	// Create expander for the body environment (to expand macros like let)
-	bodyExpander := NewExpanderTimeContinuation(bodyEnv)
+	bodyExpander := NewExpanderTimeContinuation(ctctx.ctx, bodyEnv)
 
 	// If there's a fender, evaluate it and branch to cleanup on false
 	var fenderBranchIdx int
 	if fender != nil {
 		// Expand the fender first
-		expandedFender, err := bodyExpander.ExpandExpression(ctctx.ctx, fender)
+		expandedFender, err := bodyExpander.ExpandExpression(fender)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "error expanding fender")
 		}
@@ -253,7 +253,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	}
 
 	// Expand and compile the body
-	expandedBody, err := bodyExpander.ExpandExpression(ctctx.ctx, body)
+	expandedBody, err := bodyExpander.ExpandExpression(body)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "error expanding body")
 	}

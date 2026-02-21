@@ -36,7 +36,7 @@ func compileScheme(t *testing.T, code string) *NativeTemplate {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)
@@ -110,7 +110,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)
 	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
@@ -123,7 +123,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
@@ -140,7 +140,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, _ := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)
 	err := NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
@@ -152,7 +152,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
@@ -179,7 +179,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false, true)

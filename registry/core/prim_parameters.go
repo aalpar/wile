@@ -15,8 +15,6 @@
 package core
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -30,7 +28,7 @@ import (
 //
 // If a converter is provided, it is applied to the initial value and to
 // any value passed when setting the parameter.
-func PrimMakeParameter(ctx context.Context, mc *machine.MachineContext) error {
+func PrimMakeParameter(mc *machine.MachineContext) error {
 	init := mc.Arg(0)
 	rest := mc.Arg(1)
 

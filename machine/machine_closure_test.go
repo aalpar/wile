@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -141,7 +140,7 @@ func TestMachineClosureEqualToNil(t *testing.T) {
 // TestForeignClosureSchemeString tests ForeignClosure methods
 func TestForeignClosureSchemeString(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	fn := func(ctx context.Context, mc *MachineContext) error {
+	fn := func(mc *MachineContext) error {
 		return nil
 	}
 	cls := NewForeignClosure(env, 2, true, fn)

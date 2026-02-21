@@ -180,7 +180,7 @@ func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTime
 	expandEnv := p.env.Expand()
 
 	// Create expander for macro expansion
-	expander := NewExpanderTimeContinuation(p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 
 	// Process each expression
 	current := bodyPair
@@ -213,7 +213,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 	}
 
 	// Create expander for macro expansion
-	expander := NewExpanderTimeContinuation(p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 
 	// Collect all expressions
 	var exprs []syntax.SyntaxValue
@@ -234,7 +234,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		isLast := i == len(exprs)-1
 
 		// Expand the expression
-		expandedExpr, err := expander.ExpandExpression(ctctx.ctx, stxVal)
+		expandedExpr, err := expander.ExpandExpression(stxVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "eval-when: expansion failed")
 		}

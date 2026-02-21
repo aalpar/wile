@@ -156,6 +156,12 @@ func (p *Thread) ID() uint64 {
 	return p.id
 }
 
+// Context returns the context associated with this thread.
+// Returns nil if the thread has not been started.
+func (p *Thread) Context() context.Context {
+	return p.ctx
+}
+
 // Name returns the thread's name
 func (p *Thread) Name() string {
 	return p.name

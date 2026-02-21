@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/values"
 )
 
@@ -34,5 +32,5 @@ type Operation interface {
 // because the Run() loop delegates to them rather than inlining the logic.
 type InlinedOperation interface {
 	Operation
-	Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error)
+	Apply(mc *MachineContext) (*MachineContext, error)
 }

@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
@@ -31,7 +29,7 @@ func NewOperationMakeClosure() *OperationMakeClosure {
 	}
 }
 
-func (p *OperationMakeClosure) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error) {
 	compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
 	if !ok {
 		return mc, values.WrapForeignErrorf(values.ErrNotALocalEnvironmentFrame, "MakeClosure: expected environment frame on stack")

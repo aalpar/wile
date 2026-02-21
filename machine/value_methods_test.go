@@ -44,7 +44,7 @@ func TestParameter_Converter(t *testing.T) {
 	c.Assert(p.Converter(), qt.IsNil)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
-	conv := NewForeignClosure(env, 1, false, func(_ context.Context, mc *MachineContext) error {
+	conv := NewForeignClosure(env, 1, false, func(mc *MachineContext) error {
 		mc.SetValue(values.Void)
 		return nil
 	})
@@ -383,7 +383,7 @@ func TestMachineContinuation_PromptMethods(t *testing.T) {
 	cont.SetPromptTag(tag)
 	c.Assert(cont.PromptTag(), qt.Equals, tag)
 
-	handler := NewForeignClosure(env, 0, false, func(_ context.Context, mc *MachineContext) error {
+	handler := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
 		return nil
 	})
 	cont.SetPromptHandler(handler)
@@ -395,7 +395,7 @@ func TestNewMachineContinuationWithPrompt(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tag := NewPromptTag("p")
-	handler := NewForeignClosure(env, 0, false, func(_ context.Context, mc *MachineContext) error {
+	handler := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
 		return nil
 	})
 

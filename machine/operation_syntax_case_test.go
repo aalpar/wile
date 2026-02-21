@@ -195,7 +195,7 @@ func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationSyntaxCaseNoMatch()
-	_, err := op.Apply(context.Background(), mc)
+	_, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case: no matching clause")
@@ -296,7 +296,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	mc.SetValue(stx)
 
 	op := NewOperationStoreSyntaxCaseInput()
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
@@ -316,7 +316,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	mc.SetValue(values.NewInteger(42))
 
 	op := NewOperationStoreSyntaxCaseInput()
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
@@ -379,7 +379,7 @@ func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	}
 
 	op := NewOperationClearSyntaxCaseInput()
-	result, err := op.Apply(context.Background(), mc)
+	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)

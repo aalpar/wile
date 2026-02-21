@@ -15,7 +15,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 
@@ -29,7 +28,7 @@ var gensymCounter uint64
 
 // PrimIdentifierQ implements the identifier? predicate (R6RS).
 // Returns #t if the argument is a syntax object representing an identifier.
-func PrimIdentifierQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimIdentifierQ(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	_, ok := obj.(*syntax.SyntaxSymbol)
@@ -40,7 +39,7 @@ func PrimIdentifierQ(_ context.Context, mc *machine.MachineContext) error {
 // PrimSyntaxToDatum implements the syntax->datum procedure (R6RS).
 // Recursively unwraps a syntax object to its underlying datum, stripping
 // all lexical context information.
-func PrimSyntaxToDatum(_ context.Context, mc *machine.MachineContext) error {
+func PrimSyntaxToDatum(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
 
 	stx, ok := obj.(syntax.SyntaxValue)
@@ -59,7 +58,7 @@ func PrimSyntaxToDatum(_ context.Context, mc *machine.MachineContext) error {
 // If template-id is #f, the datum has no lexical context.
 //
 // (datum->syntax template-id datum) -> syntax-object
-func PrimDatumToSyntax(_ context.Context, mc *machine.MachineContext) error {
+func PrimDatumToSyntax(mc *machine.MachineContext) error {
 	templateArg := mc.Arg(0)
 	datum := mc.Arg(1)
 
@@ -118,7 +117,7 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 // with the same length. Each identifier is guaranteed to be unique.
 //
 // (generate-temporaries stx-list) -> list of identifiers
-func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) error {
+func PrimGenerateTemporaries(mc *machine.MachineContext) error {
 	arg := mc.Arg(0)
 
 	// H7 FIX: Check that argument is a list before type assertion
@@ -146,7 +145,7 @@ func PrimGenerateTemporaries(_ context.Context, mc *machine.MachineContext) erro
 // PrimBoundIdentifierEqualQ implements the bound-identifier=? predicate (R7RS).
 // Returns #t if two identifiers have the same name AND the same scope sets,
 // meaning they would create the same binding if used as binding occurrences.
-func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimBoundIdentifierEqualQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -176,7 +175,7 @@ func PrimBoundIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) er
 // PrimFreeIdentifierEqualQ implements the free-identifier=? predicate (R7RS).
 // Returns #t if two identifiers would resolve to the same binding in the current environment.
 // For unbound identifiers, returns #t if they have the same name.
-func PrimFreeIdentifierEqualQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimFreeIdentifierEqualQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 

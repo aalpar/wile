@@ -26,7 +26,7 @@ import (
 
 // PrimApply implements the apply primitive.
 // Applies a procedure to a list of arguments.
-func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
+func PrimApply(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	restVal := mc.Arg(1)
 
@@ -61,7 +61,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
-		v, err := finalTuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		v, err := finalTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
 			return nil
 		})
@@ -113,7 +113,7 @@ func PrimApply(ctx context.Context, mc *machine.MachineContext) error {
 // Sub-context mode (mc.Parent() == nil): Falls back to running the lambda in an isolated
 // sub-context. Used when call/cc is invoked inside another foreign function's sub-context
 // (e.g., inside apply or dynamic-wind) where there's no saved continuation to return to.
-func PrimCallCC(ctx context.Context, mc *machine.MachineContext) error {
+func PrimCallCC(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
 	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call/cc")
@@ -196,7 +196,7 @@ func newComposeAbortEscapeClosure(
 	capturingThreadID uint64,
 	capturingBarrierValid *machine.BarrierToken,
 ) *machine.MachineClosure {
-	fn := func(_ context.Context, innerMC *machine.MachineContext) error {
+	fn := func(innerMC *machine.MachineContext) error {
 		// Reject cross-thread continuation invocation
 		if innerMC.ThreadID() != capturingThreadID {
 			return values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
@@ -245,7 +245,7 @@ func newComposeAbortEscapeClosure(
 // R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
 // Before is called whenever execution enters the dynamic extent of the call to thunk,
 // and after is called whenever it exits.
-func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
+func PrimDynamicWind(mc *machine.MachineContext) error {
 	before := mc.Arg(0)
 	thunk := mc.Arg(1)
 	after := mc.Arg(2)
@@ -331,7 +331,7 @@ func PrimDynamicWind(ctx context.Context, mc *machine.MachineContext) error {
 // PrimValues implements the values primitive.
 // Returns multiple values as specified by R7RS. With no arguments returns no values.
 // With one or more arguments, returns all arguments as multiple values.
-func PrimValues(_ context.Context, mc *machine.MachineContext) error {
+func PrimValues(mc *machine.MachineContext) error {
 	restVal := mc.Arg(0)
 
 	// restVal is a list of all arguments (variadic)
@@ -359,7 +359,7 @@ func PrimValues(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimCallWithValues implements the call-with-values primitive.
 // Calls producer, passes results to consumer.
-func PrimCallWithValues(ctx context.Context, mc *machine.MachineContext) error {
+func PrimCallWithValues(mc *machine.MachineContext) error {
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 

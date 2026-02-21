@@ -58,8 +58,6 @@ R7RS library system is enabled — automatically importable from Scheme via
 package myext
 
 import (
-    "context"
-
     "github.com/aalpar/wile/machine"
     "github.com/aalpar/wile/registry"
     "github.com/aalpar/wile/values"
@@ -88,7 +86,7 @@ func addPrimitives(r *registry.Registry) error {
     return nil
 }
 
-func primDouble(ctx context.Context, mc *machine.MachineContext) error {
+func primDouble(mc *machine.MachineContext) error {
     n, ok := mc.Arg(0).(values.Number)
     if !ok {
         return values.WrapForeignErrorf(values.ErrNotANumber, "double: expected number")
@@ -298,16 +296,17 @@ primitives. The builder runs them in order, stopping on the first error.
 
 ## Writing Primitive Implementations
 
-A primitive implementation has the signature:
+A primitive implementation has the type `machine.ForeignFunction`:
 
 ```go
-func(ctx context.Context, mc *machine.MachineContext) error
+// machine.ForeignFunction
+func(mc *machine.MachineContext) error
 ```
 
 ### Accessing Arguments
 
 ```go
-func primAdd(ctx context.Context, mc *machine.MachineContext) error {
+func primAdd(mc *machine.MachineContext) error {
     a, ok := mc.Arg(0).(values.Number)
     if !ok {
         return values.WrapForeignErrorf(values.ErrNotANumber, "add: first argument")
@@ -329,7 +328,7 @@ a proper list of the excess arguments:
 
 ```go
 // (my-sum x ...) — ParamCount: 1, IsVariadic: true
-func primMySum(ctx context.Context, mc *machine.MachineContext) error {
+func primMySum(mc *machine.MachineContext) error {
     rest := mc.Arg(0) // proper list of all arguments
     // Walk the list...
 }

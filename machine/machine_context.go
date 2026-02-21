@@ -734,7 +734,7 @@ func (p *MachineContext) Run() error {
 
 		case OpComplex:
 			var err error
-			mc, err = mc.template.sideTable[instr.Arg].Apply(mc.ctx, mc)
+			mc, err = mc.template.sideTable[instr.Arg].Apply(mc)
 			if err != nil {
 				if errors.Is(err, errHalt) {
 					return nil

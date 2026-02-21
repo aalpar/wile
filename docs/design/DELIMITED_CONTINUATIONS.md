@@ -13,7 +13,7 @@ When Scheme captures a continuation with `call/cc`, the captured object represen
 Before this change, `map` and `for-each` were implemented in Go:
 
 ```go
-func PrimMap(ctx context.Context, mc *machine.MachineContext) error {
+func PrimMap(mc *machine.MachineContext) error {
     // ...
     for {
         // Collect one element from each list

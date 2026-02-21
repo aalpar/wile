@@ -189,7 +189,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			}
 
 			// Expand the syntax
-			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
+			expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "error expanding bootstrap macro")
 			}

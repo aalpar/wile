@@ -21,7 +21,7 @@
 │  Continuation     │  │  ┌─────────────────────────────────────┐     │
 │  (compiler)       │  │  │  for pc < len(ops) {                │     │
 │                   │  │  │    if ops&1023==0 → check ctx.Done()│     │
-│  ExpanderTime     │  │  │    ops[pc].Apply(ctx, mc) ──────────┤     │
+│  ExpanderTime     │  │  │    ops[pc].Apply(mc) ───────────────┤     │
 │  Continuation     │  │  │  }                                  │     │
 │  (expander)       │  │  └──────────────┬──────────────────────┘     │
 │                   │  │                 │                             │

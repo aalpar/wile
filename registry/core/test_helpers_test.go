@@ -80,7 +80,7 @@ func runSchemeCodeWithEnv(t *testing.T, env *environment.EnvironmentFrame, code 
 	}
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func runSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 	}
 
 	ectx := ctx
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}

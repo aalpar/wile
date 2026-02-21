@@ -574,7 +574,7 @@ func TestStringPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -604,7 +604,7 @@ func TestStringInputPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -638,7 +638,7 @@ func TestBytevectorPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -668,7 +668,7 @@ func TestBytevectorInputPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -750,7 +750,7 @@ func TestPortPredicates(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 
 			ectx := context.Background()
-			expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+			expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 			qt.Assert(t, err, qt.IsNil)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)

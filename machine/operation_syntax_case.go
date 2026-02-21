@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"context"
 	"fmt"
 	"sort"
 
@@ -62,7 +61,7 @@ func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	}
 }
 
-func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxCaseMatch) Apply(mctx *MachineContext) (*MachineContext, error) {
 	// Get the clause from value register
 	clauseVal := mctx.GetValue()
 	clause, ok := clauseVal.(*syntaxCaseClause)
@@ -81,7 +80,7 @@ func (p *OperationSyntaxCaseMatch) Apply(ctx context.Context, mctx *MachineConte
 	matcher := match.NewSyntaxMatcherWithEllipsisVars(clause.patternVars, clause.bytecode, clause.ellipsisVars)
 
 	// Try to match
-	err := matcher.Match(ctx, input)
+	err := matcher.Match(mctx.Context(), input)
 	if err != nil {
 		// Match failed
 		mctx.SetValue(values.FalseValue)
@@ -128,7 +127,7 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 	}
 }
 
-func (p *OperationBindPatternVars) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationBindPatternVars) Apply(mctx *MachineContext) (*MachineContext, error) {
 	sc := mctx.syntaxCase
 	if sc == nil || sc.bindings == nil {
 		return nil, mctx.Error("syntax-case: no pattern bindings available")
@@ -178,7 +177,7 @@ func NewOperationSyntaxCaseNoMatch() *OperationSyntaxCaseNoMatch {
 	}
 }
 
-func (p *OperationSyntaxCaseNoMatch) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxCaseNoMatch) Apply(mctx *MachineContext) (*MachineContext, error) {
 	return nil, mctx.Error("syntax-case: no matching clause")
 }
 
@@ -203,7 +202,7 @@ func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 	}
 }
 
-func (p *OperationSyntaxTemplateExpand) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxTemplateExpand) Apply(mctx *MachineContext) (*MachineContext, error) {
 	sc := mctx.syntaxCase
 	if sc == nil || sc.matcher == nil {
 		return nil, mctx.Error("syntax: no pattern matcher available for template expansion")
@@ -245,14 +244,14 @@ func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
 	}
 }
 
-func (p *OperationStoreSyntaxCaseInput) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationStoreSyntaxCaseInput) Apply(mctx *MachineContext) (*MachineContext, error) {
 	sc := ensureSyntaxCaseState(mctx)
 	val := mctx.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
 	if stx, ok := val.(syntax.SyntaxValue); ok {
 		sc.input = stx
 	} else {
-		sc.input = schemeutil.DatumToSyntaxValue(ctx, nil, val)
+		sc.input = schemeutil.DatumToSyntaxValue(mctx.Context(), nil, val)
 	}
 	mctx.pc++
 	return mctx, nil
@@ -275,7 +274,7 @@ func NewOperationClearSyntaxCaseInput() *OperationClearSyntaxCaseInput {
 	}
 }
 
-func (p *OperationClearSyntaxCaseInput) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationClearSyntaxCaseInput) Apply(mctx *MachineContext) (*MachineContext, error) {
 	mctx.syntaxCase = nil
 	mctx.pc++
 	return mctx, nil

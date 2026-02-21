@@ -326,7 +326,7 @@ func evalSchemeString(code string) (values.Value, error) {
 	env.MaybeCreateOwnGlobalBinding(listSym, environment.BindingTypeVariable)
 	listIdx := env.GetGlobalIndex(listSym)
 	if listIdx != nil {
-		listClosure := NewForeignClosure(env, 1, true, func(_ context.Context, mc *MachineContext) error {
+		listClosure := NewForeignClosure(env, 1, true, func(mc *MachineContext) error {
 			// The variadic args come as a list in the first local slot
 			o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 			mc.SetValue(o)
@@ -354,8 +354,8 @@ func evalSchemeString(code string) (values.Value, error) {
 
 		// Expand
 		ectx := context.Background()
-		econt := NewExpanderTimeContinuation(env)
-		expanded, err := econt.ExpandExpression(ectx, stx)
+		econt := NewExpanderTimeContinuation(ectx, env)
+		expanded, err := econt.ExpandExpression(stx)
 		if err != nil {
 			return nil, err
 		}
@@ -620,8 +620,8 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 	tpl := NewNativeTemplate(0, 0, false)
 	cctx := NewCompiletimeContinuation(tpl, env)
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(env)
-	prog, err := econt.ExpandExpression(ectx, prog)
+	econt := NewExpanderTimeContinuation(ectx, env)
+	prog, err := econt.ExpandExpression(prog)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register call-depth primitive: returns current continuation stack depth
 	callDepthSym := env.InternSymbol(values.NewSymbol("call-depth"))
 	env.MaybeCreateOwnGlobalBinding(callDepthSym, environment.BindingTypeVariable)
-	callDepthFn := func(ctx context.Context, mc *MachineContext) error {
+	callDepthFn := func(mc *MachineContext) error {
 		depth := mc.CallDepth()
 		if depth > maxCallDepth {
 			maxCallDepth = depth
@@ -720,7 +720,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register subtraction primitive: (- a b)
 	subSym := env.InternSymbol(values.NewSymbol("-"))
 	env.MaybeCreateOwnGlobalBinding(subSym, environment.BindingTypeVariable)
-	subFn := func(ctx context.Context, mc *MachineContext) error {
+	subFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		mc.SetValue(values.NewInteger(a - b))
@@ -732,7 +732,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register equality primitive: (= a b)
 	eqSym := env.InternSymbol(values.NewSymbol("="))
 	env.MaybeCreateOwnGlobalBinding(eqSym, environment.BindingTypeVariable)
-	eqFn := func(ctx context.Context, mc *MachineContext) error {
+	eqFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		if a == b {
@@ -945,14 +945,14 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 	// Test quote expansion
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(env)
-	expanded, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
+	econt := NewExpanderTimeContinuation(ectx, env)
+	expanded, err := econt.ExpandExpression(schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNotNil)
 
 	// Test quasiquote expansion
 	qqProg := values.List(values.NewSymbol("quasiquote"), values.List(values.NewSymbol("a"), values.NewSymbol("b")))
-	expanded2, err := econt.ExpandExpression(ectx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, qqProg))
+	expanded2, err := econt.ExpandExpression(schemeutil.DatumToSyntaxValue(context.Background(), sctx, qqProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded2, qt.IsNotNil)
 }
@@ -1139,8 +1139,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
-	econt := NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	econt := NewExpanderTimeContinuation(context.Background(), env)
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Test ExpandQuote - currently returns nil, nil
@@ -1153,7 +1152,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		),
 		sctx,
 	)
-	expanded, err := econt.ExpandQuote(ectx, quoteExpr)
+	expanded, err := econt.ExpandQuote(quoteExpr)
 	// The function returns nil, nil (unimplemented)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNil)
@@ -1168,7 +1167,7 @@ func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
 		),
 		sctx,
 	)
-	expanded, err = econt.ExpandQuasiquote(ectx, qqExpr)
+	expanded, err = econt.ExpandQuasiquote(qqExpr)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNil)
 }

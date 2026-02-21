@@ -42,7 +42,6 @@ package machine
 // Reference: "Binding as Sets of Scopes" (Flatt, 2016)
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/aalpar/wile/environment"
@@ -102,7 +101,7 @@ func NewOperationSyntaxRulesTransform() *OperationSyntaxRulesTransform {
 	}
 }
 
-func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineContext, error) {
 	// Get the clauses from the value register
 	clausesVal := mctx.GetValue()
 	if clausesVal == nil {
@@ -185,7 +184,7 @@ func (p *OperationSyntaxRulesTransform) Apply(ctx context.Context, mctx *Machine
 	// Try each clause in order
 	for i, clause := range clauses {
 		// Try to match the pattern with R7RS binding checking
-		err := clause.matcher.MatchWithBindingChecker(ctx, input, bindingChecker)
+		err := clause.matcher.MatchWithBindingChecker(mctx.Context(), input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site

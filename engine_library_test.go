@@ -132,7 +132,7 @@ func (m *mockLibraryNamerExtension) AddToRegistry(r *registry.Registry) error {
 	r.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "custom-fn",
 		ParamCount: 1,
-		Impl: machine.ForeignFunction(func(_ context.Context, mc *machine.MachineContext) error {
+		Impl: machine.ForeignFunction(func(mc *machine.MachineContext) error {
 			mc.SetValue(nil)
 			return nil
 		}),

@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
@@ -27,21 +25,18 @@ import (
 type ExpanderContext struct {
 	env          *environment.EnvironmentFrame
 	expander     *ExpanderTimeContinuation
-	ctx          context.Context
 	introScope   *syntax.Scope // Introduction scope for current macro expansion
 	useSiteScope *syntax.Scope // Use-site scope for binding forms
 }
 
 // NewExpanderContext creates a new ExpanderContext.
 func NewExpanderContext(
-	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	expander *ExpanderTimeContinuation,
 ) *ExpanderContext {
 	return &ExpanderContext{
 		env:      env,
 		expander: expander,
-		ctx:      ctx,
 	}
 }
 
@@ -58,7 +53,7 @@ func (p *ExpanderContext) Expand(stx syntax.SyntaxValue) (syntax.SyntaxValue, er
 	if p == nil {
 		return stx, nil
 	}
-	return p.expander.ExpandExpression(p.ctx, stx)
+	return p.expander.ExpandExpression(stx)
 }
 
 // ExpandOnce performs a single step of macro expansion.
@@ -69,7 +64,7 @@ func (p *ExpanderContext) ExpandOnce(stx syntax.SyntaxValue) (syntax.SyntaxValue
 	if p == nil {
 		return stx, false, nil
 	}
-	return p.expander.ExpandOnce(p.ctx, stx)
+	return p.expander.ExpandOnce(stx)
 }
 
 // IntroductionScope returns the introduction scope for the current macro expansion.

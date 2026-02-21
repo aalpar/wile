@@ -150,8 +150,8 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // subsequent body expressions.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	expander := NewExpanderTimeContinuation(p.env)
-	expandedForms, err := expander.ExpandBodyWithDefineSyntax(ctctx.ctx, forms)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
 	}

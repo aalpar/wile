@@ -54,9 +54,8 @@ func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 // newTopLevelThunkExt creates a top-level thunk from an expression using the expander and compiler
 func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFrame) (*machine.MachineContinuation, error) {
 	// Expand the expression
-	econt := machine.NewExpanderTimeContinuation(env)
-	ectx := context.Background()
-	expanded, err := econt.ExpandExpression(ectx, sv)
+	econt := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := econt.ExpandExpression(sv)
 	if err != nil {
 		return nil, err
 	}

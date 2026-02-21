@@ -15,7 +15,6 @@
 package math
 
 import (
-	"context"
 	"math"
 	"math/big"
 	"math/cmplx"
@@ -45,7 +44,7 @@ func ensureInexactDecimal(s string) string {
 }
 
 // PrimExp implements the (exp z) primitive.
-func PrimExp(_ context.Context, mc *machine.MachineContext) error {
+func PrimExp(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -56,7 +55,7 @@ func PrimExp(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimLog implements the (log z) and (log z1 z2) primitives.
-func PrimLog(_ context.Context, mc *machine.MachineContext) error {
+func PrimLog(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
 	z, err := helpers.ToComplex128(o)
@@ -80,7 +79,7 @@ func PrimLog(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSin implements the (sin z) primitive.
-func PrimSin(_ context.Context, mc *machine.MachineContext) error {
+func PrimSin(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -91,7 +90,7 @@ func PrimSin(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCos implements the (cos z) primitive.
-func PrimCos(_ context.Context, mc *machine.MachineContext) error {
+func PrimCos(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -102,7 +101,7 @@ func PrimCos(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimTan implements the (tan z) primitive.
-func PrimTan(_ context.Context, mc *machine.MachineContext) error {
+func PrimTan(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -113,7 +112,7 @@ func PrimTan(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAsin implements the (asin z) primitive.
-func PrimAsin(_ context.Context, mc *machine.MachineContext) error {
+func PrimAsin(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -124,7 +123,7 @@ func PrimAsin(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAcos implements the (acos z) primitive.
-func PrimAcos(_ context.Context, mc *machine.MachineContext) error {
+func PrimAcos(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
@@ -135,7 +134,7 @@ func PrimAcos(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAtan implements the (atan z) and (atan y x) primitives.
-func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
+func PrimAtan(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -168,7 +167,7 @@ func PrimAtan(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §6.2.6: The branch cut for sqrt lies along the negative real axis,
 // continuous with quadrant II. This means for values on the negative real axis
 // (including those with -0.0 imaginary part), sqrt returns positive imaginary.
-func PrimSqrt(_ context.Context, mc *machine.MachineContext) error {
+func PrimSqrt(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -227,7 +226,7 @@ func complexSqrtR7RS(z complex128) complex128 {
 }
 
 // PrimExpt implements the (expt) primitive.
-func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
+func PrimExpt(mc *machine.MachineContext) error {
 	base := mc.Arg(0)
 	exp := mc.Arg(1)
 	baseNum, ok := base.(values.Number)
@@ -387,7 +386,7 @@ func PrimExpt(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimSquare implements the (square) primitive.
-func PrimSquare(_ context.Context, mc *machine.MachineContext) error {
+func PrimSquare(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	n, ok := o.(values.Number)
 	if !ok {
@@ -406,8 +405,8 @@ type realNumberOp struct {
 	rationalOp   func(*values.Rational) values.Value
 }
 
-func makeRealNumberPrimitive(op realNumberOp) func(context.Context, *machine.MachineContext) error {
-	return func(_ context.Context, mc *machine.MachineContext) error {
+func makeRealNumberPrimitive(op realNumberOp) func(*machine.MachineContext) error {
+	return func(mc *machine.MachineContext) error {
 		o := mc.Arg(0)
 		switch v := o.(type) {
 		case *values.Integer:
@@ -472,7 +471,7 @@ var PrimRound = makeRealNumberPrimitive(realNumberOp{
 //
 // R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
 // Works on any real numbers, returning exact results when both inputs are exact.
-func PrimFloorDiv(_ context.Context, mc *machine.MachineContext) error {
+func PrimFloorDiv(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -503,7 +502,7 @@ func PrimFloorDiv(_ context.Context, mc *machine.MachineContext) error {
 // PrimFloorQuotient implements the (floor-quotient) primitive.
 //
 // R7RS §6.2.6: Returns the floor quotient for any real numbers.
-func PrimFloorQuotient(_ context.Context, mc *machine.MachineContext) error {
+func PrimFloorQuotient(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -533,7 +532,7 @@ func PrimFloorQuotient(_ context.Context, mc *machine.MachineContext) error {
 // PrimFloorRemainder implements the (floor-remainder) primitive.
 //
 // R7RS §6.2.6: Returns the floor remainder for any real numbers.
-func PrimFloorRemainder(_ context.Context, mc *machine.MachineContext) error {
+func PrimFloorRemainder(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -565,7 +564,7 @@ func PrimFloorRemainder(_ context.Context, mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns two values: truncate quotient and truncate remainder.
 // Works on any real numbers, returning exact results when both inputs are exact.
-func PrimTruncateDiv(_ context.Context, mc *machine.MachineContext) error {
+func PrimTruncateDiv(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -596,7 +595,7 @@ func PrimTruncateDiv(_ context.Context, mc *machine.MachineContext) error {
 // PrimTruncateQuotient implements the truncate-quotient primitive.
 //
 // R7RS §6.2.6: Returns the truncate quotient for any real numbers.
-func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
+func PrimTruncateQuotient(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -626,7 +625,7 @@ func PrimTruncateQuotient(_ context.Context, mc *machine.MachineContext) error {
 // PrimTruncateRemainder implements the truncate-remainder primitive.
 //
 // R7RS §6.2.6: Returns the truncate remainder for any real numbers.
-func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error {
+func PrimTruncateRemainder(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 
@@ -655,7 +654,7 @@ func PrimTruncateRemainder(_ context.Context, mc *machine.MachineContext) error 
 }
 
 // PrimFiniteQ implements the (finite?) primitive.
-func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimFiniteQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
@@ -665,7 +664,7 @@ func PrimFiniteQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimInfiniteQ implements the (infinite?) primitive.
-func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimInfiniteQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
@@ -675,7 +674,7 @@ func PrimInfiniteQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimNanQ implements the nan? primitive.
-func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimNanQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))
@@ -685,7 +684,7 @@ func PrimNanQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimNumerator implements the numerator primitive.
-func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumerator(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -723,7 +722,7 @@ func PrimNumerator(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimDenominator implements the (denominator) primitive.
-func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
+func PrimDenominator(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -761,7 +760,7 @@ func PrimDenominator(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimRationalize implements the (rationalize) primitive.
-func PrimRationalize(_ context.Context, mc *machine.MachineContext) error {
+func PrimRationalize(mc *machine.MachineContext) error {
 	xArg := mc.Arg(0)
 	yArg := mc.Arg(1)
 
@@ -886,7 +885,7 @@ func floorRat(r *big.Rat) *big.Rat {
 //
 // R7RS §6.2.6: Returns two non-negative exact integers s and r where
 // n = s² + r and n < (s+1)².
-func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
+func PrimExactIntegerSqrt(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 
 	switch v := o.(type) {
@@ -924,7 +923,7 @@ func PrimExactIntegerSqrt(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimMakeRectangular implements make-rectangular.
 // R7RS §6.2.6: If both arguments are exact, the result is exact.
-func PrimMakeRectangular(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakeRectangular(mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	i := mc.Arg(1)
 
@@ -1060,7 +1059,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 }
 
 // PrimMakePolar implements the (make-polar) primitive.
-func PrimMakePolar(_ context.Context, mc *machine.MachineContext) error {
+func PrimMakePolar(mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	theta := mc.Arg(1)
 	var mag, angle float64
@@ -1091,7 +1090,7 @@ func PrimMakePolar(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimRealPart implements the (real-part) primitive.
-func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
+func PrimRealPart(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	c, ok := o.(values.ComplexNumber)
 	if ok {
@@ -1116,7 +1115,7 @@ func PrimRealPart(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimImagPart implements the (imag-part) primitive.
-func PrimImagPart(_ context.Context, mc *machine.MachineContext) error {
+func PrimImagPart(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	c, ok := o.(values.ComplexNumber)
 	if ok {
@@ -1137,7 +1136,7 @@ func PrimImagPart(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimMagnitude implements the (magnitude) primitive.
-func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
+func PrimMagnitude(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
@@ -1172,7 +1171,7 @@ func PrimMagnitude(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimAngle implements the angle primitive.
-func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
+func PrimAngle(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
@@ -1219,7 +1218,7 @@ func PrimAngle(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimNumberToString implements the number->string primitive.
-func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
+func PrimNumberToString(mc *machine.MachineContext) error {
 	n := mc.Arg(0)
 	rest := mc.Arg(1)
 	radix := 10
@@ -1277,7 +1276,7 @@ func PrimNumberToString(_ context.Context, mc *machine.MachineContext) error {
 // R7RS §7.1.1: The string may contain prefix directives #b, #o, #d, #x
 // (radix) and #e, #i (exactness), in either order, up to one of each.
 // A radix prefix in the string overrides the radix argument.
-func PrimStringToNumber(_ context.Context, mc *machine.MachineContext) error {
+func PrimStringToNumber(mc *machine.MachineContext) error {
 	s := mc.Arg(0)
 	rest := mc.Arg(1)
 	str, ok := s.(*values.String)

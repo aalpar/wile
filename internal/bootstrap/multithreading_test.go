@@ -38,7 +38,7 @@ func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (v
 	}
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}

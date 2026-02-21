@@ -32,7 +32,7 @@ import (
 
 // PrimEval implements the (eval) primitive.
 // Evaluates an expression in a given environment.
-func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
+func PrimEval(mc *machine.MachineContext) error {
 	expr := mc.Arg(0)
 	envSpec := mc.Arg(1)
 
@@ -46,17 +46,17 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Convert datum to syntax value
 	sctx := syntax.NewZeroValueSourceContext()
-	stx := schemeutil.DatumToSyntaxValue(ctx, sctx, expr)
+	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 
 	// Expand the expression
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: expansion error")
 	}
 
 	// Compile the expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+	cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "eval: compilation error")
@@ -64,7 +64,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Run the compiled code in a sub-context
 	cont := machine.NewMachineContinuation(nil, tpl, env)
-	sub := machine.NewMachineContext(ctx, cont)
+	sub := machine.NewMachineContext(mc.Context(), cont)
 	sub.SetExceptionHandler(mc.ExceptionHandler())
 	sub.SetMaxCallDepth(mc.MaxCallDepth())
 	sub.SetThread(mc.Thread())
@@ -79,7 +79,7 @@ func PrimEval(ctx context.Context, mc *machine.MachineContext) error {
 
 // PrimLoad implements the (load) primitive.
 // Loads and evaluates a Scheme source file.
-func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
+func PrimLoad(mc *machine.MachineContext) error {
 	filenameVal := mc.Arg(0)
 	filename, err := helpers.RequireType[*values.String](filenameVal, values.ErrNotAString, "load")
 	if err != nil {
@@ -122,7 +122,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 	// Read and evaluate each expression
 	var lastValue = values.Void
 	for {
-		stx, err := p.ReadSyntax(ctx)
+		stx, err := p.ReadSyntax(mc.Context())
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -131,14 +131,14 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 		}
 
 		// Expand the expression
-		expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, stx)
+		expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
 		}
 
 		// Compile the expression
 		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+		cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
@@ -146,7 +146,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 
 		// Run the compiled code
 		cont := machine.NewMachineContinuation(nil, tpl, env)
-		sub := machine.NewMachineContext(ctx, cont)
+		sub := machine.NewMachineContext(mc.Context(), cont)
 		sub.SetExceptionHandler(mc.ExceptionHandler())
 		sub.SetMaxCallDepth(mc.MaxCallDepth())
 		sub.SetThread(mc.Thread())
@@ -165,7 +165,7 @@ func PrimLoad(ctx context.Context, mc *machine.MachineContext) error {
 // PrimCurrentLoadPath implements the (current-load-path) primitive.
 // Returns the absolute path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
-func PrimCurrentLoadPath(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame().TopLevel()
 	stack := env.LoadPathStack()
 	if stack == nil {
@@ -185,7 +185,7 @@ func PrimCurrentLoadPath(_ context.Context, mc *machine.MachineContext) error {
 // PrimCurrentLoadDirectory implements the (current-load-directory) primitive.
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
-func PrimCurrentLoadDirectory(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame().TopLevel()
 	stack := env.LoadPathStack()
 	if stack == nil {
@@ -205,7 +205,7 @@ func PrimCurrentLoadDirectory(_ context.Context, mc *machine.MachineContext) err
 // PrimCurrentLoadDepth implements the (current-load-depth) primitive.
 // Returns the current load stack depth (number of nested loads), or #f if
 // no stack exists. Useful for debugging nested load chains.
-func PrimCurrentLoadDepth(_ context.Context, mc *machine.MachineContext) error {
+func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame().TopLevel()
 	stack := env.LoadPathStack()
 	if stack == nil {
@@ -220,7 +220,7 @@ func PrimCurrentLoadDepth(_ context.Context, mc *machine.MachineContext) error {
 
 // PrimInteractionEnvironment implements the (interaction-environment) primitive.
 // Returns the REPL environment (the current top-level environment).
-func PrimInteractionEnvironment(_ context.Context, mc *machine.MachineContext) error {
+func PrimInteractionEnvironment(mc *machine.MachineContext) error {
 	// Return the current top-level environment directly
 	topLevel := mc.EnvironmentFrame().TopLevelEnv()
 	topLevel.Name = "interaction-environment"
@@ -230,7 +230,7 @@ func PrimInteractionEnvironment(_ context.Context, mc *machine.MachineContext) e
 
 // PrimSchemeReportEnvironment implements the (scheme-report-environment) primitive.
 // Returns R5RS env.
-func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) error {
+func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "scheme-report-environment")
 	if err != nil {
@@ -253,7 +253,7 @@ func PrimSchemeReportEnvironment(_ context.Context, mc *machine.MachineContext) 
 
 // PrimNullEnvironment implements the null-environment primitive.
 // Returns an empty R5RS environment with no bindings.
-func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
+func PrimNullEnvironment(mc *machine.MachineContext) error {
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "null-environment")
 	if err != nil {
@@ -283,7 +283,7 @@ func PrimNullEnvironment(_ context.Context, mc *machine.MachineContext) error {
 //   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
 //   - (environment '(for-template (scheme base)))     ; Phase -1
 //   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
-func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
+func PrimEnvironment(mc *machine.MachineContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
 
@@ -307,15 +307,15 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 	}
 
 	// Process each import spec
-	v, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, specVal values.Value) error {
+	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
-		importSet, err := machine.ParseImportSetFromDatum(ctx, specVal)
+		importSet, err := machine.ParseImportSetFromDatum(mc.Context(), specVal)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "environment: invalid import spec")
 		}
 
 		// Load the library (uses callerEnv for registry access)
-		lib, err := machine.LoadLibrary(ctx, importSet.LibraryName, callerEnv)
+		lib, err := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "environment: failed to load %s",
 				importSet.LibraryName.SchemeString())
@@ -351,7 +351,7 @@ func PrimEnvironment(ctx context.Context, mc *machine.MachineContext) error {
 // PrimExpand implements the expand primitive.
 // Fully expands a syntax object and returns the expanded syntax.
 // (expand stx) -> expanded-stx
-func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
+func PrimExpand(mc *machine.MachineContext) error {
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -373,8 +373,8 @@ func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(env)
-	expanded, err := expander.ExpandExpression(ctx, syntaxVal)
+	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
+	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand: expansion failed")
 	}
@@ -386,7 +386,7 @@ func PrimExpand(ctx context.Context, mc *machine.MachineContext) error {
 // Performs a single step of macro expansion and returns both the
 // expanded syntax and a boolean indicating whether expansion occurred.
 // (expand-once stx) -> (values expanded-stx did-expand?)
-func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
+func PrimExpandOnce(mc *machine.MachineContext) error {
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -408,8 +408,8 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(env)
-	expanded, didExpand, err := expander.ExpandOnce(ctx, syntaxVal)
+	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
+	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
@@ -429,7 +429,7 @@ func PrimExpandOnce(ctx context.Context, mc *machine.MachineContext) error {
 // This is the final phase hook, completing the pipeline:
 //
 //	expand -> compile -> (execute via calling the returned thunk)
-func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
+func PrimCompile(mc *machine.MachineContext) error {
 	expr := mc.Arg(0)
 
 	// Accept either syntax object or datum
@@ -439,14 +439,14 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	} else {
 		// Convert datum to syntax value
 		sctx := syntax.NewZeroValueSourceContext()
-		syntaxVal = schemeutil.DatumToSyntaxValue(ctx, sctx, expr)
+		syntaxVal = schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 	}
 
 	// Get the environment for expansion and compilation
 	env := mc.EnvironmentFrame()
 
 	// Step 1: Expand the syntax object
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ctx, syntaxVal)
+	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(syntaxVal)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: expansion failed")
 	}
@@ -454,7 +454,7 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 	// Step 2: Compile to bytecode template
 	// Create a thunk template (0 params, 0 locals, not variadic)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+	cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return values.WrapForeignErrorf(err, "compile: compilation failed")
@@ -482,7 +482,7 @@ func PrimCompile(ctx context.Context, mc *machine.MachineContext) error {
 //
 // If the binding is a CompileTimeValue, it returns the unwrapped value.
 // This allows define-for-syntax bindings to be accessed from macro transformers.
-func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
+func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
@@ -527,7 +527,7 @@ func PrimSyntaxLocalValue(_ context.Context, mc *machine.MachineContext) error {
 //
 // When syntax-local-value retrieves a CompileTimeValue, it automatically unwraps
 // it to return the underlying value.
-func PrimMakeCompileTimeValue(ctx context.Context, mc *machine.MachineContext) error {
+func PrimMakeCompileTimeValue(mc *machine.MachineContext) error {
 	v := mc.Arg(0)
 
 	ctv := values.NewCompileTimeValue(v)
@@ -551,7 +551,7 @@ func PrimMakeCompileTimeValue(ctx context.Context, mc *machine.MachineContext) e
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with an introduction scope).
-func PrimSyntaxLocalIntroduce(_ context.Context, mc *machine.MachineContext) error {
+func PrimSyntaxLocalIntroduce(mc *machine.MachineContext) error {
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -597,7 +597,7 @@ func PrimSyntaxLocalIntroduce(_ context.Context, mc *machine.MachineContext) err
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with a use-site scope).
-func PrimSyntaxLocalIdentifierAsBinding(_ context.Context, mc *machine.MachineContext) error {
+func PrimSyntaxLocalIdentifierAsBinding(mc *machine.MachineContext) error {
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)

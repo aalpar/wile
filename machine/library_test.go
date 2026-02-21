@@ -753,7 +753,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 
 	// Create compiler and expand the library definition
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	// Compile the library - this should succeed with forward references

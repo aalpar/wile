@@ -48,7 +48,7 @@
 //
 // Go functions are exposed as [ForeignFunction] implementations:
 //
-//	type ForeignFunction func(context.Context, *MachineContext) error
+//	type ForeignFunction func(*MachineContext) error
 //
 // The [ForeignClosure] type wraps these for the VM.
 package machine

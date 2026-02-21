@@ -18,7 +18,6 @@
 package all
 
 import (
-	"context"
 	"unicode"
 
 	"github.com/aalpar/wile/machine"
@@ -27,42 +26,42 @@ import (
 )
 
 // PrimCharCiEqVariadic implements the variadic char-ci=? primitive.
-func PrimCharCiEqVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharCiEqVariadic(mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci=?", func(a, b rune) bool {
 		return simpleCaseFold(a) == simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiLtVariadic implements the variadic char-ci<? primitive.
-func PrimCharCiLtVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharCiLtVariadic(mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
 		return simpleCaseFold(a) < simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiGtVariadic implements the variadic char-ci>? primitive.
-func PrimCharCiGtVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharCiGtVariadic(mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci>?", func(a, b rune) bool {
 		return simpleCaseFold(a) > simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiLeVariadic implements the variadic char-ci<=? primitive.
-func PrimCharCiLeVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharCiLeVariadic(mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci<=?", func(a, b rune) bool {
 		return simpleCaseFold(a) <= simpleCaseFold(b)
 	})
 }
 
 // PrimCharCiGeVariadic implements the variadic char-ci>=? primitive.
-func PrimCharCiGeVariadic(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharCiGeVariadic(mc *machine.MachineContext) error {
 	return helpers.CharCompareVariadic(mc, "char-ci>=?", func(a, b rune) bool {
 		return simpleCaseFold(a) >= simpleCaseFold(b)
 	})
 }
 
 // PrimCharAlphabeticQ tests if a character is alphabetic.
-func PrimCharAlphabeticQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharAlphabeticQ(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-alphabetic?")
 	if err != nil {
 		return err
@@ -72,7 +71,7 @@ func PrimCharAlphabeticQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharNumericQ tests if a character is numeric.
-func PrimCharNumericQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharNumericQ(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-numeric?")
 	if err != nil {
 		return err
@@ -82,7 +81,7 @@ func PrimCharNumericQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharWhitespaceQ tests if a character is whitespace.
-func PrimCharWhitespaceQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharWhitespaceQ(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-whitespace?")
 	if err != nil {
 		return err
@@ -92,7 +91,7 @@ func PrimCharWhitespaceQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharUpperCaseQ tests if a character is uppercase.
-func PrimCharUpperCaseQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharUpperCaseQ(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upper-case?")
 	if err != nil {
 		return err
@@ -102,7 +101,7 @@ func PrimCharUpperCaseQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharLowerCaseQ tests if a character is lowercase.
-func PrimCharLowerCaseQ(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharLowerCaseQ(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-lower-case?")
 	if err != nil {
 		return err
@@ -112,7 +111,7 @@ func PrimCharLowerCaseQ(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharUpcase returns the uppercase version of a character.
-func PrimCharUpcase(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharUpcase(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upcase")
 	if err != nil {
 		return err
@@ -122,7 +121,7 @@ func PrimCharUpcase(_ context.Context, mc *machine.MachineContext) error {
 }
 
 // PrimCharDowncase returns the lowercase version of a character.
-func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharDowncase(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-downcase")
 	if err != nil {
 		return err
@@ -134,7 +133,7 @@ func PrimCharDowncase(_ context.Context, mc *machine.MachineContext) error {
 // PrimCharFoldcase returns the case-folded version of a character.
 // R7RS §6.6: Returns the simple Unicode case-folded version of the character.
 // Simple case folding maps each character to exactly one character.
-func PrimCharFoldcase(_ context.Context, mc *machine.MachineContext) error {
+func PrimCharFoldcase(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-foldcase")
 	if err != nil {
 		return err
@@ -166,7 +165,7 @@ func simpleCaseFold(r rune) rune {
 // PrimDigitValue implements the (digit-value) primitive.
 // R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
 // according to Unicode, or #f if it is not a decimal digit.
-func PrimDigitValue(_ context.Context, mc *machine.MachineContext) error {
+func PrimDigitValue(mc *machine.MachineContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "digit-value")
 	if err != nil {
 		return err

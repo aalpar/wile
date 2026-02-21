@@ -15,7 +15,6 @@
 package helpers
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -49,7 +48,7 @@ func TestMakeTypePredicate(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg)
-			err := isInteger(context.Background(), mc)
+			err := isInteger(mc)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -82,7 +81,7 @@ func TestMakeNumericPredicate(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg)
-			err := isExact(context.Background(), mc)
+			err := isExact(mc)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -112,7 +111,7 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg)
-			err := isExact(context.Background(), mc)
+			err := isExact(mc)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
 		})

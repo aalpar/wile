@@ -222,4 +222,4 @@ Other
 
 ### Other
 - [ ] MachineContext `Error` should be `Errorf`.  I cannot find an instance that does not use `fmt.Sprintf`.  Migrate `Error(` to `Errorf` that takes a `form` and a `args ...` paramter that feed into `fmt.Sprintf` inside `Errorf(`
-- [ ] Prim functions (eg. PrimSyntaxLocalIntroduce) already have a context through MachineContext.  Supplying a context here is redundant.  Remove initial context.Context parameter from the Prim function.  Add a type for `func(context.Context, *MachineContext)`.
+- [x] Prim functions (eg. PrimSyntaxLocalIntroduce) already have a context through MachineContext.  Supplying a context here is redundant.  Remove initial context.Context parameter from the Prim function.  Add a type for `func(context.Context, *MachineContext)`.  Done: `context.Context` removed from `ForeignFunction`, `InlinedOperation.Apply`, all `Prim*` functions, and `argConverter`. Type `machine.ForeignFunction` defined as `func(mc *MachineContext) error`.

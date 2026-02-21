@@ -28,10 +28,9 @@ func TestNewExpanderContext(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
-	expander := NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	expander := NewExpanderTimeContinuation(context.Background(), env)
 
-	ctx := NewExpanderContext(ectx, env, expander)
+	ctx := NewExpanderContext(env, expander)
 
 	c.Assert(ctx, qt.IsNotNil)
 	c.Assert(ctx.Env(), qt.Equals, env)
@@ -41,10 +40,9 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
-	expander := NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	expander := NewExpanderTimeContinuation(context.Background(), env)
 
-	ctx := NewExpanderContext(ectx, env, expander)
+	ctx := NewExpanderContext(env, expander)
 
 	// Initially nil
 	c.Assert(ctx.IntroductionScope(), qt.IsNil)
@@ -59,10 +57,9 @@ func TestExpanderContext_UseSiteScope(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewTopLevelEnvironment().Runtime()
-	expander := NewExpanderTimeContinuation(env)
-	ectx := context.Background()
+	expander := NewExpanderTimeContinuation(context.Background(), env)
 
-	ctx := NewExpanderContext(ectx, env, expander)
+	ctx := NewExpanderContext(env, expander)
 
 	// Initially nil
 	c.Assert(ctx.UseSiteScope(), qt.IsNil)

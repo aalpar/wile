@@ -49,7 +49,7 @@ func runSchemeCodeWithEnvForShadowTest(t *testing.T, env *environment.Environmen
 	}
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(env).ExpandExpression(ectx, stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}

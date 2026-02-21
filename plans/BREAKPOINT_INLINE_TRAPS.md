@@ -49,12 +49,12 @@ type OperationBreakpointTrap struct {
     Debugger *Debugger    // debugger to notify
 }
 
-func (p *OperationBreakpointTrap) Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error) {
+func (p *OperationBreakpointTrap) Apply(mc *MachineContext) (*MachineContext, error) {
     if p.BP.Enabled {
         p.BP.HitCount++
         p.Debugger.TriggerBreak(mc, p.BP)
     }
-    return p.Original.Apply(ctx, mc)
+    return p.Original.Apply(mc)
 }
 ```
 

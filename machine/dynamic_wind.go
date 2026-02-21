@@ -73,7 +73,7 @@ func (p *WindingStack) Pop() *DynamicWindFrame {
 	return frame
 }
 
-// FindCommonPrefix finds the longest common prefix of two winding stacks.
+// FindCommonWindingPrefix finds the longest common prefix of two winding stacks.
 // Returns the index where they diverge (0 means no common frames).
 func FindCommonWindingPrefix(current, target WindingStack) int {
 	minLen := min(len(current), len(target))
