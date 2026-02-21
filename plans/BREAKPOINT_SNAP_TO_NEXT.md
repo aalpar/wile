@@ -21,10 +21,10 @@ If no operation carries that source line, the breakpoint is dead.
 `NativeTemplate` maintains a parallel array:
 
 ```
-operations[i]  <->  sourceRefs[i]  ->  sourceTable[ref]  ->  SourceContext{file, line, col}
+code[i]  <->  sourceRefs[i]  ->  sourceTable[ref]  ->  SourceContext{file, line, col}
 ```
 
-`SourceAt(pc)` does a direct O(1) lookup. Multiple operations often share the same source line. Optimization can remove operations, leaving gaps in which source lines are represented.
+`SourceAt(pc)` does a direct O(1) lookup. Multiple instructions often share the same source line. Optimization can remove instructions, leaving gaps in which source lines are represented.
 
 ### When Lines Disappear
 
@@ -84,7 +84,7 @@ New method on `NativeTemplate`:
 // that line in this template.
 func (p *NativeTemplate) NearestSourceLine(file string, targetLine int) int {
     nearest := -1
-    for i := range p.operations {
+    for i := range p.code {
         src := p.sourceTable[p.sourceRefs[i]]
         if src == nil || src.File != file {
             continue
@@ -142,7 +142,7 @@ New method on `NativeTemplate` (same as Option B):
 ```go
 func (p *NativeTemplate) NearestSourceLine(file string, targetLine int) int {
     nearest := -1
-    for i := range p.operations {
+    for i := range p.code {
         src := p.sourceTable[p.sourceRefs[i]]
         if src == nil || src.File != file {
             continue

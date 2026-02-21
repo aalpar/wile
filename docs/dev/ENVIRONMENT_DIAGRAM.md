@@ -10,7 +10,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│                         Engine (wile/engine.go)                               │
+│                         Engine (engine.go)                                    │
 │  topLevel ──→ TopLevelEnvironment                                             │
 │  env ────────→ runtime EnvironmentFrame (phase 0)                             │
 │  registry ──→ Registry (Go-side primitive registration)                       │
@@ -228,4 +228,4 @@ MachineContext
 | Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via TLE | Shared | Syntax compilers |
 | Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via TLE | Shared | `lambda`, `let`, `letrec` |
 | Library env | `TLE.NewChildRuntime()` | Own global + phases | Via shared TLE | Own registry | `(import ...)` |
-| let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via TLE | Shared | `let-syntax`, `letrec-syntax`Z |
+| let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via TLE | Shared | `let-syntax`, `letrec-syntax` |

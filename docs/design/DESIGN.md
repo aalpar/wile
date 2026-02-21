@@ -11,18 +11,19 @@ Wile implements R7RS `syntax-rules` macros using Flatt's "sets of scopes" hygien
 │  Layer 3: Hygiene Layer                                     │
 │  - Scope creation and propagation                           │
 │  - Variable resolution with scope matching                  │
-│  - Files: syntax/scope_utils.go, machine/operation_syntax_  │
-│           rules_transform.go                                │
+│  - Files: internal/syntax/scope_utils.go,                   │
+│    machine/operation_syntax_rules_transform.go              │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 2: Syntax Adapter                                    │
 │  - Bridges syntax objects ↔ raw values                      │
 │  - Preserves syntax for captured pattern variables          │
-│  - File: match/syntax_adapter.go                            │
+│  - File: internal/match/syntax_adapter.go                   │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 1: Pattern Matching VM                               │
 │  - Unhygienic bytecode-based pattern matcher                │
 │  - Captures bindings, handles ellipsis repetition           │
-│  - Files: match/match.go, match/syntax_compiler.go          │
+│  - Files: internal/match/match.go,                          │
+│    internal/match/syntax_compiler.go                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -64,12 +65,13 @@ Every parsed expression is wrapped in a syntax object that carries:
 
 ```go
 type SyntaxSymbol struct {
-    Sym           *values.Symbol
-    sourceContext *SourceContext  // Contains Scopes []*Scope
+    Sym             *values.Symbol
+    syntaxBase                     // Contains SourceContext with Scopes []*Scope
+    ResolvedBinding any            // Pre-resolved binding for cross-library macro hygiene
 }
 ```
 
-### Scopes (`syntax/scope.go`)
+### Scopes (`internal/syntax/syntax_value.go`)
 
 A scope is a unique identifier created at specific points:
 
@@ -79,8 +81,8 @@ A scope is a unique identifier created at specific points:
 
 ```go
 type Scope struct {
-    ID     int64
-    Name   string  // For debugging
+    id          uint64 // ensures unique pointer identity
+    IsRebinding bool   // true for let-syntax/letrec-syntax scopes
 }
 ```
 
@@ -94,13 +96,16 @@ A `syntax-rules` form compiles to a `MachineClosure` containing:
 
 ```go
 type SyntaxRulesClause struct {
-    pattern      syntax.SyntaxValue
-    template     syntax.SyntaxValue
-    bytecode     []match.SyntaxCommand
-    matcher      *match.SyntaxMatcher
-    patternVars  map[string]struct{}
-    freeIds      map[string]struct{}   // For recursive macros
-    macroScope   *syntax.Scope
+    pattern          syntax.SyntaxValue
+    template         syntax.SyntaxValue
+    bytecode         []match.SyntaxCommand
+    matcher          *match.SyntaxMatcher
+    patternVars      map[string]struct{}
+    patternVarSyntax map[string]*syntax.SyntaxSymbol
+    ellipsisVars     map[int]map[string]struct{}
+    freeIds          map[string]*FreeIdResolution
+    macroScope       *syntax.Scope
+    ellipsis         string
 }
 ```
 
@@ -147,31 +152,27 @@ The binding's scope set must be a **subset** of the reference's scope set.
 
 ### Implementation in Code
 
-**Scope creation** (`operation_syntax_rules_transform.go:136`):
+**Scope creation** (`operation_syntax_rules_transform.go:192`):
 ```go
-introScope := syntax.NewScope(nil)
+introScope := syntax.NewScope()
 ```
 
-**Scope addition** (`syntax_adapter.go:298`):
+**Scope addition** (`syntax_adapter.go:454-456`):
 ```go
-if introScope != nil && !isFreeIdentifier {
-    sym = sym.AddScope(introScope).(*syntax.SyntaxSymbol)
+if opts.IntroScope != nil {
+    newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 }
 ```
 
-**Scope matching** (`scope_utils.go:25`):
+**Scope matching** (`scope_utils.go:32`):
 ```go
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
     // bindingScopes ⊆ useScopes
+    if len(bindingScopes) > len(useScopes) {
+        return false
+    }
     for _, bindScope := range bindingScopes {
-        found := false
-        for _, useScope := range useScopes {
-            if bindScope == useScope {
-                found = true
-                break
-            }
-        }
-        if !found {
+        if !slices.Contains(useScopes, bindScope) {
             return false
         }
     }
@@ -301,14 +302,13 @@ These are loaded during environment initialization and use the same macro system
 
 | File | Purpose |
 |------|---------|
-| `match/match.go` | Pattern matching VM |
-| `match/syntax_compiler.go` | Pattern → bytecode compiler |
-| `match/syntax_adapter.go` | Syntax ↔ value conversion |
-| `match/expand.go` | Template expansion |
-| `syntax/scope.go` | Scope type definition |
-| `syntax/scope_utils.go` | Scope set operations, `ScopesMatch` |
-| `syntax/syntax_symbol.go` | Symbol with scopes |
-| `syntax/syntax_pair.go` | Pair with recursive scope propagation |
+| `internal/match/match.go` | Pattern matching VM |
+| `internal/match/syntax_compiler.go` | Pattern → bytecode compiler |
+| `internal/match/syntax_adapter.go` | Syntax ↔ value conversion |
+| `internal/syntax/syntax_value.go` | Scope type definition |
+| `internal/syntax/scope_utils.go` | Scope set operations, `ScopesMatch` |
+| `internal/syntax/syntax_symbol.go` | Symbol with scopes |
+| `internal/syntax/syntax_pair.go` | Pair with recursive scope propagation |
 | `machine/compile_syntax_rules.go` | `syntax-rules` compilation |
 | `machine/operation_syntax_rules_transform.go` | Runtime macro expansion |
 | `machine/expander_time_continuation.go` | Expansion-phase walker |

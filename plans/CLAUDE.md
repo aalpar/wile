@@ -22,7 +22,7 @@ When investigating R7RS conformance issues:
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
 | `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
-| `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | Planned |
+| `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | **Implemented** |
 | `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
 | `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
@@ -31,7 +31,6 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phase 5 + Tier 2 remaining | Phase 5+ remaining |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
 | `SANDBOXING_MODEL.md` | Extension-level sandboxing: security classification, SafeExtensions API, isolation tests | Proposed |
 | `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing (fine-grained layer) | Proposed |
@@ -43,7 +42,6 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
 | `ARCHITECTURAL_REVIEW_REFACTORING.md` | Remaining: 2.1 deferred indefinitely; 4.2, 4.4 low-priority | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
@@ -53,7 +51,6 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
 | `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
-| `INTEGER_OPCODE_DISPATCH.md` | Design rationale for integer opcode dispatch (Phase 6 foundation) | Reference |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Developer Documentation (outside plans/)

@@ -12,7 +12,7 @@ Most macro authors need to *understand* what's happening when things break, not 
 
 ### Enhanced Scope Type
 
-Add provenance fields to `Scope` in `syntax/syntax_value.go`:
+Add provenance fields to `Scope` in `internal/syntax/syntax_value.go` (currently has `id uint64` and `IsRebinding bool`):
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -68,8 +68,8 @@ Add provenance fields to `Scope` in `syntax/syntax_value.go`:
 
 | File | Change |
 |------|--------|
-| `syntax/syntax_value.go` | Add provenance fields to Scope |
-| `syntax/scope_reason.go` | New — ScopeReason type and constants |
+| `internal/syntax/syntax_value.go` | Add provenance fields to Scope |
+| `internal/syntax/scope_reason.go` | New — ScopeReason type and constants |
 | `machine/expander_time_continuation.go` | Use NewScopeWithProvenance |
 | `machine/operation_syntax_rules_transform.go` | Use NewScopeWithProvenance for intro scope |
 | `registry/core/prim_hygiene_debug.go` | New — 5 debugging primitives |

@@ -10,7 +10,7 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 ┌──────────────────────────────────────────────────────┐
 │  Go Application                                      │
 │                                                      │
-│  engine, _ := wile.NewEngine()                       │
+│  engine, _ := wile.NewEngine(ctx)                    │
 │  result, _ := engine.Eval(ctx, "(+ 1 2)")            │
 │                                                      │
 ├──────────────────────────────────────────────────────┤
@@ -171,8 +171,8 @@ Extensions implement `registry.Extension` and register primitives, macros, and c
 
 | File | Purpose |
 |------|---------|
-| `wile/engine.go` | Engine type, evaluation methods, initialization |
-| `wile/value.go` | Value interface, constructors, wrapping |
-| `wile/options.go` | Functional options for engine configuration |
-| `wile/compiled.go` | CompiledCode type |
-| `wile/doc.go` | Package documentation |
+| `engine.go` | Engine type, evaluation methods, initialization |
+| `value.go` | Value interface, constructors, wrapping |
+| `options.go` | Functional options for engine configuration |
+| `compiled.go` | CompiledCode type |
+| `doc.go` | Package documentation |

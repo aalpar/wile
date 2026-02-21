@@ -82,13 +82,13 @@ without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
 
 | Component | File | Line |
 |-----------|------|------|
-| `PrimCallCC` | `registry/core/prim_control.go` | 115 |
-| `newComposeAbortEscapeClosure` | `registry/core/prim_control.go` | 192 |
+| `PrimCallCC` | `registry/core/prim_control.go` | 116 |
+| `newComposeAbortEscapeClosure` | `registry/core/prim_control.go` | 193 |
 | `ComposableContinuation` | `machine/composable_continuation.go` | 29 |
-| `BarrierToken` | `machine/barrier_token.go` | 23 |
-| `applyComposableContinuation` | `machine/machine_context.go` | 485 |
-| `RunWithEscapeHandling` | `machine/machine_context.go` | 1227 |
-| `RestoreWithWindingFrom` | `machine/machine_context.go` | 1079 |
+| `BarrierToken` | `machine/barrier_token.go` | 28 |
+| `applyComposableContinuation` | `machine/machine_context.go` | 486 |
+| `RunWithEscapeHandling` | `machine/machine_context.go` | 1228 |
+| `RestoreWithWindingFrom` | `machine/machine_context.go` | 1080 |
 
 For operational details (error propagation paths, RunWithEscapeHandling
 pseudocode, end-to-end examples), see `docs/dev/PROMPT_ABORT_SYSTEM.md`.

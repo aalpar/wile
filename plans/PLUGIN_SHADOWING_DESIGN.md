@@ -2,7 +2,7 @@
 
 **Status:** Proposed — Not implemented
 
-**Dependencies:** Public extension system (`EXTERNAL_EXTENSIONS_PLAN.md`)
+**Dependencies:** Public extension system (see `MODULE_DECOMPOSITION.md` Phase 2)
 
 ## Problem
 

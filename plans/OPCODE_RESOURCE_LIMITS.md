@@ -2,7 +2,7 @@
 
 Date: 2026-02-15
 Status: Design (not yet implemented)
-Depends on: `private/op-complexity-analysis.md` (raw complexity data)
+Depends on: (raw complexity data embedded in this document)
 
 ## Problem
 
@@ -18,11 +18,11 @@ The attacker controls Scheme source code (or input data that drives macro expans
 
 | Limit | Location | Default | Error Sentinel |
 |-------|----------|---------|----------------|
-| Call depth | `machine_context.go:82` | 0 (unlimited) | `ErrCallDepthExceeded` |
+| Call depth | `machine_context.go:69` | 0 (unlimited) | `ErrCallDepthExceeded` |
 | read-string allocation | `prim_read_write.go:34` | 100 MB | `ErrAllocationLimitExceeded` |
 | read-bytevector allocation | `prim_read_write.go:38` | 100 MB | `ErrAllocationLimitExceeded` |
-| VM loop context check | `machine_context.go:37` | Every 1024 ops | (context error) |
-| Match VM context check | `match.go:223` | Every 1024 iterations | (context error) |
+| VM loop context check | `machine_context.go:38` | Every 1024 ops | (context error) |
+| Match VM context check | `match.go:237` | Every 1024 iterations | (context error) |
 
 ## Complete Non-O(1) Operation Catalog
 
@@ -35,7 +35,7 @@ The attacker controls Scheme source code (or input data that drives macro expans
 | `SyntaxCaseMatch` | `operation_syntax_case.go:65` | O(input) | Runs match VM internally | Match Steps |
 | `SyntaxRulesTransform` | `operation_syntax_rules_transform.go:105` | O(clauses × (input + template × reps)) | Match per clause + Expand on first match | Match Steps + Expand Steps |
 | `SyntaxTemplateExpand` | `operation_syntax_case.go:206` | O(template × reps) | Recursive `expandSyntaxValue` calls | Expand Steps |
-| `Apply` (composable cont.) | `machine_context.go:398` | O(d) + O(d) + O(w) | `DeepCopy` O(d) + `GraftContinuation` O(d) + winding O(w) | Continuation Copy Depth |
+| `Apply` (composable cont.) | `machine_context.go:486` (`applyComposableContinuation`) | O(d) + O(d) + O(w) | `DeepCopy` O(d) + `GraftContinuation` O(d) + winding O(w) | Continuation Copy Depth |
 | `ForeignFunctionCall` | `operation_foreign_function_call.go:61` | O(?) unbounded | Arbitrary Go code | Embedder Responsibility (ctx) |
 
 #### Bounded by Compile-Time Constants — No Limits Needed
@@ -68,7 +68,7 @@ The attacker controls Scheme source code (or input data that drives macro expans
 
 | Function | File | Complexity | Called From |
 |----------|------|-----------|------------|
-| `addScopeToSyntax` | `operation_syntax_rules_transform.go:345` | O(tree) | `SyntaxPair.AddScope` |
+| `addScopeToSyntax` | `operation_syntax_rules_transform.go:349` | O(tree) | `SyntaxPair.AddScope` |
 | `addScopeToSyntaxSkipFreeIds` | `operation_syntax_rules_transform.go:249` | O(tree) | Template expansion |
 | `mapSyntaxTree` | `internal/syntax/syntax_pair.go` | O(tree) | `SyntaxPair.AddScope` |
 | `DatumToSyntaxValue` | `internal/schemeutil/` | O(tree) | `StoreSyntaxCaseInput` (conditional) |
@@ -82,7 +82,7 @@ These are covered by the **Expand Steps** category — they are called as part o
 
 **What it caps:** Iterations of the match VM's bytecode dispatch loop.
 
-**Enforcement point:** `Matcher.MatchSyntaxWithLiterals()` in `internal/match/match.go`, line 221. The loop already has an `iterations` counter (line 220) and a batched `ctx.Done()` check every 1024 iterations (line 222–229). The limit check piggybacks on this existing counter, inside the same batch check:
+**Enforcement point:** `Matcher.MatchSyntaxWithLiterals()` in `internal/match/match.go`, line 234+. The loop already has an `iterations` counter (line 234) and a batched `ctx.Done()` check every 1024 iterations (line 237). The limit check piggybacks on this existing counter, inside the same batch check:
 
 ```
 if maxMatchSteps > 0 && iterations > maxMatchSteps {
@@ -118,7 +118,7 @@ wile.WithMaxMatchSteps(n uint64) EngineOption
 
 **What it caps:** Total recursive calls to `expandSyntaxValue()` (and the tree-walking helpers it calls) during a single template expansion.
 
-**Enforcement point:** At the top of `SyntaxMatcher.expandSyntaxValue()` in `internal/match/syntax_adapter.go`, line 255:
+**Enforcement point:** At the top of `SyntaxMatcher.expandSyntaxValue()` in `internal/match/syntax_adapter.go`, line 255+:
 
 ```
 p.expandSteps++
@@ -164,7 +164,7 @@ wile.WithMaxExpandSteps(n uint64) EngineOption
 
 **What it caps:** The number of continuation frames walked during `DeepCopy()` and `GraftContinuation()` when invoking a composable continuation.
 
-**Enforcement point:** Inside `MachineContinuation.DeepCopy()` in `machine/machine_continuation.go`, line 149:
+**Enforcement point:** Inside `MachineContinuation.DeepCopy()` in `machine/machine_continuation.go`, line 164:
 
 ```
 depth := 0
@@ -179,7 +179,7 @@ for current.parent != nil {
 }
 ```
 
-`GraftContinuation()` (machine_context.go:893) walks the same chain but does not copy — it just finds the bottom. Its cost is dominated by `DeepCopy`'s cost, so a single limit on `DeepCopy` suffices. If the deep copy succeeds, the graft is guaranteed to succeed within the same bound.
+`GraftContinuation()` (machine_context.go:1151) walks the same chain but does not copy — it just finds the bottom. Its cost is dominated by `DeepCopy`'s cost, so a single limit on `DeepCopy` suffices. If the deep copy succeeds, the graft is guaranteed to succeed within the same bound.
 
 **This is distinct from `maxCallDepth`:**
 - `maxCallDepth` limits how deep the *live* call stack grows during execution.
@@ -202,7 +202,7 @@ engineConfig.maxContinuationCopyDepth
 func (p *MachineContinuation) DeepCopy(maxDepth uint64) (*MachineContinuation, error)
 ```
 
-The call site in `applyComposableContinuation` (machine_context.go:412) passes `p.maxContinuationCopyDepth`.
+The call site in `applyComposableContinuation` (machine_context.go:486) passes `p.maxContinuationCopyDepth`.
 
 **Note on winding:** `RestoreWithWindingFrom` (machine_context.go:821) calls `unwindStackTo` and `RewindTo`, which walk the winding stack. The winding stack depth is bounded by the number of `dynamic-wind` frames, which are pushed by user code. However, each unwind/rewind step *executes a thunk* (before/after procedure), which re-enters the VM loop — so the VM loop's own `ctx.Done()` check covers these. No additional limit needed for winding.
 

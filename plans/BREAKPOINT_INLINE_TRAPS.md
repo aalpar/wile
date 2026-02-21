@@ -2,14 +2,14 @@
 
 **Status:** PROPOSED
 **Date:** 2026-02-17
-**Related:** `plans/BREAKPOINT_SNAP_TO_NEXT.md`, `machine/debugger.go`, `machine/operation_brk.go`
+**Related:** `plans/BREAKPOINT_SNAP_TO_NEXT.md`, `machine/debugger.go`
 
 ## Problem
 
 The VM loop checks for breakpoints on **every instruction** when a debugger is attached:
 
 ```go
-// machine_context.go:516-524
+// machine_context.go:579-585
 if mc.debugger != nil {
     bp := mc.debugger.CheckBreakpoint(mc)    // every instruction
     if bp != nil {
@@ -29,6 +29,8 @@ if mc.debugger != nil {
 The `mc.debugger != nil` guard makes the non-debugger case free (nil check, always predicted not-taken). But when a debugger IS attached, every instruction pays the full cost even if the nearest breakpoint is thousands of instructions away.
 
 ## Design: Operation Patching
+
+> **Note (2026-02-21):** The codebase now uses integer opcode dispatch (`Instruction{Op OpCode, Arg int32}`) with inlined ops in the `Run()` switch and complex ops via `OpComplex` side table. The `Operation` interface no longer has `Apply`; that's on `InlinedOperation`. The patching approach described below would need adaptation: instead of replacing an `Operation` at a slot, a trap would either (a) replace an `Instruction` with a trap opcode that chains to the original, or (b) patch the `sideTable` entry for `OpComplex` instructions. The core idea (patch-at-breakpoint-site instead of check-every-instruction) remains valid; only the mechanism changes.
 
 Instead of checking breakpoints in the VM loop, **patch the bytecode** at breakpoint locations. Insert a wrapper operation that fires the breakpoint then delegates to the original operation.
 
@@ -117,7 +119,7 @@ func (p *Debugger) SetBreakpoint(file string, line, column int) BreakpointID {
 }
 
 func (p *Debugger) patchTemplate(tpl *NativeTemplate, bp *Breakpoint) {
-    for pc := range tpl.operations {
+    for pc := range tpl.code {
         src := tpl.SourceAt(pc)
         if src == nil || src.File != bp.File || src.Start.Line() != bp.Line {
             continue
@@ -208,7 +210,7 @@ The win is proportional to instruction count between breakpoints — the common 
 
 ## Concurrency
 
-Template `operations` is a slice. Patching replaces individual elements (pointer-sized writes). In Go, pointer writes to slice elements are atomic on aligned architectures. The debugger mutex serializes Set/Remove. If SRFI-18 threads share templates, a thread might see the old or new operation at a given PC — both are valid (old = miss the breakpoint on this pass, new = hit it). No data race, no corruption.
+Template `code` is a slice of `Instruction` and `sideTable` is a slice of `InlinedOperation`. For `OpComplex` instructions, patching replaces `sideTable` entries (pointer-sized writes). In Go, pointer writes to slice elements are atomic on aligned architectures. The debugger mutex serializes Set/Remove. If SRFI-18 threads share templates, a thread might see the old or new operation at a given PC — both are valid (old = miss the breakpoint on this pass, new = hit it). No data race, no corruption.
 
 If stronger guarantees are needed later, the operation slot can use `atomic.Pointer[Operation]`. Not needed for the REPL (single-goroutine execution).
 

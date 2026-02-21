@@ -62,20 +62,13 @@
 
 ## Findings
 
-### F1. LibraryEnvFactory: Package-Global Data Race
+### F1. LibraryEnvFactory: Package-Global Data Race — FIXED
 
 **Lens**: Cross-talk / Temporal Coupling
-**Where**: `engine.go:183`, `machine/library_loader.go:45`
-**Theory**: **TOCTOU race condition** (Lampson, "Hints for Computer System Design," 1983). The interval between Engine A writing `LibraryEnvFactory` and Engine B reading it is a race window. With concurrent `NewEngine()` calls, the window is the entire duration of `NewEngine()` initialization — potentially milliseconds. P(collision) per-second is approximately `2 × t_init × creation_rate`.
+**Where**: Previously `engine.go` (package-level global); now `environment/top_level_environment.go` (field on `TopLevelEnvironment`)
+**Status**: **FIXED.** `LibraryEnvFactory` is now a field on `TopLevelEnvironment` (set via `SetLibraryEnvFactory`, read via `LibraryEnvFactory()`), not a package-level global. Each engine has its own `TopLevelEnvironment` with its own factory closure. The data race described here no longer exists.
 
-**Dynamics**: Two embedders create engines concurrently in separate goroutines (a plausible embedding scenario). Engine A sets `LibraryEnvFactory` to its closure. Engine B then overwrites it with its own closure. Engine A subsequently imports a library — the factory creates an environment configured for Engine B's registry, not Engine A's. The result is silent incorrect behavior: bindings resolve against the wrong environment. This is a true **Go data race** (concurrent unsynchronized writes to a package-level variable), detectable by `go test -race`.
-
-**Severity**:
-- Steady-state impact: None if single-engine (the common case today)
-- Transient impact: Corruption during concurrent engine creation
-- Overload impact: N/A
-
-**Proposed direction**: Replace the package-level global with a field on `MachineContext` or `EnvironmentFrame`. The factory already captures the caller's environment — it needs to be per-engine, not per-process. This eliminates the race and removes the "multiple engines overwrite each other" documented limitation. The code already notes this as a known issue (`engine.go:183`).
+The factory is set in `engine.go:182` during engine construction and read in `machine/library_loader.go:126` during library loading. Both access the per-engine `TopLevelEnvironment` instance.
 
 ---
 
@@ -101,7 +94,7 @@ Multiple Engine instances share this cache — one engine's workload grows anoth
 ### F3. Engine Use-After-Close: No Guard on Public API
 
 **Lens**: Mode Transition
-**Where**: `engine.go:642-656` (Close), `engine.go:235-241` (Eval), `engine.go:296-305` (Compile), `engine.go:320-322` (Run), `engine.go:325-340` (Define/Get)
+**Where**: `engine.go:641` (Close), `engine.go:234` (Eval), `engine.go:295` (Compile), `engine.go:319` (Run)
 **Theory**: **Metastable state** (Bronson et al., "Metastable Failures in Distributed Systems," HotOS 2021). After `Close()`, the engine is in a state that _looks_ valid (all fields still set, no nil pointers) but produces undefined behavior. This is a half-state — the system has transitioned to "closed" but external interfaces don't enforce the new state. In reliability terms, MTTR = ∞ because the system never recovers from the undefined state — it just produces wrong results.
 
 **Dynamics**: An embedder calls `engine.Close()`, then later (perhaps from another goroutine, or due to a logic error) calls `engine.Eval()`. The `closed` field is `true`, but `Eval` doesn't check it. The call proceeds using the closed engine's environment. If `Close()` freed resources in extension closers, the eval may access freed state or produce incorrect results with no error signal.
@@ -118,7 +111,7 @@ Multiple Engine instances share this cache — one engine's workload grows anoth
 ### F4. RunWithEscapeHandling: Unbounded Retry Loop
 
 **Lens**: Feedback Loop
-**Where**: `machine/machine_context.go:1018-1107`
+**Where**: `machine/machine_context.go:1228+` (`RunWithEscapeHandling`)
 **Theory**: **Positive feedback loop without gain limiting**. The loop's transfer function: escape → restore → Run() → escape → restore → ... The loop gain is determined by whether the restored continuation produces another escape. If gain ≥ 1 (each run produces at least one escape), the loop never terminates. This violates the **Nyquist stability criterion** — the loop gain must be < 1 at the frequency where phase = -180° for the system to converge.
 
 In practice, each restoration makes forward progress (the continuation advances), so the loop gain is < 1 for well-formed programs. But a pathological program with mutually-invoking continuations could create gain = 1.
@@ -154,7 +147,7 @@ In practice, each restoration makes forward progress (the continuation advances)
 ### F6. sync.Pool Drain Under GC Pressure
 
 **Lens**: Mode Transition / Saturation
-**Where**: `machine/pool.go:25-122`
+**Where**: `machine/pool.go`
 **Theory**: **GC-induced transient** (Åström & Murray, *Feedback Systems*, Ch. 1). Go's `sync.Pool` drains all cached objects on every GC cycle. This creates a periodic transient: after GC, the next burst of `SaveContinuation` / `NewSubContext` calls allocate fresh objects instead of reusing pooled ones. The transient is **inrush current** — a sudden spike in allocation rate after a GC event.
 
 The system's response is overdamped: allocation spikes, GC eventually reclaims the new objects, pools refill, allocation rate returns to normal. But under sustained high load, the GC cycle itself is triggered more frequently (because allocations are higher), creating a feedback loop: more GC → less pooling → more allocation → more GC. This is a negative feedback loop (higher allocation triggers GC which reclaims), but its settling time depends on the `GOGC` setting.
@@ -173,7 +166,7 @@ The system's response is overdamped: allocation spikes, GC eventually reclaims t
 ### F7. Thread-Engine Shared State Without Isolation
 
 **Lens**: Cross-talk
-**Where**: `machine/machine_context.go:555-567` (NewSubContext), `environment/load_path_stack.go:37-105`
+**Where**: `machine/machine_context.go:767` (NewSubContext), `environment/load_path_stack.go`
 **Theory**: **Noisy neighbor effect** (Gunther, *Guerrilla Capacity Planning*, Ch. 6). Threads (SRFI-18) share the global `TopLevelEnvironment` and its `LoadPathStack`. The LoadPathStack is documented as non-thread-safe for LIFO ordering under concurrent loads. More broadly, `GlobalEnvironmentFrame` bindings are shared-mutable state between threads — a `(define x 5)` in one thread is visible to another.
 
 The **Universal Scalability Law** predicts that shared mutable state creates a coherence cost β > 0. As thread count N increases, throughput grows as N / (1 + α(N-1) + β·N·(N-1)). With β > 0, there exists a peak N beyond which adding threads decreases throughput.
@@ -194,7 +187,7 @@ For mutable globals: Thread A evaluates `(define x 1)`, Thread B evaluates `(def
 ### F8. PopContinuation Dual callDepth Strategy
 
 **Lens**: Signal Integrity
-**Where**: `machine/machine_context.go:260-273` (PopContinuation), `machine/machine_context.go:232-251` (RestoreAndRelease)
+**Where**: `machine/machine_context.go:278` (PopContinuation), `machine/machine_context.go:240` (RestoreAndRelease)
 **Theory**: **Signal distortion** from inconsistent encoding. Two code paths maintain `callDepth` using different strategies: `RestoreAndRelease` reads the cached value from the continuation (`p.callDepth = cont.callDepth`), while `PopContinuation` decrements directly (`p.callDepth--`). These should produce the same result in the normal case, but they encode different invariants:
 - `RestoreAndRelease`: callDepth = the restored continuation's ancestor count (absolute)
 - `PopContinuation`: callDepth = previous depth - 1 (relative)
@@ -214,7 +207,7 @@ For mutable globals: Thread A evaluates `(define x 1)`, Thread B evaluates `(def
 
 | # | Finding | P(trigger) × Blast Radius | Priority |
 |---|---------|---------------------------|----------|
-| F1 | LibraryEnvFactory data race | Medium × High (silent corruption) | **1** |
+| F1 | LibraryEnvFactory data race | ~~Medium × High~~ **FIXED** (now per-engine) | ~~1~~ |
 | F3 | Use-after-Close no guard | Low × Medium (undefined behavior) | **2** |
 | F2 | String intern unbounded growth | High (always) × Low (slow leak) | **3** |
 | F5 | Macro expansion no depth limit | Low × Medium (hang/OOM) | **4** |
@@ -243,7 +236,7 @@ The stability margins are generous for the intended workload (config, scripting,
 
 ### 3. Top 3 Dynamic Risks
 
-1. **LibraryEnvFactory race (F1)**: Add per-engine factory field. _Why_: This is the only finding that produces silent data corruption under plausible (not adversarial) usage — two embedders creating engines concurrently.
+1. **LibraryEnvFactory race (F1)**: **FIXED** — factory is now a field on `TopLevelEnvironment`, per-engine.
 
 2. **Use-after-Close (F3)**: Add `closed` guard to public API methods. _Why_: Six lines of code convert undefined behavior into a clear error. The cost-benefit ratio is extreme.
 

@@ -174,13 +174,14 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
     // Get caller's TopLevelEnvironment
     callerTopLevel := callerEnv.TopLevelEnv()
     if callerTopLevel == nil {
-        return nil, errors.New("caller has no TopLevelEnvironment")
+        return nil, values.WrapForeignErrorf(values.ErrMissingTopLevelEnvironment,
+            "caller environment has no TopLevelEnvironment")
     }
 
-    // Create child sharing the TopLevelEnvironment
+    // Create a new environment that shares the TopLevelEnvironment
     libEnv := callerTopLevel.NewChildRuntime()
 
-    // Register primitives, macros, etc.
+    // Initialize with shared sequence (primitives, macros, etc.)
     // ...
 
     return libEnv, nil

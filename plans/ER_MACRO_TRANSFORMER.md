@@ -185,7 +185,7 @@ New method `expandERMacroInvocation`:
 also accept `er-macro-transformer` (and `lambda`) by routing through
 `compileTransformerToMachineClosure` instead of hardcoding `CompileSyntaxRules`.
 
-This is a refactoring of lines ~344-360 in `expandLetSyntaxImpl`.
+This is a refactoring of the transformer compilation logic in `expandLetSyntaxImpl` (around line 372).
 
 ### Phase 5: Primitive Expander Registration
 

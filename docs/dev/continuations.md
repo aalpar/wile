@@ -74,13 +74,13 @@ MachineContext (live VM state)
                                           └── parent ──→ ... ──→ nil
 ```
 
-The VM loop (`machine_context.go:567`) steps through instructions. Two opcodes manage the chain:
+The VM loop (`machine_context.go:568`) steps through instructions. Two opcodes manage the chain:
 
 ## Save and Restore: The Calling Convention
 
 When the compiler encounters a non-tail call like `(f (+ 1 2))`, it emits `OpSaveContinuation` before the call and expects `OpRestoreContinuation` after the callee finishes.
 
-**OpSaveContinuation** (`machine_context.go:655-660`): Takes the current `vmState` — the program counter, environment, eval stack, everything — packages it into a new `MachineContinuation`, and pushes it onto the chain. The offset argument tells it where to resume: "when this frame is restored, set `pc` to here."
+**OpSaveContinuation** (`machine_context.go:656-661`): Takes the current `vmState` — the program counter, environment, eval stack, everything — packages it into a new `MachineContinuation`, and pushes it onto the chain. The offset argument tells it where to resume: "when this frame is restored, set `pc` to here."
 
 ```
 before SaveContinuation:              after SaveContinuation:
@@ -94,7 +94,7 @@ MachineContext                        MachineContext
                                                         └── parent ──→ (frame 0)
 ```
 
-**OpRestoreContinuation** (`machine_context.go:637-641`): Pops the top frame off the chain and overwrites the current `vmState` with its contents. The VM is now back where it was before the call, with the callee's result sitting in the value register.
+**OpRestoreContinuation** (`machine_context.go:638-642`): Pops the top frame off the chain and overwrites the current `vmState` with its contents. The VM is now back where it was before the call, with the callee's result sitting in the value register.
 
 ```go
 case OpRestoreContinuation:
@@ -110,9 +110,9 @@ If `cont` is nil, there's nothing to return to — execution is done.
 
 ## How call/cc Works
 
-The implementation lives in `registry/core/prim_control.go:115-178`. Here's the sequence:
+The implementation lives in `registry/core/prim_control.go:116-179`. Here's the sequence:
 
-**1. Capture the continuation chain.** `SliceContinuationAt(nil)` (`machine_context.go:1129-1146`) deep-copies every frame from `mc.cont` down to the bottom. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
+**1. Capture the continuation chain.** `SliceContinuationAt(nil)` (`machine_context.go:1130-1147`) deep-copies every frame from `mc.cont` down to the bottom. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
 
 ```go
 segment := mc.SliceContinuationAt(nil)
@@ -136,7 +136,7 @@ The model follows Racket's unification: `call/cc` is defined in terms of composa
     default-prompt-tag)
 ```
 
-**3. Two execution modes.** `PrimCallCC` has a critical branch at `prim_control.go:132`:
+**3. Two execution modes.** `PrimCallCC` has a critical branch at `prim_control.go:133`:
 
 - **Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the current VM context via `mc.Apply()`. This preserves the full continuation chain — crucial for coroutines where multiple continuations interact with the same call stack.
 - **Sub-context mode** (`mc.Parent() == nil`): The lambda runs in an isolated sub-context. Used when `call/cc` is itself inside a foreign function's sub-context (e.g., inside `apply`).
@@ -145,7 +145,7 @@ The model follows Racket's unification: `call/cc` is defined in terms of composa
 
 When the escape closure fires, it doesn't just "return" — it needs to abandon whatever computation is currently running and jump back to a known boundary. Wile uses Go's error propagation for this.
 
-The escape closure returns an `ErrPromptAbort` error targeting `DefaultPromptTag`. This error propagates up through the Go call stack (through `Run()`, through any `OperationForeignFunctionCall` wrappers) until it hits `RunWithEscapeHandling` (`machine_context.go:1227`).
+The escape closure returns an `ErrPromptAbort` error targeting `DefaultPromptTag`. This error propagates up through the Go call stack (through `Run()`, through any `OperationForeignFunctionCall` wrappers) until it hits `RunWithEscapeHandling` (`machine_context.go:1228`).
 
 `RunWithEscapeHandling` is the outermost execution loop. It installs `DefaultPromptTag` as the context-level prompt, runs the VM, and catches any `ErrPromptAbort`:
 
@@ -180,7 +180,7 @@ Shared frames use the safe path: `evals.Copy()` instead of transfer, and the fra
 
 ### Dynamic-Wind Integration
 
-When a continuation is invoked, the VM can't just slam in the new state — it has to respect `dynamic-wind` contracts. `RestoreWithWindingFrom` (`machine_context.go:1075-1103`) compares the current winding stack with the target:
+When a continuation is invoked, the VM can't just slam in the new state — it has to respect `dynamic-wind` contracts. `RestoreWithWindingFrom` (`machine_context.go:1080-1104`) compares the current winding stack with the target:
 
 1. Calls "after" thunks for frames being exited (innermost first)
 2. Calls "before" thunks for frames being entered (outermost first)

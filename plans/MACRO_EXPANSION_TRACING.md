@@ -10,7 +10,7 @@ Enable tracing of macro-generated code back to which macro generated it, which i
 
 ## Current State
 
-`OriginInfo` in `syntax/source_context.go` tracks: macro name (`Identifier`), use-site location (`Location`), nesting chain (`Parent`). Missing: intro scope reference, template location.
+`OriginInfo` in `internal/syntax/source_context.go` tracks: macro name (`Identifier`), application ID (`ApplicationID`), use-site location (`Location`), template location (`TemplateLocation`), nesting chain (`Parent`). These fields were added in prior work. Remaining: intro scope reference, use-site syntax form, template syntax form.
 
 ## Design
 
@@ -39,11 +39,11 @@ Using `SyntaxValue` instead of `*SourceContext` preserves actual syntax structur
 
 | File | Change |
 |------|--------|
-| `syntax/source_context.go` | Extend `OriginInfo` with new fields |
+| `internal/syntax/source_context.go` | Extend `OriginInfo` with new fields |
 | `machine/operation_syntax_rules_transform.go` | Create intro scope before origin, populate new fields |
 | `internal/extensions/eval/prim_eval.go` | Add `PrimSyntaxOrigin` |
 | `internal/extensions/eval/register.go` | Register `syntax-origin` |
-| `syntax/coverage_test.go` | Update tests |
+| `internal/syntax/coverage_test.go` | Update tests |
 
 ## Notes
 

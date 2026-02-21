@@ -166,7 +166,7 @@ A default `FormRegistry` is built once (equivalent to today's `init()`) and clon
 |------|-------|--------|
 | Global registry | `internal/forms/form_spec.go` | Replace with `FormRegistry` type |
 | Init registration | `machine/register.go` `init()` | Build a default `FormRegistry` instead of mutating global |
-| Compiler dispatch | `machine/compile_validated.go:53` | `forms.Lookup(...)` → `p.formRegistry.Lookup(...)` |
+| Compiler dispatch | `machine/compile_validated.go:38` (`compileValidated`) | `forms.Lookup(...)` → `p.formRegistry.Lookup(...)` |
 | CompileTimeContinuation | `machine/compile_time_continuation.go` | Add `formRegistry *forms.FormRegistry` field |
 | Validator | `internal/validate/` | Validators call `forms.Lookup()` to check special-form status; need registry passed in |
 | Expander | `machine/expander_time_continuation.go` | May reference forms registry for form detection |

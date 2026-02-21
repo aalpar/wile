@@ -80,32 +80,30 @@ cmd/scheme                                                                  0   
 ### 1. MachineContext: 22 Fields, ~4 Orthogonal Concerns
 
 **Principle**: State Tightness
-**Where**: `machine/machine_context.go:61-75`
-**Theory**: Product type explosion (Pierce, *TAPL* §11). `MachineContext` is a struct of 22 fields (9 from embedded `vmState` + 13 direct). The representable state space is the Cartesian product of all field domains. Most combinations are meaningless.
+**Where**: `machine/machine_context.go:56-70`
+**Theory**: Product type explosion (Pierce, *TAPL* §11). `MachineContext` is a struct of ~14 fields (embedded `vmState` + direct). The representable state space is the Cartesian product of all field domains. Most combinations are meaningless.
 
 **Current state**: `MachineContext` combines four orthogonal concerns:
 
 | Concern | Fields |
 |---------|--------|
 | Core VM execution | vmState (env, template, value, evals, pc, callDepth), cont, maxCallDepth |
-| Continuation escape tracking | parentMC, pendingEscape, escapeCont |
+| Sub-context tracking | parentMC, escapeCont, barrierValid |
 | Execution context add-ons | expanderCtx, exceptionHandler, debugger, thread, syntaxCase, counters |
 | Thread identity | vmState.threadID, thread |
 
-**Problem**: The continuation escape fields (`parentMC`, `pendingEscape`, `escapeCont`) form a micro-state machine embedded inside the struct without explicit states. `pendingEscape` is only used in 2 files (18 references across `machine_context.go` and one test). These fields are temporal — they describe a lifecycle phase (normal execution → escaping → resumed) — but the phase is encoded implicitly across three pointer fields rather than as a discriminated state.
+**Note**: The `pendingEscape` field was removed in a prior refactor. The escape tracking is now simpler: `parentMC` tracks the parent context for sub-contexts, and `escapeCont` tracks where to continue after a sub-context completes. `barrierValid` was added for `with-continuation-barrier` support.
 
-In type-algebraic terms: `parentMC *MachineContext × pendingEscape *MachineContinuation × escapeCont *MachineContinuation` represents `(ptr|nil)³ = 8 states`. Semantically there are ~3 states: *no escape in progress*, *escaping*, *resumed after escape*. Type precision: 3/8 = 37.5%.
+**Proposed direction**: The escape state is now cleaner than when this analysis was written. The remaining fields (`parentMC`, `escapeCont`) serve distinct, well-defined roles. No extraction needed.
 
-**Proposed direction**: Extract a `type escapeState struct { parent *MachineContext; pending, escape *MachineContinuation }` or consider an explicit `escapePhase` enum to constrain transitions. Even just grouping these fields with a comment block would make the state machine visible.
-
-**Impact**: Reduces cognitive load when reading the VM loop. Clarifies invariants for call/cc escape handling — currently the most complex control flow path in the VM.
+**Impact**: Low — the prior refactor already addressed the main concern.
 
 ---
 
 ### 2. Thread.RunFunc / Thread.CleanupFunc: Dependency Inversion via Function Injection
 
 **Principle**: Dependency Minimization
-**Where**: `values/thread.go:124-133`
+**Where**: `values/thread.go` (`RunFunc`/`CleanupFunc` fields)
 **Theory**: Dependency Inversion Principle (Martin) implemented via first-class functions. `Thread` lives in `values/` (I=0.00) but needs `machine/` (I=0.32) to run thunks. Rather than importing `machine/`, `Thread` holds `RunFunc func(ctx, thunk) (Value, error)` and `CleanupFunc func()` — function-typed fields injected at construction time.
 
 **Current state**: This is a correct application of DIP. `values/` remains a pure leaf, and the injection is done at thread creation time in `machine/`.
@@ -123,7 +121,7 @@ In Hoare triple terms: `{t.RunFunc != nil ∧ t.CleanupFunc != nil} t.Start() {t
 ### 3. OperationBase + 34 Operation Types: Successful Embedding Refactor
 
 **Principle**: Composability
-**Where**: `machine/operation_helpers.go:94-135`, `machine/operation_*.go`
+**Where**: `machine/operation_helpers.go:100+`, `machine/operation_*.go`
 **Theory**: Template Method pattern (GoF) via Go struct embedding. The base provides `SchemeString()`, `IsVoid()`, `String()`, and each operation overrides `Apply()` and `EqualTo()`.
 
 **Current state**: 34 operation types all embed `OperationBase`. Four generic helper functions (`sameType`, `fieldMatches`, `fieldMethodMatches`, `sliceMatches`) eliminate repetitive `EqualTo` boilerplate. The generics are well-constrained.
@@ -139,20 +137,26 @@ The `EqualTo` helpers form a family of morphisms parameterized by field accessor
 ### 4. Operation Interface Embeds values.Value: Deliberate Subtyping Choice
 
 **Principle**: Dependency Minimization / Composability
-**Where**: `machine/operation.go:22-25`
+**Where**: `machine/operation.go:28-30` (Operation), `machine/operation.go:35-38` (InlinedOperation)
 **Theory**: Interface embedding as subtyping (Liskov & Wing, 1994).
 
-**Current state**:
+**Current state** (post integer-opcode-dispatch refactor):
 ```go
 type Operation interface {
     values.Value
+}
+
+type InlinedOperation interface {
+    Operation
     Apply(ctx context.Context, mc *MachineContext) (*MachineContext, error)
 }
 ```
 
-**Problem**: Operations carry 3 methods (`SchemeString`, `IsVoid`, `EqualTo`) that serve debugging/testing but aren't part of the core `Apply` contract. By the Interface Segregation Principle, this is a product-type interface where a sum might be more appropriate. However, `values.Value` is the project's universal type — everything in the VM is a `Value`. Breaking this would require a parallel type hierarchy.
+The `Operation` base interface now only embeds `values.Value` (for operations inlined into the `Run()` switch). `InlinedOperation` extends it with `Apply` for complex operations dispatched via the `OpComplex` side table.
 
-**Proposed direction**: Leave as-is. The cost (implementing `EqualTo` on every operation) was amortized by the generic helpers. The trade-off is net positive.
+**Assessment**: The integer-opcode-dispatch refactor split the interface appropriately. Simple operations (Push, Pop, Branch, etc.) implement only `Operation` and have their logic inlined in the `Run()` switch. Complex operations (ForeignFunctionCall, SyntaxRulesTransform, etc.) implement `InlinedOperation` with their own `Apply`.
+
+**Proposed direction**: Leave as-is. The interface split is clean.
 
 **Impact**: None needed.
 
@@ -161,7 +165,7 @@ type Operation interface {
 ### 5. captureContext: Recursive Tree Without Typed Keys
 
 **Principle**: State Tightness
-**Where**: `internal/match/syntax_compiler.go:72-75`
+**Where**: `internal/match/syntax_compiler.go:73-76`
 
 **Current state**:
 ```go
@@ -182,7 +186,7 @@ type captureContext struct {
 ### 6. ThreadState: Correct Sum Type, Missing Transition Guard
 
 **Principle**: State Tightness
-**Where**: `values/thread.go:76-85`
+**Where**: `values/thread.go:77-85`
 
 **Current state**: `ThreadState` is `int` with 4 named constants. State machine:
 ```
@@ -217,20 +221,9 @@ Type precision: 4/2^64 ≈ 0% (Go typed-int enum with unbounded underlying type)
 
 ## Opportunities
 
-### Opportunity: EscapeState Extraction
+### Opportunity: EscapeState Extraction — SUPERSEDED
 
-**Replaces**: 3 loose fields on `MachineContext` (`parentMC`, `pendingEscape`, `escapeCont`)
-**Core operation**: Track the lifecycle of a continuation escape across sub-context boundaries
-**Algebraic structure**: State machine with 3 states (none, escaping, handled). Currently encoded as a product of 3 nullable pointers (8 representable states, 3 semantic).
-**Proposed shape**:
-```go
-type escapeTracking struct {
-    parentMC      *MachineContext
-    pendingEscape *MachineContinuation
-    escapeCont    *MachineContinuation
-}
-```
-**Reuse sites**: `NewSubContext()` (field copy), `RunWithEscapeHandling()` (state transitions), continuation capture in `call/cc`.
+The `pendingEscape` field was removed in a prior refactor. The escape tracking is now two fields (`parentMC`, `escapeCont`) which serve distinct roles: `parentMC` tracks the parent context for sub-contexts, and `escapeCont` tracks where to continue after a sub-context completes. `barrierValid` (added for `with-continuation-barrier`) is orthogonal. The original 3-pointer state machine concern no longer applies.
 
 ---
 
@@ -240,7 +233,7 @@ type escapeTracking struct {
 
 | Type | Representable States | Semantic States | Precision |
 |------|---------------------|-----------------|-----------|
-| `MachineContext` (escape fields) | 8 (3 nullable pointers) | 3 | 37.5% |
+| `MachineContext` (sub-context fields) | 4 (2 nullable pointers) | 2 | 50% |
 | `ThreadState` | 2^64 (Go int) | 4 | ≈ 0% (language limitation) |
 | `captureContext.children` key | 2^64 (int) | 0..N (small) | ≈ 0% |
 | `Thread.RunFunc` | nil \| func | func only | 50% |
@@ -255,7 +248,7 @@ type escapeTracking struct {
 
 ### Top 2 Highest-Impact Changes (Ranked)
 
-1. **EscapeState grouping** (Finding #1) — Raises type precision from 37.5% to ~100% for escape tracking. Makes the call/cc escape lifecycle explicit. Impact: clarifies the most complex control flow in the VM.
+1. **EscapeState grouping** (Finding #1) — SUPERSEDED: `pendingEscape` was removed; the escape tracking is now simpler (2 fields, not 3). No further grouping needed.
 
 2. **ellipsisID type alias** (Finding #5) — `type ellipsisID int` prevents key-type confusion in `captureContext.children` and `SyntaxCompiler.ellipsisVars`. Impact: one-line change, improved documentation-in-type.
 

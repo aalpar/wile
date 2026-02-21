@@ -2,7 +2,7 @@
 
 **Status**: Proposed
 **Date**: 2026-02-20
-**Related**: `SANDBOXING_MODEL.md` (extension-level capability control), `DIALECT_SYSTEM.md` (dialect configurability), `EXTERNAL_EXTENSIONS_PLAN.md` (earlier extension extraction work)
+**Related**: `SANDBOXING_MODEL.md` (extension-level capability control), `DIALECT_SYSTEM.md` (dialect configurability)
 
 ## Motivation
 
@@ -473,7 +473,7 @@ Move internal extensions to public packages:
 - `internal/extensions/eval/` → `extensions/eval/`
 - New `extensions/records/`, `extensions/promises/` from Phase 1
 
-After this phase, all extensions are importable by external code. This is the `EXTERNAL_EXTENSIONS_PLAN.md` work.
+After this phase, all extensions are importable by external code.
 
 **Prerequisite:** Phase 1.
 
@@ -536,7 +536,7 @@ Create `wile-workspace` repo (or document the workspace pattern) with `go.work` 
 | This plan | Depends on | Why |
 |-----------|-----------|-----|
 | Phase 1 (decompose all) | Nothing | Internal refactor |
-| Phase 2 (make public) | `EXTERNAL_EXTENSIONS_PLAN.md` | Same work, already scoped |
+| Phase 2 (make public) | None | Internal refactor |
 | Phase 3 (extract modules) | Phase 2 | Can't extract until public |
 | Phase 4 (bundles) | `DIALECT_SYSTEM.md` Phase 3 | `wile-r7rs` needs the Dialect type |
 | Phase 4 (bundles) | `SANDBOXING_MODEL.md` Phase 1 | `wile-std` is SafeExtensions as a module |

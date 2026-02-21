@@ -89,12 +89,11 @@ func addPrimitives(r *registry.Registry) error {
 }
 
 func primDouble(ctx context.Context, mc *machine.MachineContext) error {
-    n := mc.Arg(0)
-    result, err := n.Add(n)
-    if err != nil {
-        return err
+    n, ok := mc.Arg(0).(values.Number)
+    if !ok {
+        return values.WrapForeignErrorf(values.ErrNotANumber, "double: expected number")
     }
-    mc.SetValue(result)
+    mc.SetValue(n.Add(n))
     return nil
 }
 ```
@@ -309,15 +308,16 @@ func(ctx context.Context, mc *machine.MachineContext) error
 
 ```go
 func primAdd(ctx context.Context, mc *machine.MachineContext) error {
-    a := mc.Arg(0) // first argument (values.Value)
-    b := mc.Arg(1) // second argument
-
-    result, err := a.Add(b)
-    if err != nil {
-        return err
+    a, ok := mc.Arg(0).(values.Number)
+    if !ok {
+        return values.WrapForeignErrorf(values.ErrNotANumber, "add: first argument")
     }
-
-    mc.SetValue(result)
+    b, ok := mc.Arg(1).(values.Number)
+    if !ok {
+        return values.WrapForeignErrorf(values.ErrNotANumber, "add: second argument")
+    }
+    // Number.Add panics on unknown types; the VM recovers panics
+    mc.SetValue(a.Add(b))
     return nil
 }
 ```
@@ -338,7 +338,7 @@ func primMySum(ctx context.Context, mc *machine.MachineContext) error {
 ### Return Values
 
 - **Single value**: `mc.SetValue(result)`
-- **Void**: `mc.SetValue(values.Void)` (or just return nil — the VM handles void)
+- **Void**: `mc.SetValue(values.Void)`
 - **Multiple values**: Use `mc.SetValues()` or return values through
   continuation-based protocols
 

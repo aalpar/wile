@@ -175,9 +175,9 @@ Zero-field operations like `Push`, `Pop`, `Pull` contribute ~42 lines each for b
 
 **Problem**: The **Parnas criterion** asks: what's the design decision being hidden? For simple ops, it's the `Apply` body — 3-5 lines. The remaining ~35 lines per file are structural boilerplate. This is the transition from **enumeration to induction** — 20+ structurally identical blocks that differ only in their `Apply` body.
 
-This is the exact pattern the INTEGER_OPCODE_DISPATCH plan addresses: move the ~20 simple ops into a `switch` statement, where each case is 3-5 lines. The structural overhead drops from ~35 lines/op to ~5 lines/case.
+This pattern was addressed by the integer-opcode-dispatch refactor (now completed and merged). Simple ops are inlined in the `Run()` switch on `OpCode`, each case 3-5 lines. The remaining ~13 complex operations keep their struct-based form (as `InlinedOperation`, dispatched via `OpComplex` side table).
 
-**Proposed direction**: Already planned (INTEGER_OPCODE_DISPATCH.md, Option D). After migration, the remaining ~15 complex operations keep their struct-based form (justified by their complex payloads). This is a natural partition: **simple ops = data (opcode + immediate), complex ops = behavior (interface)**.
+**Status**: **COMPLETED.** The `Instruction{Op OpCode, Arg int32}` encoding with inlined switch dispatch is now the production architecture. The `Operation` base interface embeds only `values.Value`; complex ops implement `InlinedOperation` with `Apply`.
 
 **Impact**: ~700 lines of boilerplate eliminated. Cache locality improvement from contiguous `[]Instruction`. The composability gain is that adding a new simple operation becomes adding a `case` to the switch, not creating a new file with 40 lines of boilerplate.
 
@@ -198,7 +198,7 @@ OperationBase: NewOperationBase("machine-operation-push")
 
 **Problem**: With N instances of `OperationPush` across all templates, N copies of the same `OperationBase{opName: "machine-operation-push"}` exist. Go interns string literals, so the underlying bytes are shared, but each `OperationBase` struct still occupies 32 bytes (two string headers) per instance.
 
-**Proposed direction**: This resolves naturally with INTEGER_OPCODE_DISPATCH. For the remaining complex operations, consider making `opName` a method on `OperationBase` that looks up a package-level `map[reflect.Type]string`, or simply use a package-level `var` per type.
+**Proposed direction**: The integer-opcode-dispatch refactor (now completed) resolved the per-instance name overhead for inlined ops. For the remaining complex operations, consider making `opName` a method on `OperationBase` that looks up a package-level `map[reflect.Type]string`, or simply use a package-level `var` per type.
 
 **Impact**: 32 bytes × instances saved. More importantly, it eliminates the *possibility* of two instances of the same type having different names (currently representable but never valid).
 
@@ -312,7 +312,7 @@ func addPrimitives(r *registry.Registry) error {
 ### 11. `CompileTimeCallContext` — Clean Product Type
 
 **Principle**: State Tightness
-**Where**: `machine/compile_time_call_context.go:59-63`
+**Where**: `machine/compile_time_call_context.go:60-64`
 
 ```go
 type CompileTimeCallContext struct {
@@ -347,7 +347,7 @@ type CompileTimeCallContext struct {
 **Replaces**: 20+ simple operation structs (Push, Pop, LoadLocal, Branch, etc.)
 **Core operation**: `Apply(mc) → mc` with behavior determined by opcode enum + immediate operand
 **Algebraic structure**: **Enumeration to induction** — 20+ structurally identical types → a single dispatched type with a discriminant
-**Proposed shape**: Already designed in INTEGER_OPCODE_DISPATCH.md (Option D: `Instruction{Op, Arg}` + side table for complex ops)
+**Status**: **COMPLETED.** The `Instruction{Op OpCode, Arg int32}` encoding with `OpComplex` side table dispatch is now implemented.
 **Reuse sites**: Peephole optimizer (Phase 5) operates on the instruction stream; integer opcodes are simpler to pattern-match than interface types.
 
 ---
@@ -405,7 +405,7 @@ The `internal/forms` package exists solely to break a `validate` ↔ `machine` c
 
 ### Top 3 Highest-Impact Changes
 
-1. **Integer Opcode Dispatch** (already planned): Eliminates ~700 lines of operation boilerplate, improves cache locality, makes the peephole optimizer simpler. This is the highest-leverage structural change in the codebase. Finding #5, #6.
+1. **Integer Opcode Dispatch** (**COMPLETED**): Eliminated operation boilerplate, improved cache locality. Finding #5, #6. Now uses `Instruction{Op OpCode, Arg int32}` with 17 inlined ops in the `Run()` switch and 13 complex ops via `OpComplex` side table.
 
 2. **`LibraryRegistry` interface in `environment`**: Restores compile-time type safety for the library system contract. Small change, eliminates an `any` field, follows Dependency Inversion. Finding #4.
 

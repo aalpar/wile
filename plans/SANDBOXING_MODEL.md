@@ -77,7 +77,7 @@ Each extension falls into one of three categories:
 
 ## How propagation works
 
-The `LibraryEnvFactory` in `engine.go:182-211` closes over the engine's registry. When a library is loaded via `(import ...)`, the factory creates a new environment and applies the *same* registry. This means:
+The `LibraryEnvFactory` in `engine.go:182` (set via `SetLibraryEnvFactory` on `TopLevelEnvironment`) closes over the engine's registry. When a library is loaded via `(import ...)`, the factory creates a new environment and applies the *same* registry. This means:
 
 1. If files extension isn't loaded, no library can access the filesystem — even if a `.sld` file on disk contains `(import (scheme file))`.
 2. Extension libraries registered as synthetic R7RS libraries (e.g., `(wile math)`) only export primitives that exist in the engine's registry.
@@ -204,7 +204,7 @@ func (p *Registry) WithoutBindings(names ...string) *Registry
 
 Pass the library name through `LibraryEnvFactory` so the factory knows which library it's creating an environment for. This is a low-cost signature change that enables per-library policies in the future and makes the loading path self-documenting.
 
-**Current signature** (`environment/top_level_environment.go:29`):
+**Current signature** (`environment/top_level_environment.go:30`):
 
 ```go
 type LibraryEnvFactory func(context.Context, *EnvironmentFrame) (*EnvironmentFrame, error)
@@ -231,11 +231,11 @@ type LibraryEnvFactory func(context.Context, *EnvironmentFrame, []string) (*Envi
 
 | What | Where | Change |
 |------|-------|--------|
-| Type definition | `environment/top_level_environment.go:29` | Add `[]string` param |
-| Field + getter + setter | `environment/top_level_environment.go:80,236,241` | Follows from type |
-| Call site (only one) | `machine/library_loader.go:130` | Pass `expectedName.Parts` — already in scope |
+| Type definition | `environment/top_level_environment.go:30` | Add `[]string` param |
+| Field + getter + setter | `environment/top_level_environment.go:81,237,242` | Follows from type |
+| Call site (only one) | `machine/library_loader.go:126` | Pass `expectedName.Parts` — already in scope |
 | Engine factory closure | `engine.go:182` | Add param to closure signature (ignore or log) |
-| Bootstrap factory | `internal/bootstrap/environment_tiny.go:148` | Add param to `NewLibraryEnvironmentFrame` |
+| Bootstrap factory | `internal/bootstrap/environment_tiny.go:149` | Add param to `NewLibraryEnvironmentFrame` |
 | CLI setup | `cmd/scheme/main.go:191` | Points to bootstrap factory |
 | Tests | `machine/library_test.go:309,745`, `machine/library_scheme_test.go:54` | Point to bootstrap factory |
 | Docs | `docs/EXTENSION_LIBRARIES.md`, `docs/dev/ENVIRONMENT_SYSTEM.md` | Text updates |
@@ -266,8 +266,8 @@ There are three sites that process `(import ...)`:
 | Site | File | Context |
 |------|------|---------|
 | `processLibraryImport` | `compile_time_continuation_library.go:300` | Inside `define-library` — has `lib *CompiledLibrary`, so importer name is `lib.Name` |
-| `CompileImport` | `compile_time_continuation_library.go:717` | Top-level `(import ...)` — importer is `nil` (script/REPL) |
-| `expandImportForm` | `expander_time_continuation.go:747` | Top-level during expansion — importer is `nil` (script/REPL) |
+| `CompileImport` | `compile_time_continuation_library.go:718` | Top-level `(import ...)` — importer is `nil` (script/REPL) |
+| `expandImportForm` | `expander_time_continuation.go:748` | Top-level during expansion — importer is `nil` (script/REPL) |
 
 The key insight: `processLibraryImport` already receives the importing library as `lib *CompiledLibrary`. The importer identity is in scope — it's just not passed further. The other two sites are top-level imports where `nil` is the correct importer identity (not a missing value).
 

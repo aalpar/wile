@@ -43,8 +43,8 @@ Core: `file`, `code`, `env`, `process` resources; `read`, `write`, `delete`, `st
 
 | File | Primitives Gated | Resource | Action |
 |------|-----------------|----------|--------|
-| `internal/extensions/files/prim_files.go` | open-input/output-file, file-exists?, delete-file, call-with-*-file | `file` | read/write/stat/delete |
-| `internal/extensions/system/prim_system.go` | get-environment-variable(s), exit, emergency-exit | `env`/`process` | read/exit |
+| `extensions/files/prim_files.go` | open-input/output-file, file-exists?, delete-file, call-with-*-file | `file` | read/write/stat/delete |
+| `extensions/system/prim_system.go` | get-environment-variable(s), exit, emergency-exit | `env`/`process` | read/exit |
 | `internal/extensions/eval/prim_eval.go` | `load` | `code` | `load` |
 | `machine/compile_time_continuation.go` | `include`, `include-ci` | `code` | `load` |
 | `machine/library_loader.go` | library `import` | `code` | `load` |

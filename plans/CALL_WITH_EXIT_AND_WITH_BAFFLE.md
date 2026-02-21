@@ -1,6 +1,8 @@
-# Plan: `call-with-exit` and `with-baffle`
+# Plan: `call-with-exit` and `with-baffle` — IMPLEMENTED
 
 S7-inspired escape continuation and continuation barrier primitives for Wile.
+
+> **Status: IMPLEMENTED.** Both `call-with-exit` and `with-continuation-barrier`/`with-baffle` are implemented and tested. See `registry/core/prim_exit.go`, `registry/core/prim_barrier.go`, `machine/exit_escape.go`, `machine/barrier_token.go`. The `barrier.go` file mentioned in Phase 2 was implemented as `barrier_token.go` with `BarrierToken` instead of `BarrierID`.
 
 ## Background
 
