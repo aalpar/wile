@@ -50,17 +50,8 @@ func (p *CaseLambdaClosure) FindMatchingClause(argCount int) (*MachineClosure, b
 		return nil, false
 	}
 	for _, clause := range p.clauses {
-		tpl := clause.Template()
-		if tpl.IsVariadic() {
-			// Variadic: needs at least (parameterCount - 1) args
-			if argCount >= tpl.ParameterCount()-1 {
-				return clause, true
-			}
-		} else {
-			// Fixed arity: needs exact match
-			if argCount == tpl.ParameterCount() {
-				return clause, true
-			}
+		if clause.AcceptsArity(argCount) {
+			return clause, true
 		}
 	}
 	return nil, false
