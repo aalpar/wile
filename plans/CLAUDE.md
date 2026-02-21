@@ -41,7 +41,10 @@ When investigating R7RS conformance issues:
 |------|---------|--------|
 | `EXTERNAL_EXTENSIONS_PLAN.md` | Public extension system — Phase 5 + Tier 2 remaining | Phase 5+ remaining |
 | `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
-| `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing | Proposed |
+| `SANDBOXING_MODEL.md` | Extension-level sandboxing: security classification, SafeExtensions API, isolation tests | Proposed |
+| `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing (fine-grained layer) | Proposed |
+| `DIALECT_SYSTEM.md` | Multi-dialect support: de-globalize forms registry, Dialect type, extract R7RS as default | Proposed |
+| `MODULE_DECOMPOSITION.md` | Split extensions into separate Go modules: core boundary, extraction order, go workspace | Proposed |
 | `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
 
 ### Architectural Review
