@@ -17,9 +17,7 @@ When investigating R7RS conformance issues:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `PERFORMANCE_REFACTORING_PLAN.md` | Full-pipeline performance refactoring | Phases 0–6 complete, Phase 7 deferred |
-| `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Allocation reduction for continuation-heavy workloads (6 optimizations) | Complete |
-| `PROMPT_SUBCONTEXT_REFACTORING.md` | Sub-context winding stack inheritance bug fix + lifecycle refactoring proposal | Bug fix complete, Layer 1 refactoring proposed |
+| `PROMPT_SUBCONTEXT_REFACTORING.md` | Sub-context unwinding helper extraction (Layer 1) | Low priority |
 | `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
 | `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
 | `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
@@ -27,13 +25,7 @@ When investigating R7RS conformance issues:
 | `CALL_WITH_EXIT_AND_WITH_BAFFLE.md` | S7-inspired escape continuation + continuation barrier | Planned |
 | `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
-| `COMPILER_OPTIMIZER.md` | Bytecode optimizer: peephole, constant folding, ops prealloc (Phase 5) | Complete |
-| `INTEGER_OPCODE_DISPATCH.md` | Integer opcode dispatch — replace interface dispatch with switch for hot-path ops | Complete (design doc for Phase 6) |
-| `PHASE6_SWITCH_DISPATCH.md` | Phase 6 implementation plan: switch dispatch for 17 hot-path ops, 3 waves | Complete |
-| `APPLY_OPTIMIZATION_OPPORTUNITIES.md` | Apply call path optimization opportunities | Reference |
 | `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
-| `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
-| `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
 
 ### Proposed Designs (Future)
 
@@ -52,13 +44,16 @@ When investigating R7RS conformance issues:
 | File | Purpose | Status |
 |------|---------|--------|
 | `ARCHITECTURAL_REVIEW_FIXES.md` | Complete fix history (EXEMPT from cleanup) | Reference |
-| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Open refactoring: 2.1 deferred; 4.2, 4.4 low-priority remaining | Reference |
+| `ARCHITECTURAL_REVIEW_REFACTORING.md` | Remaining: 2.1 deferred indefinitely; 4.2, 4.4 low-priority | Reference |
 | `STRUCTURAL_ANALYSIS.md` | Dependency metrics, type precision | Reference |
 
 ### Reference
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `SIGNALS_ANALYSIS.md` | Full codebase review from a signals engineering perspective (2026-02-17) | Reference |
+| `STRUCTURAL_REDUCTION_ANALYSIS.md` | Full codebase review — dependency minimization, state tightness, composability (2026-02-17) | Reference |
+| `INTEGER_OPCODE_DISPATCH.md` | Design rationale for integer opcode dispatch (Phase 6 foundation) | Reference |
 | `SYSTEMATIC_DEBUG_LOGGING.md` | Debug methodology (pattern-based) | Reference |
 
 ## Developer Documentation (outside plans/)
