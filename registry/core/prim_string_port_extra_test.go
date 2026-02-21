@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -35,7 +36,7 @@ func TestOpenInputStringReadMultiple(t *testing.T) {
 		values.NewSymbol("b"),
 		values.NewSymbol("c"),
 	)
-	qt.Assert(t, result, values.SchemeEquals, expected)
+	qt.Assert(t, result, valuestest.SchemeEquals, expected)
 }
 
 func TestOpenInputStringWithNestedExpressions(t *testing.T) {
@@ -49,7 +50,7 @@ func TestOpenInputStringWithNestedExpressions(t *testing.T) {
 		values.NewSymbol("x"),
 		values.NewInteger(10),
 	)
-	qt.Assert(t, result, values.SchemeEquals, expected)
+	qt.Assert(t, result, valuestest.SchemeEquals, expected)
 }
 
 func TestOpenOutputStringMultipleWrites(t *testing.T) {

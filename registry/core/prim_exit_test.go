@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -107,7 +108,7 @@ func TestCallWithExit_Success(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			result, err := runSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }

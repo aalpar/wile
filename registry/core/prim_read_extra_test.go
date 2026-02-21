@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -30,7 +31,7 @@ func TestReadWithExplicitPort(t *testing.T) {
 			(read p))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
@@ -42,7 +43,7 @@ func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
 				(syntax->datum stx)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("foo"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("foo"))
 }
 
 func TestReadEOFOnExhaustedPort(t *testing.T) {
@@ -53,7 +54,7 @@ func TestReadEOFOnExhaustedPort(t *testing.T) {
 			(eof-object? (read p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestReadRepeatedEOF(t *testing.T) {
@@ -65,7 +66,7 @@ func TestReadRepeatedEOF(t *testing.T) {
 				(and (eof-object? a) (eof-object? b))))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
@@ -75,7 +76,7 @@ func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
 			(eof-object? (read-syntax p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestReadTokenEOFOnExhaustedPort(t *testing.T) {
@@ -85,7 +86,7 @@ func TestReadTokenEOFOnExhaustedPort(t *testing.T) {
 			(eof-object? (read-token p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestClosePortThenRead(t *testing.T) {
@@ -98,7 +99,7 @@ func TestClosePortThenRead(t *testing.T) {
 			(eof-object? (read p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCallWithPortClosesOnReturn(t *testing.T) {
@@ -110,7 +111,7 @@ func TestCallWithPortClosesOnReturn(t *testing.T) {
 			(not (input-port-open? p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestReadTokenReturnsToken(t *testing.T) {
@@ -121,5 +122,5 @@ func TestReadTokenReturnsToken(t *testing.T) {
 				(not (eof-object? tok))))  ; should not be eof
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,10 +30,10 @@ import (
 func TestParameter_ValueAndSetValue(t *testing.T) {
 	c := qt.New(t)
 	p := NewParameter(values.NewInteger(42), nil)
-	c.Assert(p.Value(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(p.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	p.SetValue(values.NewString("hello"))
-	c.Assert(p.Value(), values.SchemeEquals, values.NewString("hello"))
+	c.Assert(p.Value(), valuestest.SchemeEquals, values.NewString("hello"))
 }
 
 func TestParameter_Converter(t *testing.T) {
@@ -330,11 +331,11 @@ func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 	// Pop returns most recent first
 	h2 := mc.PopExceptionHandler()
 	c.Assert(h2, qt.IsNotNil)
-	c.Assert(h2.Handler(), values.SchemeEquals, values.NewString("h2"))
+	c.Assert(h2.Handler(), valuestest.SchemeEquals, values.NewString("h2"))
 
 	h1 := mc.PopExceptionHandler()
 	c.Assert(h1, qt.IsNotNil)
-	c.Assert(h1.Handler(), values.SchemeEquals, values.NewString("h1"))
+	c.Assert(h1.Handler(), valuestest.SchemeEquals, values.NewString("h1"))
 
 	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
 }

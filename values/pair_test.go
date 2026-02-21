@@ -12,25 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestPair_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  *Pair
+		in  *values.Pair
 		out string
 	}{
 		{nil, "#<void>"},
-		{NewCons(nil, nil), "(#<void> . #<void>)"},
-		{NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList)), "(1 2)"},
-		{NewCons(NewInteger(1), NewCons(NewInteger(2), NewCons(NewInteger(3), EmptyList))), "(1 2 3)"},
-		{NewCons(NewCons(NewInteger(1), NewInteger(2)), EmptyList), "((1 . 2))"},
-		{NewCons(NewCons(NewInteger(1), (*Pair)(nil)), EmptyList), "((1 . #<void>))"},
+		{values.NewCons(nil, nil), "(#<void> . #<void>)"},
+		{values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList)), "(1 2)"},
+		{values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewCons(values.NewInteger(3), values.EmptyList))), "(1 2 3)"},
+		{values.NewCons(values.NewCons(values.NewInteger(1), values.NewInteger(2)), values.EmptyList), "((1 . 2))"},
+		{values.NewCons(values.NewCons(values.NewInteger(1), (*values.Pair)(nil)), values.EmptyList), "((1 . #<void>))"},
 	}
 
 	for _, tc := range tcs {
@@ -42,98 +45,98 @@ func TestPair_SchemeString(t *testing.T) {
 func TestPair_EqualTo(t *testing.T) {
 	tcs := []struct {
 		nm  string
-		in0 *Pair
-		in1 Value
+		in0 *values.Pair
+		in1 values.Value
 		out bool
 	}{
 		{
 			nm:  "1",
-			in0: (*Pair)(nil),
-			in1: (*Pair)(nil),
+			in0: (*values.Pair)(nil),
+			in1: (*values.Pair)(nil),
 			out: true,
 		},
 		{
 			nm:  "3",
-			in0: &Pair{nil, nil},
-			in1: &Pair{nil, nil},
+			in0: &values.Pair{nil, nil},
+			in1: &values.Pair{nil, nil},
 			out: true,
 		},
 		{
 			nm:  "5",
-			in0: (*Pair)(nil),
-			in1: (*Pair)(nil),
+			in0: (*values.Pair)(nil),
+			in1: (*values.Pair)(nil),
 			out: true,
 		},
 		{
 			nm:  "6",
-			in0: NewCons(NewInteger(10), EmptyList),
-			in1: NewCons(NewInteger(10), EmptyList),
+			in0: values.NewCons(values.NewInteger(10), values.EmptyList),
+			in1: values.NewCons(values.NewInteger(10), values.EmptyList),
 			out: true,
 		},
 		{
 			nm:  "7",
-			in0: NewCons(NewInteger(10), (*Pair)(nil)),
-			in1: NewCons(NewInteger(10), Value(nil)),
+			in0: values.NewCons(values.NewInteger(10), (*values.Pair)(nil)),
+			in1: values.NewCons(values.NewInteger(10), values.Value(nil)),
 			out: true,
 		},
 		{
 			nm:  "8",
-			in0: NewCons(NewInteger(10), (*Pair)(nil)),
-			in1: NewCons(NewInteger(10), Void),
+			in0: values.NewCons(values.NewInteger(10), (*values.Pair)(nil)),
+			in1: values.NewCons(values.NewInteger(10), values.Void),
 			out: true,
 		},
 		{
 			nm:  "9",
-			in0: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList),
-			in1: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList),
+			in0: values.NewCons(values.NewCons(values.NewInteger(10), values.EmptyList), values.EmptyList),
+			in1: values.NewCons(values.NewCons(values.NewInteger(10), values.EmptyList), values.EmptyList),
 			out: true,
 		},
 		{
 			nm:  "10",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
 			out: true,
 		},
 		{
 			nm:  "11",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(30), EmptyList)),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(30), values.EmptyList)),
 			out: false,
 		},
 		{
 			nm:  "12",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(30), EmptyList)),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(30), values.EmptyList)),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
 			out: false,
 		},
 		{
 			nm:  "13",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 			out: true,
 		},
 		{
 			nm:  "14",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
 			out: false,
 		},
 		{
 			nm:  "15",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 			out: false,
 		},
 		{
 			nm:  "16",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), Void)),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.Void)),
 			out: false,
 		},
 		{
 			nm:  "17",
-			in0: NewCons(NewInteger(10), NewCons(NewInteger(20), Void)),
-			in1: NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in0: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.Void)),
+			in1: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 			out: false,
 		},
 	}
@@ -146,27 +149,27 @@ func TestPair_EqualTo(t *testing.T) {
 }
 
 func TestEmptyList_EqualTo(t *testing.T) {
-	qt.Assert(t, EmptyList.EqualTo(EmptyList), qt.IsTrue)
-	qt.Assert(t, EqualTo(EmptyList, EmptyList), qt.IsTrue)
-	qt.Assert(t, EmptyList.EqualTo(NewCons(NewInteger(1), EmptyList)), qt.IsFalse)
+	qt.Assert(t, values.EmptyList.EqualTo(values.EmptyList), qt.IsTrue)
+	qt.Assert(t, values.EqualTo(values.EmptyList, values.EmptyList), qt.IsTrue)
+	qt.Assert(t, values.EmptyList.EqualTo(values.NewCons(values.NewInteger(1), values.EmptyList)), qt.IsFalse)
 }
 
 func TestPair_NewCons(t *testing.T) {
-	pr := NewCons(nil, nil)
+	pr := values.NewCons(nil, nil)
 	qt.Assert(t, pr, qt.Not(qt.IsNil))
 }
 
 func TestPair_IsList(t *testing.T) {
 	tcs := []struct {
-		in  *Pair
+		in  *values.Pair
 		out bool
 	}{
 		{in: nil, out: false},
-		{in: NewCons(NewInteger(10), EmptyList), out: true},
-		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: true},
-		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: true},
+		{in: values.NewCons(values.NewInteger(10), values.EmptyList), out: true},
+		{in: values.NewCons(values.NewCons(values.NewInteger(10), values.EmptyList), values.EmptyList), out: true},
+		{in: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)), out: true},
 		{
-			in:  NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in:  values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 			out: false,
 		},
 	}
@@ -179,7 +182,7 @@ func TestPair_IsList(t *testing.T) {
 }
 
 func TestEmptyList_IsList(t *testing.T) {
-	qt.Assert(t, EmptyList.IsList(), qt.IsTrue)
+	qt.Assert(t, values.EmptyList.IsList(), qt.IsTrue)
 }
 
 func TestPair_IsList_Circular(t *testing.T) {
@@ -188,15 +191,15 @@ func TestPair_IsList_Circular(t *testing.T) {
 
 	t.Run("self-referential", func(t *testing.T) {
 		// (set-cdr! x x) - cdr points to self
-		p := NewCons(NewSymbol("a"), EmptyList)
+		p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
 		p.SetCdr(p)
 		qt.Assert(t, p.IsList(), qt.Equals, false)
 	})
 
 	t.Run("cycle after one element", func(t *testing.T) {
 		// (a . #0=(b . #0#))
-		p1 := NewCons(NewSymbol("a"), EmptyList)
-		p2 := NewCons(NewSymbol("b"), EmptyList)
+		p1 := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+		p2 := values.NewCons(values.NewSymbol("b"), values.EmptyList)
 		p1.SetCdr(p2)
 		p2.SetCdr(p2) // p2 points to itself
 		qt.Assert(t, p1.IsList(), qt.Equals, false)
@@ -204,8 +207,8 @@ func TestPair_IsList_Circular(t *testing.T) {
 
 	t.Run("cycle back to start", func(t *testing.T) {
 		// #0=(a b . #0#)
-		p1 := NewCons(NewSymbol("a"), EmptyList)
-		p2 := NewCons(NewSymbol("b"), EmptyList)
+		p1 := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+		p2 := values.NewCons(values.NewSymbol("b"), values.EmptyList)
 		p1.SetCdr(p2)
 		p2.SetCdr(p1) // cycle back to start
 		qt.Assert(t, p1.IsList(), qt.Equals, false)
@@ -213,9 +216,9 @@ func TestPair_IsList_Circular(t *testing.T) {
 
 	t.Run("longer cycle", func(t *testing.T) {
 		// (a b c d . #0=(e f . #0#))
-		cells := make([]*Pair, 6)
+		cells := make([]*values.Pair, 6)
 		for i := range cells {
-			cells[i] = NewCons(NewInteger(int64(i)), EmptyList)
+			cells[i] = values.NewCons(values.NewInteger(int64(i)), values.EmptyList)
 		}
 		for i := range 5 {
 			cells[i].SetCdr(cells[i+1])
@@ -227,7 +230,7 @@ func TestPair_IsList_Circular(t *testing.T) {
 
 func TestPair_Length(t *testing.T) {
 	tcs := []struct {
-		in           *Pair
+		in           *values.Pair
 		out          int
 		panicMatches string
 	}{
@@ -236,11 +239,11 @@ func TestPair_Length(t *testing.T) {
 			panicMatches: "not a list",
 			out:          -1,
 		},
-		{in: NewCons(NewInteger(10), EmptyList), out: 1},
-		{in: NewCons(NewCons(NewInteger(10), EmptyList), EmptyList), out: 1},
-		{in: NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)), out: 2},
+		{in: values.NewCons(values.NewInteger(10), values.EmptyList), out: 1},
+		{in: values.NewCons(values.NewCons(values.NewInteger(10), values.EmptyList), values.EmptyList), out: 1},
+		{in: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)), out: 2},
 		{
-			in:           NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in:           values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 			panicMatches: "not a list",
 			out:          -1,
 		},
@@ -258,60 +261,60 @@ func TestPair_Length(t *testing.T) {
 }
 
 func TestEmptyList_Length(t *testing.T) {
-	qt.Assert(t, EmptyList.Length(), qt.Equals, 0)
+	qt.Assert(t, values.EmptyList.Length(), qt.Equals, 0)
 }
 
 func TestPair_IsVoid(t *testing.T) {
-	qt.Assert(t, (*Pair)(nil).IsVoid(), qt.IsTrue)
-	qt.Assert(t, NewCons(NewInteger(1), EmptyList).IsVoid(), qt.IsFalse)
+	qt.Assert(t, (*values.Pair)(nil).IsVoid(), qt.IsTrue)
+	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsVoid(), qt.IsFalse)
 }
 
 func TestPair_IsEmptyList(t *testing.T) {
 	// *Pair.IsEmptyList() always returns false now that EmptyList is a separate type
-	qt.Assert(t, (*Pair)(nil).IsEmptyList(), qt.IsFalse)
-	qt.Assert(t, NewCons(NewInteger(1), EmptyList).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, (*values.Pair)(nil).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsEmptyList(), qt.IsFalse)
 }
 
 func TestEmptyList_IsVoidAndIsEmptyList(t *testing.T) {
-	qt.Assert(t, EmptyList.IsEmptyList(), qt.IsTrue)
-	qt.Assert(t, EmptyList.IsVoid(), qt.IsFalse)
-	qt.Assert(t, IsEmptyList(EmptyList), qt.IsTrue)
-	qt.Assert(t, IsVoid(EmptyList), qt.IsFalse)
+	qt.Assert(t, values.EmptyList.IsEmptyList(), qt.IsTrue)
+	qt.Assert(t, values.EmptyList.IsVoid(), qt.IsFalse)
+	qt.Assert(t, values.IsEmptyList(values.EmptyList), qt.IsTrue)
+	qt.Assert(t, values.IsVoid(values.EmptyList), qt.IsFalse)
 }
 
 func TestEmptyList_AsVector(t *testing.T) {
-	got := EmptyList.AsVector()
+	got := values.EmptyList.AsVector()
 	qt.Assert(t, got, qt.Not(qt.IsNil))
 	qt.Assert(t, len(got.Datum()), qt.Equals, 0)
 }
 
 func TestEmptyList_Append(t *testing.T) {
 	// Appending to empty list returns the argument
-	got := EmptyList.Append(NewCons(NewInteger(10), EmptyList))
-	qt.Assert(t, got, SchemeEquals, NewCons(NewInteger(10), EmptyList))
+	got := values.EmptyList.Append(values.NewCons(values.NewInteger(10), values.EmptyList))
+	qt.Assert(t, got, valuestest.SchemeEquals, values.NewCons(values.NewInteger(10), values.EmptyList))
 
 	// Appending nil/void returns it
-	got = EmptyList.Append((*Pair)(nil))
-	qt.Assert(t, got, qt.Equals, Value((*Pair)(nil)))
+	got = values.EmptyList.Append((*values.Pair)(nil))
+	qt.Assert(t, got, qt.Equals, values.Value((*values.Pair)(nil)))
 }
 
 func TestEmptyList_SchemeString(t *testing.T) {
-	qt.Assert(t, EmptyList.SchemeString(), qt.Equals, "()")
+	qt.Assert(t, values.EmptyList.SchemeString(), qt.Equals, "()")
 }
 
 func TestEmptyList_Car_Panics(t *testing.T) {
-	qt.Assert(t, func() { EmptyList.Car() }, qt.PanicMatches, "not a pair")
+	qt.Assert(t, func() { values.EmptyList.Car() }, qt.PanicMatches, "not a pair")
 }
 
 func TestEmptyList_Cdr_Panics(t *testing.T) {
-	qt.Assert(t, func() { EmptyList.Cdr() }, qt.PanicMatches, "not a pair")
+	qt.Assert(t, func() { values.EmptyList.Cdr() }, qt.PanicMatches, "not a pair")
 }
 
 func TestPair_AsVector(t *testing.T) {
 	tcs := []struct {
 		name         string
-		in           *Pair
-		out          *Vector
+		in           *values.Pair
+		out          *values.Vector
 		panicMatches string
 	}{
 		{
@@ -321,42 +324,42 @@ func TestPair_AsVector(t *testing.T) {
 		},
 		{
 			name:         "void pair panics",
-			in:           NewCons(nil, nil),
+			in:           values.NewCons(nil, nil),
 			panicMatches: "not a list",
 		},
 		{
 			name: "single element list",
-			in:   NewCons(NewInteger(10), EmptyList),
-			out:  NewVector(NewInteger(10)),
+			in:   values.NewCons(values.NewInteger(10), values.EmptyList),
+			out:  values.NewVector(values.NewInteger(10)),
 		},
 		{
 			name: "two element list",
-			in:   NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
-			out:  NewVector(NewInteger(10), NewInteger(20)),
+			in:   values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
+			out:  values.NewVector(values.NewInteger(10), values.NewInteger(20)),
 		},
 		{
 			name: "three element list",
-			in:   NewCons(NewInteger(1), NewCons(NewInteger(2), NewCons(NewInteger(3), EmptyList))),
-			out:  NewVector(NewInteger(1), NewInteger(2), NewInteger(3)),
+			in:   values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewCons(values.NewInteger(3), values.EmptyList))),
+			out:  values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
 			name: "nested list as element",
-			in:   NewCons(NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList)), EmptyList),
-			out:  NewVector(NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList))),
+			in:   values.NewCons(values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList)), values.EmptyList),
+			out:  values.NewVector(values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))),
 		},
 		{
 			name: "mixed types",
-			in:   NewCons(NewInteger(1), NewCons(NewString("hello"), NewCons(TrueValue, EmptyList))),
-			out:  NewVector(NewInteger(1), NewString("hello"), TrueValue),
+			in:   values.NewCons(values.NewInteger(1), values.NewCons(values.NewString("hello"), values.NewCons(values.TrueValue, values.EmptyList))),
+			out:  values.NewVector(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
 		},
 		{
 			name:         "improper list panics",
-			in:           NewCons(NewInteger(1), NewInteger(2)),
+			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 			panicMatches: "not a list",
 		},
 		{
 			name:         "improper list with multiple elements panics",
-			in:           NewCons(NewInteger(1), NewCons(NewInteger(2), NewInteger(3))),
+			in:           values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3))),
 			panicMatches: "not a list",
 		},
 	}
@@ -369,7 +372,7 @@ func TestPair_AsVector(t *testing.T) {
 				if tc.out == nil {
 					qt.Assert(t, got, qt.IsNil)
 				} else {
-					qt.Assert(t, got, SchemeEquals, tc.out)
+					qt.Assert(t, got, valuestest.SchemeEquals, tc.out)
 				}
 			}
 		})
@@ -379,70 +382,70 @@ func TestPair_AsVector(t *testing.T) {
 func TestPair_Append(t *testing.T) {
 	tcs := []struct {
 		name         string
-		in           *Pair
-		vs           Value
-		out          Value
+		in           *values.Pair
+		vs           values.Value
+		out          values.Value
 		panicMatches string
 	}{
 		{
 			name:         "nil input",
-			in:           (*Pair)(nil),
-			vs:           (*Pair)(nil),
-			out:          (*Pair)(nil),
+			in:           (*values.Pair)(nil),
+			vs:           (*values.Pair)(nil),
+			out:          (*values.Pair)(nil),
 			panicMatches: "not a list",
 		},
 		{
 			name:         "void pair input",
-			in:           NewCons(nil, nil),
-			vs:           (*Pair)(nil),
+			in:           values.NewCons(nil, nil),
+			vs:           (*values.Pair)(nil),
 			panicMatches: "not a list",
 		},
 		{
 			name: "empty vs with nil",
-			in:   NewCons(NewInteger(10), EmptyList),
-			vs:   EmptyList,
-			out:  NewCons(NewInteger(10), EmptyList),
+			in:   values.NewCons(values.NewInteger(10), values.EmptyList),
+			vs:   values.EmptyList,
+			out:  values.NewCons(values.NewInteger(10), values.EmptyList),
 		},
 		{
 			name: "append to empty list",
-			in:   NewCons(NewInteger(10), EmptyList),
-			vs:   NewCons(NewInteger(20), EmptyList),
-			out:  NewCons(NewInteger(10), NewCons(NewInteger(20), EmptyList)),
+			in:   values.NewCons(values.NewInteger(10), values.EmptyList),
+			vs:   values.NewCons(values.NewInteger(20), values.EmptyList),
+			out:  values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)),
 		},
 		{
 			name: "append to empty list with nil",
-			in:   NewCons(NewInteger(10), EmptyList),
-			vs:   NewCons(NewInteger(20), NewInteger(30)),
-			out:  NewCons(NewInteger(10), NewCons(NewInteger(20), NewInteger(30))),
+			in:   values.NewCons(values.NewInteger(10), values.EmptyList),
+			vs:   values.NewCons(values.NewInteger(20), values.NewInteger(30)),
+			out:  values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
 		},
 		{
 			name:         "append to non-list pair",
-			in:           NewCons(NewInteger(1), NewInteger(2)),
-			vs:           NewCons(NewInteger(3), EmptyList),
+			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			vs:           values.NewCons(values.NewInteger(3), values.EmptyList),
 			panicMatches: "not a list",
 		},
 		{
 			name: "append non-list value",
-			in:   NewCons(NewInteger(1), EmptyList),
-			vs:   NewInteger(2),
-			out:  NewCons(NewInteger(1), NewInteger(2)),
+			in:   values.NewCons(values.NewInteger(1), values.EmptyList),
+			vs:   values.NewInteger(2),
+			out:  values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 		},
 		{
 			name: "append Void to list",
-			in:   NewCons(NewInteger(1), EmptyList),
-			vs:   Void,
-			out:  NewCons(NewInteger(1), Void),
+			in:   values.NewCons(values.NewInteger(1), values.EmptyList),
+			vs:   values.Void,
+			out:  values.NewCons(values.NewInteger(1), values.Void),
 		},
 		{
 			name:         "append Void to non-list",
-			in:           NewCons(NewInteger(1), NewInteger(2)),
-			vs:           Void,
+			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			vs:           values.Void,
 			panicMatches: "not a list",
 		},
 		{
 			name:         "append Void to list",
-			in:           NewCons(NewInteger(1), NewInteger(2)),
-			vs:           Void,
+			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			vs:           values.Void,
 			panicMatches: "not a list",
 		},
 	}
@@ -454,7 +457,7 @@ func TestPair_Append(t *testing.T) {
 				}, qt.PanicMatches, tc.panicMatches)
 			} else {
 				got := tc.in.Append(tc.vs)
-				qt.Assert(t, got, SchemeEquals, tc.out)
+				qt.Assert(t, got, valuestest.SchemeEquals, tc.out)
 			}
 		})
 	}
@@ -464,25 +467,25 @@ func TestPair_Append_DoesNotMutateOriginal(t *testing.T) {
 	c := qt.New(t)
 
 	// Create list (1 2 3)
-	original := List(NewInteger(1), NewInteger(2), NewInteger(3))
+	original := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 
 	// Append (4 5)
-	toAppend := List(NewInteger(4), NewInteger(5))
-	result := original.(*Pair).Append(toAppend)
+	toAppend := values.List(values.NewInteger(4), values.NewInteger(5))
+	result := original.(*values.Pair).Append(toAppend)
 
 	// Verify result is correct
-	expected := List(NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewInteger(5))
-	c.Assert(result, SchemeEquals, expected)
+	expected := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))
+	c.Assert(result, valuestest.SchemeEquals, expected)
 
 	// Verify original is unchanged
-	originalExpected := List(NewInteger(1), NewInteger(2), NewInteger(3))
-	c.Assert(original, SchemeEquals, originalExpected)
+	originalExpected := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	c.Assert(original, valuestest.SchemeEquals, originalExpected)
 
 	// Verify they don't share spine by mutating result
-	result.(*Pair).SetCar(NewInteger(99))
-	c.Assert(original.(*Pair).Car(), SchemeEquals, NewInteger(1),
+	result.(*values.Pair).SetCar(values.NewInteger(99))
+	c.Assert(original.(*values.Pair).Car(), valuestest.SchemeEquals, values.NewInteger(1),
 		qt.Commentf("original should still have 1, not 99"))
-	c.Assert(result.(*Pair).Car(), SchemeEquals, NewInteger(99),
+	c.Assert(result.(*values.Pair).Car(), valuestest.SchemeEquals, values.NewInteger(99),
 		qt.Commentf("result should have 99"))
 }
 
@@ -490,14 +493,14 @@ func TestPair_Append_SharesStructureWithLastArgument(t *testing.T) {
 	c := qt.New(t)
 
 	// R7RS §6.4: the last argument shares structure
-	list1 := List(NewInteger(1), NewInteger(2))
-	list2 := List(NewInteger(3), NewInteger(4))
+	list1 := values.List(values.NewInteger(1), values.NewInteger(2))
+	list2 := values.List(values.NewInteger(3), values.NewInteger(4))
 
-	result := list1.(*Pair).Append(list2)
+	result := list1.(*values.Pair).Append(list2)
 
 	// The tail of result should be the same pointer as list2
 	// result is (1 2 3 4), so cdr of cdr should point to list2
-	resultTail := result.(*Pair).Cdr().(*Pair).Cdr()
+	resultTail := result.(*values.Pair).Cdr().(*values.Pair).Cdr()
 	c.Assert(resultTail, qt.Equals, list2,
 		qt.Commentf("last argument should share structure"))
 }
@@ -507,11 +510,11 @@ func TestPair_Append_EmptyList(t *testing.T) {
 
 	// Appending empty list should return the original list
 	// but R7RS allows returning p when vs is empty since no mutation occurs
-	original := List(NewInteger(1), NewInteger(2))
-	result := original.(*Pair).Append(EmptyList)
+	original := values.List(values.NewInteger(1), values.NewInteger(2))
+	result := original.(*values.Pair).Append(values.EmptyList)
 
 	// Verify result equals original
-	c.Assert(result, SchemeEquals, original)
+	c.Assert(result, valuestest.SchemeEquals, original)
 
 	// When vs is empty, returning p is allowed (no copy needed)
 	// because there's no mutation risk
@@ -523,59 +526,59 @@ func TestPair_Append_MultipleElements(t *testing.T) {
 	c := qt.New(t)
 
 	// Test appending longer lists
-	list1 := List(NewInteger(1), NewInteger(2), NewInteger(3))
-	list2 := List(NewInteger(4), NewInteger(5), NewInteger(6), NewInteger(7))
-	result := list1.(*Pair).Append(list2)
+	list1 := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	list2 := values.List(values.NewInteger(4), values.NewInteger(5), values.NewInteger(6), values.NewInteger(7))
+	result := list1.(*values.Pair).Append(list2)
 
-	expected := List(
-		NewInteger(1), NewInteger(2), NewInteger(3),
-		NewInteger(4), NewInteger(5), NewInteger(6), NewInteger(7),
+	expected := values.List(
+		values.NewInteger(1), values.NewInteger(2), values.NewInteger(3),
+		values.NewInteger(4), values.NewInteger(5), values.NewInteger(6), values.NewInteger(7),
 	)
-	c.Assert(result, SchemeEquals, expected)
+	c.Assert(result, valuestest.SchemeEquals, expected)
 
 	// Verify original list1 is unchanged
-	c.Assert(list1, SchemeEquals, List(NewInteger(1), NewInteger(2), NewInteger(3)))
+	c.Assert(list1, valuestest.SchemeEquals, values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)))
 
 	// Verify structure sharing with list2
-	resultTail := result.(*Pair).Cdr().(*Pair).Cdr().(*Pair).Cdr()
+	resultTail := result.(*values.Pair).Cdr().(*values.Pair).Cdr().(*values.Pair).Cdr()
 	c.Assert(resultTail, qt.Equals, list2)
 }
 
 func TestPair_Car(t *testing.T) {
-	p := NewCons(NewInteger(42), NewInteger(99))
-	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(42))
+	p := values.NewCons(values.NewInteger(42), values.NewInteger(99))
+	qt.Assert(t, p.Car(), valuestest.SchemeEquals, values.NewInteger(42))
 
-	p2 := NewCons(NewString("hello"), EmptyList)
-	qt.Assert(t, p2.Car(), SchemeEquals, NewString("hello"))
+	p2 := values.NewCons(values.NewString("hello"), values.EmptyList)
+	qt.Assert(t, p2.Car(), valuestest.SchemeEquals, values.NewString("hello"))
 }
 
 func TestPair_SetCar(t *testing.T) {
-	p := NewCons(NewInteger(1), NewInteger(2))
-	p.SetCar(NewInteger(10))
-	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(10))
-	qt.Assert(t, p.Cdr(), SchemeEquals, NewInteger(2))
+	p := values.NewCons(values.NewInteger(1), values.NewInteger(2))
+	p.SetCar(values.NewInteger(10))
+	qt.Assert(t, p.Car(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, p.Cdr(), valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func TestPair_SetCdr(t *testing.T) {
-	p := NewCons(NewInteger(1), NewInteger(2))
-	p.SetCdr(NewInteger(20))
-	qt.Assert(t, p.Car(), SchemeEquals, NewInteger(1))
-	qt.Assert(t, p.Cdr(), SchemeEquals, NewInteger(20))
+	p := values.NewCons(values.NewInteger(1), values.NewInteger(2))
+	p.SetCdr(values.NewInteger(20))
+	qt.Assert(t, p.Car(), valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, p.Cdr(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 func TestPair_Datum(t *testing.T) {
-	p := NewCons(NewInteger(1), NewInteger(2))
+	p := values.NewCons(values.NewInteger(1), values.NewInteger(2))
 	datum := p.Datum()
-	qt.Assert(t, datum[0], SchemeEquals, NewInteger(1))
-	qt.Assert(t, datum[1], SchemeEquals, NewInteger(2))
+	qt.Assert(t, datum[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, datum[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func TestPair_String(t *testing.T) {
-	p := NewCons(NewInteger(1), NewCons(NewInteger(2), EmptyList))
+	p := values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))
 	s := p.String()
 	qt.Assert(t, s, qt.Equals, "(1 2)")
 
-	p2 := NewCons(NewInteger(1), NewInteger(2))
+	p2 := values.NewCons(values.NewInteger(1), values.NewInteger(2))
 	s2 := p2.String()
 	qt.Assert(t, s2, qt.Equals, "(1 . 2)")
 }

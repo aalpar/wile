@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile"
 	extsystem "github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -115,7 +116,7 @@ func TestGetEnvironmentVariable(t *testing.T) {
 	t.Run("existing variable", func(t *testing.T) {
 		t.Setenv("WILE_TEST_VAR", "hello")
 		result := eval(t, engine, `(get-environment-variable "WILE_TEST_VAR")`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewString("hello"))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("hello"))
 	})
 
 	t.Run("nonexistent variable returns false", func(t *testing.T) {
@@ -126,13 +127,13 @@ func TestGetEnvironmentVariable(t *testing.T) {
 	t.Run("empty string value", func(t *testing.T) {
 		t.Setenv("WILE_TEST_EMPTY", "")
 		result := eval(t, engine, `(get-environment-variable "WILE_TEST_EMPTY")`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewString(""))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString(""))
 	})
 
 	t.Run("value with equals sign", func(t *testing.T) {
 		t.Setenv("WILE_TEST_EQUALS", "a=b=c")
 		result := eval(t, engine, `(get-environment-variable "WILE_TEST_EQUALS")`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewString("a=b=c"))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("a=b=c"))
 	})
 
 	t.Run("wrong argument type", func(t *testing.T) {
@@ -163,7 +164,7 @@ func TestGetEnvironmentVariables(t *testing.T) {
 			     (cdr (car vars)))
 			    (else (loop (cdr vars)))))
 		`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewString("found"))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("found"))
 	})
 
 	t.Run("entries are pairs", func(t *testing.T) {
@@ -249,7 +250,7 @@ func TestJiffiesPerSecond(t *testing.T) {
 
 	t.Run("returns 1 billion", func(t *testing.T) {
 		result := eval(t, engine, `(jiffies-per-second)`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(1_000_000_000))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(1_000_000_000))
 	})
 
 	t.Run("exact integer", func(t *testing.T) {

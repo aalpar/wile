@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math"
@@ -20,22 +20,25 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestInteger_EqualTo(t *testing.T) {
 	tcs := []struct {
-		in0 Value
-		in1 Value
+		in0 values.Value
+		in1 values.Value
 		out bool
 	}{
 		{
-			in0: NewInteger(10),
-			in1: NewInteger(10),
+			in0: values.NewInteger(10),
+			in1: values.NewInteger(10),
 			out: true,
 		},
 		{
-			in0: NewInteger(10),
-			in1: NewInteger(11),
+			in0: values.NewInteger(10),
+			in1: values.NewInteger(11),
 			out: false,
 		},
 	}
@@ -47,168 +50,168 @@ func TestInteger_EqualTo(t *testing.T) {
 }
 
 func TestInteger_Datum(t *testing.T) {
-	i := NewInteger(42)
+	i := values.NewInteger(42)
 	qt.Assert(t, i.Datum(), qt.Equals, int64(42))
 }
 
 func TestInteger_Add(t *testing.T) {
-	i1 := NewInteger(5)
-	i2 := NewInteger(3)
+	i1 := values.NewInteger(5)
+	i2 := values.NewInteger(3)
 	result := i1.Add(i2)
-	qt.Assert(t, result, SchemeEquals, NewInteger(8))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(8))
 
-	i3 := NewInteger(0)
+	i3 := values.NewInteger(0)
 	result = i1.Add(i3)
-	qt.Assert(t, result, SchemeEquals, NewInteger(5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(5))
 
-	f1 := NewFloat(2.5)
+	f1 := values.NewFloat(2.5)
 	result = i1.Add(f1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(7.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(7.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = i1.Add(r1)
-	qt.Assert(t, result, SchemeEquals, NewRational(11, 2))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(11, 2))
 
-	c1 := NewComplex(complex(1, 2))
+	c1 := values.NewComplex(complex(1, 2))
 	result = i1.Add(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(6, 2)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(6, 2)))
 }
 
 func TestInteger_Subtract(t *testing.T) {
-	i1 := NewInteger(10)
-	i2 := NewInteger(3)
+	i1 := values.NewInteger(10)
+	i2 := values.NewInteger(3)
 	result := i1.Subtract(i2)
-	qt.Assert(t, result, SchemeEquals, NewInteger(7))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(7))
 
-	i3 := NewInteger(0)
+	i3 := values.NewInteger(0)
 	result = i1.Subtract(i3)
-	qt.Assert(t, result, SchemeEquals, NewInteger(10))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(10))
 
-	f1 := NewFloat(2.5)
+	f1 := values.NewFloat(2.5)
 	result = i1.Subtract(f1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(7.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(7.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = i1.Subtract(r1)
-	qt.Assert(t, result, SchemeEquals, NewRational(19, 2))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(19, 2))
 
-	c1 := NewComplex(complex(1, 2))
+	c1 := values.NewComplex(complex(1, 2))
 	result = i1.Subtract(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(9, -2)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(9, -2)))
 }
 
 func TestInteger_Multiply(t *testing.T) {
-	i1 := NewInteger(5)
-	i2 := NewInteger(3)
+	i1 := values.NewInteger(5)
+	i2 := values.NewInteger(3)
 	result := i1.Multiply(i2)
-	qt.Assert(t, result, SchemeEquals, NewInteger(15))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(15))
 
-	i3 := NewInteger(0)
+	i3 := values.NewInteger(0)
 	result = i1.Multiply(i3)
-	qt.Assert(t, result, SchemeEquals, NewInteger(0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(0))
 
-	f1 := NewFloat(2.5)
+	f1 := values.NewFloat(2.5)
 	result = i1.Multiply(f1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(12.5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(12.5))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = i1.Multiply(r1)
-	qt.Assert(t, result, SchemeEquals, NewRational(5, 2))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(5, 2))
 
-	c1 := NewComplex(complex(2, 3))
+	c1 := values.NewComplex(complex(2, 3))
 	result = i1.Multiply(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(10, 15)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(10, 15)))
 }
 
 func TestInteger_Divide(t *testing.T) {
-	i1 := NewInteger(10)
-	i2 := NewInteger(2)
+	i1 := values.NewInteger(10)
+	i2 := values.NewInteger(2)
 	result := i1.Divide(i2)
-	qt.Assert(t, result, SchemeEquals, NewInteger(5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(5))
 
-	i3 := NewInteger(3)
+	i3 := values.NewInteger(3)
 	result = i1.Divide(i3)
-	qt.Assert(t, result, SchemeEquals, NewRational(10, 3))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(10, 3))
 
-	f1 := NewFloat(2.0)
+	f1 := values.NewFloat(2.0)
 	result = i1.Divide(f1)
-	qt.Assert(t, result, SchemeEquals, NewFloat(5.0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(5.0))
 
-	r1 := NewRational(1, 2)
+	r1 := values.NewRational(1, 2)
 	result = i1.Divide(r1)
-	qt.Assert(t, result, SchemeEquals, NewRational(20, 1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(20, 1))
 
-	c1 := NewComplex(complex(2, 0))
+	c1 := values.NewComplex(complex(2, 0))
 	result = i1.Divide(c1)
-	qt.Assert(t, result, SchemeEquals, NewComplex(complex(5, 0)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
 }
 
 func TestInteger_IsZero(t *testing.T) {
-	i1 := NewInteger(0)
+	i1 := values.NewInteger(0)
 	qt.Assert(t, i1.IsZero(), qt.IsTrue)
 
-	i2 := NewInteger(5)
+	i2 := values.NewInteger(5)
 	qt.Assert(t, i2.IsZero(), qt.IsFalse)
 }
 
 func TestInteger_LessThan(t *testing.T) {
-	i1 := NewInteger(5)
-	i2 := NewInteger(10)
+	i1 := values.NewInteger(5)
+	i2 := values.NewInteger(10)
 	qt.Assert(t, i1.LessThan(i2), qt.IsTrue)
 	qt.Assert(t, i2.LessThan(i1), qt.IsFalse)
 
-	f1 := NewFloat(7.5)
+	f1 := values.NewFloat(7.5)
 	qt.Assert(t, i1.LessThan(f1), qt.IsTrue)
 
-	r1 := NewRational(11, 2)
+	r1 := values.NewRational(11, 2)
 	qt.Assert(t, i1.LessThan(r1), qt.IsTrue)
 
-	c1 := NewComplex(complex(7, 0))
+	c1 := values.NewComplex(complex(7, 0))
 	qt.Assert(t, i1.LessThan(c1), qt.IsTrue)
 }
 
 func TestInteger_Caching(t *testing.T) {
 	// Small integers should be cached (same pointer)
-	i1 := NewInteger(42)
-	i2 := NewInteger(42)
+	i1 := values.NewInteger(42)
+	i2 := values.NewInteger(42)
 	qt.Assert(t, i1 == i2, qt.IsTrue, qt.Commentf("small integers should return same pointer"))
 
 	// Test cache boundaries (-32768 to 32767, 16-bit range)
-	iMin := NewInteger(-32768)
-	iMin2 := NewInteger(-32768)
+	iMin := values.NewInteger(-32768)
+	iMin2 := values.NewInteger(-32768)
 	qt.Assert(t, iMin == iMin2, qt.IsTrue, qt.Commentf("cache min boundary should be cached"))
 
-	iMax := NewInteger(32767)
-	iMax2 := NewInteger(32767)
+	iMax := values.NewInteger(32767)
+	iMax2 := values.NewInteger(32767)
 	qt.Assert(t, iMax == iMax2, qt.IsTrue, qt.Commentf("cache max boundary should be cached"))
 
 	// Zero should be cached
-	i0a := NewInteger(0)
-	i0b := NewInteger(0)
+	i0a := values.NewInteger(0)
+	i0b := values.NewInteger(0)
 	qt.Assert(t, i0a == i0b, qt.IsTrue, qt.Commentf("zero should be cached"))
 
 	// Negative numbers in range should be cached
-	iNeg := NewInteger(-100)
-	iNeg2 := NewInteger(-100)
+	iNeg := values.NewInteger(-100)
+	iNeg2 := values.NewInteger(-100)
 	qt.Assert(t, iNeg == iNeg2, qt.IsTrue, qt.Commentf("negative integers in range should be cached"))
 
 	// Values within 16-bit range should be cached
-	i1000a := NewInteger(1000)
-	i1000b := NewInteger(1000)
+	i1000a := values.NewInteger(1000)
+	i1000b := values.NewInteger(1000)
 	qt.Assert(t, i1000a == i1000b, qt.IsTrue, qt.Commentf("integers within 16-bit range should be cached"))
 
 	// Values outside cache range should NOT be cached (different pointers)
-	iOutMin := NewInteger(-32769)
-	iOutMin2 := NewInteger(-32769)
+	iOutMin := values.NewInteger(-32769)
+	iOutMin2 := values.NewInteger(-32769)
 	qt.Assert(t, iOutMin != iOutMin2, qt.IsTrue, qt.Commentf("integers below cache min should not be cached"))
 
-	iOutMax := NewInteger(32768)
-	iOutMax2 := NewInteger(32768)
+	iOutMax := values.NewInteger(32768)
+	iOutMax2 := values.NewInteger(32768)
 	qt.Assert(t, iOutMax != iOutMax2, qt.IsTrue, qt.Commentf("integers above cache max should not be cached"))
 
 	// Large integers should NOT be cached
-	iBig1 := NewInteger(100000)
-	iBig2 := NewInteger(100000)
+	iBig1 := values.NewInteger(100000)
+	iBig2 := values.NewInteger(100000)
 	qt.Assert(t, iBig1 != iBig2, qt.IsTrue, qt.Commentf("large integers should not be cached"))
 
 	// Cached integers should still have correct values
@@ -219,56 +222,56 @@ func TestInteger_Caching(t *testing.T) {
 func TestInteger_OverflowPromotion(t *testing.T) {
 	c := qt.New(t)
 
-	maxInt := NewInteger(math.MaxInt64)
-	minInt := NewInteger(math.MinInt64)
+	maxInt := values.NewInteger(math.MaxInt64)
+	minInt := values.NewInteger(math.MinInt64)
 
 	// MaxInt64 + 1 -> BigInteger
-	result := maxInt.Add(NewInteger(1))
-	bi, ok := result.(*BigInteger)
+	result := maxInt.Add(values.NewInteger(1))
+	bi, ok := result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("MaxInt64 + 1 should produce BigInteger, got %T", result))
 	expected := new(big.Int).Add(big.NewInt(math.MaxInt64), big.NewInt(1))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// MinInt64 - 1 -> BigInteger
-	result = minInt.Subtract(NewInteger(1))
-	bi, ok = result.(*BigInteger)
+	result = minInt.Subtract(values.NewInteger(1))
+	bi, ok = result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 - 1 should produce BigInteger, got %T", result))
 	expected = new(big.Int).Sub(big.NewInt(math.MinInt64), big.NewInt(1))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// MaxInt64 * 2 -> BigInteger
-	result = maxInt.Multiply(NewInteger(2))
-	bi, ok = result.(*BigInteger)
+	result = maxInt.Multiply(values.NewInteger(2))
+	bi, ok = result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("MaxInt64 * 2 should produce BigInteger, got %T", result))
 	expected = new(big.Int).Mul(big.NewInt(math.MaxInt64), big.NewInt(2))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// MinInt64 * 2 -> BigInteger
-	result = minInt.Multiply(NewInteger(2))
-	bi, ok = result.(*BigInteger)
+	result = minInt.Multiply(values.NewInteger(2))
+	bi, ok = result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 * 2 should produce BigInteger, got %T", result))
 	expected = new(big.Int).Mul(big.NewInt(math.MinInt64), big.NewInt(2))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// Negate MinInt64 -> BigInteger equal to 2^63
 	result = minInt.Negate()
-	bi, ok = result.(*BigInteger)
+	bi, ok = result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Negate MinInt64 should produce BigInteger, got %T", result))
 	expected = new(big.Int).Neg(big.NewInt(math.MinInt64))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// Abs MinInt64 -> BigInteger equal to 2^63
 	result = minInt.Abs()
-	bi, ok = result.(*BigInteger)
+	bi, ok = result.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Abs MinInt64 should produce BigInteger, got %T", result))
 	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
 
 	// Small values still produce *Integer
-	result = NewInteger(5).Add(NewInteger(3))
-	_, ok = result.(*Integer)
+	result = values.NewInteger(5).Add(values.NewInteger(3))
+	_, ok = result.(*values.Integer)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("5 + 3 should produce Integer, got %T", result))
 
-	result = NewInteger(5).Multiply(NewInteger(3))
-	_, ok = result.(*Integer)
+	result = values.NewInteger(5).Multiply(values.NewInteger(3))
+	_, ok = result.(*values.Integer)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("5 * 3 should produce Integer, got %T", result))
 }

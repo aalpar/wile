@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // ============================================================================
@@ -156,7 +157,7 @@ func TestFloorDivComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -248,7 +249,7 @@ func TestFloorQuotientComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -293,7 +294,7 @@ func TestFloorRemainderComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -412,7 +413,7 @@ func TestTruncateDivComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -504,7 +505,7 @@ func TestTruncateQuotientComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -549,7 +550,7 @@ func TestTruncateRemainderComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -614,16 +615,16 @@ func TestFloorVsTruncateDifference(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			floorRes, err := runSchemeCode(t, tc.floorCode)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, floorRes, values.SchemeEquals, tc.floorResult)
+			qt.Assert(t, floorRes, valuestest.SchemeEquals, tc.floorResult)
 
 			truncRes, err := runSchemeCode(t, tc.truncateCode)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, truncRes, values.SchemeEquals, tc.truncResult)
+			qt.Assert(t, truncRes, valuestest.SchemeEquals, tc.truncResult)
 
 			if tc.shouldDiffer {
-				qt.Assert(t, floorRes, qt.Not(values.SchemeEquals), truncRes)
+				qt.Assert(t, floorRes, qt.Not(valuestest.SchemeEquals), truncRes)
 			} else {
-				qt.Assert(t, floorRes, values.SchemeEquals, truncRes)
+				qt.Assert(t, floorRes, valuestest.SchemeEquals, truncRes)
 			}
 		})
 	}

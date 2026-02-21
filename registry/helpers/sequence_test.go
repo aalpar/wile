@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // ── SequenceLength ───────────────────────────────────────────────────
@@ -56,7 +57,7 @@ func TestSequenceLength_Vector(t *testing.T) {
 			mc := makeMC(tc.vec)
 			err := SequenceLength[*values.Vector](mc, values.ErrNotAVector, "vector-length")
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -86,7 +87,7 @@ func TestSequenceLength_ByteVector(t *testing.T) {
 			mc := makeMC(tc.bv)
 			err := SequenceLength[*values.ByteVector](mc, values.ErrNotAByteVector, "bytevector-length")
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -147,7 +148,7 @@ func TestSequenceRef_Vector(t *testing.T) {
 			mc := makeMC(vec, tc.idx)
 			err := SequenceRef[*values.Vector](mc, values.ErrNotAVector, "vector-ref", vectorGet)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -240,7 +241,7 @@ func TestSequenceSet_Vector(t *testing.T) {
 			err := SequenceSet[*values.Vector](mc, values.ErrNotAVector, "vector-set!", vectorSet)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), qt.Equals, values.Void)
-			c.Assert(vec.Get(int(tc.idx)), values.SchemeEquals, tc.wantAt)
+			c.Assert(vec.Get(int(tc.idx)), valuestest.SchemeEquals, tc.wantAt)
 		})
 	}
 }

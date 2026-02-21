@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -123,7 +124,7 @@ func TestExpandExpression_List(t *testing.T) {
 	cctx := context.Background()
 	result, err := cont.ExpandExpression(cctx, lst0)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.UnwrapAll(), values.SchemeEquals, lst1.UnwrapAll())
+	qt.Assert(t, result.UnwrapAll(), valuestest.SchemeEquals, lst1.UnwrapAll())
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
@@ -153,7 +154,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	resultSym, ok := resultPair.Car().(*syntax.SyntaxSymbol)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, resultSym.Unwrap(), values.SchemeEquals, values.NewSymbol("case-lambda"))
+	qt.Assert(t, resultSym.Unwrap(), valuestest.SchemeEquals, values.NewSymbol("case-lambda"))
 
 	// Count clauses
 	clauseCount := 0
@@ -182,7 +183,7 @@ func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	resultSym, ok := resultPair.Car().(*syntax.SyntaxSymbol)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, resultSym.Unwrap(), values.SchemeEquals, values.NewSymbol("case-lambda"))
+	qt.Assert(t, resultSym.Unwrap(), valuestest.SchemeEquals, values.NewSymbol("case-lambda"))
 }
 
 // Tests moved from coverage_additional_test.go
@@ -236,7 +237,7 @@ func TestAddScopeToSyntax(t *testing.T) {
 
 	// Test with non-syntax value
 	result = addScopeToSyntax(values.NewInteger(42), scope)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestAddScopeToSyntaxSkipFreeIds tests the addScopeToSyntaxSkipFreeIds function
@@ -285,7 +286,7 @@ func TestAddScopeToSyntaxSkipFreeIds(t *testing.T) {
 
 	// Test with non-syntax value
 	result = addScopeToSyntaxSkipFreeIds(values.NewInteger(42), scope, freeIds)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestAddScopeToPairSkipFreeIds tests the addScopeToPairSkipFreeIds function
@@ -352,7 +353,7 @@ func TestExpandSetForm(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestExpandCaseLambdaForm tests case-lambda expansion
@@ -380,7 +381,7 @@ func TestExpandCaseLambdaForm(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(0))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(0))
 
 	// Call with 1 arg
 	sv = parseSchemeExpr(t, env, "(cl 42)")
@@ -389,5 +390,5 @@ func TestExpandCaseLambdaForm(t *testing.T) {
 	mc = NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -34,7 +35,7 @@ func TestDeleteFile(t *testing.T) {
 	code := fmt.Sprintf(`(begin (delete-file %q) #t)`, path)
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	// Verify file was deleted
 	_, err = os.Stat(path)
@@ -63,7 +64,7 @@ func TestLoad(t *testing.T) {
 	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestLoadWithMultipleExpressions(t *testing.T) {
@@ -77,7 +78,7 @@ func TestLoadWithMultipleExpressions(t *testing.T) {
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// Should return the value of the last expression
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 func TestLoadReturnsLastValue(t *testing.T) {
@@ -90,7 +91,7 @@ func TestLoadReturnsLastValue(t *testing.T) {
 	code := fmt.Sprintf(`(load %q)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 func TestLoadWithEmptyFile(t *testing.T) {
@@ -143,5 +144,5 @@ func TestLoadAccessesTopLevelEnvironment(t *testing.T) {
 	code := fmt.Sprintf(`(begin (define global-var 32) (load %q))`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }

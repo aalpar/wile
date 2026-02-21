@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -104,7 +105,7 @@ func TestCompileSyntaxRules_RoundTrip(t *testing.T) {
 			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, mc.GetValue(), values.SchemeEquals, tc.expected)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -134,7 +135,7 @@ func TestCompileSyntaxRules_LiteralsNonMatch(t *testing.T) {
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 }
 
 // TestCompileSyntaxRules_Errors tests error conditions during syntax-rules

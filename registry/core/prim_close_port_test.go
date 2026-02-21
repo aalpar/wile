@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -32,7 +33,7 @@ func TestClosePortOnStringPorts(t *testing.T) {
 			#t)
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -40,7 +41,7 @@ func TestClosePortOnStringPorts(t *testing.T) {
 			#t)
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestClosePortOnBytevectorPorts(t *testing.T) {
@@ -50,7 +51,7 @@ func TestClosePortOnBytevectorPorts(t *testing.T) {
 			#t)
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	result, err = runSchemeCode(t, `
 		(let ((p (open-output-bytevector)))
@@ -58,5 +59,5 @@ func TestClosePortOnBytevectorPorts(t *testing.T) {
 			#t)
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

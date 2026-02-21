@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestCharacter_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  Value
+		in  values.Value
 		out string
 	}{
 		{
-			in:  NewCharacter('='),
+			in:  values.NewCharacter('='),
 			out: `#\=`,
 		},
 		{
-			in:  NewCharacter('>'),
+			in:  values.NewCharacter('>'),
 			out: `#\>`,
 		},
 	}
@@ -43,18 +45,18 @@ func TestCharacter_SchemeString(t *testing.T) {
 
 func TestCharacter_EqualTo(t *testing.T) {
 	tcs := []struct {
-		in0 Value
-		in1 Value
+		in0 values.Value
+		in1 values.Value
 		out bool
 	}{
 		{
-			in0: NewCharacter('='),
-			in1: NewCharacter('='),
+			in0: values.NewCharacter('='),
+			in1: values.NewCharacter('='),
 			out: true,
 		},
 		{
-			in0: NewCharacter('='),
-			in1: NewCharacter('>'),
+			in0: values.NewCharacter('='),
+			in1: values.NewCharacter('>'),
 			out: false,
 		},
 	}
@@ -66,20 +68,20 @@ func TestCharacter_EqualTo(t *testing.T) {
 }
 
 func TestCharacter_Datum(t *testing.T) {
-	c := NewCharacter('a')
+	c := values.NewCharacter('a')
 	qt.Assert(t, c.Datum(), qt.Equals, 'a')
 }
 
 func TestCharacter_IsVoid(t *testing.T) {
-	c := NewCharacter('x')
+	c := values.NewCharacter('x')
 	qt.Assert(t, c.IsVoid(), qt.IsFalse)
 
-	var nilChar *Character
+	var nilChar *values.Character
 	qt.Assert(t, nilChar.IsVoid(), qt.IsTrue)
 }
 
 func TestCharacter_String(t *testing.T) {
-	c := NewCharacter('z')
+	c := values.NewCharacter('z')
 	qt.Assert(t, c.String(), qt.Equals, "z")
 }
 
@@ -98,8 +100,8 @@ func TestCharacter_CacheIdentity(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			a := NewCharacter(tc.r)
-			b := NewCharacter(tc.r)
+			a := values.NewCharacter(tc.r)
+			b := values.NewCharacter(tc.r)
 			if tc.samePtr {
 				qt.Assert(t, a, qt.Equals, b)
 			} else {

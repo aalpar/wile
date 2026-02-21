@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -68,9 +69,9 @@ func TestLocalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	v := env.GetLocalBinding(li0)
-	qt.Assert(t, v.value, values.SchemeEquals, value0)
+	qt.Assert(t, v.value, valuestest.SchemeEquals, value0)
 	v = env.GetLocalBinding(li1)
-	qt.Assert(t, v.value, values.SchemeEquals, value1)
+	qt.Assert(t, v.value, valuestest.SchemeEquals, value1)
 }
 
 func TestLocalEnvironmentFrame_Bindings(t *testing.T) {
@@ -183,11 +184,11 @@ func TestCopyForApply_IndependentBindings(t *testing.T) {
 
 	// SetValue on copy does not affect original
 	copied.SetLocalValue(li0, values.NewInteger(99))
-	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, copied.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, copied.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(99))
 
 	// Original still intact
-	qt.Assert(t, le.GetLocalBinding(li1).Value(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, le.GetLocalBinding(li1).Value(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
 func TestCopyForApply_NilSafe(t *testing.T) {
@@ -229,8 +230,8 @@ func TestCopyInto_CopiesBindings(t *testing.T) {
 
 	// Bindings are independent copies
 	qt.Assert(t, len(dst.bindings), qt.Equals, 2)
-	qt.Assert(t, dst.bindings[0].Value(), values.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, dst.bindings[1].Value(), values.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, dst.bindings[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 
 	// Keys are shared
 	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.Keys()).Pointer())
@@ -238,7 +239,7 @@ func TestCopyInto_CopiesBindings(t *testing.T) {
 
 	// Mutating dst does not affect source
 	dst.bindings[0].SetValue(values.NewInteger(99))
-	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
@@ -254,7 +255,7 @@ func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
 	qt.Assert(t, dst.keysShared, qt.IsTrue)
 
 	// Bindings are independent
-	qt.Assert(t, dst.bindings[0].Value(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(42))
 	dst.bindings[0].SetValue(values.NewInteger(99))
-	qt.Assert(t, le.GetLocalBinding(li0).Value(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(42))
 }

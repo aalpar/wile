@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func newEnv(t *testing.T) *environment.EnvironmentFrame {
@@ -103,7 +104,7 @@ func TestRun(t *testing.T) {
 			result, err := runtime.Run(context.Background(), tpl, env)
 			c.Assert(err, qt.IsNil)
 			c.Assert(len(result) > 0, qt.IsTrue)
-			c.Assert(result[0], values.SchemeEquals, tc.want)
+			c.Assert(result[0], valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

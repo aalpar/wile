@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"bytes"
@@ -20,13 +20,15 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // ByteVectorInputOutputPort
 
 func TestByteVectorInputOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorInputOutputPort()
+	port := values.NewByteVectorInputOutputPort()
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -43,10 +45,10 @@ func TestByteVectorInputOutputPort_Basic(t *testing.T) {
 	c.Assert(buf, qt.DeepEquals, []byte{1, 2, 3})
 
 	// EqualTo
-	port2 := NewByteVectorInputOutputPort()
+	port2 := values.NewByteVectorInputOutputPort()
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -57,7 +59,7 @@ func TestByteVectorInputOutputPort_Basic(t *testing.T) {
 func TestByteVectorInputOutputPort_FromBuffer(t *testing.T) {
 	c := qt.New(t)
 	buf := bytes.NewBuffer([]byte{10, 20, 30})
-	port := NewByteVectorInputOutputPortFromBuffer(buf)
+	port := values.NewByteVectorInputOutputPortFromBuffer(buf)
 	c.Assert(port, qt.IsNotNil)
 
 	b := make([]byte, 3)
@@ -69,7 +71,7 @@ func TestByteVectorInputOutputPort_FromBuffer(t *testing.T) {
 
 func TestByteVectorInputOutputPort_ByteOps(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorInputOutputPort()
+	port := values.NewByteVectorInputOutputPort()
 
 	err := port.WriteByte(42)
 	c.Assert(err, qt.IsNil)
@@ -81,7 +83,7 @@ func TestByteVectorInputOutputPort_ByteOps(t *testing.T) {
 
 func TestByteVectorInputOutputPort_ReadByteVector(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorInputOutputPort()
+	port := values.NewByteVectorInputOutputPort()
 	_, err := port.Write([]byte{1, 2, 3})
 	c.Assert(err, qt.IsNil)
 
@@ -92,7 +94,7 @@ func TestByteVectorInputOutputPort_ReadByteVector(t *testing.T) {
 
 func TestByteVectorInputOutputPort_Flush(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorInputOutputPort()
+	port := values.NewByteVectorInputOutputPort()
 	err := port.Flush()
 	c.Assert(err, qt.IsNil)
 }
@@ -101,7 +103,7 @@ func TestByteVectorInputOutputPort_Flush(t *testing.T) {
 
 func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorBufferdOutputPort()
+	port := values.NewByteVectorBufferdOutputPort()
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -125,10 +127,10 @@ func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
 	c.Assert(bv, qt.IsNotNil)
 
 	// EqualTo
-	port2 := NewByteVectorBufferdOutputPort()
+	port2 := values.NewByteVectorBufferdOutputPort()
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -139,7 +141,7 @@ func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
 func TestByteVectorBufferdOutputPort_FromBuffer(t *testing.T) {
 	c := qt.New(t)
 	buf := &bytes.Buffer{}
-	port := NewByteVectorBufferdOutputPortFromBuffer(buf)
+	port := values.NewByteVectorBufferdOutputPortFromBuffer(buf)
 	c.Assert(port, qt.IsNotNil)
 
 	_, err := port.Write([]byte{1})
@@ -150,7 +152,7 @@ func TestByteVectorBufferdOutputPort_FromBuffer(t *testing.T) {
 
 func TestStringInputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewStringInputPortWithBuffer(bytes.NewBufferString("hello world"))
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString("hello world"))
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -172,10 +174,10 @@ func TestStringInputPort_Basic(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// EqualTo
-	port2 := NewStringInputPortWithBuffer(bytes.NewBufferString("hello"))
+	port2 := values.NewStringInputPortWithBuffer(bytes.NewBufferString("hello"))
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Flush and Close
 	err = port.Flush()
@@ -189,7 +191,7 @@ func TestStringInputPort_Basic(t *testing.T) {
 
 func TestStringOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewStringOutputPort()
+	port := values.NewStringOutputPort()
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -217,10 +219,10 @@ func TestStringOutputPort_Basic(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// EqualTo
-	port2 := NewStringOutputPort()
+	port2 := values.NewStringOutputPort()
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -232,7 +234,7 @@ func TestStringOutputPort_Basic(t *testing.T) {
 
 func TestCharacterInputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewCharacterInputPortFromReader(strings.NewReader("abc"))
+	port := values.NewCharacterInputPortFromReader(strings.NewReader("abc"))
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -253,10 +255,10 @@ func TestCharacterInputPort_Basic(t *testing.T) {
 	c.Assert(n, qt.Equals, 3)
 
 	// EqualTo
-	port2 := NewCharacterInputPortFromReader(strings.NewReader("def"))
+	port2 := values.NewCharacterInputPortFromReader(strings.NewReader("def"))
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -269,7 +271,7 @@ func TestCharacterInputPort_Basic(t *testing.T) {
 func TestCharacterOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
 	var buf bytes.Buffer
-	port := NewCharacterOutputPortFromWriter(&buf)
+	port := values.NewCharacterOutputPortFromWriter(&buf)
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -296,10 +298,10 @@ func TestCharacterOutputPort_Basic(t *testing.T) {
 
 	// EqualTo
 	var buf2 bytes.Buffer
-	port2 := NewCharacterOutputPortFromWriter(&buf2)
+	port2 := values.NewCharacterOutputPortFromWriter(&buf2)
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -311,7 +313,7 @@ func TestCharacterOutputPort_Basic(t *testing.T) {
 
 func TestByteVectorInputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewByteVectorInputPortFromReader(bytes.NewReader([]byte{10, 20, 30}))
+	port := values.NewByteVectorInputPortFromReader(bytes.NewReader([]byte{10, 20, 30}))
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -332,10 +334,10 @@ func TestByteVectorInputPort_Basic(t *testing.T) {
 	c.Assert(n, qt.Equals, 3)
 
 	// EqualTo
-	port2 := NewByteVectorInputPortFromReader(bytes.NewReader([]byte{1}))
+	port2 := values.NewByteVectorInputPortFromReader(bytes.NewReader([]byte{1}))
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -348,7 +350,7 @@ func TestByteVectorInputPort_Basic(t *testing.T) {
 func TestByteVectorOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
 	var buf bytes.Buffer
-	port := NewByteVectorOutputPortFromWriter(&buf)
+	port := values.NewByteVectorOutputPortFromWriter(&buf)
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -368,10 +370,10 @@ func TestByteVectorOutputPort_Basic(t *testing.T) {
 
 	// EqualTo
 	var buf2 bytes.Buffer
-	port2 := NewByteVectorOutputPortFromWriter(&buf2)
+	port2 := values.NewByteVectorOutputPortFromWriter(&buf2)
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -383,7 +385,7 @@ func TestByteVectorOutputPort_Basic(t *testing.T) {
 
 func TestBinaryInputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := NewBinaryInputPortFromReader(bytes.NewReader([]byte{5, 6, 7}))
+	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{5, 6, 7}))
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -404,10 +406,10 @@ func TestBinaryInputPort_Basic(t *testing.T) {
 	c.Assert(n, qt.Equals, 3)
 
 	// EqualTo
-	port2 := NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
+	port2 := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()
@@ -420,7 +422,7 @@ func TestBinaryInputPort_Basic(t *testing.T) {
 func TestBinaryOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
 	var buf bytes.Buffer
-	port := NewBinaryOutputPortFromWriter(&buf)
+	port := values.NewBinaryOutputPortFromWriter(&buf)
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -440,10 +442,10 @@ func TestBinaryOutputPort_Basic(t *testing.T) {
 
 	// EqualTo
 	var buf2 bytes.Buffer
-	port2 := NewBinaryOutputPortFromWriter(&buf2)
+	port2 := values.NewBinaryOutputPortFromWriter(&buf2)
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
-	c.Assert(port.EqualTo(NewInteger(1)), qt.IsFalse)
+	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
 
 	// Close
 	err = port.Close()

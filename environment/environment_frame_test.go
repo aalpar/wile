@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -83,9 +84,9 @@ func TestEnvironmentFrame_Locals(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	lb := env.GetLocalBinding(li0)
-	qt.Assert(t, lb.value, values.SchemeEquals, value0)
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, value0)
 	lb = env.GetLocalBinding(li1)
-	qt.Assert(t, lb.value, values.SchemeEquals, value1)
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, value1)
 }
 
 func TestEnvironmentFrame_Globals(t *testing.T) {
@@ -108,7 +109,7 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	// Test adding a binding
 	gi0, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, gi0, values.SchemeEquals, NewGlobalIndex(tv0))
+	qt.Assert(t, gi0, valuestest.SchemeEquals, NewGlobalIndex(tv0))
 
 	// Set the initial value of the new binding
 	err := env.SetOwnGlobalValue(gi0, value0)
@@ -118,22 +119,22 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	tv0 = env.InternSymbol(values.NewSymbol("testVar0"))
 	gi0, ok = env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsFalse)
-	qt.Assert(t, gi0.Index, values.SchemeEquals, tv0)
+	qt.Assert(t, gi0.Index, valuestest.SchemeEquals, tv0)
 
 	// Adding a new binding should create a new index
 	tv1 := values.NewSymbol("testVar1")
 	gi1, ok := env.MaybeCreateOwnGlobalBinding(tv1, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, gi1.Index, values.SchemeEquals, tv1)
+	qt.Assert(t, gi1.Index, valuestest.SchemeEquals, tv1)
 
 	// Set the initial value of the new binding
 	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
 	bd := env.GetGlobalBinding(gi0)
-	qt.Assert(t, bd.value, values.SchemeEquals, value0)
+	qt.Assert(t, bd.value, valuestest.SchemeEquals, value0)
 	bd = env.GetGlobalBinding(gi1)
-	qt.Assert(t, bd.value, values.SchemeEquals, value1)
+	qt.Assert(t, bd.value, valuestest.SchemeEquals, value1)
 }
 
 func TestEnvironmentFrame_Bindings(t *testing.T) {
@@ -153,28 +154,28 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, values.SchemeEquals, values.Void)
+	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.Void)
 
 	// check local environment
 	li0 := env.GetLocalIndex(tv0)
 	qt.Assert(t, li0, qt.IsNotNil)
 	lb := env.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, values.SchemeEquals, values.Void)
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, values.Void)
 
 	err := env.SetLocalValue(li0, values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNil)
 
 	lb = env.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, values.NewInteger(42))
 
 	err = env.SetOwnGlobalValue(gi, values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNil)
 
 	gb = env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.NewInteger(42))
 
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 	li1, ok := env.EnsureLocalBinding(tv0, BindingTypeVariable)
@@ -189,11 +190,11 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	lb = env.GetLocalBinding(li1)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, values.SchemeEquals, values.NewInteger(43))
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, values.NewInteger(43))
 
 	lb = env.parent.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestEnvironmentFrame_Hierarchy(t *testing.T) {
@@ -208,7 +209,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, values.SchemeEquals, values.Void)
+	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.Void)
 
 	lenv := NewLocalEnvironment(0)
 	env = NewEnvironmentFrameWithParent(lenv, env)
@@ -219,7 +220,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 	lb := env.GetLocalBinding(li)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, lb.value, values.SchemeEquals, values.Void)
+	qt.Assert(t, lb.value, valuestest.SchemeEquals, values.Void)
 }
 
 func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
@@ -366,7 +367,7 @@ func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
 	// GetBindingWithScopes should return it (no scopes = always matches)
 	b1 := env.GetBindingWithScopes(sym1, nil)
 	qt.Assert(t, b1, qt.Not(qt.IsNil))
-	qt.Assert(t, b1.Value(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, b1.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Test with non-existent symbol
 	sym2 := values.NewSymbol("nonexistent")
@@ -409,7 +410,7 @@ func TestEnvironmentFrame_GetLocalBindingByIndex(t *testing.T) {
 	// GetLocalBindingByIndex takes an int (the index), not a LocalIndex
 	binding := env.GetLocalBindingByIndex(li[0])
 	qt.Assert(t, binding, qt.Not(qt.IsNil))
-	qt.Assert(t, binding.Value(), values.SchemeEquals, val)
+	qt.Assert(t, binding.Value(), valuestest.SchemeEquals, val)
 }
 
 func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
@@ -426,7 +427,7 @@ func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
 	env.SetGlobalBindingByIndex(idx, newBinding)
 
 	binding := env.GetGlobalBinding(gi)
-	qt.Assert(t, binding.Value(), values.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, binding.Value(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 func TestEnvironmentFrame_LibraryRegistry(t *testing.T) {

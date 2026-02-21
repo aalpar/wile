@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // TestBigIntegerCompareFloatPrecision verifies that BigInteger.Compare
@@ -32,50 +34,50 @@ func TestBigIntegerCompareFloatPrecision(t *testing.T) {
 
 	tcs := []struct {
 		name           string
-		bigInt         *BigInteger
-		float          *Float
+		bigInt         *values.BigInteger
+		float          *values.Float
 		expectedResult int // -1, 0, or 1
 	}{
 		{
 			name:           "2^53 + 1 > 2^53 (exact in float64)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
-			float:          NewFloat(9007199254740992.0),                           // 2^53 (exact in float64)
-			expectedResult: 1,                                                      // BigInteger is larger
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
+			float:          values.NewFloat(9007199254740992.0),                           // 2^53 (exact in float64)
+			expectedResult: 1,                                                             // BigInteger is larger
 		},
 		{
 			name:           "2^53 == 2^53.0",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(9007199254740992)), // 2^53
-			float:          NewFloat(9007199254740992.0),                           // 2^53
-			expectedResult: 0,                                                      // Equal
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(9007199254740992)), // 2^53
+			float:          values.NewFloat(9007199254740992.0),                           // 2^53
+			expectedResult: 0,                                                             // Equal
 		},
 		{
 			name:           "2^53 - 1 < 2^53.0",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(9007199254740991)), // 2^53 - 1
-			float:          NewFloat(9007199254740992.0),                           // 2^53
-			expectedResult: -1,                                                     // BigInteger is smaller
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(9007199254740991)), // 2^53 - 1
+			float:          values.NewFloat(9007199254740992.0),                           // 2^53
+			expectedResult: -1,                                                            // BigInteger is smaller
 		},
 		{
 			name:           "2^54 > 2^53.0",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(18014398509481984)), // 2^54
-			float:          NewFloat(9007199254740992.0),                            // 2^53
-			expectedResult: 1,                                                       // BigInteger is larger
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(18014398509481984)), // 2^54
+			float:          values.NewFloat(9007199254740992.0),                            // 2^53
+			expectedResult: 1,                                                              // BigInteger is larger
 		},
 		{
 			name:           "negative: -(2^53 + 1) < -(2^53)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(-9007199254740993)), // -(2^53 + 1)
-			float:          NewFloat(-9007199254740992.0),                           // -(2^53)
-			expectedResult: -1,                                                      // BigInteger is smaller (more negative)
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(-9007199254740993)), // -(2^53 + 1)
+			float:          values.NewFloat(-9007199254740992.0),                           // -(2^53)
+			expectedResult: -1,                                                             // BigInteger is smaller (more negative)
 		},
 		{
 			name:           "small values: 42 == 42.0",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(42)),
-			float:          NewFloat(42.0),
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(42)),
+			float:          values.NewFloat(42.0),
 			expectedResult: 0, // Equal
 		},
 		{
 			name:           "zero: 0 == 0.0",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(0)),
-			float:          NewFloat(0.0),
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(0)),
+			float:          values.NewFloat(0.0),
 			expectedResult: 0, // Equal
 		},
 	}
@@ -99,32 +101,32 @@ func TestBigIntegerCompareComplexPrecision(t *testing.T) {
 
 	tcs := []struct {
 		name           string
-		bigInt         *BigInteger
-		complex        *Complex
+		bigInt         *values.BigInteger
+		complex        *values.Complex
 		expectedResult int // -1, 0, or 1
 	}{
 		{
 			name:           "2^53 + 1 > complex(2^53, 0)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
-			complex:        NewComplex(complex(9007199254740992.0, 0)),             // 2^53 + 0i
-			expectedResult: 1,                                                      // BigInteger is larger
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
+			complex:        values.NewComplex(complex(9007199254740992.0, 0)),             // 2^53 + 0i
+			expectedResult: 1,                                                             // BigInteger is larger
 		},
 		{
 			name:           "2^53 == complex(2^53, 0)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(9007199254740992)), // 2^53
-			complex:        NewComplex(complex(9007199254740992.0, 0)),             // 2^53 + 0i
-			expectedResult: 0,                                                      // Equal
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(9007199254740992)), // 2^53
+			complex:        values.NewComplex(complex(9007199254740992.0, 0)),             // 2^53 + 0i
+			expectedResult: 0,                                                             // Equal
 		},
 		{
 			name:           "42 == complex(42, 0)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(42)),
-			complex:        NewComplex(complex(42.0, 0)),
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(42)),
+			complex:        values.NewComplex(complex(42.0, 0)),
 			expectedResult: 0, // Equal
 		},
 		{
 			name:           "100 < complex(200, 50i)",
-			bigInt:         NewBigInteger(new(big.Int).SetInt64(100)),
-			complex:        NewComplex(complex(200.0, 50.0)),
+			bigInt:         values.NewBigInteger(new(big.Int).SetInt64(100)),
+			complex:        values.NewComplex(complex(200.0, 50.0)),
 			expectedResult: -1, // Real part comparison: 100 < 200
 		},
 	}
@@ -143,21 +145,21 @@ func TestBigIntegerArithmeticFloatPrecision(t *testing.T) {
 	c := qt.New(t)
 
 	// Use 2^54 which is beyond float64 precision boundary
-	bigInt := NewBigInteger(new(big.Int).SetInt64(18014398509481984)) // 2^54
-	floatOne := NewFloat(1.0)
+	bigInt := values.NewBigInteger(new(big.Int).SetInt64(18014398509481984)) // 2^54
+	floatOne := values.NewFloat(1.0)
 
 	t.Run("Add: 2^54 + 1.0", func(t *testing.T) {
 		result := bigInt.Add(floatOne)
 		// Result should be BigFloat (inexact) to preserve exactness contagion
 		c.Assert(result, qt.Not(qt.IsNil))
 
-		bf, ok := result.(*BigFloat)
+		bf, ok := result.(*values.BigFloat)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", result))
 
 		// Verify the value is correct
 		expected := new(big.Float).SetInt64(18014398509481984)
 		expected.Add(expected, new(big.Float).SetFloat64(1.0))
-		c.Assert(bf.value.Cmp(expected), qt.Equals, 0)
+		c.Assert(bf.BigFloatValue().Cmp(expected), qt.Equals, 0)
 
 		// Verify it's inexact
 		c.Assert(bf.IsExact(), qt.Equals, false)
@@ -170,14 +172,14 @@ func TestBigIntegerArithmeticFloatPrecision(t *testing.T) {
 	})
 
 	t.Run("Multiply: 2^54 * 2.0", func(t *testing.T) {
-		floatTwo := NewFloat(2.0)
+		floatTwo := values.NewFloat(2.0)
 		result := bigInt.Multiply(floatTwo)
 		c.Assert(result, qt.Not(qt.IsNil))
 		// Result should be 2^55
 	})
 
 	t.Run("Divide: 2^54 / 2.0", func(t *testing.T) {
-		floatTwo := NewFloat(2.0)
+		floatTwo := values.NewFloat(2.0)
 		result := bigInt.Divide(floatTwo)
 		c.Assert(result, qt.Not(qt.IsNil))
 		// Result should be 2^53
@@ -190,32 +192,32 @@ func TestBigIntegerLessThanFloat(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		bigInt   *BigInteger
-		float    *Float
+		bigInt   *values.BigInteger
+		float    *values.Float
 		expected bool
 	}{
 		{
 			name:     "2^53 + 1 is not less than 2^53.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
-			float:    NewFloat(9007199254740992.0),                           // 2^53
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(9007199254740993)), // 2^53 + 1
+			float:    values.NewFloat(9007199254740992.0),                           // 2^53
 			expected: false,
 		},
 		{
 			name:     "2^53 - 1 is less than 2^53.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(9007199254740991)), // 2^53 - 1
-			float:    NewFloat(9007199254740992.0),                           // 2^53
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(9007199254740991)), // 2^53 - 1
+			float:    values.NewFloat(9007199254740992.0),                           // 2^53
 			expected: true,
 		},
 		{
 			name:     "42 is not less than 42.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(42)),
-			float:    NewFloat(42.0),
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(42)),
+			float:    values.NewFloat(42.0),
 			expected: false,
 		},
 		{
 			name:     "10 is less than 20.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(10)),
-			float:    NewFloat(20.0),
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(10)),
+			float:    values.NewFloat(20.0),
 			expected: true,
 		},
 	}
@@ -234,26 +236,26 @@ func TestBigIntegerEqualToFloat(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		bigInt   *BigInteger
-		other    Value
+		bigInt   *values.BigInteger
+		other    values.Value
 		expected bool
 	}{
 		{
 			name:     "2^53 + 1 is not equal to 2^53.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(9007199254740993)),
-			other:    NewFloat(9007199254740992.0),
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(9007199254740993)),
+			other:    values.NewFloat(9007199254740992.0),
 			expected: false, // Different values
 		},
 		{
 			name:     "2^53 equals 2^53.0",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(9007199254740992)),
-			other:    NewFloat(9007199254740992.0),
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(9007199254740992)),
+			other:    values.NewFloat(9007199254740992.0),
 			expected: false, // EqualTo doesn't compare across exact/inexact
 		},
 		{
 			name:     "42 equals Integer 42",
-			bigInt:   NewBigInteger(new(big.Int).SetInt64(42)),
-			other:    NewInteger(42),
+			bigInt:   values.NewBigInteger(new(big.Int).SetInt64(42)),
+			other:    values.NewInteger(42),
 			expected: true, // Same exact value
 		},
 	}

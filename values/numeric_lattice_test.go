@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"fmt"
@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // =============================================================================
@@ -83,29 +85,29 @@ func (tc TypeClass) String() string {
 }
 
 // Classify returns the lattice position of a number.
-func Classify(n Number) TypeClass {
+func Classify(n values.Number) TypeClass {
 	switch v := n.(type) {
-	case *Integer:
+	case *values.Integer:
 		return TypeClass{PrecisionInteger, ComplexityReal}
-	case *BigInteger:
+	case *values.BigInteger:
 		return TypeClass{PrecisionBigInteger, ComplexityReal}
-	case *Rational:
+	case *values.Rational:
 		return TypeClass{PrecisionRational, ComplexityReal}
-	case *Float:
+	case *values.Float:
 		return TypeClass{PrecisionFloat, ComplexityReal}
-	case *BigFloat:
+	case *values.BigFloat:
 		return TypeClass{PrecisionBigFloat, ComplexityReal}
-	case *Complex:
+	case *values.Complex:
 		// complex128 uses float64 internally
 		return TypeClass{PrecisionFloat, ComplexityComplex}
-	case *BigComplex:
+	case *values.BigComplex:
 		// BigComplex precision depends on its components
 		return TypeClass{classifyBigComplexPrecision(v), ComplexityComplex}
 	}
 	panic(fmt.Sprintf("unknown type: %T", n))
 }
 
-func classifyBigComplexPrecision(bc *BigComplex) PrecisionRank {
+func classifyBigComplexPrecision(bc *values.BigComplex) PrecisionRank {
 	// BigComplex precision is the max of its real and imaginary parts
 	realPrec := Classify(bc.Real())
 	imagPrec := Classify(bc.Imag())
@@ -189,25 +191,25 @@ func TestLattice_Classify(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		value    Number
+		value    values.Number
 		expected TypeClass
 	}{
 		// Real types
-		{"Integer", NewInteger(42), TypeClass{PrecisionInteger, ComplexityReal}},
-		{"BigInteger", NewBigIntegerFromInt64(42), TypeClass{PrecisionBigInteger, ComplexityReal}},
-		{"Rational", NewRational(3, 4), TypeClass{PrecisionRational, ComplexityReal}},
-		{"Float", NewFloat(3.14), TypeClass{PrecisionFloat, ComplexityReal}},
-		{"BigFloat", NewBigFloatFromFloat64(3.14), TypeClass{PrecisionBigFloat, ComplexityReal}},
+		{"Integer", values.NewInteger(42), TypeClass{PrecisionInteger, ComplexityReal}},
+		{"BigInteger", values.NewBigIntegerFromInt64(42), TypeClass{PrecisionBigInteger, ComplexityReal}},
+		{"Rational", values.NewRational(3, 4), TypeClass{PrecisionRational, ComplexityReal}},
+		{"Float", values.NewFloat(3.14), TypeClass{PrecisionFloat, ComplexityReal}},
+		{"BigFloat", values.NewBigFloatFromFloat64(3.14), TypeClass{PrecisionBigFloat, ComplexityReal}},
 
 		// Complex types
-		{"Complex", NewComplex(complex(1, 2)), TypeClass{PrecisionFloat, ComplexityComplex}},
+		{"Complex", values.NewComplex(complex(1, 2)), TypeClass{PrecisionFloat, ComplexityComplex}},
 
 		// BigComplex with various component types
-		{"BigComplex(BigInteger)", NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2)),
+		{"BigComplex(BigInteger)", values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
 			TypeClass{PrecisionBigInteger, ComplexityComplex}},
-		{"BigComplex(Rational)", NewBigComplex(NewRational(1, 2), NewRational(3, 4)),
+		{"BigComplex(Rational)", values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4)),
 			TypeClass{PrecisionRational, ComplexityComplex}},
-		{"BigComplex(BigFloat)", NewBigComplex(NewBigFloatFromFloat64(1.0), NewBigFloatFromFloat64(2.0)),
+		{"BigComplex(BigFloat)", values.NewBigComplex(values.NewBigFloatFromFloat64(1.0), values.NewBigFloatFromFloat64(2.0)),
 			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 	}
 
@@ -278,25 +280,25 @@ func TestLattice_PredictionsVsActual(t *testing.T) {
 	c := qt.New(t)
 
 	// Test values - use different values for receiver vs operand to avoid simplification
-	testValues := map[string]Number{
-		"Integer":    NewInteger(5),
-		"BigInteger": NewBigIntegerFromInt64(7),
-		"Rational":   NewRational(3, 4),
-		"Float":      NewFloat(2.5),
-		"BigFloat":   NewBigFloatFromFloat64(3.5),
-		"Complex":    NewComplex(complex(1, 2)),
-		"BigComplex": NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2)),
+	testValues := map[string]values.Number{
+		"Integer":    values.NewInteger(5),
+		"BigInteger": values.NewBigIntegerFromInt64(7),
+		"Rational":   values.NewRational(3, 4),
+		"Float":      values.NewFloat(2.5),
+		"BigFloat":   values.NewBigFloatFromFloat64(3.5),
+		"Complex":    values.NewComplex(complex(1, 2)),
+		"BigComplex": values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
 	}
 
 	// Different operand values to avoid simplification
-	operandValues := map[string]Number{
-		"Integer":    NewInteger(3),
-		"BigInteger": NewBigIntegerFromInt64(11),
-		"Rational":   NewRational(1, 3),
-		"Float":      NewFloat(1.5),
-		"BigFloat":   NewBigFloatFromFloat64(2.5),
-		"Complex":    NewComplex(complex(3, 4)),
-		"BigComplex": NewBigComplex(NewBigIntegerFromInt64(5), NewBigIntegerFromInt64(6)),
+	operandValues := map[string]values.Number{
+		"Integer":    values.NewInteger(3),
+		"BigInteger": values.NewBigIntegerFromInt64(11),
+		"Rational":   values.NewRational(1, 3),
+		"Float":      values.NewFloat(1.5),
+		"BigFloat":   values.NewBigFloatFromFloat64(2.5),
+		"Complex":    values.NewComplex(complex(3, 4)),
+		"BigComplex": values.NewBigComplex(values.NewBigIntegerFromInt64(5), values.NewBigIntegerFromInt64(6)),
 	}
 
 	typeNames := []string{"Integer", "BigInteger", "Rational", "Float", "BigFloat", "Complex", "BigComplex"}
@@ -469,24 +471,24 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 	}
 
 	// Test values
-	testValues := map[string]Number{
-		"Integer":    NewInteger(5),
-		"BigInteger": NewBigIntegerFromInt64(7),
-		"Rational":   NewRational(3, 4),
-		"Float":      NewFloat(2.5),
-		"BigFloat":   NewBigFloatFromFloat64(3.5),
-		"Complex":    NewComplex(complex(1, 2)),
-		"BigComplex": NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2)),
+	testValues := map[string]values.Number{
+		"Integer":    values.NewInteger(5),
+		"BigInteger": values.NewBigIntegerFromInt64(7),
+		"Rational":   values.NewRational(3, 4),
+		"Float":      values.NewFloat(2.5),
+		"BigFloat":   values.NewBigFloatFromFloat64(3.5),
+		"Complex":    values.NewComplex(complex(1, 2)),
+		"BigComplex": values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
 	}
 
-	operandValues := map[string]Number{
-		"Integer":    NewInteger(3),
-		"BigInteger": NewBigIntegerFromInt64(11),
-		"Rational":   NewRational(1, 3),
-		"Float":      NewFloat(1.5),
-		"BigFloat":   NewBigFloatFromFloat64(2.5),
-		"Complex":    NewComplex(complex(3, 4)),
-		"BigComplex": NewBigComplex(NewBigIntegerFromInt64(5), NewBigIntegerFromInt64(6)),
+	operandValues := map[string]values.Number{
+		"Integer":    values.NewInteger(3),
+		"BigInteger": values.NewBigIntegerFromInt64(11),
+		"Rational":   values.NewRational(1, 3),
+		"Float":      values.NewFloat(1.5),
+		"BigFloat":   values.NewBigFloatFromFloat64(2.5),
+		"Complex":    values.NewComplex(complex(3, 4)),
+		"BigComplex": values.NewBigComplex(values.NewBigIntegerFromInt64(5), values.NewBigIntegerFromInt64(6)),
 	}
 
 	typeNames := []string{"Integer", "BigInteger", "Rational", "Float", "BigFloat", "Complex", "BigComplex"}
@@ -518,33 +520,33 @@ func TestLattice_ExactnessPreservation(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		a, b        Number
+		a, b        values.Number
 		expectExact bool
 		description string
 	}{
 		// Exact + Exact = Exact
-		{"Int+Int", NewInteger(1), NewInteger(2), true, "exact integer + exact integer"},
-		{"Int+BigInt", NewInteger(1), NewBigIntegerFromInt64(2), true, "exact integer + exact big integer"},
-		{"Int+Rational", NewInteger(1), NewRational(1, 2), true, "exact integer + exact rational"},
-		{"BigInt+Rational", NewBigIntegerFromInt64(1), NewRational(1, 2), true, "exact big integer + exact rational"},
-		{"Rational+Rational", NewRational(1, 2), NewRational(1, 3), true, "exact rational + exact rational"},
+		{"Int+Int", values.NewInteger(1), values.NewInteger(2), true, "exact integer + exact integer"},
+		{"Int+BigInt", values.NewInteger(1), values.NewBigIntegerFromInt64(2), true, "exact integer + exact big integer"},
+		{"Int+Rational", values.NewInteger(1), values.NewRational(1, 2), true, "exact integer + exact rational"},
+		{"BigInt+Rational", values.NewBigIntegerFromInt64(1), values.NewRational(1, 2), true, "exact big integer + exact rational"},
+		{"Rational+Rational", values.NewRational(1, 2), values.NewRational(1, 3), true, "exact rational + exact rational"},
 
 		// Exact + Inexact = Inexact
-		{"Int+Float", NewInteger(1), NewFloat(2.0), false, "exact + inexact float"},
-		{"Int+BigFloat", NewInteger(1), NewBigFloatFromFloat64(2.0), false, "exact + inexact big float"},
-		{"Rational+Float", NewRational(1, 2), NewFloat(2.0), false, "exact rational + inexact float"},
+		{"Int+Float", values.NewInteger(1), values.NewFloat(2.0), false, "exact + inexact float"},
+		{"Int+BigFloat", values.NewInteger(1), values.NewBigFloatFromFloat64(2.0), false, "exact + inexact big float"},
+		{"Rational+Float", values.NewRational(1, 2), values.NewFloat(2.0), false, "exact rational + inexact float"},
 
 		// Inexact + Inexact = Inexact
-		{"Float+Float", NewFloat(1.0), NewFloat(2.0), false, "inexact + inexact"},
-		{"Float+BigFloat", NewFloat(1.0), NewBigFloatFromFloat64(2.0), false, "float + big float"},
-		{"BigFloat+BigFloat", NewBigFloatFromFloat64(1.0), NewBigFloatFromFloat64(2.0), false, "big float + big float"},
+		{"Float+Float", values.NewFloat(1.0), values.NewFloat(2.0), false, "inexact + inexact"},
+		{"Float+BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(2.0), false, "float + big float"},
+		{"BigFloat+BigFloat", values.NewBigFloatFromFloat64(1.0), values.NewBigFloatFromFloat64(2.0), false, "big float + big float"},
 
 		// Complex exactness
-		{"Int+ExactComplex", NewInteger(1),
-			NewBigComplex(NewBigIntegerFromInt64(2), NewBigIntegerFromInt64(3)), true, "exact + exact complex"},
-		{"Int+InexactComplex", NewInteger(1), NewComplex(complex(2, 3)), false, "exact + inexact complex"},
-		{"Float+ExactComplex", NewFloat(1.0),
-			NewBigComplex(NewBigIntegerFromInt64(2), NewBigIntegerFromInt64(3)), false, "inexact + exact complex = inexact"},
+		{"Int+ExactComplex", values.NewInteger(1),
+			values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(3)), true, "exact + exact complex"},
+		{"Int+InexactComplex", values.NewInteger(1), values.NewComplex(complex(2, 3)), false, "exact + inexact complex"},
+		{"Float+ExactComplex", values.NewFloat(1.0),
+			values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(3)), false, "inexact + exact complex = inexact"},
 	}
 
 	for _, tt := range tests {
@@ -569,8 +571,8 @@ func TestLattice_VsLinearTower(t *testing.T) {
 	// The linear tower forces: Integer -> BigInteger -> Rational -> Float -> BigFloat -> Complex -> BigComplex
 	// This loses exactness when promoting exact reals to complex
 
-	exactInt := NewInteger(3)
-	exactComplex := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))
+	exactInt := values.NewInteger(3)
+	exactComplex := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2))
 
 	// Direct dispatch (correct): preserves exactness
 	directResult := exactInt.Add(exactComplex)
@@ -607,11 +609,11 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 	// BigFloat + Complex now preserves BigFloat precision (fixed asymmetry bug)
 	c.Run("BigFloat+Complex_preserves_precision", func(c *qt.C) {
 		// A BigFloat with more precision than float64 can represent
-		bf := NewBigFloatFromFloat64(1.0)
-		bf.value.SetPrec(256)
-		bf.value.SetString("1.123456789012345678901234567890")
+		bf := values.NewBigFloatFromFloat64(1.0)
+		bf.BigFloatValue().SetPrec(256)
+		bf.BigFloatValue().SetString("1.123456789012345678901234567890")
 
-		cx := NewComplex(complex(2, 3))
+		cx := values.NewComplex(complex(2, 3))
 
 		result := bf.Add(cx)
 
@@ -632,9 +634,9 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 		// An integer larger than float64 can exactly represent
 		largeInt := new(big.Int)
 		largeInt.SetString("9999999999999999999999999999", 10)
-		bi := &BigInteger{value: largeInt}
+		bi := values.NewBigInteger(largeInt)
 
-		fl := NewFloat(1.0)
+		fl := values.NewFloat(1.0)
 
 		result := bi.Add(fl)
 

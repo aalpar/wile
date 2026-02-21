@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -32,7 +33,7 @@ func TestBinding_NewBindingWithScopes(t *testing.T) {
 	b := NewBindingWithScopes(val, BindingTypeVariable, scopes)
 
 	qt.Assert(t, b, qt.Not(qt.IsNil))
-	qt.Assert(t, b.Value(), values.SchemeEquals, val)
+	qt.Assert(t, b.Value(), valuestest.SchemeEquals, val)
 	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypeVariable)
 	qt.Assert(t, b.Scopes(), qt.HasLen, 2)
 	qt.Assert(t, b.Scopes()[0], qt.Equals, scope1)
@@ -46,11 +47,11 @@ func TestBinding_BindingType(t *testing.T) {
 
 func TestBinding_SetValue(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b.Value(), values.SchemeEquals, values.Void)
+	qt.Assert(t, b.Value(), valuestest.SchemeEquals, values.Void)
 
 	newVal := values.NewInteger(123)
 	b.SetValue(newVal)
-	qt.Assert(t, b.Value(), values.SchemeEquals, newVal)
+	qt.Assert(t, b.Value(), valuestest.SchemeEquals, newVal)
 }
 
 func TestBinding_SetBindingType(t *testing.T) {
@@ -146,7 +147,7 @@ func TestBinding_Copy(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 
 	// Check that values are equal
-	qt.Assert(t, b2.Value(), values.SchemeEquals, b1.Value())
+	qt.Assert(t, b2.Value(), valuestest.SchemeEquals, b1.Value())
 	qt.Assert(t, b2.BindingType(), qt.Equals, b1.BindingType())
 	qt.Assert(t, b2.Scopes(), qt.HasLen, 2)
 
@@ -178,7 +179,7 @@ func TestBinding_NewBindingWithSource(t *testing.T) {
 	b := NewBindingWithSource(val, BindingTypeVariable, scopes, source)
 
 	qt.Assert(t, b, qt.Not(qt.IsNil))
-	qt.Assert(t, b.Value(), values.SchemeEquals, val)
+	qt.Assert(t, b.Value(), valuestest.SchemeEquals, val)
 	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypeVariable)
 	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
 	qt.Assert(t, b.Source(), qt.Equals, source)

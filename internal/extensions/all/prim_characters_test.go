@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile"
 	extall "github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -313,7 +314,7 @@ func TestCharUpcase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -338,7 +339,7 @@ func TestCharDowncase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -359,7 +360,7 @@ func TestCharFoldcase(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 
@@ -406,7 +407,7 @@ func TestDigitValue(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), values.SchemeEquals, tc.want)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 

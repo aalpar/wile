@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -74,11 +75,11 @@ func TestUnwindTo_DirectCall(t *testing.T) {
 	// Verify both after thunks were called
 	mc, err := runSchemeExpr(t, env, "after1-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "after2-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestUnwindTo_PartialUnwind exercises UnwindTo with a commonDepth > 0,
@@ -110,11 +111,11 @@ func TestUnwindTo_PartialUnwind(t *testing.T) {
 	// Only inner should have been called
 	mc, err := runSchemeExpr(t, env, "inner-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "outer-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.FalseValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.FalseValue)
 }
 
 // TestUnwindTo_NilAfterThunks verifies that frames with nil After closures
@@ -145,7 +146,7 @@ func TestUnwindTo_NilAfterThunks(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "tracked")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestUnwindTo_DynamicWindWithPromptAbort exercises UnwindTo via Scheme:
@@ -168,7 +169,7 @@ func TestUnwindTo_DynamicWindWithPromptAbort(t *testing.T) {
 			(lambda (v) v))`,
 	)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// The after thunk should have run during unwinding
 	mc, err = runSchemeExpr(t, env, "(memq 'after wind-log)")
@@ -200,7 +201,7 @@ func TestUnwindTo_NestedDynamicWindWithPromptAbort(t *testing.T) {
 			(lambda (v) v))`,
 	)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(99))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
 
 	// Both after thunks should have run (inner first, then outer)
 	mc, err = runSchemeExpr(t, env, "wind-log2")
@@ -212,7 +213,7 @@ func TestUnwindTo_NestedDynamicWindWithPromptAbort(t *testing.T) {
 		values.NewSymbol("inner-before"),
 		values.NewSymbol("outer-before"),
 	)
-	c.Assert(mc.GetValue(), values.SchemeEquals, expected)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // --- RestoreWithWinding ---
@@ -244,7 +245,7 @@ func TestRestoreWithWinding_DirectCall(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "before-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestRestoreWithWinding_UnwindAndRewind exercises RestoreWithWinding with
@@ -280,11 +281,11 @@ func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "src-after-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 
 	mc, err = runSchemeExpr(t, env, "tgt-before-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // --- FindPrompt ---
@@ -429,7 +430,7 @@ func TestRewindTo_DirectCall(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	// b2 was cons'd last (innermost, called second), so it's car
 	expected := values.List(values.NewSymbol("b2"), values.NewSymbol("b1"))
-	c.Assert(mc.GetValue(), values.SchemeEquals, expected)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 // TestRewindTo_NilBeforeThunks verifies that frames with nil Before
@@ -474,7 +475,7 @@ func TestCallCC_DynamicWindReentry(t *testing.T) {
 			(lambda () (set! reentry-log (cons 'after reentry-log))))`,
 	)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewSymbol("result"))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("result"))
 
 	// Log should be (after thunk before) from first pass
 	_, err = runSchemeExpr(t, env, "reentry-log")
@@ -483,7 +484,7 @@ func TestCallCC_DynamicWindReentry(t *testing.T) {
 	// Now re-enter the continuation
 	mc, err = runSchemeExpr(t, env, "(k 'ignored)")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewSymbol("result"))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("result"))
 
 	// After re-entry, log should have additional before/thunk/after entries
 	mc, err = runSchemeExpr(t, env, "(memq 'before reentry-log)")
@@ -526,7 +527,7 @@ func TestComposableContinuation_DynamicWind(t *testing.T) {
 	var mc *machine.MachineContext
 	mc, err = runSchemeExpr(t, env, "(cc-k 10)")
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(11))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(11))
 
 	// Verify winding happened
 	mc, err = runSchemeExpr(t, env, "(memq 'before cc-log)")
@@ -735,7 +736,7 @@ func TestRunWithEscapeHandling_PromptAbortNoHandler(t *testing.T) {
 			(lambda (v) v))`,
 	)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestRunWithEscapeHandling_PromptAbortWithMultipleValues exercises abort
@@ -753,7 +754,7 @@ func TestRunWithEscapeHandling_PromptAbortWithMultipleValues(t *testing.T) {
 			(lambda (a b) (+ a b)))`,
 	)
 	c.Assert(err, qt.IsNil)
-	c.Assert(mc.GetValue(), values.SchemeEquals, values.NewInteger(30))
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 }
 
 // TestRunWithEscapeHandling_NormalCompletionWithWindingStack exercises the
@@ -781,7 +782,7 @@ func TestRunWithEscapeHandling_NormalCompletionWithWindingStack(t *testing.T) {
 
 	result, err := runSchemeExpr(t, env, "unwind-called")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.GetValue(), values.SchemeEquals, values.TrueValue)
+	c.Assert(result.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
 // TestRunWithEscapeHandling_OtherError exercises the fallthrough path

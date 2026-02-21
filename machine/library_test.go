@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
 
@@ -514,14 +515,14 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	fooTarget := targetEnv.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
 	fooBinding := targetEnv.GetBinding(fooTarget)
 	c.Assert(fooBinding, qt.IsNotNil)
-	c.Assert(fooBinding.Value(), values.SchemeEquals, values.NewInteger(42))
+	c.Assert(fooBinding.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Verify syntax binding was copied
 	barTarget := targetEnv.InternSymbol(values.NewSymbol("bar"))
 	barBinding := targetEnv.Expand().GetBinding(barTarget)
 	c.Assert(barBinding, qt.IsNotNil)
 	c.Assert(barBinding.BindingType(), qt.Equals, environment.BindingTypeSyntax)
-	c.Assert(barBinding.Value(), values.SchemeEquals, mockMacro)
+	c.Assert(barBinding.Value(), valuestest.SchemeEquals, mockMacro)
 }
 
 func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
@@ -554,7 +555,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	myFooSym := targetEnv.InternSymbol(values.NewSymbol("my-bindSymbolWithScopes"))
 	binding := targetEnv.GetBinding(myFooSym)
 	c.Assert(binding, qt.IsNotNil)
-	c.Assert(binding.Value(), values.SchemeEquals, values.NewInteger(99))
+	c.Assert(binding.Value(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 func TestCopyLibraryBindingsToEnv_MissingBinding(t *testing.T) {
@@ -706,14 +707,14 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 	elseTarget := targetEnv.InternSymbol(values.NewSymbol("else"))
 	runtimeBinding := targetEnv.GetBinding(elseTarget)
 	c.Assert(runtimeBinding, qt.IsNotNil, qt.Commentf("else should be in runtime phase"))
-	c.Assert(runtimeBinding.Value(), values.SchemeEquals, mockValue)
+	c.Assert(runtimeBinding.Value(), valuestest.SchemeEquals, mockValue)
 
 	// Verify binding is also present in compile phase (phase 2)
 	targetCompileEnv := targetEnv.AtPhase(2)
 	elseCompileSym := targetCompileEnv.InternSymbol(values.NewSymbol("else"))
 	compileBinding := targetCompileEnv.GetBinding(elseCompileSym)
 	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))
-	c.Assert(compileBinding.Value(), values.SchemeEquals, mockValue)
+	c.Assert(compileBinding.Value(), valuestest.SchemeEquals, mockValue)
 }
 
 // TestLibraryForwardReferences tests that library bodies support forward references

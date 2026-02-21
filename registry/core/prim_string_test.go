@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -111,7 +112,7 @@ func TestStringLength(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -137,7 +138,7 @@ func TestStringRef(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -163,7 +164,7 @@ func TestSubstring(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -194,7 +195,7 @@ func TestStringAppend(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -220,7 +221,7 @@ func TestStringToList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -249,7 +250,7 @@ func TestListToString(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -266,7 +267,7 @@ func TestListToStringUnicode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -287,7 +288,7 @@ func TestStringToSymbol(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -309,7 +310,7 @@ func TestStringToSymbolEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -341,7 +342,7 @@ func TestStringSymbolRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -363,7 +364,7 @@ func TestSymbolToString(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -385,7 +386,7 @@ func TestSymbolToStringEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -411,7 +412,7 @@ func TestNumberToString(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -437,7 +438,7 @@ func TestStringToNumber(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -508,7 +509,7 @@ func TestStringLengthExtended(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -535,7 +536,7 @@ func TestStringRefExtended(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -595,7 +596,7 @@ func TestSubstringExtended(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -650,7 +651,7 @@ func TestMakeString(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -704,7 +705,7 @@ func TestStringCopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -775,7 +776,7 @@ func TestStringCase(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -817,7 +818,7 @@ func TestStringPredicate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -849,7 +850,7 @@ func TestStringFoldcase(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -903,7 +904,7 @@ func TestStringFoldcaseUnicode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -930,7 +931,7 @@ func TestStringConstructor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1011,7 +1012,7 @@ func TestStringUnicode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1273,7 +1274,7 @@ func TestCharUnicode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1307,7 +1308,7 @@ func TestStringSet(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1360,7 +1361,7 @@ func TestStringFill(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1413,7 +1414,7 @@ func TestStringCopyTo(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1485,7 +1486,7 @@ func TestStringMap(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1546,7 +1547,7 @@ func TestStringForEach(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1587,7 +1588,7 @@ func TestStringToListOptional(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1650,7 +1651,7 @@ func TestStringSetMutable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }

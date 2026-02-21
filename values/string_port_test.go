@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"bytes"
@@ -20,15 +20,17 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestStringInputOutputPort_NewStringInputPort(t *testing.T) {
-	port := NewStringInputPortWithBuffer(bytes.NewBufferString("hello"))
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString("hello"))
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestStringInputOutputPort_ReadRune(t *testing.T) {
-	port := NewStringInputPortWithBuffer(bytes.NewBufferString("abc"))
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString("abc"))
 	r1, _, err := port.ReadRune()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, r1, qt.Equals, 'a')
@@ -39,7 +41,7 @@ func TestStringInputOutputPort_ReadRune(t *testing.T) {
 }
 
 func TestStringInputOutputPort_UnreadRune(t *testing.T) {
-	port := NewStringInputPortWithBuffer(bytes.NewBufferString("abc"))
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString("abc"))
 	r1, _, _ := port.ReadRune()
 	qt.Assert(t, r1, qt.Equals, 'a')
 
@@ -51,40 +53,40 @@ func TestStringInputOutputPort_UnreadRune(t *testing.T) {
 }
 
 func TestStringInputOutputPort_IsVoid(t *testing.T) {
-	port := NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
+	port := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
 
-	var nilPort *StringOutputPort
+	var nilPort *values.StringOutputPort
 	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestStringInputOutputPort_Datum(t *testing.T) {
-	port := NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
+	port := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	datum := port.Datum()
 	qt.Assert(t, datum, qt.Not(qt.IsNil))
 }
 
 func TestStringInputOutputPort_EqualTo(t *testing.T) {
-	port1 := NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
-	port2 := NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
+	port1 := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
+	port2 := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	qt.Assert(t, port1.EqualTo(port2), qt.IsFalse)
 
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
 }
 
 func TestStringInputOutputPort_SchemeString(t *testing.T) {
-	port := NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
+	port := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "string-input-output-port"), qt.IsTrue)
 }
 
 func TestStringInputOutputPort_NewStringOutputPort(t *testing.T) {
-	port := NewStringOutputPort()
+	port := values.NewStringOutputPort()
 	qt.Assert(t, port, qt.Not(qt.IsNil))
 }
 
 func TestStringInputOutputPort_Write(t *testing.T) {
-	port := NewStringOutputPort()
+	port := values.NewStringOutputPort()
 	n, err := port.WriteString("hello")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, n, qt.Equals, 5)
@@ -95,7 +97,7 @@ func TestStringInputOutputPort_Write(t *testing.T) {
 }
 
 func TestStringInputOutputPort_GetString(t *testing.T) {
-	port := NewStringOutputPort()
+	port := values.NewStringOutputPort()
 	port.WriteString("hello") //nolint:errcheck
 	port.WriteString(" ")     //nolint:errcheck
 	port.WriteString("world") //nolint:errcheck

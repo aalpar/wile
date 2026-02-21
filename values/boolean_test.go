@@ -12,47 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestBoolean_New(t *testing.T) {
 	tcs := []struct {
 		in  bool
-		out Value
+		out values.Value
 	}{
 		{
 			in:  true,
-			out: NewBoolean(true),
+			out: values.NewBoolean(true),
 		},
 		{
 			in:  false,
-			out: NewBoolean(false),
+			out: values.NewBoolean(false),
 		},
 	}
 	for _, tc := range tcs {
 		t.Run("", func(t *testing.T) {
-			v := NewBoolean(tc.in)
-			qt.Assert(t, v, SchemeEquals, tc.out)
+			v := values.NewBoolean(tc.in)
+			qt.Assert(t, v, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
 
 func TestBoolean_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  Value
+		in  values.Value
 		out string
 	}{
 		{
-			in:  NewBoolean(true),
+			in:  values.NewBoolean(true),
 			out: "#t",
 		},
 		{
-			in:  NewBoolean(false),
+			in:  values.NewBoolean(false),
 			out: "#f",
 		},
 	}
@@ -65,23 +68,23 @@ func TestBoolean_SchemeString(t *testing.T) {
 
 func TestBoolean_EqualTo(t *testing.T) {
 	tcs := []struct {
-		in0 Value
-		in1 Value
+		in0 values.Value
+		in1 values.Value
 		out bool
 	}{
 		{
-			in0: NewBoolean(true),
-			in1: NewBoolean(true),
+			in0: values.NewBoolean(true),
+			in1: values.NewBoolean(true),
 			out: true,
 		},
 		{
-			in0: NewBoolean(true),
-			in1: NewBoolean(false),
+			in0: values.NewBoolean(true),
+			in1: values.NewBoolean(false),
 			out: false,
 		},
 		{
-			in0: NewBoolean(false),
-			in1: NewBoolean(false),
+			in0: values.NewBoolean(false),
+			in1: values.NewBoolean(false),
 			out: true,
 		},
 	}
@@ -93,10 +96,10 @@ func TestBoolean_EqualTo(t *testing.T) {
 }
 
 func TestBoolean_Datum(t *testing.T) {
-	b := NewBoolean(true)
+	b := values.NewBoolean(true)
 	qt.Assert(t, b.Datum(), qt.Equals, true)
 
-	b2 := NewBoolean(false)
+	b2 := values.NewBoolean(false)
 	qt.Assert(t, b2.Datum(), qt.Equals, false)
 }
 
@@ -104,23 +107,23 @@ func TestBoolToBoolean(t *testing.T) {
 	tcs := []struct {
 		name string
 		in   bool
-		out  *Boolean
+		out  *values.Boolean
 	}{
 		{
 			name: "true returns TrueValue",
 			in:   true,
-			out:  TrueValue,
+			out:  values.TrueValue,
 		},
 		{
 			name: "false returns FalseValue",
 			in:   false,
-			out:  FalseValue,
+			out:  values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := BoolToBoolean(tc.in)
+			result := values.BoolToBoolean(tc.in)
 			c.Assert(result, qt.Equals, tc.out)
 		})
 	}
@@ -129,79 +132,79 @@ func TestBoolToBoolean(t *testing.T) {
 func TestValueToBool(t *testing.T) {
 	tcs := []struct {
 		name string
-		in   Value
+		in   values.Value
 		out  bool
 	}{
 		{
 			name: "boolean false returns false",
-			in:   FalseValue,
+			in:   values.FalseValue,
 			out:  false,
 		},
 		{
 			name: "boolean true returns true",
-			in:   TrueValue,
+			in:   values.TrueValue,
 			out:  true,
 		},
 		{
 			name: "integer returns true (Scheme semantics)",
-			in:   NewInteger(0),
+			in:   values.NewInteger(0),
 			out:  true,
 		},
 		{
 			name: "negative integer returns true",
-			in:   NewInteger(-1),
+			in:   values.NewInteger(-1),
 			out:  true,
 		},
 		{
 			name: "positive integer returns true",
-			in:   NewInteger(42),
+			in:   values.NewInteger(42),
 			out:  true,
 		},
 		{
 			name: "empty string returns true",
-			in:   NewString(""),
+			in:   values.NewString(""),
 			out:  true,
 		},
 		{
 			name: "non-empty string returns true",
-			in:   NewString("hello"),
+			in:   values.NewString("hello"),
 			out:  true,
 		},
 		{
 			name: "empty list returns true",
-			in:   EmptyList,
+			in:   values.EmptyList,
 			out:  true,
 		},
 		{
 			name: "pair returns true",
-			in:   NewCons(NewInteger(1), NewInteger(2)),
+			in:   values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 			out:  true,
 		},
 		{
 			name: "symbol returns true",
-			in:   NewSymbol("foo"),
+			in:   values.NewSymbol("foo"),
 			out:  true,
 		},
 		{
 			name: "void returns true",
-			in:   Void,
+			in:   values.Void,
 			out:  true,
 		},
 		{
 			name: "character returns true",
-			in:   NewCharacter('a'),
+			in:   values.NewCharacter('a'),
 			out:  true,
 		},
 		{
 			name: "float zero returns true",
-			in:   NewFloat(0.0),
+			in:   values.NewFloat(0.0),
 			out:  true,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValueToBool(tc.in)
+			result := values.ValueToBool(tc.in)
 			c.Assert(result, qt.Equals, tc.out)
 		})
 	}
@@ -210,44 +213,44 @@ func TestValueToBool(t *testing.T) {
 func TestValueToBoolean(t *testing.T) {
 	tcs := []struct {
 		name string
-		in   Value
-		out  *Boolean
+		in   values.Value
+		out  *values.Boolean
 	}{
 		{
 			name: "boolean false returns FalseValue",
-			in:   FalseValue,
-			out:  FalseValue,
+			in:   values.FalseValue,
+			out:  values.FalseValue,
 		},
 		{
 			name: "boolean true returns TrueValue",
-			in:   TrueValue,
-			out:  TrueValue,
+			in:   values.TrueValue,
+			out:  values.TrueValue,
 		},
 		{
 			name: "integer returns TrueValue (Scheme semantics)",
-			in:   NewInteger(0),
-			out:  TrueValue,
+			in:   values.NewInteger(0),
+			out:  values.TrueValue,
 		},
 		{
 			name: "string returns TrueValue",
-			in:   NewString(""),
-			out:  TrueValue,
+			in:   values.NewString(""),
+			out:  values.TrueValue,
 		},
 		{
 			name: "empty list returns TrueValue",
-			in:   EmptyList,
-			out:  TrueValue,
+			in:   values.EmptyList,
+			out:  values.TrueValue,
 		},
 		{
 			name: "symbol returns TrueValue",
-			in:   NewSymbol("bar"),
-			out:  TrueValue,
+			in:   values.NewSymbol("bar"),
+			out:  values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := ValueToBoolean(tc.in)
+			result := values.ValueToBoolean(tc.in)
 			c.Assert(result, qt.Equals, tc.out)
 		})
 	}

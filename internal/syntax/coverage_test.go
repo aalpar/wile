@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -266,14 +267,14 @@ func TestSyntaxComment_Unwrap(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	comment := NewSyntaxComment("; hello", sctx)
 	result := comment.Unwrap()
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("; hello"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("; hello"))
 }
 
 func TestSyntaxComment_UnwrapAll(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	comment := NewSyntaxComment("; hello", sctx)
 	result := comment.UnwrapAll()
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("; hello"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("; hello"))
 }
 
 func TestSyntaxComment_IsVoid(t *testing.T) {
@@ -315,14 +316,14 @@ func TestSyntaxDirective_Unwrap(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	directive := NewSyntaxDirective("#!fold-case", sctx)
 	result := directive.Unwrap()
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("#!fold-case"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("#!fold-case"))
 }
 
 func TestSyntaxDirective_UnwrapAll(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	directive := NewSyntaxDirective("#!fold-case", sctx)
 	result := directive.UnwrapAll()
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("#!fold-case"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("#!fold-case"))
 }
 
 func TestSyntaxDirective_IsVoid(t *testing.T) {
@@ -375,7 +376,7 @@ func TestSyntaxDatumComment_UnwrapAll(t *testing.T) {
 	value := NewSyntaxObject(values.NewInteger(42), sctx)
 	datum := NewSyntaxDatumComment("#;", value, sctx)
 	result := datum.UnwrapAll()
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestSyntaxDatumComment_IsVoid(t *testing.T) {
@@ -427,14 +428,14 @@ func TestSyntaxDatumLabel_Unwrap(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	label := NewSyntaxDatumLabel(1, sctx)
 	result := label.Unwrap()
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestSyntaxDatumLabel_UnwrapAll(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	label := NewSyntaxDatumLabel(1, sctx)
 	result := label.UnwrapAll()
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestSyntaxDatumLabel_IsVoid(t *testing.T) {
@@ -486,7 +487,7 @@ func TestSyntaxDatumLabelAssignment_UnwrapAll(t *testing.T) {
 	value := NewSyntaxObject(values.NewInteger(42), sctx)
 	assignment := NewSyntaxDatumLabelAssignment(1, value, sctx)
 	result := assignment.UnwrapAll()
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestSyntaxDatumLabelAssignment_IsVoid(t *testing.T) {
@@ -712,26 +713,6 @@ func TestNewScope(t *testing.T) {
 func TestSyntaxEmptyListCoverage(t *testing.T) {
 	qt.Assert(t, SyntaxEmptyList, qt.IsNotNil)
 	qt.Assert(t, SyntaxEmptyList.IsEmptyList(), qt.IsTrue)
-}
-
-// Test SyntaxEquals checker
-func TestSyntaxEquals(t *testing.T) {
-	checker := SyntaxEquals
-	qt.Assert(t, checker.ArgNames(), qt.DeepEquals, []string{"got", "want"})
-
-	sctx1 := NewSourceContext("test", "file.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(5, 5, 1))
-	sctx2 := NewSourceContext("test", "file.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(5, 5, 1))
-	sctx3 := NewSourceContext("other", "file.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(5, 5, 1))
-
-	sym1 := NewSyntaxSymbol("foo", sctx1)
-	sym2 := NewSyntaxSymbol("foo", sctx2)
-	sym3 := NewSyntaxSymbol("foo", sctx3)
-
-	err := checker.Check(sym1, []any{sym2}, nil)
-	qt.Assert(t, err, qt.IsNil)
-
-	err = checker.Check(sym1, []any{sym3}, nil)
-	qt.Assert(t, err, qt.IsNotNil)
 }
 
 // TestSyntaxList_ElementSourceContext verifies that SyntaxList preserves

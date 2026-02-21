@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -189,7 +190,7 @@ func TestHashDigit_Parser(t *testing.T) {
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
 			v := syn.UnwrapAll()
-			c.Assert(v, values.SchemeEquals, tc.expect)
+			c.Assert(v, valuestest.SchemeEquals, tc.expect)
 		})
 	}
 }

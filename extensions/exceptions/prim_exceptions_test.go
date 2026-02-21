@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile"
 	extexceptions "github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -63,7 +64,7 @@ func TestWithExceptionHandler(t *testing.T) {
 			    (lambda () (raise-continuable 'my-error)))
 			  caught)
 		`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewSymbol("my-error"))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("my-error"))
 	})
 
 	t.Run("thunk completes without exception", func(t *testing.T) {
@@ -72,7 +73,7 @@ func TestWithExceptionHandler(t *testing.T) {
 			  (lambda (e) 'not-called)
 			  (lambda () 42))
 		`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(42))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 
 	t.Run("nested handlers with continuable", func(t *testing.T) {
@@ -135,7 +136,7 @@ func TestRaiseContinuable(t *testing.T) {
 			  (lambda (e) 100)
 			  (lambda () (+ 1 (raise-continuable 'ignored))))
 		`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(101))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(101))
 	})
 
 	t.Run("raise continuable with symbol", func(t *testing.T) {
@@ -144,7 +145,7 @@ func TestRaiseContinuable(t *testing.T) {
 			  (lambda (e) 42)
 			  (lambda () (raise-continuable 'warning)))
 		`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(42))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 
 	t.Run("wrong argument count", func(t *testing.T) {

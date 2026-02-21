@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -81,7 +82,7 @@ func TestExactnessPredicates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -159,7 +160,7 @@ func TestSpecialValuePredicates(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -206,7 +207,7 @@ func TestExactnessConversions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -275,7 +276,7 @@ func TestExactIntegerSqrt(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
-			qt.Assert(t, result, values.SchemeEquals, expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, expected)
 		})
 	}
 }
@@ -310,7 +311,7 @@ func TestRationalize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -363,7 +364,7 @@ func TestFloorDivision(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
-			qt.Assert(t, result, values.SchemeEquals, expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, expected)
 		})
 	}
 }
@@ -389,7 +390,7 @@ func TestFloorQuotient(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -415,7 +416,7 @@ func TestFloorRemainder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -468,7 +469,7 @@ func TestTruncateDivision(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			// Result should be a list of two values
 			expected := values.List(tc.out1, tc.out2)
-			qt.Assert(t, result, values.SchemeEquals, expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, expected)
 		})
 	}
 }
@@ -494,7 +495,7 @@ func TestTruncateQuotient(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -520,7 +521,7 @@ func TestTruncateRemainder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }

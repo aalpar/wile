@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // TestCoreArithmetic tests basic arithmetic primitives.
@@ -40,7 +41,7 @@ func TestCoreArithmetic(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.Expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -92,7 +93,7 @@ func TestCoreListOperations(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tc.Expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

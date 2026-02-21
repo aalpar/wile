@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -53,7 +54,7 @@ func TestEval(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -89,7 +90,7 @@ func TestEvalExtended(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -127,7 +128,7 @@ func TestEvalWithLambda(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -228,7 +229,7 @@ func TestCompile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -277,7 +278,7 @@ func TestSyntaxToDatum(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -315,7 +316,7 @@ func TestDatumToSyntax(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -382,7 +383,7 @@ func TestIdentifierQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -415,7 +416,7 @@ func TestExpand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -449,7 +450,7 @@ func TestExpandOnce(t *testing.T) {
 		result, err := runSchemeCode(t, code)
 		qt.Assert(t, err, qt.IsNil)
 		// For a primitive form like +, no expansion happens
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("expand-once returns syntax object", func(t *testing.T) {
@@ -460,7 +461,7 @@ func TestExpandOnce(t *testing.T) {
 		result, err := runSchemeCode(t, code)
 		qt.Assert(t, err, qt.IsNil)
 		expected := values.List(values.NewSymbol("+"), values.NewInteger(1), values.NewInteger(2))
-		qt.Assert(t, result, values.SchemeEquals, expected)
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
 	})
 }
 
@@ -523,7 +524,7 @@ func TestEnvironmentSymbolIdentity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -548,7 +549,7 @@ func TestNullEnvironmentSymbolIdentity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }

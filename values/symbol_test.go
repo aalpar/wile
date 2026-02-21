@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 func TestSymbol_EqualTo(t *testing.T) {
-	s0 := NewSymbol("a")
-	s1 := NewSymbol("b")
-	s2 := NewSymbol("a")
+	s0 := values.NewSymbol("a")
+	s1 := values.NewSymbol("b")
+	s2 := values.NewSymbol("a")
 	// check pointer equality first
 	qt.Assert(t, s0.EqualTo(s1), qt.Equals, false)
 	qt.Assert(t, s0.EqualTo(s2), qt.Equals, true)
@@ -34,28 +36,28 @@ func TestSymbol_EqualTo(t *testing.T) {
 }
 
 func TestSymbol_Datum(t *testing.T) {
-	s := NewSymbol("test")
+	s := values.NewSymbol("test")
 	qt.Assert(t, s.Datum(), qt.Equals, "test")
 }
 
 func TestSymbol_Copy(t *testing.T) {
-	s := NewSymbol("original")
+	s := values.NewSymbol("original")
 	copyVal := s.Copy()
-	cpy, ok := copyVal.(*Symbol)
+	cpy, ok := copyVal.(*values.Symbol)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cpy.Key, qt.Equals, "original")
 	qt.Assert(t, cpy, qt.Not(qt.Equals), s)
 }
 
 func TestSymbol_SchemeString(t *testing.T) {
-	s := NewSymbol("lambda")
+	s := values.NewSymbol("lambda")
 	qt.Assert(t, s.SchemeString(), qt.Equals, "lambda")
 }
 
 func TestSymbol_IsVoid(t *testing.T) {
-	s := NewSymbol("test")
+	s := values.NewSymbol("test")
 	qt.Assert(t, s.IsVoid(), qt.IsFalse)
 
-	var nilSym *Symbol
+	var nilSym *values.Symbol
 	qt.Assert(t, nilSym.IsVoid(), qt.IsTrue)
 }

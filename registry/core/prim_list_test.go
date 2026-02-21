@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -38,7 +39,7 @@ func TestCar(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -74,7 +75,7 @@ func TestCdr(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -123,7 +124,7 @@ func TestCons(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -139,7 +140,7 @@ func TestList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -159,7 +160,7 @@ func TestCar_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -175,7 +176,7 @@ func TestCdr_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -193,7 +194,7 @@ func TestCons_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -213,7 +214,7 @@ func TestSetCarBang_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -231,7 +232,7 @@ func TestSetCdrBang_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -249,7 +250,7 @@ func TestListRef_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -286,7 +287,7 @@ func TestListTail_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -320,7 +321,7 @@ func TestListSetBang_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -352,7 +353,7 @@ func TestMemq_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -380,7 +381,7 @@ func TestMemv_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -408,7 +409,7 @@ func TestMember_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -442,7 +443,7 @@ func TestAssq_ImproperAlist(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -472,7 +473,7 @@ func TestAssv_ImproperAlist(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -502,7 +503,7 @@ func TestAssoc_ImproperAlist(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -932,7 +933,7 @@ func TestCxR_ImproperList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -977,7 +978,7 @@ func TestNullQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1004,7 +1005,7 @@ func TestPairQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1032,7 +1033,7 @@ func TestListQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1055,7 +1056,7 @@ func TestSetCarBang(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1091,7 +1092,7 @@ func TestSetCdrBang(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1129,7 +1130,7 @@ func TestListSetBang(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1170,7 +1171,7 @@ func TestMakeList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1222,7 +1223,7 @@ func TestAppend(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1245,7 +1246,7 @@ func TestLength(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1287,7 +1288,7 @@ func TestReverse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1321,7 +1322,7 @@ func TestListRef(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1361,7 +1362,7 @@ func TestListTail(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1404,7 +1405,7 @@ func TestMemq(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1431,7 +1432,7 @@ func TestMemv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1458,7 +1459,7 @@ func TestMember(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1504,7 +1505,7 @@ func TestMemberWithCompare(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1532,7 +1533,7 @@ func TestAssq(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1555,7 +1556,7 @@ func TestAssv(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1581,7 +1582,7 @@ func TestAssoc(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1631,7 +1632,7 @@ func TestAssocWithCompare(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1668,7 +1669,7 @@ func TestListCopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1687,7 +1688,7 @@ func TestListCopy_SpineIndependence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }
@@ -1706,7 +1707,7 @@ func TestListCopy_ElementSharing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 }

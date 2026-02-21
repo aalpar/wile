@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -91,7 +92,7 @@ func runRoundTripsWith(t *testing.T, eval evalFunc, cases []roundTripCase) {
 		c.Run(tt.name, func(c *qt.C) {
 			result, err := eval(t, env, tt.code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, values.SchemeEquals, tt.expected)
+			c.Assert(result, valuestest.SchemeEquals, tt.expected)
 		})
 	}
 }

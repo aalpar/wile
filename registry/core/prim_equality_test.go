@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -54,7 +55,7 @@ func TestNumericEquality(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -94,7 +95,7 @@ func TestEqQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -130,7 +131,7 @@ func TestEqualQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -146,7 +147,7 @@ func TestEqQWithDifferentPairs(t *testing.T) {
 	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// Two different pairs should not be eq?
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestEqualQWithLists(t *testing.T) {
@@ -159,7 +160,7 @@ func TestEqualQWithLists(t *testing.T) {
 	result, err := runProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// equal? compares by value, so equivalent lists should be equal?
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEqv(t *testing.T) {
@@ -409,7 +410,7 @@ func TestEqvQPrimitive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }

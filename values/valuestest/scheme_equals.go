@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+// Package valuestest provides test helpers for the values package.
+package valuestest
 
 import (
 	"errors"
 	"fmt"
 	"reflect"
 
+	"github.com/aalpar/wile/values"
+
 	qt "github.com/frankban/quicktest"
 )
 
 // SchemeEquals is a quicktest checker for Scheme value equality.
-var SchemeEquals qt.Checker = &schemeEqualsChecker{}
+var SchemeEquals qt.Checker = &schemeEqualsChecker{} //nolint:gocritic // test helper, not Scheme runtime
 
 type schemeEqualsChecker struct{}
 
@@ -37,7 +40,7 @@ func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, v
 		// A panic is raised when the provided args are not comparable.
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("%s", r) //nolint:gocritic // quicktest checker, not Scheme runtime
+			err = fmt.Errorf("%s", r) //nolint:gocritic // test helper, not Scheme runtime
 		}
 	}()
 
@@ -46,7 +49,7 @@ func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, v
 	// Customize error message for non-nil errors.
 	_, ok := got.(error)
 	if ok && got == nil {
-		return errors.New("got non-nil error") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("got non-nil error") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
 	// Show error types when comparing errors with different types.
@@ -61,19 +64,19 @@ func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, v
 				note("want type", qt.Unquoted(wantType.String()))
 			}
 		}
-		return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("values are not equal") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
-	gotValue, ok0 := got.(Value)
-	wantValue, ok1 := want.(Value)
+	gotValue, ok0 := got.(values.Value)
+	wantValue, ok1 := want.(values.Value)
 	if !ok0 || !ok1 {
-		return errors.New("got and want must be of type Datum") //nolint:gocritic // quicktest checker, not Scheme runtime
+		return errors.New("got and want must be of type Datum") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
 	// Binding(nil).(Binding) == false so check
-	if EqualTo(gotValue, wantValue) {
+	if values.EqualTo(gotValue, wantValue) {
 		return nil
 	}
 
-	return errors.New("values are not equal") //nolint:gocritic // quicktest checker, not Scheme runtime
+	return errors.New("values are not equal") //nolint:gocritic // test helper, not Scheme runtime
 }

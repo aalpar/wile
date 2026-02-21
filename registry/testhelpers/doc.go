@@ -18,7 +18,7 @@
 //
 //	result, err := testhelpers.RunSchemeCode(t, "(+ 1 2)")
 //	c.Assert(err, qt.IsNil)
-//	c.Assert(result, values.SchemeEquals, values.NewInteger(3))
+//	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(3))
 //
 // # Helpers
 //

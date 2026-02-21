@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -31,61 +32,61 @@ func TestIntegerQ(t *testing.T) {
 	t.Run("integer? on exact integer", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 42)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on inexact integer", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 3.0)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on non-integer float", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 3.5)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on non-integer rational", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 1/2)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on integer rational", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 1/1)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on complex with zero imaginary", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 3+0i)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on complex with non-zero imaginary", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 3+1i)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on negative integer", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? -5)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on zero", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? 0)")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on non-number", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(integer? \"hello\")")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 }
 
@@ -422,7 +423,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	t.Run("string->number on invalid string", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(string->number \"xyz\")")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("string->number on float string", func(t *testing.T) {
@@ -468,7 +469,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	t.Run("string->number on empty string", func(t *testing.T) {
 		result, err := runSchemeCode(t, "(string->number \"\")")
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("string->number on negative float string", func(t *testing.T) {
@@ -519,7 +520,7 @@ func TestStringToNumber_Prefixes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
 
@@ -527,13 +528,13 @@ func TestStringToNumber_Prefixes(t *testing.T) {
 	t.Run("invalid prefix returns false", func(t *testing.T) {
 		result, err := runSchemeCode(t, `(string->number "#q42")`)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("empty after prefix returns false", func(t *testing.T) {
 		result, err := runSchemeCode(t, `(string->number "#x")`)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 }
 

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -33,7 +34,7 @@ func TestEofObjectFromRead(t *testing.T) {
 			(eof-object? (read p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectFromReadAfterData(t *testing.T) {
@@ -44,7 +45,7 @@ func TestEofObjectFromReadAfterData(t *testing.T) {
 			(eof-object? (read p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectFromReadCharAfterRead(t *testing.T) {
@@ -55,7 +56,7 @@ func TestEofObjectFromReadCharAfterRead(t *testing.T) {
 			(eof-object? (read-char p)))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectFromReadMultipleEof(t *testing.T) {
@@ -70,24 +71,24 @@ func TestEofObjectFromReadMultipleEof(t *testing.T) {
 				     (eof-object? c))))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectUniqueness(t *testing.T) {
 	// There is only one eof-object
 	result, err := runSchemeCode(t, `(eq? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectEqv(t *testing.T) {
 	result, err := runSchemeCode(t, `(eqv? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectEqual(t *testing.T) {
 	result, err := runSchemeCode(t, `(equal? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

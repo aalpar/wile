@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package values_test
 
 import (
 	"math"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
 )
 
 // TestExactnessContagionAddition validates R7RS §6.2.2 exactness contagion
@@ -45,49 +47,49 @@ func TestExactnessContagionAddition(t *testing.T) {
 	// This is the critical case that detects improper zero short-circuits.
 	tcs := []struct {
 		name     string
-		a        Number
-		b        Number
+		a        values.Number
+		b        values.Number
 		wantType string
 		isExact  bool
 	}{
 		// Integer (exact) + Float (inexact) → Float (inexact)
-		{"Integer 0 + Float 0.0", NewInteger(0), NewFloat(0.0), "Float", false},
-		{"Float 0.0 + Integer 0", NewFloat(0.0), NewInteger(0), "Float", false},
+		{"Integer 0 + Float 0.0", values.NewInteger(0), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 + Integer 0", values.NewFloat(0.0), values.NewInteger(0), "Float", false},
 
 		// Integer (exact) + Integer (exact) → Integer (exact)
-		{"Integer 0 + Integer 0", NewInteger(0), NewInteger(0), "Integer", true},
+		{"Integer 0 + Integer 0", values.NewInteger(0), values.NewInteger(0), "Integer", true},
 
 		// BigInteger (exact) + Float (inexact) → BigFloat (inexact)
 		// Changed: precision preservation via BigFloat instead of Float
-		{"BigInteger 0 + Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "BigFloat", false},
-		{"Float 0.0 + BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
+		{"BigInteger 0 + Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "BigFloat", false},
+		{"Float 0.0 + BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// BigInteger (exact) + BigFloat (inexact) → BigFloat (inexact)
-		{"BigInteger 0 + BigFloat 0.0", NewBigIntegerFromInt64(0), NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 + BigInteger 0", NewBigFloatFromFloat64(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
+		{"BigInteger 0 + BigFloat 0.0", values.NewBigIntegerFromInt64(0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 + BigInteger 0", values.NewBigFloatFromFloat64(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// Rational (exact) + Float (inexact) → Float (inexact)
-		{"Rational 0/1 + Float 0.0", NewRational(0, 1), NewFloat(0.0), "Float", false},
-		{"Float 0.0 + Rational 0/1", NewFloat(0.0), NewRational(0, 1), "Float", false},
+		{"Rational 0/1 + Float 0.0", values.NewRational(0, 1), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 + Rational 0/1", values.NewFloat(0.0), values.NewRational(0, 1), "Float", false},
 
 		// Rational (exact) + BigFloat (inexact) → BigFloat (inexact)
-		{"Rational 0/1 + BigFloat 0.0", NewRational(0, 1), NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 + Rational 0/1", NewBigFloatFromFloat64(0.0), NewRational(0, 1), "BigFloat", false},
+		{"Rational 0/1 + BigFloat 0.0", values.NewRational(0, 1), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 + Rational 0/1", values.NewBigFloatFromFloat64(0.0), values.NewRational(0, 1), "BigFloat", false},
 
 		// Integer (exact) + Complex (inexact) → Complex (inexact)
-		{"Integer 0 + Complex 0+0i", NewInteger(0), NewComplex(0), "Complex", false},
-		{"Complex 0+0i + Integer 0", NewComplex(0), NewInteger(0), "Complex", false},
+		{"Integer 0 + Complex 0+0i", values.NewInteger(0), values.NewComplex(0), "Complex", false},
+		{"Complex 0+0i + Integer 0", values.NewComplex(0), values.NewInteger(0), "Complex", false},
 
 		// BigInteger (exact) + BigComplex (can be exact or inexact depending on parts)
-		{"BigInteger 0 + BigComplex(inexact)", NewBigIntegerFromInt64(0),
-			NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), NewBigFloatFromFloat64(0)),
+		{"BigInteger 0 + BigComplex(inexact)", values.NewBigIntegerFromInt64(0),
+			values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(0), values.NewBigFloatFromFloat64(0)),
 			"BigComplex", false},
 
 		// Float (inexact) + Float (inexact) → Float (inexact)
-		{"Float 0.0 + Float 0.0", NewFloat(0.0), NewFloat(0.0), "Float", false},
+		{"Float 0.0 + Float 0.0", values.NewFloat(0.0), values.NewFloat(0.0), "Float", false},
 
 		// BigFloat (inexact) + BigFloat (inexact) → BigFloat (inexact)
-		{"BigFloat 0.0 + BigFloat 0.0", NewBigFloatFromFloat64(0.0), NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 + BigFloat 0.0", values.NewBigFloatFromFloat64(0.0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
 	}
 
 	for _, tc := range tcs {
@@ -116,44 +118,44 @@ func TestExactnessContagionSubtraction(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		a        Number
-		b        Number
+		a        values.Number
+		b        values.Number
 		wantType string
 		isExact  bool
 	}{
 		// Integer (exact) - Float (inexact) → Float (inexact)
-		{"Integer 0 - Float 0.0", NewInteger(0), NewFloat(0.0), "Float", false},
-		{"Float 0.0 - Integer 0", NewFloat(0.0), NewInteger(0), "Float", false},
+		{"Integer 0 - Float 0.0", values.NewInteger(0), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 - Integer 0", values.NewFloat(0.0), values.NewInteger(0), "Float", false},
 
 		// Integer (exact) - Integer (exact) → Integer (exact)
-		{"Integer 0 - Integer 0", NewInteger(0), NewInteger(0), "Integer", true},
+		{"Integer 0 - Integer 0", values.NewInteger(0), values.NewInteger(0), "Integer", true},
 
 		// BigInteger (exact) - Float (inexact) → BigFloat (inexact)
 		// Changed: precision preservation via BigFloat instead of Float
-		{"BigInteger 0 - Float 0.0", NewBigIntegerFromInt64(0), NewFloat(0.0), "BigFloat", false},
-		{"Float 0.0 - BigInteger 0", NewFloat(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
+		{"BigInteger 0 - Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "BigFloat", false},
+		{"Float 0.0 - BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// BigInteger (exact) - BigFloat (inexact) → BigFloat (inexact)
-		{"BigInteger 0 - BigFloat 0.0", NewBigIntegerFromInt64(0), NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 - BigInteger 0", NewBigFloatFromFloat64(0.0), NewBigIntegerFromInt64(0), "BigFloat", false},
+		{"BigInteger 0 - BigFloat 0.0", values.NewBigIntegerFromInt64(0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 - BigInteger 0", values.NewBigFloatFromFloat64(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
 
 		// Rational (exact) - Float (inexact) → Float (inexact)
-		{"Rational 0/1 - Float 0.0", NewRational(0, 1), NewFloat(0.0), "Float", false},
-		{"Float 0.0 - Rational 0/1", NewFloat(0.0), NewRational(0, 1), "Float", false},
+		{"Rational 0/1 - Float 0.0", values.NewRational(0, 1), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 - Rational 0/1", values.NewFloat(0.0), values.NewRational(0, 1), "Float", false},
 
 		// Rational (exact) - BigFloat (inexact) → BigFloat (inexact)
-		{"Rational 0/1 - BigFloat 0.0", NewRational(0, 1), NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 - Rational 0/1", NewBigFloatFromFloat64(0.0), NewRational(0, 1), "BigFloat", false},
+		{"Rational 0/1 - BigFloat 0.0", values.NewRational(0, 1), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 - Rational 0/1", values.NewBigFloatFromFloat64(0.0), values.NewRational(0, 1), "BigFloat", false},
 
 		// Integer (exact) - Complex (inexact) → Complex (inexact)
-		{"Integer 0 - Complex 0+0i", NewInteger(0), NewComplex(0), "Complex", false},
-		{"Complex 0+0i - Integer 0", NewComplex(0), NewInteger(0), "Complex", false},
+		{"Integer 0 - Complex 0+0i", values.NewInteger(0), values.NewComplex(0), "Complex", false},
+		{"Complex 0+0i - Integer 0", values.NewComplex(0), values.NewInteger(0), "Complex", false},
 
 		// Float (inexact) - Float (inexact) → Float (inexact)
-		{"Float 0.0 - Float 0.0", NewFloat(0.0), NewFloat(0.0), "Float", false},
+		{"Float 0.0 - Float 0.0", values.NewFloat(0.0), values.NewFloat(0.0), "Float", false},
 
 		// BigFloat (inexact) - BigFloat (inexact) → BigFloat (inexact)
-		{"BigFloat 0.0 - BigFloat 0.0", NewBigFloatFromFloat64(0.0), NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 - BigFloat 0.0", values.NewBigFloatFromFloat64(0.0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
 	}
 
 	for _, tc := range tcs {
@@ -185,20 +187,20 @@ func TestExactnessContagionSubtraction(t *testing.T) {
 func TestIEEE754SignedZeroPreservation(t *testing.T) {
 	c := qt.New(t)
 
-	posZero := NewFloat(+0.0)
-	negZero := NewFloat(math.Copysign(0.0, -1.0)) // -0.0
+	posZero := values.NewFloat(+0.0)
+	negZero := values.NewFloat(math.Copysign(0.0, -1.0)) // -0.0
 
 	// Helper to check sign via math.Signbit
-	isNegativeZero := func(n Number) bool {
-		f, ok := n.(*Float)
+	isNegativeZero := func(n values.Number) bool {
+		f, ok := n.(*values.Float)
 		if !ok {
 			return false
 		}
 		return f.Value == 0.0 && math.Signbit(f.Value)
 	}
 
-	isPositiveZero := func(n Number) bool {
-		f, ok := n.(*Float)
+	isPositiveZero := func(n values.Number) bool {
+		f, ok := n.(*values.Float)
 		if !ok {
 			return false
 		}
@@ -207,36 +209,36 @@ func TestIEEE754SignedZeroPreservation(t *testing.T) {
 
 	tcs := []struct {
 		name    string
-		a       Number
-		b       Number
-		op      func(Number, Number) Number
+		a       values.Number
+		b       values.Number
+		op      func(values.Number, values.Number) values.Number
 		wantPos bool // true = +0.0, false = -0.0
 	}{
 		// Addition
-		{"(+0.0) + (+0.0)", posZero, posZero, func(a, b Number) Number {
+		{"(+0.0) + (+0.0)", posZero, posZero, func(a, b values.Number) values.Number {
 			return a.Add(b)
 		}, true},
-		{"(+0.0) + (-0.0)", posZero, negZero, func(a, b Number) Number {
+		{"(+0.0) + (-0.0)", posZero, negZero, func(a, b values.Number) values.Number {
 			return a.Add(b)
 		}, true},
-		{"(-0.0) + (-0.0)", negZero, negZero, func(a, b Number) Number {
+		{"(-0.0) + (-0.0)", negZero, negZero, func(a, b values.Number) values.Number {
 			return a.Add(b)
 		}, false},
-		{"(-0.0) + (+0.0)", negZero, posZero, func(a, b Number) Number {
+		{"(-0.0) + (+0.0)", negZero, posZero, func(a, b values.Number) values.Number {
 			return a.Add(b)
 		}, true},
 
 		// Subtraction
-		{"(+0.0) - (+0.0)", posZero, posZero, func(a, b Number) Number {
+		{"(+0.0) - (+0.0)", posZero, posZero, func(a, b values.Number) values.Number {
 			return a.Subtract(b)
 		}, true},
-		{"(+0.0) - (-0.0)", posZero, negZero, func(a, b Number) Number {
+		{"(+0.0) - (-0.0)", posZero, negZero, func(a, b values.Number) values.Number {
 			return a.Subtract(b)
 		}, true},
-		{"(-0.0) - (+0.0)", negZero, posZero, func(a, b Number) Number {
+		{"(-0.0) - (+0.0)", negZero, posZero, func(a, b values.Number) values.Number {
 			return a.Subtract(b)
 		}, false},
-		{"(-0.0) - (-0.0)", negZero, negZero, func(a, b Number) Number {
+		{"(-0.0) - (-0.0)", negZero, negZero, func(a, b values.Number) values.Number {
 			return a.Subtract(b)
 		}, true},
 	}
@@ -251,7 +253,7 @@ func TestIEEE754SignedZeroPreservation(t *testing.T) {
 			} else {
 				c.Assert(isNegativeZero(result), qt.IsTrue,
 					qt.Commentf("Expected -0.0, got %v (signbit=%v)",
-						result.SchemeString(), math.Signbit(result.(*Float).Value)))
+						result.SchemeString(), math.Signbit(result.(*values.Float).Value)))
 			}
 		})
 	}
@@ -290,26 +292,26 @@ func TestMultiplicationExactZeroOptimization(t *testing.T) {
 
 	// Case 1: Exact zero * finite inexact → exact zero
 	// This is the optimization: mathematically unambiguous result
-	result := NewInteger(0).Multiply(NewFloat(42.5))
+	result := values.NewInteger(0).Multiply(values.NewFloat(42.5))
 	c.Assert(result.IsZero(), qt.IsTrue)
 	c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("(* 0 42.5) should be exact 0"))
 
 	// Case 2: Inexact zero * finite exact → depends on implementation
 	// Some implementations return exact 0, others return inexact 0
-	result = NewFloat(0.0).Multiply(NewInteger(42))
+	result = values.NewFloat(0.0).Multiply(values.NewInteger(42))
 	c.Assert(result.IsZero(), qt.IsTrue)
 	// No exactness assertion here — both behaviors are acceptable per R7RS
 
 	// Case 3: Exact zero * infinity → NaN (NOT zero)
-	result = NewInteger(0).Multiply(NewFloat(math.Inf(1)))
+	result = values.NewInteger(0).Multiply(values.NewFloat(math.Inf(1)))
 	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 +inf.0) should be +nan.0"))
 
 	// Case 4: Exact zero * -infinity → NaN (NOT zero)
-	result = NewInteger(0).Multiply(NewFloat(math.Inf(-1)))
+	result = values.NewInteger(0).Multiply(values.NewFloat(math.Inf(-1)))
 	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 -inf.0) should be +nan.0"))
 
 	// Case 5: Exact zero * NaN → NaN (NOT zero)
-	result = NewInteger(0).Multiply(NewFloat(math.NaN()))
+	result = values.NewInteger(0).Multiply(values.NewFloat(math.NaN()))
 	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 +nan.0) should be +nan.0"))
 }
 
@@ -334,17 +336,17 @@ func TestExactnessContagionWhyMultiplicationIsDifferent(t *testing.T) {
 	c := qt.New(t)
 
 	// Demonstrate: addition preserves exactness of non-zero operand
-	addResult := NewInteger(0).Add(NewFloat(0.0))
+	addResult := values.NewInteger(0).Add(values.NewFloat(0.0))
 	c.Assert(addResult.IsExact(), qt.IsFalse,
 		qt.Commentf("(+ 0 0.0) must be inexact because 0.0 is inexact"))
 
 	// Demonstrate: subtraction preserves exactness of minuend
-	subResult := NewFloat(0.0).Subtract(NewInteger(0))
+	subResult := values.NewFloat(0.0).Subtract(values.NewInteger(0))
 	c.Assert(subResult.IsExact(), qt.IsFalse,
 		qt.Commentf("(- 0.0 0) must be inexact because 0.0 is inexact"))
 
 	// Demonstrate: multiplication can return exact zero
-	mulResult := NewInteger(0).Multiply(NewFloat(42.5))
+	mulResult := values.NewInteger(0).Multiply(values.NewFloat(42.5))
 	c.Assert(mulResult.IsExact(), qt.IsTrue,
 		qt.Commentf("(* 0 42.5) can be exact because result is mathematically 0"))
 }

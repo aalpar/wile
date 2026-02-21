@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -49,9 +50,9 @@ func (p *SyntaxVectorSuite) TestNewSyntaxVector_WithValues(c *qt.C) {
 
 	vec := NewSyntaxVector(p.sctx, v1, v2, v3)
 	c.Assert(len(vec.Values), qt.Equals, 3)
-	c.Assert(vec.Values[0], values.SchemeEquals, v1)
-	c.Assert(vec.Values[1], values.SchemeEquals, v2)
-	c.Assert(vec.Values[2], values.SchemeEquals, v3)
+	c.Assert(vec.Values[0], valuestest.SchemeEquals, v1)
+	c.Assert(vec.Values[1], valuestest.SchemeEquals, v2)
+	c.Assert(vec.Values[2], valuestest.SchemeEquals, v3)
 }
 
 func (p *SyntaxVectorSuite) TestSourceContext(c *qt.C) {
@@ -88,14 +89,14 @@ func (p *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(*resultVec), qt.Equals, 2)
 	// Unwrap keeps syntax values inside
-	c.Assert((*resultVec)[0], values.SchemeEquals, v1)
-	c.Assert((*resultVec)[1], values.SchemeEquals, v2)
+	c.Assert((*resultVec)[0], valuestest.SchemeEquals, v1)
+	c.Assert((*resultVec)[1], valuestest.SchemeEquals, v2)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.Unwrap()
-	c.Assert(result, values.SchemeEquals, values.Void)
+	c.Assert(result, valuestest.SchemeEquals, values.Void)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
@@ -117,8 +118,8 @@ func (p *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(len(*resultVec), qt.Equals, 2)
 	// UnwrapAll recursively unwraps to raw values
-	c.Assert((*resultVec)[0], values.SchemeEquals, values.NewInteger(1))
-	c.Assert((*resultVec)[1], values.SchemeEquals, values.NewInteger(2))
+	c.Assert((*resultVec)[0], valuestest.SchemeEquals, values.NewInteger(1))
+	c.Assert((*resultVec)[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
@@ -135,13 +136,13 @@ func (p *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {
 	expected := values.NewVector(
 		values.NewVector(values.NewInteger(1), values.NewInteger(2)),
 		values.NewVector(values.NewInteger(3), values.NewInteger(4)))
-	c.Assert(result, values.SchemeEquals, expected)
+	c.Assert(result, valuestest.SchemeEquals, expected)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_Nil(c *qt.C) {
 	var vec *SyntaxVector
 	result := vec.UnwrapAll()
-	c.Assert(result, values.SchemeEquals, values.Void)
+	c.Assert(result, valuestest.SchemeEquals, values.Void)
 }
 
 func (p *SyntaxVectorSuite) TestSchemeString_Empty(c *qt.C) {
@@ -230,9 +231,9 @@ func (p *SyntaxVectorSuite) TestSyntaxForEach_IteratesElements(c *qt.C) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(IsSyntaxEmptyList(tail), qt.IsTrue)
 	c.Assert(len(seen), qt.Equals, 3)
-	c.Assert(seen[0], values.SchemeEquals, v1)
-	c.Assert(seen[1], values.SchemeEquals, v2)
-	c.Assert(seen[2], values.SchemeEquals, v3)
+	c.Assert(seen[0], valuestest.SchemeEquals, v1)
+	c.Assert(seen[1], valuestest.SchemeEquals, v2)
+	c.Assert(seen[2], valuestest.SchemeEquals, v3)
 	c.Assert(idxs, qt.DeepEquals, []int{0, 1, 2})
 	c.Assert(lastFlags, qt.DeepEquals, []bool{true, true, false})
 }
@@ -285,8 +286,8 @@ func (p *SyntaxVectorSuite) TestSyntaxForEach_ErrorStopsIteration(c *qt.C) {
 	c.Assert(err, qt.Equals, sentinel)
 	c.Assert(tail, qt.IsNil)
 	c.Assert(len(seen), qt.Equals, 2)
-	c.Assert(seen[0], values.SchemeEquals, v1)
-	c.Assert(seen[1], values.SchemeEquals, v2)
+	c.Assert(seen[0], valuestest.SchemeEquals, v1)
+	c.Assert(seen[1], valuestest.SchemeEquals, v2)
 }
 
 // TestAddScope_EmptyVector verifies empty vectors return unchanged

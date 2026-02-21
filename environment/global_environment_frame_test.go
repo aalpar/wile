@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -69,10 +70,10 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	gb2 := env.GetOwnGlobalBinding(gi0).Value()
-	qt.Assert(t, gb2, values.SchemeEquals, value0)
+	qt.Assert(t, gb2, valuestest.SchemeEquals, value0)
 
 	gb3 := env.GetOwnGlobalBinding(gi1).Value()
-	qt.Assert(t, gb3, values.SchemeEquals, value1)
+	qt.Assert(t, gb3, valuestest.SchemeEquals, value1)
 }
 
 func TestGlobalEnvironmentFrame_Keys(t *testing.T) {

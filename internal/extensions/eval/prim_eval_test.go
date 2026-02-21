@@ -25,6 +25,7 @@ import (
 	extexceptions "github.com/aalpar/wile/extensions/exceptions"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -69,7 +70,7 @@ func TestEval(t *testing.T) {
 
 	t.Run("evaluate simple expression", func(t *testing.T) {
 		result := eval(t, engine, `(eval '(+ 1 2) (interaction-environment))`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(3))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(3))
 	})
 
 	t.Run("evaluate in null environment", func(t *testing.T) {
@@ -79,7 +80,7 @@ func TestEval(t *testing.T) {
 	t.Run("evaluate variable reference", func(t *testing.T) {
 		eval(t, engine, `(define x 42)`)
 		result := eval(t, engine, `(eval 'x (interaction-environment))`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(42))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 
 	t.Run("wrong number of arguments", func(t *testing.T) {
@@ -104,14 +105,14 @@ func TestLoad(t *testing.T) {
 		path := writeTestFile(t, dir, "def.scm", "(define loaded-value 123)")
 		eval(t, engine, fmt.Sprintf(`(load %q)`, path))
 		result := eval(t, engine, `loaded-value`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(123))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(123))
 	})
 
 	t.Run("load multiple expressions", func(t *testing.T) {
 		path := writeTestFile(t, dir, "multi.scm", "(define x 10)\n(define y 20)\n(+ x y)")
 		result := eval(t, engine, fmt.Sprintf(`(load %q)`, path))
 		// load returns the value of the last expression
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(30))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(30))
 	})
 
 	t.Run("load nonexistent file", func(t *testing.T) {
@@ -146,7 +147,7 @@ func TestInteractionEnvironment(t *testing.T) {
 
 	t.Run("environment has standard bindings", func(t *testing.T) {
 		result := eval(t, engine, `(eval '(+ 1 2) (interaction-environment))`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(3))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(3))
 	})
 
 	t.Run("wrong argument count", func(t *testing.T) {
@@ -295,14 +296,14 @@ func TestCompile(t *testing.T) {
 		// compile creates a 0-arg thunk that evaluates the expression
 		eval(t, engine, `(define compiled-expr (compile '(+ 3 4)))`)
 		result := eval(t, engine, `(compiled-expr)`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(7))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(7))
 	})
 
 	t.Run("compile with variable reference", func(t *testing.T) {
 		eval(t, engine, `(define x 10)`)
 		eval(t, engine, `(define compiled-ref (compile 'x))`)
 		result := eval(t, engine, `(compiled-ref)`)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(10))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(10))
 	})
 
 	t.Run("compile syntax object input", func(t *testing.T) {
@@ -456,7 +457,7 @@ func TestEnvironmentWithLibraryRegistry(t *testing.T) {
 		result, err := engine.Eval(context.Background(),
 			`(eval '(caar '((1 2) 3)) (environment '(scheme cxr)))`)
 		c.Assert(err, qt.IsNil)
-		c.Assert(result.Internal(), values.SchemeEquals, values.NewInteger(1))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(1))
 	})
 }
 

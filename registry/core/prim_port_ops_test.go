@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -39,7 +40,7 @@ func TestOpenInputFile(t *testing.T) {
 		#t)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestOpenInputFileAndRead(t *testing.T) {
@@ -58,7 +59,7 @@ func TestOpenInputFileAndRead(t *testing.T) {
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	expected := values.List(values.NewSymbol("+"), values.NewInteger(1), values.NewInteger(2))
-	qt.Assert(t, result, values.SchemeEquals, expected)
+	qt.Assert(t, result, valuestest.SchemeEquals, expected)
 }
 
 func TestOpenOutputFile(t *testing.T) {
@@ -71,7 +72,7 @@ func TestOpenOutputFile(t *testing.T) {
 		#t)`, tmpfile)
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	content, err := os.ReadFile(tmpfile)
 	qt.Assert(t, err, qt.IsNil)
@@ -90,7 +91,7 @@ func TestOpenOutputFileWithMultipleWrites(t *testing.T) {
 		#t)`, tmpfile)
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	content, err := os.ReadFile(tmpfile)
 	qt.Assert(t, err, qt.IsNil)
@@ -111,7 +112,7 @@ func TestClosePortWithFileInputPort(t *testing.T) {
 		#t)`, f.Name())
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestClosePortWithFileOutputPort(t *testing.T) {
@@ -124,7 +125,7 @@ func TestClosePortWithFileOutputPort(t *testing.T) {
 		#t)`, tmpfile)
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
 	content, err := os.ReadFile(tmpfile)
 	qt.Assert(t, err, qt.IsNil)

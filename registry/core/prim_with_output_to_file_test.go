@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -54,7 +55,7 @@ func TestWithOutputToFileReturnsResult(t *testing.T) {
 
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("result"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("result"))
 }
 
 func TestWithOutputToFileErrors(t *testing.T) {

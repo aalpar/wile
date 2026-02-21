@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -88,7 +89,7 @@ func TestChannelWithBufferSize(t *testing.T) {
 		  (channel-capacity ch))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(5))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(5))
 }
 
 func TestChannelTrySendReceive(t *testing.T) {
@@ -125,7 +126,7 @@ func TestChannelLength(t *testing.T) {
 		  (channel-length ch))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(2))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func TestChannelClose(t *testing.T) {
@@ -194,7 +195,7 @@ func TestMutexSpecific(t *testing.T) {
 		  (mutex-specific m))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // ===========================================================================
@@ -407,7 +408,7 @@ func TestAtomicLoadStore(t *testing.T) {
 		  (atomic-load a))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 
 	result, err = evalScheme(t, env, `
 		(let ((a (make-atomic 0)))
@@ -415,7 +416,7 @@ func TestAtomicLoadStore(t *testing.T) {
 		  (atomic-load a))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(100))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 func TestAtomicSwap(t *testing.T) {
@@ -428,7 +429,7 @@ func TestAtomicSwap(t *testing.T) {
 		  (atomic-swap! a 100))
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestAtomicCompareAndSwap(t *testing.T) {

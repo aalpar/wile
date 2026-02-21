@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -42,7 +43,7 @@ func TestWithInputFromFile(t *testing.T) {
 
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestWithInputFromFileReturnsResult(t *testing.T) {
@@ -59,7 +60,7 @@ func TestWithInputFromFileReturnsResult(t *testing.T) {
 
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("done"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
 }
 
 func TestWithInputFromFileErrors(t *testing.T) {

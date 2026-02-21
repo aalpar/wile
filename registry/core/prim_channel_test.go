@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -63,7 +64,7 @@ func TestChannelQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -72,7 +73,7 @@ func TestMakeChannel(t *testing.T) {
 	// make-channel should return a channel
 	result, err := runSchemeCode(t, "(channel? (make-channel))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMakeChannelWithBuffer(t *testing.T) {
@@ -80,7 +81,7 @@ func TestMakeChannelWithBuffer(t *testing.T) {
 	code := "(channel-capacity (make-channel 5))"
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(5))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(5))
 }
 
 func TestChannelCapacity(t *testing.T) {
@@ -104,7 +105,7 @@ func TestChannelCapacity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -119,7 +120,7 @@ func TestChannelLength(t *testing.T) {
 	code := "(channel-length (make-channel 5))"
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(0))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(0))
 }
 
 func TestChannelLengthError(t *testing.T) {
@@ -136,7 +137,7 @@ func TestChannelSendAndReceive(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestChannelSendError(t *testing.T) {
@@ -157,7 +158,7 @@ func TestChannelTrySend(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestChannelTrySendFull(t *testing.T) {
@@ -169,7 +170,7 @@ func TestChannelTrySendFull(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestChannelTrySendError(t *testing.T) {
@@ -192,7 +193,7 @@ func TestChannelTryReceive(t *testing.T) {
 	// Should return (42 #t #t)
 	pair, ok := result.(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, pair.Car(), values.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, pair.Car(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestChannelTryReceiveEmpty(t *testing.T) {
@@ -206,7 +207,7 @@ func TestChannelTryReceiveEmpty(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.FalseValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestChannelTryReceiveError(t *testing.T) {
@@ -222,7 +223,7 @@ func TestChannelClose(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestChannelCloseError(t *testing.T) {
@@ -255,7 +256,7 @@ func TestChannelClosedQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -276,7 +277,7 @@ func TestChannelWithThread(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(100))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 func TestChannelMultipleValues(t *testing.T) {
@@ -292,5 +293,5 @@ func TestChannelMultipleValues(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(6))
 }

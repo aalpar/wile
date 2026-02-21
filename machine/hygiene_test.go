@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -160,7 +161,7 @@ func TestLetMacroExpansion(t *testing.T) {
 	t.Logf("Expanded: %s", expanded.SchemeString())
 
 	expectedForm := parseString(t, env, `(list 1 2 3)`)
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll())
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
 }
 
 // TestLetMacroSimple tests a simplified let macro without body ellipsis
@@ -200,7 +201,7 @@ func TestLetMacroSimple(t *testing.T) {
 	t.Logf("Expanded: %s", expanded.SchemeString())
 
 	expectedForm := parseString(t, env, `((lambda (x) x) 1)`)
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll())
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
 }
 
 // TestMultipleElementsWithTrailingEllipsis tests patterns like (bindSymbolWithScopes a b ...)
@@ -237,7 +238,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	t.Logf("Expanded: %s", expanded.SchemeString())
 
 	expectedForm := parseString(t, env, `(begin x)`)
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll())
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
 
 	// Test with multiple expressions: (begin-with-first x y z) -> (begin x y z)
 	testForm2 := parseString(t, env, `(begin-with-first x y z)`)
@@ -249,7 +250,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	t.Logf("Expanded2: %s", expanded2.SchemeString())
 
 	expectedForm2 := parseString(t, env, `(begin x y z)`)
-	qt.Assert(t, expanded2.UnwrapAll(), values.SchemeEquals, expectedForm2.UnwrapAll())
+	qt.Assert(t, expanded2.UnwrapAll(), valuestest.SchemeEquals, expectedForm2.UnwrapAll())
 }
 
 // TestLetMacroFull tests the full R7RS let macro with multiple body expressions
@@ -293,7 +294,7 @@ func TestLetMacroFull(t *testing.T) {
 	// With the (begin body ...) wrapper, the expansion is:
 	// ((lambda (x) (begin x)) 1)
 	expectedForm := parseString(t, env, `((lambda (x) (begin x)) 1)`)
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll())
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
 }
 
 func TestScopeCreation(t *testing.T) {
@@ -362,7 +363,7 @@ func TestScopeCreation(t *testing.T) {
 	// Check semantic equality by comparing unwrapped values (ignoring syntax metadata)
 	// The expected form is (quote expanded)
 	expandedForm := parseString(t, env, "'expanded")
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expandedForm.UnwrapAll())
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expandedForm.UnwrapAll())
 
 	// Verify the expansion is structurally correct
 	// Note: Free identifiers (like 'quote' and 'expanded') do NOT get intro scope
@@ -554,7 +555,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 
 			// Parse expected form and compare
 			expectedForm := parseString(t, env, tt.expected)
-			qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll(),
+			qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll(),
 				qt.Commentf("expanded: %s, expected: %s", expanded.SchemeString(), expectedForm.SchemeString()))
 		})
 	}
@@ -627,7 +628,7 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	// The expected result is (begin (quote bound-identifier=?))
 	// The outer begin comes from let-syntax body wrapping
 	expectedForm := parseString(t, env, `(begin (quote bound-identifier=?))`)
-	qt.Assert(t, expanded.UnwrapAll(), values.SchemeEquals, expectedForm.UnwrapAll(),
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll(),
 		qt.Commentf("expected (begin (quote bound-identifier=?)), got: %s", expanded.SchemeString()))
 }
 

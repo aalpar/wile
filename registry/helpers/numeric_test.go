@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // ── binOps used by tests ─────────────────────────────────────────────
@@ -141,7 +142,7 @@ func TestNumericFoldVariadic(t *testing.T) {
 			mc := makeMC(tc.args)
 			err := NumericFoldVariadic(mc, "test", tc.identity, tc.binOp)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -256,7 +257,7 @@ func TestNumericFoldWithFirst(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericFoldWithFirst(mc, "test", tc.unaryOp, tc.binOp)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -382,7 +383,7 @@ func TestNumericChainCompare(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericChainCompare(mc, "test", tc.fails)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -467,7 +468,7 @@ func TestNumericChainCompareReal(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericChainCompareReal(mc, "test", tc.fails)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -585,7 +586,7 @@ func TestNumericExtremum(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericExtremum(mc, "test", tc.isBetter)
 			c.Assert(err, qt.IsNil)
-			c.Assert(mc.GetValue(), values.SchemeEquals, tc.want)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
 	}
 }
@@ -713,7 +714,7 @@ func TestMaybeToInexact(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result := MaybeToInexact(tc.n, tc.hasInexact)
-			c.Assert(result, values.SchemeEquals, tc.want)
+			c.Assert(result, valuestest.SchemeEquals, tc.want)
 		})
 	}
 }

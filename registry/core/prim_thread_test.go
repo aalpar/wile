@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -58,7 +59,7 @@ func TestThreadQ(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, values.SchemeEquals, tc.out)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
 	}
 }
@@ -67,7 +68,7 @@ func TestMakeThread(t *testing.T) {
 	// make-thread should return a thread
 	result, err := runSchemeCode(t, "(thread? (make-thread (lambda () 'done)))")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMakeThreadWithName(t *testing.T) {
@@ -75,14 +76,14 @@ func TestMakeThreadWithName(t *testing.T) {
 	code := `(thread-name (make-thread (lambda () 'done) "test-thread"))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("test-thread"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("test-thread"))
 }
 
 func TestThreadName(t *testing.T) {
 	code := `(thread-name (make-thread (lambda () 42) "my-thread"))`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewString("my-thread"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("my-thread"))
 }
 
 func TestThreadNameError(t *testing.T) {
@@ -98,7 +99,7 @@ func TestThreadSpecific(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestThreadSpecificSet(t *testing.T) {
@@ -109,7 +110,7 @@ func TestThreadSpecificSet(t *testing.T) {
 	`
 	result, err := runSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("my-data"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("my-data"))
 }
 
 func TestThreadSpecificError(t *testing.T) {
@@ -131,7 +132,7 @@ func TestThreadStartAndJoin(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(6))
 }
 
 func TestThreadStartReturnsThread(t *testing.T) {
@@ -141,7 +142,7 @@ func TestThreadStartReturnsThread(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestThreadStartError(t *testing.T) {
@@ -184,7 +185,7 @@ func TestThreadTerminate(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.TrueValue)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestThreadTerminateError(t *testing.T) {
@@ -214,7 +215,7 @@ func TestThreadJoinWithTimeout(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewSymbol("timed-out"))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("timed-out"))
 }
 
 func TestMultipleThreads(t *testing.T) {
@@ -232,5 +233,5 @@ func TestMultipleThreads(t *testing.T) {
 	`
 	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, values.SchemeEquals, values.NewInteger(6))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(6))
 }

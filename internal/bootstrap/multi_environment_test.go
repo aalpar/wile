@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -48,12 +49,12 @@ func TestMultiEnv_PrimitiveMutationIsolation(t *testing.T) {
 	// env1 sees the redefined +
 	result, err := evalScheme(t, env1, `(+ 1 2)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(0))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(0))
 
 	// env2 still has the original +
 	result, err = evalScheme(t, env2, `(+ 1 2)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(3))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(3))
 }
 
 // TestMultiEnv_SymbolNonIdentityAcrossTopLevels verifies that the same symbol
@@ -118,8 +119,8 @@ func TestMultiEnv_ConcurrentTopLevelUse(t *testing.T) {
 
 	c.Assert(err1, qt.IsNil)
 	c.Assert(err2, qt.IsNil)
-	c.Assert(result1, values.SchemeEquals, values.NewInteger(10000))
-	c.Assert(result2, values.SchemeEquals, values.NewInteger(40000))
+	c.Assert(result1, valuestest.SchemeEquals, values.NewInteger(10000))
+	c.Assert(result2, valuestest.SchemeEquals, values.NewInteger(40000))
 }
 
 // TestMultiEnv_UserMacroIsolation verifies that defining a macro in one
@@ -141,7 +142,7 @@ func TestMultiEnv_UserMacroIsolation(t *testing.T) {
 
 	result, err := evalScheme(t, env1, `(always-42)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 
 	// env2 does not have the macro
 	_, err = evalScheme(t, env2, `(always-42)`)
@@ -178,12 +179,12 @@ func TestMultiEnv_SiblingLibraryIsolation(t *testing.T) {
 	// lib1 sees its own var
 	result, err := evalScheme(t, lib1, `lib1-var`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(111))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(111))
 
 	// lib2 sees its own var
 	result, err = evalScheme(t, lib2, `lib2-var`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(222))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(222))
 
 	// lib1 does NOT see lib2's var
 	_, err = evalScheme(t, lib1, `lib2-var`)
@@ -242,20 +243,20 @@ func TestMultiEnv_SiblingLibrarySharedPrimitives(t *testing.T) {
 	// Both libraries can use core primitives
 	result, err := evalScheme(t, lib1, `(+ 10 20)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(30))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(30))
 
 	result, err = evalScheme(t, lib2, `(+ 10 20)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(30))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(30))
 
 	// Both libraries can use bootstrap macros
 	result, err = evalScheme(t, lib1, `(let ((x 5)) (* x x))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(25))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(25))
 
 	result, err = evalScheme(t, lib2, `(let ((x 5)) (* x x))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(25))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(25))
 }
 
 // TestMultiEnv_SiblingLibraryMacroIsolation verifies that a macro defined in
@@ -281,7 +282,7 @@ func TestMultiEnv_SiblingLibraryMacroIsolation(t *testing.T) {
 	// lib1 can use it
 	result, err := evalScheme(t, lib1, `(double 21)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(42))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(42))
 
 	// lib2 cannot
 	_, err = evalScheme(t, lib2, `(double 21)`)
@@ -368,15 +369,15 @@ func TestMultiEnv_NestedLibraryBindingIsolation(t *testing.T) {
 	// Each sees its own binding
 	result, err := evalScheme(t, topLevel, `level`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("top"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("top"))
 
 	result, err = evalScheme(t, outerLib, `level`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("outer"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("outer"))
 
 	result, err = evalScheme(t, innerLib, `level`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("inner"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("inner"))
 }
 
 // TestMultiEnv_NestedLibraryPrimitivesAvailable verifies that primitives and
@@ -397,11 +398,11 @@ func TestMultiEnv_NestedLibraryPrimitivesAvailable(t *testing.T) {
 	// Inner library has access to primitives and bootstrap macros
 	result, err := evalScheme(t, innerLib, `(+ 1 2 3)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(6))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(6))
 
 	result, err = evalScheme(t, innerLib, `(let ((x 10)) (cond ((> x 5) 'big) (else 'small)))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewSymbol("big"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("big"))
 }
 
 // ===========================================================================
@@ -437,11 +438,11 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 	// Library can operate on it
 	result, err := evalScheme(t, lib, `(length imported-data)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(3))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(3))
 
 	result, err = evalScheme(t, lib, `(car imported-data)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(1))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 // TestMultiEnv_ClosureCapturesDefiningEnvironment verifies that a closure
@@ -476,7 +477,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 	// Call it from the library — it should resolve parent-x in the parent env
 	result, err := evalScheme(t, lib, `(get-parent-x)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(100))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(100))
 
 	// Mutate parent-x in the parent and call again from library
 	_, err = evalScheme(t, parent, `(set! parent-x 200)`)
@@ -484,7 +485,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 
 	result, err = evalScheme(t, lib, `(get-parent-x)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(200))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(200))
 }
 
 // TestMultiEnv_ParameterObjectAcrossEnvironments verifies that a parameter
@@ -516,17 +517,17 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 	// Library sees the default value
 	result, err := evalSchemeEscape(t, lib, `(my-param)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(10))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(10))
 
 	// Library can parameterize it
 	result, err = evalSchemeEscape(t, lib, `(parameterize ((my-param 99)) (my-param))`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(99))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(99))
 
 	// After parameterize scope, parent still sees the default
 	result, err = evalSchemeEscape(t, parent, `(my-param)`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, values.SchemeEquals, values.NewInteger(10))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(10))
 }
 
 // ===========================================================================
@@ -571,7 +572,7 @@ func TestMultiEnv_ConcurrentLibraryUse(t *testing.T) {
 	for i := range numLibs {
 		c.Assert(errs[i], qt.IsNil, qt.Commentf("goroutine %d", i))
 		expected := int64((i + 1) * (i + 1))
-		c.Assert(results[i], values.SchemeEquals, values.NewInteger(expected),
+		c.Assert(results[i], valuestest.SchemeEquals, values.NewInteger(expected),
 			qt.Commentf("goroutine %d", i))
 	}
 }
@@ -739,7 +740,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 		c.Run(tt.name, func(c *qt.C) {
 			result, err := evalScheme(t, lib, tt.code)
 			c.Assert(err, qt.IsNil, qt.Commentf("code: %s", tt.code))
-			c.Assert(result, values.SchemeEquals, tt.expected, qt.Commentf("code: %s", tt.code))
+			c.Assert(result, valuestest.SchemeEquals, tt.expected, qt.Commentf("code: %s", tt.code))
 		})
 	}
 }
