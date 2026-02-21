@@ -136,19 +136,20 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 		// Unwind frames that were entered after the handler was installed
 		for i := len(excErr.WindingStack) - 1; i >= commonDepth; i-- {
 			frame := excErr.WindingStack[i]
-			if frame.After != nil {
-				sub := mc.NewSubContext()
-				sub.SetWindingStack(excErr.WindingStack[:i])
-				_, err := sub.Apply(frame.After)
-				if err != nil {
-					machine.ReleaseSubContext(sub)
-					return err
-				}
-				err = sub.Run()
+			if frame.After == nil {
+				continue
+			}
+			sub := mc.NewSubContext()
+			sub.SetWindingStack(excErr.WindingStack[:i])
+			_, err := sub.Apply(frame.After)
+			if err != nil {
 				machine.ReleaseSubContext(sub)
-				if err != nil {
-					return err
-				}
+				return err
+			}
+			err = sub.Run()
+			machine.ReleaseSubContext(sub)
+			if err != nil {
+				return err
 			}
 		}
 	}
