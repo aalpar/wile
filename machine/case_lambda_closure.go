@@ -18,6 +18,8 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+var _ values.Callable = (*CaseLambdaClosure)(nil)
+
 // CaseLambdaClosure dispatches to the first clause whose arity matches
 // the argument count. Each clause is a MachineClosure with its own
 // template and captured environment.
@@ -62,6 +64,12 @@ func (p *CaseLambdaClosure) FindMatchingClause(argCount int) (*MachineClosure, b
 		}
 	}
 	return nil, false
+}
+
+// AcceptsArity reports whether any clause in this case-lambda can accept n arguments.
+func (p *CaseLambdaClosure) AcceptsArity(n int) bool {
+	_, ok := p.FindMatchingClause(n)
+	return ok
 }
 
 // IsVoid reports whether this value represents the absence of a case-lambda

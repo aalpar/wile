@@ -16,7 +16,10 @@ package machine
 
 import "github.com/aalpar/wile/values"
 
-var _ values.Value = (*Parameter)(nil)
+var (
+	_ values.Value    = (*Parameter)(nil)
+	_ values.Callable = (*Parameter)(nil)
+)
 
 // Parameter represents an R7RS parameter object.
 // Parameters are dynamically-scoped variables that can be temporarily
@@ -58,6 +61,12 @@ func (p *Parameter) Converter() *MachineClosure {
 // HasConverter returns true if the parameter has a converter procedure.
 func (p *Parameter) HasConverter() bool {
 	return p.converter != nil
+}
+
+// AcceptsArity reports whether this parameter can be called with n arguments.
+// Parameters accept 0 args (get current value) or 1 arg (set value).
+func (p *Parameter) AcceptsArity(n int) bool {
+	return n == 0 || n == 1
 }
 
 // IsVoid returns true if the parameter is nil.

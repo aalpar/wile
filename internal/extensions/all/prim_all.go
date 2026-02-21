@@ -285,15 +285,11 @@ func PrimMakePromise(mc *machine.MachineContext) error {
 }
 
 // executeThunk runs a promise thunk and returns its result.
-func executeThunk(mc *machine.MachineContext, thunk values.Value) (values.Value, error) {
-	mcls, ok := thunk.(*machine.MachineClosure)
-	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure,
-			"force: promise thunk is not a procedure: %T", thunk)
-	}
+// The thunk is already validated as Callable when the promise was created.
+func executeThunk(mc *machine.MachineContext, thunk values.Callable) (values.Value, error) {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err := sub.Apply(mcls)
+	_, err := sub.ApplyCallable(thunk)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +357,11 @@ func PrimForce(mc *machine.MachineContext) error {
 // PrimMakeLazyPromise implements the (delay-force) primitive.
 // Creates a lazy promise that delays evaluation of a thunk.
 func PrimMakeLazyPromise(mc *machine.MachineContext) error {
-	thunk := mc.Arg(0)
+	thunk, ok := mc.Arg(0).(values.Callable)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"%%make-lazy-promise: thunk must be a procedure")
+	}
 	mc.SetValue(values.NewPromise(thunk))
 	return nil
 }

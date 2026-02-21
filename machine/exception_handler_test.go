@@ -25,7 +25,7 @@ import (
 func TestNewExceptionHandler(t *testing.T) {
 	c := qt.New(t)
 
-	handler := values.NewString("handler-proc")
+	handler := NewParameter(values.NewString("handler-proc"), nil)
 	eh := NewExceptionHandler(handler, nil)
 
 	c.Assert(eh, qt.IsNotNil)
@@ -36,10 +36,10 @@ func TestNewExceptionHandler(t *testing.T) {
 func TestExceptionHandler_WithParent(t *testing.T) {
 	c := qt.New(t)
 
-	parentHandler := values.NewString("parent-handler")
+	parentHandler := NewParameter(values.NewString("parent"), nil)
 	parent := NewExceptionHandler(parentHandler, nil)
 
-	childHandler := values.NewString("child-handler")
+	childHandler := NewParameter(values.NewString("child"), nil)
 	child := NewExceptionHandler(childHandler, parent)
 
 	c.Assert(child.Handler(), qt.Equals, childHandler)
@@ -50,9 +50,9 @@ func TestExceptionHandler_WithParent(t *testing.T) {
 func TestExceptionHandler_Chain(t *testing.T) {
 	c := qt.New(t)
 
-	h1 := NewExceptionHandler(values.NewString("h1"), nil)
-	h2 := NewExceptionHandler(values.NewString("h2"), h1)
-	h3 := NewExceptionHandler(values.NewString("h3"), h2)
+	h1 := NewExceptionHandler(NewParameter(values.NewString("h1"), nil), nil)
+	h2 := NewExceptionHandler(NewParameter(values.NewString("h2"), nil), h1)
+	h3 := NewExceptionHandler(NewParameter(values.NewString("h3"), nil), h2)
 
 	// Walk the chain
 	c.Assert(h3.Parent(), qt.Equals, h2)

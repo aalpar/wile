@@ -27,8 +27,16 @@ import (
 // (with-exception-handler handler thunk)
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(mc *machine.MachineContext) error {
-	handler := mc.Arg(0)
-	thunk := mc.Arg(1)
+	handler, ok := mc.Arg(0).(values.Callable)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"with-exception-handler: handler must be a procedure")
+	}
+	thunk, ok := mc.Arg(1).(values.Callable)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+			"with-exception-handler: thunk must be a procedure")
+	}
 
 	// Push handler onto exception handler stack
 	mc.PushExceptionHandler(handler)
@@ -68,7 +76,7 @@ func PrimWithExceptionHandler(mc *machine.MachineContext) error {
 // callExceptionHandler invokes the exception handler with the given condition.
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
-func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Value) (values.Value, error) {
+func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Callable) (values.Value, error) {
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
@@ -113,7 +121,7 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 
 // handleException processes an exception by calling the handler and, for continuable
 // exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
-func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Value) error {
+func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
 	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
 	mc.PopExceptionHandler()
 

@@ -24,7 +24,7 @@ var _ Value = (*Promise)(nil)
 // is returned.
 type Promise struct {
 	// Thunk is the procedure to evaluate (nil if already forced)
-	Thunk Value
+	Thunk Callable
 	// Result is the cached result (valid only if Forced is true)
 	Result Value
 	// Forced indicates whether the promise has been evaluated
@@ -33,7 +33,7 @@ type Promise struct {
 
 // NewPromise creates a new unforced promise with the given thunk.
 // The thunk should be a procedure that takes no arguments.
-func NewPromise(thunk Value) *Promise {
+func NewPromise(thunk Callable) *Promise {
 	return &Promise{
 		Thunk:  thunk,
 		Result: nil,

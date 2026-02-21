@@ -19,6 +19,8 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+var _ values.Callable = (*MachineClosure)(nil)
+
 type MachineClosure struct {
 	env      *environment.EnvironmentFrame
 	template *NativeTemplate
@@ -50,6 +52,17 @@ func (p *MachineClosure) IsVoid() bool {
 
 func (p *MachineClosure) SchemeString() string {
 	return "#<machine-closure>"
+}
+
+// AcceptsArity reports whether this closure can be called with n arguments.
+// Fixed-arity closures require exactly paramCount args; variadic closures
+// require at least paramCount-1 (the rest parameter collects the remainder).
+func (p *MachineClosure) AcceptsArity(n int) bool {
+	tpl := p.template
+	if tpl.IsVariadic() {
+		return n >= tpl.ParameterCount()-1
+	}
+	return n == tpl.ParameterCount()
 }
 
 func (p *MachineClosure) EqualTo(o values.Value) bool {
