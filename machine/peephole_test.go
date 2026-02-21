@@ -112,6 +112,36 @@ func TestPeephole_DeadLoadVoid(t *testing.T) {
 			wantDead: 0,
 		},
 		{
+			name: "LoadVoid before Pop is dead",
+			code: []Instruction{
+				{Op: OpStoreGlobal, Arg: 0},
+				{Op: OpLoadVoid},
+				{Op: OpPop},
+			},
+			wantOps:  []OpCode{OpStoreGlobal, OpPop},
+			wantDead: 1,
+		},
+		{
+			name: "LoadVoid before Pull is dead",
+			code: []Instruction{
+				{Op: OpStoreGlobal, Arg: 0},
+				{Op: OpLoadVoid},
+				{Op: OpPull},
+			},
+			wantOps:  []OpCode{OpStoreGlobal, OpPull},
+			wantDead: 1,
+		},
+		{
+			name: "LoadVoid before PeekK is dead",
+			code: []Instruction{
+				{Op: OpStoreGlobal, Arg: 0},
+				{Op: OpLoadVoid},
+				{Op: OpPeekK, Arg: 0},
+			},
+			wantOps:  []OpCode{OpStoreGlobal, OpPeekK},
+			wantDead: 1,
+		},
+		{
 			name: "consecutive dead LoadVoids",
 			code: []Instruction{
 				{Op: OpStoreGlobal, Arg: 0},
@@ -395,15 +425,15 @@ func TestPeephole_NonTemplateLiteralsIgnored(t *testing.T) {
 
 // --- Internal Helpers ---
 
-func TestIsLoadOp(t *testing.T) {
-	loads := []OpCode{OpLoadVoid, OpLoadLiteral, OpLoadGlobal, OpLoadLocal}
-	for _, op := range loads {
-		qt.Assert(t, isLoadOp(op), qt.IsTrue, qt.Commentf("%s", op))
+func TestWritesValueRegister(t *testing.T) {
+	writers := []OpCode{OpLoadVoid, OpLoadLiteral, OpLoadGlobal, OpLoadLocal, OpPop, OpPull, OpPeekK}
+	for _, op := range writers {
+		qt.Assert(t, writesValueRegister(op), qt.IsTrue, qt.Commentf("%s", op))
 	}
 
-	nonLoads := []OpCode{OpPush, OpPop, OpApply, OpBranch, OpComplex, OpStoreGlobal}
-	for _, op := range nonLoads {
-		qt.Assert(t, isLoadOp(op), qt.IsFalse, qt.Commentf("%s", op))
+	nonWriters := []OpCode{OpPush, OpApply, OpBranch, OpComplex, OpStoreGlobal, OpDrop, OpPopEnv}
+	for _, op := range nonWriters {
+		qt.Assert(t, writesValueRegister(op), qt.IsFalse, qt.Commentf("%s", op))
 	}
 }
 
