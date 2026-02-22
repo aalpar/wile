@@ -91,13 +91,32 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 | NewApplyFrame (&EnvironmentFrame) | 46.9M | 15.6% |
 | Numeric helper closures (ForEach) | 95.3M | 31.8% |
 
-### Post-fix: what changed
+### Post-fix profiling (after both noCopyApply + 2-arg fast path)
 
-The foreign closure fix eliminated copyForApplyInto + NewApplyFrame for all primitive calls. The remaining top allocators are now:
+Total allocs reduced 35.2% (300M → 194M). Per-iteration: 4,618 → 1,745. CPU time per op: 169μs → 100μs.
 
-1. **Numeric helper closures** — `NumericChainCompare`, `NumericFoldWithFirst`, etc. allocate closure literals for `ForEach` iteration on every call, even for the common 2-argument case
-2. **`values.NewCons`** — variadic rest-arg boxing: `values.List(vs[l-1:]...)` in `Apply` creates cons cells for every variadic call
-3. **Stack.Push growslice** — eval stack re-growing despite being pooled at cap 8
+**CPU breakdown (post-fix):**
+
+| Category | Pre-fix | Post-fix | Change |
+|----------|---------|----------|--------|
+| Allocation + GC | 52.5% | 40.0% | -12.5pp |
+| sync.Pool ops | 6.6% | **21.9%** | +15.3pp |
+| VM dispatch | 5.8% | 11.7% | +5.9pp |
+| Global/symbol lookup | 6.6% | 7.9% | +1.3pp |
+| Apply + env copy | 4.7% | 5.0% | — |
+
+**Allocation objects (post-fix):**
+
+| Allocator | Share | Per iter | Notes |
+|-----------|-------|----------|-------|
+| values.NewCons | **39.9%** | 696 | Rest-arg boxing — `values.List()` in Apply for every variadic call |
+| Stack.Push growslice | **22.0%** | 384 | Eval stack re-growing past cap 8 |
+| NewApplyFrame | 11.2% | 194 | Only Scheme closure calls now (fib) |
+| copyForApplyInto | 11.1% | 193 | Same — fib's bindings |
+| NumericFoldWithFirst closure | 10.5% | 182 | `-` / `/` ForEach closure (3+ arg path) |
+| NumericFoldVariadic closure | 5.0% | 87 | `+` / `*` ForEach closure (3+ arg path) |
+
+**Key shift:** sync.Pool is now the #2 CPU bottleneck (21.9%). The continuation pool Get/Put/pin/CAS overhead has become more expensive than the GC it was meant to avoid. This is a classic profile inversion: reducing allocation made the pooling overhead dominant.
 
 ## Remaining Allocations Per Non-Tail Call
 
@@ -162,23 +181,39 @@ At runtime, `scopes` and `source` are never read — they're compile-time metada
 
 **Files:** `machine/pool.go`, `environment/environment_frame.go`, `machine/machine_context.go`
 
-#### NEW: 4. Fast-path for 2-argument Numeric Primitives
+#### ~~4. Fast-path for 2-argument Numeric Primitives~~ — DONE
 
-The numeric helpers (`NumericChainCompare`, `NumericFoldWithFirst`, `NumericFoldVariadic`) allocate closure literals for `ForEach` iteration on every call, even for the common 2-argument case (`(+ a b)`, `(<= x y)`). These closures accounted for 31.8% of all allocations in the pre-fix fib profile.
+Completed as part of `6282c36`. See "Completed: 2-Argument Numeric Fast Path" above.
 
-**Approach:** Add a 2-argument fast path that skips `ForEach` entirely. When `rest` is a single-element list, extract the value directly and apply the binary operation without creating a closure.
+#### 4. Eliminate Variadic Rest-Arg Cons Cells
 
-**Files:** `registry/helpers/numeric.go`
+**Current #1 remaining allocator at 39.9% of all objects (post-fix).**
 
-#### NEW: 5. Eliminate Variadic Rest-Arg Cons Cells
-
-Every variadic primitive call creates cons cells via `values.List(vs[l-1:]...)` in `Apply` for the rest parameter. For `(<= n 1)`, this allocates a 1-element linked list just to pass the second argument. This was 16.4% of all allocations in the pre-fix fib profile.
+Every variadic primitive call creates cons cells via `values.List(vs[l-1:]...)` in `Apply` for the rest parameter. For `(<= n 1)`, this allocates a 1-element linked list just to pass the second argument.
 
 **Approach:** For the common case of 1-2 rest args, use pre-allocated singleton/pair list structures, or change the calling convention so primitives read args directly from the stack rather than from environment bindings.
 
 **Risk:** Changes the foreign function calling convention. Requires audit of all primitive implementations.
 
 **Files:** `machine/machine_context.go` (Apply), `values/pair.go`
+
+#### 5. Evaluate sync.Pool Overhead
+
+**sync.Pool is now 21.9% of CPU (up from 6.6% pre-fix).** This is a profile inversion: reducing allocation made the pooling overhead dominant. The continuation pool Get/Put/pin/CAS is now more expensive than the GC it avoids.
+
+**Investigation needed:** Benchmark with continuation pooling disabled vs enabled to measure net effect. If GC pressure is now low enough, pooling may be net-negative. Alternatively, consider a simpler pooling strategy (e.g., per-goroutine free list) with less atomic contention.
+
+**Files:** `machine/pool.go`
+
+#### 6. Increase Stack Pool Capacity
+
+**Stack.Push growslice is 22.0% of remaining allocations (post-fix).** The eval stack pool starts at cap 8, but the stack frequently exceeds this, triggering `growslice`. Bumping the initial capacity would eliminate these allocations.
+
+**Approach:** Check `VMCounters.StackMaxDepth` and depth histogram across benchmarks to find the right cap. Current counters show most depths are 0-2 but some reach 42.
+
+**Risk:** Minimal — only affects initial allocation size.
+
+**Files:** `machine/pool.go`
 
 ### Tier 2: Moderate Impact, Lower Complexity
 
@@ -225,12 +260,14 @@ Replace per-call `MachineContinuation` allocation with a contiguous stack of fra
 
 1. ~~**Foreign closure noCopyApply**~~ — **DONE** (`713661d`, -24.5% geo-mean)
 2. ~~**2-arg numeric fast path**~~ — **DONE** (`6282c36`, -20.1% incremental, -33.4% combined)
-3. **#5 Eliminate variadic rest-arg cons cells** — targets 16.4% of pre-fix allocations, higher risk
-4. **#1 Eliminate PopAll allocation** — smaller impact now that primitive env copies are gone
-5. **#6 Binding copy via `copy()`** — one-line change if scopes/source sharing is verified
-6. **#2 Slim Binding struct** — requires audit of runtime scopes/source usage
-7. **#3 Pool EnvironmentFrame** — needs lifetime analysis, moderate risk
-8. **#7 Flat closures** — large project, highest potential payoff, plan separately
+3. **#4 Eliminate variadic rest-arg cons cells** — current #1 allocator at 39.9%, higher risk
+4. **#6 Increase stack pool capacity** — 22.0% of allocs, mechanical fix
+5. **#5 Evaluate sync.Pool overhead** — 21.9% of CPU, investigation needed
+6. **#1 Eliminate PopAll allocation** — smaller impact now
+7. **#7 Binding copy via `copy()`** — one-line change if scopes/source sharing is verified
+8. **#2 Slim Binding struct** — requires audit of runtime scopes/source usage
+9. **#3 Pool EnvironmentFrame** — needs lifetime analysis, moderate risk (but reconsider given sync.Pool overhead findings)
+10. **#8 Flat closures** — large project, highest potential payoff, plan separately
 
 ## Measurement
 
