@@ -22,6 +22,7 @@ func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool
 		NewOperationForeignFunctionCall(fn),
 		NewOperationRestoreContinuation(),
 	)
+	tpl.computeNoCopyApply()
 	lenv := environment.NewLocalEnvironment(pcnt)
 	env = environment.NewEnvironmentFrameWithParent(lenv, env)
 	q := NewClosureWithTemplate(tpl, env)
