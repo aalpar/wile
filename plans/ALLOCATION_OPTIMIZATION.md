@@ -1,7 +1,7 @@
 # Allocation Optimization Plan
 
 Date: 2026-02-22
-Status: In progress — two optimizations complete, remaining items pending
+Status: In progress — three optimizations complete (-42.1% combined), remaining items pending
 
 ## Problem Statement
 
@@ -48,6 +48,22 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 
 **Why it was large:** In the pre-fix fib profile, numeric helper closures (ForEach callbacks) accounted for 31.8% of all allocations. The 2-arg case (`(+ a b)`, `(<= n 1)`, `(- n 1)`) is overwhelmingly dominant in practice.
 
+## Completed: Pull Backing Array Preservation
+
+**Commit:** `db452db` (2026-02-22)
+
+`Stack.Pull()` used `(*p)[1:]` to remove the bottom element, which advances the slice start pointer. Each Pull erodes the usable capacity by 1. After pool recycling via `acquireStack` (which resets to `[:0]` but preserves the shifted start), the cap shrinks: 8→7→6→... until `Push` triggers `growslice`, allocating a fresh backing array. The pooled array is wasted. `Stack.Push` growslice accounted for 22.0% of all allocations post-2-arg-fix.
+
+**Fix:** Replace `(*p)[1:]` with `copy((*p), (*p)[1:])` + length decrement. This shifts elements down, preserving the original backing array start for pool reuse. Also extracted `stackInitialCap` constant (currently 8) in `pool.go`.
+
+**Impact (incremental, on top of noCopyApply + 2-arg fast path):**
+
+| Metric | Result |
+|--------|--------|
+| Gabriel geo-mean vs previous | **-13.0%** |
+| Gabriel geo-mean vs original master | **-42.1%** (combined) |
+| Best individual vs master | sum -51.9%, sieve -49.2%, fib -47.9%, ackermann -47.0% |
+
 ## Current State — What's Already Optimized
 
 | Optimization | Mechanism | Location |
@@ -63,6 +79,7 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 | RestoreAndRelease | Transfer evals ownership for normal returns (no copy) | `machine_context.go:240` |
 | Contiguous bindings | `[]Binding` not `[]*Binding` — cache-friendly, one alloc | `local_environment_frame.go:182-184` |
 | **2-arg numeric fast path** | `values.Single()` skips ForEach closure for 2-arg calls | `registry/helpers/numeric.go` |
+| **Pull backing array fix** | `copy()` instead of reslice preserves pool capacity | `stack.go:44`, `pool.go:32` |
 
 ## Profiling Findings (fib 10, post-fix baseline)
 
@@ -260,8 +277,8 @@ Replace per-call `MachineContinuation` allocation with a contiguous stack of fra
 
 1. ~~**Foreign closure noCopyApply**~~ — **DONE** (`713661d`, -24.5% geo-mean)
 2. ~~**2-arg numeric fast path**~~ — **DONE** (`6282c36`, -20.1% incremental, -33.4% combined)
-3. **#4 Eliminate variadic rest-arg cons cells** — current #1 allocator at 39.9%, higher risk
-4. **#6 Increase stack pool capacity** — 22.0% of allocs, mechanical fix
+3. ~~**Pull backing array fix**~~ — **DONE** (`db452db`, -13.0% incremental, -42.1% combined)
+4. **#4 Eliminate variadic rest-arg cons cells** — current #1 allocator at 39.9%, higher risk
 5. **#5 Evaluate sync.Pool overhead** — 21.9% of CPU, investigation needed
 6. **#1 Eliminate PopAll allocation** — smaller impact now
 7. **#7 Binding copy via `copy()`** — one-line change if scopes/source sharing is verified
