@@ -50,6 +50,15 @@ func NumericFoldVariadic(
 		mc.SetValue(nbr)
 		return nil
 	}
+	// Fast path: two-element list (e.g., (+ a b)).
+	if val, ok := values.Single(rest); ok {
+		v, ok := val.(values.Number)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+		}
+		mc.SetValue(binOp(nbr, v))
+		return nil
+	}
 	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
@@ -96,6 +105,10 @@ func NumericFoldWithFirst(
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o2)
 	}
 	acc := binOp(nbr0, nbr2)
+	if values.IsEmptyList(pr.Cdr()) {
+		mc.SetValue(acc)
+		return nil
+	}
 	rest, ok := pr.Cdr().(values.Tuple)
 	if !ok {
 		mc.SetValue(acc)
@@ -140,6 +153,15 @@ func NumericChainCompare(
 	pr, ok := rest.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
+	}
+	// Fast path: single-element rest list (the common 2-argument case).
+	if val, ok := values.Single(pr); ok {
+		curr, ok := val.(values.Number)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+		}
+		mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
+		return nil
 	}
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
@@ -190,6 +212,28 @@ func NumericChainCompareReal(
 	name string,
 	fails func(prev, curr values.Number) bool,
 ) error {
+	// Fast path: 2-argument case avoids the wrapper closure allocation.
+	o0 := mc.Arg(0)
+	prev, ok := o0.(values.Number)
+	if ok {
+		rest := mc.Arg(1)
+		if !values.IsEmptyList(rest) {
+			if pr, ok := rest.(values.Tuple); ok {
+				if val, ok := values.Single(pr); ok {
+					curr, ok := val.(values.Number)
+					if !ok {
+						return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+					}
+					if isNonRealComplex(prev) || isNonRealComplex(curr) {
+						return values.WrapForeignErrorf(values.ErrNotANumber, "%s: requires real arguments", name)
+					}
+					mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
+					return nil
+				}
+			}
+		}
+	}
+	// General path: 1 or 3+ arguments.
 	var complexErr error
 	err := NumericChainCompare(mc, name, func(prev, curr values.Number) bool {
 		if isNonRealComplex(prev) || isNonRealComplex(curr) {
@@ -238,6 +282,25 @@ func NumericExtremum(
 	pr, ok := rest.(values.Tuple)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
+	}
+	// Fast path: single-element rest list (the common 2-argument case).
+	if val, ok := values.Single(pr); ok {
+		curr, ok := val.(values.Number)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+		}
+		if !curr.IsExact() {
+			hasInexact = true
+		}
+		if curr.IsNaN() {
+			mc.SetValue(curr)
+			return nil
+		}
+		if isBetter(curr, best) {
+			best = curr
+		}
+		mc.SetValue(MaybeToInexact(best, hasInexact))
+		return nil
 	}
 
 	foundNaN := false

@@ -341,6 +341,19 @@ func IsEmptyList(v Value) bool {
 	return false
 }
 
+// Single returns the sole element of a single-element Tuple, or false if
+// the Tuple has zero or more than one element. This avoids ForEach and its
+// closure allocation for the common case of 1-element rest-arg lists.
+func Single(t Tuple) (Value, bool) {
+	if t.IsEmptyList() {
+		return nil, false
+	}
+	if IsEmptyList(t.Cdr()) {
+		return t.Car(), true
+	}
+	return nil, false
+}
+
 // VectorToList converts a Vector to a proper list preserving element order.
 // Iterates backward through the vector, prepending each element to build the list.
 // Returns EmptyList for nil or void vectors.
