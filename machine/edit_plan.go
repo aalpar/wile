@@ -30,8 +30,8 @@ import (
 //   - SideTable indices: Complex (unreferenced entries are GC'd)
 //
 // These are stable across Apply and not touched:
-//   - Literal pool indices: LoadLiteral, LoadGlobal, StoreGlobal
-//   - Local indices: LoadLocal, StoreLocal
+//   - Literal pool indices: LoadLiteral, LoadGlobal, StoreGlobal, PushLiteral, PushGlobal
+//   - Local indices: LoadLocal, StoreLocal, PushLocal
 //   - Stack offsets: PeekK
 type EditPlan struct {
 	tpl   *NativeTemplate

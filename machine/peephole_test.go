@@ -248,8 +248,8 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 			// [1] StoreGlobal
 			// [2] LoadVoid             ← dead
 			// [3] LoadVoid             ← dead (followed by LoadGlobal)
-			// [4] LoadGlobal
-			// [5] Push
+			// [4] LoadGlobal           ← fused with Push
+			// [5] Push                 ← fused into PushGlobal
 			// [6] Apply
 			code: []Instruction{
 				{Op: OpBranch, Arg: 6},
@@ -260,8 +260,8 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 				{Op: OpPush},
 				{Op: OpApply},
 			},
-			// After: [0] Branch +4  [1] StoreGlobal  [2] LoadGlobal  [3] Push  [4] Apply
-			wantArg: map[int]int32{0: 4},
+			// After: [0] Branch +3  [1] StoreGlobal  [2] PushGlobal  [3] Apply
+			wantArg: map[int]int32{0: 3},
 		},
 	}
 
@@ -287,8 +287,8 @@ func TestPeephole_BranchTargetSentinel(t *testing.T) {
 	// (one past the last instruction). This exercises pcRemap[len(dead)].
 	//
 	// [0] SaveContinuation +5  → target is [5] (sentinel)
-	// [1] LoadLiteral
-	// [2] Push
+	// [1] LoadLiteral          ← fused with Push
+	// [2] Push                 ← fused into PushLiteral
 	// [3] LoadVoid             ← dead
 	// [4] LoadGlobal
 	tpl := NewEmptyNativeTemplate()
@@ -303,10 +303,10 @@ func TestPeephole_BranchTargetSentinel(t *testing.T) {
 
 	tpl.Optimize()
 
-	// After: [0] SaveContinuation +4  [1] LoadLiteral  [2] Push  [3] LoadGlobal
-	qt.Assert(t, len(tpl.code), qt.Equals, 4)
+	// After: [0] SaveContinuation +3  [1] PushLiteral  [2] LoadGlobal
+	qt.Assert(t, len(tpl.code), qt.Equals, 3)
 	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpSaveContinuation)
-	qt.Assert(t, tpl.code[0].Arg, qt.Equals, int32(4),
+	qt.Assert(t, tpl.code[0].Arg, qt.Equals, int32(3),
 		qt.Commentf("sentinel target should remap to new len(code)"))
 }
 
@@ -318,15 +318,15 @@ func TestPeephole_SourceRefsParallel(t *testing.T) {
 		{Op: OpStoreGlobal, Arg: 0}, // sourceRef 1
 		{Op: OpLoadVoid},            // sourceRef 2 (dead)
 		{Op: OpLoadLiteral, Arg: 1}, // sourceRef 3
-		{Op: OpPush},                // sourceRef 4
+		{Op: OpPush},                // sourceRef 4 (fused with LoadLiteral)
 	}
 	tpl.sourceRefs = []uint16{1, 2, 3, 4}
 
 	tpl.Optimize()
 
 	qt.Assert(t, len(tpl.code), qt.Equals, len(tpl.sourceRefs))
-	// The surviving instructions should keep their original source refs.
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint16{1, 3, 4})
+	// LoadVoid removed; LoadLiteral+Push fused to PushLiteral with Load's sourceRef.
+	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint16{1, 3})
 }
 
 // --- Edge Cases ---
@@ -368,15 +368,14 @@ func TestPeephole_Idempotent(t *testing.T) {
 func TestPeephole_NoOptimizablePatterns(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{
-		{Op: OpLoadLiteral, Arg: 0},
-		{Op: OpPush},
 		{Op: OpApply},
+		{Op: OpRestoreContinuation},
 	}
-	tpl.sourceRefs = []uint16{0, 0, 0}
+	tpl.sourceRefs = []uint16{0, 0}
 
 	tpl.Optimize()
 
-	qt.Assert(t, len(tpl.code), qt.Equals, 3)
+	qt.Assert(t, len(tpl.code), qt.Equals, 2)
 }
 
 // --- Recursive Sub-Templates ---
@@ -403,8 +402,9 @@ func TestPeephole_RecursiveSubTemplate(t *testing.T) {
 
 	parent.Optimize()
 
-	// Parent is unchanged (no dead LoadVoid)
-	qt.Assert(t, len(parent.code), qt.Equals, 2)
+	// Parent: LoadLiteral+Push fused into PushLiteral
+	qt.Assert(t, len(parent.code), qt.Equals, 1)
+	qt.Assert(t, parent.code[0].Op, qt.Equals, OpPushLiteral)
 
 	// Sub-template was optimized
 	qt.Assert(t, len(sub.code), qt.Equals, 3)
@@ -423,6 +423,177 @@ func TestPeephole_NonTemplateLiteralsIgnored(t *testing.T) {
 	qt.Assert(t, len(tpl.code), qt.Equals, 1)
 }
 
+// --- Fused Push ---
+
+func TestPeephole_FuseLoadPush(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    []Instruction
+		wantOps []OpCode
+		wantArg map[int]int32 // index → expected Arg in optimized code
+	}{
+		{
+			name: "LoadLiteral+Push fuses to PushLiteral",
+			code: []Instruction{
+				{Op: OpLoadLiteral, Arg: 7},
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushLiteral, OpApply},
+			wantArg: map[int]int32{0: 7},
+		},
+		{
+			name: "LoadGlobal+Push fuses to PushGlobal",
+			code: []Instruction{
+				{Op: OpLoadGlobal, Arg: 3},
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushGlobal, OpApply},
+			wantArg: map[int]int32{0: 3},
+		},
+		{
+			name: "LoadLocal+Push fuses to PushLocal",
+			code: []Instruction{
+				{Op: OpLoadLocal, Arg: 42},
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushLocal, OpApply},
+			wantArg: map[int]int32{0: 42},
+		},
+		{
+			name: "LoadLiteral+non-Push does not fuse",
+			code: []Instruction{
+				{Op: OpLoadLiteral, Arg: 0},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpLoadLiteral, OpApply},
+		},
+		{
+			name: "non-Load+Push does not fuse",
+			code: []Instruction{
+				{Op: OpPop},
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPop, OpPush, OpApply},
+		},
+		{
+			name: "multiple consecutive fusions",
+			code: []Instruction{
+				{Op: OpLoadLiteral, Arg: 1},
+				{Op: OpPush},
+				{Op: OpLoadGlobal, Arg: 2},
+				{Op: OpPush},
+				{Op: OpLoadLocal, Arg: 3},
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushLiteral, OpPushGlobal, OpPushLocal, OpApply},
+			wantArg: map[int]int32{0: 1, 1: 2, 2: 3},
+		},
+		{
+			name: "interleaved fusible and non-fusible",
+			code: []Instruction{
+				{Op: OpLoadLiteral, Arg: 1},
+				{Op: OpPush},
+				{Op: OpLoadLiteral, Arg: 2},
+				{Op: OpBranchOnFalseValue, Arg: 1},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushLiteral, OpLoadLiteral, OpBranchOnFalseValue, OpApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint16, len(tt.code))
+
+			tpl.Optimize()
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+			for idx, expectedArg := range tt.wantArg {
+				qt.Assert(t, tpl.code[idx].Arg, qt.Equals, expectedArg,
+					qt.Commentf("instruction %d (%s)", idx, tpl.code[idx].Op))
+			}
+		})
+	}
+}
+
+func TestPeephole_FuseLoadPush_SourceRef(t *testing.T) {
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpLoadLiteral, Arg: 0},
+		{Op: OpPush},
+	}
+	tpl.sourceRefs = []uint16{5, 6}
+
+	tpl.Optimize()
+
+	qt.Assert(t, len(tpl.code), qt.Equals, 1)
+	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpPushLiteral)
+	// Fused instruction inherits sourceRef from the Load, not the Push.
+	qt.Assert(t, tpl.sourceRefs[0], qt.Equals, uint16(5))
+}
+
+func TestPeephole_FuseLoadPush_BranchAcrossFusion(t *testing.T) {
+	// Branch target lands past a fused pair.
+	// [0] Branch +4  → target is [4]
+	// [1] LoadLiteral
+	// [2] Push         ← fused with LoadLiteral
+	// [3] LoadGlobal
+	// [4] Apply
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpBranch, Arg: 4},
+		{Op: OpLoadLiteral, Arg: 0},
+		{Op: OpPush},
+		{Op: OpLoadGlobal, Arg: 1},
+		{Op: OpApply},
+	}
+	tpl.sourceRefs = make([]uint16, 5)
+
+	tpl.Optimize()
+
+	// After: [0] Branch +3  [1] PushLiteral  [2] LoadGlobal  [3] Apply
+	qt.Assert(t, opcodes(tpl), qt.DeepEquals,
+		[]OpCode{OpBranch, OpPushLiteral, OpLoadGlobal, OpApply})
+	qt.Assert(t, tpl.code[0].Arg, qt.Equals, int32(3))
+}
+
+func TestPeephole_FuseLoadPush_PushIsBranchTarget(t *testing.T) {
+	// Push is a branch target (convergence point for if-expression).
+	// Must NOT fuse LoadLiteral+Push because the Branch also targets Push.
+	//
+	// [0] LoadLocal               ; value = test
+	// [1] BranchOnFalseValue +3   ; → [4]
+	// [2] LoadLiteral #t          ; consequent
+	// [3] Branch +2               ; → [5] Push
+	// [4] LoadLiteral #f          ; alternative
+	// [5] Push                    ; convergence: push if-result
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpLoadLocal, Arg: 0},
+		{Op: OpBranchOnFalseValue, Arg: 3},
+		{Op: OpLoadLiteral, Arg: 0},
+		{Op: OpBranch, Arg: 2},
+		{Op: OpLoadLiteral, Arg: 1},
+		{Op: OpPush},
+	}
+	tpl.sourceRefs = make([]uint16, 6)
+
+	tpl.Optimize()
+
+	// Push at [5] is a branch target (Branch +2 from [3] targets [5]).
+	// Neither LoadLiteral+Push pair should be fused.
+	qt.Assert(t, opcodes(tpl), qt.DeepEquals,
+		[]OpCode{OpLoadLocal, OpBranchOnFalseValue, OpLoadLiteral, OpBranch, OpLoadLiteral, OpPush})
+}
+
 // --- Internal Helpers ---
 
 func TestWritesValueRegister(t *testing.T) {
@@ -431,7 +602,8 @@ func TestWritesValueRegister(t *testing.T) {
 		qt.Assert(t, writesValueRegister(op), qt.IsTrue, qt.Commentf("%s", op))
 	}
 
-	nonWriters := []OpCode{OpPush, OpApply, OpBranch, OpComplex, OpStoreGlobal, OpDrop, OpPopEnv}
+	nonWriters := []OpCode{OpPush, OpApply, OpBranch, OpComplex, OpStoreGlobal, OpDrop, OpPopEnv,
+		OpPushLiteral, OpPushGlobal, OpPushLocal}
 	for _, op := range nonWriters {
 		qt.Assert(t, writesValueRegister(op), qt.IsFalse, qt.Commentf("%s", op))
 	}

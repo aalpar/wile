@@ -158,6 +158,20 @@ func instructionToOperation(instr Instruction) Operation {
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationStoreLocalByLocalIndexImmediate(li)
 
+	// --- Wave 4: fused push operations ---
+	// Fused opcodes are decomposed back to their original Load operations
+	// so tests can assert against the compiler's logical output independent
+	// of peephole optimization. All call sites are test-only; no runtime,
+	// debugging, or further optimization passes consume this output.
+	case OpPushLiteral:
+		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPushGlobal:
+		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPushLocal:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationLoadLocalByLocalIndexImmediate(li)
+
 	default:
 		return nil
 	}

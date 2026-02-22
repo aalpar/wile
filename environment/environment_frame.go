@@ -27,27 +27,27 @@ import (
 //
 //	┌─────────────────────────────────────────────────────────────────────────┐
 //	│                        TopLevelEnvironment                              │
-//	│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)    │
+//	│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)     │
 //	│                                                                         │
-//	│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)     │
-//	│  syntaxInterns ──── map[wrt]SyntaxValue (thread-safe)                │
-//	│  phases ─────────── *PhaseRegistry                                     │
-//	│  libraryRegistry ── any (*machine.LibraryRegistry)                     │
-//	│  runtime ────────── *EnvironmentFrame (phase 0)                        │
+//	│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)      │
+//	│  syntaxInterns ──── map[wrt]SyntaxValue (thread-safe)                   │
+//	│  phases ─────────── *PhaseRegistry                                      │
+//	│  libraryRegistry ── any (*machine.LibraryRegistry)                      │
+//	│  runtime ────────── *EnvironmentFrame (phase 0)                         │
 //	└─────────────────────────────────────────────────────────────────────────┘
 //	                                    │
 //	                                    │ owns
 //	                                    ▼
 //	┌─────────────────────────────────────────────────────────────────────────┐
 //	│                         EnvironmentFrame                                │
-//	│  (Lexical scope node: links local/global bindings, parent chain)       │
+//	│  (Lexical scope node: links local/global bindings, parent chain)        │
 //	│                                                                         │
-//	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)     │
-//	│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)    │
-//	│  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
-//	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
-//	│  phases ─────────── *PhaseRegistry (shared reference)                  │
-//	│  topLevel ───────── *TopLevelEnvironment (back-reference)              │
+//	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)      │
+//	│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)     │
+//	│  global ─────────── *GlobalEnvironmentFrame (define bindings)           │
+//	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)                │
+//	│  phases ─────────── *PhaseRegistry (shared reference)                   │
+//	│  topLevel ───────── *TopLevelEnvironment (back-reference)               │
 //	└─────────────────────────────────────────────────────────────────────────┘
 //	          │                                    │
 //	          │ contains                           │ contains

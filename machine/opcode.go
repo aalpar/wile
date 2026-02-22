@@ -46,6 +46,11 @@ const (
 	OpLoadLocal
 	OpStoreLocal
 
+	// Wave 4: fused push operations (Arg = same as unfused Load variant)
+	OpPushLiteral // LoadLiteral + Push
+	OpPushGlobal  // LoadGlobal + Push
+	OpPushLocal   // LoadLocal + Push
+
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -75,6 +80,9 @@ var opcodeNames = [opCount]string{
 	OpPeekK:               "PeekK",
 	OpLoadLocal:           "LoadLocal",
 	OpStoreLocal:          "StoreLocal",
+	OpPushLiteral:         "PushLiteral",
+	OpPushGlobal:          "PushGlobal",
+	OpPushLocal:           "PushLocal",
 	OpComplex:             "Complex",
 }
 
