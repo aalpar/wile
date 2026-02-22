@@ -458,6 +458,11 @@ func (p *NativeTemplate) AppendSideTableOp(op InlinedOperation) Instruction {
 	return Instruction{Op: OpComplex, Arg: idx}
 }
 
+// Literals returns the literals pool.
+func (p *NativeTemplate) Literals() MultipleValues {
+	return p.literals
+}
+
 // Code returns the integer-dispatch bytecode slice.
 func (p *NativeTemplate) Code() []Instruction {
 	return p.code
