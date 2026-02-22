@@ -36,7 +36,7 @@ type Instruction struct {
 
 // String returns a human-readable representation of the instruction.
 func (instr Instruction) String() string {
-	if instr.Op == OpLoadLocal || instr.Op == OpStoreLocal {
+	if instr.Op == OpLoadLocal || instr.Op == OpStoreLocal || instr.Op == OpPushLocal {
 		slot, depth := DecodeLocalIndex(instr.Arg)
 		return fmt.Sprintf("%s slot=%d depth=%d", instr.Op, slot, depth)
 	}

@@ -158,6 +158,17 @@ func instructionToOperation(instr Instruction) Operation {
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationStoreLocalByLocalIndexImmediate(li)
 
+	// --- Wave 4: fused push operations ---
+	// Reconstruct as the Load operation; the Push is implicit in the fused semantics.
+	case OpPushLiteral:
+		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPushGlobal:
+		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPushLocal:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationLoadLocalByLocalIndexImmediate(li)
+
 	default:
 		return nil
 	}

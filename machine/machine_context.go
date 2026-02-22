@@ -730,6 +730,42 @@ func (p *MachineContext) Run() error {
 			}
 			mc.pc++
 
+		// --- Wave 4: fused push operations ---
+
+		case OpPushLiteral:
+			mc.evals.Push(mc.template.literals[instr.Arg])
+			mc.pc++
+
+		case OpPushGlobal:
+			o := mc.template.literals[instr.Arg]
+			if o == nil {
+				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
+			}
+			gi, ok := o.(*environment.GlobalIndex)
+			if !ok {
+				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
+			}
+			var bd *environment.Binding
+			if gi.Env != nil {
+				bd = gi.Env.GetOwnGlobalBinding(gi)
+			} else {
+				bd = mc.env.GetGlobalBinding(gi)
+			}
+			if bd == nil {
+				return mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+			}
+			mc.evals.Push(bd.Value())
+			mc.pc++
+
+		case OpPushLocal:
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			bd := mc.env.GetLocalBindingBySlotDepth(slot, depth)
+			if bd == nil {
+				return mc.Error(fmt.Sprintf("no such local binding %d:%d", slot, depth))
+			}
+			mc.evals.Push(bd.Value())
+			mc.pc++
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

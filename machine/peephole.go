@@ -35,6 +35,7 @@ func (p *NativeTemplate) Optimize() {
 
 	plan := NewEditPlan(p)
 	markDeadLoadVoidEdits(p.code, plan)
+	fuseLoadPush(p.code, p.sourceRefs, plan)
 	plan.Apply()
 
 	p.optimizeSubTemplates()
@@ -72,4 +73,50 @@ func markDeadLoadVoidEdits(code []Instruction, plan *EditPlan) {
 			plan.Delete(i, i+1)
 		}
 	}
+}
+
+// loadToFusedPush maps Load opcodes to their fused Push equivalents.
+var loadToFusedPush = [opCount]OpCode{
+	OpLoadLiteral: OpPushLiteral,
+	OpLoadGlobal:  OpPushGlobal,
+	OpLoadLocal:   OpPushLocal,
+}
+
+// fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push
+// pairs and adds Replace edits that fuse them into single PushLiteral,
+// PushGlobal, or PushLocal instructions. The fused instruction inherits
+// the source attribution from the Load instruction.
+//
+// A Load+Push pair is NOT fused if the Push is a branch target, because
+// the Push may be a convergence point for multiple control flow paths
+// (e.g., both branches of an `if` expression that share a Push to push
+// the result). Fusing would bind the Push to only the Load's value.
+func fuseLoadPush(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
+	targets := branchTargets(code)
+	for i := 0; i < len(code)-1; i++ {
+		fused := loadToFusedPush[code[i].Op]
+		if fused != OpInvalid && code[i+1].Op == OpPush && !targets[i+1] {
+			plan.Replace(i, i+2,
+				[]Instruction{{Op: fused, Arg: code[i].Arg}},
+				sourceRefs[i],
+			)
+			i++ // skip the Push
+		}
+	}
+}
+
+// branchTargets returns a set of instruction positions that are targeted
+// by branch instructions. Used to prevent fusing Load+Push when the Push
+// is a convergence point for multiple control flow paths.
+func branchTargets(code []Instruction) []bool {
+	targets := make([]bool, len(code))
+	for i, instr := range code {
+		if isBranchOp(instr.Op) {
+			target := i + int(instr.Arg)
+			if target >= 0 && target < len(code) {
+				targets[target] = true
+			}
+		}
+	}
+	return targets
 }
