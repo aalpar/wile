@@ -108,6 +108,11 @@ func fuseLoadPush(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
 // branchTargets returns a set of instruction positions that are targeted
 // by branch instructions. Used to prevent fusing Load+Push when the Push
 // is a convergence point for multiple control flow paths.
+//
+// Branch targets beyond [0, len(code)) are silently discarded by the
+// bounds check. This is safe because fuseLoadPush only iterates
+// [0, len(code)-1], so out-of-bounds positions (e.g., a branch
+// targeting len(code) for fall-through) are never consulted.
 func branchTargets(code []Instruction) []bool {
 	targets := make([]bool, len(code))
 	for i, instr := range code {

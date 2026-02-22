@@ -159,7 +159,10 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationStoreLocalByLocalIndexImmediate(li)
 
 	// --- Wave 4: fused push operations ---
-	// Reconstruct as the Load operation; the Push is implicit in the fused semantics.
+	// Fused opcodes are decomposed back to their original Load operations
+	// so tests can assert against the compiler's logical output independent
+	// of peephole optimization. All call sites are test-only; no runtime,
+	// debugging, or further optimization passes consume this output.
 	case OpPushLiteral:
 		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
 	case OpPushGlobal:
