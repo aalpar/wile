@@ -594,6 +594,100 @@ func TestPeephole_FuseLoadPush_PushIsBranchTarget(t *testing.T) {
 		[]OpCode{OpLoadLocal, OpBranchOnFalseValue, OpLoadLiteral, OpBranch, OpLoadLiteral, OpPush})
 }
 
+func TestPeephole_FusePullApply(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    []Instruction
+		wantOps []OpCode
+	}{
+		{
+			name: "Pull+Apply fuses to PullApply",
+			code: []Instruction{
+				{Op: OpPushLiteral, Arg: 0},
+				{Op: OpPull},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPushLiteral, OpPullApply},
+		},
+		{
+			name: "Pull without Apply does not fuse",
+			code: []Instruction{
+				{Op: OpPull},
+				{Op: OpPush},
+			},
+			wantOps: []OpCode{OpPull, OpPush},
+		},
+		{
+			name: "Apply without Pull does not fuse",
+			code: []Instruction{
+				{Op: OpPush},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPush, OpApply},
+		},
+		{
+			name: "multiple Pull+Apply pairs all fuse",
+			code: []Instruction{
+				{Op: OpPull},
+				{Op: OpApply},
+				{Op: OpPull},
+				{Op: OpApply},
+			},
+			wantOps: []OpCode{OpPullApply, OpPullApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint16, len(tt.code))
+
+			tpl.Optimize()
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+		})
+	}
+}
+
+func TestPeephole_FusePullApply_SourceRef(t *testing.T) {
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpPull},
+		{Op: OpApply},
+	}
+	tpl.sourceRefs = []uint16{5, 6}
+
+	tpl.Optimize()
+
+	qt.Assert(t, len(tpl.code), qt.Equals, 1)
+	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpPullApply)
+	// Fused instruction inherits sourceRef from Pull, not Apply.
+	qt.Assert(t, tpl.sourceRefs[0], qt.Equals, uint16(5))
+}
+
+func TestPeephole_FusePullApply_ApplyIsBranchTarget(t *testing.T) {
+	// Apply is a branch target — must NOT fuse.
+	//
+	// [0] Pull
+	// [1] BranchOnFalseValue +1  ; → [2] Apply
+	// [2] Apply                  ; branch target
+	tpl := NewEmptyNativeTemplate()
+	tpl.code = []Instruction{
+		{Op: OpPull},
+		{Op: OpBranchOnFalseValue, Arg: 1},
+		{Op: OpApply},
+	}
+	tpl.sourceRefs = make([]uint16, 3)
+
+	tpl.Optimize()
+
+	// Pull+Apply should NOT be fused because Apply at [2] is a branch target.
+	qt.Assert(t, opcodes(tpl), qt.DeepEquals,
+		[]OpCode{OpPull, OpBranchOnFalseValue, OpApply})
+}
+
 // --- Internal Helpers ---
 
 func TestWritesValueRegister(t *testing.T) {
@@ -603,7 +697,7 @@ func TestWritesValueRegister(t *testing.T) {
 	}
 
 	nonWriters := []OpCode{OpPush, OpApply, OpBranch, OpComplex, OpStoreGlobal, OpDrop, OpPopEnv,
-		OpPushLiteral, OpPushGlobal, OpPushLocal}
+		OpPushLiteral, OpPushGlobal, OpPushLocal, OpPullApply}
 	for _, op := range nonWriters {
 		qt.Assert(t, writesValueRegister(op), qt.IsFalse, qt.Commentf("%s", op))
 	}
@@ -615,7 +709,7 @@ func TestIsBranchOp(t *testing.T) {
 		qt.Assert(t, isBranchOp(op), qt.IsTrue, qt.Commentf("%s", op))
 	}
 
-	nonBranches := []OpCode{OpPush, OpLoadVoid, OpApply, OpComplex}
+	nonBranches := []OpCode{OpPush, OpLoadVoid, OpApply, OpComplex, OpPullApply}
 	for _, op := range nonBranches {
 		qt.Assert(t, isBranchOp(op), qt.IsFalse, qt.Commentf("%s", op))
 	}

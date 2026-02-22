@@ -172,6 +172,11 @@ func instructionToOperation(instr Instruction) Operation {
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationLoadLocalByLocalIndexImmediate(li)
 
+	// --- Wave 5: fused call operations ---
+	// Decomposed back to the first operation (Pull) for test assertions.
+	case OpPullApply:
+		return NewOperationPull()
+
 	default:
 		return nil
 	}

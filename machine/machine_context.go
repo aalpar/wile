@@ -766,6 +766,20 @@ func (p *MachineContext) Run() error {
 			mc.evals.Push(bd.Value())
 			mc.pc++
 
+		// --- Wave 5: fused call operations ---
+
+		case OpPullApply:
+			mc.SetValue(mc.evals.Pull())
+			vs := mc.evals.PopAll()
+			mc.counters.StackPopAlls++
+			mc.counters.StackElementsCopied += uint64(len(vs))
+			mc.counters.RecordStackDepth(len(vs))
+			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc = result
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

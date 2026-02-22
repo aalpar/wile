@@ -51,6 +51,9 @@ const (
 	OpPushGlobal  // LoadGlobal + Push
 	OpPushLocal   // LoadLocal + Push
 
+	// Wave 5: fused call operations (zero-operand)
+	OpPullApply // Pull + Apply
+
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -83,6 +86,7 @@ var opcodeNames = [opCount]string{
 	OpPushLiteral:         "PushLiteral",
 	OpPushGlobal:          "PushGlobal",
 	OpPushLocal:           "PushLocal",
+	OpPullApply:           "PullApply",
 	OpComplex:             "Complex",
 }
 
