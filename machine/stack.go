@@ -42,7 +42,8 @@ func (p *Stack) Pull() values.Value {
 		panic(values.ErrStackUnderflow)
 	}
 	q := (*p)[0]
-	*p = (*p)[1:]
+	copy((*p), (*p)[1:])
+	*p = (*p)[:len(*p)-1]
 	return q
 }
 
