@@ -430,6 +430,62 @@ func TestStackPopAllThenPush(t *testing.T) {
 	qt.Assert(t, got[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
+// TestStack_Drain verifies Drain returns correct elements and empties the stack.
+func TestStack_Drain(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(10))
+	s.Push(values.NewInteger(20))
+	s.Push(values.NewInteger(30))
+
+	vs := s.Drain()
+	qt.Assert(t, len(vs), qt.Equals, 3)
+	qt.Assert(t, cap(vs), qt.Equals, 3)
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, vs[2], valuestest.SchemeEquals, values.NewInteger(30))
+	qt.Assert(t, s.Len(), qt.Equals, 0)
+}
+
+// TestStack_Drain_Empty verifies Drain returns nil on empty stack.
+func TestStack_Drain_Empty(t *testing.T) {
+	s := NewStack()
+	vs := s.Drain()
+	qt.Assert(t, vs, qt.IsNil)
+}
+
+// TestStack_Drain_SharedMemory verifies the returned slice shares backing
+// memory with the stack — Push after Drain overwrites the same array.
+func TestStack_Drain_SharedMemory(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(1))
+	s.Push(values.NewInteger(2))
+
+	vs := s.Drain()
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(1))
+
+	// Push reuses the backing array — vs[0] is now overwritten.
+	s.Push(values.NewInteger(99))
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+// TestStack_Drain_AfterPull verifies Drain works correctly after Pull,
+// matching the OpPullApply pattern.
+func TestStack_Drain_AfterPull(t *testing.T) {
+	s := NewStack()
+	s.Push(values.NewInteger(1)) // will be Pull'd (procedure)
+	s.Push(values.NewInteger(2)) // arg 1
+	s.Push(values.NewInteger(3)) // arg 2
+
+	pulled := s.Pull()
+	qt.Assert(t, pulled, valuestest.SchemeEquals, values.NewInteger(1))
+
+	vs := s.Drain()
+	qt.Assert(t, len(vs), qt.Equals, 2)
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(3))
+	qt.Assert(t, s.Len(), qt.Equals, 0)
+}
+
 // TestStackPeekKPanics tests that Stack.PeekK panics on invalid indices
 func TestStackPeekKPanics(t *testing.T) {
 	s := NewStack(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
@@ -454,4 +510,46 @@ func TestStackPeekKPanics(t *testing.T) {
 	qt.Assert(t, func() {
 		empty.PeekK(0)
 	}, qt.PanicMatches, ".*stack underflow.*")
+}
+
+func BenchmarkStack_PopAll(b *testing.B) {
+	depths := []int{1, 3, 5, 8}
+	vals := make([]values.Value, 8)
+	for i := range vals {
+		vals[i] = values.NewInteger(int64(i))
+	}
+	for _, depth := range depths {
+		b.Run(
+			"depth="+qt.Format(depth),
+			func(b *testing.B) {
+				s := NewStack()
+				for range b.N {
+					s.PushAll(vals[:depth])
+					vs := s.PopAll()
+					_ = vs
+				}
+			},
+		)
+	}
+}
+
+func BenchmarkStack_Drain(b *testing.B) {
+	depths := []int{1, 3, 5, 8}
+	vals := make([]values.Value, 8)
+	for i := range vals {
+		vals[i] = values.NewInteger(int64(i))
+	}
+	for _, depth := range depths {
+		b.Run(
+			"depth="+qt.Format(depth),
+			func(b *testing.B) {
+				s := NewStack()
+				for range b.N {
+					s.PushAll(vals[:depth])
+					vs := s.Drain()
+					clear(vs)
+				}
+			},
+		)
+	}
 }

@@ -28,7 +28,7 @@ type VMCounters struct {
 	ContinuationsSaved       uint64
 	ContinuationsRestored    uint64
 	StackPopAlls             uint64
-	StackElementsCopied      uint64
+	StackElementsDrained      uint64
 	ForeignCalls             uint64
 	SubContextsCreated       uint64
 	StackPoolReleases        uint64
@@ -78,7 +78,7 @@ func (c VMCounters) String() string {
 			"continuations_saved:          %d\n"+
 			"continuations_restored:       %d\n"+
 			"stack_pop_alls:               %d\n"+
-			"stack_elements_copied:        %d\n"+
+			"stack_elements_drained:        %d\n"+
 			"foreign_calls:                %d\n"+
 			"sub_contexts_created:         %d\n"+
 			"stack_pool_releases:          %d\n"+
@@ -101,7 +101,7 @@ func (c VMCounters) String() string {
 		c.ContinuationsSaved,
 		c.ContinuationsRestored,
 		c.StackPopAlls,
-		c.StackElementsCopied,
+		c.StackElementsDrained,
 		c.ForeignCalls,
 		c.SubContextsCreated,
 		c.StackPoolReleases,

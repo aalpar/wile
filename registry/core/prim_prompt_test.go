@@ -140,6 +140,25 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 				        result))))`,
 			expected: values.NewInteger(21),
 		},
+		{
+			// Regression: OpApply uses Drain which returns a slice aliasing
+			// the evals backing array. When applyComposableContinuation calls
+			// Restore, releaseStack nils elements in that shared array. The
+			// argument value (42) must be saved to a local before Restore;
+			// otherwise it reads as nil/0 and the result would be 1 not 43.
+			name: "composable continuation preserves argument through Restore",
+			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+				(let ((k #f))
+				  (call-with-continuation-prompt
+				    (lambda ()
+				      (+ 1 (call-with-composable-continuation
+				              (lambda (c) (set! k c) 0)
+				              tag)))
+				    tag
+				    #f)
+				  (k 42)))`,
+			expected: values.NewInteger(43),
+		},
 	}
 
 	for _, tc := range tcs {

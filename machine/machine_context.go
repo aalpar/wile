@@ -400,6 +400,11 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 //   - *Parameter: R7RS parameter object (§4.2.6)
 //   - *ComposableContinuation: delimited continuation
 //
+// args may alias the evals backing array (when the caller uses Drain).
+// Dispatch targets must finish reading all args before calling Restore,
+// returnImmediate, or pushing to mc.evals — releaseStack nils elements
+// in the shared backing array, and Push overwrites them.
+//
 // Precondition: p.ctx must be set (always true for contexts created via
 // NewMachineContext or NewSubContext).
 func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Value) (*MachineContext, error) {
@@ -489,6 +494,10 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		return p, err
 	}
 
+	// Save before Restore/returnImmediate, which call releaseStack on old
+	// evals. args may alias the evals backing array (see ApplyCallable doc).
+	val := args[0]
+
 	// Reject cross-thread composable continuation invocation
 	if p.threadID != cc.threadID {
 		return p, values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
@@ -518,7 +527,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		// Empty composable continuation: captured at a tail-call site with no
 		// saved frames above it (e.g., call/cc inside a sub-context where
 		// the call was in tail position). Applying it just returns the value.
-		p.SetValue(args[0])
+		p.SetValue(val)
 		return p.returnImmediate(), nil
 	}
 
@@ -527,7 +536,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 
 	// Restore from the top of the segment (resume captured computation)
 	p.Restore(segment)
-	p.SetValue(args[0])
+	p.SetValue(val)
 	return p, nil
 }
 
@@ -625,11 +634,12 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpApply:
-			vs := mc.evals.PopAll()
+			vs := mc.evals.Drain()
 			mc.counters.StackPopAlls++
-			mc.counters.StackElementsCopied += uint64(len(vs))
+			mc.counters.StackElementsDrained += uint64(len(vs))
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			clear(vs)
 			if err != nil {
 				return mc.WrapError(err, "")
 			}
@@ -770,11 +780,12 @@ func (p *MachineContext) Run() error {
 
 		case OpPullApply:
 			mc.SetValue(mc.evals.Pull())
-			vs := mc.evals.PopAll()
+			vs := mc.evals.Drain()
 			mc.counters.StackPopAlls++
-			mc.counters.StackElementsCopied += uint64(len(vs))
+			mc.counters.StackElementsDrained += uint64(len(vs))
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			clear(vs)
 			if err != nil {
 				return mc.WrapError(err, "")
 			}

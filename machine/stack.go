@@ -118,6 +118,21 @@ func (p *Stack) PopAll() []values.Value {
 	return result
 }
 
+// Drain returns the stack's contents and resets the stack to empty.
+// The returned slice shares the stack's backing array — the caller must
+// finish reading before any new Push operations (which overwrite the same
+// memory). Call clear(result) after reading to release GC references.
+// Use PopAll() when the returned slice must outlive subsequent stack operations.
+func (p *Stack) Drain() []values.Value {
+	n := len(*p)
+	if n == 0 {
+		return nil
+	}
+	result := ([]values.Value)(*p)[:n:n]
+	*p = (*p)[:0]
+	return result
+}
+
 // PeekK returns the kth value from the top of the stack without removing it.
 // `K` is zero-based, so PeekK(0) returns the top value. `K` is used for methods that need a numeric index.
 func (p Stack) PeekK(i int) values.Value {
