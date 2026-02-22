@@ -62,6 +62,7 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 |--------|--------|
 | Gabriel geo-mean vs previous | **-13.0%** |
 | Gabriel geo-mean vs original master | **-42.1%** (combined) |
+| ZebraPuzzle (all 3 combined) | **-29.5%** (18.36s → 12.95s) |
 | Best individual vs master | sum -51.9%, sieve -49.2%, fib -47.9%, ackermann -47.0% |
 
 ## Current State — What's Already Optimized
