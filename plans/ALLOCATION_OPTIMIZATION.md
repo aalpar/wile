@@ -108,32 +108,37 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 | NewApplyFrame (&EnvironmentFrame) | 46.9M | 15.6% |
 | Numeric helper closures (ForEach) | 95.3M | 31.8% |
 
-### Post-fix profiling (after both noCopyApply + 2-arg fast path)
+### Post-fix profiling (after all three fixes)
 
-Total allocs reduced 35.2% (300M → 194M). Per-iteration: 4,618 → 1,745. CPU time per op: 169μs → 100μs.
+Total allocs reduced 43.6% (300M → 169M). Per-iteration: 4,618 → 1,335. CPU time per op: 169μs → 88μs (-48%).
 
-**CPU breakdown (post-fix):**
+**CPU breakdown evolution:**
 
-| Category | Pre-fix | Post-fix | Change |
-|----------|---------|----------|--------|
-| Allocation + GC | 52.5% | 40.0% | -12.5pp |
-| sync.Pool ops | 6.6% | **21.9%** | +15.3pp |
-| VM dispatch | 5.8% | 11.7% | +5.9pp |
-| Global/symbol lookup | 6.6% | 7.9% | +1.3pp |
-| Apply + env copy | 4.7% | 5.0% | — |
+| Category | Pre-fix | After fix 1+2 | After all 3 |
+|----------|---------|---------------|-------------|
+| Allocation + GC | 52.5% | 40.0% | 46.1% |
+| sync.Pool ops | 6.6% | 21.9% | **17.3%** |
+| VM dispatch | 5.8% | 11.7% | 10.8% |
+| Global/symbol lookup | 6.6% | 7.9% | 8.1% |
+| Apply + env copy | 4.7% | 5.0% | 5.4% |
 
-**Allocation objects (post-fix):**
+GC share went UP (16.8% → 26.1%) despite fewer allocs because non-GC work shrank more.
+
+**Allocation objects (after all 3 fixes):**
 
 | Allocator | Share | Per iter | Notes |
 |-----------|-------|----------|-------|
-| values.NewCons | **39.9%** | 696 | Rest-arg boxing — `values.List()` in Apply for every variadic call |
-| Stack.Push growslice | **22.0%** | 384 | Eval stack re-growing past cap 8 |
-| NewApplyFrame | 11.2% | 194 | Only Scheme closure calls now (fib) |
-| copyForApplyInto | 11.1% | 193 | Same — fib's bindings |
-| NumericFoldWithFirst closure | 10.5% | 182 | `-` / `/` ForEach closure (3+ arg path) |
-| NumericFoldVariadic closure | 5.0% | 87 | `+` / `*` ForEach closure (3+ arg path) |
+| values.NewCons | **49.6%** | 662 | Rest-arg boxing — `values.List()` in Apply for every variadic call |
+| NewApplyFrame | 14.4% | 191 | Scheme closure calls only (fib). Reducible via pooling (#3), slim binding (#2), memcpy (#7) |
+| NumericFoldWithFirst | 14.3% | 190 | `*Integer` results from `binOp`, NOT closures — 2-arg fast paths work correctly |
+| copyForApplyInto | 14.2% | 190 | Same lifecycle as NewApplyFrame |
+| NumericFoldVariadic | 7.2% | 95 | `*Integer` results from `binOp`, NOT closures — irreducible arithmetic |
 
-**Key shift:** sync.Pool is now the #2 CPU bottleneck (21.9%). The continuation pool Get/Put/pin/CAS overhead has become more expensive than the GC it was meant to avoid. This is a classic profile inversion: reducing allocation made the pooling overhead dominant.
+**Stack.Push growslice: ELIMINATED** by Pull backing array fix.
+
+**Key clarification:** The NumericFoldWithFirst/Variadic allocations in the profiler are `*Integer` values created by `binOp()` (e.g., `(- n 1)` → new Integer), not ForEach closure allocations. The 2-arg fast paths are working correctly — ForEach is never reached for 2-arg calls.
+
+**Key concern:** sync.Pool is 17.3% of CPU. Adding more pooled objects (e.g., env frame pooling in #3) may be net-negative. Must benchmark pool-disabled vs pool-enabled before expanding pooling.
 
 ## Remaining Allocations Per Non-Tail Call
 
