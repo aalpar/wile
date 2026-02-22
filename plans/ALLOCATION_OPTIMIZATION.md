@@ -1,7 +1,7 @@
 # Allocation Optimization Plan
 
 Date: 2026-02-22
-Status: In progress — foreign closure fix complete, remaining items pending
+Status: In progress — two optimizations complete, remaining items pending
 
 ## Problem Statement
 
@@ -28,6 +28,25 @@ Peephole fusion reduced dispatched ops by 32% in ZebraPuzzle but only improved w
 
 **Why it was large:** In `(fib 10)`, 441 of 618 total Apply calls were to primitives (71%). All 441 were needlessly copying their environment. CPU profiling showed 52.5% of fib time was allocation + GC, with `NewApplyFrame` + `copyForApplyInto` as the top allocators.
 
+## Completed: 2-Argument Numeric Fast Path
+
+**Commit:** `6282c36` (2026-02-22)
+
+The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericFoldVariadic`, `NumericFoldWithFirst`, `NumericExtremum`) allocated closure literals for `ForEach` iteration on every call, even for the common 2-argument case (`(+ a b)`, `(<= x y)`). `emptyListType` implements `Tuple`, so existing early-exit checks (`pr.Cdr().(values.Tuple)`) didn't fire for single-element rest lists — they fell through to ForEach.
+
+**Fix:** Add `values.Single(t Tuple) (Value, bool)` that extracts the sole element from a single-element list. Use it in all five numeric helpers to skip ForEach and its closure allocation. Also add `IsEmptyList` guard in `NumericFoldWithFirst` before the `Cdr().(values.Tuple)` check. For `NumericChainCompareReal`, add a complete 2-arg fast path that skips the wrapper closure passed to `NumericChainCompare`.
+
+**Impact (incremental, on top of noCopyApply fix):**
+
+| Metric | Result |
+|--------|--------|
+| Gabriel geo-mean vs noCopy baseline | **-20.1%** |
+| Gabriel geo-mean vs original master | **-33.4%** (combined) |
+| Best individual vs noCopy | sum -41.1%, primes -37.8%, ackermann -35.3%, sieve -33.9% |
+| Best individual vs master | fib -39.5%, primes -39.4%, ackermann -38.4%, tak -37.8% |
+
+**Why it was large:** In the pre-fix fib profile, numeric helper closures (ForEach callbacks) accounted for 31.8% of all allocations. The 2-arg case (`(+ a b)`, `(<= n 1)`, `(- n 1)`) is overwhelmingly dominant in practice.
+
 ## Current State — What's Already Optimized
 
 | Optimization | Mechanism | Location |
@@ -42,6 +61,7 @@ Peephole fusion reduced dispatched ops by 32% in ZebraPuzzle but only improved w
 | CoW keys map | Shared between copies, only cloned on mutation | `local_environment_frame.go:139-141` |
 | RestoreAndRelease | Transfer evals ownership for normal returns (no copy) | `machine_context.go:240` |
 | Contiguous bindings | `[]Binding` not `[]*Binding` — cache-friendly, one alloc | `local_environment_frame.go:182-184` |
+| **2-arg numeric fast path** | `values.Single()` skips ForEach closure for 2-arg calls | `registry/helpers/numeric.go` |
 
 ## Profiling Findings (fib 10, post-fix baseline)
 
@@ -203,8 +223,8 @@ Replace per-call `MachineContinuation` allocation with a contiguous stack of fra
 ## Recommended Execution Order (revised)
 
 1. ~~**Foreign closure noCopyApply**~~ — **DONE** (`713661d`, -24.5% geo-mean)
-2. **#4 Fast-path 2-arg numerics** — targets the largest remaining allocator (31.8%), moderate complexity
-3. **#5 Eliminate variadic rest-arg cons cells** — targets 16.4% of allocations, higher risk
+2. ~~**2-arg numeric fast path**~~ — **DONE** (`6282c36`, -20.1% incremental, -33.4% combined)
+3. **#5 Eliminate variadic rest-arg cons cells** — targets 16.4% of pre-fix allocations, higher risk
 4. **#1 Eliminate PopAll allocation** — smaller impact now that primitive env copies are gone
 5. **#6 Binding copy via `copy()`** — one-line change if scopes/source sharing is verified
 6. **#2 Slim Binding struct** — requires audit of runtime scopes/source usage
