@@ -766,6 +766,41 @@ func (p *MachineContext) Run() error {
 			mc.evals.Push(bd.Value())
 			mc.pc++
 
+		// --- Wave 5: fused call operations ---
+
+		case OpPullApply:
+			mc.SetValue(mc.evals.Pull())
+			vs := mc.evals.PopAll()
+			mc.counters.StackPopAlls++
+			mc.counters.StackElementsCopied += uint64(len(vs))
+			mc.counters.RecordStackDepth(len(vs))
+			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc = result
+
+		// --- Wave 5: promoted complex operations ---
+
+		case OpMakeClosure:
+			compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotALocalEnvironmentFrame,
+					"MakeClosure: expected environment frame on stack")
+			}
+			tpl, ok := mc.evals.Pop().(*NativeTemplate)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotAMachineTemplate,
+					"MakeClosure: expected native template on stack")
+			}
+			runtimeEnv := environment.NewEnvironmentFrameWithParent(
+				compiletimeEnv.LocalEnvironment(),
+				mc.env,
+			)
+			cls := NewClosureWithTemplate(tpl, runtimeEnv)
+			mc.SetValue(cls)
+			mc.pc++
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

@@ -172,6 +172,15 @@ func instructionToOperation(instr Instruction) Operation {
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationLoadLocalByLocalIndexImmediate(li)
 
+	// --- Wave 5: fused call operations ---
+	// Decomposed back to the first operation (Pull) for test assertions.
+	case OpPullApply:
+		return NewOperationPull()
+
+	// --- Wave 5: promoted complex operations ---
+	case OpMakeClosure:
+		return NewOperationMakeClosure()
+
 	default:
 		return nil
 	}
@@ -265,6 +274,10 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	case *OperationStoreLocalByLocalIndexImmediate:
 		return Instruction{Op: OpStoreLocal, Arg: EncodeLocalIndex(v.LocalIndex)}, true
 
+	// --- Wave 5: promoted complex operations ---
+	case *OperationMakeClosure:
+		return Instruction{Op: OpMakeClosure}, true
+
 	default:
 		return Instruction{}, false
 	}
@@ -301,14 +314,7 @@ func (p *NativeTemplate) NoCopyApply() bool {
 // when neither OpSaveContinuation nor *OperationMakeClosure is present.
 func (p *NativeTemplate) computeNoCopyApply() {
 	for _, instr := range p.code {
-		if instr.Op == OpSaveContinuation {
-			p.noCopyApply = false
-			return
-		}
-	}
-	for _, op := range p.sideTable {
-		_, ok := op.(*OperationMakeClosure)
-		if ok {
+		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure {
 			p.noCopyApply = false
 			return
 		}
@@ -456,6 +462,11 @@ func (p *NativeTemplate) AppendSideTableOp(op InlinedOperation) Instruction {
 	idx := int32(len(p.sideTable))
 	p.sideTable = append(p.sideTable, op)
 	return Instruction{Op: OpComplex, Arg: idx}
+}
+
+// Literals returns the literals pool.
+func (p *NativeTemplate) Literals() MultipleValues {
+	return p.literals
 }
 
 // Code returns the integer-dispatch bytecode slice.

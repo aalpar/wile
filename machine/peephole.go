@@ -36,6 +36,7 @@ func (p *NativeTemplate) Optimize() {
 	plan := NewEditPlan(p)
 	markDeadLoadVoidEdits(p.code, plan)
 	fuseLoadPush(p.code, p.sourceRefs, plan)
+	fusePullApply(p.code, p.sourceRefs, plan)
 	plan.Apply()
 
 	p.optimizeSubTemplates()
@@ -62,7 +63,8 @@ func writesValueRegister(op OpCode) bool {
 		op == OpLoadLocal ||
 		op == OpPop ||
 		op == OpPull ||
-		op == OpPeekK
+		op == OpPeekK ||
+		op == OpMakeClosure
 }
 
 // markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for
@@ -101,6 +103,21 @@ func fuseLoadPush(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
 				sourceRefs[i],
 			)
 			i++ // skip the Push
+		}
+	}
+}
+
+// fusePullApply fuses Pull + Apply into a single OpPullApply instruction.
+// Every function call emits this pair; fusing saves one dispatch per call.
+func fusePullApply(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
+	targets := branchTargets(code)
+	for i := 0; i < len(code)-1; i++ {
+		if code[i].Op == OpPull && code[i+1].Op == OpApply && !targets[i+1] {
+			plan.Replace(i, i+2,
+				[]Instruction{{Op: OpPullApply}},
+				sourceRefs[i],
+			)
+			i++ // skip the Apply
 		}
 	}
 }
