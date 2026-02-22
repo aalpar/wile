@@ -691,7 +691,7 @@ func TestPeephole_FusePullApply_ApplyIsBranchTarget(t *testing.T) {
 // --- Internal Helpers ---
 
 func TestWritesValueRegister(t *testing.T) {
-	writers := []OpCode{OpLoadVoid, OpLoadLiteral, OpLoadGlobal, OpLoadLocal, OpPop, OpPull, OpPeekK}
+	writers := []OpCode{OpLoadVoid, OpLoadLiteral, OpLoadGlobal, OpLoadLocal, OpPop, OpPull, OpPeekK, OpMakeClosure}
 	for _, op := range writers {
 		qt.Assert(t, writesValueRegister(op), qt.IsTrue, qt.Commentf("%s", op))
 	}
@@ -709,7 +709,7 @@ func TestIsBranchOp(t *testing.T) {
 		qt.Assert(t, isBranchOp(op), qt.IsTrue, qt.Commentf("%s", op))
 	}
 
-	nonBranches := []OpCode{OpPush, OpLoadVoid, OpApply, OpComplex, OpPullApply}
+	nonBranches := []OpCode{OpPush, OpLoadVoid, OpApply, OpComplex, OpPullApply, OpMakeClosure}
 	for _, op := range nonBranches {
 		qt.Assert(t, isBranchOp(op), qt.IsFalse, qt.Commentf("%s", op))
 	}

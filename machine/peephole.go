@@ -63,7 +63,8 @@ func writesValueRegister(op OpCode) bool {
 		op == OpLoadLocal ||
 		op == OpPop ||
 		op == OpPull ||
-		op == OpPeekK
+		op == OpPeekK ||
+		op == OpMakeClosure
 }
 
 // markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for

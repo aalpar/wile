@@ -54,6 +54,9 @@ const (
 	// Wave 5: fused call operations (zero-operand)
 	OpPullApply // Pull + Apply
 
+	// Wave 5: promoted complex operations (zero-operand)
+	OpMakeClosure // MakeClosure (was OpComplex)
+
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -87,6 +90,7 @@ var opcodeNames = [opCount]string{
 	OpPushGlobal:          "PushGlobal",
 	OpPushLocal:           "PushLocal",
 	OpPullApply:           "PullApply",
+	OpMakeClosure:         "MakeClosure",
 	OpComplex:             "Complex",
 }
 
