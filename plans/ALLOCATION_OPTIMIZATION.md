@@ -44,6 +44,7 @@ The numeric helpers (`NumericChainCompare`, `NumericChainCompareReal`, `NumericF
 | Gabriel geo-mean vs original master | **-33.4%** (combined) |
 | Best individual vs noCopy | sum -41.1%, primes -37.8%, ackermann -35.3%, sieve -33.9% |
 | Best individual vs master | fib -39.5%, primes -39.4%, ackermann -38.4%, tak -37.8% |
+| ZebraPuzzle (combined) | **-22.2%** (18.36s → 14.29s) — minimal incremental over noCopyApply alone (-21.2%) |
 
 **Why it was large:** In the pre-fix fib profile, numeric helper closures (ForEach callbacks) accounted for 31.8% of all allocations. The 2-arg case (`(+ a b)`, `(<= n 1)`, `(- n 1)`) is overwhelmingly dominant in practice.
 
