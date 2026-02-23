@@ -171,12 +171,11 @@ func NewList(vals ...Value) Value {
 	if len(vals) == 0 {
 		return wrapValue(values.EmptyList)
 	}
-	// Build list from back to front
-	var result values.Value = values.EmptyList
-	for i := len(vals) - 1; i >= 0; i-- {
-		result = values.NewCons(unwrapValue(vals[i]), result)
+	unwrapped := make([]values.Value, len(vals))
+	for i, v := range vals {
+		unwrapped[i] = unwrapValue(v)
 	}
-	return wrapValue(result)
+	return wrapValue(values.List(unwrapped...))
 }
 
 // EmptyList is the empty list.

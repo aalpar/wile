@@ -231,7 +231,6 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 // Implementation note: Must accept *Pair (not Tuple) because:
 // 1. It needs map lookup with concrete pointer (seenPairs, needsLabelPair)
 // 2. Pointer identity is used for tracking shared/circular structure
-// 3. ArrayList would need a separate writeTuple method with its own tracking
 func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 	if pr == nil {
 		sb.WriteString("#<void>")

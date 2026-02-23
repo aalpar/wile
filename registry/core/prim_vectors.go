@@ -89,11 +89,7 @@ func PrimVectorToList(mc *machine.MachineContext) error {
 		return err
 	}
 
-	var result values.Value = values.EmptyList
-	for i := end - 1; i >= start; i-- {
-		result = values.NewCons((*v)[i], result)
-	}
-	mc.SetValue(result)
+	mc.SetValue(values.List((*v)[start:end]...))
 	return nil
 }
 

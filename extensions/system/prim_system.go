@@ -145,13 +145,11 @@ func PrimJiffiesPerSecond(mc *machine.MachineContext) error {
 func PrimFeatures(mc *machine.MachineContext) error {
 	features := machine.AllFeatures()
 
-	// Build a list of symbols
-	result := values.EmptyList
-	// Build the list in reverse order to get correct ordering
-	for i := len(features) - 1; i >= 0; i-- {
-		sym := mc.EnvironmentFrame().InternSymbol(values.NewSymbol(features[i]))
-		result = values.NewCons(sym, result)
+	elems := make([]values.Value, len(features))
+	for i, f := range features {
+		elems[i] = mc.EnvironmentFrame().InternSymbol(values.NewSymbol(f))
 	}
+	result := values.List(elems...)
 
 	mc.SetValue(result)
 	return nil

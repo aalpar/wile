@@ -139,7 +139,7 @@ type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
 // Tuple captures the operations needed to traverse, measure, and convert
 // list-shaped values without requiring a concrete *Pair type.
 //
-// Implemented by: Pair, ArrayList, emptyListType (EmptyList singleton).
+// Implemented by: Pair, emptyListType (EmptyList singleton).
 //
 // IsVoid is listed explicitly because Pair uses a nil-receiver convention
 // where (*Pair)(nil) represents void, and the method must be dispatched

@@ -147,12 +147,11 @@ func PrimStringToList(mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Build the list from the substring
-	var result values.Value = values.EmptyList
-	for i := end - 1; i >= start; i-- {
-		result = values.NewCons(values.NewCharacter(runes[i]), result)
+	elems := make([]values.Value, end-start)
+	for i := start; i < end; i++ {
+		elems[i-start] = values.NewCharacter(runes[i])
 	}
-	mc.SetValue(result)
+	mc.SetValue(values.List(elems...))
 	return nil
 }
 

@@ -34,7 +34,6 @@
 //   - [Pair]: cons cells as [2]Value arrays
 //   - [Vector]: fixed-size mutable value arrays
 //   - [ByteVector]: byte arrays for binary data
-//   - [ArrayList]: array-backed list representation with O(1) element access
 //   - [Hashtable]: bucket-chaining hash maps with [Hashable] keys
 //
 // # I/O Ports (R7RS 6.13)

@@ -16,4 +16,4 @@ Extension interface: `Name() string` + `AddToRegistry(*Registry) error`.
 
 ## Compile-Time Code
 
-Compile-time/macro code uses `*Pair` only (no `ArrayList` at those phases). The `Tuple` interface is for runtime read-only operations.
+Compile-time/macro code uses `*Pair` only. The `Tuple` interface is for runtime read-only operations.

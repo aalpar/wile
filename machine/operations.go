@@ -27,14 +27,11 @@ func (p Operations) AsList() values.Tuple {
 		return nil // or return EmptyList depending on your API
 	}
 
-	// Build the list from the end backwards
-	var result values.Value = values.EmptyList
-
-	for i := len(p) - 1; i >= 0; i-- {
-		result = values.NewCons(p[i], result)
+	vs := make([]values.Value, len(p))
+	for i, op := range p {
+		vs[i] = op
 	}
-
-	return result.(values.Tuple)
+	return values.List(vs...)
 }
 
 func NewOperations(ops ...Operation) Operations {
