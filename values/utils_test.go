@@ -61,6 +61,32 @@ func Test_List(t *testing.T) {
 	}
 }
 
+func Test_List_MutationSemantics(t *testing.T) {
+	// Block-allocated pairs must support set-car!/set-cdr! identically
+	// to individually allocated pairs.
+	c := qt.New(t)
+
+	lst := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	p := lst.(*values.Pair)
+
+	// set-car! on first cell
+	p.SetCar(values.NewInteger(99))
+	c.Assert(p.Car(), valuestest.SchemeEquals, values.NewInteger(99))
+
+	// set-cdr! to truncate list
+	p.SetCdr(values.EmptyList)
+	c.Assert(p.Cdr(), valuestest.SchemeEquals, values.EmptyList)
+
+	// Remaining cells are independent — mutating the head didn't corrupt them
+	lst2 := values.List(values.NewInteger(10), values.NewInteger(20))
+	p2 := lst2.(*values.Pair)
+	second := p2.Cdr().(*values.Pair)
+	second.SetCar(values.NewInteger(42))
+	c.Assert(second.Car(), valuestest.SchemeEquals, values.NewInteger(42))
+	// First cell unchanged
+	c.Assert(p2.Car(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
 func Test_FlipVectorToList(t *testing.T) {
 	tcs := []struct {
 		name string

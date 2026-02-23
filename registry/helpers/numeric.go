@@ -51,7 +51,8 @@ func NumericFoldVariadic(
 		return nil
 	}
 	// Fast path: two-element list (e.g., (+ a b)).
-	if val, ok := values.Single(rest); ok {
+	val, ok := values.Single(rest)
+	if ok {
 		v, ok := val.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
@@ -155,7 +156,8 @@ func NumericChainCompare(
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 	// Fast path: single-element rest list (the common 2-argument case).
-	if val, ok := values.Single(pr); ok {
+	val, ok := values.Single(pr)
+	if ok {
 		curr, ok := val.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
@@ -218,8 +220,10 @@ func NumericChainCompareReal(
 	if ok {
 		rest := mc.Arg(1)
 		if !values.IsEmptyList(rest) {
-			if pr, ok := rest.(values.Tuple); ok {
-				if val, ok := values.Single(pr); ok {
+			pr, ok := rest.(values.Tuple)
+			if ok {
+				val, ok := values.Single(pr)
+				if ok {
 					curr, ok := val.(values.Number)
 					if !ok {
 						return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
@@ -284,7 +288,8 @@ func NumericExtremum(
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 	// Fast path: single-element rest list (the common 2-argument case).
-	if val, ok := values.Single(pr); ok {
+	val, ok := values.Single(pr)
+	if ok {
 		curr, ok := val.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)

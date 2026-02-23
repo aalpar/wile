@@ -801,6 +801,16 @@ func (p *MachineContext) Run() error {
 			mc.SetValue(cls)
 			mc.pc++
 
+		// --- Wave 6: cached binding operations ---
+
+		case OpLoadCachedBinding:
+			mc.SetValue(mc.template.cachedBindings[instr.Arg].Value())
+			mc.pc++
+
+		case OpPushCachedBinding:
+			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
+			mc.pc++
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

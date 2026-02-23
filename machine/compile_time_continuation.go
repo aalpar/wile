@@ -86,6 +86,15 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	if expr.ResolvedBinding != nil {
 		gi, ok := expr.ResolvedBinding.(*environment.GlobalIndex)
 		if ok && gi != nil {
+			bd := gi.Env.GetOwnGlobalBinding(gi)
+			if bd != nil {
+				idx := p.template.AppendCachedBinding(bd)
+				p.AppendOperations(
+					NewOperationLoadCachedBinding(idx),
+				)
+				return nil
+			}
+			// Binding not yet defined at compile time — fall back to runtime resolution
 			i := p.template.MaybeAppendLiteral(gi)
 			p.AppendOperations(
 				NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
@@ -121,6 +130,15 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
 		}
 
+		bd := p.env.GetGlobalBinding(gi)
+		if bd != nil {
+			idx := p.template.AppendCachedBinding(bd)
+			p.AppendOperations(
+				NewOperationLoadCachedBinding(idx),
+			)
+			return nil
+		}
+		// Binding not yet defined at compile time — fall back to runtime resolution
 		i := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(
 			NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
@@ -146,17 +164,12 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
 	}
 
-	// It must be a global binding (since local lookup failed)
-	// Note: globalBinding is used to verify a binding exists; we need the index for codegen
-	gi := p.env.GetGlobalIndex(sym)
-	if gi == nil {
-		// This shouldn't happen if GetBindingWithScopes succeeded
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
-	}
-
-	i := p.template.MaybeAppendLiteral(gi)
+	// It must be a global binding (since local lookup failed).
+	// globalBinding was found by GetBindingWithScopes — use it directly
+	// as a cached binding to skip runtime map/lock overhead.
+	idx := p.template.AppendCachedBinding(globalBinding)
 	p.AppendOperations(
-		NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
+		NewOperationLoadCachedBinding(idx),
 	)
 	return nil
 }

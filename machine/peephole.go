@@ -61,6 +61,7 @@ func writesValueRegister(op OpCode) bool {
 		op == OpLoadLiteral ||
 		op == OpLoadGlobal ||
 		op == OpLoadLocal ||
+		op == OpLoadCachedBinding ||
 		op == OpPop ||
 		op == OpPull ||
 		op == OpPeekK ||
@@ -79,9 +80,10 @@ func markDeadLoadVoidEdits(code []Instruction, plan *EditPlan) {
 
 // loadToFusedPush maps Load opcodes to their fused Push equivalents.
 var loadToFusedPush = [opCount]OpCode{
-	OpLoadLiteral: OpPushLiteral,
-	OpLoadGlobal:  OpPushGlobal,
-	OpLoadLocal:   OpPushLocal,
+	OpLoadLiteral:       OpPushLiteral,
+	OpLoadGlobal:        OpPushGlobal,
+	OpLoadLocal:         OpPushLocal,
+	OpLoadCachedBinding: OpPushCachedBinding,
 }
 
 // fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push

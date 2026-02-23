@@ -404,11 +404,11 @@ func TestCompileContext_CompileIf(t *testing.T) {
 	// BranchOnFalseValue reads value register directly, no Push needed
 	qt.Assert(t, cont.template.EffectiveOperations(), qt.HasLen, 5)
 	qt.Assert(t, cont.template.EffectiveOperations(), valuestest.SchemeEquals, NewOperations(
-		NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0),
+		NewOperationLoadCachedBinding(0),
 		NewOperationBranchOnFalseValueOffsetImmediate(3),
-		NewOperationLoadLiteralByLiteralIndexImmediate(1),
+		NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		NewOperationBranchOffsetImmediate(2),
-		NewOperationLoadLiteralByLiteralIndexImmediate(2),
+		NewOperationLoadLiteralByLiteralIndexImmediate(1),
 	))
 
 	// Run with x = #f → should take the false branch
@@ -541,7 +541,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 		NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(2),
 		NewOperationLoadVoid(),
 		NewOperationSaveContinuationOffsetImmediate(7),
-		NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(2),
+		NewOperationLoadCachedBinding(0),
 		NewOperationPush(),
 		NewOperationLoadLiteralByLiteralIndexImmediate(3),
 		NewOperationPush(),

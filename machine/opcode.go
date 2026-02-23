@@ -57,6 +57,10 @@ const (
 	// Wave 5: promoted complex operations (zero-operand)
 	OpMakeClosure // MakeClosure (was OpComplex)
 
+	// Wave 6: cached binding operations (Arg = index into cachedBindings)
+	OpLoadCachedBinding // Load from compile-time resolved *Binding
+	OpPushCachedBinding // LoadCachedBinding + Push (fused)
+
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -91,6 +95,8 @@ var opcodeNames = [opCount]string{
 	OpPushLocal:           "PushLocal",
 	OpPullApply:           "PullApply",
 	OpMakeClosure:         "MakeClosure",
+	OpLoadCachedBinding:   "LoadCachedBinding",
+	OpPushCachedBinding:   "PushCachedBinding",
 	OpComplex:             "Complex",
 }
 
