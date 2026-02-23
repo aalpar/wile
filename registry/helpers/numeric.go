@@ -60,12 +60,16 @@ func NumericFoldVariadic(
 		mc.SetValue(binOp(nbr, v))
 		return nil
 	}
+	// acc is a separate variable so that nbr (used on the 2-arg fast path
+	// above) stays on the stack. The closure below captures acc by reference,
+	// which forces it to the heap — but only on the 3+-arg path.
+	acc := nbr
 	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
 		}
-		nbr = binOp(nbr, v)
+		acc = binOp(acc, v)
 		return nil
 	})
 	if err != nil {
@@ -74,7 +78,7 @@ func NumericFoldVariadic(
 	if !values.IsEmptyList(v) {
 		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
 	}
-	mc.SetValue(nbr)
+	mc.SetValue(acc)
 	return nil
 }
 
@@ -105,16 +109,20 @@ func NumericFoldWithFirst(
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o2)
 	}
-	acc := binOp(nbr0, nbr2)
+	result := binOp(nbr0, nbr2)
 	if values.IsEmptyList(pr.Cdr()) {
-		mc.SetValue(acc)
+		mc.SetValue(result)
 		return nil
 	}
 	rest, ok := pr.Cdr().(values.Tuple)
 	if !ok {
-		mc.SetValue(acc)
+		mc.SetValue(result)
 		return nil
 	}
+	// acc is a separate variable so that result (used on the 2-arg fast path
+	// above) stays on the stack. The closure below captures acc by reference,
+	// which forces it to the heap — but only on the 3+-arg path.
+	acc := result
 	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
