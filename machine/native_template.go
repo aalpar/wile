@@ -40,6 +40,11 @@ type NativeTemplate struct {
 	// instead of allocating a fresh copy via NewApplyFrame().
 	noCopyApply bool
 
+	// cachedBindings stores *Binding pointers resolved at compile time.
+	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
+	// bypassing the runtime InternSymbol → RLock → map lookup path.
+	cachedBindings []*environment.Binding
+
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
@@ -145,6 +150,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
 	case OpStoreGlobal:
 		return NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpLoadCachedBinding:
+		return NewOperationLoadCachedBinding(instr.Arg)
 	case OpPeekK:
 		return NewOperationPeekK(int(instr.Arg))
 
@@ -167,6 +174,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
 	case OpPushGlobal:
 		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
+	case OpPushCachedBinding:
+		return NewOperationLoadCachedBinding(instr.Arg)
 	case OpPushLocal:
 		slot, depth := DecodeLocalIndex(instr.Arg)
 		li := environment.NewLocalIndex(slot, depth)
@@ -277,6 +286,10 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	// --- Wave 5: promoted complex operations ---
 	case *OperationMakeClosure:
 		return Instruction{Op: OpMakeClosure}, true
+
+	// --- Wave 6: cached binding operations ---
+	case *OperationLoadCachedBinding:
+		return Instruction{Op: OpLoadCachedBinding, Arg: v.BindingIndex}, true
 
 	default:
 		return Instruction{}, false
@@ -436,6 +449,20 @@ func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
 	}
 }
 
+// AppendCachedBinding adds a *Binding to the cached bindings array,
+// deduplicating by pointer identity. Returns the index for use as
+// an OpLoadCachedBinding/OpPushCachedBinding operand.
+func (p *NativeTemplate) AppendCachedBinding(bd *environment.Binding) int32 {
+	for i, existing := range p.cachedBindings {
+		if existing == bd {
+			return int32(i)
+		}
+	}
+	idx := int32(len(p.cachedBindings))
+	p.cachedBindings = append(p.cachedBindings, bd)
+	return idx
+}
+
 // AppendOperations appends operations with no source attribution (index 0 = nil).
 // Converts operations to instructions using AppendOperationsWithSource.
 func (p *NativeTemplate) AppendOperations(ops ...Operation) {
@@ -556,6 +583,7 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		name:           p.name,
 	}
 	q.literals = slices.Clone(p.literals)
+	q.cachedBindings = slices.Clone(p.cachedBindings)
 	q.code = slices.Clone(p.code)
 	q.sideTable = slices.Clone(p.sideTable)
 	q.sourceRefs = slices.Clone(p.sourceRefs)

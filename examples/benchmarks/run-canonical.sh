@@ -4,6 +4,7 @@
 
 set -e
 
+RUNS="${RUNS:-6}"
 SCHEME="${SCHEME:-../../dist/scheme}"
 
 if [ ! -e "$SCHEME" ]; then
@@ -56,32 +57,55 @@ echo "Running Canonical Gabriel Benchmark Suite"
 echo "=========================================="
 echo ""
 echo "Benchmarks: ${#CANONICAL_BENCHMARKS[@]}"
+echo "Runs: $RUNS"
 echo "Scheme: $SCHEME"
 echo ""
 
 RESULTS_CSV="canonical-results-$(date +%Y%m%d-%H%M%S).csv"
+RAW_CSV=$(mktemp)
 
-echo "benchmark,total_time_seconds" > "$RESULTS_CSV"
+echo "run,benchmark,total_time_seconds" > "$RAW_CSV"
 
-for bench in "${CANONICAL_BENCHMARKS[@]}"; do
-    echo "----------------------------------------"
-    echo "Running $bench..."
-    echo "----------------------------------------"
+for run in $(seq 1 "$RUNS"); do
+    echo "========== Run $run / $RUNS =========="
+    for bench in "${CANONICAL_BENCHMARKS[@]}"; do
+        echo -n "  $bench... "
 
-    OUTPUT=$("$SCHEME" --file "${bench}.scm" 2>&1)
-    echo "$OUTPUT"
+        OUTPUT=$("$SCHEME" --file "${bench}.scm" 2>&1)
 
-    # Extract time and save to CSV
-    TIME=$(echo "$OUTPUT" | grep "Total time:" | awk '{print $3}' | tr -d 's')
-    if [ -n "$TIME" ]; then
-        echo "$bench,$TIME" >> "$RESULTS_CSV"
-    fi
-
+        TIME=$(echo "$OUTPUT" | grep "Total time:" | awk '{print $3}' | tr -d 's')
+        if [ -n "$TIME" ]; then
+            echo "$run,$bench,$TIME" >> "$RAW_CSV"
+            echo "${TIME}s"
+        else
+            echo "FAILED"
+        fi
+    done
     echo ""
 done
 
+# Compute avg/min/max/spread from raw data
+echo "benchmark,avg_s,min_s,max_s,spread_pct,runs" > "$RESULTS_CSV"
+awk -F, 'NR > 1 {
+    bench = $2; time = $3 + 0
+    sum[bench] += time; count[bench]++
+    if (!(bench in mn) || time < mn[bench]) mn[bench] = time
+    if (!(bench in mx) || time > mx[bench]) mx[bench] = time
+    if (count[bench] == 1) order[++n] = bench
+}
+END {
+    for (i = 1; i <= n; i++) {
+        b = order[i]
+        avg = sum[b] / count[b]
+        spread = ((mx[b] - mn[b]) / avg) * 100
+        printf "%s,%.4f,%.4f,%.4f,%.1f,%d\n", b, avg, mn[b], mx[b], spread, count[b]
+    }
+}' "$RAW_CSV" >> "$RESULTS_CSV"
+
+rm -f "$RAW_CSV"
+
 echo "==============================="
-echo "All canonical benchmarks complete"
+echo "All canonical benchmarks complete ($RUNS runs averaged)"
 echo ""
 echo "Results saved to: $RESULTS_CSV"
 echo ""

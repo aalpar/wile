@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	goruntime "runtime"
 	"runtime/debug"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 
@@ -45,6 +46,8 @@ type Options struct {
 	LibraryPath string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
 	Version     bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet       bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
+	CPUProfile  string   `long:"cpuprofile" description:"Write CPU profile to file"`
+	MemProfile  string   `long:"memprofile" description:"Write memory profile to file"`
 }
 
 var (
@@ -174,6 +177,22 @@ func main() {
 		opts.File = append(opts.File, args[0])
 	}
 
+	// CPU profiling
+	if opts.CPUProfile != "" {
+		f, err := os.Create(opts.CPUProfile)
+		if err != nil {
+			Failf(err, "Cannot create CPU profile")
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+		err = pprof.StartCPUProfile(f)
+		if err != nil {
+			Failf(err, "Cannot start CPU profile")
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -222,6 +241,22 @@ func main() {
 	if len(opts.File) == 0 || opts.Interactive {
 		setupSignals(opts.Quiet)
 		runREPL(ctx, env)
+	}
+
+	// Memory profiling (written at exit after all work is done)
+	if opts.MemProfile != "" {
+		f, err := os.Create(opts.MemProfile)
+		if err != nil {
+			Failf(err, "Cannot create memory profile")
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+		goruntime.GC()
+		err = pprof.WriteHeapProfile(f)
+		if err != nil {
+			Failf(err, "Cannot write memory profile")
+		}
 	}
 }
 
