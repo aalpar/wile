@@ -73,64 +73,196 @@ func (p *Float) toBigComplex() *BigComplex {
 
 // Add returns the sum of two numbers.
 //
+// Kind returns the numeric kind for dispatch table indexing.
+func (p *Float) Kind() NumericKind {
+	return KindFloat
+}
+
+var floatAdd [numKinds]func(*Float, Number) Number
+var floatSubtract [numKinds]func(*Float, Number) Number
+var floatLessThan [numKinds]func(*Float, Number) bool
+var floatCompare [numKinds]func(*Float, Number) int
+var floatMultiply [numKinds]func(*Float, Number) Number
+var floatDivide [numKinds]func(*Float, Number) Number
+
+func init() {
+	floatAdd[KindInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value + float64(o.(*Integer).Value))
+	}
+	floatAdd[KindBigInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value + float64FromBigInt(o.(*BigInteger).value))
+	}
+	floatAdd[KindFloat] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value + o.(*Float).Value)
+	}
+	floatAdd[KindBigFloat] = func(p *Float, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Add(self, o.(*BigFloat).value)}
+	}
+	floatAdd[KindRational] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value + o.(*Rational).Float64())
+	}
+	floatAdd[KindComplex] = func(p *Float, o Number) Number {
+		return NewComplex(p.toComplex() + o.(*Complex).Value)
+	}
+	floatAdd[KindBigComplex] = func(p *Float, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Add(o)
+	}
+
+	floatSubtract[KindInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value - float64(o.(*Integer).Value))
+	}
+	floatSubtract[KindBigInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value - float64FromBigInt(o.(*BigInteger).value))
+	}
+	floatSubtract[KindFloat] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value - o.(*Float).Value)
+	}
+	floatSubtract[KindBigFloat] = func(p *Float, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Sub(self, o.(*BigFloat).value)}
+	}
+	floatSubtract[KindRational] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value - o.(*Rational).Float64())
+	}
+	floatSubtract[KindComplex] = func(p *Float, o Number) Number {
+		return NewComplex(p.toComplex() - o.(*Complex).Value)
+	}
+	floatSubtract[KindBigComplex] = func(p *Float, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Subtract(o)
+	}
+
+	floatLessThan[KindInteger] = func(p *Float, o Number) bool {
+		return p.Value < float64(o.(*Integer).Value)
+	}
+	floatLessThan[KindBigInteger] = func(p *Float, o Number) bool {
+		self := p.bigFloat()
+		other := new(big.Float).SetInt(o.(*BigInteger).BigInt())
+		return self.Cmp(other) < 0
+	}
+	floatLessThan[KindFloat] = func(p *Float, o Number) bool {
+		return p.Value < o.(*Float).Value
+	}
+	floatLessThan[KindBigFloat] = func(p *Float, o Number) bool {
+		return p.bigFloat().Cmp(o.(*BigFloat).BigFloatValue()) < 0
+	}
+	floatLessThan[KindRational] = func(p *Float, o Number) bool {
+		return p.Value < o.(*Rational).Float64()
+	}
+	floatLessThan[KindComplex] = func(p *Float, o Number) bool {
+		return p.Value < real(o.(*Complex).Value)
+	}
+	floatLessThan[KindBigComplex] = func(p *Float, o Number) bool {
+		return p.bigFloat().Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue()) < 0
+	}
+
+	floatCompare[KindInteger] = func(p *Float, o Number) int {
+		pf := p.bigFloat()
+		vf := new(big.Float).SetInt64(o.(*Integer).Value)
+		return pf.Cmp(vf)
+	}
+	floatCompare[KindBigInteger] = func(p *Float, o Number) int {
+		pf := p.bigFloat()
+		vf := new(big.Float).SetInt(o.(*BigInteger).value)
+		return pf.Cmp(vf)
+	}
+	floatCompare[KindFloat] = func(p *Float, o Number) int {
+		pf := p.bigFloat()
+		vf := new(big.Float).SetFloat64(o.(*Float).Value)
+		return pf.Cmp(vf)
+	}
+	floatCompare[KindBigFloat] = func(p *Float, o Number) int {
+		return p.bigFloat().Cmp(o.(*BigFloat).value)
+	}
+	floatCompare[KindRational] = func(p *Float, o Number) int {
+		pf := p.bigFloat()
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
+		return pf.Cmp(vf)
+	}
+	floatCompare[KindComplex] = func(p *Float, o Number) int {
+		r := real(o.(*Complex).Value)
+		if p.Value < r {
+			return -1
+		} else if p.Value > r {
+			return 1
+		}
+		return 0
+	}
+	floatCompare[KindBigComplex] = func(p *Float, o Number) int {
+		return p.bigFloat().Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue())
+	}
+
+	floatMultiply[KindInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value * float64(o.(*Integer).Value))
+	}
+	floatMultiply[KindBigInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value * float64FromBigInt(o.(*BigInteger).value))
+	}
+	floatMultiply[KindFloat] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value * o.(*Float).Value)
+	}
+	floatMultiply[KindBigFloat] = func(p *Float, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Mul(self, o.(*BigFloat).value)}
+	}
+	floatMultiply[KindRational] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value * o.(*Rational).Float64())
+	}
+	floatMultiply[KindComplex] = func(p *Float, o Number) Number {
+		return NewComplex(p.toComplex() * o.(*Complex).Value)
+	}
+	floatMultiply[KindBigComplex] = func(p *Float, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Multiply(o)
+	}
+
+	floatDivide[KindInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value / float64(o.(*Integer).Value))
+	}
+	floatDivide[KindBigInteger] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value / float64FromBigInt(o.(*BigInteger).value))
+	}
+	floatDivide[KindFloat] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value / o.(*Float).Value)
+	}
+	floatDivide[KindBigFloat] = func(p *Float, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Quo(self, o.(*BigFloat).value)}
+	}
+	floatDivide[KindRational] = func(p *Float, o Number) Number {
+		return NewFloat(p.Value / o.(*Rational).Float64())
+	}
+	floatDivide[KindComplex] = func(p *Float, o Number) Number {
+		return NewComplex(p.toComplex() / o.(*Complex).Value)
+	}
+	floatDivide[KindBigComplex] = func(p *Float, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Divide(o)
+	}
+}
+
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Add(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
-	// so the result's exactness MUST match the other operand.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *Integer:
-		return NewFloat(p.Value + float64(v.Value))
-	case *BigInteger:
-		return NewFloat(p.Value + float64FromBigInt(v.value))
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
 		return NewFloat(p.Value + v.Value)
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Add(self, v.value)}
-	case *Rational:
-		return NewFloat(p.Value + v.Float64())
-	case *Complex:
-		return NewComplex(p.toComplex() + v.Value)
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Add(v)
 	}
-	panic(ErrNotANumber)
+	return floatAdd[o.Kind()](p, o)
 }
 
 // Subtract returns the difference of two numbers.
 //
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *Float) Subtract(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
-	// so the result's exactness MUST match the minuend.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *Integer:
-		return NewFloat(p.Value - float64(v.Value))
-	case *BigInteger:
-		return NewFloat(p.Value - float64FromBigInt(v.value))
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
 		return NewFloat(p.Value - v.Value)
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
-	case *Rational:
-		return NewFloat(p.Value - v.Float64())
-	case *Complex:
-		return NewComplex(p.toComplex() - v.Value)
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Subtract(v)
 	}
-	panic(ErrNotANumber)
+	return floatSubtract[o.Kind()](p, o)
 }
 
 // Multiply returns the product of two numbers.
@@ -146,25 +278,11 @@ func (p *Float) Multiply(o Number) Number {
 	if p.IsZero() && o.IsFinite() {
 		return multiplyResultForZero(p, o)
 	}
-	switch v := o.(type) {
-	case *Integer:
-		return NewFloat(p.Value * float64(v.Value))
-	case *BigInteger:
-		return NewFloat(p.Value * float64FromBigInt(v.value))
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
 		return NewFloat(p.Value * v.Value)
-	case *Rational:
-		return NewFloat(p.Value * v.Float64())
-	case *Complex:
-		return NewComplex(p.toComplex() * v.Value)
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Multiply(v)
 	}
-	panic(ErrNotANumber)
+	return floatMultiply[o.Kind()](p, o)
 }
 
 // Divide returns the quotient of this float and another number.
@@ -172,25 +290,11 @@ func (p *Float) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
 	}
-	switch v := o.(type) {
-	case *Integer:
-		return NewFloat(p.Value / float64(v.Value))
-	case *BigInteger:
-		return NewFloat(p.Value / float64FromBigInt(v.value))
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
 		return NewFloat(p.Value / v.Value)
-	case *Rational:
-		return NewFloat(p.Value / v.Float64())
-	case *Complex:
-		return NewComplex(p.toComplex() / v.Value)
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Divide(v)
 	}
-	panic(ErrNotANumber)
+	return floatDivide[o.Kind()](p, o)
 }
 
 // IsZero returns true if this float is zero.
@@ -200,27 +304,11 @@ func (p *Float) IsZero() bool {
 
 // LessThan returns true if this float is less than another number.
 func (p *Float) LessThan(o Number) bool {
-	switch v := o.(type) {
-	case *Integer:
-		return p.Value < float64(v.Value)
-	case *BigInteger:
-		self := p.bigFloat()
-		other := new(big.Float).SetInt(v.BigInt())
-		return self.Cmp(other) < 0
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
 		return p.Value < v.Value
-	case *BigFloat:
-		self := p.bigFloat()
-		return self.Cmp(v.BigFloatValue()) < 0
-	case *Rational:
-		return p.Value < v.Float64()
-	case *Complex:
-		return p.Value < real(v.Value)
-	case *BigComplex:
-		self := p.bigFloat()
-		return self.Cmp(toBigFloat(v.Real()).BigFloatValue()) < 0
 	}
-	panic(ErrNotANumber)
+	return floatLessThan[o.Kind()](p, o)
 }
 
 // Abs returns the absolute value of this float.
@@ -277,34 +365,13 @@ func (p *Float) Negate() Number {
 // R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
 // Returns -1 if p < o, 0 if p == o, 1 if p > o.
 func (p *Float) Compare(o Number) int {
-	pf := p.bigFloat()
-	switch v := o.(type) {
-	case *BigFloat:
-		return pf.Cmp(v.value)
-	case *BigInteger:
-		vf := new(big.Float).SetInt(v.value)
-		return pf.Cmp(vf)
-	case *Integer:
-		vf := new(big.Float).SetInt64(v.Value)
-		return pf.Cmp(vf)
-	case *Float:
+	v, ok := o.(*Float)
+	if ok {
+		pf := p.bigFloat()
 		vf := new(big.Float).SetFloat64(v.Value)
 		return pf.Cmp(vf)
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
-		return pf.Cmp(vf)
-	case *Complex:
-		r := real(v.Value)
-		if p.Value < r {
-			return -1
-		} else if p.Value > r {
-			return 1
-		}
-		return 0
-	case *BigComplex:
-		return pf.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	panic(ErrNotANumber)
+	return floatCompare[o.Kind()](p, o)
 }
 
 // IsExact returns false since Float is always inexact.

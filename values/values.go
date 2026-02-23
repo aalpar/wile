@@ -298,6 +298,7 @@ type ByteVectorExtractor interface {
 // with-exception-handler.
 type Number interface {
 	Value
+	Kind() NumericKind
 	Add(Number) Number
 	Subtract(Number) Number
 	Multiply(Number) Number
