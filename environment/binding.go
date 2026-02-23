@@ -19,35 +19,41 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// BindingMeta holds compile-time metadata (scopes and source location) that
+// is never read during VM execution. Stored behind a pointer so that runtime
+// Binding copies (the hot path) move 32 bytes instead of 56.
+type BindingMeta struct {
+	Scopes []*syntax.Scope
+	Source *syntax.SourceContext
+}
+
 // Binding represents a variable binding in the environment.
 // It stores the bound value, the binding type (variable, syntax, or primitive),
-// optional scopes for hygienic macro expansion, and optional source location.
+// and an optional pointer to compile-time metadata (scopes, source location).
 type Binding struct {
 	value       values.Value
 	bindingType BindingType
-	scopes      []*syntax.Scope       // Scopes associated with this binding
-	source      *syntax.SourceContext // Where this binding was defined (optional)
+	meta        *BindingMeta
 }
 
 // NewBinding creates a new binding with the given value and type.
 // The binding has no scopes (for backward compatibility with non-hygienic code).
 func NewBinding(value values.Value, bindingType BindingType) *Binding {
-	q := &Binding{
+	return &Binding{
 		value:       value,
 		bindingType: bindingType,
-		scopes:      nil, // No scopes by default for backward compatibility
 	}
-	return q
 }
 
 // NewBindingWithScopes creates a binding with associated scopes (for hygiene)
 func NewBindingWithScopes(value values.Value, bindingType BindingType, scopes []*syntax.Scope) *Binding {
-	q := &Binding{
+	return &Binding{
 		value:       value,
 		bindingType: bindingType,
-		scopes:      scopes,
+		meta: &BindingMeta{
+			Scopes: scopes,
+		},
 	}
-	return q
 }
 
 // NewBindingWithSource creates a binding with source location information.
@@ -55,8 +61,10 @@ func NewBindingWithSource(value values.Value, bindingType BindingType, scopes []
 	return &Binding{
 		value:       value,
 		bindingType: bindingType,
-		scopes:      scopes,
-		source:      source,
+		meta: &BindingMeta{
+			Scopes: scopes,
+			Source: source,
+		},
 	}
 }
 
@@ -83,23 +91,35 @@ func (p *Binding) SetBindingType(value BindingType) {
 // Scopes returns the hygiene scopes associated with this binding.
 // Returns nil for bindings without hygiene information.
 func (p *Binding) Scopes() []*syntax.Scope {
-	return p.scopes
+	if p.meta == nil {
+		return nil
+	}
+	return p.meta.Scopes
 }
 
 // SetScopes updates the hygiene scopes associated with this binding.
 func (p *Binding) SetScopes(scopes []*syntax.Scope) {
-	p.scopes = scopes
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	p.meta.Scopes = scopes
 }
 
 // Source returns the source location where this binding was defined.
 // Returns nil for bindings without source information.
 func (p *Binding) Source() *syntax.SourceContext {
-	return p.source
+	if p.meta == nil {
+		return nil
+	}
+	return p.meta.Source
 }
 
 // SetSource updates the source location for this binding.
 func (p *Binding) SetSource(source *syntax.SourceContext) {
-	p.source = source
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	p.meta.Source = source
 }
 
 // SchemeString returns a string representation of this binding.
@@ -128,15 +148,19 @@ func (p *Binding) EqualTo(o values.Value) bool {
 	return p.value.EqualTo(v.value) && p.bindingType == v.bindingType
 }
 
-// Copy creates a copy of this binding. Scopes and source are shared by
-// reference because they are immutable at runtime — SetScopes is only
-// called during compilation/expansion, never during VM execution.
+// Copy creates a deep copy of this binding. The meta struct is copied so
+// that SetScopes on the original does not affect the copy. This method is
+// only used during compilation/expansion, never on the runtime hot path.
 func (p *Binding) Copy() values.Value {
-	q := &Binding{
+	b := &Binding{
 		value:       p.value,
 		bindingType: p.bindingType,
-		scopes:      p.scopes,
-		source:      p.source,
 	}
-	return q
+	if p.meta != nil {
+		b.meta = &BindingMeta{
+			Scopes: p.meta.Scopes,
+			Source: p.meta.Source,
+		}
+	}
+	return b
 }
