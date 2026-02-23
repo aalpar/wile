@@ -125,8 +125,7 @@ func (p *GlobalEnvironmentFrame) Copy() values.Value {
 		allBindings[i] = Binding{
 			value:       b.value,
 			bindingType: b.bindingType,
-			scopes:      b.scopes,
-			source:      b.source,
+			meta:        b.meta,
 		}
 		q.bindings[i] = &allBindings[i]
 	}

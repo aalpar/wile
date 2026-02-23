@@ -445,7 +445,11 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 	}
 	i = len(p.local.bindings)
 	p.local.keys[*key] = i
-	p.local.bindings = append(p.local.bindings, Binding{value: values.Void, bindingType: bt, scopes: scopes})
+	b := Binding{value: values.Void, bindingType: bt}
+	if scopes != nil {
+		b.meta = &BindingMeta{Scopes: scopes}
+	}
+	p.local.bindings = append(p.local.bindings, b)
 	return NewLocalIndex(i, 0), true
 }
 
