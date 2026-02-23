@@ -6,7 +6,7 @@
 
 - **Numeric** (`Number`): Integer, BigInteger, Float, BigFloat, Rational, Complex, BigComplex
 - **Basic**: Boolean, Symbol, String, Character, Byte
-- **Collections**: Pair, Vector, ByteVector, ArrayList, Hashtable, EmptyList
+- **Collections**: Pair, Vector, ByteVector, Hashtable, EmptyList
 - **I/O** (`Port`/`InputPort`/`OutputPort`): BinaryInputPort, CharacterInputPort, TextualWriter
 - **Control**: MachineClosure, CaseLambdaClosure, Parameter, ComposableContinuation
 - **Advanced**: SyntaxValue, CompileTimeValue, Record, Box, Promise, Channel, Thread, Mutex

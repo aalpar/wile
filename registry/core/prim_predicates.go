@@ -121,8 +121,6 @@ func PrimListQ(mc *machine.MachineContext) error {
 	switch t := o.(type) {
 	case *values.Pair:
 		mc.SetValue(values.BoolToBoolean(t.IsList()))
-	case *values.ArrayList:
-		mc.SetValue(values.BoolToBoolean(t.IsList()))
 	default:
 		mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
 	}

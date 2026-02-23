@@ -86,7 +86,7 @@ type equalPairKey [2]Value
 
 // EqualTo compares two values for structural equality.
 // Handles nil and void values specially: nil equals nil, void equals void.
-// For compound types (Pair, Vector, ArrayList), uses optimistic bisimilarity
+// For compound types (Pair, Vector), uses optimistic bisimilarity
 // with a visited set to terminate on circular structures per R7RS §6.1.
 // This is the same technique used by Chez Scheme and Racket: when a
 // (pointer-a, pointer-b) pair is re-encountered during recursion, return true.
@@ -103,10 +103,6 @@ func EqualTo(a, b Value) bool {
 
 // equalToDeep dispatches compound types to cycle-aware helpers,
 // and delegates everything else to a.EqualTo(b).
-//
-// Implementation note: Cannot use Tuple interface here because R7RS equal?
-// requires type-specific equality. A *Pair and *ArrayList with identical
-// elements must return false. Each concrete type needs its own case.
 func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -128,13 +124,6 @@ func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 			return false
 		}
 		return vectorEqualToDeep(pa, pb, visited)
-	case *ArrayList:
-		// Must check concrete *ArrayList type, not Tuple interface
-		pb, ok := b.(*ArrayList)
-		if !ok {
-			return false
-		}
-		return arrayListEqualToDeep(pa, pb, visited)
 	default:
 		return a.EqualTo(b)
 	}
@@ -185,10 +174,9 @@ func compareIndexable[T Value](
 // Mirrors the iterative structure of Pair.EqualTo but records visited
 // pointer pairs and recurses elements via equalToDeep.
 //
-// Implementation note: Must use *Pair (not Tuple) for three reasons:
+// Implementation note: Must use *Pair (not Tuple) for two reasons:
 // 1. Cycle detection via pointer identity comparison (p == v, p0 == v0)
 // 2. Map keys require concrete type (equalPairKey uses [2]Value with *Pair pointers)
-// 3. Type-specific equality (Pair vs ArrayList must not be considered equal)
 func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
 	if p == v {
 		return true
@@ -239,20 +227,6 @@ func vectorEqualToDeep(p, other *Vector, visited map[equalPairKey]bool) bool {
 		func(v *Vector) int { return len(*v) },
 		func(v *Vector, i int) Value { return (*v)[i] },
 		nil, // Vectors don't have void elements
-		visited,
-	)
-}
-
-// arrayListEqualToDeep compares two ArrayLists with cycle detection.
-func arrayListEqualToDeep(p, v *ArrayList, visited map[equalPairKey]bool) bool {
-	if p == nil || v == nil {
-		return p == v
-	}
-	return compareIndexable(
-		p, v,
-		func(a *ArrayList) int { return len(*a) },
-		func(a *ArrayList, i int) Value { return (*a)[i] },
-		func(a *ArrayList, i int) bool { return IsVoid((*a)[i]) },
 		visited,
 	)
 }
@@ -349,17 +323,12 @@ func Single(t Tuple) (Value, bool) {
 }
 
 // VectorToList converts a Vector to a proper list preserving element order.
-// Iterates backward through the vector, prepending each element to build the list.
 // Returns EmptyList for nil or void vectors.
 func VectorToList(vs *Vector) Tuple {
 	if IsVoid(vs) {
 		return EmptyList
 	}
-	var q Value = EmptyList
-	for j := len(*vs) - 1; j >= 0; j-- {
-		q = NewCons((*vs)[j], q)
-	}
-	return q.(Tuple)
+	return List([]Value(*vs)...)
 }
 
 // ExactInteger extracts an exact integer from a Scheme value.

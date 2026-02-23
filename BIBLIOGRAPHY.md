@@ -151,7 +151,7 @@ Introduces shift/reset as composable delimited control operators, the theoretica
 
 ### Optimistic Bisimilarity for Structural Equality
 
-Used in `values/utils.go` for `EqualTo()` on compound types (Pair, Vector, ArrayList). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1.
+Used in `values/utils.go` for `EqualTo()` on compound types (Pair, Vector). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1.
 
 ### Split Value Register
 

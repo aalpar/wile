@@ -56,13 +56,11 @@ func PrimMakeList(mc *machine.MachineContext) error {
 		}
 	}
 
-	// Build list from tail to head
-	result := values.Value(values.EmptyList)
-	for range count {
-		result = values.NewCons(fill, result)
+	elems := make([]values.Value, count)
+	for i := range elems {
+		elems[i] = fill
 	}
-
-	mc.SetValue(result)
+	mc.SetValue(values.List(elems...))
 	return nil
 }
 

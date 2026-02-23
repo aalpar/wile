@@ -126,7 +126,6 @@ Option A (minimal, lower risk) — Create \`emptyListType struct{}\` implementin
 ## Tasks
 - [ ] Step 1: Create \`emptyListType\`
 - [ ] Step 2: Update \`Pair\` type assumptions
-- [ ] Step 3: Update \`ArrayList\`
 - [ ] Step 4: Update utility functions
 - [ ] Step 5: Simplify predicates (pair?, null?)
 - [ ] Step 6: Create \`syntaxEmptyListType\` in syntax layer

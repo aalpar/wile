@@ -102,7 +102,7 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, sctx)
 	case values.Tuple:
-		// If the datum is a Tuple (Pair or ArrayList), wrap it in SyntaxValue
+		// If the datum is a Tuple (Pair), wrap it in SyntaxValue
 		var tuple0stx *syntax.SyntaxPair
 		tuple1, ok := v.Cdr().(values.Tuple)
 		if !ok {

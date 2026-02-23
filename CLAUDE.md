@@ -44,7 +44,7 @@ mc.SetValue( BoolToBoolean(<conditional>) )
 named functions, methods, closures (inline, deferred, goroutine, or assigned), and
 function arguments. Every function body MUST start on the line after the opening brace
 and the closing brace MUST be on its own line. No exceptions.
-**NEVER** write code that exclusively accepts `*values.Pair` for read-only operations. Use `values.Tuple` interface instead to support both `*Pair` and `*ArrayList`. Only use `*values.Pair` when mutation (`SetCar`, `SetCdr`) or type-specific predicates (`pair?`) are required.
+**NEVER** write code that exclusively accepts `*values.Pair` for read-only operations. Use `values.Tuple` interface instead. Only use `*values.Pair` when mutation (`SetCar`, `SetCdr`) or type-specific predicates (`pair?`) are required.
 
 ## Workflow
 
@@ -123,12 +123,10 @@ Use `values.Tuple` for read-only operations, `*values.Pair` only for mutation or
 
 | Use Case | Type | Why |
 |----------|------|-----|
-| Traversal, pattern matching, assoc lookup | `values.Tuple` | Generic (works with `*Pair`, `*ArrayList`) |
+| Traversal, pattern matching, assoc lookup | `values.Tuple` | Generic (works with `*Pair`, `emptyListType`) |
 | List copying | Input: `Tuple`, Output: `*Pair` | Read generically, write concretely |
 | `list-set!`, `set-car!`, `set-cdr!` | `*values.Pair` | Needs `SetCar`/`SetCdr` |
 | `pair?` predicate | `*values.Pair` | Type-specific per R7RS |
-
-Compile-time/macro code uses `*Pair` only (no `ArrayList` at those phases).
 
 ## Build Commands
 

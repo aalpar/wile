@@ -130,13 +130,13 @@ func PrimGenerateTemporaries(mc *machine.MachineContext) error {
 	// Count the length of the list
 	count := tuple.Length()
 	// Generate fresh identifiers
-	result := values.EmptyList
-	for i := count - 1; i >= 0; i-- {
+	elems := make([]values.Value, count)
+	for i := range elems {
 		id := atomic.AddUint64(&gensymCounter, 1)
 		name := fmt.Sprintf("g%d", id)
-		sym := syntax.NewSyntaxSymbol(name, nil)
-		result = values.NewCons(sym, result)
+		elems[i] = syntax.NewSyntaxSymbol(name, nil)
 	}
+	result := values.List(elems...)
 
 	mc.SetValue(result)
 	return nil

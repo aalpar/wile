@@ -203,8 +203,6 @@ func Test_IsList(t *testing.T) {
 		{"empty list is a list", values.EmptyList, true},
 		{"proper list is a list", values.List(values.NewInteger(1), values.NewInteger(2)), true},
 		{"improper list is not a list", values.NewCons(values.NewInteger(1), values.NewInteger(2)), false},
-		{"arraylist proper list is a list", values.NewArrayList(values.NewInteger(1), values.NewInteger(2), values.EmptyList), true},
-		{"arraylist improper list is not a list", values.NewArrayList(values.NewInteger(1), values.NewInteger(2)), false},
 		{"integer is not a list", values.NewInteger(42), false},
 		{"string is not a list", values.NewString("hello"), false},
 	}

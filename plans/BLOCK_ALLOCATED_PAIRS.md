@@ -3,7 +3,7 @@
 Date: 2026-02-22
 Status: Implemented
 Prerequisite: None (independent of other allocation optimizations)
-Supersedes: `ARRAYLIST_AS_PAIR.md` (abandoned — see Lessons Learned)
+Supersedes: ArrayList-as-Pair approach (abandoned — mutation and aliasing issues)
 
 ## Problem Statement
 
@@ -35,7 +35,7 @@ Block allocation (proposed):
 
 ### Why This Preserves Semantics
 
-Unlike the ArrayList-as-Pair approach (which introduced a new representation with incompatible mutation semantics), block-allocated pairs produce real `*Pair` pointers:
+Block-allocated pairs produce real `*Pair` pointers:
 
 | Operation | Individual alloc | Block alloc | Same? |
 |-----------|-----------------|-------------|-------|
@@ -106,16 +106,6 @@ For noCopyApply variadic closures, the rest-arg list is rebuilt on every call. I
 ### Pooling Blocks by Size (deferred)
 
 Pool `[]Pair` blocks by common sizes (1, 2, 3) to avoid even the single allocation. But sync.Pool overhead is already 17.3-21.9% of CPU — adding more pools may be net-negative. Benchmark pool-free block allocation first.
-
-## Lessons Learned (from ArrayList-as-Pair attempt)
-
-The ArrayList-as-Pair plan (`ARRAYLIST_AS_PAIR.md`) attempted to use `*ArrayList` as a pair representation. It failed for two reasons:
-
-1. **Mutation semantics**: `set-cdr!` on an ArrayList sub-slice (from `Cdr()`) can't propagate structural changes to the parent. Go slice headers have independent length fields — shortening a sub-slice doesn't shorten the parent. This is a fundamental property of Go slices, not a fixable implementation detail.
-
-2. **Reuse aliasing**: Overwriting an ArrayList's backing array while old sub-slices (from prior `Cdr()` calls) are still alive creates self-referential structures, causing infinite recursion in `datumToSyntax` and similar recursive walkers.
-
-Block-allocated pairs avoid both problems: each `&block[i]` is an independent `*Pair` with full mutation semantics, and `Cdr()` returns a pointer to the next cell (not a view into the same structure).
 
 ## Execution Order
 

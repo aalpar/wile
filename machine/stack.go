@@ -89,12 +89,7 @@ func (p Stack) AsList() values.Tuple {
 	if len(p) == 0 {
 		return values.EmptyList
 	}
-	// Build list from end to start to avoid mutating EmptyList
-	result := values.EmptyList
-	for i := len(p) - 1; i >= 0; i-- {
-		result = values.NewCons(p[i], result)
-	}
-	return result
+	return values.List([]values.Value(p)...)
 }
 
 // PushAll pushes all values from the slice onto the stack.
