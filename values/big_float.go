@@ -74,82 +74,226 @@ func (p *BigFloat) HashCode() uint64 {
 
 // Add returns the sum of this BigFloat and another number.
 //
-// R7RS §6.2.6: The + procedure returns the sum of its arguments.
-// R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
-func (p *BigFloat) Add(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
-	// so the result's exactness MUST match the other operand.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *BigFloat:
-		return &BigFloat{value: new(big.Float).Add(p.value, v.value)}
-	case *BigInteger:
-		vf := v.bigFloat()
+// Kind returns the numeric kind for dispatch table indexing.
+func (p *BigFloat) Kind() NumericKind {
+	return KindBigFloat
+}
+
+var bigFloatAdd [numKinds]func(*BigFloat, Number) Number
+var bigFloatSubtract [numKinds]func(*BigFloat, Number) Number
+var bigFloatLessThan [numKinds]func(*BigFloat, Number) bool
+var bigFloatCompare [numKinds]func(*BigFloat, Number) int
+var bigFloatMultiply [numKinds]func(*BigFloat, Number) Number
+var bigFloatDivide [numKinds]func(*BigFloat, Number) Number
+
+func init() {
+	bigFloatAdd[KindInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Integer).bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
-	case *Integer:
-		vf := v.bigFloat()
+	}
+	bigFloatAdd[KindBigInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*BigInteger).bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
-	case *Float:
-		vf := v.bigFloat()
+	}
+	bigFloatAdd[KindFloat] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Float).bigFloat()
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
+	}
+	bigFloatAdd[KindBigFloat] = func(p *BigFloat, o Number) Number {
+		return &BigFloat{value: new(big.Float).Add(p.value, o.(*BigFloat).value)}
+	}
+	bigFloatAdd[KindRational] = func(p *BigFloat, o Number) Number {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
 		return &BigFloat{value: new(big.Float).Add(p.value, vf)}
-	case *Complex:
-		// Convert both to BigComplex to preserve BigFloat precision
+	}
+	bigFloatAdd[KindComplex] = func(p *BigFloat, o Number) Number {
+		v := o.(*Complex)
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		vc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
 			NewBigFloatFromFloat64(imag(v.Value)),
 		)
 		return bc.Add(vc)
-	case *BigComplex:
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		return bc.Add(v)
 	}
-	panic(ErrNotANumber)
-}
+	bigFloatAdd[KindBigComplex] = func(p *BigFloat, o Number) Number {
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Add(o)
+	}
 
-// Subtract returns the difference of this BigFloat and another number.
-//
-// R7RS §6.2.6: The - procedure returns the difference of its arguments.
-// R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
-func (p *BigFloat) Subtract(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
-	// so the result's exactness MUST match the minuend.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *BigFloat:
-		return &BigFloat{value: new(big.Float).Sub(p.value, v.value)}
-	case *BigInteger:
-		vf := v.bigFloat()
+	bigFloatSubtract[KindInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Integer).bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
-	case *Integer:
-		vf := v.bigFloat()
+	}
+	bigFloatSubtract[KindBigInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*BigInteger).bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
-	case *Float:
-		vf := v.bigFloat()
+	}
+	bigFloatSubtract[KindFloat] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Float).bigFloat()
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
+	}
+	bigFloatSubtract[KindBigFloat] = func(p *BigFloat, o Number) Number {
+		return &BigFloat{value: new(big.Float).Sub(p.value, o.(*BigFloat).value)}
+	}
+	bigFloatSubtract[KindRational] = func(p *BigFloat, o Number) Number {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
 		return &BigFloat{value: new(big.Float).Sub(p.value, vf)}
-	case *Complex:
-		// Convert both to BigComplex to preserve BigFloat precision
+	}
+	bigFloatSubtract[KindComplex] = func(p *BigFloat, o Number) Number {
+		v := o.(*Complex)
 		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
 		vc := NewBigComplexFromBigFloats(
 			NewBigFloatFromFloat64(real(v.Value)),
 			NewBigFloatFromFloat64(imag(v.Value)),
 		)
 		return bc.Subtract(vc)
-	case *BigComplex:
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		return bc.Subtract(v)
 	}
-	panic(ErrNotANumber)
+	bigFloatSubtract[KindBigComplex] = func(p *BigFloat, o Number) Number {
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Subtract(o)
+	}
+
+	bigFloatLessThan[KindInteger] = func(p *BigFloat, o Number) bool {
+		return p.value.Cmp(o.(*Integer).bigFloat()) < 0
+	}
+	bigFloatLessThan[KindBigInteger] = func(p *BigFloat, o Number) bool {
+		return p.value.Cmp(o.(*BigInteger).bigFloat()) < 0
+	}
+	bigFloatLessThan[KindFloat] = func(p *BigFloat, o Number) bool {
+		return p.value.Cmp(o.(*Float).bigFloat()) < 0
+	}
+	bigFloatLessThan[KindBigFloat] = func(p *BigFloat, o Number) bool {
+		return p.value.Cmp(o.(*BigFloat).value) < 0
+	}
+	bigFloatLessThan[KindRational] = func(p *BigFloat, o Number) bool {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
+		return p.value.Cmp(vf) < 0
+	}
+	bigFloatLessThan[KindComplex] = func(p *BigFloat, o Number) bool {
+		f, _ := p.value.Float64()
+		return f < real(o.(*Complex).Value)
+	}
+	bigFloatLessThan[KindBigComplex] = func(p *BigFloat, o Number) bool {
+		return p.value.Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue()) < 0
+	}
+
+	bigFloatCompare[KindInteger] = func(p *BigFloat, o Number) int {
+		return p.value.Cmp(o.(*Integer).bigFloat())
+	}
+	bigFloatCompare[KindBigInteger] = func(p *BigFloat, o Number) int {
+		return p.value.Cmp(o.(*BigInteger).bigFloat())
+	}
+	bigFloatCompare[KindFloat] = func(p *BigFloat, o Number) int {
+		return p.value.Cmp(o.(*Float).bigFloat())
+	}
+	bigFloatCompare[KindBigFloat] = func(p *BigFloat, o Number) int {
+		return p.value.Cmp(o.(*BigFloat).value)
+	}
+	bigFloatCompare[KindRational] = func(p *BigFloat, o Number) int {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
+		return p.value.Cmp(vf)
+	}
+	bigFloatCompare[KindComplex] = func(p *BigFloat, o Number) int {
+		f, _ := p.value.Float64()
+		if f < real(o.(*Complex).Value) {
+			return -1
+		} else if f > real(o.(*Complex).Value) {
+			return 1
+		}
+		return 0
+	}
+	bigFloatCompare[KindBigComplex] = func(p *BigFloat, o Number) int {
+		return p.value.Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue())
+	}
+
+	bigFloatMultiply[KindInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Integer).bigFloat()
+		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
+	}
+	bigFloatMultiply[KindBigInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*BigInteger).bigFloat()
+		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
+	}
+	bigFloatMultiply[KindFloat] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Float).bigFloat()
+		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
+	}
+	bigFloatMultiply[KindBigFloat] = func(p *BigFloat, o Number) Number {
+		return &BigFloat{value: new(big.Float).Mul(p.value, o.(*BigFloat).value)}
+	}
+	bigFloatMultiply[KindRational] = func(p *BigFloat, o Number) Number {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
+		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
+	}
+	bigFloatMultiply[KindComplex] = func(p *BigFloat, o Number) Number {
+		v := o.(*Complex)
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Multiply(vc)
+	}
+	bigFloatMultiply[KindBigComplex] = func(p *BigFloat, o Number) Number {
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Multiply(o)
+	}
+
+	bigFloatDivide[KindInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Integer).bigFloat()
+		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
+	}
+	bigFloatDivide[KindBigInteger] = func(p *BigFloat, o Number) Number {
+		vf := o.(*BigInteger).bigFloat()
+		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
+	}
+	bigFloatDivide[KindFloat] = func(p *BigFloat, o Number) Number {
+		vf := o.(*Float).bigFloat()
+		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
+	}
+	bigFloatDivide[KindBigFloat] = func(p *BigFloat, o Number) Number {
+		return &BigFloat{value: new(big.Float).Quo(p.value, o.(*BigFloat).value)}
+	}
+	bigFloatDivide[KindRational] = func(p *BigFloat, o Number) Number {
+		vf := new(big.Float).SetRat(o.(*Rational).Rat())
+		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
+	}
+	bigFloatDivide[KindComplex] = func(p *BigFloat, o Number) Number {
+		v := o.(*Complex)
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		vc := NewBigComplexFromBigFloats(
+			NewBigFloatFromFloat64(real(v.Value)),
+			NewBigFloatFromFloat64(imag(v.Value)),
+		)
+		return bc.Divide(vc)
+	}
+	bigFloatDivide[KindBigComplex] = func(p *BigFloat, o Number) Number {
+		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return bc.Divide(o)
+	}
+}
+
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
+// R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
+// Inexactness is contagious per R7RS §6.2.2.
+func (p *BigFloat) Add(o Number) Number {
+	v, ok := o.(*BigFloat)
+	if ok {
+		return &BigFloat{value: new(big.Float).Add(p.value, v.value)}
+	}
+	return bigFloatAdd[o.Kind()](p, o)
+}
+
+// Subtract returns the difference of this BigFloat and another number.
+//
+// R7RS §6.2.6: The - procedure returns the difference of its arguments.
+// R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
+func (p *BigFloat) Subtract(o Number) Number {
+	v, ok := o.(*BigFloat)
+	if ok {
+		return &BigFloat{value: new(big.Float).Sub(p.value, v.value)}
+	}
+	return bigFloatSubtract[o.Kind()](p, o)
 }
 
 // Multiply returns the product of this BigFloat and another number.
@@ -162,71 +306,23 @@ func (p *BigFloat) Multiply(o Number) Number {
 	if p.IsZero() && o.IsFinite() {
 		return multiplyResultForZero(p, o)
 	}
-	switch v := o.(type) {
-	case *BigFloat:
+	v, ok := o.(*BigFloat)
+	if ok {
 		return &BigFloat{value: new(big.Float).Mul(p.value, v.value)}
-	case *BigInteger:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
-	case *Integer:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
-	case *Float:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
-		return &BigFloat{value: new(big.Float).Mul(p.value, vf)}
-	case *Complex:
-		// Convert both to BigComplex to preserve BigFloat precision
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		vc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		return bc.Multiply(vc)
-	case *BigComplex:
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		return bc.Multiply(v)
 	}
-	panic(ErrNotANumber)
+	return bigFloatMultiply[o.Kind()](p, o)
 }
 
 // Divide returns the quotient of this BigFloat and another number.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
 	}
-	switch v := o.(type) {
-	case *BigFloat:
+	v, ok := o.(*BigFloat)
+	if ok {
 		return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
-	case *BigInteger:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
-	case *Integer:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
-	case *Float:
-		vf := v.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
-		return &BigFloat{value: new(big.Float).Quo(p.value, vf)}
-	case *Complex:
-		// Convert both to BigComplex to preserve BigFloat precision
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		vc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		return bc.Divide(vc)
-	case *BigComplex:
-		bc := NewBigComplex(p, NewBigFloatFromFloat64(0))
-		return bc.Divide(v)
 	}
-	panic(ErrNotANumber)
+	return bigFloatDivide[o.Kind()](p, o)
 }
 
 // Negate returns the negation of this BigFloat.
@@ -241,7 +337,11 @@ func (p *BigFloat) IsZero() bool {
 
 // LessThan returns true if this BigFloat is less than another number.
 func (p *BigFloat) LessThan(o Number) bool {
-	return p.Compare(o) < 0
+	v, ok := o.(*BigFloat)
+	if ok {
+		return p.value.Cmp(v.value) < 0
+	}
+	return bigFloatLessThan[o.Kind()](p, o)
 }
 
 // IsNegative returns true if this BigFloat is negative.
@@ -314,33 +414,11 @@ func (p *BigFloat) Sign() int {
 
 // Compare compares this BigFloat with another number.
 func (p *BigFloat) Compare(o Number) int {
-	switch v := o.(type) {
-	case *BigFloat:
+	v, ok := o.(*BigFloat)
+	if ok {
 		return p.value.Cmp(v.value)
-	case *BigInteger:
-		vf := v.bigFloat()
-		return p.value.Cmp(vf)
-	case *Integer:
-		vf := v.bigFloat()
-		return p.value.Cmp(vf)
-	case *Float:
-		vf := v.bigFloat()
-		return p.value.Cmp(vf)
-	case *Rational:
-		vf := new(big.Float).SetRat(v.Rat())
-		return p.value.Cmp(vf)
-	case *Complex:
-		f, _ := p.value.Float64()
-		if f < real(v.Value) {
-			return -1
-		} else if f > real(v.Value) {
-			return 1
-		}
-		return 0
-	case *BigComplex:
-		return p.value.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	panic(ErrNotANumber)
+	return bigFloatCompare[o.Kind()](p, o)
 }
 
 // SchemeString returns the Scheme representation of this BigFloat.

@@ -125,86 +125,224 @@ func (p *BigInteger) toBigComplex() *BigComplex {
 
 // Add returns the sum of this BigInteger and another number.
 //
+// Kind returns the numeric kind for dispatch table indexing.
+func (p *BigInteger) Kind() NumericKind {
+	return KindBigInteger
+}
+
+var bigIntegerAdd [numKinds]func(*BigInteger, Number) Number
+var bigIntegerSubtract [numKinds]func(*BigInteger, Number) Number
+var bigIntegerLessThan [numKinds]func(*BigInteger, Number) bool
+var bigIntegerCompare [numKinds]func(*BigInteger, Number) int
+var bigIntegerMultiply [numKinds]func(*BigInteger, Number) Number
+var bigIntegerDivide [numKinds]func(*BigInteger, Number) Number
+
+func init() {
+	bigIntegerAdd[KindInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, o.(*Integer).bigInt())}
+	}
+	bigIntegerAdd[KindBigInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, o.(*BigInteger).value)}
+	}
+	bigIntegerAdd[KindFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		other := o.(*Float).bigFloat()
+		result := new(big.Float).Add(self, other)
+		return NewBigFloat(result)
+	}
+	bigIntegerAdd[KindBigFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Add(self, o.(*BigFloat).value)}
+	}
+	bigIntegerAdd[KindRational] = func(p *BigInteger, o Number) Number {
+		pRat := p.bigRat()
+		return NewRationalFromRat(new(big.Rat).Add(pRat, o.(*Rational).Rat()))
+	}
+	bigIntegerAdd[KindComplex] = func(p *BigInteger, o Number) Number {
+		f := p.float64Val()
+		return NewComplex(complex(f, 0) + o.(*Complex).Datum())
+	}
+	bigIntegerAdd[KindBigComplex] = func(p *BigInteger, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Add(o)
+	}
+
+	bigIntegerSubtract[KindInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, o.(*Integer).bigInt())}
+	}
+	bigIntegerSubtract[KindBigInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, o.(*BigInteger).value)}
+	}
+	bigIntegerSubtract[KindFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		other := o.(*Float).bigFloat()
+		result := new(big.Float).Sub(self, other)
+		return NewBigFloat(result)
+	}
+	bigIntegerSubtract[KindBigFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Sub(self, o.(*BigFloat).value)}
+	}
+	bigIntegerSubtract[KindRational] = func(p *BigInteger, o Number) Number {
+		pRat := p.bigRat()
+		return NewRationalFromRat(new(big.Rat).Sub(pRat, o.(*Rational).Rat()))
+	}
+	bigIntegerSubtract[KindComplex] = func(p *BigInteger, o Number) Number {
+		f := p.float64Val()
+		return NewComplex(complex(f, 0) - o.(*Complex).Datum())
+	}
+	bigIntegerSubtract[KindBigComplex] = func(p *BigInteger, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Subtract(o)
+	}
+
+	bigIntegerLessThan[KindInteger] = func(p *BigInteger, o Number) bool {
+		return p.value.Cmp(o.(*Integer).bigInt()) < 0
+	}
+	bigIntegerLessThan[KindBigInteger] = func(p *BigInteger, o Number) bool {
+		return p.value.Cmp(o.(*BigInteger).value) < 0
+	}
+	bigIntegerLessThan[KindFloat] = func(p *BigInteger, o Number) bool {
+		return p.bigFloat().Cmp(o.(*Float).bigFloat()) < 0
+	}
+	bigIntegerLessThan[KindBigFloat] = func(p *BigInteger, o Number) bool {
+		return p.bigFloat().Cmp(o.(*BigFloat).BigFloatValue()) < 0
+	}
+	bigIntegerLessThan[KindRational] = func(p *BigInteger, o Number) bool {
+		return p.bigRat().Cmp(o.(*Rational).Rat()) < 0
+	}
+	bigIntegerLessThan[KindComplex] = func(p *BigInteger, o Number) bool {
+		self := p.bigFloat()
+		realPart := NewFloat(real(o.(*Complex).Value)).bigFloat()
+		return self.Cmp(realPart) < 0
+	}
+	bigIntegerLessThan[KindBigComplex] = func(p *BigInteger, o Number) bool {
+		return p.bigFloat().Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue()) < 0
+	}
+
+	bigIntegerCompare[KindInteger] = func(p *BigInteger, o Number) int {
+		return p.value.Cmp(o.(*Integer).bigInt())
+	}
+	bigIntegerCompare[KindBigInteger] = func(p *BigInteger, o Number) int {
+		return p.value.Cmp(o.(*BigInteger).value)
+	}
+	bigIntegerCompare[KindFloat] = func(p *BigInteger, o Number) int {
+		// Convert both to BigFloat to preserve precision.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		self := p.bigFloat()
+		other := o.(*Float).bigFloat()
+		return self.Cmp(other)
+	}
+	bigIntegerCompare[KindBigFloat] = func(p *BigInteger, o Number) int {
+		return p.bigFloat().Cmp(o.(*BigFloat).BigFloatValue())
+	}
+	bigIntegerCompare[KindRational] = func(p *BigInteger, o Number) int {
+		return p.bigRat().Cmp(o.(*Rational).Rat())
+	}
+	bigIntegerCompare[KindComplex] = func(p *BigInteger, o Number) int {
+		// Compare real parts at BigFloat precision.
+		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
+		self := p.bigFloat()
+		realPart := NewFloat(real(o.(*Complex).Value)).bigFloat()
+		return self.Cmp(realPart)
+	}
+	bigIntegerCompare[KindBigComplex] = func(p *BigInteger, o Number) int {
+		return p.bigFloat().Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue())
+	}
+
+	bigIntegerMultiply[KindInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, o.(*Integer).bigInt())}
+	}
+	bigIntegerMultiply[KindBigInteger] = func(p *BigInteger, o Number) Number {
+		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, o.(*BigInteger).value)}
+	}
+	bigIntegerMultiply[KindFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		other := o.(*Float).bigFloat()
+		result := new(big.Float).Mul(self, other)
+		return NewBigFloat(result)
+	}
+	bigIntegerMultiply[KindBigFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Mul(self, o.(*BigFloat).value)}
+	}
+	bigIntegerMultiply[KindRational] = func(p *BigInteger, o Number) Number {
+		pRat := p.bigRat()
+		return NewRationalFromRat(new(big.Rat).Mul(pRat, o.(*Rational).Rat()))
+	}
+	bigIntegerMultiply[KindComplex] = func(p *BigInteger, o Number) Number {
+		f := p.float64Val()
+		return NewComplex(complex(f, 0) * o.(*Complex).Datum())
+	}
+	bigIntegerMultiply[KindBigComplex] = func(p *BigInteger, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Multiply(o)
+	}
+
+	bigIntegerDivide[KindInteger] = func(p *BigInteger, o Number) Number {
+		v := o.(*Integer)
+		divisor := v.bigInt()
+		quo, rem := new(big.Int).QuoRem(p.value, divisor, new(big.Int))
+		if rem.Sign() == 0 {
+			return &BigInteger{value: quo}
+		}
+		return NewRationalFromBigInt(p.value, divisor)
+	}
+	bigIntegerDivide[KindBigInteger] = func(p *BigInteger, o Number) Number {
+		v := o.(*BigInteger)
+		quo, rem := new(big.Int).QuoRem(p.value, v.value, new(big.Int))
+		if rem.Sign() == 0 {
+			return &BigInteger{value: quo}
+		}
+		return NewRationalFromBigInt(p.value, v.value)
+	}
+	bigIntegerDivide[KindFloat] = func(p *BigInteger, o Number) Number {
+		v := o.(*Float)
+		self := p.bigFloat()
+		other := v.bigFloat()
+		result := new(big.Float).Quo(self, other)
+		return NewBigFloat(result)
+	}
+	bigIntegerDivide[KindBigFloat] = func(p *BigInteger, o Number) Number {
+		self := p.bigFloat()
+		return &BigFloat{value: new(big.Float).Quo(self, o.(*BigFloat).value)}
+	}
+	bigIntegerDivide[KindRational] = func(p *BigInteger, o Number) Number {
+		pRat := p.bigRat()
+		return NewRationalFromRat(new(big.Rat).Quo(pRat, o.(*Rational).Rat()))
+	}
+	bigIntegerDivide[KindComplex] = func(p *BigInteger, o Number) Number {
+		f := p.float64Val()
+		return NewComplex(complex(f, 0) / o.(*Complex).Datum())
+	}
+	bigIntegerDivide[KindBigComplex] = func(p *BigInteger, o Number) Number {
+		bc := p.toBigComplex()
+		return bc.Divide(o)
+	}
+}
+
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
 // exact + inexact = inexact (Float/Complex).
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
+// Inexactness is contagious per R7RS §6.2.2.
 func (p *BigInteger) Add(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For addition, 0 + x = x,
-	// so the result's exactness MUST match the other operand.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *BigInteger:
+	v, ok := o.(*BigInteger)
+	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.value)}
-	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.bigInt())}
-	case *Float:
-		// Promote to BigFloat for precision-preserving arithmetic.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
-		self := p.bigFloat()
-		other := v.bigFloat()
-		result := new(big.Float).Add(self, other)
-		return NewBigFloat(result)
-	case *Rational:
-		// Convert BigInteger to Rational and add
-		pRat := p.bigRat()
-		return NewRationalFromRat(new(big.Rat).Add(pRat, v.Rat()))
-	case *Complex:
-		// For Complex, we must use float64 (Complex type uses float64 parts).
-		// This loses precision for large BigIntegers, but Complex itself is inexact.
-		f := p.float64Val()
-		return NewComplex(complex(f, 0) + v.Datum())
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Add(self, v.value)}
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Add(v)
 	}
-	panic(ErrNotANumber)
+	return bigIntegerAdd[o.Kind()](p, o)
 }
 
 // Subtract returns the difference of this BigInteger and another number.
 //
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
-//
-//nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Subtract(o Number) Number {
-	// R7RS §6.2.2: Inexactness is contagious. For subtraction, x - 0 = x,
-	// so the result's exactness MUST match the minuend.
-	// No zero short-circuit allowed (unlike multiplication).
-	switch v := o.(type) {
-	case *BigInteger:
+	v, ok := o.(*BigInteger)
+	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}
-	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.bigInt())}
-	case *Float:
-		// Promote to BigFloat for precision-preserving arithmetic.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
-		self := p.bigFloat()
-		other := v.bigFloat()
-		result := new(big.Float).Sub(self, other)
-		return NewBigFloat(result)
-	case *Rational:
-		pRat := p.bigRat()
-		return NewRationalFromRat(new(big.Rat).Sub(pRat, v.Rat()))
-	case *Complex:
-		// For Complex, we must use float64 (Complex type uses float64 parts).
-		// This loses precision for large BigIntegers, but Complex itself is inexact.
-		f := p.float64Val()
-		return NewComplex(complex(f, 0) - v.Datum())
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Sub(self, v.value)}
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Subtract(v)
 	}
-	panic(ErrNotANumber)
+	return bigIntegerSubtract[o.Kind()](p, o)
 }
 
 // Multiply returns the product of this BigInteger and another number.
@@ -223,35 +361,11 @@ func (p *BigInteger) Multiply(o Number) Number {
 	if p.IsZero() && o.IsFinite() {
 		return multiplyResultForZero(p, o)
 	}
-	switch v := o.(type) {
-	case *BigInteger:
+	v, ok := o.(*BigInteger)
+	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.value)}
-	case *Integer:
-		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, v.bigInt())}
-	case *Float:
-		// Promote to BigFloat for precision-preserving arithmetic.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
-		self := p.bigFloat()
-		other := v.bigFloat()
-		result := new(big.Float).Mul(self, other)
-		return NewBigFloat(result)
-	case *Rational:
-		pRat := p.bigRat()
-		return NewRationalFromRat(new(big.Rat).Mul(pRat, v.Rat()))
-	case *Complex:
-		// For Complex, we must use float64 (Complex type uses float64 parts).
-		// This loses precision for large BigIntegers, but Complex itself is inexact.
-		f := p.float64Val()
-		return NewComplex(complex(f, 0) * v.Datum())
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(self, v.value)}
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Multiply(v)
 	}
-	panic(ErrNotANumber)
+	return bigIntegerMultiply[o.Kind()](p, o)
 }
 
 // Divide returns the quotient of this BigInteger and another number.
@@ -267,46 +381,15 @@ func (p *BigInteger) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
 	}
-	switch v := o.(type) {
-	case *BigInteger:
-		// Check if division is exact
+	v, ok := o.(*BigInteger)
+	if ok {
 		quo, rem := new(big.Int).QuoRem(p.value, v.value, new(big.Int))
 		if rem.Sign() == 0 {
 			return &BigInteger{value: quo}
 		}
 		return NewRationalFromBigInt(p.value, v.value)
-	case *Integer:
-		// Check if division is exact
-		divisor := v.bigInt()
-		quo, rem := new(big.Int).QuoRem(p.value, divisor, new(big.Int))
-		if rem.Sign() == 0 {
-			return &BigInteger{value: quo}
-		}
-		return NewRationalFromBigInt(p.value, divisor)
-	case *Float:
-		// Promote to BigFloat for precision-preserving arithmetic.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		// Return BigFloat (inexact) to preserve exactness contagion per R7RS §6.2.2.
-		self := p.bigFloat()
-		other := v.bigFloat()
-		result := new(big.Float).Quo(self, other)
-		return NewBigFloat(result)
-	case *Rational:
-		pRat := p.bigRat()
-		return NewRationalFromRat(new(big.Rat).Quo(pRat, v.Rat()))
-	case *Complex:
-		// For Complex, we must use float64 (Complex type uses float64 parts).
-		// This loses precision for large BigIntegers, but Complex itself is inexact.
-		f := p.float64Val()
-		return NewComplex(complex(f, 0) / v.Datum())
-	case *BigFloat:
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(self, v.value)}
-	case *BigComplex:
-		bc := p.toBigComplex()
-		return bc.Divide(v)
 	}
-	panic(ErrNotANumber)
+	return bigIntegerDivide[o.Kind()](p, o)
 }
 
 // Negate returns the negation of this BigInteger.
@@ -324,7 +407,11 @@ func (p *BigInteger) IsZero() bool {
 // R7RS §6.2.6: The < procedure returns #t if its arguments are monotonically
 // increasing. Comparison across numeric types uses mathematical value.
 func (p *BigInteger) LessThan(o Number) bool {
-	return p.Compare(o) < 0
+	v, ok := o.(*BigInteger)
+	if ok {
+		return p.value.Cmp(v.value) < 0
+	}
+	return bigIntegerLessThan[o.Kind()](p, o)
 }
 
 // IsNegative returns true if this BigInteger is negative.
@@ -412,35 +499,11 @@ func (p *BigInteger) Sign() int {
 // R7RS §6.2.6: Numeric comparisons use mathematical value regardless of
 // exactness. Returns -1, 0, or 1 for less than, equal, or greater than.
 func (p *BigInteger) Compare(o Number) int {
-	switch v := o.(type) {
-	case *BigInteger:
+	v, ok := o.(*BigInteger)
+	if ok {
 		return p.value.Cmp(v.value)
-	case *Integer:
-		return p.value.Cmp(v.bigInt())
-	case *Float:
-		// Convert both to BigFloat to preserve precision.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		// Pattern matches Float.Compare() and Integer.Compare() with BigFloat.
-		self := p.bigFloat()
-		other := v.bigFloat()
-		return self.Cmp(other)
-	case *BigFloat:
-		self := p.bigFloat()
-		return self.Cmp(v.BigFloatValue())
-	case *Rational:
-		pRat := p.bigRat()
-		return pRat.Cmp(v.Rat())
-	case *Complex:
-		// Compare real parts at BigFloat precision.
-		// Don't convert BigInteger to float64 (loses precision for >53-bit integers).
-		self := p.bigFloat()
-		realPart := NewFloat(real(v.Value)).bigFloat()
-		return self.Cmp(realPart)
-	case *BigComplex:
-		self := p.bigFloat()
-		return self.Cmp(toBigFloat(v.Real()).BigFloatValue())
 	}
-	panic(ErrNotANumber)
+	return bigIntegerCompare[o.Kind()](p, o)
 }
 
 // SchemeString returns the Scheme representation of this BigInteger.
