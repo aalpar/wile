@@ -145,17 +145,8 @@ func (p *LocalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
 		return (*LocalEnvironmentFrame)(nil)
 	}
-	n := len(p.bindings)
-	bindings := make([]Binding, n)
-	for i := range p.bindings {
-		b := &p.bindings[i]
-		bindings[i] = Binding{
-			value:       b.value,
-			bindingType: b.bindingType,
-			scopes:      b.scopes,
-			source:      b.source,
-		}
-	}
+	bindings := make([]Binding, len(p.bindings))
+	copy(bindings, p.bindings)
 	return &LocalEnvironmentFrame{
 		keys:       p.keys,
 		keysShared: true,
@@ -179,18 +170,8 @@ func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 	}
 	p.keysShared = true
 
-	// Single contiguous allocation: []Binding stores values directly,
-	// eliminating the former []*Binding pointer slice entirely.
 	q.bindings = make([]Binding, len(p.bindings))
-	for i := range p.bindings {
-		b := &p.bindings[i]
-		q.bindings[i] = Binding{
-			value:       b.value,
-			bindingType: b.bindingType,
-			scopes:      b.scopes,
-			source:      b.source,
-		}
-	}
+	copy(q.bindings, p.bindings)
 	return q
 }
 
@@ -200,15 +181,7 @@ func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 	dst.keys = p.keys
 	dst.keysShared = true
 	dst.bindings = make([]Binding, len(p.bindings))
-	for i := range p.bindings {
-		b := &p.bindings[i]
-		dst.bindings[i] = Binding{
-			value:       b.value,
-			bindingType: b.bindingType,
-			scopes:      b.scopes,
-			source:      b.source,
-		}
-	}
+	copy(dst.bindings, p.bindings)
 }
 
 // copyForApplyInto copies bindings into an existing destination frame,
@@ -219,13 +192,5 @@ func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keysShared = true
 	p.keysShared = true
 	dst.bindings = make([]Binding, len(p.bindings))
-	for i := range p.bindings {
-		b := &p.bindings[i]
-		dst.bindings[i] = Binding{
-			value:       b.value,
-			bindingType: b.bindingType,
-			scopes:      b.scopes,
-			source:      b.source,
-		}
-	}
+	copy(dst.bindings, p.bindings)
 }
