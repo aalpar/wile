@@ -176,7 +176,7 @@ func (p *ArrayList) IsList() bool {
 	if p == nil || len(*p) == 0 {
 		return false
 	}
-	return (*p)[len(*p)-1] == EmptyList
+	return IsEmptyList((*p)[len(*p)-1])
 }
 
 // Length returns the number of list elements, excluding the terminator.
@@ -197,7 +197,7 @@ func (p *ArrayList) IsEmptyList() bool {
 	if p == nil {
 		return false
 	}
-	return len(*p) == 1 && (*p)[0] == EmptyList
+	return len(*p) == 1 && IsEmptyList((*p)[0])
 }
 
 // IsVoid returns true if this ArrayList represents the absence of a value.
