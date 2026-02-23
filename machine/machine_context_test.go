@@ -1373,3 +1373,664 @@ func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(mc.GetValue(), qt.Equals, values.Void)
 }
+
+// --- Wave 1: zero-operand ops ---
+
+func TestRunDispatch_OpPush(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(values.NewInteger(42))
+
+	// Load 42 → Push → Pop → verify round-trip
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litIdx)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpPush_Nil(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	// OpPush with nil value register should be a no-op (line 631 guard)
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.evals.Len(), qt.Equals, 0)
+}
+
+func TestRunDispatch_OpPop(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	lit0 := tpl.MaybeAppendLiteral(values.NewInteger(10))
+	lit1 := tpl.MaybeAppendLiteral(values.NewInteger(20))
+
+	// Push 10, push 20 → Pop → verify top (20) in value register
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit0)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit1)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(20))
+	c.Assert(mc.evals.Len(), qt.Equals, 1) // 10 still on stack
+}
+
+func TestRunDispatch_OpPull(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	lit0 := tpl.MaybeAppendLiteral(values.NewInteger(10))
+	lit1 := tpl.MaybeAppendLiteral(values.NewInteger(20))
+
+	// Push A(10), Push B(20) → Pull → verify A (bottom) in value register
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit0)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit1)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpPull})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
+	c.Assert(mc.evals.Len(), qt.Equals, 1) // 20 still on stack
+}
+
+func TestRunDispatch_OpDrop(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	lit0 := tpl.MaybeAppendLiteral(values.NewInteger(10))
+	lit1 := tpl.MaybeAppendLiteral(values.NewInteger(20))
+
+	// Push A(10), Push B(20) → Drop (discard 20) → Pop → verify A(10)
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit0)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit1)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpDrop})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+func TestRunDispatch_OpPopEnv(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
+
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	childLenv := environment.NewLocalEnvironment(0)
+	childEnv := environment.NewEnvironmentFrameWithParent(childLenv, topEnv)
+
+	cont := NewMachineContinuation(nil, tpl, childEnv)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.EnvironmentFrame(), qt.Equals, topEnv)
+}
+
+func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrNilParentEnvironment), qt.IsTrue)
+}
+
+func TestRunDispatch_OpRestoreContinuation_NilCont(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendInstruction(Instruction{Op: OpRestoreContinuation})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+	// mc.cont is nil (cont had nil parent)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+}
+
+// --- Wave 2: single-operand ops ---
+
+func TestRunDispatch_OpBranch(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Branch +2 → skip OpInvalid → OpLoadVoid
+	tpl.AppendInstruction(Instruction{Op: OpBranch, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpInvalid})
+	tpl.AppendInstruction(Instruction{Op: OpLoadVoid})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Void)
+}
+
+func TestRunDispatch_OpBranchOnFalseValue_False(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	litFalse := tpl.MaybeAppendLiteral(values.FalseValue)
+
+	// Load #f → BranchOnFalseValue +2 → skip OpInvalid → OpLoadVoid
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litFalse)})
+	tpl.AppendInstruction(Instruction{Op: OpBranchOnFalseValue, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpInvalid})
+	tpl.AppendInstruction(Instruction{Op: OpLoadVoid})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Void)
+}
+
+func TestRunDispatch_OpBranchOnFalseValue_True(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	litTrue := tpl.MaybeAppendLiteral(values.TrueValue)
+	lit42 := tpl.MaybeAppendLiteral(values.NewInteger(42))
+
+	// Load #t → BranchOnFalseValue +2 (not taken) → load 42
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litTrue)})
+	tpl.AppendInstruction(Instruction{Op: OpBranchOnFalseValue, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit42)})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpSaveContinuation(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	lit42 := tpl.MaybeAppendLiteral(values.NewInteger(42))
+	lit99 := tpl.MaybeAppendLiteral(values.NewInteger(99))
+
+	// 0: SaveContinuation +3 → saves pc=0+3=3, advances to 1
+	// 1: LoadLiteral 42
+	// 2: RestoreContinuation → restores pc=3
+	// 3: LoadLiteral 99 → this proves we landed at the target
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 3})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit42)})
+	tpl.AppendInstruction(Instruction{Op: OpRestoreContinuation})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit99)})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	// Value 42 was set at instruction 1; RestoreContinuation preserves it,
+	// then instruction 3 overwrites with 99.
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+func TestRunDispatch_OpLoadLiteral(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(values.NewInteger(42))
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litIdx)})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpPeekK(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	lit0 := tpl.MaybeAppendLiteral(values.NewInteger(10))
+	lit1 := tpl.MaybeAppendLiteral(values.NewInteger(20))
+
+	// Push A(10), Push B(20) → PeekK 0 → verify B (top) in value register, stack unchanged
+	// PeekK(0) = top, PeekK(1) = second from top, etc.
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit0)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit1)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpPeekK, Arg: 0})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(20)) // top of stack
+	c.Assert(mc.evals.Len(), qt.Equals, 2)                                  // stack unchanged
+}
+
+func TestRunDispatch_OpLoadGlobal(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	sym := values.NewSymbol("test-var")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+
+	// Set the global binding value
+	bd := env.GetGlobalBinding(gi)
+	bd.SetValue(values.NewInteger(99))
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(gi)
+	tpl.AppendInstruction(Instruction{Op: OpLoadGlobal, Arg: int32(litIdx)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+func TestRunDispatch_OpLoadGlobal_NoBinding(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	// Create a GlobalIndex for a symbol that doesn't exist as a binding
+	sym := values.NewSymbol("nonexistent")
+	gi := environment.NewGlobalIndex(sym)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(gi)
+	tpl.AppendInstruction(Instruction{Op: OpLoadGlobal, Arg: int32(litIdx)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no such global binding")
+}
+
+func TestRunDispatch_OpStoreGlobal(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	sym := values.NewSymbol("store-var")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litVal := tpl.MaybeAppendLiteral(values.NewInteger(77))
+	litGI := tpl.MaybeAppendLiteral(gi)
+
+	// Load 77 → Push → StoreGlobal
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litVal)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpStoreGlobal, Arg: int32(litGI)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+
+	// Verify the binding was updated
+	bd := env.GetGlobalBinding(gi)
+	c.Assert(bd.Value(), valuestest.SchemeEquals, values.NewInteger(77))
+}
+
+// --- Wave 3: two-operand ops (bit-packed local index) ---
+
+func TestRunDispatch_OpLoadLocal(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+
+	// Set slot 0 to 42
+	err := env.SetLocalValueBySlotDepth(0, 0, values.NewInteger(42))
+	c.Assert(err, qt.IsNil)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	li := environment.NewLocalIndex(0, 0) // slot=0, depth=0
+	tpl.AppendInstruction(Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(li)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err = mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpLoadLocal_Depth(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	// Parent frame with slot 0 = 99
+	parentLenv := environment.NewLocalEnvironment(1)
+	parentEnv := environment.NewEnvironmentFrameWithParent(parentLenv, topEnv)
+	err := parentEnv.SetLocalValueBySlotDepth(0, 0, values.NewInteger(99))
+	c.Assert(err, qt.IsNil)
+
+	// Child frame
+	childLenv := environment.NewLocalEnvironment(0)
+	childEnv := environment.NewEnvironmentFrameWithParent(childLenv, parentEnv)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	li := environment.NewLocalIndex(0, 1) // slot=0, depth=1
+	tpl.AppendInstruction(Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(li)})
+
+	cont := NewMachineContinuation(nil, tpl, childEnv)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err = mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+func TestRunDispatch_OpLoadLocal_NoBinding(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	tpl := NewNativeTemplate(0, 0, false)
+	// No local environment → slot 0 doesn't exist
+	li := environment.NewLocalIndex(0, 0)
+	tpl.AppendInstruction(Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(li)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no such local binding")
+}
+
+func TestRunDispatch_OpStoreLocal(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litVal := tpl.MaybeAppendLiteral(values.NewInteger(55))
+	li := environment.NewLocalIndex(0, 0)
+
+	// Load 55 → Push → StoreLocal
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litVal)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpStoreLocal, Arg: EncodeLocalIndex(li)})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+
+	// Verify the local binding was updated
+	bd := env.GetLocalBindingBySlotDepth(0, 0)
+	c.Assert(bd, qt.IsNotNil)
+	c.Assert(bd.Value(), valuestest.SchemeEquals, values.NewInteger(55))
+}
+
+// --- Wave 4: fused push ops ---
+
+func TestRunDispatch_OpPushLiteral(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(values.NewInteger(42))
+
+	// PushLiteral → Pop → verify 42
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx)})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpPushGlobal(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	sym := values.NewSymbol("push-global-var")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	bd := env.GetGlobalBinding(gi)
+	bd.SetValue(values.NewInteger(99))
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litIdx := tpl.MaybeAppendLiteral(gi)
+
+	// PushGlobal → Pop → verify 99
+	tpl.AppendInstruction(Instruction{Op: OpPushGlobal, Arg: int32(litIdx)})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+func TestRunDispatch_OpPushLocal(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	err := env.SetLocalValueBySlotDepth(0, 0, values.NewInteger(42))
+	c.Assert(err, qt.IsNil)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	li := environment.NewLocalIndex(0, 0)
+
+	// PushLocal → Pop → verify 42
+	tpl.AppendInstruction(Instruction{Op: OpPushLocal, Arg: EncodeLocalIndex(li)})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err = mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+// --- Wave 5: fused call + promoted complex ---
+
+func TestRunDispatch_OpPullApply(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	// Create closure template: 1 param, loads local slot 0 (the arg) then ends
+	clsTpl := NewNativeTemplate(1, 0, false)
+	li := environment.NewLocalIndex(0, 0)
+	clsTpl.AppendInstruction(Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(li)})
+
+	// Create closure with its own environment (1 slot for the parameter)
+	clsLenv := environment.NewLocalEnvironment(1)
+	clsEnv := environment.NewEnvironmentFrameWithParent(clsLenv, topEnv)
+	cls := NewClosureWithTemplate(clsTpl, clsEnv)
+
+	// Outer template: push closure, push arg(42), PullApply
+	tpl := NewNativeTemplate(0, 0, false)
+	litCls := tpl.MaybeAppendLiteral(cls)
+	litArg := tpl.MaybeAppendLiteral(values.NewInteger(42))
+
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litCls)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litArg)})
+	tpl.AppendInstruction(Instruction{Op: OpPush})
+	tpl.AppendInstruction(Instruction{Op: OpPullApply})
+
+	env := topEnv
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpMakeClosure(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	// Template and env to push on stack
+	innerTpl := NewNativeTemplate(1, 0, false)
+	innerTpl.AppendInstruction(Instruction{Op: OpLoadVoid})
+	innerLenv := environment.NewLocalEnvironment(1)
+	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litTpl := tpl.MaybeAppendLiteral(innerTpl)
+	litEnv := tpl.MaybeAppendLiteral(innerEnv)
+
+	// Push order: template first, then env (Pop order: env first, then template)
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litTpl)})
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litEnv)})
+	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
+
+	cont := NewMachineContinuation(nil, tpl, topEnv)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+
+	result := mc.GetValue()
+	_, ok := result.(*MachineClosure)
+	c.Assert(ok, qt.IsTrue)
+}
+
+func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	innerLenv := environment.NewLocalEnvironment(1)
+	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	// Push a non-template (integer) in the template position
+	litBad := tpl.MaybeAppendLiteral(values.NewInteger(999))
+	litEnv := tpl.MaybeAppendLiteral(innerEnv)
+
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litBad)})
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litEnv)})
+	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
+
+	cont := NewMachineContinuation(nil, tpl, topEnv)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrNotAMachineTemplate), qt.IsTrue)
+}
+
+func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	innerTpl := NewNativeTemplate(1, 0, false)
+	innerTpl.AppendInstruction(Instruction{Op: OpLoadVoid})
+
+	tpl := NewNativeTemplate(0, 0, false)
+	litTpl := tpl.MaybeAppendLiteral(innerTpl)
+	// Push a non-env (integer) in the env position
+	litBad := tpl.MaybeAppendLiteral(values.NewInteger(999))
+
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litTpl)})
+	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litBad)})
+	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
+
+	cont := NewMachineContinuation(nil, tpl, topEnv)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrNotALocalEnvironmentFrame), qt.IsTrue)
+}
+
+// --- Wave 6: cached binding ops ---
+
+func TestRunDispatch_OpLoadCachedBinding(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	sym := values.NewSymbol("cached-var")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	bd := env.GetGlobalBinding(gi)
+	bd.SetValue(values.NewInteger(42))
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+	tpl.AppendInstruction(Instruction{Op: OpLoadCachedBinding, Arg: cbIdx})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	sym := values.NewSymbol("push-cached-var")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	bd := env.GetGlobalBinding(gi)
+	bd.SetValue(values.NewInteger(42))
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+
+	// PushCachedBinding → Pop → verify 42
+	tpl.AppendInstruction(Instruction{Op: OpPushCachedBinding, Arg: cbIdx})
+	tpl.AppendInstruction(Instruction{Op: OpPop})
+
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
+}
