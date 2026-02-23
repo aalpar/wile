@@ -54,23 +54,18 @@ func formatIndexable(prefix string, length int, get func(int) Value) string {
 // Type assertion to *Pair is required during construction for efficient iterative
 // building of the linked structure. Callers receive the Tuple interface.
 func List(os ...Value) Tuple {
-	l := len(os)
-	switch l {
-	case 0:
+	n := len(os)
+	if n == 0 {
 		return EmptyList
-	case 1:
-		return NewCons(os[0], EmptyList)
 	}
-	q := NewCons(os[0], NewCons(nil, nil))
-	curr := q
-	for _, v := range os[1:] {
-		// Type assertion required: iteratively building *Pair chain, need next pointer
-		curr = curr.Cdr().(*Pair)
-		curr.SetCar(v)
-		curr.SetCdr(NewCons(nil, nil))
+	block := make([]Pair, n)
+	for i := 0; i < n-1; i++ {
+		block[i][0] = os[i]
+		block[i][1] = &block[i+1]
 	}
-	curr.SetCdr(EmptyList)
-	return q
+	block[n-1][0] = os[n-1]
+	block[n-1][1] = EmptyList
+	return &block[0]
 }
 
 // ForEach iterates over a Tuple value, calling fn for each element.
