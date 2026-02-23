@@ -1,7 +1,7 @@
 # Block-Allocated Pairs Plan
 
 Date: 2026-02-22
-Status: Proposed
+Status: Implemented
 Prerequisite: None (independent of other allocation optimizations)
 Supersedes: `ARRAYLIST_AS_PAIR.md` (abandoned — see Lessons Learned)
 

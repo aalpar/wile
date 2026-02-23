@@ -50,9 +50,8 @@ func formatIndexable(prefix string, length int, get func(int) Value) string {
 // Returns EmptyList if no arguments are provided.
 // The resulting list has the values in the same order as the arguments.
 //
-// Implementation note: Returns Tuple interface but constructs *Pair internally.
-// Type assertion to *Pair is required during construction for efficient iterative
-// building of the linked structure. Callers receive the Tuple interface.
+// Implementation note: Block-allocates all Pair cells in a single slice and links
+// them via cdr pointers. Callers receive the Tuple interface.
 func List(os ...Value) Tuple {
 	n := len(os)
 	if n == 0 {

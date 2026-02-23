@@ -1,7 +1,7 @@
 # ArrayList-as-Pair Refactoring Plan
 
 Date: 2026-02-22
-Status: Proposed
+Status: Abandoned (superseded by BLOCK_ALLOCATED_PAIRS.md)
 Prerequisite: None (independent of other allocation optimizations)
 
 ## Problem Statement
