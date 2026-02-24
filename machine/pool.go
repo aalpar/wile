@@ -14,7 +14,11 @@
 
 package machine
 
-import "context"
+import (
+	"context"
+
+	"github.com/aalpar/wile/environment"
+)
 
 // Object pooling (sync.Pool) recycles short-lived allocations that follow
 // an acquire/release lifecycle. Each non-tail call creates a continuation
@@ -73,6 +77,20 @@ var continuationPool = registerPool(pools, NewPool("continuation",
 	func(cont *MachineContinuation) {
 		releaseStack(cont.evals)
 		*cont = MachineContinuation{}
+	},
+))
+
+// envFramePool recycles EnvironmentFrame structs used in the Apply copy path.
+// Frames are created on every non-tail closure call and stored in the
+// continuation chain. On normal return (RestoreAndRelease, unshared path),
+// the old mc.env is overwritten — the pool recycles it instead of leaving it
+// for GC. Shared frames (marked by call/cc) are never pooled.
+var envFramePool = registerPool(pools, NewPool("env_frame",
+	func() *environment.EnvironmentFrame {
+		return &environment.EnvironmentFrame{}
+	},
+	func(f *environment.EnvironmentFrame) {
+		*f = environment.EnvironmentFrame{}
 	},
 ))
 
@@ -137,4 +155,21 @@ func releaseContinuation(cont *MachineContinuation) {
 		return
 	}
 	continuationPool.Release(cont)
+}
+
+// acquireEnvFrame returns a zeroed EnvironmentFrame from the pool.
+func acquireEnvFrame() *environment.EnvironmentFrame {
+	return envFramePool.Acquire()
+}
+
+// releaseEnvFrame zeros the EnvironmentFrame (breaking GC references) and
+// returns it to the pool. Nil-safe.
+//
+// Must NOT be called on frames stored in shared continuations — those frames
+// may be re-invoked by call/cc and must remain live for GC.
+func releaseEnvFrame(f *environment.EnvironmentFrame) {
+	if f == nil {
+		return
+	}
+	envFramePool.Release(f)
 }

@@ -180,6 +180,25 @@ func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 	return q
 }
 
+// InitApplyFrame populates dst from p's closure environment without allocating
+// a new EnvironmentFrame. The caller is responsible for providing dst (e.g.
+// from a pool). This is the pooling-friendly counterpart of NewApplyFrame.
+func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
+	parent := p.parent
+	if parent == nil {
+		panic(values.WrapForeignErrorf(
+			values.ErrNilParentEnvironment,
+			"InitApplyFrame called on frame with nil parent - closure environments must have a parent",
+		))
+	}
+	dst.parent = parent
+	dst.global = parent.global
+	dst.phaseLevel = parent.phaseLevel
+	dst.phases = parent.phases
+	dst.topLevel = parent.topLevel
+	p.local.copyForApplyInto(&dst.local)
+}
+
 // IsTopLevel returns true if this is the top-level environment frame (no parent).
 func (p *EnvironmentFrame) IsTopLevel() bool {
 	return p.parent == nil

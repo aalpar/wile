@@ -46,6 +46,10 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 		compiletimeEnv.LocalEnvironment(), // Keep local structure for parameters
 		mc.env,                            // Capture runtime parent for free variables
 	)
+	// The closure now references mc.env through runtimeEnv's parent chain.
+	// Mark it non-poolable so RestoreAndRelease won't recycle it while the
+	// closure still holds a live reference.
+	mc.envPooled = false
 	cls := NewClosureWithTemplate(tpl, runtimeEnv)
 	mc.SetValue(cls)
 	mc.pc++

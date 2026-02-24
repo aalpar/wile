@@ -59,6 +59,7 @@ import (
 //	│ windingStack │ ✗              │ ✗           │ ✗                   │ ✗                │
 //	│ promptTag    │ ✗              │ ✗           │ ✗                   │ ✗                │
 //	│ callDepth    │ ✓              │ ✓ (saved)   │ ✓ (saved)           │ ✗                │
+//	│ envPooled    │ ✓              │ ✗ (=false)  │ ✓ or false(shared)  │ ✓                │
 //	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
 type vmState struct {
 	env          *environment.EnvironmentFrame
@@ -84,4 +85,10 @@ type vmState struct {
 	// 2^64-1. All depth computation must use the parent pointer (which is nil-safe)
 	// rather than arithmetic on callDepth. See NewMachineContinuationFromMachineContext.
 	callDepth uint64
+	// envPooled is true when env was acquired from the envFramePool (Apply
+	// copy path). When the env is about to be overwritten (RestoreAndRelease,
+	// Restore), this flag tells us it's safe to return it to the pool.
+	// Set false for noCopyApply (closure's own env), sub-context envs, or
+	// envs restored from shared continuations.
+	envPooled bool
 }

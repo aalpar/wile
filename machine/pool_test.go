@@ -502,7 +502,7 @@ func TestSubContextPool_StatsTracked(t *testing.T) {
 
 func TestPoolManager_AllStats_ReportsAllPools(t *testing.T) {
 	stats := pools.AllStats()
-	qt.Assert(t, len(stats), qt.Equals, 3)
+	qt.Assert(t, len(stats), qt.Equals, 4)
 
 	names := make(map[string]bool)
 	for _, s := range stats {
@@ -511,6 +511,7 @@ func TestPoolManager_AllStats_ReportsAllPools(t *testing.T) {
 	qt.Assert(t, names["stack"], qt.IsTrue)
 	qt.Assert(t, names["sub_context"], qt.IsTrue)
 	qt.Assert(t, names["continuation"], qt.IsTrue)
+	qt.Assert(t, names["env_frame"], qt.IsTrue)
 }
 
 // ---------------------------------------------------------------------------
@@ -587,4 +588,137 @@ func TestContinuationPool_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// ---------------------------------------------------------------------------
+// Env frame pool
+// ---------------------------------------------------------------------------
+
+func TestEnvFramePool_StatsTracked(t *testing.T) {
+	before := envFramePool.Stats()
+
+	f := acquireEnvFrame()
+	releaseEnvFrame(f)
+
+	after := envFramePool.Stats()
+	qt.Assert(t, after.Acquires-before.Acquires, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+}
+
+func TestRestoreAndRelease_ReleasesPooledEnvFrame(t *testing.T) {
+	// Set up a pooled env frame as mc.env (simulates Apply copy path).
+	env := acquireEnvFrame()
+	mc := &MachineContext{}
+	mc.env = env
+	mc.envPooled = true
+	mc.evals = acquireStack()
+
+	// Build a continuation to restore from.
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+
+	before := envFramePool.Stats()
+	mc.RestoreAndRelease(cont)
+	after := envFramePool.Stats()
+
+	// The old pooled env should have been released.
+	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+	// Restored env is from the continuation, not pooled.
+	qt.Assert(t, mc.envPooled, qt.IsFalse)
+}
+
+func TestRestoreAndRelease_SkipsNonPooledEnvFrame(t *testing.T) {
+	// mc.env is NOT from the pool (simulates noCopy path).
+	mc := &MachineContext{}
+	mc.env = &environment.EnvironmentFrame{}
+	mc.envPooled = false
+	mc.evals = acquireStack()
+
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+
+	before := envFramePool.Stats()
+	mc.RestoreAndRelease(cont)
+	after := envFramePool.Stats()
+
+	// No env frame should have been released.
+	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(0))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(0))
+}
+
+func TestRestoreAndRelease_SharedCont_ReleasesPooledEnv(t *testing.T) {
+	// Shared continuation path should still release the old pooled env.
+	env := acquireEnvFrame()
+	mc := &MachineContext{}
+	mc.env = env
+	mc.envPooled = true
+	mc.evals = acquireStack()
+
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.evals.Push(values.NewInteger(1))
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.shared = true
+
+	before := envFramePool.Stats()
+	mc.RestoreAndRelease(cont)
+	after := envFramePool.Stats()
+
+	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+	// Restored env from shared continuation must NOT be marked pooled.
+	qt.Assert(t, mc.envPooled, qt.IsFalse)
+}
+
+func TestRestoreAndRelease_PropagatesEnvPooledFromCont(t *testing.T) {
+	// The continuation was saved when mc.envPooled was true. After restoring
+	// from an unshared continuation, envPooled should be propagated.
+	mc := &MachineContext{}
+	mc.env = &environment.EnvironmentFrame{}
+	mc.envPooled = false
+	mc.evals = acquireStack()
+
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.env = &environment.EnvironmentFrame{}
+	cont.template = &NativeTemplate{}
+	cont.envPooled = true // saved when caller's env was pooled
+
+	mc.RestoreAndRelease(cont)
+
+	qt.Assert(t, mc.envPooled, qt.IsTrue)
+}
+
+func TestRestoreAndRelease_SameEnvIdentity_SkipsRelease(t *testing.T) {
+	// When no Apply occurs between SaveContinuation and RestoreContinuation
+	// (e.g., a foreign function call), oldEnv == cont.env. Releasing would
+	// corrupt the live env frame that mc now points to.
+	sharedEnv := acquireEnvFrame()
+	mc := &MachineContext{}
+	mc.env = sharedEnv
+	mc.envPooled = true
+	mc.evals = acquireStack()
+
+	cont := acquireContinuation()
+	cont.evals = acquireStack()
+	cont.env = sharedEnv // same pointer: no Apply changed mc.env
+	cont.template = &NativeTemplate{}
+	cont.envPooled = true
+
+	before := envFramePool.Stats()
+	mc.RestoreAndRelease(cont)
+	after := envFramePool.Stats()
+
+	// Must NOT release because oldEnv == p.env (same frame).
+	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(0))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(0))
+	// mc.env should still be the shared frame, usable.
+	qt.Assert(t, mc.env, qt.Equals, sharedEnv)
+	qt.Assert(t, mc.envPooled, qt.IsTrue)
 }
