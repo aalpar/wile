@@ -462,6 +462,58 @@ func TestRestoreAndRelease_UnsharedFrameStillPools(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Pool stats tracking
+// ---------------------------------------------------------------------------
+
+func TestStackPool_StatsTracked(t *testing.T) {
+	// Read baseline stats (pools are shared across tests, so use relative checks).
+	before := stackPool.Stats()
+
+	s := acquireStack()
+	s.Push(values.NewInteger(1))
+	releaseStack(s)
+
+	after := stackPool.Stats()
+	qt.Assert(t, after.Acquires-before.Acquires, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+}
+
+func TestContinuationPool_StatsTracked(t *testing.T) {
+	before := continuationPool.Stats()
+
+	cont := acquireContinuation()
+	releaseContinuation(cont)
+
+	after := continuationPool.Stats()
+	qt.Assert(t, after.Acquires-before.Acquires, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+}
+
+func TestSubContextPool_StatsTracked(t *testing.T) {
+	before := subContextPool.Stats()
+
+	mc := acquireSubContext()
+	ReleaseSubContext(mc)
+
+	after := subContextPool.Stats()
+	qt.Assert(t, after.Acquires-before.Acquires, qt.Equals, uint64(1))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+}
+
+func TestPoolManager_AllStats_ReportsAllPools(t *testing.T) {
+	stats := pools.AllStats()
+	qt.Assert(t, len(stats), qt.Equals, 3)
+
+	names := make(map[string]bool)
+	for _, s := range stats {
+		names[s.Name] = true
+	}
+	qt.Assert(t, names["stack"], qt.IsTrue)
+	qt.Assert(t, names["sub_context"], qt.IsTrue)
+	qt.Assert(t, names["continuation"], qt.IsTrue)
+}
+
+// ---------------------------------------------------------------------------
 // Concurrent access
 // ---------------------------------------------------------------------------
 
