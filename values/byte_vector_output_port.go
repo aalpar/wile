@@ -43,10 +43,7 @@ func NewByteVectorOutputPortFromWriter(wrt io.Writer) *ByteVectorOutputPort {
 	q := &ByteVectorOutputPort{
 		wrt: bufio.NewWriter(wrt),
 	}
-	closer, ok := wrt.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(wrt)
 	return q
 }
 

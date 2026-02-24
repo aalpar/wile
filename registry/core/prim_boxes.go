@@ -29,11 +29,10 @@ func PrimBox(mc *machine.MachineContext) error {
 
 // PrimBoxQ implements the box? predicate.
 // Returns #t if the argument is a box, #f otherwise.
-func PrimBoxQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(*values.Box)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimBoxQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.Box)
+	return ok
+})
 
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.

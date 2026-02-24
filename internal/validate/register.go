@@ -81,6 +81,6 @@ func registerValidator(name string, fn validatorFunc) {
 func registerPassthrough(name string) {
 	forms.RegisterValidator(name, func(_ context.Context, _ any, pair any, _ any) any {
 		p := pair.(*syntax.SyntaxPair)
-		return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: p.SourceContext()}, Value: p}
+		return newLiteralExpr(p.SourceContext(), p)
 	})
 }

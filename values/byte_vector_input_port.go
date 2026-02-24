@@ -41,10 +41,7 @@ func NewByteVectorInputPort(reader *bufio.Reader) *ByteVectorInputPort {
 // NewByteVectorInputPortFromReader creates a new input port reading from the given byte slice.
 func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 	q := &ByteVectorInputPort{rdr: bufio.NewReader(reader)}
-	closer, ok := reader.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(reader)
 	return q
 }
 

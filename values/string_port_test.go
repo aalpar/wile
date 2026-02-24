@@ -74,10 +74,18 @@ func TestStringInputOutputPort_EqualTo(t *testing.T) {
 	qt.Assert(t, port1.EqualTo(port1), qt.IsTrue)
 }
 
-func TestStringInputOutputPort_SchemeString(t *testing.T) {
+func TestStringOutputPort_SchemeString(t *testing.T) {
 	port := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	s := port.SchemeString()
-	qt.Assert(t, strings.Contains(s, "string-input-output-port"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(s, "string-output-port"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(s, "string-input-output-port"), qt.IsFalse)
+}
+
+func TestStringInputPort_SchemeString(t *testing.T) {
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString("test"))
+	s := port.SchemeString()
+	qt.Assert(t, strings.Contains(s, "string-input-port"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(s, "string-input-output-port"), qt.IsFalse)
 }
 
 func TestStringInputOutputPort_NewStringOutputPort(t *testing.T) {

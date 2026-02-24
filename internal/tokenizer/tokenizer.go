@@ -1114,9 +1114,7 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 		return
 	}
 	// Integer part
-	for p.err == nil && isDigit(10, p.curr()) {
-		p.next()
-	}
+	p.readUnsignedBaseNNumber(10)
 	// Optional decimal point
 	if p.err == nil && p.curr() == '.' {
 		p.next()
@@ -1125,9 +1123,7 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 		return
 	}
 	// Fractional part
-	for p.err == nil && isDigit(10, p.curr()) {
-		p.next()
-	}
+	p.readUnsignedBaseNNumber(10)
 	if p.err != nil {
 		return
 	}

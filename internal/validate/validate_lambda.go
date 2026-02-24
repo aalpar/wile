@@ -36,24 +36,14 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 	// outer bindings including special forms (R7RS §4.2.2).
 	childEnv := createLambdaValidationEnv(env, params)
 
-	// Validate body - must have at least one expression
-	var body []ValidatedExpr
-	for i := 2; i < len(elements); i++ {
-		expr := validateExpr(ctx, childEnv, elements[i], result)
-		if expr != nil {
-			body = append(body, expr)
-		}
-	}
-
-	// If any validation failed, return nil
-	if len(body) != len(elements)-2 {
+	body, ok := validateBodySlice(ctx, childEnv, elements, 2, result)
+	if !ok {
 		return nil
 	}
 
 	return &ValidatedLambda{
-		validatedBase: validatedBase{formName: "lambda", source: source},
-		params:        params,
-		body:          body,
+		validatedBase:     validatedBase{formName: "lambda", source: source},
+		validatedProcBase: validatedProcBase{params: params, body: body},
 	}
 }
 

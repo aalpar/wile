@@ -78,6 +78,64 @@ func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, erro
 	return vectors, minLen, nil
 }
 
+// CollectStrings extracts zero or more strings from a rest argument,
+// validates that each element is a string, converts them to rune slices, and returns
+// the minimum length of the strings. Callers are responsible for rejecting an empty
+// argument list if a non-empty list is required. Used by string-map and string-for-each.
+func CollectStrings(rest values.Value, name string) ([]*values.String, [][]rune, int, error) {
+	var strs []*values.String
+	current := rest
+	for !values.IsEmptyList(current) {
+		tuple, ok := current.(values.Tuple)
+		if !ok {
+			return nil, nil, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+		}
+		s, err := RequireType[*values.String](tuple.Car(), values.ErrNotAString, name)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		strs = append(strs, s)
+		current = tuple.Cdr()
+	}
+	if len(strs) == 0 {
+		return nil, nil, 0, nil
+	}
+	runeSlices := make([][]rune, len(strs))
+	minLen := -1
+	for i, s := range strs {
+		runeSlices[i] = s.Runes()
+		if minLen < 0 || len(runeSlices[i]) < minLen {
+			minLen = len(runeSlices[i])
+		}
+	}
+	return strs, runeSlices, minLen, nil
+}
+
+// MemberLookup is a helper for list membership primitives (memq, memv).
+// Takes obj at index 0, list at index 1. Uses eq predicate to find match.
+// On match, returns the tail of the list starting at the matched element.
+func MemberLookup(
+	mc *machine.MachineContext,
+	name string,
+	eq func(a, b values.Value) bool,
+) error {
+	obj := mc.Arg(0)
+	lst := mc.Arg(1)
+	for !values.IsEmptyList(lst) {
+		pr, ok := lst.(values.Tuple)
+		if !ok {
+			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, lst)
+		}
+		if eq(pr.Car(), obj) {
+			mc.SetValue(pr)
+			return nil
+		}
+		lst = pr.Cdr()
+	}
+	mc.SetValue(values.FalseValue)
+	return nil
+}
+
 // AssocLookup is a helper for alist lookup primitives (assq, assv, assoc).
 // Takes key at index 0, alist at index 1. Uses eq predicate to find match.
 func AssocLookup(

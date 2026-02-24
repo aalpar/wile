@@ -50,6 +50,32 @@ func MakeNumericPredicate[T any](
 	}
 }
 
+// MakeCharPredicate creates a character predicate primitive that extracts
+// arg 0 as a Character and applies a boolean test on the rune value.
+func MakeCharPredicate(name string, test func(rune) bool) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		ch, err := RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, name)
+		if err != nil {
+			return err
+		}
+		mc.SetValue(values.BoolToBoolean(test(ch.Value)))
+		return nil
+	}
+}
+
+// MakeCharTransform creates a character transformation primitive that extracts
+// arg 0 as a Character, applies a rune transformation, and returns a new Character.
+func MakeCharTransform(name string, transform func(rune) rune) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		ch, err := RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, name)
+		if err != nil {
+			return err
+		}
+		mc.SetValue(values.NewCharacter(transform(ch.Value)))
+		return nil
+	}
+}
+
 // ChainEquality implements variadic chain equality comparison for primitives
 // like boolean=? and symbol=?.
 //

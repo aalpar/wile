@@ -40,71 +40,53 @@ type NativeError struct {
 	err       error           // Wrapped Go error (optional)
 }
 
+// newNativeError is the core constructor for all NativeError variants.
+func newNativeError(msg string, cause error, kind NativeErrorKind, irritants ...Value) *NativeError {
+	irr := List(irritants...)
+	if len(irritants) == 0 {
+		irr = EmptyList
+	}
+	return &NativeError{
+		message:   NewString(msg),
+		irritants: irr,
+		kind:      kind,
+		err:       cause,
+	}
+}
+
 // NewNativeError creates a new native error with the given message.
 func NewNativeError(msg string) *NativeError {
-	q := &NativeError{
-		message:   NewString(msg),
-		irritants: EmptyList,
-		kind:      NativeErrorKindGeneric,
-	}
-	return q
+	return newNativeError(msg, nil, NativeErrorKindGeneric)
 }
 
 // NewErrorObject creates a new error object with the given message and irritants.
 func NewErrorObject(message string, irritants ...Value) *NativeError {
-	q := &NativeError{
-		message:   NewString(message),
-		irritants: List(irritants...),
-		kind:      NativeErrorKindGeneric,
-	}
-	return q
+	return newNativeError(message, nil, NativeErrorKindGeneric, irritants...)
 }
 
 // NewErrorObjectWithCause creates a new error object that wraps a Go error.
 // This preserves the original error for debugging while providing R7RS-compliant
 // exception handling. The wrapped error can be retrieved with Datum() or Unwrap().
 func NewErrorObjectWithCause(message string, cause error, irritants ...Value) *NativeError {
-	q := &NativeError{
-		message:   NewString(message),
-		irritants: List(irritants...),
-		kind:      NativeErrorKindGeneric,
-		err:       cause,
-	}
-	return q
+	return newNativeError(message, cause, NativeErrorKindGeneric, irritants...)
 }
 
 // NewReadError creates a new read error object with the given message and irritants.
 // R7RS §6.11: read-error? predicate checks for errors during reading.
 func NewReadError(message string, irritants ...Value) *NativeError {
-	q := &NativeError{
-		message:   NewString(message),
-		irritants: List(irritants...),
-		kind:      NativeErrorKindRead,
-	}
-	return q
+	return newNativeError(message, nil, NativeErrorKindRead, irritants...)
 }
 
 // NewFileError creates a new file error object with the given message and irritants.
 // R7RS §6.11: file-error? predicate checks for errors during file operations.
 func NewFileError(message string, irritants ...Value) *NativeError {
-	q := &NativeError{
-		message:   NewString(message),
-		irritants: List(irritants...),
-		kind:      NativeErrorKindFile,
-	}
-	return q
+	return newNativeError(message, nil, NativeErrorKindFile, irritants...)
 }
 
 // NewErrorObjectWithCauseAndKind creates a new error object that wraps a Go error with a specific kind.
 // R7RS §6.11: The kind determines which error predicate (file-error?, read-error?) matches.
 func NewErrorObjectWithCauseAndKind(message string, cause error, kind NativeErrorKind, irritants ...Value) *NativeError {
-	q := &NativeError{
-		message:   NewString(message),
-		irritants: List(irritants...),
-		kind:      kind,
-		err:       cause,
-	}
-	return q
+	return newNativeError(message, cause, kind, irritants...)
 }
 
 // Message returns the error message string.

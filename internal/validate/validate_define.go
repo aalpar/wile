@@ -88,25 +88,16 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 		return nil
 	}
 
-	var body []ValidatedExpr
-	for i := 2; i < len(elements); i++ {
-		expr := validateExpr(ctx, env, elements[i], result)
-		if expr != nil {
-			body = append(body, expr)
-		}
-	}
-
-	// If body validation failed, return nil
-	if len(body) != len(elements)-2 {
+	body, ok := validateBodySlice(ctx, env, elements, 2, result)
+	if !ok {
 		return nil
 	}
 
 	return &ValidatedDefine{
-		validatedBase: validatedBase{formName: "define", source: source},
-		name:          name,
-		IsFunction:    true,
-		params:        params,
-		body:          body,
+		validatedBase:     validatedBase{formName: "define", source: source},
+		validatedProcBase: validatedProcBase{params: params, body: body},
+		name:              name,
+		IsFunction:        true,
 	}
 }
 

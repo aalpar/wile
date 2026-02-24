@@ -74,23 +74,13 @@ func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentF
 	// Validate parameters
 	params := validateParams(elements[0], result)
 
-	// Validate body - must have at least one expression
-	var body []ValidatedExpr
-	for i := 1; i < len(elements); i++ {
-		bodyExpr := validateExpr(ctx, env, elements[i], result)
-		if bodyExpr != nil {
-			body = append(body, bodyExpr)
-		}
-	}
-
-	// If body validation failed, return nil
-	if len(body) != len(elements)-1 {
+	body, ok := validateBodySlice(ctx, env, elements, 1, result)
+	if !ok {
 		return nil
 	}
 
 	return &ValidatedCaseLambdaClause{
-		validatedBase: validatedBase{formName: "@clause", source: source},
-		params:        params,
-		body:          body,
+		validatedBase:     validatedBase{formName: "@clause", source: source},
+		validatedProcBase: validatedProcBase{params: params, body: body},
 	}
 }

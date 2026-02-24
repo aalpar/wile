@@ -17,6 +17,7 @@ package helpers
 import (
 	"errors"
 	"testing"
+	"unicode"
 
 	qt "github.com/frankban/quicktest"
 
@@ -116,6 +117,82 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
 		})
 	}
+}
+
+// ── MakeCharPredicate ────────────────────────────────────────────────
+
+func TestMakeCharPredicate(t *testing.T) {
+	c := qt.New(t)
+
+	isUpper := MakeCharPredicate("char-upper-case?", unicode.IsUpper)
+
+	tcs := []struct {
+		name string
+		arg  values.Value
+		want values.Value
+	}{
+		{"uppercase", values.NewCharacter('A'), values.TrueValue},
+		{"lowercase", values.NewCharacter('a'), values.FalseValue},
+		{"digit", values.NewCharacter('5'), values.FalseValue},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := makeMC(tc.arg)
+			err := isUpper(mc)
+			c.Assert(err, qt.IsNil)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+func TestMakeCharPredicate_Errors(t *testing.T) {
+	c := qt.New(t)
+
+	isUpper := MakeCharPredicate("char-upper-case?", unicode.IsUpper)
+
+	mc := makeMC(values.NewInteger(42))
+	err := isUpper(mc)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
+}
+
+// ── MakeCharTransform ────────────────────────────────────────────────
+
+func TestMakeCharTransform(t *testing.T) {
+	c := qt.New(t)
+
+	toUpper := MakeCharTransform("char-upcase", unicode.ToUpper)
+
+	tcs := []struct {
+		name string
+		arg  values.Value
+		want values.Value
+	}{
+		{"lowercase to upper", values.NewCharacter('a'), values.NewCharacter('A')},
+		{"already upper", values.NewCharacter('A'), values.NewCharacter('A')},
+		{"digit unchanged", values.NewCharacter('5'), values.NewCharacter('5')},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := makeMC(tc.arg)
+			err := toUpper(mc)
+			c.Assert(err, qt.IsNil)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+func TestMakeCharTransform_Errors(t *testing.T) {
+	c := qt.New(t)
+
+	toUpper := MakeCharTransform("char-upcase", unicode.ToUpper)
+
+	mc := makeMC(values.NewString("not a char"))
+	err := toUpper(mc)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
 }
 
 // ── ChainEquality ────────────────────────────────────────────────────

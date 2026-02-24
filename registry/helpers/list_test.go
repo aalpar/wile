@@ -170,6 +170,150 @@ func TestCollectVectors_Errors(t *testing.T) {
 	}
 }
 
+// ── CollectStrings ───────────────────────────────────────────────────
+
+func TestCollectStrings(t *testing.T) {
+	c := qt.New(t)
+
+	s1 := values.NewString("abc")
+	s2 := values.NewString("de")
+	s3 := values.NewString("fghij")
+
+	tcs := []struct {
+		name       string
+		rest       values.Value
+		wantCount  int
+		wantMinLen int
+	}{
+		{"empty list", values.EmptyList, 0, 0},
+		{"single string", values.List(s1), 1, 3},
+		{"two strings min is shorter", values.List(s1, s2), 2, 2},
+		{"three strings min is middle", values.List(s1, s2, s3), 3, 2},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			strs, runeSlices, minLen, err := CollectStrings(tc.rest, "test")
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(strs), qt.Equals, tc.wantCount)
+			if tc.wantCount > 0 {
+				c.Assert(len(runeSlices), qt.Equals, tc.wantCount)
+				c.Assert(minLen, qt.Equals, tc.wantMinLen)
+			}
+		})
+	}
+}
+
+func TestCollectStrings_Errors(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name     string
+		rest     values.Value
+		sentinel error
+	}{
+		{
+			"non-string element",
+			values.List(values.NewInteger(1)),
+			values.ErrNotAString,
+		},
+		{
+			"mixed string and non-string",
+			values.List(values.NewString("ok"), values.NewInteger(1)),
+			values.ErrNotAString,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, _, err := CollectStrings(tc.rest, "test")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
+		})
+	}
+}
+
+// ── MemberLookup ─────────────────────────────────────────────────────
+
+func TestMemberLookup(t *testing.T) {
+	c := qt.New(t)
+
+	lst := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+
+	tcs := []struct {
+		name string
+		key  values.Value
+		list values.Value
+		eq   func(a, b values.Value) bool
+		want values.Value
+	}{
+		{
+			"found first element",
+			values.NewInteger(1),
+			lst,
+			valEq,
+			lst, // returns tail from match point
+		},
+		{
+			"found middle element",
+			values.NewInteger(2),
+			lst,
+			valEq,
+			lst.Cdr(), // (2 3)
+		},
+		{
+			"not found returns false",
+			values.NewInteger(99),
+			lst,
+			valEq,
+			values.FalseValue,
+		},
+		{
+			"empty list returns false",
+			values.NewInteger(1),
+			values.EmptyList,
+			valEq,
+			values.FalseValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := makeMC(tc.key, tc.list)
+			err := MemberLookup(mc, "test", tc.eq)
+			c.Assert(err, qt.IsNil)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+func TestMemberLookup_Errors(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name     string
+		key      values.Value
+		list     values.Value
+		sentinel error
+	}{
+		{
+			"list not a list",
+			values.NewInteger(1),
+			values.NewInteger(42),
+			values.ErrNotAList,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := makeMC(tc.key, tc.list)
+			err := MemberLookup(mc, "test", valEq)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
+		})
+	}
+}
+
 // ── AssocLookup ──────────────────────────────────────────────────────
 
 func valEq(a, b values.Value) bool {

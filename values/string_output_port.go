@@ -93,5 +93,5 @@ func (p *StringOutputPort) String() string {
 
 // SchemeString returns the Scheme representation of the port.
 func (p *StringOutputPort) SchemeString() string {
-	return fmt.Sprintf("<string-input-output-port %p>", p.buf)
+	return fmt.Sprintf("<string-output-port %p>", p.buf)
 }

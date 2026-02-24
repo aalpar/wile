@@ -48,6 +48,16 @@ func (b *portBase) Close() error {
 	return nil
 }
 
+// setCloser checks if v implements io.Closer and, if so, stores it
+// for use when the port is closed. Used by port constructors to detect
+// closeable underlying streams.
+func (b *portBase) setCloser(v any) {
+	closer, ok := v.(io.Closer)
+	if ok {
+		b.clsr = closer
+	}
+}
+
 // guardClosed returns ErrPortClosed if the port is closed.
 // I/O methods call this at the top to reject operations on closed ports.
 func (b *portBase) guardClosed() error {
