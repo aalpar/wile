@@ -318,7 +318,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
 			// Create binding with letScope so free identifier resolution works
-			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, nil)
 
 			cdr := current.SyntaxCdr()
 			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -382,7 +382,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 
 		// Store in child expand environment with letScope for free identifier resolution
-		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, nil)
 		if !created {
 			localIndex = childExpandEnv.GetLocalIndex(keyword)
 		}
@@ -539,7 +539,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 			newScopes[len(idScopes)] = bindingScope
 
 			sym := p.env.InternSymbol(id.Sym)
-			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes)
+			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes, nil)
 		}
 
 		// Continue expansion with the child environment
@@ -850,7 +850,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 		p.env,
 	)
 	for _, fs := range formalSyms {
-		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
+		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes, nil)
 	}
 
 	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions
@@ -1014,7 +1014,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 			scopes := nameSym.Scopes()
 			// Create placeholder binding in current environment (not expand phase)
 			if p.env.LocalEnvironment() != nil {
-				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, nil)
 			} else {
 				p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
 			}

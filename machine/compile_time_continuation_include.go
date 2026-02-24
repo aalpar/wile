@@ -230,7 +230,7 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 // define bindings with the correct scopes for hygiene.
 func (p *CompileTimeContinuation) bindSymbolWithScopes(name *values.Symbol, scopes []*syntax.Scope) {
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, nil)
 	} else {
 		gi, created := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
 		if !created {

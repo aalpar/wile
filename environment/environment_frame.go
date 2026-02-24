@@ -431,7 +431,7 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 // MaybeCreateLocalBindingWithScopes creates a new local binding with associated scopes in the current local environment.
 // It returns the LocalIndex of the new binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*LocalIndex, bool) {
+func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, source *syntax.SourceContext) (*LocalIndex, bool) {
 	if p == nil || !p.hasLocal() {
 		return nil, false
 	}
@@ -446,8 +446,8 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 	i = len(p.local.bindings)
 	p.local.keys[*key] = i
 	b := Binding{value: values.Void, bindingType: bt}
-	if scopes != nil {
-		b.meta = &BindingMeta{Scopes: scopes}
+	if scopes != nil || source != nil {
+		b.meta = &BindingMeta{Scopes: scopes, Source: source}
 	}
 	p.local.bindings = append(p.local.bindings, b)
 	return NewLocalIndex(i, 0), true

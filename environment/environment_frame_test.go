@@ -382,18 +382,18 @@ func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
 	sym := values.NewSymbol("test-var")
 
 	// Create binding with scopes
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	qt.Assert(t, li, qt.Not(qt.IsNil))
 
 	// Try to create again - should return existing
-	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created2, qt.IsFalse)
 	qt.Assert(t, li2, qt.DeepEquals, li)
 
 	// Test on environment with no local
 	topEnv := NewTopLevelEnvironmentFrame()
-	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created3, qt.IsFalse)
 	qt.Assert(t, li3, qt.IsNil)
 }
