@@ -144,7 +144,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 			applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources)
 			if applyErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory")
+				return nil, applyErr
 			}
 
 			return libEnv, nil
@@ -430,20 +430,24 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
-		return err
+		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "apply registry")
 	}
 
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
-		return err
+		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register syntax compilers")
 	}
 
 	err = machine.RegisterPrimitiveExpanders(env)
 	if err != nil {
-		return err
+		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register primitive expanders")
 	}
 
-	return loadBootstrapMacros(ctx, env, macroSources)
+	err = loadBootstrapMacros(ctx, env, macroSources)
+	if err != nil {
+		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "load bootstrap macros")
+	}
+	return nil
 }
 
 // expandAndCompile runs the expand → compile → optimize pipeline for a single
@@ -469,7 +473,7 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl, err := expandAndCompile(ctx, p.env, stx)
 	if err != nil {
-		return nil, &CompilationError{Message: "compilation error", Cause: err}
+		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
