@@ -113,9 +113,13 @@ var (
 	ErrImmutableString       = NewStaticError("cannot mutate immutable string")
 
 	// FFI errors
+	ErrFFIRegistration          = NewStaticError("FFI registration error")
 	ErrFFICallbackError         = NewStaticError("FFI callback error")
 	ErrCallbackResultConversion = NewStaticError("callback result conversion failed")
 	ErrHashtableInsertionFailed = NewStaticError("hashtable insertion failed")
+
+	// Engine initialization errors
+	ErrEngineInit = NewStaticError("engine initialization error")
 
 	// Environment errors (keep as panics but use sentinels)
 	ErrMissingTopLevelEnvironment = NewStaticError("missing TopLevelEnvironment")

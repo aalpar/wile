@@ -114,12 +114,12 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	// Register syntax compilers and primitive expanders
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
-		return nil, &Error{Message: "failed to register syntax compilers", Cause: err}
+		return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "failed to register syntax compilers")
 	}
 
 	err = machine.RegisterPrimitiveExpanders(env)
 	if err != nil {
-		return nil, &Error{Message: "failed to register primitive expanders", Cause: err}
+		return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "failed to register primitive expanders")
 	}
 
 	// Load bootstrap macros
@@ -156,14 +156,16 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 				parts = []string{"wile", snap.name}
 			}
 			if slices.Contains(parts, "") {
-				return nil, &Error{
-					Message: fmt.Sprintf("invalid library name for extension %q: empty name part", snap.name),
-				}
+				return nil, values.WrapForeignErrorf(
+					values.ErrEngineInit,
+					"invalid library name for extension %q: empty name part", snap.name,
+				)
 			}
 			if len(parts) == 0 {
-				return nil, &Error{
-					Message: fmt.Sprintf("invalid library name for extension %q: no name parts", snap.name),
-				}
+				return nil, values.WrapForeignErrorf(
+					values.ErrEngineInit,
+					"invalid library name for extension %q: no name parts", snap.name,
+				)
 			}
 
 			libName := machine.NewLibraryName(parts...)
@@ -173,7 +175,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 			}
 			regErr := libReg.Register(lib)
 			if regErr != nil {
-				return nil, &Error{Message: "failed to register extension library", Cause: regErr}
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, regErr, "failed to register extension library")
 			}
 		}
 
@@ -182,29 +184,29 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
 			callerTopLevel := callerEnv.TopLevelEnv()
 			if callerTopLevel == nil {
-				return nil, &Error{Message: "library env factory: caller has no TopLevelEnvironment"}
+				return nil, values.WrapForeignErrorf(values.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
 			}
 
 			libEnv := callerTopLevel.NewChildRuntime()
 
 			applyErr := reg.Apply(ctx, libEnv)
 			if applyErr != nil {
-				return nil, &Error{Message: "library env factory: failed to apply registry", Cause: applyErr}
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to apply registry")
 			}
 
 			applyErr = machine.RegisterSyntaxCompilers(libEnv)
 			if applyErr != nil {
-				return nil, &Error{Message: "library env factory: failed to register syntax compilers", Cause: applyErr}
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to register syntax compilers")
 			}
 
 			applyErr = machine.RegisterPrimitiveExpanders(libEnv)
 			if applyErr != nil {
-				return nil, &Error{Message: "library env factory: failed to register primitive expanders", Cause: applyErr}
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to register primitive expanders")
 			}
 
 			applyErr = loadBootstrapMacros(ctx, libEnv, macroSources)
 			if applyErr != nil {
-				return nil, &Error{Message: "library env factory: failed to load bootstrap macros", Cause: applyErr}
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to load bootstrap macros")
 			}
 
 			return libEnv, nil

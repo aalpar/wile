@@ -51,7 +51,6 @@ Never wrap with empty messages (`WrapForeignErrorf(err, "")` produces `": underl
 
 | Type | When to use | Where defined |
 |------|------------|---------------|
-| `*wile.Error` | Engine initialization failures | `error.go` |
 | `*wile.CompilationError` | Parse, expand, compile failures | `error.go` |
 | `*wile.RuntimeError` | Execution failures, Scheme exceptions | `error.go` |
 | `*machine.SchemeError` | Internal VM errors with source location | `machine/scheme_error.go` |
