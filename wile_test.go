@@ -277,32 +277,6 @@ func TestEngine_TopLevelEnvironment(t *testing.T) {
 	c.Assert(engine.TopLevelEnvironment(), qt.IsNotNil)
 }
 
-// Error type
-
-func TestError_Error(t *testing.T) {
-	c := qt.New(t)
-
-	t.Run("with cause", func(t *testing.T) {
-		e := &Error{Message: "failed", Cause: errors.New("bad input")}
-		c.Assert(e.Error(), qt.Equals, "failed: bad input")
-	})
-
-	t.Run("without cause", func(t *testing.T) {
-		e := &Error{Message: "failed"}
-		c.Assert(e.Error(), qt.Equals, "failed")
-	})
-}
-
-func TestError_Unwrap(t *testing.T) {
-	c := qt.New(t)
-	cause := errors.New("root cause")
-	e := &Error{Message: "wrapper", Cause: cause}
-	c.Assert(e.Unwrap(), qt.Equals, cause)
-
-	e2 := &Error{Message: "no cause"}
-	c.Assert(e2.Unwrap(), qt.IsNil)
-}
-
 // CompiledCode.String
 
 func TestCompiledCode_String(t *testing.T) {

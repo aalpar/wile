@@ -75,9 +75,8 @@ func TestRegisterFuncValidation(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error")
 			}
-			var wileErr *wile.Error
-			if !errors.As(err, &wileErr) {
-				t.Fatalf("expected *wile.Error, got %T", err)
+			if !errors.Is(err, values.ErrFFIRegistration) {
+				t.Fatalf("expected ErrFFIRegistration, got %T: %v", err, err)
 			}
 		})
 	}
@@ -1312,9 +1311,8 @@ func TestRegisterFuncsFailFast(t *testing.T) {
 		t.Fatal("expected error from RegisterFuncs with non-function value")
 	}
 
-	var wileErr *wile.Error
-	if !errors.As(err, &wileErr) {
-		t.Fatalf("expected *wile.Error, got %T", err)
+	if !errors.Is(err, values.ErrFFIRegistration) {
+		t.Fatalf("expected ErrFFIRegistration, got %T: %v", err, err)
 	}
 	if !strings.Contains(err.Error(), "bad") {
 		t.Errorf("expected error to mention binding name %q, got: %v", "bad", err)

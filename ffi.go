@@ -72,15 +72,17 @@ func analyzeReturnShape(fnType reflect.Type, errPrefix string) (returnShape, err
 		return returnShape{valueType: fnType.Out(0)}, nil
 	case 2:
 		if fnType.Out(1) != errorType {
-			return returnShape{}, &Error{
-				Message: fmt.Sprintf("%s: second return value must be error, got %s", errPrefix, fnType.Out(1)),
-			}
+			return returnShape{}, values.WrapForeignErrorf(
+				values.ErrFFIRegistration,
+				"%s: second return value must be error, got %s", errPrefix, fnType.Out(1),
+			)
 		}
 		return returnShape{hasError: true, valueType: fnType.Out(0)}, nil
 	default:
-		return returnShape{}, &Error{
-			Message: fmt.Sprintf("%s: too many return values (%d), maximum is 2", errPrefix, numOut),
-		}
+		return returnShape{}, values.WrapForeignErrorf(
+			values.ErrFFIRegistration,
+			"%s: too many return values (%d), maximum is 2", errPrefix, numOut,
+		)
 	}
 }
 
@@ -134,7 +136,7 @@ type ffiSpec struct {
 // callback for later invocation or calling it from another goroutine is
 // unsafe — the closure captures VM state that is not goroutine-safe.
 //
-// Returns a *[Error] if fn is not a function or uses unsupported types.
+// Returns an error wrapping [values.ErrFFIRegistration] if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {
 	spec, err := buildFFISpec(name, fn)
 	if err != nil {
@@ -174,7 +176,7 @@ func (p *Engine) RegisterFuncs(funcs map[string]any) error {
 func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	fnType := reflect.TypeOf(fn)
 	if fnType == nil || fnType.Kind() != reflect.Func {
-		return nil, &Error{Message: fmt.Sprintf("RegisterFunc %q: not a function", name)}
+		return nil, values.WrapForeignErrorf(values.ErrFFIRegistration, "RegisterFunc %q: not a function", name)
 	}
 
 	spec := &ffiSpec{
@@ -193,9 +195,10 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	// Validate no context.Context in non-first position.
 	for i := paramStart; i < fnType.NumIn(); i++ {
 		if fnType.In(i) == contextType {
-			return nil, &Error{
-				Message: fmt.Sprintf("RegisterFunc %q: context.Context must be first parameter", name),
-			}
+			return nil, values.WrapForeignErrorf(
+				values.ErrFFIRegistration,
+				"RegisterFunc %q: context.Context must be first parameter", name,
+			)
 		}
 	}
 
@@ -350,9 +353,10 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		return makeCallbackArgConverter(name, pos, t)
 
 	default:
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported parameter type at position %d: %s", name, pos, t),
-		}
+		return nil, values.WrapForeignErrorf(
+			values.ErrFFIRegistration,
+			"RegisterFunc %q: unsupported parameter type at position %d: %s", name, pos, t,
+		)
 	}
 }
 
@@ -409,9 +413,10 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 
 	// Validate key type at registration time.
 	if !isSupportedMapKeyType(keyType) {
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported map key type at position %d: %s (must be string, int64, int, or bool)", name, pos, keyType),
-		}
+		return nil, values.WrapForeignErrorf(
+			values.ErrFFIRegistration,
+			"RegisterFunc %q: unsupported map key type at position %d: %s (must be string, int64, int, or bool)", name, pos, keyType,
+		)
 	}
 
 	keyConv, err := makeArgConverter(name, pos, keyType)
@@ -547,9 +552,10 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 	for i := range numIn {
 		conv, err := makeRetConverter(name, t.In(i))
 		if err != nil {
-			return nil, &Error{
-				Message: fmt.Sprintf("RegisterFunc %q: unsupported callback parameter type at position %d: %s", name, pos, t.In(i)),
-			}
+			return nil, values.WrapForeignErrorf(
+				values.ErrFFIRegistration,
+				"RegisterFunc %q: unsupported callback parameter type at position %d: %s", name, pos, t.In(i),
+			)
 		}
 		paramConvs[i] = conv
 	}
@@ -792,9 +798,10 @@ func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 		return makeStructRetConverter(name, t)
 
 	default:
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported return type: %s", name, t),
-		}
+		return nil, values.WrapForeignErrorf(
+			values.ErrFFIRegistration,
+			"RegisterFunc %q: unsupported return type: %s", name, t,
+		)
 	}
 }
 
@@ -834,9 +841,10 @@ func makeSliceRetConverter(name string, t reflect.Type) (retConverter, error) {
 func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 	keyType := t.Key()
 	if !isSupportedMapKeyType(keyType) {
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: unsupported map key type in return: %s (must be string, int64, int, or bool)", name, keyType),
-		}
+		return nil, values.WrapForeignErrorf(
+			values.ErrFFIRegistration,
+			"RegisterFunc %q: unsupported map key type in return: %s (must be string, int64, int, or bool)", name, keyType,
+		)
 	}
 
 	keyConv, err := makeRetConverter(name, t.Key())

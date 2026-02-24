@@ -20,23 +20,6 @@ import (
 	"strings"
 )
 
-// Error represents a Wile engine error, including initialization failures.
-type Error struct {
-	Message string
-	Cause   error
-}
-
-func (p *Error) Error() string {
-	if p.Cause != nil {
-		return p.Message + ": " + p.Cause.Error()
-	}
-	return p.Message
-}
-
-func (p *Error) Unwrap() error {
-	return p.Cause
-}
-
 // CompilationError wraps errors from parsing, expanding, or compiling Scheme code.
 type CompilationError struct {
 	Message string
