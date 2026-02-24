@@ -51,20 +51,16 @@ func PrimMakeRecordType(mc *machine.MachineContext) error {
 }
 
 // PrimIsRecordType implements the (record-type? obj) primitive.
-func PrimIsRecordType(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	_, ok := obj.(*values.RecordType)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimIsRecordType = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.RecordType)
+	return ok
+})
 
 // PrimIsRecord implements the (record? obj) primitive.
-func PrimIsRecord(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	_, ok := obj.(*values.Record)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimIsRecord = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.Record)
+	return ok
+})
 
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
@@ -262,12 +258,10 @@ func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.Reco
 // =============================================================================
 
 // PrimPromiseQ tests if an object is a promise.
-func PrimPromiseQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimPromiseQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Promise)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimMakePromise implements the (make-promise) primitive.
 // Creates a promise from a value, wrapping it if not already a promise.

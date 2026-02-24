@@ -37,6 +37,23 @@ type ValidatedBodyAndParams interface {
 	Body() []ValidatedExpr
 }
 
+// validatedProcBase provides the shared params/body fields and accessors
+// for procedure-like validated forms (lambda, define-function, case-lambda clause).
+type validatedProcBase struct {
+	params *ValidatedParams
+	body   []ValidatedExpr
+}
+
+// Params returns the parameter list.
+func (p *validatedProcBase) Params() *ValidatedParams {
+	return p.params
+}
+
+// Body returns the body expressions.
+func (p *validatedProcBase) Body() []ValidatedExpr {
+	return p.body
+}
+
 // validatedBase provides the common FormName/SetFormName/Source implementation
 // embedded by all ValidatedExpr types. This eliminates ~36 identical method
 // definitions across the 13 validated form structs.
@@ -72,26 +89,15 @@ type ValidatedIf struct {
 // (define name expr) and (define (name params...) body...)
 type ValidatedDefine struct {
 	validatedBase
-	params     *ValidatedParams // For function form, nil for value form
-	body       []ValidatedExpr  // For function form, nil for value form
-	name       *syntax.SyntaxSymbol
-	subExp     ValidatedExpr // For (define name expr), nil for function form
-	IsFunction bool          // True for (define (name ...) ...)
+	validatedProcBase // params/body for function form, zero values for value form
+	name              *syntax.SyntaxSymbol
+	subExp            ValidatedExpr // For (define name expr), nil for function form
+	IsFunction        bool          // True for (define (name ...) ...)
 }
 
 // Name returns the name being defined.
 func (p *ValidatedDefine) Name() *syntax.SyntaxSymbol {
 	return p.name
-}
-
-// Params returns the parameter list for function definitions.
-func (p *ValidatedDefine) Params() *ValidatedParams {
-	return p.params
-}
-
-// Body returns the body expressions for function definitions.
-func (p *ValidatedDefine) Body() []ValidatedExpr {
-	return p.body
 }
 
 // SubExp returns the value expression for simple definitions.
@@ -102,18 +108,7 @@ func (p *ValidatedDefine) SubExp() ValidatedExpr {
 // ValidatedLambda represents (lambda (params...) body...)
 type ValidatedLambda struct {
 	validatedBase
-	params *ValidatedParams
-	body   []ValidatedExpr // At least one expression required
-}
-
-// Params returns the parameter list for this lambda.
-func (p *ValidatedLambda) Params() *ValidatedParams {
-	return p.params
-}
-
-// Body returns the body expressions for this lambda.
-func (p *ValidatedLambda) Body() []ValidatedExpr {
-	return p.body
+	validatedProcBase
 }
 
 // ValidatedParams represents a parameter list
@@ -183,6 +178,15 @@ type ValidatedLiteral struct {
 	Value syntax.SyntaxValue
 }
 
+// newLiteralExpr creates a ValidatedLiteral wrapping a syntax value as a
+// passthrough form. Used by structural validators and the passthrough registry.
+func newLiteralExpr(source *syntax.SourceContext, value syntax.SyntaxValue) *ValidatedLiteral {
+	return &ValidatedLiteral{
+		validatedBase: validatedBase{formName: "@literal", source: source},
+		Value:         value,
+	}
+}
+
 // ValidatedQuasiquote represents (quasiquote template)
 type ValidatedQuasiquote struct {
 	validatedBase
@@ -192,18 +196,7 @@ type ValidatedQuasiquote struct {
 // ValidatedCaseLambdaClause represents a single clause in case-lambda
 type ValidatedCaseLambdaClause struct {
 	validatedBase
-	params *ValidatedParams
-	body   []ValidatedExpr
-}
-
-// Params returns the parameter list for this clause.
-func (p *ValidatedCaseLambdaClause) Params() *ValidatedParams {
-	return p.params
-}
-
-// Body returns the body expressions for this clause.
-func (p *ValidatedCaseLambdaClause) Body() []ValidatedExpr {
-	return p.body
+	validatedProcBase
 }
 
 // ValidatedCaseLambda represents (case-lambda [clause] ...)

@@ -60,87 +60,17 @@ func PrimCharCiGeVariadic(mc *machine.MachineContext) error {
 	})
 }
 
-// PrimCharAlphabeticQ tests if a character is alphabetic.
-func PrimCharAlphabeticQ(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-alphabetic?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.BoolToBoolean(unicode.IsLetter(ch.Value)))
-	return nil
-}
+// Character classification predicates — all use MakeCharPredicate factory.
+var PrimCharAlphabeticQ = helpers.MakeCharPredicate("char-alphabetic?", unicode.IsLetter)
+var PrimCharNumericQ = helpers.MakeCharPredicate("char-numeric?", unicode.IsDigit)
+var PrimCharWhitespaceQ = helpers.MakeCharPredicate("char-whitespace?", unicode.IsSpace)
+var PrimCharUpperCaseQ = helpers.MakeCharPredicate("char-upper-case?", unicode.IsUpper)
+var PrimCharLowerCaseQ = helpers.MakeCharPredicate("char-lower-case?", unicode.IsLower)
 
-// PrimCharNumericQ tests if a character is numeric.
-func PrimCharNumericQ(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-numeric?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.BoolToBoolean(unicode.IsDigit(ch.Value)))
-	return nil
-}
-
-// PrimCharWhitespaceQ tests if a character is whitespace.
-func PrimCharWhitespaceQ(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-whitespace?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.BoolToBoolean(unicode.IsSpace(ch.Value)))
-	return nil
-}
-
-// PrimCharUpperCaseQ tests if a character is uppercase.
-func PrimCharUpperCaseQ(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upper-case?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.BoolToBoolean(unicode.IsUpper(ch.Value)))
-	return nil
-}
-
-// PrimCharLowerCaseQ tests if a character is lowercase.
-func PrimCharLowerCaseQ(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-lower-case?")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.BoolToBoolean(unicode.IsLower(ch.Value)))
-	return nil
-}
-
-// PrimCharUpcase returns the uppercase version of a character.
-func PrimCharUpcase(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-upcase")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewCharacter(unicode.ToUpper(ch.Value)))
-	return nil
-}
-
-// PrimCharDowncase returns the lowercase version of a character.
-func PrimCharDowncase(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-downcase")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewCharacter(unicode.ToLower(ch.Value)))
-	return nil
-}
-
-// PrimCharFoldcase returns the case-folded version of a character.
-// R7RS §6.6: Returns the simple Unicode case-folded version of the character.
-// Simple case folding maps each character to exactly one character.
-func PrimCharFoldcase(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char-foldcase")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewCharacter(simpleCaseFold(ch.Value)))
-	return nil
-}
+// Character case transformation — all use MakeCharTransform factory.
+var PrimCharUpcase = helpers.MakeCharTransform("char-upcase", unicode.ToUpper)
+var PrimCharDowncase = helpers.MakeCharTransform("char-downcase", unicode.ToLower)
+var PrimCharFoldcase = helpers.MakeCharTransform("char-foldcase", simpleCaseFold)
 
 // simpleCaseFold performs Unicode simple case folding on a rune.
 // Simple case folding maps each character to exactly one character.

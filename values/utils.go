@@ -90,6 +90,18 @@ type equalPairKey [2]Value
 // with a visited set to terminate on circular structures per R7RS §6.1.
 // This is the same technique used by Chez Scheme and Racket: when a
 // (pointer-a, pointer-b) pair is re-encountered during recursion, return true.
+// wrapperValueEqualTo compares two optional Value fields for structural equality.
+// Used by wrapper types (Box, CompileTimeValue) whose EqualTo delegates to inner values.
+func wrapperValueEqualTo(pVal, oVal Value) bool {
+	if pVal == oVal {
+		return true
+	}
+	if pVal == nil || oVal == nil {
+		return false
+	}
+	return pVal.EqualTo(oVal)
+}
+
 func EqualTo(a, b Value) bool {
 	if a == nil || b == nil {
 		return a == b

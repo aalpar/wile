@@ -43,10 +43,7 @@ func NewCharacterInputPort(rdr *bufio.Reader) *CharacterInputPort {
 // NewCharacterInputPortFromReader creates a new character input port from an io.Reader.
 func NewCharacterInputPortFromReader(rdr io.Reader) *CharacterInputPort {
 	q := &CharacterInputPort{rdr: bufio.NewReader(rdr)}
-	closer, ok := rdr.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(rdr)
 	return q
 }
 

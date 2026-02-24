@@ -52,11 +52,10 @@ func PrimDefaultContinuationPromptTag(mc *machine.MachineContext) error {
 }
 
 // PrimContinuationPromptTagQ tests whether a value is a continuation prompt tag.
-func PrimContinuationPromptTagQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(*machine.PromptTag)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimContinuationPromptTagQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*machine.PromptTag)
+	return ok
+})
 
 // PrimCallWithContinuationPrompt installs a continuation prompt and runs the thunk.
 //

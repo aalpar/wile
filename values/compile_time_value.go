@@ -50,22 +50,16 @@ func (p *CompileTimeValue) EqualTo(v Value) bool {
 	if p == other {
 		return true
 	}
-	if p == nil && other == nil {
-		return true
-	}
 	if p == nil || other == nil {
 		return false
 	}
-	if p.Value == nil && other.Value == nil {
-		return true
-	}
-	if p.Value == nil || other.Value == nil {
-		return false
-	}
-	return p.Value.EqualTo(other.Value)
+	return wrapperValueEqualTo(p.Value, other.Value)
 }
 
 // SchemeString returns the Scheme representation of the compile-time value.
 func (p *CompileTimeValue) SchemeString() string {
+	if p == nil {
+		return "#<compile-time-value:void>"
+	}
 	return fmt.Sprintf("#<compile-time-value %s>", p.Value.SchemeString())
 }

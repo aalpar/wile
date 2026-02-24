@@ -41,10 +41,7 @@ func NewBinaryInputPort(rdr *bufio.Reader) *BinaryInputPort {
 // NewBinaryInputPortFromReader creates a new input port reading from the given byte slice.
 func NewBinaryInputPortFromReader(reader io.Reader) *BinaryInputPort {
 	q := &BinaryInputPort{rdr: bufio.NewReader(reader)}
-	closer, ok := reader.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(reader)
 	return q
 }
 

@@ -42,10 +42,7 @@ func NewCharacterOutputPort(wrt *bufio.Writer) *CharacterOutputPort {
 // NewCharacterOutputPortFromWriter creates a new character output port wrapping the given buf.
 func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
 	q := NewCharacterOutputPort(bufio.NewWriter(wrt))
-	closer, ok := wrt.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(wrt)
 	return q
 }
 

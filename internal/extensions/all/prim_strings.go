@@ -165,49 +165,24 @@ func PrimStringMap(mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-map: expected at least one string")
 	}
 
-	// Collect all strings into a slice
-	var strs []*values.String
-	current := stringsVal
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string-map: improper argument list")
-		}
-		s, err := helpers.RequireType[*values.String](tuple.Car(), values.ErrNotAString, "string-map")
-		if err != nil {
-			return err
-		}
-		strs = append(strs, s)
-		current = tuple.Cdr()
+	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-map")
+	if err != nil {
+		return err
 	}
-
 	if len(strs) == 0 {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-map: expected at least one string")
 	}
 
-	// Convert all strings to rune slices and find minimum length
-	runeSlices := make([][]rune, len(strs))
-	minLen := -1
-	for i, s := range strs {
-		runeSlices[i] = s.Runes()
-		if minLen < 0 || len(runeSlices[i]) < minLen {
-			minLen = len(runeSlices[i])
-		}
-	}
-
-	// Apply proc to each position
 	result := make([]rune, minLen)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 
-	for i := 0; i < minLen; i++ {
-		// Collect one character from each string
+	for i := range minLen {
 		args := make(values.Vector, len(strs))
 		for j := range strs {
 			args[j] = values.NewCharacter(runeSlices[j][i])
 		}
 
-		// Apply proc to collected arguments
 		_, err := sub.Apply(mcls, args...)
 		if err != nil {
 			return err
@@ -217,7 +192,6 @@ func PrimStringMap(mc *machine.MachineContext) error {
 			return err
 		}
 
-		// Get the result character
 		resultVal := sub.GetValue()
 		char, ok := resultVal.(*values.Character)
 		if !ok {
@@ -226,7 +200,6 @@ func PrimStringMap(mc *machine.MachineContext) error {
 		result[i] = char.Value
 	}
 
-	// R7RS §6.7: string-map returns a newly allocated mutable string
 	mc.SetValue(values.NewMutableString(string(result)))
 	return nil
 }
@@ -246,48 +219,23 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
 	}
 
-	// Collect all strings into a slice
-	var strs []*values.String
-	current := stringsVal
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string-for-each: improper argument list")
-		}
-		s, err := helpers.RequireType[*values.String](tuple.Car(), values.ErrNotAString, "string-for-each")
-		if err != nil {
-			return err
-		}
-		strs = append(strs, s)
-		current = tuple.Cdr()
+	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-for-each")
+	if err != nil {
+		return err
 	}
-
 	if len(strs) == 0 {
 		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
 	}
 
-	// Convert all strings to rune slices and find minimum length
-	runeSlices := make([][]rune, len(strs))
-	minLen := -1
-	for i, s := range strs {
-		runeSlices[i] = s.Runes()
-		if minLen < 0 || len(runeSlices[i]) < minLen {
-			minLen = len(runeSlices[i])
-		}
-	}
-
-	// Apply proc to each position
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 
-	for i := 0; i < minLen; i++ {
-		// Collect one character from each string
+	for i := range minLen {
 		args := make(values.Vector, len(strs))
 		for j := range strs {
 			args[j] = values.NewCharacter(runeSlices[j][i])
 		}
 
-		// Apply proc to collected arguments
 		_, err := sub.Apply(mcls, args...)
 		if err != nil {
 			return err

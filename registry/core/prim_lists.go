@@ -320,41 +320,15 @@ func PrimListTail(mc *machine.MachineContext) error {
 // PrimMemq implements the memq primitive.
 // Finds an element in a list using eq? for comparison.
 func PrimMemq(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	lst := mc.Arg(1)
-	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "memq: expected a list but got %T", lst)
-		}
-		if pr.Car() == obj {
-			mc.SetValue(pr)
-			return nil
-		}
-		lst = pr.Cdr()
-	}
-	mc.SetValue(values.FalseValue)
-	return nil
+	return helpers.MemberLookup(mc, "memq", func(a, b values.Value) bool {
+		return a == b
+	})
 }
 
 // PrimMemv implements the memv primitive.
 // Finds an element in a list using eqv? for comparison.
 func PrimMemv(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	lst := mc.Arg(1)
-	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(values.Tuple)
-		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "memv: expected a list but got %T", lst)
-		}
-		if helpers.Eqv(pr.Car(), obj) {
-			mc.SetValue(pr)
-			return nil
-		}
-		lst = pr.Cdr()
-	}
-	mc.SetValue(values.FalseValue)
-	return nil
+	return helpers.MemberLookup(mc, "memv", helpers.Eqv)
 }
 
 // PrimMember implements the member primitive.

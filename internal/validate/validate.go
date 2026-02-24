@@ -34,13 +34,35 @@ func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, 
 	return result
 }
 
+// validateBodySlice validates a contiguous slice of elements as body expressions.
+// Returns (body, true) if all elements validated, (nil, false) if any failed.
+func validateBodySlice(
+	ctx context.Context,
+	env *environment.EnvironmentFrame,
+	elements []syntax.SyntaxValue,
+	start int,
+	result *ValidationResult,
+) ([]ValidatedExpr, bool) {
+	var body []ValidatedExpr
+	for i := start; i < len(elements); i++ {
+		expr := validateExpr(ctx, env, elements[i], result)
+		if expr != nil {
+			body = append(body, expr)
+		}
+	}
+	if len(body) != len(elements)-start {
+		return nil, false
+	}
+	return body, true
+}
+
 func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	switch e := expr.(type) {
 	case *syntax.SyntaxPair:
 		// Empty list '() is a self-evaluating literal, not a form.
 		// R7RS §4.1.2: The empty list is a literal expression.
 		if e.IsEmptyList() {
-			return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: e.SourceContext()}, Value: e}
+			return newLiteralExpr(e.SourceContext(), e)
 		}
 		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
@@ -49,7 +71,7 @@ func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr s
 		return validateSyntaxObject(e, result)
 	default:
 		// Self-evaluating: numbers, strings, booleans, etc.
-		return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal"}, Value: expr}
+		return newLiteralExpr(nil, expr)
 	}
 }
 
@@ -63,7 +85,7 @@ func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) Va
 		return nil
 	default:
 		// Self-evaluating literal wrapped in syntax
-		return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: obj.SourceContext()}, Value: obj}
+		return newLiteralExpr(obj.SourceContext(), obj)
 	}
 }
 

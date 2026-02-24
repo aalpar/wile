@@ -29,11 +29,10 @@ func PrimMakeHashtable(mc *machine.MachineContext) error {
 
 // PrimHashtableQ implements the hashtable? predicate.
 // Returns #t if the argument is a hash table, #f otherwise.
-func PrimHashtableQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(*values.Hashtable)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimHashtableQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.Hashtable)
+	return ok
+})
 
 // PrimHashtableRef implements the hashtable-ref primitive.
 // (hashtable-ref ht key) — errors if key is missing.

@@ -22,35 +22,19 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// PrimPortQ implements the port? primitive.
-// Returns #t if the argument is a port (input or output), #f otherwise.
-//
-// R7RS §6.13.1: Returns #t if obj is a port, otherwise returns #f.
-func PrimPortQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(values.Port)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
-
-// PrimInputPortQ implements the (input-port?) primitive.
-// Returns #t if argument is input port.
-//
-// R7RS §6.13.1: Returns #t if obj is an input port, otherwise returns #f.
-func PrimInputPortQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(values.InputPort)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
-
-// PrimOutputPortQ implements the output-port? primitive.
-// Returns #t if the argument is an output port, #f otherwise.
-//
-// R7RS §6.13.1: Returns #t if obj is an output port, otherwise returns #f.
-func PrimOutputPortQ(mc *machine.MachineContext) error {
-	_, ok := mc.Arg(0).(values.OutputPort)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+// Port type predicates — R7RS §6.13.1.
+var PrimPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(values.Port)
+	return ok
+})
+var PrimInputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(values.InputPort)
+	return ok
+})
+var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(values.OutputPort)
+	return ok
+})
 
 // PrimInputPortOpenQ implements the (input-port-open?) primitive.
 // Returns #t if input port is open.

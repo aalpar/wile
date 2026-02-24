@@ -55,22 +55,16 @@ func (p *Box) EqualTo(v Value) bool {
 	if p == other {
 		return true
 	}
-	if p == nil && other == nil {
-		return true
-	}
 	if p == nil || other == nil {
 		return false
 	}
-	if p.Value == nil && other.Value == nil {
-		return true
-	}
-	if p.Value == nil || other.Value == nil {
-		return false
-	}
-	return p.Value.EqualTo(other.Value)
+	return wrapperValueEqualTo(p.Value, other.Value)
 }
 
 // SchemeString returns the Scheme representation of the box.
 func (p *Box) SchemeString() string {
+	if p == nil {
+		return "#<box:void>"
+	}
 	return fmt.Sprintf("#&%s", p.Value.SchemeString())
 }

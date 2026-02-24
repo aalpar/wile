@@ -42,10 +42,7 @@ func NewBinaryOutputPort(wrt *bufio.Writer) *BinaryOutputPort {
 // NewBinaryOutputPortFromWriter creates a new input port reading from the given byte slice.
 func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
 	q := &BinaryOutputPort{wrt: bufio.NewWriter(writer)}
-	closer, ok := writer.(io.Closer)
-	if ok {
-		q.clsr = closer
-	}
+	q.setCloser(writer)
 	return q
 }
 

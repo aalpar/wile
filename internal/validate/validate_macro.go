@@ -43,7 +43,7 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	// The compiler/expander handles transformer validation
 
 	// Return as literal - compiler handles the rest
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...)
@@ -99,7 +99,7 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 	}
 
 	// Return as literal - compiler handles the rest
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateImport validates (import import-set...)
@@ -121,7 +121,7 @@ func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *
 		}
 	}
 
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateExport validates (export export-spec...)
@@ -150,7 +150,7 @@ func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *
 		result.addErrorf(getSourceContext(spec), "export", "export-spec %d must be a symbol or rename form", i)
 	}
 
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateDefineLibrary validates (define-library (name...) declaration...)
@@ -193,7 +193,7 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 		return nil
 	}
 
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateInclude validates (include filename...)
@@ -216,7 +216,7 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 		result.addErrorf(getSourceContext(elements[i]), "include", "include argument %d must be a string", i)
 	}
 
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
 
 // validateCondExpand validates (cond-expand clause...)
@@ -240,5 +240,5 @@ func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pa
 		}
 	}
 
-	return &ValidatedLiteral{validatedBase: validatedBase{formName: "@literal", source: source}, Value: pair}
+	return newLiteralExpr(source, pair)
 }
