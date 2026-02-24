@@ -40,6 +40,50 @@ type argConverter func(mc *MachineContext, v values.Value) (reflect.Value, error
 // retConverter converts a Go reflect.Value to a Scheme value.
 type retConverter func(v reflect.Value) values.Value
 
+// returnShape describes the return convention of a Go function type.
+// Go functions return 0–2 values in one of four shapes:
+//
+//   - 0 returns: void (no value, no error)
+//   - 1 return, error interface: error-only (success = nil error)
+//   - 1 return, non-error: value-only (always succeeds from Go's perspective)
+//   - 2 returns, (T, error): value + error (idiomatic Go error return)
+//
+// The error return must be the exact `error` interface type, not a concrete
+// type implementing error. Concrete error types are non-nilable, and the
+// wrapper calls IsNil() which would panic on non-interface reflect.Values.
+type returnShape struct {
+	hasError  bool         // true if the last return is the error interface
+	valueType reflect.Type // non-nil if there's a non-error return value
+}
+
+// analyzeReturnShape inspects a function type's return values and classifies
+// them into one of the four supported shapes. Used by both top-level
+// buildFFISpec and nested makeCallbackArgConverter to share the validation
+// logic for return conventions.
+func analyzeReturnShape(fnType reflect.Type, errPrefix string) (returnShape, error) {
+	numOut := fnType.NumOut()
+	switch numOut {
+	case 0:
+		return returnShape{}, nil
+	case 1:
+		if fnType.Out(0) == errorType {
+			return returnShape{hasError: true}, nil
+		}
+		return returnShape{valueType: fnType.Out(0)}, nil
+	case 2:
+		if fnType.Out(1) != errorType {
+			return returnShape{}, &Error{
+				Message: fmt.Sprintf("%s: second return value must be error, got %s", errPrefix, fnType.Out(1)),
+			}
+		}
+		return returnShape{hasError: true, valueType: fnType.Out(0)}, nil
+	default:
+		return returnShape{}, &Error{
+			Message: fmt.Sprintf("%s: too many return values (%d), maximum is 2", errPrefix, numOut),
+		}
+	}
+}
+
 // ffiSpec holds pre-computed reflection data for a registered Go function.
 type ffiSpec struct {
 	name       string
@@ -187,41 +231,17 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	spec.paramCount = numSchemeParams
 
 	// Analyze return types.
-	numOut := fnType.NumOut()
-	switch numOut {
-	case 0:
-		// void
-	case 1:
-		outType := fnType.Out(0)
-		// Require the exact error interface, not concrete types that implement
-		// error. Concrete error types are non-nilable, and the wrapper calls
-		// IsNil() which would panic on non-interface kinds.
-		if outType == errorType {
-			spec.hasError = true
-		} else {
-			conv, err := makeRetConverter(name, outType)
-			if err != nil {
-				return nil, err
-			}
-			spec.retConv = conv
-		}
-	case 2:
-		// Must be (T, error) with the exact error interface type.
-		if fnType.Out(1) != errorType {
-			return nil, &Error{
-				Message: fmt.Sprintf("RegisterFunc %q: second return value must be error, got %s", name, fnType.Out(1)),
-			}
-		}
-		spec.hasError = true
-		conv, err := makeRetConverter(name, fnType.Out(0))
+	shape, err := analyzeReturnShape(fnType, fmt.Sprintf("RegisterFunc %q", name))
+	if err != nil {
+		return nil, err
+	}
+	spec.hasError = shape.hasError
+	if shape.valueType != nil {
+		conv, err := makeRetConverter(name, shape.valueType)
 		if err != nil {
 			return nil, err
 		}
 		spec.retConv = conv
-	default:
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: too many return values (%d), maximum is 2", name, numOut),
-		}
 	}
 
 	return spec, nil
@@ -534,44 +554,21 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 		paramConvs[i] = conv
 	}
 
-	// Determine callback return shape.
-	numOut := t.NumOut()
+	// Determine callback return shape. Callback returns use argConverters
+	// (Scheme→Go direction) because data flows back from the Scheme procedure
+	// into the Go caller — the inverse of the outer function's returns.
+	shape, err := analyzeReturnShape(t, fmt.Sprintf("RegisterFunc %q: callback at position %d", name, pos))
+	if err != nil {
+		return nil, err
+	}
+	hasErrorReturn := shape.hasError
 	var resultConv argConverter
-	hasErrorReturn := false
-
-	switch numOut {
-	case 0:
-		// void callback
-	case 1:
-		if t.Out(0) == errorType {
-			hasErrorReturn = true
-		} else {
-			conv, err := makeArgConverter(name, pos, t.Out(0))
-			if err != nil {
-				return nil, &Error{
-					Message: fmt.Sprintf("RegisterFunc %q: unsupported callback return type at position %d: %s", name, pos, t.Out(0)),
-				}
-			}
-			resultConv = conv
-		}
-	case 2:
-		if t.Out(1) != errorType {
-			return nil, &Error{
-				Message: fmt.Sprintf("RegisterFunc %q: callback second return must be error at position %d, got %s", name, pos, t.Out(1)),
-			}
-		}
-		hasErrorReturn = true
-		conv, err := makeArgConverter(name, pos, t.Out(0))
+	if shape.valueType != nil {
+		conv, err := makeArgConverter(name, pos, shape.valueType)
 		if err != nil {
-			return nil, &Error{
-				Message: fmt.Sprintf("RegisterFunc %q: unsupported callback return type at position %d: %s", name, pos, t.Out(0)),
-			}
+			return nil, err
 		}
 		resultConv = conv
-	default:
-		return nil, &Error{
-			Message: fmt.Sprintf("RegisterFunc %q: callback at position %d has too many return values (%d)", name, pos, numOut),
-		}
 	}
 
 	funcType := t

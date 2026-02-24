@@ -38,18 +38,16 @@ type PrimitiveExpanderFunc func(
 // PrimitiveExpander wraps a PrimitiveExpanderFunc as a values.Value so it can
 // be stored in the environment.
 type PrimitiveExpander struct {
-	name string
-	fn   PrimitiveExpanderFunc
+	namedHandlerBase
+	fn PrimitiveExpanderFunc
 }
 
 // NewPrimitiveExpander creates a new primitive expander.
 func NewPrimitiveExpander(name string, fn PrimitiveExpanderFunc) *PrimitiveExpander {
-	return &PrimitiveExpander{name: name, fn: fn}
-}
-
-// Name returns the name of this primitive expander.
-func (p *PrimitiveExpander) Name() string {
-	return p.name
+	return &PrimitiveExpander{
+		namedHandlerBase: namedHandlerBase{name: name, prefix: "primitive-expander"},
+		fn:               fn,
+	}
 }
 
 // Expand invokes the primitive expander function.
@@ -59,16 +57,6 @@ func (p *PrimitiveExpander) Expand(
 	expr syntax.SyntaxValue,
 ) (syntax.SyntaxValue, error) {
 	return p.fn(etc, sym, expr)
-}
-
-// SchemeString implements values.Value interface.
-func (p *PrimitiveExpander) SchemeString() string {
-	return "#<primitive-expander:" + p.name + ">"
-}
-
-// IsVoid implements values.Value interface.
-func (p *PrimitiveExpander) IsVoid() bool {
-	return false
 }
 
 // EqualTo implements values.Value interface.

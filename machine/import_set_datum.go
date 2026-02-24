@@ -55,8 +55,14 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 	return NewLibraryName(parts...), nil
 }
 
-// ParseImportSetFromDatum parses an import set from a datum value.
+// ParseImportSetFromDatum parses an import set from datum values (runtime).
 // This is for runtime use by the 'environment' procedure.
+//
+// A parallel set of functions exists in compile_time_continuation_library.go
+// operating on *syntax.SyntaxPair for compile-time parsing. The two families
+// are structurally identical but use different accessor methods due to the
+// syntax/datum phase boundary. Changes here should be mirrored there.
+//
 // Import sets can be:
 //   - (<library-name>)              : import all exports
 //   - (only <import-set> <id> ...)  : import only specified identifiers

@@ -390,7 +390,13 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 	return err
 }
 
-// parseImportSet parses an import set with optional modifiers.
+// parseImportSet parses an import set from syntax objects (compile-time).
+//
+// A parallel set of functions exists in import_set_datum.go operating on
+// plain values.Tuple for runtime datum parsing. The two families are
+// structurally identical but use different accessor methods due to the
+// syntax/datum phase boundary. Changes here should be mirrored there.
+//
 // Import sets can be:
 //   - (<library-name>)              : import all exports
 //   - (only <import-set> <id> ...)  : import only specified identifiers
@@ -453,10 +459,7 @@ func parseImportSetOnly(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSe
 	}
 
 	// Get identifiers
-	idsExpr, ok := cdrExpr.Cdr().(syntax.SyntaxValue)
-	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected identifiers")
-	}
+	idsExpr := cdrExpr.SyntaxCdr()
 
 	ids, err := parseIdentifierList(ctx, idsExpr)
 	if err != nil {
@@ -494,7 +497,7 @@ func parseImportSetExcept(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 
 // parseImportSetPrefix parses (prefix <import-set> <prefix>)
 func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.Cdr().(*syntax.SyntaxPair)
+	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected import-set and prefix")
 	}

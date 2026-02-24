@@ -61,6 +61,29 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 	return mc.GetValue(), nil
 }
 
+// executeFormsAtCompileTime expands, compiles, and executes each expression
+// in bodyPair at compile time. Used by eval-when and begin-for-syntax.
+func (p *CompileTimeContinuation) executeFormsAtCompileTime(
+	ctctx CompileTimeCallContext,
+	formName string,
+	bodyPair *syntax.SyntaxPair,
+) error {
+	expandEnv := p.env.Expand()
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+
+	v, err := bodyPair.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
+		_, err := p.expandCompileExecute(ctctx.ctx, ctctx, stxVal, expandEnv, expander, formName)
+		return err
+	})
+	if err != nil {
+		return values.WrapForeignErrorf(err, "%s: error processing body expressions", formName)
+	}
+	if !syntax.IsSyntaxEmptyList(v) {
+		return values.WrapForeignErrorf(values.ErrNotAList, "%s: improper body expressions list", formName)
+	}
+	return nil
+}
+
 // ensureState checks that the compiler has a valid environment and template.
 // Every compile-time form (define-syntax, begin-for-syntax, define-for-syntax,
 // eval-when) must call this before accessing p.env or p.template.
