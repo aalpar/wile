@@ -76,6 +76,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	q.pc = mc.pc + off
 	q.threadID = mc.threadID
 	q.callDepth = depth
+	q.envPooled = mc.envPooled
 	q.parent = mc.cont
 	return q
 }
@@ -134,6 +135,9 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 			promptTag:    p.promptTag,
 			threadID:     p.threadID,
 			callDepth:    p.callDepth,
+			// envPooled intentionally false: Copy() shares the env pointer
+			// with the original frame. The copy does not own the env frame
+			// and must not release it back to the pool.
 		},
 		parent:        p.parent,
 		promptHandler: p.promptHandler,

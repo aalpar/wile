@@ -203,7 +203,7 @@ func (p *MachineContext) Arg(index int) values.Value {
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
 	p.counters.StackPoolReleases++
-	old := p.evals
+	oldEvals := p.evals
 	p.env = cont.env
 	p.template = cont.template
 	// Must copy evals to avoid corrupting the continuation's saved stack.
@@ -217,9 +217,14 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// equals the chain length of cont.parent (which is now p.cont).
 	// This replaces an O(d) chain walk with an O(1) field read.
 	p.callDepth = cont.callDepth
-	// Return the old evals stack to the pool. It was allocated by a prior
-	// SaveContinuation and is now dead (replaced by the continuation's copy).
-	releaseStack(old)
+	// Restore always comes from a shared/composable continuation (call/cc
+	// re-entry, composable continuation invocation). The old mc.env is NOT
+	// released because it may be referenced by continuation frames still in
+	// the chain (e.g., SaveContinuation frames created before the composable
+	// continuation was invoked). Let GC collect it naturally.
+	p.envPooled = false
+	// Return the old evals stack to the pool.
+	releaseStack(oldEvals)
 }
 
 // RestoreAndRelease is the fast path for normal function return. It transfers
@@ -240,7 +245,10 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
 
-	old := p.evals
+	oldEvals := p.evals
+	oldEnv := p.env
+	oldEnvPooled := p.envPooled
+
 	p.env = cont.env
 	p.template = cont.template
 	p.cont = cont.parent
@@ -248,11 +256,19 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.callDepth = cont.callDepth
 
 	if cont.shared {
-		// Shared frame: copy evals (preserve for re-invocation), don't pool.
+		// Shared frame: copy evals (preserve for re-invocation), don't pool
+		// the continuation. The restored env must not be released on future
+		// overwrites because the shared continuation may be re-invoked.
 		p.counters.SharedFrameRestores++
 		p.counters.StackPoolReleases++
 		p.evals = cont.evals.Copy()
-		releaseStack(old)
+		// envPooled: shared continuation may be re-invoked; env must not be recycled.
+		p.envPooled = false
+		releaseStack(oldEvals)
+		if oldEnvPooled && oldEnv != p.env {
+			p.counters.EnvFramePoolReleases++
+			releaseEnvFrame(oldEnv)
+		}
 		return
 	}
 
@@ -260,7 +276,17 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.counters.StackPoolReleases++
 	p.counters.ContinuationPoolReleases++
 	p.evals = cont.evals // transfer, not copy
-	releaseStack(old)
+	// envPooled: restore caller's ownership state from saved continuation.
+	p.envPooled = cont.envPooled
+	releaseStack(oldEvals)
+	// Only release the old env if it differs from the restored env. When no
+	// Apply occurred between SaveContinuation and RestoreContinuation (e.g.,
+	// a foreign function call), oldEnv == cont.env and releasing would corrupt
+	// the live env.
+	if oldEnvPooled && oldEnv != p.env {
+		p.counters.EnvFramePoolReleases++
+		releaseEnvFrame(oldEnv)
+	}
 
 	// Break the evals reference before pooling so the transferred stack
 	// (now p.evals) is not released again inside releaseContinuation.
@@ -287,6 +313,9 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 	p.pc = q.pc
 	p.singleValue = q.singleValue
 	p.multiValues = q.multiValues
+	// envPooled: restore caller's ownership state. Caller (releaseContinuation
+	// in Run loop) handles release of the old env via the popped frame.
+	p.envPooled = q.envPooled
 	return q
 }
 
@@ -349,16 +378,21 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		// EnvironmentFrame and []Binding allocations.
 		env = mcls.env
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: closure's own env, not from pool.
+		p.envPooled = false
 		p.counters.NoCopyApplies++
 		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
 	} else {
-		// Copy path: create a fresh frame with copied local bindings.
+		// Copy path: acquire a frame from the pool and populate it.
 		// Critical for recursive functions with SaveContinuation: without
 		// copying, all invocations share the same bindings, causing
 		// parameter corruption when evaluating arguments like
 		// (+ (f (- n 1)) (f (- n 2))).
-		env = mcls.env.NewApplyFrame()
+		env = acquireEnvFrame()
+		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: frame from envFramePool; RestoreAndRelease will recycle it.
+		p.envPooled = true
 		p.counters.EnvsCopied++
 		p.counters.BindingsCopied += uint64(len(bnds))
 		p.counters.KeysShared++
@@ -622,6 +656,9 @@ func (p *MachineContext) Run() error {
 					"PopEnv: cannot pop top-level environment")
 			}
 			mc.env = parent
+			// The parent frame was not acquired from the pool; clear the flag
+			// to prevent RestoreAndRelease from releasing it.
+			mc.envPooled = false
 			mc.pc++
 
 		case OpApply:
@@ -797,6 +834,10 @@ func (p *MachineContext) Run() error {
 				compiletimeEnv.LocalEnvironment(),
 				mc.env,
 			)
+			// The closure now references mc.env through runtimeEnv's parent chain.
+			// Mark it non-poolable so RestoreAndRelease won't recycle it while the
+			// closure still holds a live reference.
+			mc.envPooled = false
 			cls := NewClosureWithTemplate(tpl, runtimeEnv)
 			mc.SetValue(cls)
 			mc.pc++
@@ -849,6 +890,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
 	mc.ctx = p.ctx
+	// envPooled: zero value (false) — sub-context env is top-level, not from pool.
 	mc.env = p.env.TopLevel()
 	mc.evals = acquireStack()
 	mc.threadID = p.threadID

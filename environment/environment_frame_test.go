@@ -759,3 +759,78 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 	c.Assert(binding.Source(), qt.IsNotNil)
 	c.Assert(binding.Source().File, qt.Equals, "updated.scm")
 }
+
+// ---------------------------------------------------------------------------
+// InitApplyFrame
+// ---------------------------------------------------------------------------
+
+func TestInitApplyFrame_PopulatesExistingFrame(t *testing.T) {
+	// Set up source env with bindings (simulates closure env).
+	tl := NewTopLevelEnvironment()
+	parent := tl.Runtime()
+	local := NewLocalEnvironment(2)
+	src := NewEnvironmentFrameWithParent(local, parent)
+	li0 := &LocalIndex{0, 0}
+	li1 := &LocalIndex{1, 0}
+	src.SetLocalValue(li0, values.NewInteger(10))
+	src.SetLocalValue(li1, values.NewInteger(20))
+
+	// Populate dst from src.
+	var dst EnvironmentFrame
+	src.InitApplyFrame(&dst)
+
+	// Parent chain should match.
+	qt.Assert(t, dst.Parent(), qt.Equals, parent)
+
+	// Bindings should be independent copies.
+	dstBindings := dst.LocalEnvironment().Bindings()
+	qt.Assert(t, len(dstBindings), qt.Equals, 2)
+	qt.Assert(t, dstBindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, dstBindings[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
+
+	// Mutating dst should not affect src.
+	dstBindings[0].SetValue(values.NewInteger(99))
+	qt.Assert(t, src.GetLocalBindingByIndex(0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+func TestInitApplyFrame_MatchesNewApplyFrame(t *testing.T) {
+	// InitApplyFrame must produce the same result as NewApplyFrame.
+	tl := NewTopLevelEnvironment()
+	parent := tl.Runtime()
+	local := NewLocalEnvironment(3)
+	src := NewEnvironmentFrameWithParent(local, parent)
+	for i := range 3 {
+		src.SetLocalValue(&LocalIndex{i, 0}, values.NewInteger(int64(i*10)))
+	}
+
+	fromNew := src.NewApplyFrame()
+
+	var fromInit EnvironmentFrame
+	src.InitApplyFrame(&fromInit)
+
+	// Same parent.
+	qt.Assert(t, fromInit.Parent(), qt.Equals, fromNew.Parent())
+
+	// Same bindings.
+	newBindings := fromNew.LocalEnvironment().Bindings()
+	initBindings := fromInit.LocalEnvironment().Bindings()
+	qt.Assert(t, len(initBindings), qt.Equals, len(newBindings))
+	for i := range newBindings {
+		qt.Assert(t, initBindings[i].Value(), valuestest.SchemeEquals, newBindings[i].Value())
+	}
+}
+
+func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
+	// A frame with no parent should panic, same as NewApplyFrame.
+	src := &EnvironmentFrame{}
+	var dst EnvironmentFrame
+
+	defer func() {
+		r := recover()
+		qt.Assert(t, r, qt.IsNotNil)
+		err, ok := r.(error)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, errors.Is(err, values.ErrNilParentEnvironment), qt.IsTrue)
+	}()
+	src.InitApplyFrame(&dst)
+}
