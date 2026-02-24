@@ -27,10 +27,24 @@ import (
 // ProgramStartTime is used for current-jiffy to measure elapsed time.
 var ProgramStartTime = time.Now()
 
-// PrimCommandLine implements the (command-line) primitive.
-// Returns a list of command line arguments.
+// commandLineArgs holds the script-relative command-line arguments set by the CLI.
+// When set, PrimCommandLine returns these instead of os.Args.
+var commandLineArgs []string
+
+// SetCommandLine sets the command-line arguments returned by (command-line).
+// The first element should be the script name, followed by script arguments.
+func SetCommandLine(args []string) {
+	commandLineArgs = args
+}
+
+// PrimCommandLine implements the (command-line) primitive per R7RS §6.14.
+// Returns a list whose first element is the script name and the rest are
+// script arguments. Falls back to os.Args when no script is being executed.
 func PrimCommandLine(mc *machine.MachineContext) error {
-	args := os.Args
+	args := commandLineArgs
+	if args == nil {
+		args = os.Args
+	}
 	list := values.EmptyList
 	for i := len(args) - 1; i >= 0; i-- {
 		list = values.NewCons(values.NewString(args[i]), list)

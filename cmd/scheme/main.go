@@ -30,6 +30,7 @@ import (
 	"syscall"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/repl"
@@ -151,7 +152,7 @@ func setupSignals(quiet bool) {
 }
 
 func main() {
-	var fin io.RuneReader
+	var fin *bufio.Reader
 
 	parser := flags.NewParser(&opts, flags.Default)
 	parser.Name = "scheme"
@@ -172,9 +173,26 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Handle positional argument as file if --file not specified
+	// Handle positional argument as file if --file not specified.
+	// Remaining positional args after the filename are script arguments.
+	// positionalFile tracks whether the file came from a positional arg
+	// (i.e. shebang execution context) vs -f flag (pure Scheme source).
+	var scriptArgs []string
+	positionalFile := false
 	if len(opts.File) == 0 && len(args) > 0 {
 		opts.File = append(opts.File, args[0])
+		scriptArgs = args[1:]
+		positionalFile = true
+	} else {
+		scriptArgs = args
+	}
+
+	// Set (command-line) to [script-name, script-args...] per R7RS §6.14
+	if len(opts.File) > 0 {
+		cmdLine := make([]string, 0, 1+len(scriptArgs))
+		cmdLine = append(cmdLine, opts.File[len(opts.File)-1])
+		cmdLine = append(cmdLine, scriptArgs...)
+		system.SetCommandLine(cmdLine)
 	}
 
 	// CPU profiling
@@ -232,7 +250,7 @@ func main() {
 				} else {
 					// Run last file (print results) and exit in non-interactive mode
 					fin = bufio.NewReader(fd)
-					runFile(ctx, env, fin, fn)
+					runFile(ctx, env, fin, fn, positionalFile)
 				}
 			}(filename, descriptor)
 		}
@@ -263,7 +281,17 @@ func main() {
 // runFile processes a Scheme file, exiting on errors.
 // All top-level expressions are wrapped in a single (begin ...) form to enable
 // proper R7RS continuation semantics across expression boundaries.
-func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin io.RuneReader, filename string) {
+// When shebang is true, a leading #! line is skipped if present.
+func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.Reader, filename string, shebang bool) {
+	// Skip shebang line: only for files executed as programs (positional arg),
+	// not for files loaded via -f which should be pure Scheme source.
+	if shebang {
+		peek, err := fin.Peek(2)
+		if err == nil && peek[0] == '#' && peek[1] == '!' {
+			_, _ = fin.ReadString('\n')
+		}
+	}
+
 	p := parser.NewParserWithFile(env, true, fin, filename)
 
 	// Collect all expressions from the file
