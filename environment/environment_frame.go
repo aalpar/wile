@@ -437,9 +437,12 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 	}
 	i, ok := p.local.keys[*key]
 	if ok {
-		// Binding already exists - update scopes if needed
+		// Binding already exists - update scopes/source if needed
 		if p.local.bindings[i].Scopes() == nil && scopes != nil {
 			p.local.bindings[i].SetScopes(scopes)
+		}
+		if p.local.bindings[i].Source() == nil && source != nil {
+			p.local.bindings[i].SetSource(source)
 		}
 		return NewLocalIndex(i, 0), false
 	}

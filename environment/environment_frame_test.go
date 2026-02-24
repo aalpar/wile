@@ -713,3 +713,49 @@ func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
 	c.Assert(binding.Source().Origin.Identifier, qt.Equals, "my-macro")
 	c.Assert(binding.Source().Origin.Location.File, qt.Equals, "user.scm")
 }
+
+func TestGlobalBinding_SetSource(t *testing.T) {
+	c := qt.New(t)
+
+	src := syntax.NewSourceContext("x", "global.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	sym := values.NewSymbol("x")
+
+	gi, created := topEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(gi, qt.IsNotNil)
+
+	binding := topEnv.GetGlobalBinding(gi)
+	c.Assert(binding, qt.IsNotNil)
+	c.Assert(binding.Source(), qt.IsNil)
+
+	binding.SetSource(src)
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "global.scm")
+}
+
+func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.T) {
+	c := qt.New(t)
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	// First creation: no source
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(env.GetLocalBindingByIndex(li[0]).Source(), qt.IsNil)
+
+	// Second call with source: should update
+	src := syntax.NewSourceContext("x", "updated.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created2, qt.IsFalse)
+	c.Assert(li2[0], qt.Equals, li[0])
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "updated.scm")
+}

@@ -1018,9 +1018,12 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
 			} else {
 				gi, _ := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
-				if source != nil {
-					binding := p.env.GetGlobalBinding(gi)
-					if binding != nil {
+				binding := p.env.GetGlobalBinding(gi)
+				if binding != nil {
+					if scopes != nil {
+						binding.SetScopes(scopes)
+					}
+					if source != nil {
 						binding.SetSource(source)
 					}
 				}
@@ -1088,8 +1091,14 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Store in the expand environment (for macro lookup during expansion)
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
 	binding := expandEnv.GetGlobalBinding(globalIndex)
-	if binding != nil && symbolScopes != nil {
-		binding.SetScopes(symbolScopes)
+	if binding != nil {
+		if symbolScopes != nil {
+			binding.SetScopes(symbolScopes)
+		}
+		symbolSource := keywordSym.SourceContext()
+		if symbolSource != nil {
+			binding.SetSource(symbolSource)
+		}
 	}
 	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
 }

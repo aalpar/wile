@@ -233,16 +233,14 @@ func (p *CompileTimeContinuation) bindSymbolWithSource(name *values.Symbol, scop
 	if p.env.LocalEnvironment() != nil {
 		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
 	} else {
-		gi, created := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
-		if !created {
-			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil {
-				if scopes != nil {
-					binding.SetScopes(scopes)
-				}
-				if source != nil {
-					binding.SetSource(source)
-				}
+		gi, _ := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+		binding := p.env.GetGlobalBinding(gi)
+		if binding != nil {
+			if scopes != nil {
+				binding.SetScopes(scopes)
+			}
+			if source != nil {
+				binding.SetSource(source)
 			}
 		}
 	}
