@@ -318,15 +318,19 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	}
 
 	// Reject non-procedures before entering the VM.
-	_, isCallable := callee.(values.Callable)
+	// Parameter and ComposableContinuation are both Callable but require
+	// special handling above — Parameter supports 0-arg get without the VM,
+	// and ComposableContinuation needs the winding stack. The general
+	// Callable path below handles closures and case-lambdas.
+	callable, isCallable := callee.(values.Callable)
 	if !isCallable {
 		return nil, &RuntimeError{Message: "not a procedure"}
 	}
 
-	return p.callCallable(ctx, callee, unwrappedArgs)
+	return p.callCallable(ctx, callable, unwrappedArgs)
 }
 
-func (p *Engine) callCallable(ctx context.Context, callable values.Value, args []values.Value) (Value, error) {
+func (p *Engine) callCallable(ctx context.Context, callable values.Callable, args []values.Value) (Value, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
@@ -426,7 +430,7 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 
 // applyBaseEnvironment performs the four-step setup that every usable environment
 // requires: apply registry bindings, register syntax compilers, register primitive
-// expanders, and load bootstrap macros. Callers own error wrapping.
+// expanders, and load bootstrap macros. Each step wraps errors with ErrEngineInit.
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
