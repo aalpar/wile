@@ -474,6 +474,53 @@ func TestRunFile(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 3b: Shebang and command-line argument tests
+// ---------------------------------------------------------------------------
+
+func TestShebang(t *testing.T) {
+	t.Run("shebang line skipped for positional arg", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(+ 1 2)")
+		result := runCLI(t, "-q", path)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "3\n")
+	})
+
+	t.Run("shebang not skipped for -f flag", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(+ 1 2)")
+		result := runCLI(t, "-q", "-f", path)
+		// #! is not valid Scheme when fed via -f, so this should fail
+		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+	})
+
+	t.Run("file without shebang still works as positional arg", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "(+ 10 20)")
+		result := runCLI(t, "-q", path)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "30\n")
+	})
+
+	t.Run("shebang with script arguments via command-line", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(display (length (command-line)))\n(newline)")
+		result := runCLI(t, "-q", path, "arg1", "arg2")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		// (command-line) returns (script-name arg1 arg2) => length 3
+		c.Assert(result.stdout, qt.Equals, "3\n")
+	})
+
+	t.Run("command-line first element is script name", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(display (car (command-line)))\n(newline)")
+		result := runCLI(t, "-q", path)
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, path+"\n")
+	})
+}
+
+// ---------------------------------------------------------------------------
 // Phase 4: Error tests
 // ---------------------------------------------------------------------------
 
