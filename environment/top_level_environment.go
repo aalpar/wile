@@ -443,9 +443,8 @@ func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
 
 	// Create a new phase registry for the child
 	childPhases := &PhaseRegistry{
-		envs:           make(map[int]*EnvironmentFrame),
-		topLevelEnv:    p, // Share the TopLevelEnvironment
-		topLevelEnvFrm: runtime,
+		envs:  make(map[int]*EnvironmentFrame),
+		owner: p,
 	}
 	childPhases.envs[PhaseRuntime] = runtime
 	runtime.phases = childPhases
@@ -505,9 +504,8 @@ func newGlobalEnvironmentFrameWithTopLevel(topLevel *TopLevelEnvironment) *Globa
 // newPhaseRegistryWithTopLevel creates a new PhaseRegistry owned by the given TopLevelEnvironment.
 func newPhaseRegistryWithTopLevel(topLevel *TopLevelEnvironment) *PhaseRegistry {
 	q := &PhaseRegistry{
-		envs:           make(map[int]*EnvironmentFrame),
-		topLevelEnv:    topLevel,
-		topLevelEnvFrm: topLevel.runtime,
+		envs:  make(map[int]*EnvironmentFrame),
+		owner: topLevel,
 	}
 	// TopLevel is phase 0 (runtime)
 	q.envs[PhaseRuntime] = topLevel.runtime

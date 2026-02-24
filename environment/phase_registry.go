@@ -43,10 +43,8 @@ const (
 type PhaseRegistry struct {
 	mu   sync.RWMutex
 	envs map[int]*EnvironmentFrame
-	// topLevelEnv is the owning TopLevelEnvironment (nil for legacy environments)
-	topLevelEnv *TopLevelEnvironment
-	// topLevelEnvFrm is the runtime (phase 0) environment frame
-	topLevelEnvFrm *EnvironmentFrame
+	// owner is the owning TopLevelEnvironment
+	owner *TopLevelEnvironment
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
@@ -89,14 +87,14 @@ func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	global := NewGlobalEnvironmentFrame()
-	global.topLevel = p.topLevelEnv
+	global.topLevel = p.owner
 
 	q := &EnvironmentFrame{
-		parent:     p.topLevelEnvFrm, // Phase envs parent to runtime frame
+		parent:     p.envs[PhaseRuntime], // Phase envs parent to runtime frame
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
-		topLevel:   p.topLevelEnv,
+		topLevel:   p.owner,
 	}
 	return q
 }
@@ -116,11 +114,10 @@ func (p *PhaseRegistry) Phases() []int {
 
 // TopLevelFrame returns the runtime (phase 0) environment frame.
 func (p *PhaseRegistry) TopLevelFrame() *EnvironmentFrame {
-	return p.topLevelEnvFrm
+	return p.Get(PhaseRuntime)
 }
 
 // TopLevelEnv returns the owning TopLevelEnvironment.
-// Returns nil for legacy environments created without TopLevelEnvironment.
 func (p *PhaseRegistry) TopLevelEnv() *TopLevelEnvironment {
-	return p.topLevelEnv
+	return p.owner
 }
