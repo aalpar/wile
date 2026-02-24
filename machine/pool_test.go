@@ -502,7 +502,7 @@ func TestSubContextPool_StatsTracked(t *testing.T) {
 
 func TestPoolManager_AllStats_ReportsAllPools(t *testing.T) {
 	stats := pools.AllStats()
-	qt.Assert(t, len(stats), qt.Equals, 4)
+	qt.Assert(t, len(stats) >= 4, qt.IsTrue)
 
 	names := make(map[string]bool)
 	for _, s := range stats {

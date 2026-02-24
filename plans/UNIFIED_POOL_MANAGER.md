@@ -55,12 +55,12 @@ func NewPool[T any](name string, newFn func() *T, resetFn func(*T)) *Pool[T]
 |--------|----------|
 | `Acquire() *T` | `stats.acquires++`; if enabled, `inner.Get()` (tracks miss if New called); if disabled, calls `newFn` directly |
 | `Release(v *T)` | `stats.releases++`; calls `resetFn(v)`; if enabled, `inner.Put(v)` |
-| `Drain()` | Calls `inner.Get()` in a loop until nil (forces GC to reclaim cached objects) |
+| `Drain()` | No-op at the per-pool level; actual draining is coordinated by the pool manager |
 | `SetEnabled(b bool)` | Toggles pool bypass |
 | `Name() string` | Returns pool name |
 | `Stats() PoolSnapshot` | Returns point-in-time counter snapshot |
 
-**Note on Drain:** `sync.Pool` has no public drain API. The only way to clear it is to let a GC cycle run. `Drain()` will call `runtime.GC()` to trigger pool cleanup. This is appropriate for test/debug scenarios, not production hot paths.
+**Note on Drain:** `sync.Pool` has no public drain API. The only reliable way to clear it is to let a GC cycle run. As implemented, `Pool[T].Drain()` is a no-op; instead, `PoolManager.DrainAll()` triggers `runtime.GC()` to encourage cleanup of all registered pools. This GC-based draining is approximate and intended for test/debug scenarios (e.g., between benchmarks), not for production hot paths.
 
 ### PoolHandle Interface
 

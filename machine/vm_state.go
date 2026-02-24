@@ -90,5 +90,26 @@ type vmState struct {
 	// Restore), this flag tells us it's safe to return it to the pool.
 	// Set false for noCopyApply (closure's own env), sub-context envs, or
 	// envs restored from shared continuations.
+	//
+	// INVARIANT: every site that writes mc.env MUST also set mc.envPooled.
+	// Failing to do so can cause releaseEnvFrame on a non-pooled frame
+	// (use-after-release if a closure still references it).
+	//
+	// Write sites and release semantics:
+	//
+	//  ┌──────────────────────────┬──────────┬───────────────────────────────────┐
+	//  │ Site                     │ envPooled│ Release of old env                │
+	//  ├──────────────────────────┼──────────┼───────────────────────────────────┤
+	//  │ Apply (copy path)        │ true     │ none (old env is in continuation) │
+	//  │ Apply (noCopy path)      │ false    │ none (old env is in continuation) │
+	//  │ RestoreAndRelease        │ from cont│ yes, if oldPooled && old != new   │
+	//  │ Restore (shared/callcc)  │ false    │ no (may be in shared chain → GC)  │
+	//  │ PopContinuation          │ from cont│ no (caller manages old frame)     │
+	//  │ OpPopEnv                 │ false    │ no (parent was never pooled)      │
+	//  │ OpMakeClosure            │ false    │ no (closure takes ownership)      │
+	//  │ BindPatternVars          │ false    │ no (childEnv is heap-allocated)   │
+	//  │ NewSubContext            │ false(0) │ n/a (fresh context)               │
+	//  │ acquireMacroContext      │ false(0) │ n/a (fresh context)               │
+	//  └──────────────────────────┴──────────┴───────────────────────────────────┘
 	envPooled bool
 }

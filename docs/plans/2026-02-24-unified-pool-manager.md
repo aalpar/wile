@@ -1,7 +1,5 @@
 # Unified Pool Manager Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Replace three ad-hoc `sync.Pool` instances with a generic `Pool[T]` type, a `PoolManager` registry, and unified observability/management controls.
 
 **Architecture:** Generic `Pool[T any]` wraps `sync.Pool` with atomic counters, reset callback, and enable/disable toggle. `PoolManager` holds heterogeneous pools via `PoolHandle` interface. Three existing pools (stack, sub-context, continuation) migrate to `Pool[T]` instances. All existing acquire/release function signatures preserved — call sites unchanged.

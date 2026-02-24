@@ -133,6 +133,7 @@ func ReleaseSubContext(mc *MachineContext) {
 func acquireMacroContext(ctx context.Context, cls *MachineClosure) *MachineContext {
 	mc := acquireSubContext()
 	mc.ctx = ctx
+	// envPooled: zero value (false) — macro context uses closure's env, not from pool.
 	mc.env = cls.env
 	mc.template = cls.template
 	mc.evals = acquireStack()

@@ -152,8 +152,11 @@ func (p *OperationBindPatternVars) Apply(mctx *MachineContext) (*MachineContext,
 		}
 	}
 
-	// Switch to the new environment
+	// Switch to the new environment. childEnv was heap-allocated (not from
+	// envFramePool), so clear envPooled to prevent RestoreAndRelease from
+	// recycling it. See vm_state.go envPooled write-site table.
 	mctx.env = childEnv
+	mctx.envPooled = false
 	mctx.pc++
 	return mctx, nil
 }

@@ -262,6 +262,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		p.counters.SharedFrameRestores++
 		p.counters.StackPoolReleases++
 		p.evals = cont.evals.Copy()
+		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
 		releaseStack(oldEvals)
 		if oldEnvPooled && oldEnv != p.env {
@@ -275,6 +276,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.counters.StackPoolReleases++
 	p.counters.ContinuationPoolReleases++
 	p.evals = cont.evals // transfer, not copy
+	// envPooled: restore caller's ownership state from saved continuation.
 	p.envPooled = cont.envPooled
 	releaseStack(oldEvals)
 	// Only release the old env if it differs from the restored env. When no
@@ -311,6 +313,8 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 	p.pc = q.pc
 	p.singleValue = q.singleValue
 	p.multiValues = q.multiValues
+	// envPooled: restore caller's ownership state. Caller (releaseContinuation
+	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled
 	return q
 }
@@ -374,6 +378,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		// EnvironmentFrame and []Binding allocations.
 		env = mcls.env
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: closure's own env, not from pool.
 		p.envPooled = false
 		p.counters.NoCopyApplies++
 		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
@@ -386,6 +391,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		env = acquireEnvFrame()
 		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: frame from envFramePool; RestoreAndRelease will recycle it.
 		p.envPooled = true
 		p.counters.EnvsCopied++
 		p.counters.BindingsCopied += uint64(len(bnds))
@@ -884,6 +890,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
 	mc.ctx = p.ctx
+	// envPooled: zero value (false) — sub-context env is top-level, not from pool.
 	mc.env = p.env.TopLevel()
 	mc.evals = acquireStack()
 	mc.threadID = p.threadID
