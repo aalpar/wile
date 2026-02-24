@@ -52,6 +52,15 @@ type Engine struct {
 	maxCallDepth uint64
 }
 
+// extSnapshot tracks the primitive index range for an extension so it can be
+// registered as a synthetic R7RS library after environment setup.
+type extSnapshot struct {
+	name       string
+	startIndex int
+	endIndex   int
+	namer      registry.LibraryNamer // nil if not implemented
+}
+
 // NewEngine creates a new Wile engine.
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
@@ -74,12 +83,6 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	// Add any additional extensions, tracking primitive snapshots for library creation
-	type extSnapshot struct {
-		name       string
-		startIndex int
-		endIndex   int
-		namer      registry.LibraryNamer // nil if not implemented
-	}
 	var extSnapshots []extSnapshot
 	for _, ext := range cfg.extensions {
 		startIdx := reg.PrimitiveCount()
@@ -105,26 +108,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	topLevel := environment.NewTopLevelEnvironment()
 	env := topLevel.Runtime()
 
-	// Apply registry
-	err := reg.Apply(ctx, env)
-	if err != nil {
-		return nil, err
-	}
-
-	// Register syntax compilers and primitive expanders
-	err = machine.RegisterSyntaxCompilers(env)
-	if err != nil {
-		return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "failed to register syntax compilers")
-	}
-
-	err = machine.RegisterPrimitiveExpanders(env)
-	if err != nil {
-		return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "failed to register primitive expanders")
-	}
-
-	// Load bootstrap macros
+	// Apply registry, syntax compilers, primitive expanders, and bootstrap macros
 	macroSources := reg.MacroSources()
-	err = loadBootstrapMacros(ctx, env, macroSources)
+	err := applyBaseEnvironment(ctx, env, reg, macroSources)
 	if err != nil {
 		return nil, err
 	}
@@ -141,42 +127,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		env.SetLibraryRegistry(libReg)
 
-		// Register each extension as a synthetic R7RS library so Scheme code
-		// can selectively import extension primitives via (import (wile math)) etc.
-		for _, snap := range extSnapshots {
-			names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
-			if len(names) == 0 {
-				continue
-			}
-
-			var parts []string
-			if snap.namer != nil {
-				parts = snap.namer.LibraryName()
-			} else {
-				parts = []string{"wile", snap.name}
-			}
-			if slices.Contains(parts, "") {
-				return nil, values.WrapForeignErrorf(
-					values.ErrEngineInit,
-					"invalid library name for extension %q: empty name part", snap.name,
-				)
-			}
-			if len(parts) == 0 {
-				return nil, values.WrapForeignErrorf(
-					values.ErrEngineInit,
-					"invalid library name for extension %q: no name parts", snap.name,
-				)
-			}
-
-			libName := machine.NewLibraryName(parts...)
-			lib := machine.NewCompiledLibrary(libName, env)
-			for _, name := range names {
-				lib.AddExport(name, "")
-			}
-			regErr := libReg.Register(lib)
-			if regErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, regErr, "failed to register extension library")
-			}
+		err = registerExtensionLibraries(reg, env, libReg, extSnapshots)
+		if err != nil {
+			return nil, err
 		}
 
 		// LibraryEnvFactory creates isolated library environments that mirror
@@ -189,24 +142,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 			libEnv := callerTopLevel.NewChildRuntime()
 
-			applyErr := reg.Apply(ctx, libEnv)
+			applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources)
 			if applyErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to apply registry")
-			}
-
-			applyErr = machine.RegisterSyntaxCompilers(libEnv)
-			if applyErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to register syntax compilers")
-			}
-
-			applyErr = machine.RegisterPrimitiveExpanders(libEnv)
-			if applyErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to register primitive expanders")
-			}
-
-			applyErr = loadBootstrapMacros(ctx, libEnv, macroSources)
-			if applyErr != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory: failed to load bootstrap macros")
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, applyErr, "library env factory")
 			}
 
 			return libEnv, nil
@@ -366,25 +304,29 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	}
 
 	callee := unwrapValue(proc)
-	switch cls := callee.(type) {
-	case *machine.MachineClosure:
-		return p.callClosure(ctx, cls, unwrappedArgs)
 
-	case *machine.CaseLambdaClosure:
-		return p.callCaseLambda(ctx, cls, unwrappedArgs)
+	// Parameter has special handling: 0-arg get doesn't need the VM.
+	param, isParam := callee.(*machine.Parameter)
+	if isParam {
+		return p.callParameter(ctx, param, unwrappedArgs)
+	}
 
-	case *machine.Parameter:
-		return p.callParameter(ctx, cls, unwrappedArgs)
-
-	case *machine.ComposableContinuation:
+	// Composable continuations require the VM winding stack.
+	_, isCC := callee.(*machine.ComposableContinuation)
+	if isCC {
 		return nil, &RuntimeError{Message: "cannot call composable continuation from Go"}
+	}
 
-	default:
+	// Reject non-procedures before entering the VM.
+	_, isCallable := callee.(values.Callable)
+	if !isCallable {
 		return nil, &RuntimeError{Message: "not a procedure"}
 	}
+
+	return p.callCallable(ctx, callee, unwrappedArgs)
 }
 
-func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, args []values.Value) (Value, error) {
+func (p *Engine) callCallable(ctx context.Context, callable values.Value, args []values.Value) (Value, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
@@ -392,27 +334,7 @@ func (p *Engine) callClosure(ctx context.Context, cls *machine.MachineClosure, a
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err := sub.Apply(cls, args...)
-	if err != nil {
-		return nil, p.wrapRuntimeError(err)
-	}
-
-	err = sub.Run()
-	if err != nil {
-		return nil, p.wrapRuntimeError(err)
-	}
-	return wrapValue(sub.GetValue()), nil
-}
-
-func (p *Engine) callCaseLambda(ctx context.Context, cls *machine.CaseLambdaClosure, args []values.Value) (Value, error) {
-	tpl := machine.NewEmptyNativeTemplate()
-	cont := machine.NewMachineContinuation(nil, tpl, p.env)
-	mc := machine.NewMachineContext(ctx, cont)
-	mc.SetMaxCallDepth(p.maxCallDepth)
-
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err := sub.ApplyCaseLambda(cls, args...)
+	_, err := sub.ApplyCallable(callable, args...)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
@@ -432,8 +354,7 @@ func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, ar
 	case 1:
 		newVal := args[0]
 		if param.HasConverter() {
-			converter := param.Converter()
-			converted, err := p.callClosure(ctx, converter, []values.Value{newVal})
+			converted, err := p.callCallable(ctx, param.Converter(), []values.Value{newVal})
 			if err != nil {
 				return nil, &RuntimeError{Message: "parameter: converter error", Cause: err}
 			}
@@ -462,21 +383,94 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 
 // internal helpers
 
-func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
+// registerExtensionLibraries registers each extension as a synthetic R7RS library
+// so Scheme code can selectively import extension primitives via (import (wile math)) etc.
+func registerExtensionLibraries(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *machine.LibraryRegistry, snapshots []extSnapshot) error {
+	for _, snap := range snapshots {
+		names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
+		if len(names) == 0 {
+			continue
+		}
+
+		var parts []string
+		if snap.namer != nil {
+			parts = snap.namer.LibraryName()
+		} else {
+			parts = []string{"wile", snap.name}
+		}
+		if slices.Contains(parts, "") {
+			return values.WrapForeignErrorf(
+				values.ErrEngineInit,
+				"invalid library name for extension %q: empty name part", snap.name,
+			)
+		}
+		if len(parts) == 0 {
+			return values.WrapForeignErrorf(
+				values.ErrEngineInit,
+				"invalid library name for extension %q: no name parts", snap.name,
+			)
+		}
+
+		libName := machine.NewLibraryName(parts...)
+		lib := machine.NewCompiledLibrary(libName, env)
+		for _, name := range names {
+			lib.AddExport(name, "")
+		}
+		regErr := libReg.Register(lib)
+		if regErr != nil {
+			return values.WrapForeignErrorWithCause(values.ErrEngineInit, regErr, "failed to register extension library")
+		}
+	}
+	return nil
+}
+
+// applyBaseEnvironment performs the four-step setup that every usable environment
+// requires: apply registry bindings, register syntax compilers, register primitive
+// expanders, and load bootstrap macros. Callers own error wrapping.
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string) error {
+	err := reg.Apply(ctx, env)
+	if err != nil {
+		return err
+	}
+
+	err = machine.RegisterSyntaxCompilers(env)
+	if err != nil {
+		return err
+	}
+
+	err = machine.RegisterPrimitiveExpanders(env)
+	if err != nil {
+		return err
+	}
+
+	return loadBootstrapMacros(ctx, env, macroSources)
+}
+
+// expandAndCompile runs the expand → compile → optimize pipeline for a single
+// syntax value, returning the resulting template. Callers own error wrapping.
+func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) (*machine.NativeTemplate, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, p.env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
 	if err != nil {
-		return nil, &CompilationError{Message: "expansion error", Cause: err}
+		return nil, err
 	}
 
 	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
-	err = machine.NewCompiletimeContinuation(tpl, p.env).CompileExpression(cctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, &CompilationError{Message: "compilation error", Cause: err}
+		return nil, err
 	}
 
 	tpl.Optimize()
+	return tpl, nil
+}
+
+func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
+	tpl, err := expandAndCompile(ctx, p.env, stx)
+	if err != nil {
+		return nil, &CompilationError{Message: "compilation error", Cause: err}
+	}
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
 
@@ -545,26 +539,14 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
 func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) error {
-	tpl := machine.NewEmptyNativeTemplate()
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
+	tpl, err := expandAndCompile(ctx, env, stx)
 	if err != nil {
 		return err
 	}
 
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
-	if err != nil {
-		return err
-	}
-
-	tpl.Optimize()
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	mc := machine.NewMachineContext(ctx, cont)
-	err = mc.Run()
-	if err != nil {
-		return err
-	}
-	return nil
+	return mc.Run()
 }
 
 // LoadPath Stack API
