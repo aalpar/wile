@@ -66,7 +66,7 @@ func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *Valida
 			paramSym.Sym,
 			environment.BindingTypeVariable,
 			paramSym.Scopes(),
-			nil,
+			paramSym.SourceContext(),
 		)
 	}
 
@@ -76,7 +76,7 @@ func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *Valida
 			params.Rest.Sym,
 			environment.BindingTypeVariable,
 			params.Rest.Scopes(),
-			nil,
+			params.Rest.SourceContext(),
 		)
 	}
 

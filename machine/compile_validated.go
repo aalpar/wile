@@ -225,13 +225,14 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// Get the interned symbol for the name (validator guarantees it's a SyntaxSymbol)
 	sym := p.env.InternSymbol(v.Name().Sym)
 	symbolScopes := v.Name().Scopes()
+	symbolSource := v.Name().SourceContext()
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes, nil)
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
 		return sym
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	if created && symbolScopes == nil {
+	if created && symbolScopes == nil && symbolSource == nil {
 		return sym
 	}
 	binding := p.env.GetGlobalBinding(gi)
@@ -239,6 +240,9 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 		return sym
 	}
 	binding.SetScopes(symbolScopes)
+	if symbolSource != nil {
+		binding.SetSource(symbolSource)
+	}
 	return sym
 }
 
@@ -521,8 +525,9 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 
 	sym := p.env.InternSymbol(def.Name().Sym)
 	symbolScopes := def.Name().Scopes()
+	symbolSource := def.Name().SourceContext()
 
-	p.bindSymbolWithScopes(sym, symbolScopes)
+	p.bindSymbolWithSource(sym, symbolScopes, symbolSource)
 }
 
 // bindRestParameter binds the rest parameter (if any) to the local environment.
