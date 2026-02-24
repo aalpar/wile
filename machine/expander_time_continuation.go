@@ -318,7 +318,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
 			// Create binding with letScope so free identifier resolution works
-			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 
 			cdr := current.SyntaxCdr()
 			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
@@ -382,7 +382,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 
 		// Store in child expand environment with letScope for free identifier resolution
-		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope})
+		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 		if !created {
 			localIndex = childExpandEnv.GetLocalIndex(keyword)
 		}
@@ -539,7 +539,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 			newScopes[len(idScopes)] = bindingScope
 
 			sym := p.env.InternSymbol(id.Sym)
-			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes)
+			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes, id.SourceContext())
 		}
 
 		// Continue expansion with the child environment
@@ -850,7 +850,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 		p.env,
 	)
 	for _, fs := range formalSyms {
-		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes)
+		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes, fs.source)
 	}
 
 	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions
@@ -1012,11 +1012,21 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		if nameSym != nil {
 			name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
 			scopes := nameSym.Scopes()
+			source := nameSym.SourceContext()
 			// Create placeholder binding in current environment (not expand phase)
 			if p.env.LocalEnvironment() != nil {
-				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+				p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
 			} else {
-				p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+				gi, _ := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+				binding := p.env.GetGlobalBinding(gi)
+				if binding != nil {
+					if scopes != nil {
+						binding.SetScopes(scopes)
+					}
+					if source != nil {
+						binding.SetSource(source)
+					}
+				}
 			}
 		}
 	}
@@ -1081,8 +1091,14 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Store in the expand environment (for macro lookup during expansion)
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
 	binding := expandEnv.GetGlobalBinding(globalIndex)
-	if binding != nil && symbolScopes != nil {
-		binding.SetScopes(symbolScopes)
+	if binding != nil {
+		if symbolScopes != nil {
+			binding.SetScopes(symbolScopes)
+		}
+		symbolSource := keywordSym.SourceContext()
+		if symbolSource != nil {
+			binding.SetSource(symbolSource)
+		}
 	}
 	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
 }
@@ -1091,6 +1107,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 type formalSymbol struct {
 	sym    *values.Symbol
 	scopes []*syntax.Scope
+	source *syntax.SourceContext
 }
 
 // extractFormalSymbols extracts symbols from a lambda formals expression.
@@ -1101,7 +1118,7 @@ func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
 	switch f := formals.(type) {
 	case *syntax.SyntaxSymbol:
 		// Rest argument: (lambda args body...)
-		result = append(result, formalSymbol{f.Sym, f.Scopes()})
+		result = append(result, formalSymbol{f.Sym, f.Scopes(), f.SourceContext()})
 	case *syntax.SyntaxPair:
 		// List of arguments: (lambda (x y z) body...) or (lambda (x y . rest) body...)
 		current := f
@@ -1109,14 +1126,14 @@ func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
 			car := current.SyntaxCar()
 			sym, ok := car.(*syntax.SyntaxSymbol)
 			if ok {
-				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes(), sym.SourceContext()})
 			}
 			cdr := current.SyntaxCdr()
 			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
 				current = nextPair
 			} else if sym, ok := cdr.(*syntax.SyntaxSymbol); ok {
 				// Improper list: (x y . rest)
-				result = append(result, formalSymbol{sym.Sym, sym.Scopes()})
+				result = append(result, formalSymbol{sym.Sym, sym.Scopes(), sym.SourceContext()})
 				break
 			} else {
 				break

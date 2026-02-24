@@ -221,22 +221,26 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	// Pre-create the binding
 	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
 	symbolScopes := nameSym.Scopes()
+	symbolSource := nameSym.SourceContext()
 
-	p.bindSymbolWithScopes(name, symbolScopes)
+	p.bindSymbolWithSource(name, symbolScopes, symbolSource)
 }
 
-// bindSymbolWithScopes creates a binding for the given symbol with the specified scopes.
-// If a binding already exists, it updates the scopes if possible. This is used for pre-declaring
+// bindSymbolWithSource creates a binding for the given symbol with the specified scopes and source context.
+// If a binding already exists, it updates the scopes and source if possible. This is used for pre-declaring
 // define bindings with the correct scopes for hygiene.
-func (p *CompileTimeContinuation) bindSymbolWithScopes(name *values.Symbol, scopes []*syntax.Scope) {
+func (p *CompileTimeContinuation) bindSymbolWithSource(name *values.Symbol, scopes []*syntax.Scope, source *syntax.SourceContext) {
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes)
+		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
 	} else {
-		gi, created := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
-		if !created {
-			binding := p.env.GetGlobalBinding(gi)
-			if binding != nil && scopes != nil {
+		gi, _ := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+		binding := p.env.GetGlobalBinding(gi)
+		if binding != nil {
+			if scopes != nil {
 				binding.SetScopes(scopes)
+			}
+			if source != nil {
+				binding.SetSource(source)
 			}
 		}
 	}

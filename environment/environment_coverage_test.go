@@ -175,7 +175,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 		scope := syntax.NewScope()
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
-		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope})
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope}, nil)
 
 		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope})
 		c.Assert(result, qt.IsNotNil)
@@ -191,7 +191,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 		scope2 := syntax.NewScope()
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
-		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2})
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil)
 
 		// Reference only has scope1, but binding requires both scope1 and scope2
 		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1})
@@ -233,13 +233,13 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 		// Build 3-level chain: parentEnv ← middleEnv ← innerEnv
 		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil) // 0 scopes
+		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil) // 0 scopes
 
 		middleEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parentEnv)
-		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1}) // 1 scope
+		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1}, nil) // 1 scope
 
 		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), middleEnv)
-		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}) // 2 scopes
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil) // 2 scopes
 
 		// Reference has all 3 scopes — all bindings match, but inner (2 scopes) is maximal
 		result := innerEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2, scope3})
@@ -259,11 +259,11 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 		// Parent: binding with [scopeA] (1 scope)
 		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA})
+		parentEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
 
 		// Child: binding with [scopeB] (1 scope)
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parentEnv)
-		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB})
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
 
 		// Reference has both — both candidates match with scopeCount=1
 		// First candidate collected is depth 0 (child), wins by first-encountered
@@ -282,7 +282,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		sym := env.InternSymbol(values.NewSymbol("x"))
 
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2})
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil)
 
 		// Reference exactly matches binding scopes — triggers fast path
 		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2})
@@ -307,13 +307,13 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		//   inner:  {B}        (1 scope)
 		// Reference: {A, B, C, D} — all four match as subsets
 		outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB})
+		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil)
 
 		middleEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
-		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC, scopeD})
+		middleEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC, scopeD}, nil)
 
 		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), middleEnv)
-		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB})
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
 
 		// Middle binding (3 scopes) should win despite being at depth 1, not depth 0.
 		// This is the core maximality property: scope count trumps position.
@@ -332,10 +332,10 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 		// Inner: no scopes (scopeCount=0), Outer: 1 scope (scopeCount=1)
 		outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1})
+		outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1}, nil)
 
 		innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
-		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+		innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 
 		// Outer binding (1 scope) should win over inner (0 scopes)
 		result := innerEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1})
@@ -355,7 +355,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 		// Binding has 3 scopes, but reference only has 2
-		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2, scope3})
+		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2, scope3}, nil)
 
 		// Reference is a strict subset of binding scopes — NOT a match
 		result := childEnv.GetLocalIndexWithScopes(sym, []*syntax.Scope{scope1, scope2})

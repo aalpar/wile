@@ -18,6 +18,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -382,18 +383,18 @@ func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
 	sym := values.NewSymbol("test-var")
 
 	// Create binding with scopes
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	qt.Assert(t, li, qt.Not(qt.IsNil))
 
 	// Try to create again - should return existing
-	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created2, qt.IsFalse)
 	qt.Assert(t, li2, qt.DeepEquals, li)
 
 	// Test on environment with no local
 	topEnv := NewTopLevelEnvironmentFrame()
-	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil)
+	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created3, qt.IsFalse)
 	qt.Assert(t, li3, qt.IsNil)
 }
@@ -651,4 +652,110 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 			tc.trigger()
 		})
 	}
+}
+
+func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
+	c := qt.New(t)
+
+	src := syntax.NewSourceContext("x", "test.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(li, qt.IsNotNil)
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "test.scm")
+}
+
+func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
+	c := qt.New(t)
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	c.Assert(created, qt.IsTrue)
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNil)
+}
+
+func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
+	c := qt.New(t)
+
+	origin := &syntax.OriginInfo{
+		Identifier: "my-macro",
+		Location: syntax.NewSourceContext("(my-macro x)", "user.scm",
+			syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(12, 12, 1)),
+	}
+	src := &syntax.SourceContext{
+		Text:   "temp",
+		File:   "stdlib.scm",
+		Origin: origin,
+	}
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("temp")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created, qt.IsTrue)
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().Origin, qt.IsNotNil)
+	c.Assert(binding.Source().Origin.Identifier, qt.Equals, "my-macro")
+	c.Assert(binding.Source().Origin.Location.File, qt.Equals, "user.scm")
+}
+
+func TestGlobalBinding_SetSource(t *testing.T) {
+	c := qt.New(t)
+
+	src := syntax.NewSourceContext("x", "global.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	sym := values.NewSymbol("x")
+
+	gi, created := topEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(gi, qt.IsNotNil)
+
+	binding := topEnv.GetGlobalBinding(gi)
+	c.Assert(binding, qt.IsNotNil)
+	c.Assert(binding.Source(), qt.IsNil)
+
+	binding.SetSource(src)
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "global.scm")
+}
+
+func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.T) {
+	c := qt.New(t)
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	// First creation: no source
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(env.GetLocalBindingByIndex(li[0]).Source(), qt.IsNil)
+
+	// Second call with source: should update
+	src := syntax.NewSourceContext("x", "updated.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created2, qt.IsFalse)
+	c.Assert(li2[0], qt.Equals, li[0])
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "updated.scm")
 }
