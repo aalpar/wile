@@ -285,50 +285,32 @@ func PrimStringCiGeVariadic(mc *machine.MachineContext) error {
 	})
 }
 
-// PrimStringUpcase implements the string-upcase primitive.
-// R7RS §6.7: Returns a string whose characters are the uppercase versions of the characters in string.
-// Uses Unicode full case mapping which can expand characters (e.g., ß → SS).
-func PrimStringUpcase(mc *machine.MachineContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-upcase")
-	if err != nil {
-		return err
+// makeStringCaser creates a string case-mapping primitive that extracts
+// arg 0 as a String, applies a cases.Caser, and returns a new mutable string.
+func makeStringCaser(name string, makeCaser func() cases.Caser) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, name)
+		if err != nil {
+			return err
+		}
+		caser := makeCaser()
+		result := caser.String(str.Value)
+		mc.SetValue(values.NewMutableString(result))
+		return nil
 	}
-	// Use Unicode full case mapping (language-independent)
-	caser := cases.Upper(language.Und)
-	result := caser.String(str.Value)
-	// R7RS §6.7: string-upcase returns a newly allocated mutable string
-	mc.SetValue(values.NewMutableString(result))
-	return nil
 }
 
-// PrimStringDowncase implements the string-downcase primitive.
-// R7RS §6.7: Returns a string whose characters are the lowercase versions of the characters in string.
-// Uses Unicode full case mapping which can expand characters.
-func PrimStringDowncase(mc *machine.MachineContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-downcase")
-	if err != nil {
-		return err
-	}
-	// Use Unicode full case mapping (language-independent)
-	caser := cases.Lower(language.Und)
-	result := caser.String(str.Value)
-	// R7RS §6.7: string-downcase returns a newly allocated mutable string
-	mc.SetValue(values.NewMutableString(result))
-	return nil
-}
+// String case-mapping primitives — R7RS §6.7.
+// Uses Unicode full case mapping (language-independent).
 
-// PrimStringFoldcase implements the string-foldcase primitive.
-// R7RS §6.7: Returns a string whose characters are the case-folded versions of the characters in string.
-// Uses Unicode full case folding which can expand characters (e.g., ß → ss).
-func PrimStringFoldcase(mc *machine.MachineContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-foldcase")
-	if err != nil {
-		return err
-	}
-	// Use Unicode full case folding
-	caser := cases.Fold()
-	result := caser.String(str.Value)
-	// R7RS §6.7: string-foldcase returns a newly allocated mutable string
-	mc.SetValue(values.NewMutableString(result))
-	return nil
-}
+var PrimStringUpcase = makeStringCaser("string-upcase", func() cases.Caser {
+	return cases.Upper(language.Und)
+})
+
+var PrimStringDowncase = makeStringCaser("string-downcase", func() cases.Caser {
+	return cases.Lower(language.Und)
+})
+
+var PrimStringFoldcase = makeStringCaser("string-foldcase", func() cases.Caser {
+	return cases.Fold()
+})

@@ -427,16 +427,9 @@ func (p *CompileTimeContinuation) patchSaveContinuationOffset(idx int) {
 	p.template.PatchInstructionArg(idx, int32(offset))
 }
 
-// patchBranchOnFalseValueOffset patches a previously emitted BranchOnFalseValue
-// instruction with the target offset.
-func (p *CompileTimeContinuation) patchBranchOnFalseValueOffset(idx, targetIdx int) {
-	offset := targetIdx - idx
-	p.template.PatchInstructionArg(idx, int32(offset))
-}
-
-// patchBranchOffset patches a previously emitted Branch instruction with the
-// target offset.
-func (p *CompileTimeContinuation) patchBranchOffset(idx, targetIdx int) {
+// patchBranchTarget patches a previously emitted branch instruction (Branch,
+// BranchOnFalseValue, or SaveContinuation) with the offset to targetIdx.
+func (p *CompileTimeContinuation) patchBranchTarget(idx, targetIdx int) {
 	offset := targetIdx - idx
 	p.template.PatchInstructionArg(idx, int32(offset))
 }

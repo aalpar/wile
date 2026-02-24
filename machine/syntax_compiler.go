@@ -34,33 +34,21 @@ type SyntaxCompilerFunc func(ctc *CompileTimeContinuation, ctctx CompileTimeCall
 // SyntaxCompiler wraps a SyntaxCompilerFunc as a values.Value so it can
 // be stored in the environment.
 type SyntaxCompiler struct {
-	name string
-	fn   SyntaxCompilerFunc
+	namedHandlerBase
+	fn SyntaxCompilerFunc
 }
 
 // NewSyntaxCompiler creates a new syntax compiler.
 func NewSyntaxCompiler(name string, fn SyntaxCompilerFunc) *SyntaxCompiler {
-	return &SyntaxCompiler{name: name, fn: fn}
-}
-
-// Name returns the name of this syntax compiler.
-func (p *SyntaxCompiler) Name() string {
-	return p.name
+	return &SyntaxCompiler{
+		namedHandlerBase: namedHandlerBase{name: name, prefix: "syntax-compiler"},
+		fn:               fn,
+	}
 }
 
 // Compile invokes the syntax compiler function.
 func (p *SyntaxCompiler) Compile(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	return p.fn(ctc, ctctx, expr)
-}
-
-// SchemeString implements values.Value interface.
-func (p *SyntaxCompiler) SchemeString() string {
-	return "#<syntax-compiler:" + p.name + ">"
-}
-
-// IsVoid implements values.Value interface.
-func (p *SyntaxCompiler) IsVoid() bool {
-	return false
 }
 
 // EqualTo implements values.Value interface.

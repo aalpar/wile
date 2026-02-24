@@ -928,9 +928,7 @@ func TestCompileLambdaParameterListVariants(t *testing.T) {
 
 // TestSyntaxCompilerNameMethod tests the Name method of PrimitiveCompiler
 func TestSyntaxCompilerNameMethod(t *testing.T) {
-	pc := &SyntaxCompiler{
-		name: "test-compiler",
-	}
+	pc := NewSyntaxCompiler("test-compiler", nil)
 	qt.Assert(t, pc.Name(), qt.Equals, "test-compiler")
 }
 

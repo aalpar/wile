@@ -169,36 +169,11 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 }
 
 // evalWhenExecuteAtCompileTime executes body expressions at compile time.
-// Similar to begin-for-syntax behavior.
 func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTimeCallContext, bodyPair *syntax.SyntaxPair) error {
-	// Handle empty body
 	if syntax.IsSyntaxEmptyList(bodyPair) {
 		return nil
 	}
-
-	// Get expand phase environment for execution
-	expandEnv := p.env.Expand()
-
-	// Create expander for macro expansion
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
-
-	// Process each expression
-	current := bodyPair
-	v, err := current.SyntaxForEach(ctctx.ctx, func(ctx context.Context, _ int, _ bool, exprVal syntax.SyntaxValue) error {
-		if exprVal == nil {
-			return values.WrapForeignErrorf(values.ErrUnexpectedNil, "eval-when: nil expression")
-		}
-		_, err := p.expandCompileExecute(ctx, ctctx, exprVal, expandEnv, expander, "eval-when")
-		return err
-	})
-	if err != nil {
-		return values.WrapForeignErrorf(err, "eval-when: error processing body expressions")
-	}
-	if !syntax.IsSyntaxEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper body expressions list")
-	}
-
-	return nil
+	return p.executeFormsAtCompileTime(ctctx, "eval-when", bodyPair)
 }
 
 // evalWhenCompileForRuntime compiles body expressions for runtime execution.
