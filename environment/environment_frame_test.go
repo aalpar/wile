@@ -18,6 +18,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -651,4 +652,64 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 			tc.trigger()
 		})
 	}
+}
+
+func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
+	c := qt.New(t)
+
+	src := syntax.NewSourceContext("x", "test.scm",
+		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(li, qt.IsNotNil)
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().File, qt.Equals, "test.scm")
+}
+
+func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
+	c := qt.New(t)
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	c.Assert(created, qt.IsTrue)
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNil)
+}
+
+func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
+	c := qt.New(t)
+
+	origin := &syntax.OriginInfo{
+		Identifier: "my-macro",
+		Location: syntax.NewSourceContext("(my-macro x)", "user.scm",
+			syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(12, 12, 1)),
+	}
+	src := &syntax.SourceContext{
+		Text:   "temp",
+		File:   "stdlib.scm",
+		Origin: origin,
+	}
+
+	topEnv := NewTopLevelEnvironmentFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("temp")
+
+	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	c.Assert(created, qt.IsTrue)
+
+	binding := env.GetLocalBindingByIndex(li[0])
+	c.Assert(binding.Source(), qt.IsNotNil)
+	c.Assert(binding.Source().Origin, qt.IsNotNil)
+	c.Assert(binding.Source().Origin.Identifier, qt.Equals, "my-macro")
+	c.Assert(binding.Source().Origin.Location.File, qt.Equals, "user.scm")
 }
