@@ -39,6 +39,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -91,6 +92,19 @@ func Run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.Envi
 // The filename parameter is used for error messages and source location tracking.
 // Pass an empty string if the source has no associated filename.
 func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, filename string) error {
+	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
+	// Mirrors PrimLoad in internal/extensions/eval/prim_eval.go:111-116.
+	if filename != "" {
+		absPath, absErr := filepath.Abs(filename)
+		if absErr == nil {
+			stack := env.LoadPathStack()
+			if stack != nil {
+				_ = stack.Push(absPath)
+				defer stack.Pop()
+			}
+		}
+	}
+
 	p := parser.NewParserWithFile(env, true, bufio.NewReader(r), filename)
 
 	// Collect all expressions from the reader
