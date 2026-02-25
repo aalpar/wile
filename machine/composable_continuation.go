@@ -49,9 +49,17 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 	return q
 }
 
-func (p *ComposableContinuation) Cont() *MachineContinuation { return p.cont }
-func (p *ComposableContinuation) WindingStack() WindingStack { return p.windingStack }
-func (p *ComposableContinuation) ThreadID() uint64           { return p.threadID }
+func (p *ComposableContinuation) Cont() *MachineContinuation {
+	return p.cont
+}
+
+func (p *ComposableContinuation) WindingStack() WindingStack {
+	return p.windingStack
+}
+
+func (p *ComposableContinuation) ThreadID() uint64 {
+	return p.threadID
+}
 
 // BarrierValid returns the barrier identity token captured when this continuation
 // was created. Used by applyComposableContinuation to detect barrier crossings.
@@ -70,7 +78,9 @@ func (p *ComposableContinuation) SchemeString() string {
 	return "#<composable-continuation>"
 }
 
-func (p *ComposableContinuation) IsVoid() bool { return p == nil }
+func (p *ComposableContinuation) IsVoid() bool {
+	return p == nil
+}
 
 func (p *ComposableContinuation) EqualTo(o values.Value) bool {
 	v, ok := o.(*ComposableContinuation)

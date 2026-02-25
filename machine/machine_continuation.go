@@ -145,11 +145,25 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	return q
 }
 
-func (p *MachineContinuation) PromptTag() *PromptTag              { return p.promptTag }
-func (p *MachineContinuation) SetPromptTag(t *PromptTag)          { p.promptTag = t }
-func (p *MachineContinuation) PromptHandler() *MachineClosure     { return p.promptHandler }
-func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) { p.promptHandler = h }
-func (p *MachineContinuation) ThreadID() uint64                   { return p.threadID }
+func (p *MachineContinuation) PromptTag() *PromptTag {
+	return p.promptTag
+}
+
+func (p *MachineContinuation) SetPromptTag(t *PromptTag) {
+	p.promptTag = t
+}
+
+func (p *MachineContinuation) PromptHandler() *MachineClosure {
+	return p.promptHandler
+}
+
+func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) {
+	p.promptHandler = h
+}
+
+func (p *MachineContinuation) ThreadID() uint64 {
+	return p.threadID
+}
 
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as
 // a continuation prompt. The tag identifies the prompt for abort/capture, and
