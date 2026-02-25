@@ -542,6 +542,7 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 //
 // Supported callable types:
 //   - *MachineClosure: standard Scheme lambda
+//   - *ForeignClosure: Go foreign function (direct call, no bytecode)
 //   - *CaseLambdaClosure: R7RS case-lambda (§4.2.9)
 //   - *Parameter: R7RS parameter object (§4.2.6)
 //   - *ComposableContinuation: delimited continuation
@@ -556,6 +557,8 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 	switch cls := callable.(type) {
 	case *MachineClosure:
 		return p.Apply(cls, args...)
+	case *ForeignClosure:
+		return p.applyForeign(cls, args...)
 	case *CaseLambdaClosure:
 		return p.ApplyCaseLambda(cls, args...)
 	case *Parameter:
