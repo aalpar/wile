@@ -160,14 +160,14 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		}
 	}
 
-	eng := &Engine{
+	q := &Engine{
 		topLevel:     topLevel,
 		env:          env,
 		registry:     reg,
 		closers:      closers,
 		maxCallDepth: cfg.maxCallDepth,
 	}
-	return eng, nil
+	return q, nil
 }
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
@@ -525,10 +525,10 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string) error {
 	for _, source := range sources {
 		reader := strings.NewReader(source)
-		p := parser.NewParser(env, true, reader)
+		pr := parser.NewParser(env, true, reader)
 
 		for {
-			stx, err := p.ReadSyntax(ctx)
+			stx, err := pr.ReadSyntax(ctx)
 			if err != nil {
 				if isEOF(err) {
 					break
@@ -604,7 +604,8 @@ func (p *Engine) CurrentLoadDirectory() string {
 }
 
 // PushLoadPath pushes an absolute path onto the load path stack.
-// Returns an error if absPath is not absolute.
+// Returns an error if absPath is not absolute. When the library system
+// is not enabled (no WithLibraryPaths option), this is a silent no-op.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.

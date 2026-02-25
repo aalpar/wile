@@ -104,6 +104,16 @@ Public API (embedders): `wile/`, `values/`, `registry/`. Internal: `internal/*`.
 
 After any Go code changes, run `make lint` (or at minimum `goimports -w` on changed files) before considering the task complete. Do not report completion with outstanding formatting or import issues.
 
+### Variable Naming Convention
+
+| Name | Role | Rationale |
+|------|------|-----------|
+| `p` | Method receiver (always) | Type is in the signature; role is clear from being a receiver. No need to name it after the type. Exception: compiler uses `c`. |
+| `q` | Primary return value | Assign `q` as early as possible so the reader can track "this is what gets returned" through the code flow. |
+| `err` | Error return value | Standard Go convention. |
+
+These names save mental space: `p` is always the receiver, `q` is always the result being built, `err` is always the error. No need to invent descriptive names for roles that are already clear from position.
+
 ### Error Handling (summary)
 
 Two-layer convention: **sentinel + wrap**. Use `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` at return sites. Never use bare `errors.New` or `fmt.Errorf` in production code. Always use `errors.Is`/`errors.As`, never `==`/`!=`.
