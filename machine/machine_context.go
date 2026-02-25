@@ -420,6 +420,95 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	return p, nil
 }
 
+// applyForeign calls a foreign closure directly, bypassing the bytecode VM.
+// This is the fast path for Go-implemented primitives: arity check, bind args,
+// call the function, restore continuation. No template, no opcodes, no VM loop.
+func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) (rmc *MachineContext, rerr error) {
+	l := fcls.paramCount
+
+	// Arity check (same logic as Apply).
+	if !fcls.isVariadic {
+		if len(vs) != l {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+				"expected %d arguments, got %d", l, len(vs))
+		}
+	} else {
+		if len(vs) < l-1 {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+				"expected at least %d arguments, got %d", l-1, len(vs))
+		}
+	}
+
+	p.counters.ClosuresApplied++
+	p.counters.NoCopyApplies++
+
+	// Always reuse the closure's own env (noCopyApply by construction).
+	env := fcls.env
+	bnds := env.LocalEnvironment().Bindings()
+	p.counters.NoCopyBindingsSaved += uint64(len(bnds))
+
+	if !fcls.isVariadic {
+		for i := range bnds[:l] {
+			bnds[i].SetValue(vs[i])
+		}
+	} else {
+		for i := range bnds[:l-1] {
+			bnds[i].SetValue(vs[i])
+		}
+		bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
+	}
+
+	p.env = env
+	// envPooled: closure's own env, not from pool.
+	p.envPooled = false
+
+	// Panic recovery: convert Go panics from the values package
+	// (division by zero, not-a-number, etc.) into Scheme exceptions.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		var err error
+		switch v := r.(type) {
+		case error:
+			err = v
+		default:
+			err = values.WrapForeignErrorf(values.ErrPanicRecovery, "foreign function call: %v", v)
+		}
+		rmc = nil
+		rerr = goErrorToSchemeException(p, err)
+	}()
+
+	p.counters.ForeignCalls++
+	err := fcls.fn(p)
+	if err != nil {
+		// Propagate prompt aborts, exit escapes, and exception escapes as-is.
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
+			return nil, err
+		}
+		var exitErr *ErrExitEscape
+		if errors.As(err, &exitErr) {
+			return nil, err
+		}
+		var excErr *ErrExceptionEscape
+		if errors.As(err, &excErr) {
+			return nil, err
+		}
+		return nil, goErrorToSchemeException(p, err)
+	}
+
+	// Restore continuation (same as returnImmediate).
+	if p.cont != nil {
+		p.RestoreAndRelease(p.cont)
+	} else {
+		p.template = immediateReturnTemplate
+		p.pc = 0
+	}
+	return p, nil
+}
+
 // buildRestArg constructs a variadic rest-arg list in p.restArgBuf, returning
 // it as a Tuple. The buffer grows with doubling strategy and is reused across
 // calls, amortizing allocations to zero after warmup.
