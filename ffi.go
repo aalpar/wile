@@ -723,7 +723,7 @@ func callbackParameterResult(
 			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
 			sub.SetContext(mc.Context())
-			_, applyErr := sub.Apply(param.Converter(), newVal)
+			_, applyErr := sub.ApplyCallable(param.Converter(), newVal)
 			if applyErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
 			}

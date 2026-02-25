@@ -39,7 +39,7 @@ import (
 func PrimCallWithExit(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
-	procCls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call-with-exit")
+	procCls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call-with-exit")
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err = sub.Apply(procCls, exitClosure)
+	_, err = sub.ApplyCallable(procCls, exitClosure)
 	if err != nil {
 		return err
 	}

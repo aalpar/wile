@@ -16,16 +16,13 @@ package machine
 
 import "github.com/aalpar/wile/environment"
 
-func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool, fn ForeignFunction) *MachineClosure {
-	tpl := NewNativeTemplate(pcnt, 0, vardiac)
-	tpl.AppendOperations(
-		NewOperationForeignFunctionCall(fn),
-		NewOperationRestoreContinuation(),
-	)
-	tpl.computeNoCopyApply()
-	tpl.atomicBody = true
+func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, variadic bool, fn ForeignFunction) *ForeignClosure {
 	lenv := environment.NewLocalEnvironment(pcnt)
 	env = environment.NewEnvironmentFrameWithParent(lenv, env)
-	q := NewClosureWithTemplate(tpl, env)
-	return q
+	return &ForeignClosure{
+		fn:         fn,
+		env:        env,
+		paramCount: pcnt,
+		isVariadic: variadic,
+	}
 }

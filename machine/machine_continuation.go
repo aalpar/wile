@@ -25,8 +25,8 @@ import (
 type MachineContinuation struct {
 	vmState
 	parent        *MachineContinuation
-	promptHandler *MachineClosure // Handler invoked on abort to this prompt
-	shared        bool            // true if this frame is part of a captured continuation chain
+	promptHandler Closure // Handler invoked on abort to this prompt
+	shared        bool    // true if this frame is part of a captured continuation chain
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -153,11 +153,11 @@ func (p *MachineContinuation) SetPromptTag(t *PromptTag) {
 	p.promptTag = t
 }
 
-func (p *MachineContinuation) PromptHandler() *MachineClosure {
+func (p *MachineContinuation) PromptHandler() Closure {
 	return p.promptHandler
 }
 
-func (p *MachineContinuation) SetPromptHandler(h *MachineClosure) {
+func (p *MachineContinuation) SetPromptHandler(h Closure) {
 	p.promptHandler = h
 }
 
@@ -168,7 +168,7 @@ func (p *MachineContinuation) ThreadID() uint64 {
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as
 // a continuation prompt. The tag identifies the prompt for abort/capture, and
 // the handler is invoked when an abort reaches this prompt.
-func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame, tag *PromptTag, handler *MachineClosure) *MachineContinuation {
+func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame, tag *PromptTag, handler Closure) *MachineContinuation {
 	q := NewMachineContinuation(parent, tpl, env)
 	q.promptTag = tag
 	q.promptHandler = handler

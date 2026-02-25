@@ -758,20 +758,6 @@ func TestNestedQuasiquoteUnquote(t *testing.T) {
 	}
 }
 
-// TestForeignFunctionNilError tests OperationForeignFunctionCall with nil function
-func TestForeignFunctionNilError(t *testing.T) {
-	env := newFullRuntimeEnv(t)
-
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(nil)
-	tpl.AppendOperations(op)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-	err := mc.Run()
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "foreign function is nil")
-}
-
 // TestFeaturesSupport tests feature detection for cond-expand
 func TestFeaturesSupport(t *testing.T) {
 	// Test basic features

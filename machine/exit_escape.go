@@ -27,7 +27,7 @@ type ExitTag struct{}
 // ErrExitEscape is returned by call-with-exit escape closures to signal an
 // upward escape from the dynamic extent of call-with-exit. Like ErrPromptAbort,
 // it propagates through the call stack without being wrapped as a Scheme exception
-// (OperationForeignFunctionCall passes it through unchanged).
+// (applyForeign passes it through unchanged).
 //
 // PrimCallWithExit matches it by comparing the tag pointer. The validity check
 // (*atomic.Bool) in the escape closure ensures stale tags are never emitted.

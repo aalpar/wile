@@ -475,21 +475,6 @@ func TestOperations_Length(t *testing.T) {
 	qt.Assert(t, emptyOps.Len(), qt.Equals, 0)
 }
 
-// Tests moved from coverage_additional_test.go
-// TestOperationForeignFunctionCallMethods tests the foreign function call operation methods
-func TestOperationForeignFunctionCallMethods(t *testing.T) {
-	// Create a simple foreign function
-	ff := func(mc *MachineContext) error {
-		return nil
-	}
-
-	op := NewOperationForeignFunctionCall(ff)
-	qt.Assert(t, op.SchemeString(), qt.Contains, "foreign-function-call")
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-	qt.Assert(t, op.EqualTo(op), qt.IsTrue)
-	qt.Assert(t, op.EqualTo(NewOperationPush()), qt.IsFalse)
-}
-
 // TestOperationSyntaxRulesTransformMethods tests syntax rules transform operation methods
 func TestOperationSyntaxRulesTransformMethods(t *testing.T) {
 	op := NewOperationSyntaxRulesTransform()
@@ -787,31 +772,6 @@ func TestOperationsCopy(t *testing.T) {
 	cpy = append(cpy, NewOperationPop())
 	qt.Assert(t, ops.Len(), qt.Equals, 2)
 	qt.Assert(t, cpy.Len(), qt.Equals, 3)
-}
-
-// TestOperationForeignFunctionCallSimple tests foreign function call
-func TestOperationForeignFunctionCallSimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-
-	// Create a foreign function
-	called := false
-	fn := ForeignFunction(func(mc *MachineContext) error {
-		called = true
-		mc.SetValue(values.NewInteger(99))
-		return nil
-	})
-
-	tpl := NewNativeTemplate(0, 0, false)
-	tpl.AppendOperations(
-		NewOperationForeignFunctionCall(fn),
-		NewOperationRestoreContinuation(),
-	)
-
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
-	err := mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, called, qt.IsTrue)
 }
 
 // TestOperationMakeClosureError tests MakeClosure with wrong stack

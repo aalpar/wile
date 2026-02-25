@@ -220,7 +220,7 @@ func PrimVectorMap(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "vector-map")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "vector-map")
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func PrimVectorMap(mc *machine.MachineContext) error {
 			args[j] = (*v)[i]
 		}
 
-		_, err := sub.Apply(mcls, args...)
+		_, err := sub.ApplyCallable(mcls, args...)
 		if err != nil {
 			return err
 		}
@@ -265,7 +265,7 @@ func PrimVectorForEach(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "vector-for-each")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "vector-for-each")
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func PrimVectorForEach(mc *machine.MachineContext) error {
 			args[j] = (*v)[i]
 		}
 
-		_, err := sub.Apply(mcls, args...)
+		_, err := sub.ApplyCallable(mcls, args...)
 		if err != nil {
 			return err
 		}

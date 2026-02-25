@@ -318,9 +318,9 @@ func TestEditPlan_AddLiteral_Dedup(t *testing.T) {
 // --- SideTable GC ---
 
 func TestEditPlan_SideTableGC(t *testing.T) {
-	op0 := &OperationForeignFunctionCall{Function: func(_ *MachineContext) error { return nil }}
-	op1 := &OperationForeignFunctionCall{Function: func(_ *MachineContext) error { return nil }}
-	op2 := &OperationForeignFunctionCall{Function: func(_ *MachineContext) error { return nil }}
+	op0 := NewOperationMakeClosure()
+	op1 := NewOperationMakeClosure()
+	op2 := NewOperationMakeClosure()
 
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{
@@ -344,7 +344,7 @@ func TestEditPlan_SideTableGC(t *testing.T) {
 }
 
 func TestEditPlan_SideTableGC_NoneUnreferenced(t *testing.T) {
-	op0 := &OperationForeignFunctionCall{Function: func(_ *MachineContext) error { return nil }}
+	op0 := NewOperationMakeClosure()
 
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{

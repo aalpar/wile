@@ -707,8 +707,10 @@ func TestRunWithEscapeHandling_PromptAbortNotFound(t *testing.T) {
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
+	fcls := machine.NewForeignClosure(env, 0, false, fn)
+	litIdx := tpl.MaybeAppendLiteral(fcls)
+	tpl.AppendInstruction(machine.Instruction{Op: machine.OpLoadLiteral, Arg: int32(litIdx)})
+	tpl.AppendInstruction(machine.Instruction{Op: machine.OpApply})
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -796,8 +798,10 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	op := machine.NewOperationForeignFunctionCall(fn)
-	tpl.AppendOperations(op)
+	fcls := machine.NewForeignClosure(env, 0, false, fn)
+	litIdx := tpl.MaybeAppendLiteral(fcls)
+	tpl.AppendInstruction(machine.Instruction{Op: machine.OpLoadLiteral, Arg: int32(litIdx)})
+	tpl.AppendInstruction(machine.Instruction{Op: machine.OpApply})
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

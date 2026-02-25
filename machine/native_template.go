@@ -40,13 +40,6 @@ type NativeTemplate struct {
 	// instead of allocating a fresh copy via NewApplyFrame().
 	noCopyApply bool
 
-	// atomicBody is true when the template's body executes as a single
-	// Go function call rather than as bytecode on the VM loop. An atomic
-	// body cannot trigger re-entrant Apply calls on the same MachineContext,
-	// which makes it safe to reuse the rest-arg buffer (restArgBuf) across
-	// variadic calls. Currently set only for foreign function templates.
-	atomicBody bool
-
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
 	// bypassing the runtime InternSymbol → RLock → map lookup path.

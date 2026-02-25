@@ -25,16 +25,16 @@ import (
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which
 // the before and after thunks are called whenever control enters or exits.
 type DynamicWindFrame struct {
-	Before *MachineClosure // Called when entering this extent
-	After  *MachineClosure // Called when exiting this extent
-	ID     uint64          // Unique identifier for extent matching
+	Before Closure // Called when entering this extent
+	After  Closure // Called when exiting this extent
+	ID     uint64  // Unique identifier for extent matching
 }
 
 // Global counter for generating unique frame IDs
 var nextWindingID uint64
 
 // NewDynamicWindFrame creates a new winding frame with a unique ID.
-func NewDynamicWindFrame(before, after *MachineClosure) *DynamicWindFrame {
+func NewDynamicWindFrame(before, after Closure) *DynamicWindFrame {
 	id := atomic.AddUint64(&nextWindingID, 1)
 	return &DynamicWindFrame{
 		Before: before,

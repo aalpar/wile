@@ -141,7 +141,7 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 			}
 			sub := mc.NewSubContext()
 			sub.SetWindingStack(excErr.WindingStack[:i])
-			_, err := sub.Apply(frame.After)
+			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				machine.ReleaseSubContext(sub)
 				return err

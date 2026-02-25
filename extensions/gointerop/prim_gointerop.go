@@ -418,14 +418,14 @@ func PrimOnceDo(mc *machine.MachineContext) error {
 	var thunkErr error
 	executed := once.Do(func() {
 		// Execute the thunk in a sub-context
-		cls, ok := thunk.(*machine.MachineClosure)
+		cls, ok := thunk.(machine.Closure)
 		if !ok {
 			return // Can't execute non-closure
 		}
 
 		sub := mc.NewSubContext()
 		defer machine.ReleaseSubContext(sub)
-		_, err := sub.Apply(cls)
+		_, err := sub.ApplyCallable(cls)
 		if err != nil {
 			thunkErr = err
 			return

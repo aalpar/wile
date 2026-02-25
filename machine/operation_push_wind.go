@@ -42,7 +42,7 @@ func NewOperationPushWind() *OperationPushWind {
 func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Get before closure from stack (at depth 2)
 	beforeVal := mc.evals.PeekK(2)
-	before, ok := beforeVal.(*MachineClosure)
+	before, ok := beforeVal.(Closure)
 	if !ok {
 		err := mc.Error("dynamic-wind: before must be a procedure")
 		return mc, err
@@ -50,7 +50,7 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 
 	// Get after closure from stack (at depth 0 = top)
 	afterVal := mc.evals.PeekK(0)
-	after, ok := afterVal.(*MachineClosure)
+	after, ok := afterVal.(Closure)
 	if !ok {
 		err := mc.Error("dynamic-wind: after must be a procedure")
 		return mc, err

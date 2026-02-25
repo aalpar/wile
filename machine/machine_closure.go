@@ -26,6 +26,9 @@ type MachineClosure struct {
 	template *NativeTemplate
 }
 
+func (p *MachineClosure) closureMarker() {
+}
+
 func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineClosure {
 	q := &MachineClosure{
 		env:      env,

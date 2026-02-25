@@ -71,7 +71,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
 
-	thunkCls, err := helpers.RequireType[*machine.MachineClosure](thunk, values.ErrNotAProcedure, "call-with-continuation-prompt")
+	thunkCls, err := helpers.RequireType[machine.Closure](thunk, values.ErrNotAProcedure, "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
@@ -81,10 +81,10 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 		return err
 	}
 
-	var handlerCls *machine.MachineClosure
+	var handlerCls machine.Closure
 	if handlerVal != values.FalseValue {
 		var handlerErr error
-		handlerCls, handlerErr = helpers.RequireType[*machine.MachineClosure](handlerVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
+		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
 		if handlerErr != nil {
 			return handlerErr
 		}
@@ -100,7 +100,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 	sub.SetWindingStack(mc.WindingStack())
 	sub.SetPromptTag(tag)
 
-	_, err = sub.Apply(thunkCls)
+	_, err = sub.ApplyCallable(thunkCls)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 				handlerSub := mc.NewSubContext()
 				defer machine.ReleaseSubContext(handlerSub)
 				handlerSub.SetWindingStack(mc.WindingStack())
-				_, applyErr := handlerSub.Apply(handlerCls, abortErr.Values...)
+				_, applyErr := handlerSub.ApplyCallable(handlerCls, abortErr.Values...)
 				if applyErr != nil {
 					return applyErr
 				}
@@ -196,7 +196,7 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
-	procCls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call-with-composable-continuation")
+	procCls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err = sub.Apply(procCls, cc)
+	_, err = sub.ApplyCallable(procCls, cc)
 	if err != nil {
 		return err
 	}

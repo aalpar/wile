@@ -53,18 +53,10 @@ func formatIndexable(prefix string, length int, get func(int) Value) string {
 // Implementation note: Block-allocates all Pair cells in a single slice and links
 // them via cdr pointers. Callers receive the Tuple interface.
 func List(os ...Value) Tuple {
-	n := len(os)
-	if n == 0 {
+	if len(os) == 0 {
 		return EmptyList
 	}
-	block := make([]Pair, n)
-	for i := 0; i < n-1; i++ {
-		block[i][0] = os[i]
-		block[i][1] = &block[i+1]
-	}
-	block[n-1][0] = os[n-1]
-	block[n-1][1] = EmptyList
-	return &block[0]
+	return PairBlock(make([]Pair, len(os))).LinkWith(os)
 }
 
 // ForEach iterates over a Tuple value, calling fn for each element.

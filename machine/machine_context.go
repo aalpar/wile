@@ -67,7 +67,7 @@ type MachineContext struct {
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
-	restArgBuf       []values.Pair        // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	restArgBuf       values.PairBlock     // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -407,16 +407,116 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		for i := range bnds[:l-1] {
 			bnds[i].SetValue(vs[i])
 		}
-		if tpl.NoCopyApply() && tpl.atomicBody {
-			bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
-		} else {
-			bnds[l-1].SetValue(values.List(vs[l-1:]...))
-		}
+		bnds[l-1].SetValue(values.List(vs[l-1:]...))
 	}
 
 	p.template = tpl
 	p.env = env
 	p.pc = 0
+	return p, nil
+}
+
+// applyForeign calls a foreign closure directly, bypassing the bytecode VM.
+// This is the fast path for Go-implemented primitives: arity check, bind args,
+// call the function, restore continuation. No template, no opcodes, no VM loop.
+func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) (rmc *MachineContext, rerr error) {
+	l := fcls.paramCount
+
+	// Arity check (same logic as Apply).
+	if !fcls.isVariadic {
+		if len(vs) != l {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+				"expected %d arguments, got %d", l, len(vs))
+		}
+	} else {
+		if len(vs) < l-1 {
+			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+				"expected at least %d arguments, got %d", l-1, len(vs))
+		}
+	}
+
+	p.counters.ClosuresApplied++
+	p.counters.NoCopyApplies++
+
+	// Always reuse the closure's own env (noCopyApply by construction).
+	env := fcls.env
+	bnds := env.LocalEnvironment().Bindings()
+	p.counters.NoCopyBindingsSaved += uint64(len(bnds))
+
+	if !fcls.isVariadic {
+		for i := range bnds[:l] {
+			bnds[i].SetValue(vs[i])
+		}
+	} else {
+		for i := range bnds[:l-1] {
+			bnds[i].SetValue(vs[i])
+		}
+		bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
+	}
+
+	p.env = env
+	// envPooled: closure's own env, not from pool.
+	p.envPooled = false
+
+	// Panic recovery: convert Go panics from the values package
+	// (division by zero, not-a-number, etc.) into Scheme exceptions.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		var err error
+		switch v := r.(type) {
+		case error:
+			err = v
+		default:
+			err = values.WrapForeignErrorf(values.ErrPanicRecovery, "foreign function call: %v", v)
+		}
+		rmc = nil
+		rerr = goErrorToSchemeException(p, err)
+	}()
+
+	p.counters.ForeignCalls++
+
+	// Save the template pointer before calling the foreign function.
+	// Some foreign functions (e.g., PrimCallCC inline mode) call Apply()
+	// on the MachineContext, changing the template/env/pc to set up the VM
+	// for continued execution of a different closure. If the template changes,
+	// we must NOT do returnImmediate() — the foreign function has already
+	// configured the VM state.
+	savedTemplate := p.template
+
+	err := fcls.fn(p)
+	if err != nil {
+		// Propagate prompt aborts, exit escapes, and exception escapes as-is.
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
+			return nil, err
+		}
+		var exitErr *ErrExitEscape
+		if errors.As(err, &exitErr) {
+			return nil, err
+		}
+		var excErr *ErrExceptionEscape
+		if errors.As(err, &excErr) {
+			return nil, err
+		}
+		return nil, goErrorToSchemeException(p, err)
+	}
+
+	// If the foreign function changed the template (e.g., via Apply/ApplyCallable),
+	// the VM state is configured for continued execution — do not restore continuation.
+	if p.template != savedTemplate {
+		return p, nil
+	}
+
+	// Restore continuation (same as returnImmediate).
+	if p.cont != nil {
+		p.RestoreAndRelease(p.cont)
+	} else {
+		p.template = immediateReturnTemplate
+		p.pc = 0
+	}
 	return p, nil
 }
 
@@ -433,16 +533,9 @@ func (p *MachineContext) buildRestArg(vs []values.Value, start int) values.Tuple
 		return values.EmptyList
 	}
 	if cap(p.restArgBuf) < n {
-		p.restArgBuf = make([]values.Pair, n*2)
+		p.restArgBuf = make(values.PairBlock, n*2)
 	}
-	buf := p.restArgBuf[:n]
-	for i := 0; i < n-1; i++ {
-		buf[i][0] = vs[start+i]
-		buf[i][1] = &buf[i+1]
-	}
-	buf[n-1][0] = vs[start+n-1]
-	buf[n-1][1] = values.EmptyList
-	return &buf[0]
+	return p.restArgBuf[:n].LinkWith(vs[start:])
 }
 
 // ApplyCaseLambda applies a case-lambda closure by finding the matching clause.
@@ -460,6 +553,7 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 //
 // Supported callable types:
 //   - *MachineClosure: standard Scheme lambda
+//   - *ForeignClosure: Go foreign function (direct call, no bytecode)
 //   - *CaseLambdaClosure: R7RS case-lambda (§4.2.9)
 //   - *Parameter: R7RS parameter object (§4.2.6)
 //   - *ComposableContinuation: delimited continuation
@@ -474,6 +568,8 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 	switch cls := callable.(type) {
 	case *MachineClosure:
 		return p.Apply(cls, args...)
+	case *ForeignClosure:
+		return p.applyForeign(cls, args...)
 	case *CaseLambdaClosure:
 		return p.ApplyCaseLambda(cls, args...)
 	case *Parameter:
@@ -518,7 +614,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 			sub := p.NewSubContext()
 			defer ReleaseSubContext(sub)
 			sub.SetWindingStack(p.WindingStack())
-			_, err := sub.Apply(converter, newVal)
+			_, err := sub.ApplyCallable(converter, newVal)
 			if err != nil {
 				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
 				return p, wrapErr
@@ -1162,7 +1258,7 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 		if frame.After != nil {
 			sub := p.NewSubContext()
 			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
-			_, err := sub.Apply(frame.After)
+			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
 				return err
@@ -1189,7 +1285,7 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 		if frame.Before != nil {
 			sub := p.NewSubContext()
 			sub.windingStack = p.windingStack // Current stack at this point
-			_, err := sub.Apply(frame.Before)
+			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
 				ReleaseSubContext(sub)
 				return err
@@ -1425,7 +1521,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			// Invoke the handler with the abort values.
 			// Context-level prompts have no handler (prompt is nil).
 			if prompt != nil && prompt.PromptHandler() != nil {
-				_, applyErr := p.Apply(prompt.PromptHandler(), abortErr.Values...)
+				_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
 				if applyErr != nil {
 					return applyErr
 				}

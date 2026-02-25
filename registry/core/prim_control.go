@@ -116,7 +116,7 @@ func PrimApply(mc *machine.MachineContext) error {
 func PrimCallCC(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call/cc")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call/cc")
 	if err != nil {
 		return err
 	}
@@ -135,12 +135,12 @@ func PrimCallCC(mc *machine.MachineContext) error {
 		// When the lambda returns normally, RestoreContinuation pops mc.cont,
 		// resuming from the caller of call/cc. When the lambda invokes the
 		// continuation, the escape propagates through the VM to RunWithEscapeHandling.
-		_, err := mc.Apply(mcls, contClosure)
+		_, err := mc.ApplyCallable(mcls, contClosure)
 		if err != nil {
 			return err
 		}
-		// Compensate for OperationForeignFunctionCall's mc.pc++ (Apply set pc=0).
-		mc.SetPC(mc.PC() - 1)
+		// No PC compensation needed: applyForeign does not post-increment pc
+		// (applyForeign does not post-increment pc).
 		return nil
 	}
 
@@ -153,7 +153,7 @@ func PrimCallCC(mc *machine.MachineContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err = sub.Apply(mcls, contClosure)
+	_, err = sub.ApplyCallable(mcls, contClosure)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func newComposeAbortEscapeClosure(
 	cc *machine.ComposableContinuation,
 	capturingThreadID uint64,
 	capturingBarrierValid *machine.BarrierToken,
-) *machine.MachineClosure {
+) *machine.ForeignClosure {
 	fn := func(innerMC *machine.MachineContext) error {
 		// Reject cross-thread continuation invocation
 		if innerMC.ThreadID() != capturingThreadID {
@@ -250,17 +250,17 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	thunk := mc.Arg(1)
 	after := mc.Arg(2)
 
-	beforeCls, ok := before.(*machine.MachineClosure)
+	beforeCls, ok := before.(machine.Closure)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: before must be a procedure, got %T", before)
 	}
 
-	thunkCls, ok := thunk.(*machine.MachineClosure)
+	thunkCls, ok := thunk.(machine.Closure)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: thunk must be a procedure, got %T", thunk)
 	}
 
-	afterCls, ok := after.(*machine.MachineClosure)
+	afterCls, ok := after.(machine.Closure)
 	if !ok {
 		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: after must be a procedure, got %T", after)
 	}
@@ -272,7 +272,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err := sub.Apply(beforeCls)
+	_, err := sub.ApplyCallable(beforeCls)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	defer machine.ReleaseSubContext(sub2)
 	sub2.SetWindingStack(mc.WindingStack()) // Include new frame
 	sub2.SetEscapeCont(escapeCont)          // Allow call/cc to find continuation
-	_, err = sub2.Apply(thunkCls)
+	_, err = sub2.ApplyCallable(thunkCls)
 	if err != nil {
 		mc.PopWindingFrame() // Clean up on Apply error
 		return err
@@ -310,7 +310,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	sub3 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub3)
 	sub3.SetWindingStack(mc.WindingStack())
-	_, err = sub3.Apply(afterCls)
+	_, err = sub3.ApplyCallable(afterCls)
 	if err != nil {
 		return err
 	}
@@ -363,12 +363,12 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 
-	producerCls, err := helpers.RequireType[*machine.MachineClosure](producer, values.ErrNotAProcedure, "call-with-values")
+	producerCls, err := helpers.RequireType[machine.Closure](producer, values.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}
 
-	consumerCls, err := helpers.RequireType[*machine.MachineClosure](consumer, values.ErrNotAProcedure, "call-with-values")
+	consumerCls, err := helpers.RequireType[machine.Closure](consumer, values.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}
@@ -377,7 +377,7 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err = sub.Apply(producerCls)
+	_, err = sub.ApplyCallable(producerCls)
 	if err != nil {
 		return err
 	}
@@ -393,7 +393,7 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	sub2 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub2)
 	sub2.SetWindingStack(mc.WindingStack())
-	_, err = sub2.Apply(consumerCls, producedValues...)
+	_, err = sub2.ApplyCallable(consumerCls, producedValues...)
 	if err != nil {
 		return err
 	}
