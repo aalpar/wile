@@ -90,7 +90,6 @@ examples:
 	$(GO_BUILD) -o /dev/null ./examples/embedding/source-tracking/
 
 # ── CI: everything that must pass before merge ──────────────────────
-# This is the single target GitHub Actions calls for PRs.
 # Set SKIP_LINT=1 when lint is handled externally (e.g., golangci-lint-action).
 #   make ci
 #   make ci SKIP_LINT=1
@@ -98,11 +97,11 @@ examples:
 ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check examples verify-mod
 	@echo "CI passed"
 
-# ── CD: everything that must pass before release ────────────────────
-# Includes all of CI plus release-specific validation.
+# ── CD: release-specific validation ─────────────────────────────────
+# Run before goreleaser on tagged releases. CI already passed on merge.
 #   make cd
 .PHONY: cd
-cd: ci test-examples test-schelog smoke-test bench-regression check-readme-links
+cd: build test-examples test-schelog smoke-test bench-regression check-readme-links
 	@echo "CD passed"
 
 # run extensive builds and tests
