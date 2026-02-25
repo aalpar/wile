@@ -67,7 +67,7 @@ type MachineContext struct {
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
-	restArgBuf       []values.Pair        // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	restArgBuf       values.PairBlock     // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -433,16 +433,9 @@ func (p *MachineContext) buildRestArg(vs []values.Value, start int) values.Tuple
 		return values.EmptyList
 	}
 	if cap(p.restArgBuf) < n {
-		p.restArgBuf = make([]values.Pair, n*2)
+		p.restArgBuf = make(values.PairBlock, n*2)
 	}
-	buf := p.restArgBuf[:n]
-	for i := 0; i < n-1; i++ {
-		buf[i][0] = vs[start+i]
-		buf[i][1] = &buf[i+1]
-	}
-	buf[n-1][0] = vs[start+n-1]
-	buf[n-1][1] = values.EmptyList
-	return &buf[0]
+	return p.restArgBuf[:n].LinkWith(vs[start:])
 }
 
 // ApplyCaseLambda applies a case-lambda closure by finding the matching clause.
