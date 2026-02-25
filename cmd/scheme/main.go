@@ -23,6 +23,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	goruntime "runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -289,6 +290,18 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 		peek, err := fin.Peek(2)
 		if err == nil && peek[0] == '#' && peek[1] == '!' {
 			_, _ = fin.ReadString('\n')
+		}
+	}
+
+	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
+	absPath, absErr := filepath.Abs(filename)
+	if absErr == nil {
+		stack := env.LoadPathStack()
+		if stack != nil {
+			pushErr := stack.Push(absPath)
+			if pushErr == nil {
+				defer stack.Pop()
+			}
 		}
 	}
 

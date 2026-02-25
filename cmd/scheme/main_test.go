@@ -619,6 +619,114 @@ func TestSetupSignalsDirect(t *testing.T) {
 
 // TestResolveVersionPartialLdflags covers the case where only one ldflags
 // variable is set, causing the function to fall through to ReadBuildInfo.
+// ---------------------------------------------------------------------------
+// Phase 6: LoadPathStack tests (include resolution from CLI)
+// ---------------------------------------------------------------------------
+
+func TestRunFilePopulatesLoadPathStack(t *testing.T) {
+	t.Run("relative include resolved via file directory", func(t *testing.T) {
+		c := qt.New(t)
+
+		// Create dir/main.scm that includes dir/helper.scm via relative path
+		dir := t.TempDir()
+		err := os.WriteFile(
+			filepath.Join(dir, "helper.scm"),
+			[]byte(`(define lps-test-val 99)`),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		mainPath := filepath.Join(dir, "main.scm")
+		err = os.WriteFile(
+			mainPath,
+			[]byte("(include \"helper.scm\")\n(display lps-test-val)\n(newline)"),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		result := runCLI(t, "-q", "-f", mainPath)
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "99\n")
+	})
+
+	t.Run("nested include resolved via intermediate file directory", func(t *testing.T) {
+		c := qt.New(t)
+
+		// Create dir/main.scm -> dir/sub/mid.scm -> dir/sub/leaf.scm
+		dir := t.TempDir()
+		subDir := filepath.Join(dir, "sub")
+		err := os.Mkdir(subDir, 0o755)
+		c.Assert(err, qt.IsNil)
+
+		err = os.WriteFile(
+			filepath.Join(subDir, "leaf.scm"),
+			[]byte(`(define nested-val 77)`),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		err = os.WriteFile(
+			filepath.Join(subDir, "mid.scm"),
+			[]byte(`(include "leaf.scm")`),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		mainPath := filepath.Join(dir, "main.scm")
+		err = os.WriteFile(
+			mainPath,
+			[]byte("(include \"sub/mid.scm\")\n(display nested-val)\n(newline)"),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		result := runCLI(t, "-q", "-f", mainPath)
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "77\n")
+	})
+
+	t.Run("current-load-path returns file path", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		mainPath := filepath.Join(dir, "test.scm")
+		err := os.WriteFile(
+			mainPath,
+			[]byte(`(display (current-load-path))(newline)`),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		result := runCLI(t, "-q", "-f", mainPath)
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, mainPath+"\n")
+	})
+
+	t.Run("load path stack empty after file completes", func(t *testing.T) {
+		c := qt.New(t)
+
+		// After loading a file, the stack should be empty.
+		// Verify by loading two files: second file should see empty stack.
+		dir := t.TempDir()
+		file1 := filepath.Join(dir, "first.scm")
+		file2 := filepath.Join(dir, "second.scm")
+
+		err := os.WriteFile(file1, []byte(`(define x 1)`), 0o644)
+		c.Assert(err, qt.IsNil)
+		err = os.WriteFile(
+			file2,
+			[]byte(`(display (current-load-path))(newline)`),
+			0o644,
+		)
+		c.Assert(err, qt.IsNil)
+
+		// file2 is the last file, so it goes through runFile; file1 goes through runtime.Load
+		result := runCLI(t, "-q", "-f", file1, "-f", file2)
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		// file2 should see its own path (not file1's)
+		c.Assert(result.stdout, qt.Equals, file2+"\n")
+	})
+}
+
 func TestResolveVersionPartialLdflags(t *testing.T) {
 	oldSHA := BuildSHA
 	oldVer := BuildVersion

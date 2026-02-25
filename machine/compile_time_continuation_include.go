@@ -34,11 +34,20 @@ const (
 )
 
 func findFile(p *CompileTimeContinuation, _ CompileTimeCallContext, path string) (fs.File, string, error) {
+	if path == "" {
+		return nil, "", values.WrapForeignErrorf(values.ErrFileNotFound, "include: empty filename")
+	}
+
 	stack := p.env.LoadPathStack()
 	includePath := os.Getenv(SchemeIncludePathEnv)
 	var fallbackDirs []string
 	if includePath != "" {
 		fallbackDirs = filepath.SplitList(includePath)
+	}
+	// CWD as final fallback (matches Chez source-directories default, Racket current-directory)
+	cwd, cwdErr := os.Getwd()
+	if cwdErr == nil {
+		fallbackDirs = append(fallbackDirs, cwd)
 	}
 
 	absPath, err := environment.ResolveFile(stack, path, fallbackDirs)

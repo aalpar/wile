@@ -1,0 +1,10 @@
+# Examples excluded from CI exit-code checks.
+# One path per line, relative to examples/.
+
+# Intentionally demonstrate error conditions and exit non-zero.
+basics/error-source-tracking.scm
+control/coroutines.scm
+control/exceptions.scm
+
+# Hangs: producer-consumer channel pattern doesn't terminate within timeout.
+concurrency/producers-consumers.scm

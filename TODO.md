@@ -36,6 +36,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | Reflection primitives | Runtime | Not started | Expose bound symbols, arity, types to Scheme |
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
 | P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
+| P4 | Continuation marks | Runtime | Not started | Racket-style stack annotation (`with-continuation-mark`, `continuation-mark-set->list`). Prompt infrastructure exists; needs per-frame key→value map |
 | P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 

@@ -16,6 +16,8 @@ package runtime_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -147,4 +149,50 @@ func TestLoadRuntimeError(t *testing.T) {
 	// Division by zero triggers a runtime error
 	err := runtime.Load(context.Background(), env, strings.NewReader(`(/ 1 0)`), "runtime-err.scm")
 	c.Assert(err, qt.IsNotNil)
+}
+
+func TestLoadPopulatesLoadPathStack(t *testing.T) {
+	c := qt.New(t)
+	env := newEnv(t)
+
+	// Create a file that includes another file via a relative path.
+	// If Load populates the LoadPathStack, the include will resolve
+	// the relative path against the loading file's directory.
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "sub")
+	err := os.Mkdir(subDir, 0o755)
+	c.Assert(err, qt.IsNil)
+
+	// Write the included file
+	err = os.WriteFile(filepath.Join(subDir, "helper.scm"), []byte("(define load-path-test-val 42)"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	// Write the main file that includes via relative path
+	mainPath := filepath.Join(dir, "main.scm")
+	err = os.WriteFile(mainPath, []byte(`(include "sub/helper.scm")`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	// Load using the absolute path — this should push onto LoadPathStack
+	f, err := os.Open(mainPath)
+	c.Assert(err, qt.IsNil)
+	defer f.Close()
+
+	err = runtime.Load(context.Background(), env, f, mainPath)
+	c.Assert(err, qt.IsNil)
+
+	// Verify the LoadPathStack is empty after Load returns (defer popped it)
+	stack := env.LoadPathStack()
+	c.Assert(stack.Depth(), qt.Equals, 0)
+}
+
+func TestLoadEmptyFilenameSkipsStack(t *testing.T) {
+	c := qt.New(t)
+	env := newEnv(t)
+
+	// Load with empty filename should not push onto stack
+	err := runtime.Load(context.Background(), env, strings.NewReader("(define x 1)"), "")
+	c.Assert(err, qt.IsNil)
+
+	stack := env.LoadPathStack()
+	c.Assert(stack.Depth(), qt.Equals, 0)
 }
