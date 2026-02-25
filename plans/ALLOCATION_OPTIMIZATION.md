@@ -1,7 +1,7 @@
 # Allocation Optimization Plan
 
 Date: 2026-02-22
-Status: In progress — three optimizations complete (-42.1% combined), remaining items pending
+Status: Mostly complete — initial 3 fixes (-42.1%), plus block-allocated pairs (#311), numeric fold escape fix (#312), binding copy optimization (#313/#314), ArrayList removal (#316), unified Pool[T] with env frame pooling (#325), PopAll elimination, batch ctx.Done(), peephole fusion. Remaining: rest-arg cons elimination, compile-time global binding resolution.
 
 ## Problem Statement
 

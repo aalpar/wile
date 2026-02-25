@@ -25,6 +25,12 @@ When investigating R7RS conformance issues:
 | `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
 | `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
 
+### Optimizations
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `OPTIMIZATIONS.md` | Index of all optimization files (plans, reference data, session plans) | Active |
+
 ### Proposed Designs (Future)
 
 | File | Purpose | Status |
