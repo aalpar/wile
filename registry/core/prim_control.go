@@ -195,7 +195,7 @@ func newComposeAbortEscapeClosure(
 	cc *machine.ComposableContinuation,
 	capturingThreadID uint64,
 	capturingBarrierValid *machine.BarrierToken,
-) *machine.ForeignClosure {
+) machine.Closure {
 	fn := func(innerMC *machine.MachineContext) error {
 		// Reject cross-thread continuation invocation
 		if innerMC.ThreadID() != capturingThreadID {
@@ -236,7 +236,7 @@ func newComposeAbortEscapeClosure(
 			Values: []values.Value{sub.GetValue()},
 		}
 	}
-	return machine.NewForeignClosure(env, 1, false, fn)
+	return machine.NewVMForeignClosure(env, 1, false, fn)
 }
 
 // PrimDynamicWind implements the (dynamic-wind) primitive.
