@@ -38,6 +38,20 @@ result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
 | Cross-compilation | ✓ | ✗ | ✓ | ✓ | ✗ |
 | Go GC integration | ✓ | ✗ | ✓ | ✓ | ✗ |
 
+### Performance
+
+Gabriel benchmark suite (16 benchmarks), showing improvement from allocation and dispatch optimizations:
+
+| Benchmark | v1.3.0 | v1.4.0 | Change |
+|-----------|-------:|-------:|-------:|
+| tak | 0.381s | 0.274s | -28% |
+| fib | 1.262s | 0.920s | -27% |
+| sumfp | 4.271s | 3.204s | -25% |
+| peval | 0.168s | 0.134s | -20% |
+| **Geo-mean (all 16)** | | | **-15%** |
+
+Full results and methodology in [examples/benchmarks/](examples/benchmarks/).
+
 ## Embedding in Go
 
 Wile provides a public API for embedding Scheme in Go programs via the `wile` package.
