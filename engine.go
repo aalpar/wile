@@ -78,7 +78,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		reg = registry.NewRegistry()
 		err := core.AddToRegistry(reg)
 		if err != nil {
-			return nil, err
+			return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register core primitives")
 		}
 	}
 
@@ -88,7 +88,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		startIdx := reg.PrimitiveCount()
 		err := ext.AddToRegistry(reg)
 		if err != nil {
-			return nil, err
+			return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register extension %q", ext.Name())
 		}
 		endIdx := reg.PrimitiveCount()
 		var namer registry.LibraryNamer
@@ -160,14 +160,14 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		}
 	}
 
-	q := &Engine{
+	eng := &Engine{
 		topLevel:     topLevel,
 		env:          env,
 		registry:     reg,
 		closers:      closers,
 		maxCallDepth: cfg.maxCallDepth,
 	}
-	return q, nil
+	return eng, nil
 }
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
@@ -402,16 +402,16 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 		} else {
 			parts = []string{"wile", snap.name}
 		}
-		if slices.Contains(parts, "") {
-			return values.WrapForeignErrorf(
-				values.ErrEngineInit,
-				"invalid library name for extension %q: empty name part", snap.name,
-			)
-		}
 		if len(parts) == 0 {
 			return values.WrapForeignErrorf(
 				values.ErrEngineInit,
 				"invalid library name for extension %q: no name parts", snap.name,
+			)
+		}
+		if slices.Contains(parts, "") {
+			return values.WrapForeignErrorf(
+				values.ErrEngineInit,
+				"invalid library name for extension %q: empty name part", snap.name,
 			)
 		}
 
