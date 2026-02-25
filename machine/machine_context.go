@@ -407,11 +407,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		for i := range bnds[:l-1] {
 			bnds[i].SetValue(vs[i])
 		}
-		if tpl.NoCopyApply() && tpl.atomicBody {
-			bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
-		} else {
-			bnds[l-1].SetValue(values.List(vs[l-1:]...))
-		}
+		bnds[l-1].SetValue(values.List(vs[l-1:]...))
 	}
 
 	p.template = tpl
