@@ -21,6 +21,13 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: go.sum
 
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          args: -v ./...
+
+      - name: CD
+        run: make cd
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

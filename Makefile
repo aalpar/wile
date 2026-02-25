@@ -89,6 +89,20 @@ examples:
 	$(GO_BUILD) -o /dev/null ./examples/embedding/
 	$(GO_BUILD) -o /dev/null ./examples/embedding/source-tracking/
 
+# ── CI: everything that must pass before merge ──────────────────────
+# This is the single target GitHub Actions calls for PRs.
+#   make ci
+.PHONY: ci
+ci: lint build-all test covercheck readme-check examples verify-mod
+	@echo "CI passed"
+
+# ── CD: everything that must pass before release ────────────────────
+# Includes all of CI plus release-specific validation.
+#   make cd
+.PHONY: cd
+cd: ci test-examples test-schelog smoke-test bench-regression check-readme-links
+	@echo "CD passed"
+
 # run extensive builds and tests
 .PHONY: all
 all: lint test covercheck readme-check build-all
@@ -378,6 +392,47 @@ release-snapshot:
 .PHONY: release
 release:
 	$(GORELEASER) release --clean
+
+# Verify go.sum integrity.
+#   make verify-mod
+.PHONY: verify-mod
+verify-mod:
+	$(GO_MOD) verify
+
+# Run all Scheme examples (non-benchmark, non-schelog) and verify they exit 0.
+#   make test-examples
+.PHONY: test-examples
+test-examples: build
+	@$(SH_TOOLS_DIR)/run-examples.sh $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
+
+# Run schelog validation suite.
+#   make test-schelog
+.PHONY: test-schelog
+test-schelog: build
+	@examples/logic/schelog/run-all-tests.sh
+
+# Smoke test: verify the built binary starts, prints version, and evaluates.
+#   make smoke-test
+.PHONY: smoke-test
+smoke-test: build
+	@$(SH_TOOLS_DIR)/smoke-test.sh $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
+
+# Run Gabriel benchmarks and compare against checked-in baseline.
+# Fails if geo-mean regresses more than 5%.
+#   make bench-regression
+.PHONY: bench-regression
+bench-regression: build
+	@cd examples/benchmarks && \
+		SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) \
+		BASELINE=canonical-baseline.csv \
+		THRESHOLD=5 \
+		../../$(SH_TOOLS_DIR)/bench-regression.sh
+
+# Validate links in README.md.
+#   make check-readme-links
+.PHONY: check-readme-links
+check-readme-links:
+	@$(SH_TOOLS_DIR)/check-readme-links.sh README.md
 
 # Build the Docker image containing the Go toolchain and compiled binary.
 # Delegates to tools/sh/docker-build.sh.
