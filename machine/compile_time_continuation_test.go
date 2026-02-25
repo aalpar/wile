@@ -18,6 +18,8 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -2111,10 +2113,54 @@ func TestQuasiquoteNeedsRuntime(t *testing.T) {
 func TestCompileIncludeErrorAdditional(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
-	// include with empty string should error
+	// include with empty string should error (empty-path guard)
 	sv := parseSchemeExpr(t, env, "(include \"\")")
 	_, err := newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "empty filename")
+}
+
+// TestFindFileCWDFallback verifies that findFile falls back to CWD when
+// the LoadPathStack is empty and SCHEME_INCLUDE_PATH is unset.
+func TestFindFileCWDFallback(t *testing.T) {
+	// Create a temp file in a temp dir, then chdir there
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "cwd-test.scm"), []byte("42"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Save and restore CWD
+	origDir, err := os.Getwd()
+	qt.Assert(t, err, qt.IsNil)
+	defer os.Chdir(origDir) //nolint:errcheck
+
+	err = os.Chdir(dir)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Clear SCHEME_INCLUDE_PATH so only CWD fallback applies
+	oldInclude := os.Getenv(SchemeIncludePathEnv)
+	defer os.Setenv(SchemeIncludePathEnv, oldInclude) //nolint:errcheck
+	os.Unsetenv(SchemeIncludePathEnv)                 //nolint:errcheck
+
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
+
+	// findFile should resolve "cwd-test.scm" via CWD fallback
+	f, absPath, err := findFile(cont, ctctx, "cwd-test.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, absPath, qt.Equals, filepath.Join(dir, "cwd-test.scm"))
+}
+
+// TestFindFileEmptyPath verifies that findFile rejects empty paths.
+func TestFindFileEmptyPath(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
+
+	_, _, err := findFile(cont, ctctx, "")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "empty filename")
 }
 
 // TestCompileQuasiquotePairNestedUnquote tests nested unquote in quasiquote
