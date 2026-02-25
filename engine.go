@@ -343,7 +343,7 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 		return nil, p.wrapRuntimeError(err)
 	}
 
-	err = sub.Run()
+	err = sub.RunWithEscapeHandling()
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}

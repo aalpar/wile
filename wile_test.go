@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -472,6 +473,56 @@ func TestCall_ComposableContinuation(t *testing.T) {
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
 	c.Assert(rtErr.Message, qt.Equals, "cannot call composable continuation from Go")
+}
+
+func TestCall_CallCCNonTailEscape(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			"tail position",
+			`(define (esc-tail) (call/cc (lambda (k) (k 42))))`,
+			"42",
+		},
+		{
+			"non-tail position",
+			`(define (esc-nontail) (+ 1 (call/cc (lambda (k) (k 42)))))`,
+			"43",
+		},
+		{
+			"escape skips subsequent code",
+			`(define (esc-skip) (call/cc (lambda (k) (k 42) 99)))`,
+			"42",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := engine.EvalMultiple(ctx, tc.code)
+			c.Assert(err, qt.IsNil)
+
+			// Extract the procedure name from the define form
+			name := tc.code[len(`(define (`):len(tc.code)]
+			idx := strings.Index(name, ")")
+			c.Assert(idx >= 0, qt.IsTrue, qt.Commentf("malformed define in test case: %s", tc.code))
+			name = name[:idx]
+
+			proc, ok := engine.Get(name)
+			c.Assert(ok, qt.IsTrue)
+
+			result, err := engine.Call(ctx, proc)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
 }
 
 // Structured error types
