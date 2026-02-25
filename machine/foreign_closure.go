@@ -1,9 +1,39 @@
 package machine
 
 import (
+	"errors"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
+
+// ForeignFunction is the signature for Go-implemented Scheme primitives.
+// The MachineContext provides access to arguments, the value register,
+// and the cancellation context (via mc.Context()).
+type ForeignFunction func(mc *MachineContext) error
+
+// goErrorToSchemeException converts a Go error to a Scheme exception escape.
+// It detects ForeignFileError and ForeignReadError to set the appropriate
+// NativeError kind per R7RS §6.11. The MachineContext is used to capture
+// the source location and stack trace at the point where the error occurred.
+func goErrorToSchemeException(mc *MachineContext, err error) error {
+	kind := values.NativeErrorKindGeneric
+	var fileErr *values.ForeignFileError
+	var readErr *values.ForeignReadError
+	if errors.As(err, &fileErr) {
+		kind = values.NativeErrorKindFile
+	} else if errors.As(err, &readErr) {
+		kind = values.NativeErrorKindRead
+	}
+	errObj := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
+	return &ErrExceptionEscape{
+		Condition:   errObj,
+		Continuable: false,
+		Handled:     false,
+		Source:      mc.CurrentSource(),
+		StackTrace:  mc.CaptureStackTrace(20),
+	}
+}
 
 var _ Closure = (*ForeignClosure)(nil)
 

@@ -1177,7 +1177,7 @@ func TestLcm_Errors(t *testing.T) {
 // TestDivisionByZero_SchemeException verifies that division by zero across all
 // numeric types is caught at the VM boundary and converted to a proper Scheme
 // exception that guard can handle. This tests the recover in
-// OperationForeignFunctionCall.Apply, not just the values package panic.
+// applyForeign, not just the values package panic.
 func TestDivisionByZero_SchemeException(t *testing.T) {
 	c := qt.New(t)
 	tcs := []schemeCodeTestCase{

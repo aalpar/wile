@@ -1279,13 +1279,38 @@ func TestRunDispatch_InitialOperations(t *testing.T) {
 	c.Assert(mc.GetValue(), qt.Equals, values.Void)
 }
 
+// testInlinedOp is a test-only InlinedOperation for exercising the
+// OpComplex side-table dispatch path without depending on any specific
+// production operation type.
+type testInlinedOp struct {
+	OperationBase
+	fn func(mc *MachineContext) (*MachineContext, error)
+}
+
+func newTestInlinedOp(fn func(mc *MachineContext) (*MachineContext, error)) *testInlinedOp {
+	return &testInlinedOp{
+		OperationBase: NewOperationBase("test-inlined-op"),
+		fn:            fn,
+	}
+}
+
+func (p *testInlinedOp) Apply(mc *MachineContext) (*MachineContext, error) {
+	return p.fn(mc)
+}
+
+func (p *testInlinedOp) EqualTo(o values.Value) bool {
+	_, ok := o.(*testInlinedOp)
+	return ok && p == o
+}
+
 func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
 	c := qt.New(t)
 	// Template with code + sideTable uses runIntegerDispatch.
 	tpl := NewNativeTemplate(0, 0, false)
-	op := NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+	op := newTestInlinedOp(func(mc *MachineContext) (*MachineContext, error) {
 		mc.SetValue(values.Void)
-		return nil
+		mc.pc++
+		return mc, nil
 	})
 	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
@@ -1304,8 +1329,8 @@ func TestRunDispatch_IntegerPathErrHalt(t *testing.T) {
 	// OpComplex dispatching to an InlinedOperation that returns errHalt
 	// should trigger errHalt, which Run translates to nil.
 	tpl := NewNativeTemplate(0, 0, false)
-	op := NewOperationForeignFunctionCall(func(mc *MachineContext) error {
-		return errHalt
+	op := newTestInlinedOp(func(mc *MachineContext) (*MachineContext, error) {
+		return mc, errHalt
 	})
 	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
@@ -1350,19 +1375,20 @@ func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	// Multiple OpComplex instructions in sequence.
 	tpl := NewNativeTemplate(0, 0, false)
 
-	makeLoadVoidFF := func() *OperationForeignFunctionCall {
-		return NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+	makeLoadVoidOp := func() *testInlinedOp {
+		return newTestInlinedOp(func(mc *MachineContext) (*MachineContext, error) {
 			mc.SetValue(values.Void)
-			return nil
+			mc.pc++
+			return mc, nil
 		})
 	}
 
 	// First: sets value to Void, advances pc
-	instr0 := tpl.AppendSideTableOp(makeLoadVoidFF())
+	instr0 := tpl.AppendSideTableOp(makeLoadVoidOp())
 	tpl.AppendInstruction(instr0)
 
 	// Second: sets value to Void again, advances pc
-	instr1 := tpl.AppendSideTableOp(makeLoadVoidFF())
+	instr1 := tpl.AppendSideTableOp(makeLoadVoidOp())
 	tpl.AppendInstruction(instr1)
 
 	env := environment.NewTopLevelEnvironment().Runtime()

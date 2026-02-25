@@ -140,7 +140,7 @@ func PrimCallCC(mc *machine.MachineContext) error {
 			return err
 		}
 		// No PC compensation needed: applyForeign does not post-increment pc
-		// (unlike OperationForeignFunctionCall which did mc.pc++ after each call).
+		// (applyForeign does not post-increment pc).
 		return nil
 	}
 

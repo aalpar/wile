@@ -293,7 +293,7 @@ type ByteVectorExtractor interface {
 // The panic convention is a deliberate design choice: arithmetic methods return
 // Number (not (Number, error)), keeping the interface algebraic and composable.
 // Callers that need error values should recover panics at their boundary.
-// The VM does this in OperationForeignFunctionCall.Apply, which recovers panics
+// The VM does this in applyForeign, which recovers panics
 // and converts them to Scheme exceptions catchable by guard and
 // with-exception-handler.
 type Number interface {
