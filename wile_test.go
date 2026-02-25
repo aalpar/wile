@@ -511,7 +511,9 @@ func TestCall_CallCCNonTailEscape(t *testing.T) {
 
 			// Extract the procedure name from the define form
 			name := tc.code[len(`(define (`):len(tc.code)]
-			name = name[:strings.Index(name, ")")]
+			idx := strings.Index(name, ")")
+			c.Assert(idx >= 0, qt.IsTrue, qt.Commentf("malformed define in test case: %s", tc.code))
+			name = name[:idx]
 
 			proc, ok := engine.Get(name)
 			c.Assert(ok, qt.IsTrue)
