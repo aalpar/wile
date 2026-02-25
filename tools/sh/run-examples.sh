@@ -24,6 +24,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXAMPLES_DIR="$REPO_ROOT/examples"
 EXCLUDE_FILE="$EXAMPLES_DIR/.ci-exclude"
 
+# Detect timeout command (GNU timeout or macOS gtimeout via coreutils)
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_CMD=(timeout --kill-after=5)
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD=(gtimeout --kill-after=5)
+else
+    TIMEOUT_CMD=()
+fi
+
 # Load exclusion list (paths relative to examples/, comments and blanks skipped)
 declare -A excluded
 if [ -f "$EXCLUDE_FILE" ]; then
@@ -48,7 +57,7 @@ while IFS= read -r -d '' scm; do
         continue
     fi
 
-    if timeout --kill-after=5 "$TIMEOUT" "$SCHEME" --quiet -f "$scm" >/dev/null 2>&1; then
+    if "${TIMEOUT_CMD[@]}" "$TIMEOUT" "$SCHEME" --quiet -f "$scm" >/dev/null 2>&1; then
         passed=$((passed + 1))
     else
         failed=$((failed + 1))
@@ -60,7 +69,7 @@ done < <(find "$EXAMPLES_DIR" \
     -not -path '*/schelog/*' \
     -not -path '*/lib/*' \
     -not -path '*/embedding/*' \
-    -print0 | sort -z)
+    -print0 | tr '\0' '\n' | sort | tr '\n' '\0')
 
 total=$((passed + failed + skipped))
 echo "Examples: $passed passed, $skipped skipped, $failed failed ($total total)"

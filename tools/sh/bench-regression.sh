@@ -42,10 +42,16 @@ echo ""
 
 # Run benchmarks with fewer runs for CI speed
 export SCHEME RUNS
-RESULTS_CSV=$(RUNS="$RUNS" ./run-canonical.sh 2>&1 | grep "Results saved to:" | awk '{print $NF}')
+bench_output=$(RUNS="$RUNS" ./run-canonical.sh 2>&1) || {
+    echo "Error: run-canonical.sh failed"
+    echo "$bench_output"
+    exit 1
+}
+RESULTS_CSV=$(echo "$bench_output" | grep "Results saved to:" | awk '{print $NF}' || true)
 
 if [ -z "$RESULTS_CSV" ] || [ ! -f "$RESULTS_CSV" ]; then
     echo "Error: Failed to produce benchmark results"
+    echo "$bench_output"
     exit 1
 fi
 

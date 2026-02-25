@@ -2137,9 +2137,15 @@ func TestFindFileCWDFallback(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Clear SCHEME_INCLUDE_PATH so only CWD fallback applies
-	oldInclude := os.Getenv(SchemeIncludePathEnv)
-	defer os.Setenv(SchemeIncludePathEnv, oldInclude) //nolint:errcheck
-	os.Unsetenv(SchemeIncludePathEnv)                 //nolint:errcheck
+	oldInclude, hadInclude := os.LookupEnv(SchemeIncludePathEnv)
+	defer func() {
+		if hadInclude {
+			os.Setenv(SchemeIncludePathEnv, oldInclude) //nolint:errcheck
+		} else {
+			os.Unsetenv(SchemeIncludePathEnv) //nolint:errcheck
+		}
+	}()
+	os.Unsetenv(SchemeIncludePathEnv) //nolint:errcheck
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true)

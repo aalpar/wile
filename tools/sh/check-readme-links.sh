@@ -40,7 +40,7 @@ while IFS= read -r link; do
         failed=$((failed + 1))
         failures+=("$target")
     fi
-done < <(grep -oP '\[(?:[^\]]*)\]\(\K[^)]+' "$FILE" | sort -u)
+done < <(perl -ne 'while (/\[[^\]]*\]\(([^)]+)\)/g) { print "$1\n" }' "$FILE" | sort -u)
 
 total=$((passed + failed))
 echo "Links checked: $passed/$total valid"

@@ -19,7 +19,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          args: -v ./...
+          install-only: true
 
       - name: CI
         run: make ci

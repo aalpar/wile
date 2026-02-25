@@ -23,7 +23,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
-          args: -v ./...
+          install-only: true
 
       - name: CD
         run: make cd
