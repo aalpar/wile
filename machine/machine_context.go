@@ -481,6 +481,15 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	}()
 
 	p.counters.ForeignCalls++
+
+	// Save the template pointer before calling the foreign function.
+	// Some foreign functions (e.g., PrimCallCC inline mode) call Apply()
+	// on the MachineContext, changing the template/env/pc to set up the VM
+	// for continued execution of a different closure. If the template changes,
+	// we must NOT do returnImmediate() — the foreign function has already
+	// configured the VM state.
+	savedTemplate := p.template
+
 	err := fcls.fn(p)
 	if err != nil {
 		// Propagate prompt aborts, exit escapes, and exception escapes as-is.
@@ -497,6 +506,12 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 			return nil, err
 		}
 		return nil, goErrorToSchemeException(p, err)
+	}
+
+	// If the foreign function changed the template (e.g., via Apply/ApplyCallable),
+	// the VM state is configured for continued execution — do not restore continuation.
+	if p.template != savedTemplate {
+		return p, nil
 	}
 
 	// Restore continuation (same as returnImmediate).
@@ -603,7 +618,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 			sub := p.NewSubContext()
 			defer ReleaseSubContext(sub)
 			sub.SetWindingStack(p.WindingStack())
-			_, err := sub.Apply(converter, newVal)
+			_, err := sub.ApplyCallable(converter, newVal)
 			if err != nil {
 				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
 				return p, wrapErr
@@ -1247,7 +1262,7 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 		if frame.After != nil {
 			sub := p.NewSubContext()
 			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
-			_, err := sub.Apply(frame.After)
+			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
 				return err
@@ -1274,7 +1289,7 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 		if frame.Before != nil {
 			sub := p.NewSubContext()
 			sub.windingStack = p.windingStack // Current stack at this point
-			_, err := sub.Apply(frame.Before)
+			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
 				ReleaseSubContext(sub)
 				return err
@@ -1510,7 +1525,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			// Invoke the handler with the abort values.
 			// Context-level prompts have no handler (prompt is nil).
 			if prompt != nil && prompt.PromptHandler() != nil {
-				_, applyErr := p.Apply(prompt.PromptHandler(), abortErr.Values...)
+				_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
 				if applyErr != nil {
 					return applyErr
 				}

@@ -186,7 +186,7 @@ func listToSymbols(ctx context.Context, v values.Value) ([]*values.Symbol, error
 }
 
 // newRecordConstructorClosure creates a closure that constructs records.
-func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, argIndices []int) *machine.MachineClosure {
+func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, argIndices []int) *machine.ForeignClosure {
 	fieldCount := rt.FieldCount()
 	fn := func(innerMC *machine.MachineContext) error {
 		// Create field array with unspecified values
@@ -207,7 +207,7 @@ func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.R
 }
 
 // newRecordPredicateClosure creates a closure that checks if a value is a record of the given type.
-func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.RecordType) *machine.MachineClosure {
+func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.RecordType) *machine.ForeignClosure {
 	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
@@ -218,7 +218,7 @@ func newRecordPredicateClosure(env *environment.EnvironmentFrame, rt *values.Rec
 }
 
 // newRecordAccessorClosure creates a closure that accesses a specific field of a record.
-func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.MachineClosure {
+func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.ForeignClosure {
 	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
@@ -235,7 +235,7 @@ func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.Reco
 }
 
 // newRecordModifierClosure creates a closure that modifies a specific field of a record.
-func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.MachineClosure {
+func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.RecordType, fieldIdx int) *machine.ForeignClosure {
 	fn := func(innerMC *machine.MachineContext) error {
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(1).Value()

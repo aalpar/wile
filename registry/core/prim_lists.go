@@ -354,13 +354,13 @@ func PrimMember(mc *machine.MachineContext) error {
 	rest := mc.Arg(2)
 
 	// Check for optional compare procedure
-	var compareCls *machine.MachineClosure
+	var compareCls machine.Closure
 	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "member: improper argument list")
 		}
-		cmp, ok := tuple.Car().(*machine.MachineClosure)
+		cmp, ok := tuple.Car().(machine.Closure)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAProcedure, "member: expected a procedure for compare but got %T", tuple.Car())
 		}
@@ -394,7 +394,7 @@ func PrimMember(mc *machine.MachineContext) error {
 		}
 
 		// Call compare procedure with (obj, element)
-		_, err := sub.Apply(compareCls, obj, pr.Car())
+		_, err := sub.ApplyCallable(compareCls, obj, pr.Car())
 		if err != nil {
 			return err
 		}
@@ -434,13 +434,13 @@ func PrimAssoc(mc *machine.MachineContext) error {
 	rest := mc.Arg(2)
 
 	// Check for optional compare procedure
-	var compareCls *machine.MachineClosure
+	var compareCls machine.Closure
 	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAList, "assoc: improper argument list")
 		}
-		cmp, ok := tuple.Car().(*machine.MachineClosure)
+		cmp, ok := tuple.Car().(machine.Closure)
 		if !ok {
 			return values.WrapForeignErrorf(values.ErrNotAProcedure, "assoc: expected a procedure for compare but got %T", tuple.Car())
 		}
@@ -473,7 +473,7 @@ func PrimAssoc(mc *machine.MachineContext) error {
 		}
 
 		// Call compare procedure with (obj, car of entry)
-		_, err := sub.Apply(compareCls, obj, entry.Car())
+		_, err := sub.ApplyCallable(compareCls, obj, entry.Car())
 		if err != nil {
 			return err
 		}

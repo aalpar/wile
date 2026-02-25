@@ -124,7 +124,7 @@ func callWithFile(
 		return err
 	}
 
-	proc, err := helpers.RequireType[*machine.MachineClosure](mc.Arg(1), values.ErrNotAProcedure, name)
+	proc, err := helpers.RequireType[machine.Closure](mc.Arg(1), values.ErrNotAProcedure, name)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func callWithFile(
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err = sub.Apply(proc, port)
+	_, err = sub.ApplyCallable(proc, port)
 	if err != nil {
 		return err
 	}

@@ -27,14 +27,14 @@ var (
 //   - (param) returns the current value
 //   - (param val) sets the current value (after applying converter if present)
 type Parameter struct {
-	value     values.Value    // current value
-	converter *MachineClosure // optional converter procedure (MachineClosure), or nil
+	value     values.Value // current value
+	converter Closure      // optional converter procedure (Closure), or nil
 }
 
 // NewParameter creates a new parameter with the given initial value and optional converter.
 // The converter should be a procedure that takes one argument and returns the converted value.
 // Pass nil for converter if no conversion is needed.
-func NewParameter(init values.Value, converter *MachineClosure) *Parameter {
+func NewParameter(init values.Value, converter Closure) *Parameter {
 	return &Parameter{
 		value:     init,
 		converter: converter,
@@ -54,7 +54,7 @@ func (p *Parameter) SetValue(v values.Value) {
 }
 
 // Converter returns the converter procedure, or nil if none.
-func (p *Parameter) Converter() *MachineClosure {
+func (p *Parameter) Converter() Closure {
 	return p.converter
 }
 

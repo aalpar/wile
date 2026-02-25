@@ -1305,38 +1305,53 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
 func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
-	mcls, ok := bnd.Value().(*MachineClosure)
+	cls, ok := bnd.Value().(Closure)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "not a machine closure: %T", bnd.Value())
+		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "not a closure: %T", bnd.Value())
 	}
-	// Acquire a pooled machine context for the macro transformer.
-	mc := acquireMacroContext(p.ctx, mcls)
-	defer ReleaseSubContext(mc)
 
-	// Set the expander context so the transformer can access the use-site environment.
+	// For syntax-rules transformers, we pass the entire input form as an argument.
+	// The transformer expects the full form including the macro name.
+	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
+
+	// Set up the expander context so the transformer can access the use-site environment.
 	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
 	// needs to check if input identifiers have lexical bindings at the use site.
 	// For example, in (let ((=> #f)) (cond (#t => 'ok))), the pattern matcher needs
 	// to see that => is bound by the lambda (from let expansion) to correctly
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
-	mc.SetExpanderContext(expanderCtx)
 
-	// For syntax-rules transformers, we pass the entire input form as an argument.
-	// The transformer expects the full form including the macro name.
-	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
-
-	// Apply the transformer with the input form as the argument
-	// This sets up the local environment binding for parameter 0
-	_, err := mc.Apply(mcls, inputForm)
-	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
+	var mc *MachineContext
+	switch c := cls.(type) {
+	case *MachineClosure:
+		mc = acquireMacroContext(p.ctx, c)
+		mc.SetExpanderContext(expanderCtx)
+		_, err := mc.Apply(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+		err = mc.Run()
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, err
+		}
+	case *ForeignClosure:
+		mc = acquireSubContext()
+		mc.ctx = p.ctx
+		mc.evals = acquireStack()
+		mc.SetExpanderContext(expanderCtx)
+		_, err := mc.applyForeign(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+	default:
+		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "unexpected closure type: %T", cls)
 	}
+	defer ReleaseSubContext(mc)
 
-	err = mc.Run()
-	if err != nil {
-		return nil, err
-	}
 	// Check if the transformer produced a result
 	result := mc.GetValue()
 	if values.IsVoid(result) {
@@ -1402,14 +1417,10 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	}
 
 	// Get the transformer closure
-	mcls, ok := bnd.Value().(*MachineClosure)
+	cls, ok := bnd.Value().(Closure)
 	if !ok {
-		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "not a machine closure: %T", bnd.Value())
+		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "not a closure: %T", bnd.Value())
 	}
-
-	// Acquire a pooled machine context for the macro transformer.
-	mc := acquireMacroContext(p.ctx, mcls)
-	defer ReleaseSubContext(mc)
 
 	// Build the input form
 	var cdr syntax.SyntaxValue
@@ -1421,16 +1432,33 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	}
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
-	// Apply the transformer
-	_, err := mc.Apply(mcls, inputForm)
-	if err != nil {
-		return nil, false, values.WrapForeignErrorf(err, "failed to apply transformer")
+	var mc *MachineContext
+	switch c := cls.(type) {
+	case *MachineClosure:
+		mc = acquireMacroContext(p.ctx, c)
+		_, err := mc.Apply(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, false, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+		err = mc.Run()
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, false, err
+		}
+	case *ForeignClosure:
+		mc = acquireSubContext()
+		mc.ctx = p.ctx
+		mc.evals = acquireStack()
+		_, err := mc.applyForeign(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, false, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+	default:
+		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "unexpected closure type: %T", cls)
 	}
-
-	err = mc.Run()
-	if err != nil {
-		return nil, false, err
-	}
+	defer ReleaseSubContext(mc)
 
 	// Check if the transformer produced a result
 	result := mc.GetValue()

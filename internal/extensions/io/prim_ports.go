@@ -197,7 +197,7 @@ func PrimCallWithPort(mc *machine.MachineContext) error {
 	proc := mc.Arg(1)
 
 	// Validate that proc is a procedure
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "call-with-port")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call-with-port")
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func PrimCallWithPort(mc *machine.MachineContext) error {
 	// Call the procedure with the port
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err = sub.Apply(mcls, portArg)
+	_, err = sub.ApplyCallable(mcls, portArg)
 	if err != nil {
 		return err
 	}

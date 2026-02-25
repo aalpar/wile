@@ -39,7 +39,7 @@ import (
 func PrimCallWithContinuationBarrier(mc *machine.MachineContext) error {
 	thunk := mc.Arg(0)
 
-	thunkCls, err := helpers.RequireType[*machine.MachineClosure](thunk, values.ErrNotAProcedure, "call-with-continuation-barrier")
+	thunkCls, err := helpers.RequireType[machine.Closure](thunk, values.ErrNotAProcedure, "call-with-continuation-barrier")
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func PrimCallWithContinuationBarrier(mc *machine.MachineContext) error {
 	sub.SetWindingStack(mc.WindingStack())
 	sub.SetBarrierValid(barrierValid)
 
-	_, err = sub.Apply(thunkCls)
+	_, err = sub.ApplyCallable(thunkCls)
 	if err != nil {
 		return err
 	}

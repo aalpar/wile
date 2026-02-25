@@ -32,14 +32,14 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 	init := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	var converterCls *machine.MachineClosure
+	var converterCls machine.Closure
 
 	// Check for optional converter in rest args
 	if !values.IsEmptyList(rest) {
 		pr, ok := rest.(values.Tuple)
 		if ok && !pr.IsEmptyList() {
 			// Validate converter is a procedure
-			converterCls, ok = pr.Car().(*machine.MachineClosure)
+			converterCls, ok = pr.Car().(machine.Closure)
 			if !ok {
 				return values.WrapForeignErrorf(values.ErrNotAProcedure, "make-parameter: converter must be a procedure")
 			}
@@ -47,7 +47,7 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 			// Apply converter to initial value
 			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
-			_, err := sub.Apply(converterCls, init)
+			_, err := sub.ApplyCallable(converterCls, init)
 			if err != nil {
 				return values.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
 			}

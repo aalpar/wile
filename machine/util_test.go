@@ -46,21 +46,13 @@ func TestNewForeignClosure(t *testing.T) {
 	closure := NewForeignClosure(env, 2, false, fn)
 
 	qt.Assert(t, closure, qt.IsNotNil)
-	qt.Assert(t, closure.Template().ParameterCount(), qt.Equals, 2)
-	qt.Assert(t, closure.Template().IsVariadic(), qt.IsFalse)
+	qt.Assert(t, closure.ParameterCount(), qt.Equals, 2)
+	qt.Assert(t, closure.IsVariadic(), qt.IsFalse)
+	qt.Assert(t, closure.Fn(), qt.IsNotNil)
+	qt.Assert(t, closure.Env(), qt.IsNotNil)
 
-	// Verify it has the right instructions: ForeignFunctionCall goes to sideTable
-	// via OpComplex, RestoreContinuation is a direct OpRestoreContinuation.
-	code := closure.Template().Code()
-	qt.Assert(t, len(code), qt.Equals, 2)
-	qt.Assert(t, code[0].Op, qt.Equals, OpComplex)
-	qt.Assert(t, code[1].Op, qt.Equals, OpRestoreContinuation)
-
-	// Verify ForeignFunctionCall is in the side table
-	sideTable := closure.Template().SideTable()
-	qt.Assert(t, len(sideTable), qt.Equals, 1)
-	_, ok := sideTable[0].(*OperationForeignFunctionCall)
-	qt.Assert(t, ok, qt.IsTrue)
+	// Verify it satisfies the Closure interface
+	var _ Closure = closure
 }
 
 func TestNewForeignClosure_Variadic(t *testing.T) {
@@ -73,6 +65,6 @@ func TestNewForeignClosure_Variadic(t *testing.T) {
 	closure := NewForeignClosure(env, 1, true, fn)
 
 	qt.Assert(t, closure, qt.IsNotNil)
-	qt.Assert(t, closure.Template().ParameterCount(), qt.Equals, 1)
-	qt.Assert(t, closure.Template().IsVariadic(), qt.IsTrue)
+	qt.Assert(t, closure.ParameterCount(), qt.Equals, 1)
+	qt.Assert(t, closure.IsVariadic(), qt.IsTrue)
 }

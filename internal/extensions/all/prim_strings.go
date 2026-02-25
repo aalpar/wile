@@ -156,7 +156,7 @@ func PrimStringMap(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "string-map")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "string-map")
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func PrimStringMap(mc *machine.MachineContext) error {
 			args[j] = values.NewCharacter(runeSlices[j][i])
 		}
 
-		_, err := sub.Apply(mcls, args...)
+		_, err := sub.ApplyCallable(mcls, args...)
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[*machine.MachineClosure](proc, values.ErrNotAProcedure, "string-for-each")
+	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "string-for-each")
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 			args[j] = values.NewCharacter(runeSlices[j][i])
 		}
 
-		_, err := sub.Apply(mcls, args...)
+		_, err := sub.ApplyCallable(mcls, args...)
 		if err != nil {
 			return err
 		}
