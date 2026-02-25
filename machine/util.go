@@ -23,6 +23,7 @@ func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, vardiac bool
 		NewOperationRestoreContinuation(),
 	)
 	tpl.computeNoCopyApply()
+	tpl.atomicBody = true
 	lenv := environment.NewLocalEnvironment(pcnt)
 	env = environment.NewEnvironmentFrameWithParent(lenv, env)
 	q := NewClosureWithTemplate(tpl, env)

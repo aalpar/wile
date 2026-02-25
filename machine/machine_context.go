@@ -67,6 +67,7 @@ type MachineContext struct {
 	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
+	restArgBuf       []values.Pair        // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -406,13 +407,42 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		for i := range bnds[:l-1] {
 			bnds[i].SetValue(vs[i])
 		}
-		bnds[l-1].SetValue(values.List(vs[l-1:]...))
+		if tpl.NoCopyApply() && tpl.atomicBody {
+			bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
+		} else {
+			bnds[l-1].SetValue(values.List(vs[l-1:]...))
+		}
 	}
 
 	p.template = tpl
 	p.env = env
 	p.pc = 0
 	return p, nil
+}
+
+// buildRestArg constructs a variadic rest-arg list in p.restArgBuf, returning
+// it as a Tuple. The buffer grows with doubling strategy and is reused across
+// calls, amortizing allocations to zero after warmup.
+//
+// SAFETY: Only safe on the noCopyApply path, where the environment is not
+// captured (no SaveContinuation/MakeClosure). The buffer is overwritten on
+// the next variadic call, so the returned Tuple must not be retained.
+func (p *MachineContext) buildRestArg(vs []values.Value, start int) values.Tuple {
+	n := len(vs) - start
+	if n == 0 {
+		return values.EmptyList
+	}
+	if cap(p.restArgBuf) < n {
+		p.restArgBuf = make([]values.Pair, n*2)
+	}
+	buf := p.restArgBuf[:n]
+	for i := 0; i < n-1; i++ {
+		buf[i][0] = vs[start+i]
+		buf[i][1] = &buf[i+1]
+	}
+	buf[n-1][0] = vs[start+n-1]
+	buf[n-1][1] = values.EmptyList
+	return &buf[0]
 }
 
 // ApplyCaseLambda applies a case-lambda closure by finding the matching clause.

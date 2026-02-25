@@ -327,9 +327,23 @@ func evalSchemeString(code string) (values.Value, error) {
 	listIdx := env.GetGlobalIndex(listSym)
 	if listIdx != nil {
 		listClosure := NewForeignClosure(env, 1, true, func(mc *MachineContext) error {
-			// The variadic args come as a list in the first local slot
+			// The variadic args come as a list in the first local slot.
+			// Must copy the spine because the rest-arg list may be
+			// backed by the reusable restArgBuf.
 			o := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-			mc.SetValue(o)
+			if values.IsEmptyList(o) {
+				mc.SetValue(values.EmptyList)
+				return nil
+			}
+			var elems []values.Value
+			_, err := values.ForEach(context.Background(), o, func(_ context.Context, _ int, _ bool, v values.Value) error {
+				elems = append(elems, v)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			mc.SetValue(values.List(elems...))
 			return nil
 		})
 		err = env.SetOwnGlobalValue(listIdx, listClosure)

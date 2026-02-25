@@ -25,10 +25,24 @@ import (
 
 // PrimList implements the (list) primitive.
 // Creates a list from the given arguments.
+//
+// The rest-arg list may be backed by a reusable buffer (restArgBuf),
+// so we must copy the spine to produce a persistent list.
 func PrimList(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	// The variadic args come as a list - just return them
-	mc.SetValue(o)
+	if values.IsEmptyList(o) {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+	var elems []values.Value
+	_, err := values.ForEach(mc.Context(), o, func(_ context.Context, _ int, _ bool, v values.Value) error {
+		elems = append(elems, v)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.List(elems...))
 	return nil
 }
 
