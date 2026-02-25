@@ -54,7 +54,9 @@ func (p *PromptTag) SchemeString() string {
 	return fmt.Sprintf("#<continuation-prompt-tag:%d>", p.id)
 }
 
-func (p *PromptTag) IsVoid() bool { return p == nil }
+func (p *PromptTag) IsVoid() bool {
+	return p == nil
+}
 
 func (p *PromptTag) EqualTo(o values.Value) bool {
 	v, ok := o.(*PromptTag)
