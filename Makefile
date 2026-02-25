@@ -91,9 +91,11 @@ examples:
 
 # ── CI: everything that must pass before merge ──────────────────────
 # This is the single target GitHub Actions calls for PRs.
+# Set SKIP_LINT=1 when lint is handled externally (e.g., golangci-lint-action).
 #   make ci
+#   make ci SKIP_LINT=1
 .PHONY: ci
-ci: lint build-all test covercheck readme-check examples verify-mod
+ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check examples verify-mod
 	@echo "CI passed"
 
 # ── CD: everything that must pass before release ────────────────────

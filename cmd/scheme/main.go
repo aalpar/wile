@@ -294,9 +294,12 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 	}
 
 	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
-	if absPath, absErr := filepath.Abs(filename); absErr == nil {
-		if stack := env.LoadPathStack(); stack != nil {
-			if err := stack.Push(absPath); err == nil {
+	absPath, absErr := filepath.Abs(filename)
+	if absErr == nil {
+		stack := env.LoadPathStack()
+		if stack != nil {
+			pushErr := stack.Push(absPath)
+			if pushErr == nil {
 				defer stack.Pop()
 			}
 		}

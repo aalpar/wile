@@ -95,9 +95,12 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
 	// Mirrors PrimLoad in internal/extensions/eval/prim_eval.go:111-116.
 	if filename != "" {
-		if absPath, absErr := filepath.Abs(filename); absErr == nil {
-			if stack := env.LoadPathStack(); stack != nil {
-				if err := stack.Push(absPath); err == nil {
+		absPath, absErr := filepath.Abs(filename)
+		if absErr == nil {
+			stack := env.LoadPathStack()
+			if stack != nil {
+				pushErr := stack.Push(absPath)
+				if pushErr == nil {
 					defer stack.Pop()
 				}
 			}
