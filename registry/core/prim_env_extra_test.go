@@ -101,3 +101,97 @@ func TestEvalWithEnvironments(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvironmentQ(t *testing.T) {
+	trueTests := []schemeCodeErrorTestCase{
+		{name: "interaction-environment is env", code: `(environment? (interaction-environment))`},
+	}
+	for _, tc := range trueTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectTrue(t, tc.code)
+		})
+	}
+
+	falseTests := []schemeCodeErrorTestCase{
+		{name: "integer is not env", code: `(environment? 42)`},
+		{name: "string is not env", code: `(environment? "hello")`},
+	}
+	for _, tc := range falseTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectFalse(t, tc.code)
+		})
+	}
+}
+
+func TestEnvironmentBoundNames(t *testing.T) {
+	trueTests := []schemeCodeErrorTestCase{
+		{name: "result is a pair", code: `(pair? (environment-bound-names (interaction-environment)))`},
+		{name: "elements are symbols", code: `(symbol? (car (environment-bound-names (interaction-environment))))`},
+	}
+	for _, tc := range trueTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectTrue(t, tc.code)
+		})
+	}
+
+	errorTests := []schemeCodeErrorTestCase{
+		{name: "wrong type arg", code: `(environment-bound-names 42)`},
+	}
+	for _, tc := range errorTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}
+
+func TestEnvironmentRef(t *testing.T) {
+	trueTests := []schemeCodeErrorTestCase{
+		{name: "lookup + is procedure", code: `(procedure? (environment-ref (interaction-environment) '+))`},
+	}
+	for _, tc := range trueTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectTrue(t, tc.code)
+		})
+	}
+
+	errorTests := []schemeCodeErrorTestCase{
+		{name: "unbound symbol", code: `(environment-ref (interaction-environment) 'nonexistent-xyz)`},
+		{name: "wrong env type", code: `(environment-ref 42 '+)`},
+		{name: "wrong symbol type", code: `(environment-ref (interaction-environment) 42)`},
+	}
+	for _, tc := range errorTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}
+
+func TestEnvironmentBoundQ(t *testing.T) {
+	trueTests := []schemeCodeErrorTestCase{
+		{name: "bound symbol", code: `(environment-bound? (interaction-environment) '+)`},
+	}
+	for _, tc := range trueTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectTrue(t, tc.code)
+		})
+	}
+
+	falseTests := []schemeCodeErrorTestCase{
+		{name: "unbound symbol", code: `(environment-bound? (interaction-environment) 'nonexistent-xyz)`},
+	}
+	for _, tc := range falseTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectFalse(t, tc.code)
+		})
+	}
+
+	errorTests := []schemeCodeErrorTestCase{
+		{name: "wrong env type", code: `(environment-bound? 42 '+)`},
+		{name: "wrong symbol type", code: `(environment-bound? (interaction-environment) 42)`},
+	}
+	for _, tc := range errorTests {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}

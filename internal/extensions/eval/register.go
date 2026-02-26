@@ -16,7 +16,10 @@
 package eval
 
 import (
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension is the eval extension.
@@ -62,6 +65,18 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Flips the introduction scope on a syntax object.", ParamNames: []string{"stx"}, Category: "eval"},
 		{Name: "syntax-local-identifier-as-binding", ParamCount: 1, Impl: PrimSyntaxLocalIdentifierAsBinding,
 			Doc: "Adds use-site scope to an identifier.", ParamNames: []string{"id"}, Category: "eval"},
+		{Name: "environment?", ParamCount: 1,
+			Impl: helpers.MakeTypePredicate(func(o values.Value) bool {
+				_, ok := o.(*environment.TopLevelEnvironment)
+				return ok
+			}),
+			Doc: "Returns #t if the argument is an environment.", ParamNames: []string{"obj"}, Category: "eval"},
+		{Name: "environment-bound-names", ParamCount: 1, Impl: PrimEnvironmentBoundNames,
+			Doc: "Returns a list of all symbols bound in the environment.", ParamNames: []string{"env"}, Category: "eval"},
+		{Name: "environment-ref", ParamCount: 2, Impl: PrimEnvironmentRef,
+			Doc: "Returns the value bound to a symbol in the environment.", ParamNames: []string{"env", "symbol"}, Category: "eval"},
+		{Name: "environment-bound?", ParamCount: 2, Impl: PrimEnvironmentBoundQ,
+			Doc: "Returns #t if the symbol is bound in the environment.", ParamNames: []string{"env", "symbol"}, Category: "eval"},
 	}, registry.PhaseRuntime)
 	return nil
 }
