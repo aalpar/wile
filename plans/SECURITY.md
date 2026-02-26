@@ -48,7 +48,7 @@ Each extension falls into one of three categories:
 
 | Category | Extensions | Threat |
 |----------|-----------|--------|
-| **Safe** | core, io, exceptions, math, all | Pure computation + in-memory ports. No ambient authority. |
+| **Safe** | core, io, exceptions, math, introspection, all | Pure computation + in-memory ports. No ambient authority. |
 | **Privileged** | files, eval, system | Ambient authority: filesystem, process env, code loading. |
 | **Context-dependent** | gointerop, threads | Resource exhaustion, concurrency bugs. No ambient authority. Safe for trusted code. |
 
@@ -62,6 +62,7 @@ Each extension falls into one of three categories:
 | io | `internal/extensions/io` | `read`, `write`, `display`, `newline`, string/bytevector ports, `current-input-port`, `current-output-port`, `current-error-port`, port predicates, binary I/O. All in-memory or on caller-provided ports — no filesystem access. |
 | exceptions | `extensions/exceptions` | `raise`, `with-exception-handler`, `guard`, `error`, `error-object?` |
 | math | `extensions/math` | `sqrt`, `sin`, `cos`, trigonometric/transcendental functions |
+| introspection | `extensions/introspection` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`. Read-only environment introspection — no side effects, no new capabilities without `eval`. |
 | all (safe subset) | `internal/extensions/all` | Records, promises, `string-copy!`, `string-fill!`, additional string/character ops. Exposed as `all.SafeExtension`; note that `all.Extension` includes *all* sub-extensions and is NOT safe. |
 
 **Privileged extensions** — require trust or authorization:
@@ -69,7 +70,7 @@ Each extension falls into one of three categories:
 | Extension | Package | Capability granted |
 |-----------|---------|-------------------|
 | files | `extensions/files` | `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, `call-with-input-file`, `call-with-output-file`, `with-input-from-file`, `with-output-to-file` |
-| eval | `internal/extensions/eval` | `eval`, `load`, `interaction-environment`, `scheme-report-environment`, `null-environment`, `environment`, `syntax-expand`, `compile` |
+| eval | `internal/extensions/eval` | `eval`, `load`, `scheme-report-environment`, `null-environment`, `environment`, `expand`, `compile` |
 | system | `extensions/system` | `exit`, `emergency-exit`, `command-line`, `get-environment-variable`, `get-environment-variables` |
 
 **Context-dependent:**

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile"
 	extexceptions "github.com/aalpar/wile/extensions/exceptions"
+	extintrospection "github.com/aalpar/wile/extensions/introspection"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
@@ -35,6 +36,7 @@ func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
+		wile.WithExtension(extintrospection.Extension),
 	)
 	qt.Assert(t, err, qt.IsNil)
 	return engine
@@ -132,26 +134,6 @@ func TestLoad(t *testing.T) {
 
 	t.Run("wrong argument type", func(t *testing.T) {
 		evalExpectError(t, engine, `(load 42)`)
-	})
-}
-
-func TestInteractionEnvironment(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
-	t.Run("returns environment object", func(t *testing.T) {
-		// interaction-environment returns a SchemeEnvironment
-		result := eval(t, engine, `(interaction-environment)`)
-		c.Assert(result.Internal(), qt.IsNotNil)
-	})
-
-	t.Run("environment has standard bindings", func(t *testing.T) {
-		result := eval(t, engine, `(eval '(+ 1 2) (interaction-environment))`)
-		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(3))
-	})
-
-	t.Run("wrong argument count", func(t *testing.T) {
-		evalExpectError(t, engine, `(interaction-environment 42)`)
 	})
 }
 
@@ -397,6 +379,7 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
 		wile.WithExtension(extexceptions.Extension),
+		wile.WithExtension(extintrospection.Extension),
 	)
 	c.Assert(err, qt.IsNil)
 
@@ -550,69 +533,5 @@ func TestSyntaxLocalIdentifierAsBindingInMacro(t *testing.T) {
 			(test-as-binding)
 		`)
 		c.Assert(result.Internal(), qt.IsNotNil)
-	})
-}
-
-func TestEnvironmentIntrospection(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
-	t.Run("environment? true for environment", func(t *testing.T) {
-		result := eval(t, engine, `(environment? (interaction-environment))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("environment? false for non-environment", func(t *testing.T) {
-		result := eval(t, engine, `(environment? 42)`)
-		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
-	})
-
-	t.Run("environment-bound-names returns list", func(t *testing.T) {
-		result := eval(t, engine, `(pair? (environment-bound-names (interaction-environment)))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("environment-bound-names elements are symbols", func(t *testing.T) {
-		result := eval(t, engine, `(symbol? (car (environment-bound-names (interaction-environment))))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("environment-bound-names wrong type", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-bound-names 42)`)
-	})
-
-	t.Run("environment-ref looks up procedure", func(t *testing.T) {
-		result := eval(t, engine, `(procedure? (environment-ref (interaction-environment) '+))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("environment-ref unbound symbol", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-ref (interaction-environment) 'nonexistent-xyz)`)
-	})
-
-	t.Run("environment-ref wrong env type", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-ref 42 '+)`)
-	})
-
-	t.Run("environment-ref wrong symbol type", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-ref (interaction-environment) 42)`)
-	})
-
-	t.Run("environment-bound? true for bound", func(t *testing.T) {
-		result := eval(t, engine, `(environment-bound? (interaction-environment) '+)`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("environment-bound? false for unbound", func(t *testing.T) {
-		result := eval(t, engine, `(environment-bound? (interaction-environment) 'nonexistent-xyz)`)
-		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
-	})
-
-	t.Run("environment-bound? wrong env type", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-bound? 42 '+)`)
-	})
-
-	t.Run("environment-bound? wrong symbol type", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment-bound? (interaction-environment) 42)`)
 	})
 }

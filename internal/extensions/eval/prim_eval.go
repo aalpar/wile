@@ -218,16 +218,6 @@ func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimInteractionEnvironment implements the (interaction-environment) primitive.
-// Returns the REPL environment (the current top-level environment).
-func PrimInteractionEnvironment(mc *machine.MachineContext) error {
-	// Return the current top-level environment directly
-	topLevel := mc.EnvironmentFrame().TopLevelEnv()
-	topLevel.Name = "interaction-environment"
-	mc.SetValue(topLevel)
-	return nil
-}
-
 // PrimSchemeReportEnvironment implements the (scheme-report-environment) primitive.
 // Returns R5RS env.
 func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
@@ -620,80 +610,5 @@ func PrimSyntaxLocalIdentifierAsBinding(mc *machine.MachineContext) error {
 	// Add the use-site scope to mark as binding
 	result := syntax.AddScopeToSyntax(syntaxSym, useSiteScope)
 	mc.SetValue(result)
-	return nil
-}
-
-// PrimEnvironmentBoundNames implements the (environment-bound-names) primitive.
-// Returns a list of all symbols bound in the given environment.
-// (environment-bound-names env) -> list
-func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
-	envVal := mc.Arg(0)
-
-	topLevelEnv, ok := envVal.(*environment.TopLevelEnvironment)
-	if !ok {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
-	}
-
-	keys := topLevelEnv.Runtime().GlobalEnvironment().Keys()
-	var result values.Value = values.EmptyList
-	for key := range keys {
-		sym := key
-		result = values.NewCons(&sym, result)
-	}
-
-	mc.SetValue(result)
-	return nil
-}
-
-// PrimEnvironmentRef implements the (environment-ref) primitive.
-// Returns the value bound to a symbol in the given environment.
-// Signals an error if the symbol is unbound.
-// (environment-ref env symbol) -> value
-func PrimEnvironmentRef(mc *machine.MachineContext) error {
-	envVal := mc.Arg(0)
-	symVal := mc.Arg(1)
-
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, values.ErrInvalidArgument, "environment-ref")
-	if err != nil {
-		return err
-	}
-
-	sym, err := helpers.RequireType[*values.Symbol](symVal, values.ErrNotASymbol, "environment-ref")
-	if err != nil {
-		return err
-	}
-
-	env := topLevelEnv.Runtime()
-	sym = env.InternSymbol(sym)
-	binding := env.GetBinding(sym)
-	if binding == nil {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
-	}
-
-	mc.SetValue(binding.Value())
-	return nil
-}
-
-// PrimEnvironmentBoundQ implements the (environment-bound?) primitive.
-// Returns #t if the symbol is bound in the given environment, #f otherwise.
-// (environment-bound? env symbol) -> boolean
-func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
-	envVal := mc.Arg(0)
-	symVal := mc.Arg(1)
-
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, values.ErrInvalidArgument, "environment-bound?")
-	if err != nil {
-		return err
-	}
-
-	sym, err := helpers.RequireType[*values.Symbol](symVal, values.ErrNotASymbol, "environment-bound?")
-	if err != nil {
-		return err
-	}
-
-	env := topLevelEnv.Runtime()
-	sym = env.InternSymbol(sym)
-	binding := env.GetBinding(sym)
-	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }

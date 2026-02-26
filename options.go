@@ -16,6 +16,7 @@ package wile
 
 import (
 	"github.com/aalpar/wile/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/internal/extensions/io"
@@ -100,8 +101,8 @@ func WithoutCore() EngineOption {
 }
 
 // SafeExtensions returns engine options that add extensions suitable for
-// sandboxed engines: io, exceptions, math, and the safe subset of all
-// (records, promises, strings, characters).
+// sandboxed engines: io, exceptions, math, introspection, and the safe
+// subset of all (records, promises, strings, characters).
 //
 // These provide R7RS functionality without filesystem, eval, system, Go
 // interop, or threading access. Core primitives are still added by default
@@ -119,6 +120,7 @@ func SafeExtensions() []EngineOption {
 		WithExtension(io.Extension),
 		WithExtension(exceptions.Extension),
 		WithExtension(math.Extension),
+		WithExtension(introspection.Extension),
 		WithExtension(all.SafeExtension),
 	}
 }

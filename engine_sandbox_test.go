@@ -84,6 +84,9 @@ func TestSafeEngine_AllowsSafe(t *testing.T) {
 		{"make-record-type (all-safe)", `(record-type? (make-record-type 'point '(x y)))`, "#t"},
 		// all-safe: promises
 		{"force (all-safe)", "(force (make-promise 42))", "42"},
+		// introspection
+		{"environment? (introspection)", "(environment? 42)", "#f"},
+		{"environment-bound? (introspection)", "(environment-bound? (interaction-environment) '+)", "#t"},
 	}
 	for _, tc := range safe {
 		t.Run(tc.name, func(t *testing.T) {

@@ -37,6 +37,7 @@ import (
 	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
+	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
@@ -55,6 +56,7 @@ var allExtensions = []registry.Extension{
 	ioext.Extension,
 	files.Extension,
 	math.Extension,
+	introspection.Extension,
 	eval.Extension,
 	exceptions.Extension,
 	threads.Extension,
