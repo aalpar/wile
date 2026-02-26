@@ -19,25 +19,29 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
 | P1 | Unit testing library | Standard library | **Done** | 11 test files (3,187 lines) extracted from Go suite. `plans/TESTING.md` |
-| P2 | Performance refactoring Phase 7 | Performance | Deferred | Phases 0–6 complete (shipped in v1.4.0). Peephole optimizer shipped (PR #309): fused opcodes + MakeClosure promotion → **~4% geomean improvement**. Phase 7 (tagged integers, compilation caching, library pre-compilation) deferred |
-| P4 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry. Note: `ApplyContext` removed in v1.4.0; `InitFunc` now takes `*registry.Registry` directly |
-| P4 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ARCHITECTURE.md` |
-| P4 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/SECURITY.md` |
-| P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/SECURITY.md` |
-| P4 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/MACRO_SYSTEM.md` |
+| P2 | Sandboxing convenience API | Security | Not started | `SafeExtensions()` + security classification docs. ~20 LOC but communicates the embedding security story. `plans/SECURITY.md` |
+| P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md` |
+| P2 | Environment introspection | Feature | Planned | 4 read-only primitives (`environment?`, `environment-bound-names`, etc.). Small scope, directly useful for REPL/debugging. `plans/ARCHITECTURE.md` |
+| P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for fine-grained sandboxing. `plans/SECURITY.md` |
+| P3 | ER macro transformer | Macro system | Not started | Unlocks Chibi library ecosystem. Matters after Go-side adoption creates demand for Scheme library porting. `plans/MACRO_SYSTEM.md` |
+| P3 | Module decomposition Phase 1 | Architecture | Not started | Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md` |
+| P3 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases. |
+| P3 | Debugger / DAP integration | Tooling | Not started | Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md` |
+| P3 | Performance remaining tiers | Performance | Deferred | Rest-arg cons elimination (#1 allocator at 39.9%), sync.Pool overhead evaluation. `plans/PERFORMANCE.md` |
+| P4 | Hygiene debugging | Tooling | Planned | Scope introspection for macro authors. `plans/MACRO_SYSTEM.md` |
 | P4 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md` |
-| P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
-| P3 | Plugin shadowing | Architecture | Proposed | Extension primitive shadowing. Depends on external extensions. `plans/ARCHITECTURE.md` |
-| P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
-| P4 | Fused lexing/parsing | Research | Research | Flap paper analysis for fusing tokenizer into parser. `plans/PERFORMANCE.md` |
+| P4 | Dialect system | Architecture | Proposed | De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md` |
+| P4 | Plugin shadowing | Architecture | Proposed | Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md` |
+| P4 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry |
+| P4 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
+| P4 | Reflection primitives | Runtime | Not started | Expose bound symbols, arity, types to Scheme |
+| P4 | Continuation marks | Runtime | Not started | Racket-style stack annotation. Prompt infrastructure exists; needs per-frame key→value map |
 | P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
 | P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
-| P4 | Debugger / DAP integration | Tooling | Not started | Debug Adapter Protocol |
-| P4 | Reflection primitives | Runtime | Not started | Expose bound symbols, arity, types to Scheme |
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
-| P4 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined |
-| P4 | Continuation marks | Runtime | Not started | Racket-style stack annotation (`with-continuation-mark`, `continuation-mark-set->list`). Prompt infrastructure exists; needs per-frame key→value map |
-| P4 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing |
+| P5 | Fused lexing/parsing | Research | Research | Flap paper analysis. Actionable only after profiling confirms tokenizer is a bottleneck. `plans/PERFORMANCE.md` |
+| P5 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined. No demand signal yet. |
+| P5 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing. No demand signal yet. |
 | P5 | Hashtable redesign | Performance | Not started | Replace bucket chaining with native Go map |
 
 ---
