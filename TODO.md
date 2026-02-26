@@ -18,14 +18,14 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
+| P1 | Unit testing library | Standard library | Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
 | P2 | Performance refactoring Phase 7 | Performance | Deferred | Phases 0–6 complete (shipped in v1.4.0). Peephole optimizer shipped (PR #309): fused opcodes + MakeClosure promotion → **~4% geomean improvement**. Phase 7 (tagged integers, compilation caching, library pre-compilation) deferred |
-| P2 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry. Note: `ApplyContext` removed in v1.4.0; `InitFunc` now takes `*registry.Registry` directly |
-| P2 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
-| P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |
+| P4 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry. Note: `ApplyContext` removed in v1.4.0; `InitFunc` now takes `*registry.Registry` directly |
+| P4 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
+| P4 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. `plans/OPCODE_RESOURCE_LIMITS.md` |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for sandboxing untrusted code. `plans/AUTHORIZATION_FRAMEWORK.md` |
-| P3 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
-| P3 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
-| P3 | Unit testing library | Standard library | Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
+| P4 | Hygiene debugging | Tooling | Planned | Scope introspection tooling for macro hygiene. `plans/HYGIENE_DEBUGGING_DESIGN.md` |
+| P4 | Macro expansion tracing | Tooling | Planned | Trace generated code back to macro invocation/template. `plans/MACRO_EXPANSION_TRACING.md` |
 | P3 | Programmatic tokenization/parsing | Tooling | Not started | Expose tokenizer/parser to Scheme code |
 | P3 | Plugin shadowing | Architecture | Proposed | Extension primitive shadowing. Depends on external extensions. `plans/PLUGIN_SHADOWING_DESIGN.md` |
 | P4 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS |
@@ -45,7 +45,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 Future Extensions
 -----------------
 
-### Go FFI (P2)
+### Go FFI (P4)
 
 - [ ] Phase 3: Plugin support (dynamic extension loading via registry pattern)
 
