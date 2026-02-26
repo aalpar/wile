@@ -350,11 +350,11 @@ The REPL includes an integrated debugger. Commands start with `,`:
 Source → Tokenizer → Parser → Expander → Compiler → VM
 ```
 
-1. **Tokenizer** — Lexical analysis with comprehensive R7RS token support
-2. **Parser** — Builds syntax tree with source location tracking
-3. **Expander** — Macro expansion using `syntax-rules`/`syntax-case` with scope sets
-4. **Compiler** — Generates bytecode operations
-5. **VM** — Executes bytecode with stack-based evaluation
+1. **[Tokenizer](internal/tokenizer/)** — Lexical analysis with comprehensive R7RS token support
+2. **[Parser](internal/parser/)** — Builds syntax tree with source location tracking
+3. **[Expander](https://pkg.go.dev/github.com/aalpar/wile/machine)** — Macro expansion using `syntax-rules`/`syntax-case` with scope sets
+4. **[Compiler](https://pkg.go.dev/github.com/aalpar/wile/machine)** — Generates bytecode operations
+5. **[VM](https://pkg.go.dev/github.com/aalpar/wile/machine)** — Executes bytecode with stack-based evaluation
 
 ### Package Structure
 
