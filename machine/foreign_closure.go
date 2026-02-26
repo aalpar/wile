@@ -35,6 +35,26 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 	}
 }
 
+// applyCallableError converts errors from ApplyCallable into Scheme
+// exceptions so they are catchable by guard and with-exception-handler.
+// Errors that are already Scheme-level control flow (exception escapes,
+// prompt aborts, exit escapes) pass through unchanged.
+func applyCallableError(mc *MachineContext, err error) error {
+	var excErr *ErrExceptionEscape
+	if errors.As(err, &excErr) {
+		return err
+	}
+	var abortErr *ErrPromptAbort
+	if errors.As(err, &abortErr) {
+		return err
+	}
+	var exitErr *ErrExitEscape
+	if errors.As(err, &exitErr) {
+		return err
+	}
+	return goErrorToSchemeException(mc, err)
+}
+
 var _ Closure = (*ForeignClosure)(nil)
 
 // ForeignClosure wraps a Go function as a directly-callable Scheme procedure.
