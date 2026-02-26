@@ -1,4 +1,4 @@
-# plans/ — Plan File Conventions
+# plans/ -- Plan File Conventions
 
 **Plans go in `plans/`.** Do not create plan files in any other location.
 
@@ -13,40 +13,33 @@ When investigating R7RS conformance issues:
 
 ## Plan Files
 
-### Active Plans
+| File | Contents | Status |
+|------|----------|--------|
+| `PERFORMANCE.md` | Allocation optimization (completed fixes + remaining tiers), block-allocated pairs (complete), unified pool manager (complete), fused lexing research | Mixed |
+| `SECURITY.md` | Extension-level sandboxing model, authorization framework, opcode resource limits | Proposed/Design |
+| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging design, macro expansion tracing | Proposed/Planned |
+| `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
+| `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
+| `TESTING.md` | Scheme test expansion (complete) | Complete |
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `ENVIRONMENT_INTROSPECTION.md` | Read-only environment introspection primitives | Planned |
-| `OPCODE_RESOURCE_LIMITS.md` | Per-category resource limits for VM opcodes | Design |
-| `MACRO_EXPANSION_TRACING.md` | Trace macro-generated code to source | Planned |
-| `HYGIENE_DEBUGGING_DESIGN.md` | Scope provenance and debugging primitives | Planned |
-| `BREAKPOINT_SNAP_TO_NEXT.md` | Snap-to-next breakpoint resolution for optimized bytecode | Proposed |
-| `BREAKPOINT_INLINE_TRAPS.md` | Inline breakpoint traps — remove per-instruction debugger check from VM loop | Proposed |
-| `ER_MACRO_TRANSFORMER.md` | `er-macro-transformer` (explicit renaming macros) | Proposed |
+## Before Starting Work
 
-### Optimizations
+**ALWAYS check existing project artifacts before planning or proposing solutions:**
 
-| File | Purpose | Status |
-|------|---------|--------|
-| `OPTIMIZATIONS.md` | Index of all optimization files (plans, reference data, session plans) | Active |
+1. **Check `plans/` directory** -- Read relevant plan files to understand existing design decisions, phase status, and what's already been explored
+2. **Check `TODO.md`** -- Verify the task isn't already completed or documented as deferred
+3. **Check existing patterns** -- Search the codebase for prior art before proposing new designs
 
-### Proposed Designs (Future)
-
-| File | Purpose | Status |
-|------|---------|--------|
-| `PLUGIN_SHADOWING_DESIGN.md` | Primitive shadowing for extensions | Proposed |
-| `SANDBOXING_MODEL.md` | Extension-level sandboxing: security classification, SafeExtensions API, isolation tests | Proposed |
-| `AUTHORIZATION_FRAMEWORK.md` | K8s-style verb+resource authorization for sandboxing (fine-grained layer) | Proposed |
-| `DIALECT_SYSTEM.md` | Multi-dialect support: de-globalize forms registry, Dialect type, extract R7RS as default | Proposed |
-| `MODULE_DECOMPOSITION.md` | Split extensions into separate Go modules: core boundary, extraction order, go workspace | Proposed |
-| `FUSED_LEXING_PARSING.md` | Flap paper analysis + sketch for fusing tokenizer into parser | Research |
+**Do not:**
+- Create new plan files without reading existing ones in `plans/`
+- Propose architectural approaches without checking how similar problems are already solved
+- Start implementation without verifying assumptions against actual code
 
 ## Developer Documentation (outside plans/)
 
 | File | Purpose |
 |------|---------|
-| `docs/dev/CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Performance optimization guide — explains why Apply/continuation/stack code is complex and what breaks if simplified |
+| `docs/dev/CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Performance optimization guide |
 | `docs/dev/DEBUG_METHODOLOGY.md` | Systematic debug logging methodology and Go gotchas |
 
 ## Design Documents (outside plans/)
