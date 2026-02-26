@@ -163,7 +163,7 @@ Extensions implement `registry.Extension` and register primitives, macros, and c
 
 Extensions are the primary sandboxing mechanism. Primitives not in the registry don't exist — there's no runtime check to bypass.
 
-`WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system, gointerop, threads) are excluded.
+`WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded.
 
 `WithoutCore()` goes further — it produces an engine with zero primitives. Only extensions added via `WithExtension` are available. This is useful for building minimal purpose-specific engines.
 

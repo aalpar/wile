@@ -20,7 +20,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`. |
 | **Privileged** | eval | `internal/extensions/eval` | Code loading: `eval`, `load`, `interaction-environment`, `environment`. |
 | **Privileged** | system | `extensions/system` | Process: `exit`, `emergency-exit`, `command-line`, `get-environment-variable`. |
-| **Privileged** | gointerop | `extensions/gointerop` | Go bridge: channels, wait groups, rw-mutexes, atomics, once. |
+| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
 
 **Safe** means no ambient authority — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
@@ -33,7 +33,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 ```
 
-This includes core + io + exceptions + math + records/promises/strings/characters. No filesystem, no eval, no system calls, no Go interop, no threads.
+This includes core + io + exceptions + math + records/promises/strings/characters. No filesystem, no eval, no system calls, no Go concurrency (gointerop, threads).
 
 ### Safe sandbox with library support
 

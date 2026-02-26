@@ -32,6 +32,7 @@ func NewCompileTimeValue(v Value) *CompileTimeValue {
 	}
 }
 
+// Unwrap returns the underlying value.
 func (p *CompileTimeValue) Unwrap() Value {
 	return p.Value
 }

@@ -15,27 +15,30 @@
 // Package all provides additional primitives for records, promises, and extended
 // string/character operations.
 //
-// # Records (R7RS 5.5)
+// # Records (SRFI-9 style)
 //
-//   - make-record-type, record-type?
-//   - make-record, record?, record-type-of
-//   - record-ref, record-set!
+//   - make-record-type, record-type?, record?, record-type
+//   - record-constructor, record-predicate
+//   - record-accessor, record-modifier
 //
 // # Promises (R7RS 4.2.5)
 //
-//   - make-promise, promise?
-//   - force
+//   - make-promise, promise?, force
 //
 // # Extended String Operations
 //
-//   - string-copy, string-copy!, string-fill!
-//   - substring, list->string, string->list
+//   - string-copy!, string-fill!
+//   - string-map, string-for-each
+//   - string-ci=?, string-ci<?, string-ci>?, string-ci<=?, string-ci>=?
+//   - string-upcase, string-downcase, string-foldcase
 //
 // # Extended Character Operations
 //
+//   - char-ci=?, char-ci<?, char-ci>?, char-ci<=?, char-ci>=?
 //   - char-alphabetic?, char-numeric?, char-whitespace?
 //   - char-upper-case?, char-lower-case?
 //   - char-upcase, char-downcase, char-foldcase
+//   - digit-value
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.
 package all

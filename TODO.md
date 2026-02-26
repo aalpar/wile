@@ -19,6 +19,10 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
 | P1 | Unit testing library | Standard library | **Done** | 11 test files (3,187 lines) extracted from Go suite. `plans/TESTING.md` |
+| P1 | Stack.Drain — eliminate PopAll allocation in VM hot path | Performance | Not started | `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites. |
+| P1 | Fused push opcodes | Performance | Not started | `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops. |
+| P2 | ArrayList — array-backed list representation | Performance | Not started | Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test). |
+| P2 | Numeric dispatch simplification | Performance | Not started | Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations. |
 | P2 | Sandboxing convenience API | Security | Not started | `SafeExtensions()` + security classification docs. ~20 LOC but communicates the embedding security story. `plans/SECURITY.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md` |
 | P2 | Environment introspection | Feature | Planned | 4 read-only primitives (`environment?`, `environment-bound-names`, etc.). Small scope, directly useful for REPL/debugging. `plans/ARCHITECTURE.md` |

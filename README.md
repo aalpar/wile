@@ -16,6 +16,21 @@ engine.Define("height", wile.NewInteger(600))
 result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
 ```
 
+## Table of Contents
+
+- [Why Wile?](#why-wile)
+- [Embedding in Go](#embedding-in-go)
+- [Quick Start](#quick-start)
+- [Key Features in Action](#key-features-in-action)
+- [Installation](#installation)
+- [Usage](#usage)
+- [R7RS Standard Libraries](#r7rs-standard-libraries)
+- [Architecture](#architecture)
+- [Hygiene Model](#hygiene-model)
+- [Types](#types)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+
 ## Why Wile?
 
 **Embedding a Lisp in Go has always required tradeoffs:**
