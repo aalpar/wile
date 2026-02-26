@@ -30,6 +30,10 @@
 //	    wile.WithExtension(system.Extension),
 //	)
 //
+// Sandboxed engine (no filesystem, eval, system, or Go interop):
+//
+//	engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+//
 // Custom primitives:
 //
 //	engine, _ := wile.NewEngine(ctx)

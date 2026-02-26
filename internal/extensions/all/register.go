@@ -49,6 +49,20 @@ var Builder = registry.RegistryBuilder{
 // AddToRegistry registers all standard primitives.
 var AddToRegistry = Builder.AddToRegistry
 
+// SafeBuilder includes only the safe parts of all: records, promises, strings,
+// and characters. It excludes sub-extensions that grant ambient authority
+// (files, system, eval, gointerop, threads).
+var SafeBuilder = registry.NewRegistryBuilder(
+	addRecords,
+	addPromises,
+	addMoreStrings,
+	addMoreChars,
+)
+
+// SafeExtension includes records, promises, and additional string/character
+// operations without any privileged sub-extensions.
+var SafeExtension = registry.NewExtension("all-safe", SafeBuilder.AddToRegistry)
+
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
