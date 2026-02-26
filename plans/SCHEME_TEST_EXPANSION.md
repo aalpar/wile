@@ -1,7 +1,8 @@
 # Scheme Test Suite Expansion
 
-**Status**: In progress
+**Status**: Complete
 **Created**: 2026-02-25
+**Completed**: 2026-02-25
 
 ## Goal
 
@@ -69,18 +70,24 @@ Incremental by R7RS section. One PR per section. Each PR:
 
 ## Prioritized section order
 
-| Order | File | Source Go tests | Approx cases |
-|-------|------|----------------|--------------|
-| 1 | `strings-test.scm` | `prim_strings_test.go` | ~38 |
-| 2 | `characters-test.scm` | `prim_characters_test.go` | ~15 |
-| 3 | `ports-test.scm` | `prim_ports_test.go`, `prim_read_write_test.go` | ~60 |
-| 4 | `numbers-test.scm` | `extensions/math/` tests | ~20 |
-| 5 | `exceptions-test.scm` | `extensions/exceptions/` tests | ~10 |
-| 6 | `lazy-test.scm` | `prim_all_test.go` (promises) | ~5-10 |
-| 7 | `records-test.scm` | `prim_all_test.go` (records) | ~10 |
-| 8 | `eval-test.scm` | `prim_eval_test.go` | ~15 |
-| 9 | `control-test.scm` | `machine/` tests (dynamic-wind, call/cc) | ~25 |
-| 10 | `macros-test.scm` | `machine/` tests (syntax-rules, syntax-case) | ~30 |
+| Order | File | Source Go tests | Lines | PR | Status |
+|-------|------|----------------|-------|-----|--------|
+| 1 | `strings-test.scm` | `prim_strings_test.go` | 178 | #338 | Done |
+| 2 | `characters-test.scm` | `prim_characters_test.go` | 135 | #338 | Done |
+| 3 | `ports-test.scm` | `prim_ports_test.go`, `prim_read_write_test.go` | 663 | #340 | Done |
+| 4 | `numbers-test.scm` | `extensions/math/` tests, `prim_arithmetic_test.go`, `prim_numeric_predicate_test.go` | 531 | #341 | Done |
+| 5 | `exceptions-test.scm` | `prim_exceptions_test.go`, `prim_exception_test.go` | 637 | #342 | Done |
+| 6 | `lazy-test.scm` | `prim_all_test.go`, `prim_promise_test.go`, `prim_promise_extra_test.go` | 141 | #343 | Done |
+| 7 | `records-test.scm` | `prim_all_test.go` | 304 | #343 | Done |
+| 8 | `eval-test.scm` | `prim_eval_test.go` | 81 | #344 | Done |
+| 9 | `control-test.scm` | `prim_control_test.go` | 327 | #345 | Done |
+| 10 | `macros-test.scm` | `compile_syntax_rules_test.go`, `let_shadow_macro_test.go`, `hygiene_test.go` | 157 | #345 | Done |
+
+**Total: 3,187 lines across 11 files (including smoke-test.scm).**
+
+Additional fixes shipped alongside:
+- PR #339: Arity errors now catchable by Scheme exception handlers (`guard`, `with-exception-handler`)
+- PR #342: Flaky pool capacity test relaxed for CI stability
 
 ## Scope boundaries
 

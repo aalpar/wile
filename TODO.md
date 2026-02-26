@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-22
+**Last Updated**: 2026-02-25
 
 ### Current Project Status
 
@@ -9,7 +9,7 @@ TODO
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
 **Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries
 **Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
-**Tests**: Go test suite comprehensive; Scheme test infrastructure exists but needs content
+**Tests**: Go test suite comprehensive; Scheme test suite: 3,187 lines across 11 files (strings, characters, ports, numbers, exceptions, lazy, records, eval, control, macros) + 915-test R7RS conformance suite
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
 
 ### Summary
@@ -18,7 +18,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| P1 | Unit testing library | Standard library | Partial | `(chibi test)` exists, infrastructure in `test/`, needs content |
+| P1 | Unit testing library | Standard library | **Done** | 11 test files (3,187 lines) extracted from Go suite. `plans/SCHEME_TEST_EXPANSION.md` |
 | P2 | Performance refactoring Phase 7 | Performance | Deferred | Phases 0–6 complete (shipped in v1.4.0). Peephole optimizer shipped (PR #309): fused opcodes + MakeClosure promotion → **~4% geomean improvement**. Phase 7 (tagged integers, compilation caching, library pre-compilation) deferred |
 | P4 | Go FFI Phase 3 — Plugin support | Embedding | Not started | Dynamic extension loading via registry. Note: `ApplyContext` removed in v1.4.0; `InitFunc` now takes `*registry.Registry` directly |
 | P4 | Environment introspection | Feature | Planned | Read-only primitives (`environment?`, `environment-bound-names`, etc.). `plans/ENVIRONMENT_INTROSPECTION.md` |
@@ -86,7 +86,7 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 - [ ] File system operations beyond R7RS (permissions, symlinks, stat)
 - [ ] Signal handling
 
-**Unit Testing Library** — Partial
+**Unit Testing Library** — Done (initial extraction)
 
 **What Exists**:
 - `(chibi test)` framework in `lib/chibi/test.scm`
@@ -94,12 +94,13 @@ See `plans/AUTHORIZATION_FRAMEWORK.md` for full design.
 - Automated test discovery (`*-test.scm` files)
 - CI integration (`make test-scheme`)
 - Cross-implementation testing support
+- 11 test files (3,187 lines) covering strings, characters, ports, numbers, exceptions, lazy evaluation, records, eval, control features, and macros
+- 915-test R7RS conformance suite in `integration/testdata/r7rs-tests.scm`
 
-**What's Missing**:
-- [ ] Comprehensive test content (only 1 smoke test exists)
+**Future expansion**:
 - [ ] Regression test files (`test/regression/`)
 - [ ] Library-specific tests (`lib/*/test/`)
-- [ ] Full coverage of R7RS features
+- [ ] New test cases for features not covered by Go test extraction
 
 **Logging Library**
 - [ ] Log levels (debug, info, warn, error, fatal)
