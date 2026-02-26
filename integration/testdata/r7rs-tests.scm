@@ -1381,6 +1381,13 @@
 (test #t (string-ci<=? "ΑΒΓ" "αβγ"))
 (test #t (string-ci>=? "ΑΒΓ" "αβγ"))
 
+;; variadic (3+ args)
+(test #t (string-ci<? "abc" "DEF" "ghi"))
+(test #f (string-ci<? "abc" "DEF" "def"))
+(test #t (string-ci>? "ghi" "DEF" "abc"))
+(test #t (string-ci<=? "abc" "ABC" "def"))
+(test #t (string-ci>=? "def" "ABC" "abc"))
+
 ;; latin
 (test "ABC" (string-upcase "abc"))
 (test "ABC" (string-upcase "ABC"))

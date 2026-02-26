@@ -569,3 +569,82 @@ Create `wile-workspace` repo (or document the workspace pattern) with `go.work` 
 5. **Synthetic library API for Scheme definitions.** Synthetic libraries currently only export Go primitives (`engine.go:155-178`). To support Tier 2 (extension Scheme code loaded via library system), synthetic libraries need to also carry macro sources that are evaluated when the library is first loaded. The API for attaching Scheme definitions to synthetic libraries needs design work — this is a concrete deliverable.
 
 6. **Pragmatic core size.** The goal is a clear, self-service extension mechanism — not minimal core. Some things that *could* technically be extensions (e.g., `guard`, `define-record-type`) may stay in core for pragmatic reasons. What matters is that the mechanism works identically for things inside and outside core. If someone builds their own `guard`-equivalent as an extension, the same library-system path works — they write a `.sld` file, ship it with their module, users `(import ...)` it.
+
+## Verified Dependency Analysis (2026-02-25)
+
+Concrete import analysis of every extension package, confirming which can be extracted today.
+
+### engine.go does NOT import any extensions
+
+`engine.go:17-31` imports only: `environment`, `internal/parser`, `internal/syntax`, `machine`, `registry`, `registry/core`, `values`. Extensions are purely opt-in via `WithExtension()`. An embedder who writes `wile.NewEngine(ctx)` compiles only core into their binary. **The Go linker already dead-code-eliminates unreferenced extension packages within the module.**
+
+This means separate repos are not needed for binary size reduction alone — the current single-module structure already supports it. Separate repos buy: independent versioning, pkg.go.dev discoverability, and ecosystem signal.
+
+### The only all-extensions import is internal/bootstrap
+
+`internal/bootstrap/environment_tiny.go:37-51` imports all 9 extensions (6 public + 3 internal) into the `allExtensions` slice. Only `cmd/scheme/main.go` imports `internal/bootstrap`. Embedders using the Engine API never touch this path.
+
+### Public extensions: verified clean dependency profiles
+
+Every file in `extensions/` was checked. Production code imports only public packages:
+
+| Extension | Production imports (non-stdlib) |
+|-----------|-------------------------------|
+| **math** | `registry`, `registry/helpers`, `machine`, `values` |
+| **system** | `registry`, `registry/helpers`, `machine`, `values` |
+| **exceptions** | `registry`, `registry/helpers`, `machine`, `values` |
+| **gointerop** | `registry`, `registry/helpers`, `machine`, `values` |
+| **threads** | `registry`, `registry/helpers`, `machine`, `values` |
+| **files** | `registry`, `registry/helpers`, `machine`, `values` |
+
+No `internal/` imports in production code. Test-only: `files` tests import `internal/extensions/io` (for port state setup).
+
+**All 6 can be extracted to separate repos with zero production code changes.** Test files would need adjustment (files tests need io extension loaded via Engine, not direct internal import).
+
+### Internal extensions: confirmed internal package dependencies
+
+| Extension | Internal imports (production) | Extraction blocker |
+|-----------|------------------------------|-------------------|
+| **io** | `internal/parser`, `internal/tokenizer`, `internal/syntax` | `read`/`read-syntax` need parser; port caching needs tokenizer |
+| **eval** | `internal/parser`, `internal/schemeutil`, `internal/syntax` | `eval`/`load` need full parse→expand→compile pipeline |
+| **all** | imports all 8 other extensions (both public and internal) | Meta-package; own primitives (records, promises, strings, chars) use only public packages |
+
+### `all` extension decomposition confirmed viable
+
+`all/register.go` aggregates all extensions. But its own primitive files have clean imports:
+- `prim_all.go` (records, promises): `environment`, `machine`, `registry/helpers`, `values`
+- `prim_strings.go`: `machine`, `registry/helpers`, `values`
+- `prim_characters.go`: `machine`, `registry/helpers`, `values`
+
+These can be split into `wile-records`, `wile-promises`, and moved to core (strings/chars) as the plan describes.
+
+### files → io runtime dependency confirmed
+
+`files` extension calls `extio.GetCurrentInputPort()`, `extio.SetCurrentInputPort()`, etc. for `with-input-from-file`/`with-output-to-file`. The import is `internal/extensions/io` — currently internal.
+
+**Options for extraction:**
+1. Extract io first, then files depends on `wile-io` (violates "no extension depends on another extension" rule)
+2. Move port state accessors to a public interface in core (e.g., `registry/portstate`)
+3. Accept that files+io are always co-loaded (bundle them or keep io in core)
+
+### Existing extension example validates the pattern
+
+`wile-extension-example/` is already a separate Go module (`go.mod`: `require github.com/aalpar/wile v1.3.1`). Its `kvstore/` package demonstrates the full extension authoring pattern: `registry.Extension` + `registry.Closeable` + `PrimitiveSpec` registration. Pattern is proven and working.
+
+### Scheme libraries inventory
+
+```
+lib/scheme/   — R7RS-small core (base, char, complex, cxr, eval, file, inexact, lazy, load,
+                process-context, read, repl, time, write, r5rs, case-lambda) — must stay
+lib/srfi/     — SRFI-1 only (list operations)
+lib/chibi/    — test.sld, optional.sld, diff.sld, term/ (terminal)
+```
+
+Too few SRFIs to justify a separate repo yet. As more are added, `wile-srfi` makes sense.
+
+### Key conclusion
+
+The plan's phased approach is correct. The immediate blockers for Phase 3 (extract extension modules) are:
+1. **Phase 2 prerequisite (make io/eval public)** — requires deciding whether to expose `internal/parser` etc. or create public interfaces
+2. **files→io dependency** — needs a resolution strategy before files can be independently extracted
+3. **Test migration** — files tests import internal io directly; would need Engine-based test setup
