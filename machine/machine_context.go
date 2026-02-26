@@ -794,7 +794,7 @@ func (p *MachineContext) Run() error {
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 			if err != nil {
-				return mc.WrapError(err, "")
+				return applyCallableError(mc, err)
 			}
 			mc = result
 
@@ -939,7 +939,7 @@ func (p *MachineContext) Run() error {
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 			if err != nil {
-				return mc.WrapError(err, "")
+				return applyCallableError(mc, err)
 			}
 			mc = result
 
