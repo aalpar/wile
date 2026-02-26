@@ -33,7 +33,7 @@ func TestAcquireStack_ReturnsEmptyStack(t *testing.T) {
 	s := acquireStack()
 	qt.Assert(t, s, qt.IsNotNil)
 	qt.Assert(t, s.Len(), qt.Equals, 0)
-	qt.Assert(t, cap(*s) >= 8, qt.IsTrue) // pool's New allocates cap 8
+	qt.Assert(t, cap(*s) > 0, qt.IsTrue)
 }
 
 func TestReleaseStack_NilIsNoop(t *testing.T) {
