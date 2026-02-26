@@ -1,8 +1,12 @@
-# Plan: Extension-Level Sandboxing Model
+# Security Plans
+
+---
+
+# Extension-Level Sandboxing Model
 
 **Status**: Proposed
 **Date**: 2026-02-20
-**Related**: `AUTHORIZATION_FRAMEWORK.md` (fine-grained layer), `docs/EXTENSIONS.md`
+**Related**: Authorization Framework (below), `docs/EXTENSIONS.md`
 
 ## Motivation
 
@@ -15,23 +19,23 @@ This plan documents the extension-level sandboxing model and the concrete work t
 ## Architecture: Two-Layer Sandboxing
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Layer 1: Extension-level (this plan)                        │
-│                                                             │
-│ Controls WHICH primitives exist in the engine.              │
-│ Mechanism: WithExtension() at Engine construction.          │
-│ Granularity: per-extension (io, files, eval, threads, etc.) │
-│ Enforcement: primitives not in registry don't exist.        │
-│ Propagation: LibraryEnvFactory inherits engine's registry.  │
-└─────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────┐
-│ Layer 2: Authorization (AUTHORIZATION_FRAMEWORK.md)         │
-│                                                             │
-│ Controls WHAT operations primitives can perform.            │
-│ Mechanism: Authorizer via context.Context.                  │
-│ Granularity: per-operation (read file X, delete file Y).    │
-│ Enforcement: Check() call inside each gated primitive.      │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+| Layer 1: Extension-level (this section)                      |
+|                                                              |
+| Controls WHICH primitives exist in the engine.               |
+| Mechanism: WithExtension() at Engine construction.           |
+| Granularity: per-extension (io, files, eval, threads, etc.)  |
+| Enforcement: primitives not in registry don't exist.         |
+| Propagation: LibraryEnvFactory inherits engine's registry.   |
++-------------------------------------------------------------+
++-------------------------------------------------------------+
+| Layer 2: Authorization (see below)                           |
+|                                                              |
+| Controls WHAT operations primitives can perform.             |
+| Mechanism: Authorizer via context.Context.                   |
+| Granularity: per-operation (read file X, delete file Y).     |
+| Enforcement: Check() call inside each gated primitive.       |
++-------------------------------------------------------------+
 ```
 
 Layer 1 is coarse but zero-cost: if the filesystem extension isn't loaded, filesystem primitives don't exist — no runtime checks needed. Layer 2 adds fine-grained control within loaded extensions (e.g., allow reading `/data/` but deny writing).
@@ -121,7 +125,7 @@ Add a `docs/SANDBOXING.md` covering:
 - Example: minimal sandbox, safe sandbox, full-featured sandbox
 - How library propagation works
 - What sandboxing does NOT cover (resource limits, CPU/memory, stack depth — separate concerns; `WithMaxCallDepth` exists for stack)
-- Relationship to `AUTHORIZATION_FRAMEWORK.md`
+- Relationship to authorization framework
 
 ### Phase 3: Verify isolation invariants
 
@@ -213,17 +217,6 @@ type LibraryEnvFactory func(context.Context, *EnvironmentFrame) (*EnvironmentFra
 **Proposed signature:**
 
 ```go
-type LibraryEnvFactory func(context.Context, *EnvironmentFrame, machine.LibraryName) (*EnvironmentFrame, error)
-```
-
-**Note:** This introduces a dependency from `environment/` on `machine.LibraryName`. If that's undesirable (layering violation — `environment/` is lower than `machine/`), alternatives:
-- Move `LibraryName` to `environment/` or a shared package (e.g., `values/`)
-- Use `[]string` directly in the signature and convert at the call site
-- Define a minimal interface or type alias in `environment/`
-
-The `[]string` option is simplest and avoids the dependency entirely:
-
-```go
 type LibraryEnvFactory func(context.Context, *EnvironmentFrame, []string) (*EnvironmentFrame, error)
 ```
 
@@ -239,8 +232,6 @@ type LibraryEnvFactory func(context.Context, *EnvironmentFrame, []string) (*Envi
 | CLI setup | `cmd/scheme/main.go:191` | Points to bootstrap factory |
 | Tests | `machine/library_test.go:309,745`, `machine/library_scheme_test.go:54` | Point to bootstrap factory |
 | Docs | `docs/EXTENSION_LIBRARIES.md`, `docs/dev/ENVIRONMENT_SYSTEM.md` | Text updates |
-
-Factories that don't need the name ignore the parameter. The engine factory could log it or pass it to a future policy callback.
 
 ### Phase 6: Library load observability
 
@@ -269,24 +260,12 @@ There are three sites that process `(import ...)`:
 | `CompileImport` | `compile_time_continuation_library.go:718` | Top-level `(import ...)` — importer is `nil` (script/REPL) |
 | `expandImportForm` | `expander_time_continuation.go:748` | Top-level during expansion — importer is `nil` (script/REPL) |
 
-The key insight: `processLibraryImport` already receives the importing library as `lib *CompiledLibrary`. The importer identity is in scope — it's just not passed further. The other two sites are top-level imports where `nil` is the correct importer identity (not a missing value).
-
 All three sites follow the same sequence:
-1. `LoadLibrary` → get `*CompiledLibrary` (library name, exports, source file)
-2. `ApplyToExports` → get post-modifier bindings (what actually lands)
-3. `CopyLibraryBindingsToEnvAtPhase` → install bindings
+1. `LoadLibrary` -> get `*CompiledLibrary` (library name, exports, source file)
+2. `ApplyToExports` -> get post-modifier bindings (what actually lands)
+3. `CopyLibraryBindingsToEnvAtPhase` -> install bindings
 
 The callback fires between steps 2 and 3, where all information converges.
-
-**Where the data lives now:**
-
-| Information | Available at | Currently stored? |
-|-------------|-------------|-------------------|
-| Library name | `LoadLibrary` / `CompiledLibrary.Name` | Yes — in `LibraryRegistry` |
-| Source file | `loadLibraryFromFile` / `CompiledLibrary.SourceFile` | Yes — in `CompiledLibrary` |
-| Export list | `CompiledLibrary.Exports` | Yes — in `CompiledLibrary` |
-| Post-modifier bindings | `ApplyToExports` return value | **No** — computed and consumed, not stored |
-| Importing library name | `processLibraryImport` `lib` param | **In scope but not propagated** |
 
 **Approach:** Add an optional `LibraryImportObserver` callback to `LibraryRegistry` or `TopLevelEnvironment`. Fire it at all three import sites, between `ApplyToExports` and `CopyLibraryBindingsToEnvAtPhase`. The observer is read-only — it observes but doesn't influence the import.
 
@@ -295,16 +274,6 @@ type LibraryImportObserver func(LibraryImportEvent)
 ```
 
 Embedders that don't set it pay nothing (nil check before firing).
-
-**Future extension path:** If the observer's return type changes from nothing to `error`, it becomes an enforcement hook — a callback that can reject an import. The call sites already have error handling around the import step. This is additive (change the callback signature), not a redesign. The plan does NOT include enforcement; it only includes observation. But the architecture doesn't prevent it.
-
-### Phase 7: Bootstrap factory alignment (optional)
-
-The bootstrap factory (`internal/bootstrap/environment_tiny.go:53-65`) hardcodes `allExtensions` and loads everything. This is the test/standalone path (used by `NewTopLevelEnvironmentFrameTiny` and `NewLibraryEnvironmentFrame`).
-
-For the engine path this doesn't matter — the engine uses its own factory. But the bootstrap factory creates an inconsistency: tests that use `NewLibraryEnvironmentFrame` directly get full capabilities regardless of any restriction the test intends.
-
-**Deferred** — only matters if tests need to verify sandboxed library behavior through the bootstrap path, which they shouldn't.
 
 ## Scope boundaries
 
@@ -317,16 +286,11 @@ For the engine path this doesn't matter — the engine uses its own factory. But
 - Library name in factory signature (forward-compatible for per-library policies)
 - Library load observability (what was loaded, what bindings landed where)
 
-**Covered by AUTHORIZATION_FRAMEWORK.md:**
-- Fine-grained per-operation authorization within loaded extensions
-- `Check(AccessRequest)` at runtime primitive call sites
-- `FilesystemRoot`, `ReadOnly`, `DenyAll` authorizers
-
 **Not covered (separate concerns):**
 - Resource limits: CPU time, memory, allocation rate — requires VM-level instrumentation
 - Stack depth limits: `WithMaxCallDepth` already exists
 - Network access: no network primitives exist yet; when added, they'd be a new privileged extension
-- Per-library policies (enforcement): Phase 4 passes the library name through the factory, which *enables* per-library policies. The actual policy mechanism (allowlist, callback, etc.) is future work — build when there's demand.
+- Per-library policies (enforcement): Phase 5 passes the library name through the factory, which *enables* per-library policies. The actual policy mechanism (allowlist, callback, etc.) is future work.
 - Information flow: a privileged library can pass capabilities (e.g., open file handle) to an unprivileged library via exported values. Preventing this requires an object-capability model, which is a fundamental architecture change.
 
 ## Dependencies
@@ -337,8 +301,7 @@ For the engine path this doesn't matter — the engine uses its own factory. But
 - Phase 4 (registry filtering): None — operates on `Registry` type, independent of other phases
 - Phase 5 (factory signature): None (mechanical change)
 - Phase 6 (observability): Phase 5 (needs library name in factory for importer tracking)
-- Phase 7 (bootstrap alignment): Deferred
-- `AUTHORIZATION_FRAMEWORK.md` is independent and can proceed in parallel
+- Authorization framework is independent and can proceed in parallel
 
 ## Decision log
 
@@ -347,10 +310,310 @@ For the engine path this doesn't matter — the engine uses its own factory. But
 | Extension-level as primary mechanism | Embedder is the security principal. Extensions are already opt-in. Zero-cost when extension not loaded. |
 | `export` is not a security mechanism | `export` controls outward visibility (namespace management), not inward capability. A library with full imports can do anything regardless of its export list. |
 | Safe = no ambient authority | Extensions classified as safe have no way to affect the outside world. io extension uses caller-provided ports or in-memory ports — no filesystem access. |
-| `[]string` over `LibraryName` in factory | Avoids `environment/` → `machine/` dependency. `LibraryName.Parts` is `[]string` internally; convert at call site. |
+| `[]string` over `LibraryName` in factory | Avoids `environment/` -> `machine/` dependency. `LibraryName.Parts` is `[]string` internally; convert at call site. |
 | Observer as optional callback | Embedders that don't need observability pay nothing. No allocation, no interface dispatch on the hot path. Observer is read-only — observation now, enforcement later if needed (change return type to `error`). |
-| Post-modifier bindings not stored | Computed on demand by `ApplyToExports`. Storing them would mean every import set grows. Observer callback is fire-and-forget — cheaper than persistent storage. |
-| Importer identity is already in scope | `processLibraryImport` has `lib *CompiledLibrary` — the importing library name. Top-level sites (`CompileImport`, `expandImportForm`) correctly have `nil` importer. No new threading needed; just pass what's already available into the callback. |
 | Subtraction over composition for filtering | `Without()` starts from the full registry and removes. Alternative (export individual `add*` functions for embedders to compose) requires embedders to know the internal structure of core. Subtraction is simpler: start with everything, remove what you don't want. |
 | Compile-time binding removal separate from primitive removal | `Without()` removes runtime primitives. Compile-time bindings (`set!` as special form) stay — the compiler recognizes the form but the runtime rejects it. This produces a clear compile error ("mutation disallowed") rather than a confusing unbound-variable error. `WithoutBindings()` available for embedders who want full erasure. |
-| Per-library enforcement deferred | Phase 5 threads the library name through the factory. Phase 6 observes imports with importer identity. Enforcement (blocking imports) is a future callback return-type change, not a redesign. |
+
+---
+
+# Authorization Framework
+
+**Status**: Planned — Not started
+
+## Motivation
+
+Reddit feedback: embedded scripting languages for Go lack fine-grained resource access control. Wile has coarse-grained control (extensions are opt-in), but once an extension is loaded it's all-or-nothing. The gap is **fine-grained policy within enabled extensions**.
+
+## Architecture
+
+K8s-style `Check(AccessRequest) error` with an open vocabulary of resources and actions. One `Authorizer` interface, stable forever. Extensions define their own resource/action vocabulary without changing the security package.
+
+```
+AccessRequest { Resource string, Action string, Target string }
+Authorizer    { Authorize(AccessRequest) error }
+```
+
+### Context propagation via `context.Context`
+
+`context.Context` is the only vehicle available at all three sites (runtime primitives, compile-time `include`, library loading) without structural changes.
+
+```
+Engine.Eval(ctx) -> security.WithAuthorizer(ctx, authorizer) -> flows to all sites
+```
+
+### Package: `security/` (new, public, zero deps on wile)
+
+| File | Purpose |
+|------|---------|
+| `access.go` | `AccessRequest`, resource/action constants |
+| `authorizer.go` | `Authorizer` interface, `AuthorizerFunc`, `ErrAccessDenied` |
+| `context.go` | `WithAuthorizer`, `FromContext`, `Check` |
+| `filesystem_root.go` | Restricts file/code ops to a directory tree |
+| `read_only.go` | Allows reads/stats, denies writes/deletes |
+| `deny_all.go` | Blocks everything |
+| `composite.go` | AND combinator (all must allow) |
+
+### Well-known constants
+
+Core: `file`, `code`, `env`, `process` resources; `read`, `write`, `delete`, `stat`, `load`, `exit` actions. Extensions define their own (e.g., `net`/`connect`).
+
+## Integration Points
+
+| File | Primitives Gated | Resource | Action |
+|------|-----------------|----------|--------|
+| `extensions/files/prim_files.go` | open-input/output-file, file-exists?, delete-file, call-with-*-file | `file` | read/write/stat/delete |
+| `extensions/system/prim_system.go` | get-environment-variable(s), exit, emergency-exit | `env`/`process` | read/exit |
+| `internal/extensions/eval/prim_eval.go` | `load` | `code` | `load` |
+| `machine/compile_time_continuation.go` | `include`, `include-ci` | `code` | `load` |
+| `machine/library_loader.go` | library `import` | `code` | `load` |
+
+All sites already have `context.Context`. No plumbing changes needed.
+
+## Design Decisions
+
+- **One sentinel** (`ErrAccessDenied`) — `AccessRequest` fields carry domain info
+- **K8s two-state** (allow/deny) instead of three-state — embedders configure one authorizer
+- **Immutable after construction** — no `SetAuthorizer()`, prevents TOCTOU
+- **Denied `include` paths skip** (not error) — no information leakage about sandbox contents
+- **No `Extra` field** on `AccessRequest` — three fields cover all foreseeable needs
+- **Go 1.24 upgrade path** — `FilesystemRoot` can use `os.Root` internally without API changes
+
+## Phases
+
+| Phase | Description | Deps |
+|-------|-------------|------|
+| 1 | `security/` package — interface, context, sentinels, constants | None |
+| 2 | Built-in authorizers (FilesystemRoot, ReadOnly, DenyAll, Composite) | 1 |
+| 3 | Engine integration — `WithAuthorizer` option, wrap ctx in public methods | 1 |
+| 4 | Gate runtime primitives (files, system, eval) | 3 |
+| 5 | Gate compile-time code loading (include, import) | 3 |
+| 6 | Integration tests | 4, 5 |
+
+Phases 4 and 5 are independent of each other.
+
+## Scope Boundaries
+
+- **Not covered**: Load path resolution (planned, no design doc yet), network primitives (not yet), resource limits (CPU/memory/stack — separate concern)
+- **Composes with load-path stack**: path -> [resolve] -> [authorization check] -> os.Open
+
+---
+
+# Opcode Resource Limits Design
+
+**Status:** Design (not yet implemented)
+**Date:** 2026-02-15
+
+## Problem
+
+The VM loop checks `ctx.Done()` every 1024 operations (`contextCheckMask`), but several opcodes can block *inside* a single `Apply()` call for unbounded time before returning to the loop. A malicious or runaway Scheme program can exploit this to consume unbounded CPU within a single opcode execution.
+
+## Threat Model
+
+An untrusted Scheme program (or malicious input to a trusted program) triggers unbounded computation inside a single VM opcode, bypassing the context cancellation check in the main VM loop.
+
+The attacker controls Scheme source code (or input data that drives macro expansion). The embedder controls engine configuration. The goal is to give embedders per-category knobs that cap the work any single opcode can do.
+
+## Existing Limits
+
+| Limit | Location | Default | Error Sentinel |
+|-------|----------|---------|----------------|
+| Call depth | `machine_context.go:69` | 0 (unlimited) | `ErrCallDepthExceeded` |
+| read-string allocation | `prim_read_write.go:34` | 100 MB | `ErrAllocationLimitExceeded` |
+| read-bytevector allocation | `prim_read_write.go:38` | 100 MB | `ErrAllocationLimitExceeded` |
+| VM loop context check | `machine_context.go:38` | Every 1024 ops | (context error) |
+| Match VM context check | `match.go:237` | Every 1024 iterations | (context error) |
+
+## Complete Non-O(1) Operation Catalog
+
+### Engine VM (14 non-O(1) operations)
+
+#### Unbounded — Require Limits
+
+| Operation | File | Complexity | Dominant Cost | Limit Category |
+|-----------|------|-----------|---------------|----------------|
+| `SyntaxCaseMatch` | `operation_syntax_case.go:65` | O(input) | Runs match VM internally | Match Steps |
+| `SyntaxRulesTransform` | `operation_syntax_rules_transform.go:105` | O(clauses x (input + template x reps)) | Match per clause + Expand on first match | Match Steps + Expand Steps |
+| `SyntaxTemplateExpand` | `operation_syntax_case.go:206` | O(template x reps) | Recursive `expandSyntaxValue` calls | Expand Steps |
+| `Apply` (composable cont.) | `machine_context.go:486` (`applyComposableContinuation`) | O(d) + O(d) + O(w) | `DeepCopy` O(d) + `GraftContinuation` O(d) + winding O(w) | Continuation Copy Depth |
+| `ForeignFunctionCall` | `operation_foreign_function_call.go:61` | O(?) unbounded | Arbitrary Go code | Embedder Responsibility (ctx) |
+
+#### Bounded by Compile-Time Constants — No Limits Needed
+
+| Operation | File | Complexity | Why Safe |
+|-----------|------|-----------|----------|
+| `BuildSyntaxList` | (operation_build_syntax.go) | O(n), n = stack pops | n is argument count at call site, set at compile time |
+| `MakeCaseLambdaClosure` | (operation_case_lambda.go) | O(c), c = clauses | c is compile-time constant, typically 2-4 |
+| `BindPatternVars` | `operation_syntax_case.go:131` | O(v), v = pattern vars | v is compile-time constant, typically < 20 |
+| `StoreSyntaxCaseInput` | `operation_syntax_case.go:248` | O(input) for DatumToSyntax | One-time conversion; bounded by input already parsed |
+
+#### Bounded by Other Limits — No Additional Limits Needed
+
+| Operation | File | Complexity | Why Safe |
+|-----------|------|-----------|----------|
+| `RestoreContinuation` | (operation_restore.go) | O(stack) for evals copy | Stack depth bounded by `maxCallDepth` (when set) |
+| `Push` (multiValues path) | (operation_push.go) | O(v), v = value count | Rare path (`call-with-values` only); v is result count |
+| `Apply` (normal path) | (operation_apply.go) | O(args + params) | args = call-site arity; params typically 1-5 |
+| `SaveContinuationOffsetImmediate` | (operation_save_continuation.go) | O(1) | Just captures pointers |
+| `SyntaxCaseNoMatch` | `operation_syntax_case.go:181` | O(1) | Always errors immediately |
+
+### Match VM (2 non-O(1) instructions)
+
+| Instruction | File | Complexity | Status |
+|-------------|------|-----------|--------|
+| `ByteCodeDone` | `match.go` | O(1) in practice | Safe — checks immediate cdr + one lookahead |
+| `ByteCodeSkipIfTailCount` | `match.go` | O(1) with cache | **Fixed in 766bce1** — tail count cached, decremented per iteration |
+
+### Syntax Expansion Helpers (tree-walking)
+
+| Function | File | Complexity | Called From |
+|----------|------|-----------|------------|
+| `addScopeToSyntax` | `operation_syntax_rules_transform.go:349` | O(tree) | `SyntaxPair.AddScope` |
+| `addScopeToSyntaxSkipFreeIds` | `operation_syntax_rules_transform.go:249` | O(tree) | Template expansion |
+| `mapSyntaxTree` | `internal/syntax/syntax_pair.go` | O(tree) | `SyntaxPair.AddScope` |
+| `DatumToSyntaxValue` | `internal/schemeutil/` | O(tree) | `StoreSyntaxCaseInput` (conditional) |
+| `expandSyntaxValue` | `internal/match/syntax_adapter.go:255` | O(template x reps) | `SyntaxMatcher.Expand` |
+
+These are covered by the **Expand Steps** category — they are called as part of template expansion.
+
+## Limit Categories
+
+### Category 1: Match Steps
+
+**What it caps:** Iterations of the match VM's bytecode dispatch loop.
+
+**Enforcement point:** `Matcher.MatchSyntaxWithLiterals()` in `internal/match/match.go`, line 234+. The loop already has an `iterations` counter (line 234) and a batched `ctx.Done()` check every 1024 iterations (line 237). The limit check piggybacks on this existing counter, inside the same batch check:
+
+```
+if maxMatchSteps > 0 && iterations > maxMatchSteps {
+    return ErrMatchStepsExceeded
+}
+```
+
+**Plumbing (Engine -> Matcher):**
+
+```
+engineConfig.maxMatchSteps
+  -> Engine.maxMatchSteps
+    -> MachineContext.maxMatchSteps (new field, inherited by sub-contexts)
+      -> passed to SyntaxMatcher / Matcher at match call sites
+```
+
+**API:**
+```go
+wile.WithMaxMatchSteps(n uint64) EngineOption
+```
+
+**Default:** 0 (unlimited).
+
+**Error sentinel:** `values.ErrMatchStepsExceeded = NewStaticError("match step limit exceeded")`
+
+### Category 2: Expand Steps
+
+**What it caps:** Total recursive calls to `expandSyntaxValue()` (and the tree-walking helpers it calls) during a single template expansion.
+
+**Enforcement point:** At the top of `SyntaxMatcher.expandSyntaxValue()` in `internal/match/syntax_adapter.go`, line 255+:
+
+```
+p.expandSteps++
+if p.maxExpandSteps > 0 && p.expandSteps > p.maxExpandSteps {
+    return nil, ErrExpandStepsExceeded
+}
+```
+
+The counter resets at the start of each `Expand()` call (line 238).
+
+**API:**
+```go
+wile.WithMaxExpandSteps(n uint64) EngineOption
+```
+
+**Default:** 0 (unlimited).
+
+**Error sentinel:** `values.ErrExpandStepsExceeded = NewStaticError("expand step limit exceeded")`
+
+### Category 3: Continuation Copy Depth
+
+**What it caps:** The number of continuation frames walked during `DeepCopy()` and `GraftContinuation()` when invoking a composable continuation.
+
+**Enforcement point:** Inside `MachineContinuation.DeepCopy()` in `machine/machine_continuation.go`, line 164:
+
+```
+depth := 0
+for current.parent != nil {
+    depth++
+    if maxContinuationCopyDepth > 0 && depth > maxContinuationCopyDepth {
+        return nil, ErrContinuationCopyDepthExceeded
+    }
+    parentCopy := current.parent.Copy()
+    current.parent = parentCopy
+    current = parentCopy
+}
+```
+
+**This is distinct from `maxCallDepth`:**
+- `maxCallDepth` limits how deep the *live* call stack grows during execution.
+- `maxContinuationCopyDepth` limits how much work a single *continuation invocation* does when copying a captured continuation segment.
+
+**API:**
+```go
+wile.WithMaxContinuationCopyDepth(n uint64) EngineOption
+```
+
+**Default:** 0 (unlimited).
+
+**Error sentinel:** `values.ErrContinuationCopyDepthExceeded = NewStaticError("continuation copy depth exceeded")`
+
+### ForeignFunctionCall: Embedder Responsibility
+
+`ForeignFunctionCall` calls arbitrary Go code via the `ForeignFunction` signature. The context is accessible via `mc.Context()`. The VM cannot impose a step limit on opaque Go code. This is documented as the embedder's responsibility:
+
+- Use `context.WithTimeout` or `context.WithDeadline` to bound total execution time.
+- Foreign functions that perform unbounded work must check `mc.Context().Done()` internally.
+- The engine's built-in primitives already follow this contract.
+
+## New Error Sentinels
+
+Added to `values/foreign_error.go`, grouped with existing resource-exhaustion errors:
+
+```go
+ErrMatchStepsExceeded              = NewStaticError("match step limit exceeded")
+ErrExpandStepsExceeded             = NewStaticError("expand step limit exceeded")
+ErrContinuationCopyDepthExceeded   = NewStaticError("continuation copy depth exceeded")
+```
+
+## API Summary
+
+```go
+// Existing
+wile.WithMaxCallDepth(n uint64) EngineOption
+
+// New
+wile.WithMaxMatchSteps(n uint64) EngineOption
+wile.WithMaxExpandSteps(n uint64) EngineOption
+wile.WithMaxContinuationCopyDepth(n uint64) EngineOption
+```
+
+All follow the same convention:
+- 0 = unlimited (default)
+- \> 0 = hard cap
+- Exceeded -> wrapped sentinel error, propagated as Scheme exception
+
+## Plumbing Summary
+
+All three new limits follow the same path as `maxCallDepth`:
+
+```
+EngineOption (options.go)
+  -> engineConfig field (options.go)
+    -> Engine field (engine.go)
+      -> MachineContext field (machine_context.go)
+        -> inherited by sub-contexts (NewSubContext, NewSubContextForThread)
+          -> passed to enforcement point (match/expand/deep-copy)
+```
+
+## Future Work
+
+- **Default non-zero limits:** Once the limits are implemented and tested, consider changing defaults from 0 (unlimited) to sensible non-zero values. This is a separate decision that affects backward compatibility.
+- **Scope-walking step counting:** If `addScopeToSyntax` tree walks prove to be a security concern independent of expand steps, they can be added to the expand step counter.
+- **Macro expansion depth:** The expander (`ExpandExpression` in `expander_time_continuation.go:102`) recursively expands macro results without tracking depth. This is a *separate* concern from template expansion steps — it's about how many times a macro output is re-expanded, not how large a single expansion is. A `maxExpansionDepth` limit (tracking recursive re-expansion) may be needed as a fourth category.
