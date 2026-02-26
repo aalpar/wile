@@ -69,7 +69,7 @@ Full results and methodology in [examples/benchmarks/](examples/benchmarks/).
 
 ## Embedding in Go
 
-Wile provides a public API for embedding Scheme in Go programs via the `wile` package.
+Wile provides a public API for embedding Scheme in Go programs via the [`wile`](https://pkg.go.dev/github.com/aalpar/wile) package.
 
 ### Basic Usage
 
@@ -154,7 +154,7 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 | `wile.Null` | Empty list `'()` |
 | `wile.Void` | Void value |
 
-Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the `values` package.
+Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package.
 
 ### Engine Options
 
@@ -360,34 +360,34 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 
 | Package | Purpose |
 |---------|---------|
-| `wile` (root) | Public embedding API |
-| `machine/` | Virtual machine, compiler, macro expander |
-| `values/` | Scheme value types (numbers, pairs, ports, threads, etc.) |
-| `environment/` | Variable binding, scope chains, phase hierarchy |
-| `registry/` | Extension registration and primitives |
-| `registry/core/` | Essential primitives and bootstrap macros |
-| `registry/helpers/` | Shared utilities for primitive implementations |
-| `runtime/` | Compile/Run API for embedding |
-| `internal/syntax/` | First-class syntax objects with scope sets |
-| `internal/match/` | Pattern matching engine for macros |
-| `internal/parser/` | Scheme parser |
-| `internal/tokenizer/` | Lexer |
-| `internal/validate/` | Syntax validation |
-| `internal/forms/` | Compiled form definitions |
-| `internal/schemeutil/` | Scheme utility functions |
-| `internal/repl/` | Interactive REPL with debugger |
-| `internal/bootstrap/` | Environment initialization |
-| `internal/extensions/` | Extension packages (io, files, math, threads, etc.) |
+| [`wile`](https://pkg.go.dev/github.com/aalpar/wile) (root) | Public embedding API |
+| [`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine) | Virtual machine, compiler, macro expander |
+| [`values/`](https://pkg.go.dev/github.com/aalpar/wile/values) | Scheme value types (numbers, pairs, ports, threads, etc.) |
+| [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment) | Variable binding, scope chains, phase hierarchy |
+| [`registry/`](https://pkg.go.dev/github.com/aalpar/wile/registry) | Extension registration and primitives |
+| [`registry/core/`](https://pkg.go.dev/github.com/aalpar/wile/registry/core) | Essential primitives and bootstrap macros |
+| [`registry/helpers/`](https://pkg.go.dev/github.com/aalpar/wile/registry/helpers) | Shared utilities for primitive implementations |
+| [`runtime/`](https://pkg.go.dev/github.com/aalpar/wile/runtime) | Compile/Run API for embedding |
+| [`internal/syntax/`](internal/syntax/) | First-class syntax objects with scope sets |
+| [`internal/match/`](internal/match/) | Pattern matching engine for macros |
+| [`internal/parser/`](internal/parser/) | Scheme parser |
+| [`internal/tokenizer/`](internal/tokenizer/) | Lexer |
+| [`internal/validate/`](internal/validate/) | Syntax validation |
+| [`internal/forms/`](internal/forms/) | Compiled form definitions |
+| [`internal/schemeutil/`](internal/schemeutil/) | Scheme utility functions |
+| [`internal/repl/`](internal/repl/) | Interactive REPL with debugger |
+| [`internal/bootstrap/`](internal/bootstrap/) | Environment initialization |
+| [`internal/extensions/`](internal/extensions/) | Extension packages (io, files, math, threads, etc.) |
 
 ### API Stability
 
 The following packages form the public API and follow [Go module versioning](https://go.dev/doc/modules/version-numbers):
 
-- **`wile` (root)** — `Engine`, `RegisterFunc`, `Eval`/`Compile`/`Run`, error types
-- **`values`** — Scheme value types, `Value` interface, numeric tower
-- **`registry`** — `Registry`, `Extension`, `PrimitiveSpec`, phase constants
+- **[`wile`](https://pkg.go.dev/github.com/aalpar/wile)** (root) — `Engine`, `RegisterFunc`, `Eval`/`Compile`/`Run`, error types
+- **[`values`](https://pkg.go.dev/github.com/aalpar/wile/values)** — Scheme value types, `Value` interface, numeric tower
+- **[`registry`](https://pkg.go.dev/github.com/aalpar/wile/registry)** — `Registry`, `Extension`, `PrimitiveSpec`, phase constants
 
-All other packages (`machine/`, `environment/`, `internal/`) are implementation details and may change without notice. The `machine` package is technically importable but is not covered by compatibility guarantees.
+All other packages ([`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine), [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment), [`internal/`](internal/)) are implementation details and may change without notice. The `machine` package is technically importable but is not covered by compatibility guarantees.
 
 ## Hygiene Model
 
@@ -441,15 +441,15 @@ This prevents unintended variable capture in macros:
 
 | Document | Description |
 |----------|-------------|
-| `PRIMITIVES.md` | Complete reference of types and primitives |
-| `docs/design/DESIGN.md` | Macro system design |
-| `docs/design/EMBEDDING.md` | Embedding API design |
-| `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuation implementation |
-| `docs/dev/NUMERIC_TOWER.md` | Numeric tower architecture |
-| `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
-| `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented differences from R7RS |
-| `BIBLIOGRAPHY.md` | Academic references |
-| `CHANGELOG.md` | Release history |
+| [`PRIMITIVES.md`](PRIMITIVES.md) | Complete reference of types and primitives |
+| [`docs/design/DESIGN.md`](docs/design/DESIGN.md) | Macro system design |
+| [`docs/design/EMBEDDING.md`](docs/design/EMBEDDING.md) | Embedding API design |
+| [`docs/design/DELIMITED_CONTINUATIONS.md`](docs/design/DELIMITED_CONTINUATIONS.md) | Delimited continuation implementation |
+| [`docs/dev/NUMERIC_TOWER.md`](docs/dev/NUMERIC_TOWER.md) | Numeric tower architecture |
+| [`docs/dev/ENVIRONMENT_SYSTEM.md`](docs/dev/ENVIRONMENT_SYSTEM.md) | Environment system architecture |
+| [`docs/dev/R7RS_SEMANTIC_DIFFERENCES.md`](docs/dev/R7RS_SEMANTIC_DIFFERENCES.md) | Documented differences from R7RS |
+| [`BIBLIOGRAPHY.md`](BIBLIOGRAPHY.md) | Academic references |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 
 ## References
 
