@@ -15,6 +15,10 @@
 package wile
 
 import (
+	"github.com/aalpar/wile/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/internal/extensions/all"
+	"github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/registry"
 )
 
@@ -24,6 +28,7 @@ type engineConfig struct {
 	maxCallDepth   uint64
 	libraryPaths   []string
 	libraryEnabled bool // true when WithLibraryPaths was called
+	skipCore       bool // true when WithoutCore was called
 }
 
 // EngineOption configures an Engine.
@@ -79,5 +84,56 @@ func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true
 		cfg.libraryPaths = paths
+	}
+}
+
+// WithoutCore creates an engine with an empty registry — no core primitives
+// (arithmetic, pairs, control flow, etc.) are added. Extensions added via
+// WithExtension are still applied.
+//
+// This is useful for building minimal engines where only specific extensions
+// are needed, or for testing extension isolation.
+func WithoutCore() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.skipCore = true
+	}
+}
+
+// SafeExtensions returns engine options that add extensions suitable for
+// sandboxed engines: io, exceptions, math, and the safe subset of all
+// (records, promises, strings, characters).
+//
+// These provide R7RS functionality without filesystem, eval, system, Go
+// interop, or threading access. Core primitives are still added by default
+// unless WithoutCore is also used.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    append(wile.SafeExtensions(),
+//	        wile.WithLibraryPaths("./lib"),
+//	    )...,
+//	)
+func SafeExtensions() []EngineOption {
+	return []EngineOption{
+		WithExtension(io.Extension),
+		WithExtension(exceptions.Extension),
+		WithExtension(math.Extension),
+		WithExtension(all.SafeExtension),
+	}
+}
+
+// WithSafeExtensions adds the safe extension set to the engine.
+// This is a convenience wrapper around SafeExtensions for the common case
+// where no additional options need to be appended.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+func WithSafeExtensions() EngineOption {
+	return func(cfg *engineConfig) {
+		for _, opt := range SafeExtensions() {
+			opt(cfg)
+		}
 	}
 }

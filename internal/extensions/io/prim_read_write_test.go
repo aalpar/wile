@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package io
+package io_test
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile"
+	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/values"
 )
@@ -37,9 +37,9 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	c := qt.New(t)
 
 	// Reset state before and after test
-	ResetState()
-	InitState()
-	defer ResetState()
+	extio.ResetState()
+	extio.InitState()
+	defer extio.ResetState()
 
 	// Create multiple ports that will be accessed concurrently
 	numPorts := 10
@@ -62,13 +62,13 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				port := ports[portIdx%numPorts]
 
 				// Simulate PrimRead: get or create parser
-				cacheMu.Lock()
-				prss, ok := Parsers[port]
+				extio.ExportCacheMu.Lock()
+				prss, ok := (*extio.ExportParsers)[port]
 				if !ok || prss == nil {
 					prss = parser.NewParser(nil, true, port)
-					Parsers[port] = prss
+					(*extio.ExportParsers)[port] = prss
 				}
-				cacheMu.Unlock()
+				extio.ExportCacheMu.Unlock()
 
 				c.Assert(prss, qt.Not(qt.IsNil))
 			}(i)
@@ -80,9 +80,9 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	t.Run("concurrent delete", func(t *testing.T) {
 		// Pre-populate maps
 		for _, port := range ports {
-			cacheMu.Lock()
-			Parsers[port] = parser.NewParser(nil, true, port)
-			cacheMu.Unlock()
+			extio.ExportCacheMu.Lock()
+			(*extio.ExportParsers)[port] = parser.NewParser(nil, true, port)
+			extio.ExportCacheMu.Unlock()
 		}
 
 		// Concurrently delete entries
@@ -93,7 +93,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				port := ports[portIdx%numPorts]
 
 				// Simulate closePort: evict cached state
-				evictPortCache(port)
+				extio.ExportEvictPortCache(port)
 			}(i)
 		}
 		wg.Wait()
@@ -111,17 +111,17 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				switch op {
 				case 0:
 					// Read operation
-					cacheMu.Lock()
-					_ = Parsers[port]
-					cacheMu.Unlock()
+					extio.ExportCacheMu.Lock()
+					_ = (*extio.ExportParsers)[port]
+					extio.ExportCacheMu.Unlock()
 				case 1:
 					// Write operation
-					cacheMu.Lock()
-					Parsers[port] = parser.NewParser(nil, true, port)
-					cacheMu.Unlock()
+					extio.ExportCacheMu.Lock()
+					(*extio.ExportParsers)[port] = parser.NewParser(nil, true, port)
+					extio.ExportCacheMu.Unlock()
 				case 2:
 					// Delete operation
-					evictPortCache(port)
+					extio.ExportEvictPortCache(port)
 				}
 			}(i, opType)
 		}
@@ -130,45 +130,20 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 
 	// Test 4: Concurrent InitState calls (should be idempotent and safe)
 	t.Run("concurrent InitState", func(t *testing.T) {
-		ResetState()
+		extio.ResetState()
 		for range numGoroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				InitState()
+				extio.InitState()
 			}()
 		}
 		wg.Wait()
 
 		// Verify maps were initialized exactly once
-		c.Assert(Tokenizers, qt.Not(qt.IsNil))
-		c.Assert(Parsers, qt.Not(qt.IsNil))
+		c.Assert(*extio.ExportTokenizers, qt.Not(qt.IsNil))
+		c.Assert(*extio.ExportParsers, qt.Not(qt.IsNil))
 	})
-}
-
-// newEngine creates a Wile engine with the I/O extension loaded.
-func newEngine(t *testing.T) *wile.Engine {
-	t.Helper()
-	engine, err := wile.NewEngine(context.Background(),
-		wile.WithExtension(Extension),
-	)
-	qt.New(t).Assert(err, qt.IsNil)
-	return engine
-}
-
-// eval runs Scheme code and returns the result.
-func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
-	t.Helper()
-	result, err := engine.Eval(context.Background(), code)
-	qt.New(t).Assert(err, qt.IsNil)
-	return result
-}
-
-// evalExpectError runs Scheme code and expects an error.
-func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
-	t.Helper()
-	_, err := engine.Eval(context.Background(), code)
-	qt.New(t).Assert(err, qt.IsNotNil)
 }
 
 // =============================================================================
@@ -1340,10 +1315,10 @@ func TestParserCacheEviction(t *testing.T) {
 
 	t.Run("cache maps empty after eof", func(t *testing.T) {
 		// Snapshot cache sizes before our operation
-		cacheMu.RLock()
-		parsersBefore := len(Parsers)
-		tokenizersBefore := len(Tokenizers)
-		cacheMu.RUnlock()
+		extio.ExportCacheMu.RLock()
+		parsersBefore := len(*extio.ExportParsers)
+		tokenizersBefore := len(*extio.ExportTokenizers)
+		extio.ExportCacheMu.RUnlock()
 
 		// Read to EOF on a port — should add then evict the parser entry
 		eng := newEngine(t)
@@ -1352,10 +1327,10 @@ func TestParserCacheEviction(t *testing.T) {
 		   (read p))`)
 
 		// After EOF eviction, cache should be back to pre-test size
-		cacheMu.RLock()
-		parsersAfter := len(Parsers)
-		tokenizersAfter := len(Tokenizers)
-		cacheMu.RUnlock()
+		extio.ExportCacheMu.RLock()
+		parsersAfter := len(*extio.ExportParsers)
+		tokenizersAfter := len(*extio.ExportTokenizers)
+		extio.ExportCacheMu.RUnlock()
 
 		c.Assert(parsersAfter, qt.Equals, parsersBefore)
 		c.Assert(tokenizersAfter, qt.Equals, tokenizersBefore)
@@ -1376,8 +1351,8 @@ func TestParserCacheEviction(t *testing.T) {
 func TestDefaultOutputPort(t *testing.T) {
 	// Redirect the current output port to io.Discard to avoid polluting
 	// test output while still exercising the default port code path.
-	SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
-	defer ResetCurrentOutputPort()
+	extio.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+	defer extio.ResetCurrentOutputPort()
 
 	engine := newEngine(t)
 
@@ -1422,8 +1397,8 @@ func TestDefaultInputPortRead(t *testing.T) {
 	c := qt.New(t)
 
 	port := values.NewCharacterInputPortFromReader(strings.NewReader("hello"))
-	SetCurrentInputPort(port)
-	defer ResetCurrentInputPort()
+	extio.SetCurrentInputPort(port)
+	defer extio.ResetCurrentInputPort()
 
 	engine := newEngine(t)
 	result := eval(t, engine, `(equal? (read-char) #\h)`)

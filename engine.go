@@ -76,9 +76,11 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	reg := cfg.registry
 	if reg == nil {
 		reg = registry.NewRegistry()
-		err := core.AddToRegistry(reg)
-		if err != nil {
-			return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register core primitives")
+		if !cfg.skipCore {
+			err := core.AddToRegistry(reg)
+			if err != nil {
+				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register core primitives")
+			}
 		}
 	}
 

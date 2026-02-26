@@ -926,6 +926,46 @@ func TestEngineClose(t *testing.T) {
 	})
 }
 
+// Sandbox options
+
+func TestWithoutCore(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background(), WithoutCore())
+	c.Assert(err, qt.IsNil)
+	c.Assert(engine, qt.IsNotNil)
+
+	// Core primitives should be absent
+	_, err = engine.Eval(context.Background(), "(+ 1 2)")
+	var compErr *CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue)
+}
+
+func TestWithSafeExtensions(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background(), WithSafeExtensions())
+	c.Assert(err, qt.IsNil)
+	c.Assert(engine, qt.IsNotNil)
+
+	ctx := context.Background()
+
+	// Safe primitives present
+	result, err := engine.Eval(ctx, "(sqrt 4)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "2.0")
+
+	// Privileged primitives absent
+	_, err = engine.Eval(ctx, `(open-input-file "x")`)
+	var compErr *CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue)
+}
+
+func TestSafeExtensions(t *testing.T) {
+	c := qt.New(t)
+	opts := SafeExtensions()
+	// io, exceptions, math, all-safe
+	c.Assert(len(opts), qt.Equals, 4)
+}
+
 func TestWithMaxCallDepth(t *testing.T) {
 	tests := []struct {
 		name        string

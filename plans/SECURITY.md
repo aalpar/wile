@@ -4,7 +4,7 @@
 
 # Extension-Level Sandboxing Model
 
-**Status**: Proposed
+**Status**: Phases 1-3 implemented
 **Date**: 2026-02-20
 **Related**: Authorization Framework (below), `docs/EXTENSIONS.md`
 
@@ -62,7 +62,7 @@ Each extension falls into one of three categories:
 | io | `internal/extensions/io` | `read`, `write`, `display`, `newline`, string/bytevector ports, `current-input-port`, `current-output-port`, `current-error-port`, port predicates, binary I/O. All in-memory or on caller-provided ports — no filesystem access. |
 | exceptions | `extensions/exceptions` | `raise`, `with-exception-handler`, `guard`, `error`, `error-object?` |
 | math | `extensions/math` | `sqrt`, `sin`, `cos`, trigonometric/transcendental functions |
-| all | `internal/extensions/all` | Records, promises, `string-copy!`, `string-fill!` |
+| all (safe subset) | `internal/extensions/all` | Records, promises, `string-copy!`, `string-fill!`, additional string/character ops. Exposed as `all.SafeExtension`; note that `all.Extension` includes *all* sub-extensions and is NOT safe. |
 
 **Privileged extensions** — require trust or authorization:
 
@@ -91,52 +91,36 @@ The `LibraryEnvFactory` in `engine.go:182` (set via `SetLibraryEnvFactory` on `T
 
 ## Concrete work items
 
-### Phase 1: Convenience API
+### Phase 1: Convenience API — **Implemented**
 
-Add a `SafeExtensions()` function that returns the safe extension set:
+**Location**: `options.go`, `engine.go`, `internal/extensions/all/register.go`
 
-```go
-// SafeExtensions returns extensions suitable for sandboxed engines:
-// io, exceptions, math, and all. These provide R7RS (scheme base)
-// functionality without filesystem, eval, system, or Go interop access.
-func SafeExtensions() []EngineOption
-```
+Both forms were implemented:
 
-Usage:
+- `SafeExtensions() []EngineOption` — composable slice for `append`
+- `WithSafeExtensions() EngineOption` — convenience wrapper for the common case
+- `WithoutCore() EngineOption` — bare engine with no core primitives
 
-```go
-eng, err := wile.NewEngine(ctx,
-    append(wile.SafeExtensions(),
-        wile.WithLibraryPaths("./lib"),
-    )...,
-)
-```
+**Deviation from original plan**: `SafeExtensions()` uses `all.SafeExtension` instead of `all.Extension`. The `all.Extension` aggregates *all* sub-extensions (including files, eval, system, gointerop, threads), which would defeat sandboxing. `SafeExtension` was added to `internal/extensions/all/register.go` to expose only the safe local parts: records, promises, strings, and characters.
 
-**Location**: `options.go`
+### Phase 2: Document security boundaries — **Implemented**
 
-**Open question**: Should this be a single `WithSafeExtensions()` option or a function returning a slice? The slice is more composable (`append(SafeExtensions(), WithExtension(threads.Extension))`), but a single option is simpler for the common case. Leaning toward the single option with the slice available as a package-level variable.
+**Location**: `docs/SANDBOXING.md`
 
-### Phase 2: Document security boundaries
+Covers: extension security classification, API usage (safe sandbox, composable, custom, bare), enforcement mechanism, what sandboxing does NOT cover (CPU, memory, goroutines, information flow, `include` gap), and pointers to related docs.
 
-Add a `docs/SANDBOXING.md` covering:
+### Phase 3: Verify isolation invariants — **Implemented**
 
-- The two-layer model (extension-level + authorization)
-- Extension security classification table
-- Example: minimal sandbox, safe sandbox, full-featured sandbox
-- How library propagation works
-- What sandboxing does NOT cover (resource limits, CPU/memory, stack depth — separate concerns; `WithMaxCallDepth` exists for stack)
-- Relationship to authorization framework
+**Location**: `engine_sandbox_test.go`, `wile_test.go`
 
-### Phase 3: Verify isolation invariants
+Tests implemented:
 
-Write integration tests that verify:
-
-1. An engine without files extension rejects `(open-input-file "x")` with an unbound-variable error (not a runtime error — the binding shouldn't exist at all).
-2. A library loaded by a restricted engine also lacks the restricted primitives.
-3. `(import (scheme file))` fails in a restricted engine (library exists on disk but its environment lacks the primitives, or the synthetic library isn't registered).
-4. `eval` in a restricted engine (without eval extension) is unbound.
-
-**Location**: `integration/sandbox_test.go` or `engine_sandbox_test.go`
+1. Safe engine rejects privileged primitives (`open-input-file`, `eval`, `exit`, `make-channel`, `load`, `delete-file`) with `CompilationError`.
+2. Safe engine allows safe primitives (`+`, `display`, `sqrt`, `guard`, `make-record-type`, `force`).
+3. `WithoutCore()` produces a bare engine where `+` and `car` are unbound.
+4. `WithoutCore()` + `WithExtension(math.Extension)` gives `sqrt` but not `+`.
+5. Library loaded by a safe engine fails when it tries to use `open-input-file`.
+6. Option tests: `TestWithoutCore`, `TestWithSafeExtensions`, `TestSafeExtensions`.
 
 ### Phase 4: Registry filtering
 
@@ -295,9 +279,9 @@ Embedders that don't set it pay nothing (nil check before firing).
 
 ## Dependencies
 
-- Phase 1 (convenience API): None
-- Phase 2 (documentation): None
-- Phase 3 (integration tests): Phase 1
+- Phase 1 (convenience API): None — **Done**
+- Phase 2 (documentation): None — **Done**
+- Phase 3 (integration tests): Phase 1 — **Done**
 - Phase 4 (registry filtering): None — operates on `Registry` type, independent of other phases
 - Phase 5 (factory signature): None (mechanical change)
 - Phase 6 (observability): Phase 5 (needs library name in factory for importer tracking)

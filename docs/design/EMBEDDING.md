@@ -151,11 +151,23 @@ Engine behavior can be customized via functional options:
 
 | Option | Purpose |
 |---|---|
-| `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(exts...)` | Add multiple extensions |
+| `WithSafeExtensions()` | Add the safe extension set (see Sandboxing below) |
+| `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
+| `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
+
+### Sandboxing
+
+Extensions are the primary sandboxing mechanism. Primitives not in the registry don't exist — there's no runtime check to bypass.
+
+`WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system, gointerop, threads) are excluded.
+
+`WithoutCore()` goes further — it produces an engine with zero primitives. Only extensions added via `WithExtension` are available. This is useful for building minimal purpose-specific engines.
+
+Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries. See `plans/SECURITY.md` for the full security model.
 
 ## Design Decisions
 

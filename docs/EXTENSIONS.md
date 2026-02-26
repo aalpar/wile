@@ -471,9 +471,13 @@ Not importable by external code:
 |--------|-------------|
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(ext...)` | Add multiple extensions |
+| `WithSafeExtensions()` | Add the safe extension set (io, exceptions, math, records, promises, strings, characters) |
+| `WithoutCore()` | Skip core primitives — creates a bare engine with only explicitly added extensions |
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |
 | `WithMaxCallDepth(n)` | Set maximum VM recursion depth |
+
+`SafeExtensions()` is also available as a function returning `[]EngineOption`, useful when composing with other options via `append`.
 
 ---
 
