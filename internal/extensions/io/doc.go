@@ -16,7 +16,7 @@
 //
 // # Textual Read (R7RS 6.13.2)
 //
-//   - read, read-char, peek-char, read-line, read-string
+//   - read, read-char, peek-char, char-ready?, read-line, read-string
 //   - read-syntax, read-token
 //
 // # Textual Write (R7RS 6.13.3)
@@ -27,7 +27,7 @@
 //
 // # Binary I/O
 //
-//   - read-u8, peek-u8, write-u8
+//   - read-u8, peek-u8, u8-ready?, write-u8
 //   - read-bytevector, read-bytevector!, write-bytevector
 //
 // # Port Predicates

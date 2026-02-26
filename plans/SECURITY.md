@@ -49,8 +49,8 @@ Each extension falls into one of three categories:
 | Category | Extensions | Threat |
 |----------|-----------|--------|
 | **Safe** | core, io, exceptions, math, all | Pure computation + in-memory ports. No ambient authority. |
-| **Privileged** | files, eval, system, gointerop | Ambient authority: filesystem, process env, code loading, Go bridge. |
-| **Context-dependent** | threads | Resource exhaustion, concurrency bugs. Safe for trusted code. |
+| **Privileged** | files, eval, system | Ambient authority: filesystem, process env, code loading. |
+| **Context-dependent** | gointerop, threads | Resource exhaustion, concurrency bugs. No ambient authority. Safe for trusted code. |
 
 ### Detailed breakdown
 
@@ -71,12 +71,12 @@ Each extension falls into one of three categories:
 | files | `extensions/files` | `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, `call-with-input-file`, `call-with-output-file`, `with-input-from-file`, `with-output-to-file` |
 | eval | `internal/extensions/eval` | `eval`, `load`, `interaction-environment`, `scheme-report-environment`, `null-environment`, `environment`, `syntax-expand`, `compile` |
 | system | `extensions/system` | `exit`, `emergency-exit`, `command-line`, `get-environment-variable`, `get-environment-variables` |
-| gointerop | `extensions/gointerop` | Go function bridge — arbitrary Go code execution |
 
 **Context-dependent:**
 
 | Extension | Package | Risk |
 |-----------|---------|------|
+| gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
 | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code; risky for untrusted. |
 
 ## How propagation works

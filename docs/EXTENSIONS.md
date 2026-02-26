@@ -449,9 +449,9 @@ These are importable by external Go code:
 | `extensions/math` | `(wile math)` | `sqrt`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `log`, `expt`, `square`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number` |
 | `extensions/exceptions` | `(wile exceptions)` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, `error-object?`, `error-object-message`, `error-object-irritants`, `read-error?`, `file-error?` |
 | `extensions/system` | `(wile system)` | `command-line`, `exit`, `emergency-exit`, `get-environment-variable`, `get-environment-variables`, `current-second`, `current-jiffy`, `jiffies-per-second`, `features` |
-| `extensions/files` | `(wile files)` | `load`, `include`, `with-input-from-file`, `with-output-to-file` |
-| `extensions/threads` | `(wile threads)` | SRFI-18 threading: `thread-create`, `thread-join`, `thread-yield`, `mutex-create`, `condition-variable-wait`, etc. |
-| `extensions/gointerop` | `(wile gointerop)` | Go reflection: `go-type-info`, `go-call`, `go-get`, `go-new`, etc. |
+| `extensions/files` | `(wile files)` | `open-input-file`, `open-output-file`, `open-binary-input-file`, `open-binary-output-file`, `file-exists?`, `delete-file`, `call-with-input-file`, `call-with-output-file`, `with-input-from-file`, `with-output-to-file` |
+| `extensions/threads` | `(wile threads)` | SRFI-18 threading: `make-thread`, `thread-start!`, `thread-join!`, `thread-yield!`, `make-mutex`, `mutex-lock!`, `make-condition-variable`, `condition-variable-signal!`, etc. |
+| `extensions/gointerop` | `(wile gointerop)` | Go concurrency primitives: `make-channel`, `channel-send!`, `channel-receive`, `make-wait-group`, `make-rw-mutex`, `make-once`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
 
 ### Internal Extensions (`internal/extensions/`)
 
