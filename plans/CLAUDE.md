@@ -21,6 +21,7 @@ When investigating R7RS conformance issues:
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
 | `TESTING.md` | Scheme test expansion (complete) | Complete |
+| `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Approved |
 
 ## Before Starting Work
 
