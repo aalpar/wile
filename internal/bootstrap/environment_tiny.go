@@ -63,50 +63,58 @@ var allExtensions = []registry.Extension{
 	system.Extension,
 }
 
-// initializeEnvironment is the shared initialization sequence for environment creation.
+// initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.
 // It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
-// and loads bootstrap macros.
-func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
+// loads bootstrap macros, and returns the populated registry.
+func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame) (*registry.Registry, error) {
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error adding core to registry")
+		return nil, values.WrapForeignErrorf(err, "error adding core to registry")
 	}
 
 	// Add all extensions
 	for _, ext := range allExtensions {
 		err := ext.AddToRegistry(reg)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
+			return nil, values.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
 		}
 	}
 
 	// Apply registry to environment
 	err = reg.Apply(ctx, env)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error applying registry to environment")
+		return nil, values.WrapForeignErrorf(err, "error applying registry to environment")
 	}
 
 	// Register syntax compilers in the compile environment
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error registering syntax compilers")
+		return nil, values.WrapForeignErrorf(err, "error registering syntax compilers")
 	}
 
 	// Register primitive expanders in the expand environment
 	err = machine.RegisterPrimitiveExpanders(env)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error registering primitive expanders")
+		return nil, values.WrapForeignErrorf(err, "error registering primitive expanders")
 	}
 
 	// Load bootstrap macros from registry
 	err = loadBootstrapMacros(ctx, env, reg.MacroSources())
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error loading bootstrap macros")
+		return nil, values.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
 
-	return nil
+	return reg, nil
+}
+
+// initializeEnvironment is the shared initialization sequence for environment creation.
+// It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
+// and loads bootstrap macros.
+func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
+	_, err := initializeEnvironmentWithRegistry(ctx, env)
+	return err
 }
 
 // NewTopLevelEnvironmentFrameTiny creates and initializes a complete Scheme runtime environment.
@@ -122,17 +130,27 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 // The resulting environment is ready for parsing, expanding, compiling, and executing
 // Scheme programs.
 func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
+	env, _, err := NewTopLevelWithRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return env, nil
+}
+
+// NewTopLevelWithRegistry creates a top-level environment and returns both
+// the environment frame and the primitive registry for doc introspection.
+func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame, *registry.Registry, error) {
 	// Create TopLevelEnvironment (per-instance symbol interning)
 	topLevel := environment.NewTopLevelEnvironment()
 	env := topLevel.Runtime()
 
-	// Initialize with shared sequence
-	err := initializeEnvironment(ctx, env)
+	// Initialize with shared sequence, keeping the registry
+	reg, err := initializeEnvironmentWithRegistry(ctx, env)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return env, nil
+	return env, reg, nil
 }
 
 // NewLibraryEnvironmentFrame creates a new environment for a library that shares
