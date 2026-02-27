@@ -201,12 +201,21 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 	}
 	sort.Strings(imported)
 
+	libraryParts := make([]string, len(lib.Name.Parts))
+	copy(libraryParts, lib.Name.Parts)
+
+	var importerCopy []string
+	if importer != nil {
+		importerCopy = make([]string, len(importer))
+		copy(importerCopy, importer)
+	}
+
 	reg.importObserver(LibraryImportEvent{
-		Library:    lib.Name.Parts,
+		Library:    libraryParts,
 		SourceFile: lib.SourceFile,
 		Exports:    exports,
 		Imported:   imported,
-		Importer:   importer,
+		Importer:   importerCopy,
 	})
 }
 

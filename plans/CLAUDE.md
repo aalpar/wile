@@ -16,7 +16,7 @@ When investigating R7RS conformance issues:
 | File | Contents | Status |
 |------|----------|--------|
 | `PERFORMANCE.md` | Allocation optimization (completed fixes + remaining tiers), block-allocated pairs (complete), unified pool manager (complete), fused lexing research | Mixed |
-| `SECURITY.md` | Extension-level sandboxing model, authorization framework, opcode resource limits | Phases 1-3 done, rest proposed/design |
+| `SECURITY.md` | Extension-level sandboxing model, authorization framework, opcode resource limits | Phases 1-6 done, rest proposed/design |
 | `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging design, macro expansion tracing | Proposed/Planned |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
