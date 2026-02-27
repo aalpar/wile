@@ -132,6 +132,12 @@ func TestLoad(t *testing.T) {
 		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
 	})
 
+	t.Run("load compile error", func(t *testing.T) {
+		// set! on an unbound variable triggers a compile error
+		path := writeTestFile(t, dir, "bad-compile.scm", "(set! undefined-xyz-var 42)")
+		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
+	})
+
 	t.Run("wrong argument type", func(t *testing.T) {
 		evalExpectError(t, engine, `(load 42)`)
 	})
