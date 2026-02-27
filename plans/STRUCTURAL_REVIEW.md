@@ -70,36 +70,20 @@ precision).
 
 ---
 
-### [High] Table-drive `char-ci`/`string-ci` comparisons
+### [High] ~~Table-drive `char-ci`/`string-ci` comparisons~~ DONE
 
 **Principle**: Composability (hand-unrolled loop)
-**Where**: `internal/extensions/all/prim_characters.go:28-61`,
-`internal/extensions/all/prim_strings.go:253-286`,
+**Where**: `internal/extensions/all/prim_characters.go`,
+`internal/extensions/all/prim_strings.go`,
 `internal/extensions/all/register.go`
 
-Five `PrimCharCi*Variadic` and five `PrimStringCi*Variadic` functions are
-individually defined but structurally identical -- they differ only in the
-comparison operator. The case-sensitive counterparts in
-`registry/core/prim_characters.go:52-71` already use a table-driven approach
-(`charCompareSpecs`).
+**Completed.** The 5 `PrimCharCi*Variadic` and 5 `PrimStringCi*Variadic`
+functions were replaced with `charCiCompareSpecs`/`stringCiCompareSpecs` tables
+and `makeCharCiComparePrimitive`/`makeStringCiComparePrimitive` factories,
+mirroring the existing `charCompareSpecs` pattern in `registry/core`.
+Registration loops in `addMoreChars`/`addMoreStrings` iterate over the tables.
+~60 lines reduced to ~20.
 
-```go
-// Proposed: mirror existing charCompareSpecs pattern
-var charCiCompareSpecs = []struct {
-    name string
-    cmp  func(rune, rune) bool
-}{
-    {"char-ci=?", func(a, b rune) bool {
-        return simpleCaseFold(a) == simpleCaseFold(b)
-    }},
-    {"char-ci<?", func(a, b rune) bool {
-        return simpleCaseFold(a) < simpleCaseFold(b)
-    }},
-    // ...
-}
-```
-
-**Impact**: ~60 lines reduced to ~20. Pattern consistency with `registry/core`.
 **Effort**: S
 
 ---
@@ -115,65 +99,48 @@ value-check chains, not switch candidates.
 
 ---
 
-### [Medium] `SyntaxSymbol.ResolvedBinding` is `any` (type erasure)
+### [Medium] ~~`SyntaxSymbol.ResolvedBinding` is `any` (type erasure)~~ DONE
 
 **Principle**: State Tightness / Dependency
-**Where**: `internal/syntax/syntax_symbol.go:43`
+**Where**: `internal/syntax/syntax_symbol.go`
 
-The field is typed as `any` but is invariantly either `nil` or
-`*environment.GlobalIndex`. Type precision is 2/infinity -- effectively 0%.
-The erasure exists to break a circular import between `internal/syntax` and
-`environment`.
-
-**Proposed direction**: Introduce a narrow interface in `internal/syntax` that
-`environment.GlobalIndex` satisfies:
-
-```go
-// In internal/syntax:
-type ResolvedRef interface {
-    GlobalIndex() (int, int)
-}
-```
-
-**Impact**: Eliminates runtime type assertions at every use site. Moves the
-contract from documentation to the type system.
+**Completed.** Introduced `type ResolvedRef interface { values.Value }` in
+`internal/syntax/syntax_symbol.go`. `ResolvedBinding any` changed to
+`ResolvedBinding ResolvedRef` and `WithResolvedBinding(binding any)` to
+`WithResolvedBinding(binding ResolvedRef)`. `*environment.GlobalIndex` already
+satisfies `values.Value` so no changes needed in `machine/` or `internal/match/`.
+Test stand-in strings (`"some-binding"`) replaced with `values.FalseValue`.
 **Effort**: M
 
 ---
 
-### [Medium] Unused `formName string` parameter in typed compiler path
+### [Medium] ~~Unused `formName string` parameter in typed compiler path~~ DONE
 
 **Principle**: Composability (phantom parameter)
-**Where**: `machine/compile_validated.go` -- 8 of 9 `CompileValidated*` methods
-blank the parameter with `_ string`. The 9th (`CompileValidatedDefine`) passes
-it through to `CompileValidatedDefineFn` which also blanks it.
+**Where**: `machine/compile_validated.go`, `machine/register.go`
 
-The form name is already embedded in `ValidatedExpr.FormName()`, making the
-parameter vestigial. The `registerTypedCompiler` generic in `machine/register.go:79`
-passes `name` into each adapter closure, but no method ever reads it.
-
-**Proposed direction**: Remove `formName string` from the `registerTypedCompiler`
-generic's `fn` type and from all 9 `CompileValidated*` method signatures.
-**Impact**: Cleaner function signatures. Blast radius: `machine/register.go`
-(9 adapter closures) + `machine/compile_validated.go` (9 methods).
+**Completed.** Removed `formName string` from all 10 `CompileValidated*` method
+signatures and from the `registerTypedCompiler` generic's `fn` type. The 9
+adapter closures in `register.go` updated accordingly. Form name remains
+accessible via `ValidatedExpr.FormName()` for any future need.
 **Effort**: S
 
 ---
 
-### [Medium] `ToFloat64` handles 3 numeric types; `ExtractReal` handles 5
+### [Medium] ~~`ToFloat64` handles 3 numeric types; `ExtractReal` handles 5~~ DONE
 
 **Principle**: Consistency Debt
-**Where**: `registry/helpers/value_conv.go:67-79` vs
-`registry/helpers/value_conv.go:85-103`
+**Where**: `registry/helpers/value_conv.go`
 
-Both convert `Value` to `float64`. `ToFloat64` handles `Integer`, `Float`,
-`Rational`. `ExtractReal` adds `BigInteger`, `BigFloat` plus an exactness flag.
-A caller using `ToFloat64` on a `BigFloat` gets an error; switching to
-`ExtractReal` succeeds.
-
-**Proposed direction**: Either extend `ToFloat64` to handle all real types, or
-add a doc comment to `ToFloat64` explicitly stating "deliberately excludes
-BigInteger/BigFloat -- use ExtractReal for the full numeric tower."
+**Completed.** `ToFloat64` extended to cover the full real tower: `Integer`,
+`BigInteger`, `Float`, `BigFloat`, `Rational` — matching `ExtractReal`'s
+type coverage without the exactness tracking. Complex types remain excluded
+(correct: `atan y x` is real-only per R7RS §6.2.6; use `ToComplex128` for
+complex). The `To*`/`Extract*` naming split is now semantically clean: `To*`
+converts to a Go type covering the full applicable Scheme tower; `Extract*`
+adds R7RS metadata (exactness, int64-or-big representation). Tests updated:
+6 new success cases for `BigInteger`/`BigFloat`, corresponding error cases
+removed.
 **Effort**: S
 
 ---
@@ -286,18 +253,16 @@ theoretical, not active.
 ## Summary
 
 **State of the code**: Structurally healthy. Clean DAG with no cycles, stable
-packages at the bottom, volatile wiring packages at the top. The debt is mostly
-consistency-level (~~33 compound if-assignments~~ done, naming drift in 3 files,
-11 single-line functions) rather than architectural. The `Promise.Forced` state-
-tightness fix is done. The one real composability fix (hand-unrolled
-ci-comparisons) has an established pattern to follow. The `any`-typed
-`ResolvedBinding` is the most structurally interesting problem -- a type-system
-gap caused by an import cycle that could be resolved with a narrow interface.
+packages at the bottom, volatile wiring packages at the top. All High findings
+and the three Medium structural findings are resolved. Remaining work is
+consistency-level debt (naming drift in 3 files, 11 single-line functions,
+`ToFloat64` coverage gap, `callDepth` type) and two Low-priority additions.
 
-**Top 3 remaining by impact**:
+**Remaining items**:
 
-1. **Table-drive ci-comparisons** -- unifies 10 functions into 2 tables (S)
-2. **Remove phantom `formName` parameter** -- 9 cleaner signatures (S)
-3. **Type `ResolvedBinding`** -- replaces `any` with narrow interface (M)
-
-All are low risk. Items 1 and 2 are small effort.
+1. ~~**`ToFloat64` vs `ExtractReal` gap** -- clarify or unify~~ DONE
+2. **`vmState.callDepth` `uint64` → `int`** -- detectable underflow (S)
+3. **`mctx` → `mc` rename** -- 3 operation files (S)
+4. **Single-line function definitions** -- 11 methods (S)
+5. **`SyntaxWalk` convenience wrapper** -- reduces 13 blanked parameters (S)
+6. **`NativeTemplate` length-invariant assertion** -- panic at construction (S)

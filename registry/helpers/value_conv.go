@@ -64,13 +64,22 @@ func ComplexOrFloat(c complex128) values.Value {
 	return values.NewComplex(c)
 }
 
-// ToFloat64 converts a Scheme number to a Go float64.
+// ToFloat64 converts a Scheme real number to a Go float64, covering the full
+// real numeric tower: Integer, BigInteger, Float, BigFloat, and Rational.
+// Complex types are excluded — they cannot be reduced to a single float64
+// without information loss. Use ToComplex128 for complex values.
 func ToFloat64(v values.Value) (float64, error) {
 	switch n := v.(type) {
 	case *values.Integer:
 		return float64(n.Value), nil
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
+		return f, nil
 	case *values.Float:
 		return n.Value, nil
+	case *values.BigFloat:
+		f, _ := n.BigFloatValue().Float64()
+		return f, nil
 	case *values.Rational:
 		f, _ := n.Rat().Float64()
 		return f, nil

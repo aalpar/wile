@@ -275,6 +275,16 @@ func TestToFloat64(t *testing.T) {
 		{"rational 1/1", values.NewRational(1, 1), 1, nil},
 		{"rational -1/2", values.NewRational(-1, 2), -0.5, nil},
 		{"rational zero", values.NewRational(0, 1), 0, nil},
+
+		// BigInteger
+		{"big integer positive", values.NewBigIntegerFromInt64(42), 42, nil},
+		{"big integer negative", values.NewBigIntegerFromInt64(-7), -7, nil},
+		{"big integer zero", values.NewBigIntegerFromInt64(0), 0, nil},
+
+		// BigFloat
+		{"big float positive", values.NewBigFloatFromFloat64(3.14), 3.14, nil},
+		{"big float negative", values.NewBigFloatFromFloat64(-2.718), -2.718, nil},
+		{"big float zero", values.NewBigFloatFromFloat64(0.0), 0, nil},
 	}
 
 	for _, tc := range tcs {
@@ -298,8 +308,6 @@ func TestToFloat64_Errors(t *testing.T) {
 		input values.Value
 	}{
 		{"complex", values.NewComplex(complex(1, 2))},
-		{"big integer", values.NewBigIntegerFromInt64(42)},
-		{"big float", values.NewBigFloatFromFloat64(3.14)},
 		{
 			"big complex",
 			values.NewBigComplex(values.NewBigFloatFromFloat64(1), values.NewBigFloatFromFloat64(2)),
