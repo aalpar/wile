@@ -1,6 +1,8 @@
+//nolint:errcheck // Meta-command output doesn't need error handling
 package repl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -276,7 +278,7 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 
 	parts := strings.Fields(editor)
 	cmdArgs := append(parts[1:], args[0])
-	cmd := exec.Command(parts[0], cmdArgs...)
+	cmd := exec.CommandContext(context.Background(), parts[0], cmdArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

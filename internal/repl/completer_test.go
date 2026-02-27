@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile/internal/bootstrap"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/internal/bootstrap"
 )
 
 func TestSchemeCompleter_MetaCommand(t *testing.T) {

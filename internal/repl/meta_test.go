@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/internal/bootstrap"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/internal/bootstrap"
 )
 
 func TestMetaCommandHandler(t *testing.T) {

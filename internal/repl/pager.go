@@ -1,6 +1,8 @@
+//nolint:errcheck // Pager output doesn't need error handling
 package repl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
@@ -17,7 +19,7 @@ func writeWithPager(out io.Writer, content string, pager string) {
 	}
 
 	parts := strings.Fields(pager)
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.CommandContext(context.Background(), parts[0], parts[1:]...)
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stdout = out
 	cmd.Stderr = out

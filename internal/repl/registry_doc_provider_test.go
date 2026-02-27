@@ -3,8 +3,9 @@ package repl
 import (
 	"testing"
 
-	"github.com/aalpar/wile/registry"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/registry"
 )
 
 func TestRegistryDocProvider_Found(t *testing.T) {
