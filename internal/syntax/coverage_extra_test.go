@@ -238,7 +238,7 @@ func TestSyntaxSymbol_WithResolvedBinding(t *testing.T) {
 	c := qt.New(t)
 	sym := NewSyntaxSymbol("foo", NewZeroValueSourceContext())
 
-	binding := "some-binding"
+	binding := values.FalseValue
 	result := sym.WithResolvedBinding(binding)
 
 	c.Assert(result.Sym, qt.Equals, sym.Sym)
@@ -251,7 +251,7 @@ func TestSyntaxSymbol_WithResolvedBinding(t *testing.T) {
 func TestNewSyntaxSymbolForSyntaxSymbol(t *testing.T) {
 	c := qt.New(t)
 	original := NewSyntaxSymbol("bar", NewZeroValueSourceContext())
-	original.ResolvedBinding = "orig-binding"
+	original.ResolvedBinding = values.FalseValue
 
 	sctx := NewSourceContext("bar", "new.scm", NewSourceIndexes(0, 0, 1), NewSourceIndexes(3, 3, 1))
 	result := NewSyntaxSymbolForSyntaxSymbol(original, sctx)
