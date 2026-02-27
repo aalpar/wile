@@ -48,11 +48,12 @@ func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
 	}
 
-	keys := topLevelEnv.Runtime().GlobalEnvironment().Keys()
+	env := topLevelEnv.Runtime()
+	keys := env.GlobalEnvironment().Keys()
 	var result values.Value = values.EmptyList
 	for key := range keys {
-		sym := key
-		result = values.NewCons(&sym, result)
+		interned := env.InternSymbol(&key)
+		result = values.NewCons(interned, result)
 	}
 
 	mc.SetValue(result)

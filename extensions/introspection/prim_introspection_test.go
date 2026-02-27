@@ -149,4 +149,14 @@ func TestEnvironmentBoundNamesResult(t *testing.T) {
 		`)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.TrueValue)
 	})
+
+	t.Run("returned symbols preserve eq? identity", func(t *testing.T) {
+		// memq uses eq? (pointer identity), not equal?
+		// Verifies symbols are interned, not fresh copies
+		result := schemeEval(t, engine, `
+			(memq '+ (environment-bound-names (interaction-environment)))
+		`)
+		// memq returns the tail starting at +, which is a pair (truthy)
+		c.Assert(result.Internal(), qt.Not(qt.Equals), values.FalseValue)
+	})
 }
