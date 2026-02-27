@@ -25,7 +25,7 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P2 | Numeric dispatch simplification | Performance | Not started | Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations. |
 | P2 | Sandboxing convenience API | Security | Not started | `SafeExtensions()` + security classification docs. ~20 LOC but communicates the embedding security story. `plans/SECURITY.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md` |
-| P2 | Environment introspection | Feature | Planned | 4 read-only primitives (`environment?`, `environment-bound-names`, etc.). Small scope, directly useful for REPL/debugging. `plans/ARCHITECTURE.md` |
+| P2 | Environment introspection | Feature | **Done** | 5 read-only primitives extracted to `extensions/introspection/`. Available in safe sandbox. |
 | P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for fine-grained sandboxing. `plans/SECURITY.md` |
 | P3 | ER macro transformer | Macro system | Not started | Unlocks Chibi library ecosystem. Matters after Go-side adoption creates demand for Scheme library porting. `plans/MACRO_SYSTEM.md` |
 | P3 | Module decomposition Phase 1 | Architecture | Not started | Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md` |

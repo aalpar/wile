@@ -84,6 +84,9 @@ func TestSafeEngine_AllowsSafe(t *testing.T) {
 		{"make-record-type (all-safe)", `(record-type? (make-record-type 'point '(x y)))`, "#t"},
 		// all-safe: promises
 		{"force (all-safe)", "(force (make-promise 42))", "42"},
+		// introspection
+		{"environment? (introspection)", "(environment? 42)", "#f"},
+		{"environment-bound? (introspection)", "(environment-bound? (interaction-environment) '+)", "#t"},
 	}
 	for _, tc := range safe {
 		t.Run(tc.name, func(t *testing.T) {
@@ -164,6 +167,139 @@ func TestSafeEngine_LibraryPropagation(t *testing.T) {
 	_, err = engine.EvalMultiple(ctx, `(import (bad)) (try-open)`)
 	c.Assert(err, qt.IsNotNil,
 		qt.Commentf("expected error from library using privileged primitive"))
+}
+
+// TestWithout_ImmutableSandbox verifies that Registry.Without can remove
+// mutation primitives from a full engine, producing compile-time errors
+// for set-car! while leaving car working.
+func TestWithout_ImmutableSandbox(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Build a default engine to get its fully populated registry.
+	full, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	restricted := full.Registry().Without("set-car!", "set-cdr!")
+	engine, err := NewEngine(ctx, WithRegistry(restricted))
+	c.Assert(err, qt.IsNil)
+
+	// car still works.
+	result, err := engine.Eval(ctx, "(car '(1 2 3))")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "1")
+
+	// set-car! produces a compile error.
+	_, err = engine.Eval(ctx, "(set-car! (cons 1 2) 3)")
+	var compErr *CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue,
+		qt.Commentf("expected CompilationError for set-car!, got %T: %v", err, err))
+}
+
+// TestWithoutCategory_RemoveHashtables verifies that WithoutCategory
+// removes all primitives in a category.
+func TestWithoutCategory_RemoveHashtables(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	full, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	restricted := full.Registry().WithoutCategory("hashtables")
+	engine, err := NewEngine(ctx, WithRegistry(restricted))
+	c.Assert(err, qt.IsNil)
+
+	// Core primitives still work.
+	result, err := engine.Eval(ctx, "(+ 1 2)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "3")
+
+	// Hashtable primitives should be gone.
+	_, err = engine.Eval(ctx, "(make-hashtable)")
+	var compErr *CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue,
+		qt.Commentf("expected CompilationError for make-hashtable, got %T: %v", err, err))
+}
+
+// TestImportObserver verifies that the import observer is called with
+// correct event data when a library is imported.
+func TestImportObserver(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Create a library file
+	libDir := t.TempDir()
+	err := writeTestFile(libDir+"/mylib.sld", `(define-library (mylib)
+  (export greet)
+  (begin
+    (define (greet) "hello")))`)
+	c.Assert(err, qt.IsNil)
+
+	var events []LibraryImportEvent
+	engine, err := NewEngine(ctx,
+		WithLibraryPaths(libDir),
+		WithImportObserver(func(evt LibraryImportEvent) {
+			events = append(events, evt)
+		}),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (mylib)) (greet)`)
+	c.Assert(err, qt.IsNil)
+
+	// Filter to only the mylib event (bootstrap may trigger others)
+	var myEvents []LibraryImportEvent
+	for _, evt := range events {
+		if len(evt.Library) == 1 && evt.Library[0] == "mylib" {
+			myEvents = append(myEvents, evt)
+		}
+	}
+	c.Assert(len(myEvents), qt.Equals, 1)
+
+	evt := myEvents[0]
+	c.Assert(evt.Library, qt.DeepEquals, []string{"mylib"})
+	c.Assert(evt.Exports, qt.DeepEquals, []string{"greet"})
+	c.Assert(evt.Imported, qt.DeepEquals, []string{"greet"})
+	c.Assert(evt.Importer, qt.IsNil) // top-level import
+}
+
+// TestImportObserver_OnlyModifier verifies that the Imported field reflects
+// import set modifiers like (only ...).
+func TestImportObserver_OnlyModifier(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	libDir := t.TempDir()
+	err := writeTestFile(libDir+"/twoexports.sld", `(define-library (twoexports)
+  (export alpha beta)
+  (begin
+    (define (alpha) 1)
+    (define (beta) 2)))`)
+	c.Assert(err, qt.IsNil)
+
+	var events []LibraryImportEvent
+	engine, err := NewEngine(ctx,
+		WithLibraryPaths(libDir),
+		WithImportObserver(func(evt LibraryImportEvent) {
+			events = append(events, evt)
+		}),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (only (twoexports) alpha)) (alpha)`)
+	c.Assert(err, qt.IsNil)
+
+	var myEvents []LibraryImportEvent
+	for _, evt := range events {
+		if len(evt.Library) == 1 && evt.Library[0] == "twoexports" {
+			myEvents = append(myEvents, evt)
+		}
+	}
+	c.Assert(len(myEvents), qt.Equals, 1)
+
+	evt := myEvents[0]
+	c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})
+	c.Assert(evt.Imported, qt.DeepEquals, []string{"alpha"}) // only alpha was imported
 }
 
 // writeTestFile is a helper that writes content to a file.

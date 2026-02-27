@@ -27,7 +27,10 @@ import (
 // The returned environment must share the caller's TopLevelEnvironment
 // for symbol interning (R7RS §6.5 symbol identity), but have isolated
 // bindings so library definitions don't leak.
-type LibraryEnvFactory func(context.Context, *EnvironmentFrame) (*EnvironmentFrame, error)
+//
+// The libraryName parameter contains the library name parts (e.g.,
+// ["scheme", "base"]) so the factory can implement per-library policies.
+type LibraryEnvFactory func(ctx context.Context, callerEnv *EnvironmentFrame, libraryName []string) (*EnvironmentFrame, error)
 
 var _ values.Value = (*TopLevelEnvironment)(nil)
 

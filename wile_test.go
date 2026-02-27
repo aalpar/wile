@@ -962,8 +962,8 @@ func TestWithSafeExtensions(t *testing.T) {
 func TestSafeExtensions(t *testing.T) {
 	c := qt.New(t)
 	opts := SafeExtensions()
-	// io, exceptions, math, all-safe
-	c.Assert(len(opts), qt.Equals, 4)
+	// io, exceptions, math, introspection, all-safe
+	c.Assert(len(opts), qt.Equals, 5)
 }
 
 func TestWithMaxCallDepth(t *testing.T) {

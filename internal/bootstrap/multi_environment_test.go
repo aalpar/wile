@@ -162,10 +162,10 @@ func TestMultiEnv_SiblingLibraryIsolation(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib1, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib2, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define in lib1
@@ -210,10 +210,10 @@ func TestMultiEnv_SiblingLibrarySymbolIdentity(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib1, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib2, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	sym1 := lib1.InternSymbol(values.NewSymbol("shared-sym"))
@@ -234,10 +234,10 @@ func TestMultiEnv_SiblingLibrarySharedPrimitives(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib1, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib2, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Both libraries can use core primitives
@@ -268,10 +268,10 @@ func TestMultiEnv_SiblingLibraryMacroIsolation(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib1, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib2, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define a macro in lib1
@@ -307,11 +307,11 @@ func TestMultiEnv_NestedLibraryCreation(t *testing.T) {
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel)
+	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Create a nested library from the outer library (simulates library import)
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib)
+	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(innerLib, qt.IsNotNil)
 
@@ -329,10 +329,10 @@ func TestMultiEnv_NestedLibrarySymbolIdentity(t *testing.T) {
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel)
+	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib)
+	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 
 	symTop := topLevel.InternSymbol(values.NewSymbol("nested-sym"))
@@ -352,10 +352,10 @@ func TestMultiEnv_NestedLibraryBindingIsolation(t *testing.T) {
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel)
+	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib)
+	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define at each level
@@ -389,10 +389,10 @@ func TestMultiEnv_NestedLibraryPrimitivesAvailable(t *testing.T) {
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel)
+	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib)
+	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Inner library has access to primitives and bootstrap macros
@@ -418,7 +418,7 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Create a list in the parent
@@ -455,7 +455,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define a variable and a closure in the parent
@@ -497,7 +497,7 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Create a parameter in the parent
@@ -546,7 +546,7 @@ func TestMultiEnv_ConcurrentLibraryUse(t *testing.T) {
 	const numLibs = 4
 	libs := make([]*environment.EnvironmentFrame, numLibs)
 	for i := range libs {
-		libs[i], err = NewLibraryEnvironmentFrame(ctx, parent)
+		libs[i], err = NewLibraryEnvironmentFrame(ctx, parent, nil)
 		c.Assert(err, qt.IsNil)
 	}
 
@@ -595,7 +595,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib, err := NewLibraryEnvironmentFrame(ctx, parent)
+	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Core registration categories (registry/core/register.go)
@@ -755,10 +755,10 @@ func TestMultiEnv_NestedLibraryPrimitiveAvailability(t *testing.T) {
 	topLevel, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel)
+	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib)
+	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 
 	// One representative per major category, tested at the innermost nesting level.

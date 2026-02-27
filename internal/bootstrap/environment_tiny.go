@@ -37,6 +37,7 @@ import (
 	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
+	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
@@ -55,6 +56,7 @@ var allExtensions = []registry.Extension{
 	ioext.Extension,
 	files.Extension,
 	math.Extension,
+	introspection.Extension,
 	eval.Extension,
 	exceptions.Extension,
 	threads.Extension,
@@ -146,7 +148,7 @@ func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.Environm
 // But shares with caller:
 //   - TopLevelEnvironment (symbol and syntax interning)
 //   - LibraryRegistry (for nested imports)
-func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
 	// Get caller's TopLevelEnvironment
 	callerTopLevel := callerEnv.TopLevelEnv()
 	if callerTopLevel == nil {

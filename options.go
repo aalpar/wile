@@ -16,11 +16,17 @@ package wile
 
 import (
 	"github.com/aalpar/wile/extensions/exceptions"
+	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 )
+
+// LibraryImportEvent records what happened when a library was imported.
+// See machine.LibraryImportEvent for field documentation.
+type LibraryImportEvent = machine.LibraryImportEvent
 
 type engineConfig struct {
 	registry       *registry.Registry
@@ -29,6 +35,7 @@ type engineConfig struct {
 	libraryPaths   []string
 	libraryEnabled bool // true when WithLibraryPaths was called
 	skipCore       bool // true when WithoutCore was called
+	importObserver func(LibraryImportEvent)
 }
 
 // EngineOption configures an Engine.
@@ -87,6 +94,15 @@ func WithLibraryPaths(paths ...string) EngineOption {
 	}
 }
 
+// WithImportObserver sets a callback that is invoked each time a library is
+// imported. The observer is read-only — it cannot influence the import.
+// Requires WithLibraryPaths to be effective (no libraries loaded without it).
+func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.importObserver = obs
+	}
+}
+
 // WithoutCore creates an engine with an empty registry — no core primitives
 // (arithmetic, pairs, control flow, etc.) are added. Extensions added via
 // WithExtension are still applied.
@@ -100,8 +116,8 @@ func WithoutCore() EngineOption {
 }
 
 // SafeExtensions returns engine options that add extensions suitable for
-// sandboxed engines: io, exceptions, math, and the safe subset of all
-// (records, promises, strings, characters).
+// sandboxed engines: io, exceptions, math, introspection, and the safe
+// subset of all (records, promises, strings, characters).
 //
 // These provide R7RS functionality without filesystem, eval, system, Go
 // interop, or threading access. Core primitives are still added by default
@@ -119,6 +135,7 @@ func SafeExtensions() []EngineOption {
 		WithExtension(io.Extension),
 		WithExtension(exceptions.Extension),
 		WithExtension(math.Extension),
+		WithExtension(introspection.Extension),
 		WithExtension(all.SafeExtension),
 	}
 }

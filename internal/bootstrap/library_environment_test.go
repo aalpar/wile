@@ -40,7 +40,7 @@ func TestNewLibraryEnvironmentFrame_Basic(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(libEnv, qt.IsNotNil)
 }
@@ -55,7 +55,7 @@ func TestNewLibraryEnvironmentFrame_SharedTopLevelEnvironment(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	callerTopLevel := callerEnv.TopLevelEnv()
@@ -75,7 +75,7 @@ func TestNewLibraryEnvironmentFrame_SymbolIdentity(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Intern the same symbol name in both environments
@@ -96,7 +96,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define a binding in the library environment
@@ -122,7 +122,7 @@ func TestNewLibraryEnvironmentFrame_PrimitivesAvailable(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Evaluate a simple expression in the library environment
@@ -140,7 +140,7 @@ func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	tests := []struct {
@@ -173,7 +173,7 @@ func TestNewLibraryEnvironmentFrame_NilTopLevelEnvironment(t *testing.T) {
 	// Create a bare environment frame with no TopLevelEnvironment
 	bareEnv := environment.NewEnvironmentFrame(nil, nil)
 
-	_, err := NewLibraryEnvironmentFrame(ctx, bareEnv)
+	_, err := NewLibraryEnvironmentFrame(ctx, bareEnv, nil)
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -186,7 +186,7 @@ func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv)
+	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Define a variable in the caller
@@ -418,6 +418,6 @@ func TestNewLibraryEnvironmentFrame_ExtensionError(t *testing.T) {
 	allExtensions = []registry.Extension{brokenExtension{}}
 	defer func() { allExtensions = saved }()
 
-	_, err = NewLibraryEnvironmentFrame(context.TODO(), parent)
+	_, err = NewLibraryEnvironmentFrame(context.TODO(), parent, nil)
 	c.Assert(err, qt.IsNotNil)
 }
