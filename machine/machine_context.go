@@ -64,7 +64,12 @@ type MachineContext struct {
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 	barrierValid     *BarrierToken        // non-nil when inside a with-continuation-barrier; pointer identity identifies the barrier
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
-	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
+	// thread is the SRFI-18 thread object (nil = primordial thread).
+	// This is the Scheme-visible half of the thread identity split.
+	// The numeric half (threadID) lives in vmState and propagates into
+	// continuations. See the comment on vmState.threadID for the full
+	// design and invariant.
+	thread *values.Thread
 	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
 	restArgBuf       values.PairBlock     // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
