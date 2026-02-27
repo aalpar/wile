@@ -329,7 +329,7 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 // See the comment on NewMachineContinuationFromMachineContext for why this matters.
 func (p *MachineContext) SaveContinuation(off int) error {
 	p.callDepth++
-	if p.maxCallDepth > 0 && p.callDepth > p.maxCallDepth {
+	if p.maxCallDepth > 0 && uint64(p.callDepth) > p.maxCallDepth {
 		p.callDepth--
 		return values.WrapForeignErrorf(values.ErrCallDepthExceeded,
 			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)
@@ -347,7 +347,7 @@ func (p *MachineContext) CurrentContinuation() *MachineContinuation {
 
 // CallDepth returns the depth of the current continuation stack.
 func (p *MachineContext) CallDepth() int {
-	return int(p.callDepth)
+	return p.callDepth
 }
 
 func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*MachineContext, error) {

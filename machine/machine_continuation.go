@@ -31,7 +31,7 @@ type MachineContinuation struct {
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
 func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineContinuation {
-	var depth uint64
+	var depth int
 	if parent != nil {
 		depth = parent.callDepth + 1
 	}
@@ -59,11 +59,11 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 //   - PrimCallCC sub-context path (prim_control.go): mc.callDepth == 0, mc.cont == nil
 //   - PrimDynamicWind escape cont (prim_control.go): mc.callDepth == chain length
 //
-// Using mc.callDepth - 1 would uint64-underflow to 2^64-1 in the PrimCallCC
-// case (callDepth is uint64). The parent-pointer formula is correct for all
+// Using mc.callDepth - 1 would underflow to -1 in the PrimCallCC
+// case (mc.callDepth == 0). The parent-pointer formula is correct for all
 // callers and immune to underflow.
 func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *MachineContinuation {
-	var depth uint64
+	var depth int
 	if mc.cont != nil {
 		depth = mc.cont.callDepth + 1
 	}
@@ -119,7 +119,7 @@ func (p *MachineContinuation) CallDepth() int {
 	if p == nil {
 		return 0
 	}
-	return int(p.callDepth)
+	return p.callDepth
 }
 
 func (p *MachineContinuation) Copy() *MachineContinuation {

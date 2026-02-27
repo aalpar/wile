@@ -81,10 +81,9 @@ type vmState struct {
 	//   Set once at creation time, never mutated. A root frame (parent == nil)
 	//   has callDepth 0; each level adds 1.
 	//
-	// WARNING: callDepth is uint64. Subtracting from it can silently wrap to
-	// 2^64-1. All depth computation must use the parent pointer (which is nil-safe)
+	// All depth computation should use the parent pointer (which is nil-safe)
 	// rather than arithmetic on callDepth. See NewMachineContinuationFromMachineContext.
-	callDepth uint64
+	callDepth int
 	// envPooled is true when env was acquired from the envFramePool (Apply
 	// copy path). When the env is about to be overwritten (RestoreAndRelease,
 	// Restore), this flag tells us it's safe to return it to the pool.
