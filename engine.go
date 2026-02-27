@@ -127,6 +127,10 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 			libReg.AddSearchPath(cfg.libraryPaths[i])
 		}
 
+		if cfg.importObserver != nil {
+			libReg.SetImportObserver(cfg.importObserver)
+		}
+
 		env.SetLibraryRegistry(libReg)
 
 		err = registerExtensionLibraries(reg, env, libReg, extSnapshots)
@@ -136,7 +140,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		// LibraryEnvFactory creates isolated library environments that mirror
 		// this engine's configuration — same registry, same macros.
-		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
 			callerTopLevel := callerEnv.TopLevelEnv()
 			if callerTopLevel == nil {
 				return nil, values.WrapForeignErrorf(values.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
@@ -385,6 +389,13 @@ func (p *Engine) Environment() *environment.EnvironmentFrame {
 // This provides access to per-instance symbol interning and phase management.
 func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 	return p.topLevel
+}
+
+// Registry returns a clone of the engine's registry. The returned registry
+// can be filtered with Without, WithoutCategory, or WithoutBindings and
+// passed to NewEngine via WithRegistry to create a restricted engine.
+func (p *Engine) Registry() *registry.Registry {
+	return p.registry.Clone()
 }
 
 // internal helpers

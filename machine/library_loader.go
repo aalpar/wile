@@ -127,7 +127,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	if factory == nil {
 		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
 	}
-	libEnv, err := factory(ctx, callerEnv)
+	libEnv, err := factory(ctx, callerEnv, expectedName.Parts)
 	if err != nil {
 		return nil, values.WrapForeignErrorf(err, "could not create library environment")
 	}

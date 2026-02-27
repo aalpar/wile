@@ -4,7 +4,7 @@
 
 # Extension-Level Sandboxing Model
 
-**Status**: Phases 1-3 implemented
+**Status**: Phases 1-6 implemented
 **Date**: 2026-02-20
 **Related**: Authorization Framework (below), `docs/EXTENSIONS.md`
 
@@ -123,7 +123,7 @@ Tests implemented:
 5. Library loaded by a safe engine fails when it tries to use `open-input-file`.
 6. Option tests: `TestWithoutCore`, `TestWithSafeExtensions`, `TestSafeExtensions`.
 
-### Phase 4: Registry filtering
+### Phase 4: Registry filtering — **Implemented**
 
 Add methods to `Registry` that let embedders subtract primitives from a fully-populated registry. This enables fine-grained control within extensions without requiring every extension to be rebuilt from scratch.
 
@@ -182,14 +182,17 @@ func (p *Registry) WithoutBindings(names ...string) *Registry
 - Bootstrap macros are registered as source strings, not as named primitives. You can't selectively remove `cond` or `let` via `Without()`. This is fine — derived forms are pure syntax transformations with no capability implications.
 - Syntax compilers and primitive expanders are registered via `machine.RegisterSyntaxCompilers` / `machine.RegisterPrimitiveExpanders`, outside the registry. These are core language constructs (`if`, `lambda`, `define`), not capabilities.
 
-**Location:** `registry/registry.go` (methods on `*Registry`)
+**Location:** `registry/registry.go` (methods on `*Registry`), `engine.go` (`Engine.Registry()` getter)
 
-**Existing infrastructure:**
-- `Registry.Clone()` — deep copy pattern to follow
-- `PrimitiveSpec.Category` — already on every primitive (15 categories in core, plus extension categories like `"io"`, `"ports"`, `"eval"`, `"records"`, `"promises"`)
-- `PrimitivesByCategory()` — read-only grouping, exists but only for inspection
+**What was implemented:**
+- `Without(names ...string) *Registry` — filter by primitive name
+- `WithoutCategory(categories ...string) *Registry` — filter by `PrimitiveSpec.Category`
+- `WithoutBindings(names ...string) *Registry` — filter compile-time bindings
+- `filterPrimitives` — shared helper to avoid duplication between `Without` and `WithoutCategory`
+- `Engine.Registry() *Registry` — returns a clone of the engine's registry for filtering
+- Unit tests in `registry/registry_test.go`; integration tests in `engine_sandbox_test.go`
 
-### Phase 5: Library name in factory signature
+### Phase 5: Library name in factory signature — **Implemented**
 
 Pass the library name through `LibraryEnvFactory` so the factory knows which library it's creating an environment for. This is a low-cost signature change that enables per-library policies in the future and makes the loading path self-documenting.
 
@@ -211,14 +214,16 @@ type LibraryEnvFactory func(context.Context, *EnvironmentFrame, []string) (*Envi
 |------|-------|--------|
 | Type definition | `environment/top_level_environment.go:30` | Add `[]string` param |
 | Field + getter + setter | `environment/top_level_environment.go:81,237,242` | Follows from type |
-| Call site (only one) | `machine/library_loader.go:126` | Pass `expectedName.Parts` — already in scope |
-| Engine factory closure | `engine.go:182` | Add param to closure signature (ignore or log) |
-| Bootstrap factory | `internal/bootstrap/environment_tiny.go:149` | Add param to `NewLibraryEnvironmentFrame` |
-| CLI setup | `cmd/scheme/main.go:191` | Points to bootstrap factory |
-| Tests | `machine/library_test.go:309,745`, `machine/library_scheme_test.go:54` | Point to bootstrap factory |
-| Docs | `docs/EXTENSION_LIBRARIES.md`, `docs/dev/ENVIRONMENT_SYSTEM.md` | Text updates |
+| Call site 1 | `machine/library_loader.go:130` | Pass `expectedName.Parts` |
+| Call site 2 | `machine/compile_time_continuation_library.go:120` | Pass `libName.Parts` |
+| Engine factory closure | `engine.go:139` | Add `_ []string` param (unused for now) |
+| Bootstrap factory | `internal/bootstrap/environment_tiny.go:149` | Add `_ []string` param |
+| CLI setup | `cmd/scheme/main.go:229` | Points to bootstrap factory (no change needed) |
+| Tests (factory reference) | `machine/library_test.go:309,745`, `machine/library_scheme_test.go:54` | Point to bootstrap factory (no change needed — signature matches) |
+| Tests (direct calls) | `internal/bootstrap/library_environment_test.go`, `multi_environment_test.go` | Add `nil` third argument |
+| Docs | `docs/EXTENSION_LIBRARIES.md`, `docs/dev/ENVIRONMENT_SYSTEM.md` | Text updates (deferred) |
 
-### Phase 6: Library load observability
+### Phase 6: Library load observability — **Implemented**
 
 Add an optional observer that records library load events. This gives embedders visibility into which libraries were loaded, what they exported, and what bindings actually flowed into the importer.
 
@@ -260,6 +265,16 @@ type LibraryImportObserver func(LibraryImportEvent)
 
 Embedders that don't set it pay nothing (nil check before firing).
 
+**What was implemented:**
+- `LibraryImportEvent` struct and `LibraryImportObserver` callback type in `machine/library.go`
+- `SetImportObserver` / `ImportObserver` on `*LibraryRegistry`
+- `fireImportObserver` helper that extracts the registry from `env.LibraryRegistry()`, type-asserts, nil-checks, and fires
+- Observer fires at Site 1 (`processLibraryImport`, library-internal) and Site 2 (`CompileImport`, top-level)
+- NOT fired at Site 3 (`expandImportForm`) — the expander pre-loads libraries for macros, but the compiler is the definitive import site. Firing both would produce duplicate events for the same `(import ...)` form.
+- `WithImportObserver` engine option in `options.go`; `LibraryImportEvent` type alias re-exported from `wile` package
+- Integration tests in `engine_sandbox_test.go`: basic observer, `(only ...)` modifier
+- Exports and Imported are sorted for deterministic observation
+
 ## Scope boundaries
 
 **Covered by this plan:**
@@ -283,9 +298,9 @@ Embedders that don't set it pay nothing (nil check before firing).
 - Phase 1 (convenience API): None — **Done**
 - Phase 2 (documentation): None — **Done**
 - Phase 3 (integration tests): Phase 1 — **Done**
-- Phase 4 (registry filtering): None — operates on `Registry` type, independent of other phases
-- Phase 5 (factory signature): None (mechanical change)
-- Phase 6 (observability): Phase 5 (needs library name in factory for importer tracking)
+- Phase 4 (registry filtering): None — **Done**
+- Phase 5 (factory signature): None — **Done**
+- Phase 6 (observability): Phase 5 — **Done**
 - Authorization framework is independent and can proceed in parallel
 
 ## Decision log

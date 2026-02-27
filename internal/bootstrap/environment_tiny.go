@@ -148,7 +148,7 @@ func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.Environm
 // But shares with caller:
 //   - TopLevelEnvironment (symbol and syntax interning)
 //   - LibraryRegistry (for nested imports)
-func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
+func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
 	// Get caller's TopLevelEnvironment
 	callerTopLevel := callerEnv.TopLevelEnv()
 	if callerTopLevel == nil {

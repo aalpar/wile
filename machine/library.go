@@ -34,6 +34,7 @@ package machine
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -111,11 +112,25 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 	return p.Exports[externalName]
 }
 
+// LibraryImportEvent records what happened when a library was imported.
+type LibraryImportEvent struct {
+	Library    []string // imported library name parts, e.g., ["scheme", "base"]
+	SourceFile string   // path to .sld file (empty for synthetic libraries)
+	Exports    []string // all names exported by the library
+	Imported   []string // names that actually landed in the importer (after only/except/prefix/rename)
+	Importer   []string // importing library name (nil for top-level import)
+}
+
+// LibraryImportObserver is called when a library is imported.
+// Observers are read-only — they cannot influence the import.
+type LibraryImportObserver func(LibraryImportEvent)
+
 // LibraryRegistry manages loaded libraries and handles library loading.
 type LibraryRegistry struct {
-	libraries   map[string]*CompiledLibrary // key: library name as "scheme/base"
-	loading     map[string]bool             // libraries currently being loaded (cycle detection)
-	searchPaths []string                    // directories to search for library files
+	libraries      map[string]*CompiledLibrary // key: library name as "scheme/base"
+	loading        map[string]bool             // libraries currently being loaded (cycle detection)
+	searchPaths    []string                    // directories to search for library files
+	importObserver LibraryImportObserver       // optional: called on each library import
 }
 
 // DefaultLibraryPaths are the default directories to search for libraries.
@@ -146,6 +161,53 @@ func (p *LibraryRegistry) GetSearchPaths() []string {
 // AddSearchPath adds a path to the beginning of the search path list.
 func (p *LibraryRegistry) AddSearchPath(path string) {
 	p.searchPaths = append([]string{path}, p.searchPaths...)
+}
+
+// SetImportObserver sets an optional observer that is called each time
+// a library is imported. The observer is read-only and cannot influence
+// the import. Pass nil to remove the observer.
+func (p *LibraryRegistry) SetImportObserver(obs LibraryImportObserver) {
+	p.importObserver = obs
+}
+
+// ImportObserver returns the current import observer, or nil.
+func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
+	return p.importObserver
+}
+
+// fireImportObserver calls the import observer if one is set on the
+// registry stored in env. bindings maps local name -> external name
+// (as returned by ApplyToExports). importer is the importing library's
+// name parts, or nil for top-level imports.
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer []string) {
+	regAny := env.LibraryRegistry()
+	if regAny == nil {
+		return
+	}
+	reg, ok := regAny.(*LibraryRegistry)
+	if !ok || reg.importObserver == nil {
+		return
+	}
+
+	exports := make([]string, 0, len(lib.Exports))
+	for name := range lib.Exports {
+		exports = append(exports, name)
+	}
+	sort.Strings(exports)
+
+	imported := make([]string, 0, len(bindings))
+	for name := range bindings {
+		imported = append(imported, name)
+	}
+	sort.Strings(imported)
+
+	reg.importObserver(LibraryImportEvent{
+		Library:    lib.Name.Parts,
+		SourceFile: lib.SourceFile,
+		Exports:    exports,
+		Imported:   imported,
+		Importer:   importer,
+	})
 }
 
 // Register adds a compiled library to the registry.

@@ -304,3 +304,89 @@ func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
 	}
 	return result
 }
+
+// Without returns a new Registry with the named primitives removed.
+// Names that don't match any registered primitive are silently ignored.
+// Compile-time bindings, init funcs, macro sources, and global values
+// are copied unchanged.
+func (p *Registry) Without(names ...string) *Registry {
+	return p.filterPrimitives(names, func(reg PrimitiveRegistration) string {
+		return reg.Spec.Name
+	})
+}
+
+// WithoutCategory returns a new Registry with all primitives in the
+// named categories removed. Categories are matched against PrimitiveSpec.Category.
+// Compile-time bindings, init funcs, macro sources, and global values
+// are copied unchanged.
+func (p *Registry) WithoutCategory(categories ...string) *Registry {
+	return p.filterPrimitives(categories, func(reg PrimitiveRegistration) string {
+		return reg.Spec.Category
+	})
+}
+
+// filterPrimitives returns a new Registry with primitives excluded when
+// keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
+func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *Registry {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	set := make(map[string]struct{}, len(exclude))
+	for _, v := range exclude {
+		set[v] = struct{}{}
+	}
+
+	q := &Registry{
+		primitives:   make([]PrimitiveRegistration, 0, len(p.primitives)),
+		bindings:     make([]string, len(p.bindings)),
+		initFuncs:    make([]InitFunc, len(p.initFuncs)),
+		macroSources: make([]string, len(p.macroSources)),
+		globalValues: make([]GlobalValue, len(p.globalValues)),
+	}
+	for _, reg := range p.primitives {
+		_, ok := set[keyFn(reg)]
+		if ok {
+			continue
+		}
+		q.primitives = append(q.primitives, reg)
+	}
+	copy(q.bindings, p.bindings)
+	copy(q.initFuncs, p.initFuncs)
+	copy(q.macroSources, p.macroSources)
+	copy(q.globalValues, p.globalValues)
+	return q
+}
+
+// WithoutBindings returns a new Registry with the named compile-time
+// bindings removed. Use after Without to fully erase a name that exists
+// as both a primitive and a compile-time binding (e.g., set!).
+// Primitives, init funcs, macro sources, and global values are copied unchanged.
+func (p *Registry) WithoutBindings(names ...string) *Registry {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	exclude := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		exclude[name] = struct{}{}
+	}
+
+	q := &Registry{
+		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
+		bindings:     make([]string, 0, len(p.bindings)),
+		initFuncs:    make([]InitFunc, len(p.initFuncs)),
+		macroSources: make([]string, len(p.macroSources)),
+		globalValues: make([]GlobalValue, len(p.globalValues)),
+	}
+	copy(q.primitives, p.primitives)
+	for _, b := range p.bindings {
+		_, ok := exclude[b]
+		if ok {
+			continue
+		}
+		q.bindings = append(q.bindings, b)
+	}
+	copy(q.initFuncs, p.initFuncs)
+	copy(q.macroSources, p.macroSources)
+	copy(q.globalValues, p.globalValues)
+	return q
+}
