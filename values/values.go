@@ -38,9 +38,15 @@ const (
 // It is used as the result of expressions that have no meaningful return value.
 type voidType struct{}
 
-func (voidType) SchemeString() string { return SpecialVoid }
-func (voidType) IsVoid() bool         { return true }
-func (voidType) EqualTo(v Value) bool { return v != nil && v.IsVoid() }
+func (voidType) SchemeString() string {
+	return SpecialVoid
+}
+func (voidType) IsVoid() bool {
+	return true
+}
+func (voidType) EqualTo(v Value) bool {
+	return v != nil && v.IsVoid()
+}
 
 // Void is the singleton void value.
 var Void Value = voidType{}
@@ -48,8 +54,12 @@ var Void Value = voidType{}
 // eofType represents the end-of-file object.
 type eofType struct{}
 
-func (eofType) SchemeString() string { return SpecialEOF }
-func (eofType) IsVoid() bool         { return false }
+func (eofType) SchemeString() string {
+	return SpecialEOF
+}
+func (eofType) IsVoid() bool {
+	return false
+}
 func (eofType) EqualTo(v Value) bool {
 	_, ok := v.(eofType)
 	return ok
