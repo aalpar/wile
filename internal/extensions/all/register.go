@@ -109,16 +109,6 @@ func addMoreStrings(r *registry.Registry) error {
 			Doc: "Maps a procedure over string characters.", ParamNames: []string{"proc", "string"}, Category: "strings"},
 		{Name: "string-for-each", ParamCount: 2, IsVariadic: true, Impl: PrimStringForEach,
 			Doc: "Applies a procedure to string characters for side effects.", ParamNames: []string{"proc", "string"}, Category: "strings"},
-		{Name: "string-ci=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiEqVariadic,
-			Doc: "Case-insensitive string equality.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
-		{Name: "string-ci<?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiLtVariadic,
-			Doc: "Case-insensitive string less-than.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
-		{Name: "string-ci>?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiGtVariadic,
-			Doc: "Case-insensitive string greater-than.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
-		{Name: "string-ci<=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiLeVariadic,
-			Doc: "Case-insensitive string less-or-equal.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
-		{Name: "string-ci>=?", ParamCount: 2, IsVariadic: true, Impl: PrimStringCiGeVariadic,
-			Doc: "Case-insensitive string greater-or-equal.", ParamNames: []string{"s1", "s2"}, Category: "strings"},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
 			Doc: "Returns the uppercase version of a string.", ParamNames: []string{"string"}, Category: "strings"},
 		{Name: "string-downcase", ParamCount: 1, Impl: PrimStringDowncase,
@@ -126,21 +116,35 @@ func addMoreStrings(r *registry.Registry) error {
 		{Name: "string-foldcase", ParamCount: 1, Impl: PrimStringFoldcase,
 			Doc: "Returns the case-folded version of a string.", ParamNames: []string{"string"}, Category: "strings"},
 	}, registry.PhaseRuntime)
+
+	// Case-insensitive string comparisons (generated from stringCiCompareSpecs table)
+	stringCiPrims := make([]registry.PrimitiveSpec, len(stringCiCompareSpecs))
+	for i, spec := range stringCiCompareSpecs {
+		stringCiPrims[i] = registry.PrimitiveSpec{
+			Name: spec.name, ParamCount: 2, IsVariadic: true,
+			Impl:       makeStringCiComparePrimitive(spec.name, spec.cmp),
+			Doc:        "Compares strings case-insensitively.",
+			ParamNames: []string{"s1", "s2"}, Category: "strings",
+		}
+	}
+	r.AddPrimitives(stringCiPrims, registry.PhaseRuntime)
 	return nil
 }
 
 func addMoreChars(r *registry.Registry) error {
+	// Case-insensitive character comparisons (generated from charCiCompareSpecs table)
+	charCiPrims := make([]registry.PrimitiveSpec, len(charCiCompareSpecs))
+	for i, spec := range charCiCompareSpecs {
+		charCiPrims[i] = registry.PrimitiveSpec{
+			Name: spec.name, ParamCount: 2, IsVariadic: true,
+			Impl:       makeCharCiComparePrimitive(spec.name, spec.cmp),
+			Doc:        "Compares characters case-insensitively.",
+			ParamNames: []string{"c1", "c2"}, Category: "characters",
+		}
+	}
+	r.AddPrimitives(charCiPrims, registry.PhaseRuntime)
+
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "char-ci=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiEqVariadic,
-			Doc: "Case-insensitive character equality.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
-		{Name: "char-ci<?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiLtVariadic,
-			Doc: "Case-insensitive character less-than.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
-		{Name: "char-ci>?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiGtVariadic,
-			Doc: "Case-insensitive character greater-than.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
-		{Name: "char-ci<=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiLeVariadic,
-			Doc: "Case-insensitive character less-or-equal.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
-		{Name: "char-ci>=?", ParamCount: 2, IsVariadic: true, Impl: PrimCharCiGeVariadic,
-			Doc: "Case-insensitive character greater-or-equal.", ParamNames: []string{"c1", "c2"}, Category: "characters"},
 		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
 			Doc: "Returns #t if char is alphabetic.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-numeric?", ParamCount: 1, Impl: PrimCharNumericQ,

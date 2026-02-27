@@ -25,39 +25,26 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// PrimCharCiEqVariadic implements the variadic char-ci=? primitive.
-func PrimCharCiEqVariadic(mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char-ci=?", func(a, b rune) bool {
-		return simpleCaseFold(a) == simpleCaseFold(b)
-	})
+// charCiCompareSpecs defines the five R7RS §6.6 case-insensitive character comparison
+// predicates. Each entry pairs a primitive name with its comparison function.
+// Mirrors charCompareSpecs in registry/core/prim_characters.go.
+var charCiCompareSpecs = []struct {
+	name string
+	cmp  func(rune, rune) bool
+}{
+	{"char-ci=?", func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }},
+	{"char-ci<?", func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }},
+	{"char-ci>?", func(a, b rune) bool { return simpleCaseFold(a) > simpleCaseFold(b) }},
+	{"char-ci<=?", func(a, b rune) bool { return simpleCaseFold(a) <= simpleCaseFold(b) }},
+	{"char-ci>=?", func(a, b rune) bool { return simpleCaseFold(a) >= simpleCaseFold(b) }},
 }
 
-// PrimCharCiLtVariadic implements the variadic char-ci<? primitive.
-func PrimCharCiLtVariadic(mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char-ci<?", func(a, b rune) bool {
-		return simpleCaseFold(a) < simpleCaseFold(b)
-	})
-}
-
-// PrimCharCiGtVariadic implements the variadic char-ci>? primitive.
-func PrimCharCiGtVariadic(mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char-ci>?", func(a, b rune) bool {
-		return simpleCaseFold(a) > simpleCaseFold(b)
-	})
-}
-
-// PrimCharCiLeVariadic implements the variadic char-ci<=? primitive.
-func PrimCharCiLeVariadic(mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char-ci<=?", func(a, b rune) bool {
-		return simpleCaseFold(a) <= simpleCaseFold(b)
-	})
-}
-
-// PrimCharCiGeVariadic implements the variadic char-ci>=? primitive.
-func PrimCharCiGeVariadic(mc *machine.MachineContext) error {
-	return helpers.CharCompareVariadic(mc, "char-ci>=?", func(a, b rune) bool {
-		return simpleCaseFold(a) >= simpleCaseFold(b)
-	})
+// makeCharCiComparePrimitive returns a ForeignFunction that performs a variadic
+// case-insensitive character comparison using the given comparator.
+func makeCharCiComparePrimitive(name string, cmp func(rune, rune) bool) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		return helpers.CharCompareVariadic(mc, name, cmp)
+	}
 }
 
 // Character classification predicates — all use MakeCharPredicate factory.

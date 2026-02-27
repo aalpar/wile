@@ -250,39 +250,26 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimStringCiEqVariadic implements the variadic string-ci=? primitive.
-func PrimStringCiEqVariadic(mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci=?", func(a, b string) bool {
-		return getCaseFolded(a) == getCaseFolded(b)
-	})
+// stringCiCompareSpecs defines the five R7RS §6.7 case-insensitive string comparison
+// predicates. Each entry pairs a primitive name with its comparison function.
+// Mirrors charCiCompareSpecs in prim_characters.go.
+var stringCiCompareSpecs = []struct {
+	name string
+	cmp  func(string, string) bool
+}{
+	{"string-ci=?", func(a, b string) bool { return getCaseFolded(a) == getCaseFolded(b) }},
+	{"string-ci<?", func(a, b string) bool { return getCaseFolded(a) < getCaseFolded(b) }},
+	{"string-ci>?", func(a, b string) bool { return getCaseFolded(a) > getCaseFolded(b) }},
+	{"string-ci<=?", func(a, b string) bool { return getCaseFolded(a) <= getCaseFolded(b) }},
+	{"string-ci>=?", func(a, b string) bool { return getCaseFolded(a) >= getCaseFolded(b) }},
 }
 
-// PrimStringCiLtVariadic implements the variadic string-ci<? primitive.
-func PrimStringCiLtVariadic(mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci<?", func(a, b string) bool {
-		return getCaseFolded(a) < getCaseFolded(b)
-	})
-}
-
-// PrimStringCiGtVariadic implements the variadic string-ci>? primitive.
-func PrimStringCiGtVariadic(mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci>?", func(a, b string) bool {
-		return getCaseFolded(a) > getCaseFolded(b)
-	})
-}
-
-// PrimStringCiLeVariadic implements the variadic string-ci<=? primitive.
-func PrimStringCiLeVariadic(mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci<=?", func(a, b string) bool {
-		return getCaseFolded(a) <= getCaseFolded(b)
-	})
-}
-
-// PrimStringCiGeVariadic implements the variadic string-ci>=? primitive.
-func PrimStringCiGeVariadic(mc *machine.MachineContext) error {
-	return helpers.StringCompareVariadic(mc, "string-ci>=?", func(a, b string) bool {
-		return getCaseFolded(a) >= getCaseFolded(b)
-	})
+// makeStringCiComparePrimitive returns a ForeignFunction that performs a variadic
+// case-insensitive string comparison using the given comparator.
+func makeStringCiComparePrimitive(name string, cmp func(string, string) bool) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		return helpers.StringCompareVariadic(mc, name, cmp)
+	}
 }
 
 // makeStringCaser creates a string case-mapping primitive that extracts
