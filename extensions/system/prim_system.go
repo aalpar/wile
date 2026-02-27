@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -56,6 +57,13 @@ func PrimCommandLine(mc *machine.MachineContext) error {
 // PrimExit implements the (exit) primitive.
 // Exits the program with an optional status code.
 func PrimExit(mc *machine.MachineContext) error {
+	err := security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceProcess,
+		Action:   security.ActionExit,
+	})
+	if err != nil {
+		return err
+	}
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
@@ -78,6 +86,13 @@ func PrimExit(mc *machine.MachineContext) error {
 // PrimEmergencyExit implements the (emergency-exit) primitive.
 // Exits the program immediately without cleanup or finalization.
 func PrimEmergencyExit(mc *machine.MachineContext) error {
+	err := security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceProcess,
+		Action:   security.ActionExit,
+	})
+	if err != nil {
+		return err
+	}
 	rest := mc.Arg(0)
 	code := 0
 	if !values.IsEmptyList(rest) {
@@ -104,6 +119,14 @@ func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
+	err = security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceEnv,
+		Action:   security.ActionRead,
+		Target:   name.Value,
+	})
+	if err != nil {
+		return err
+	}
 	val, exists := os.LookupEnv(name.Value)
 	if exists {
 		mc.SetValue(values.NewString(val))
@@ -116,6 +139,14 @@ func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 // PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.
 // Returns all environment variables.
 func PrimGetEnvironmentVariables(mc *machine.MachineContext) error {
+	err := security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceEnv,
+		Action:   security.ActionRead,
+		Target:   "*",
+	})
+	if err != nil {
+		return err
+	}
 	env := os.Environ()
 	list := values.EmptyList
 	for i := len(env) - 1; i >= 0; i-- {

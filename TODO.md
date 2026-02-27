@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-02-26
 
 ### Current Project Status
 
@@ -23,10 +23,10 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P1 | Fused push opcodes | Performance | Not started | `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops. |
 | P2 | ArrayList — array-backed list representation | Performance | Not started | Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test). |
 | P2 | Numeric dispatch simplification | Performance | Not started | Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations. |
-| P2 | Sandboxing convenience API | Security | Not started | `SafeExtensions()` + security classification docs. ~20 LOC but communicates the embedding security story. `plans/SECURITY.md` |
+| P2 | Sandboxing convenience API | Security | **Done** | `SafeExtensions()`, `WithSafeExtensions()`, `WithoutCore()`, registry filtering (`Without`, `WithoutCategory`, `WithoutBindings`), import observer, security classification docs. `plans/SECURITY.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md` |
 | P2 | Environment introspection | Feature | **Done** | 5 read-only primitives extracted to `extensions/introspection/`. Available in safe sandbox. |
-| P3 | Authorization Framework (6 phases) | Security | Not started | K8s-style verb+resource for fine-grained sandboxing. `plans/SECURITY.md` |
+| P3 | Authorization Framework (6 phases) | Security | **Done** | K8s-style verb+resource for fine-grained sandboxing. `security/` package, built-in authorizers, engine integration, primitive gating, integration tests. `plans/SECURITY.md` |
 | P3 | ER macro transformer | Macro system | Not started | Unlocks Chibi library ecosystem. Matters after Go-side adoption creates demand for Scheme library porting. `plans/MACRO_SYSTEM.md` |
 | P3 | Module decomposition Phase 1 | Architecture | Not started | Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md` |
 | P3 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases. |
@@ -69,12 +69,12 @@ See `plans/SECURITY.md` for full design.
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1 | `security/` package — interface, context propagation, constants | Not started |
-| 2 | Built-in authorizers (FilesystemRoot, ReadOnly, DenyAll, Composite) | Not started |
-| 3 | Engine integration (`WithAuthorizer` option, ctx wrapping) | Not started |
-| 4 | Gate runtime primitives (files, system, eval extensions) | Not started |
-| 5 | Gate compile-time code loading (include, library import) | Not started |
-| 6 | Integration tests | Not started |
+| 1 | `security/` package — interface, context propagation, constants | **Done** |
+| 2 | Built-in authorizers (FilesystemRoot, ReadOnly, DenyAll, Composite) | **Done** |
+| 3 | Engine integration (`WithAuthorizer` option, ctx wrapping) | **Done** |
+| 4 | Gate runtime primitives (files, system, eval extensions) | **Done** |
+| 5 | Gate compile-time code loading (include, library import) | **Done** |
+| 6 | Integration tests | **Done** |
 
 ---
 

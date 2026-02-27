@@ -34,6 +34,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -82,6 +83,15 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 			return nil, values.WrapForeignErrorf(err,
 				"could not find library %s", name.SchemeString())
 		}
+	}
+
+	err = security.Check(ctx, security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   filePath,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Load the library from file
