@@ -8,6 +8,72 @@ Always use sentinel error wrapping patterns (not `fmt.Errorf`) per project conve
 
 Never write single-line functions. Always spread function bodies across multiple lines, even for simple implementations.
 
+### Early Exit From Functions When Possible
+
+**A: Classic Nested If (Less Idiomatic)**
+```go
+func processDataNested(value int, settings map[string]bool) error {
+	if value > 0 {
+		if settings != nil {
+			if settings["enabled"] {
+				// The actual "happy path" logic is buried here
+				fmt.Printf("Processing value: %d\n", value)
+				return nil
+			} else {
+				return fmt.Errorf("settings not enabled")
+			}
+		} else {
+			return fmt.Errorf("settings is nil")
+		}
+	} else {
+		return fmt.Errorf("value must be positive")
+	}
+}
+```
+
+**B: Early Return (Idiomatic Go)**
+- General structure:
+    -- Check preconditions necessary to eliminate runtime errors, and known failure modes of subsequent function calls.
+    -- Attempt to avoid computation in the body by dealing with edge-cases and know trivial cases first.
+```go
+func mult( a, b int) {
+    if a == 0 || b == 0 {
+        return 0
+    }
+    return a * b
+}
+```
+
+- This approach uses "guard clauses" at the beginning of the function to handle error conditions immediately and return, which keeps the main logic (the "happy path") flat and easy to read. The Go standard library commonly uses this pattern, especially for error handling.
+
+```go
+import "fmt"
+
+func processDataEarlyReturn(value int, settings map[string]bool) error {
+	if value <= 0 {
+		return fmt.Errorf("value must be positive") // Early exit for invalid input
+	}
+
+	if settings == nil {
+		return fmt.Errorf("settings is nil") // Early exit for missing dependency
+	}
+
+	if !settings["enabled"] {
+		return fmt.Errorf("settings not enabled") // Early exit for a specific condition
+	}
+
+	// The actual "happy path" logic starts here, clear of indentation
+	fmt.Printf("Processing value: %d\n", value)
+	return nil
+}
+```
+
+#### Key Advantages of Early Return (B)
+- **Readability**: The code reads more linearly, making the primary execution flow (the "happy path") much clearer.
+- **Reduced Nesting**: It avoids the "arrow code" or "deep nesting" problem associated with multiple if/else blocks.
+- **Maintainability**: It is easier to add or modify a validation check without affecting the indentation or structure of the main logic.
+- **Idiomatic Go**: This style is explicitly mentioned and encouraged in the official _Effective Go_ documentation.  (Claude:  please provide a link/citation for Effective Go.  DO NOT add this to the BIBLIOGRAPHY as this is a Meta issue about the development process)
+
 ## Return Values
 
 | Letter | Usage                                                                                                                                                                                          |

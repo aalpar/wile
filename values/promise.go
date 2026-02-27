@@ -23,21 +23,18 @@ var _ Value = (*Promise)(nil)
 // and the result is memoized; on subsequent forces, the memoized result
 // is returned.
 type Promise struct {
-	// Thunk is the procedure to evaluate (nil if already forced)
+	// Thunk is the procedure to evaluate.
+	// nil means the promise has been forced; Result is then valid.
 	Thunk Callable
-	// Result is the cached result (valid only if Forced is true)
+	// Result is the cached result (valid only when Thunk is nil)
 	Result Value
-	// Forced indicates whether the promise has been evaluated
-	Forced bool
 }
 
 // NewPromise creates a new unforced promise with the given thunk.
 // The thunk should be a procedure that takes no arguments.
 func NewPromise(thunk Callable) *Promise {
 	return &Promise{
-		Thunk:  thunk,
-		Result: nil,
-		Forced: false,
+		Thunk: thunk,
 	}
 }
 
@@ -45,9 +42,7 @@ func NewPromise(thunk Callable) *Promise {
 // This is used by make-promise when given a non-promise value.
 func NewForcedPromise(value Value) *Promise {
 	return &Promise{
-		Thunk:  nil,
 		Result: value,
-		Forced: true,
 	}
 }
 
@@ -67,7 +62,7 @@ func (p *Promise) EqualTo(v Value) bool {
 
 // SchemeString returns the Scheme representation of the promise.
 func (p *Promise) SchemeString() string {
-	if p.Forced {
+	if p.Thunk == nil {
 		return "#<promise (forced)>"
 	}
 	return "#<promise>"

@@ -57,15 +57,16 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 ## Wile Architecture
 
 1. **Language**: R7RS Scheme with hygienic macros (sets of scopes per Flatt 2016), first-class continuations, numeric tower
-2. **Execution**: Bytecode VM with explicit PC loop (`machine_context.go:522-706`), separate eval stack — NOT tree-walking interpreter
+2. **Execution**: Bytecode VM with explicit PC loop (`MachineContext.Run()` in `machine_context.go`), separate eval stack — NOT tree-walking interpreter
 3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
 4. **Pipeline**: `Tokenizer → Parser → Expander → Compiler → VM` (string → tokens → SyntaxValue → bytecode → execution)
-5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `registry/` (primitives/extensions)
-6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match}`
+5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
+6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms}`
 7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
 8. **Error handling**: Sentinel + wrap pattern — `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` for context; never `fmt.Errorf`
 9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
 10. **Concurrency**: Engine not thread-safe (one per goroutine); SRFI-18 threads within Engine safe (VM manages coordination)
+11. **Security**: Two-layer sandboxing — extension-level (opt-in via `WithExtension()`) and fine-grained authorization (`security.Authorizer` interface with `security.Check()` gating)
 
 ### Pipeline
 
@@ -80,11 +81,18 @@ Entry: `engine.go` → `Engine.Eval()` or `Engine.Compile()` + `Engine.Run()`
 ### Package Layering
 
 ```
-values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions}
-  → machine/ → registry/ → wile/ (root)
+values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms,repl}
+  → machine/ → security/ → registry/ → extensions/ → wile/ (root)
 ```
 
-Public API (embedders): `wile/`, `values/`, `registry/`. Internal: `internal/*`. Machine: public but rarely used directly.
+Public API (embedders): `wile/`, `values/`, `registry/`, `security/`, `extensions/*`. Internal: `internal/*`. Machine: public but rarely used directly.
+
+### Security Model
+
+Two-layer sandboxing for embedded use:
+
+1. **Extension-level** (zero-cost): Extensions opt-in via `WithExtension()`. Unprovided extensions don't exist at compile time. `SafeExtensions()` provides a safe sandbox (no filesystem, eval, system, threads).
+2. **Fine-grained authorization**: `security.Authorizer` interface gates privileged operations at runtime. K8s-style vocabulary: Resource (`file`, `code`, `env`, `process`) + Action (`read`, `write`, `delete`, `load`, `exit`). Set via `WithAuthorizer()` engine option. Gate sites: files, system, eval extensions; `include`; library import.
 
 ## Code & Style
 

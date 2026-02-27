@@ -22,6 +22,7 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
 | `TESTING.md` | Scheme test expansion (complete) | Complete |
 | `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Approved |
+| `STRUCTURAL_REVIEW.md` | Codebase-wide structural reduction + tech debt assessment: dependency map, state tightness, composability, consistency debt | Reference |
 
 ## Before Starting Work
 

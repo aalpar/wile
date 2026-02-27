@@ -27,7 +27,6 @@ func TestPromise_NewPromise(t *testing.T) {
 	thunk := newStubCallable(values.NewSymbol("thunk-placeholder"))
 	p := values.NewPromise(thunk)
 
-	qt.Assert(t, p.Forced, qt.IsFalse)
 	qt.Assert(t, p.Thunk, valuestest.SchemeEquals, thunk)
 	qt.Assert(t, p.Result == nil, qt.IsTrue)
 }
@@ -36,7 +35,6 @@ func TestPromise_NewForcedPromise(t *testing.T) {
 	val := values.NewInteger(42)
 	p := values.NewForcedPromise(val)
 
-	qt.Assert(t, p.Forced, qt.IsTrue)
 	qt.Assert(t, p.Thunk == nil, qt.IsTrue)
 	qt.Assert(t, p.Result, valuestest.SchemeEquals, val)
 }
