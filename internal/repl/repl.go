@@ -39,6 +39,7 @@ type REPL struct {
 	env         *environment.EnvironmentFrame
 	debugCtx    *DebugContext
 	metaHandler *MetaCommandHandler
+	completer   *SchemeCompleter
 	docProvider DocProvider
 	historyFile string
 	prompt      string
@@ -107,6 +108,7 @@ func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
 		opt(r)
 	}
 	r.metaHandler = NewMetaCommandHandler(r.env, r.debugCtx, r.docProvider)
+	r.completer = NewSchemeCompleter(r.env, r.metaHandler.Commands())
 	return r
 }
 
@@ -118,6 +120,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		EOFPrompt:       "",
 		HistoryFile:     p.historyFile,
 		HistoryLimit:    1000,
+		AutoComplete:    p.completer,
 	})
 	if err != nil {
 		// Fall back to simple REPL if readline fails

@@ -37,6 +37,7 @@ import (
 	"github.com/aalpar/wile/internal/repl"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/runtime"
 
 	"github.com/jessevdk/go-flags"
@@ -215,7 +216,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	env, err0 := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+	env, primRegistry, err0 := bootstrap.NewTopLevelWithRegistry(ctx)
 	if err0 != nil {
 		Failf(err0, "Cannot create top-level environment")
 	}
@@ -259,7 +260,7 @@ func main() {
 	// Only enter REPL if no files were provided OR interactive mode was requested
 	if len(opts.File) == 0 || opts.Interactive {
 		setupSignals(opts.Quiet)
-		runREPL(ctx, env)
+		runREPL(ctx, env, primRegistry)
 	}
 
 	// Memory profiling (written at exit after all work is done)
@@ -356,8 +357,9 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 }
 
 // runREPL runs an interactive Read-Eval-Print Loop using the repl package
-func runREPL(ctx context.Context, env *environment.EnvironmentFrame) {
-	r := repl.New(env)
+func runREPL(ctx context.Context, env *environment.EnvironmentFrame, primRegistry *registry.Registry) {
+	docProv := repl.NewRegistryDocProvider(primRegistry)
+	r := repl.New(env, repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {
 		Failf(err, "REPL error")
