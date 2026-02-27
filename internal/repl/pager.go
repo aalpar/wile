@@ -19,6 +19,10 @@ func writeWithPager(out io.Writer, content string, pager string) {
 	}
 
 	parts := strings.Fields(pager)
+	if len(parts) == 0 {
+		fmt.Fprint(out, content)
+		return
+	}
 	cmd := exec.CommandContext(context.Background(), parts[0], parts[1:]...)
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stdout = out

@@ -72,7 +72,7 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 	return true
 }
 
-// Commands returns the list of session meta-command names (for autocomplete).
+// Commands returns all meta-command names (session + debug) for autocomplete.
 func (p *MetaCommandHandler) Commands() []string {
 	return []string{
 		"help", "doc", "edit",
@@ -90,6 +90,10 @@ type commandInfo struct {
 	category string // "session" or "debug"
 }
 
+// metaCommands defines metadata for all commands (session + debug).
+// Debug command metadata is duplicated from DebugContext to provide unified
+// help output. If debug commands are added or changed, update both here
+// and in DebugContext.HandleDebugCommand.
 var metaCommands = []commandInfo{
 	{"help", []string{"h", "?"}, "Show this help or help for a specific command",
 		"Usage: ,help [command]\n\nWith no arguments, lists all commands.\nWith a command name, shows detailed help for that command.",
@@ -270,7 +274,7 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 		return
 	}
 
-	editor := os.Getenv("EDITOR")
+	editor := strings.TrimSpace(os.Getenv("EDITOR"))
 	if editor == "" {
 		fmt.Fprintln(out, "Error: $EDITOR is not set")
 		return
