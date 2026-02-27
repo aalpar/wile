@@ -23,39 +23,17 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 )
 
-func TestBoolean_New(t *testing.T) {
-	tcs := []struct {
-		in  bool
-		out values.Value
-	}{
-		{
-			in:  true,
-			out: values.NewBoolean(true),
-		},
-		{
-			in:  false,
-			out: values.NewBoolean(false),
-		},
-	}
-	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			v := values.NewBoolean(tc.in)
-			qt.Assert(t, v, valuestest.SchemeEquals, tc.out)
-		})
-	}
-}
-
 func TestBoolean_SchemeString(t *testing.T) {
 	tcs := []struct {
 		in  values.Value
 		out string
 	}{
 		{
-			in:  values.NewBoolean(true),
+			in:  values.TrueValue,
 			out: "#t",
 		},
 		{
-			in:  values.NewBoolean(false),
+			in:  values.FalseValue,
 			out: "#f",
 		},
 	}
@@ -73,18 +51,18 @@ func TestBoolean_EqualTo(t *testing.T) {
 		out bool
 	}{
 		{
-			in0: values.NewBoolean(true),
-			in1: values.NewBoolean(true),
+			in0: values.TrueValue,
+			in1: values.TrueValue,
 			out: true,
 		},
 		{
-			in0: values.NewBoolean(true),
-			in1: values.NewBoolean(false),
+			in0: values.TrueValue,
+			in1: values.FalseValue,
 			out: false,
 		},
 		{
-			in0: values.NewBoolean(false),
-			in1: values.NewBoolean(false),
+			in0: values.FalseValue,
+			in1: values.FalseValue,
 			out: true,
 		},
 	}
@@ -96,11 +74,8 @@ func TestBoolean_EqualTo(t *testing.T) {
 }
 
 func TestBoolean_Datum(t *testing.T) {
-	b := values.NewBoolean(true)
-	qt.Assert(t, b.Datum(), qt.Equals, true)
-
-	b2 := values.NewBoolean(false)
-	qt.Assert(t, b2.Datum(), qt.Equals, false)
+	qt.Assert(t, values.TrueValue.Datum(), qt.Equals, true)
+	qt.Assert(t, values.FalseValue.Datum(), qt.Equals, false)
 }
 
 func TestBoolToBoolean(t *testing.T) {
@@ -124,6 +99,32 @@ func TestBoolToBoolean(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			result := values.BoolToBoolean(tc.in)
+			c.Assert(result, qt.Equals, tc.out)
+		})
+	}
+}
+
+func TestBooleanToBool(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   *values.Boolean
+		out  bool
+	}{
+		{
+			name: "TrueValue returns true",
+			in:   values.TrueValue,
+			out:  true,
+		},
+		{
+			name: "FalseValue returns false",
+			in:   values.FalseValue,
+			out:  false,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := values.BooleanToBool(tc.in)
 			c.Assert(result, qt.Equals, tc.out)
 		})
 	}
@@ -254,4 +255,11 @@ func TestValueToBoolean(t *testing.T) {
 			c.Assert(result, qt.Equals, tc.out)
 		})
 	}
+}
+
+func TestBoolean_EqualToNonBoolean(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(values.TrueValue.EqualTo(values.NewInteger(1)), qt.Equals, false)
+	c.Assert(values.FalseValue.EqualTo(values.NewString("false")), qt.Equals, false)
+	_ = valuestest.SchemeEquals
 }

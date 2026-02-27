@@ -29,11 +29,11 @@ func TestBox_SchemeString(t *testing.T) {
 		out string
 	}{
 		{
-			in:  values.NewBox(values.NewBoolean(true)),
+			in:  values.NewBox(values.TrueValue),
 			out: "#&#t",
 		},
 		{
-			in:  values.NewBox(values.NewBoolean(false)),
+			in:  values.NewBox(values.FalseValue),
 			out: "#&#f",
 		},
 	}

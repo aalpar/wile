@@ -19,9 +19,9 @@ var (
 	_ Hashable = (*Boolean)(nil)
 
 	// FalseValue is the singleton false boolean.
-	FalseValue = NewBoolean(false)
+	FalseValue = newBoolean(false)
 	// TrueValue is the singleton true boolean.
-	TrueValue = NewBoolean(true)
+	TrueValue = newBoolean(true)
 )
 
 // Boolean represents a Scheme boolean value.
@@ -29,8 +29,9 @@ type Boolean struct {
 	Value bool
 }
 
-// NewBoolean creates a new boolean value.
-func NewBoolean(v bool) *Boolean {
+// newBoolean creates a new boolean value. Callers outside this package
+// must use TrueValue, FalseValue, or BoolToBoolean to ensure singleton identity.
+func newBoolean(v bool) *Boolean {
 	q := &Boolean{Value: v}
 	return q
 }
@@ -80,7 +81,7 @@ func BoolToBoolean(b bool) *Boolean {
 
 // BooleanToBool converts a Scheme *Boolean to a Go bool value.
 func BooleanToBool(b *Boolean) bool {
-	return b == TrueValue
+	return b.Value
 }
 
 // ValueToBool converts a value into a Go bool using Scheme semantics.
