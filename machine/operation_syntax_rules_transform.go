@@ -101,11 +101,11 @@ func NewOperationSyntaxRulesTransform() *OperationSyntaxRulesTransform {
 	}
 }
 
-func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Get the clauses from the value register
-	clausesVal := mctx.GetValue()
+	clausesVal := mc.GetValue()
 	if clausesVal == nil {
-		return nil, mctx.Error("syntax-rules: no clauses in value register")
+		return nil, mc.Error("syntax-rules: no clauses in value register")
 	}
 
 	// Extract from wrapper
@@ -113,14 +113,14 @@ func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineCon
 	if !ok {
 		// The value register might have the input if operations aren't running correctly
 		// Check if this is actually being called as the second operation
-		return nil, mctx.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mctx.pc))
+		return nil, mc.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.pc))
 	}
 	clauses := wrapper.clauses
 
 	// Get the input form from local parameter 0 (transformer is called with input as argument)
-	inputVal := mctx.env.GetLocalBindingByIndex(0).Value()
+	inputVal := mc.env.GetLocalBindingByIndex(0).Value()
 	if inputVal == nil {
-		return nil, mctx.Error("syntax-rules: invalid input form")
+		return nil, mc.Error("syntax-rules: invalid input form")
 	}
 
 	// Convert input to syntax value if needed
@@ -173,19 +173,19 @@ func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineCon
 	// has been locally bound, in which case it shouldn't match the pattern literal.
 	//
 	// We use the expander context's environment (the use-site environment) rather
-	// than mctx.env (the macro definition-time environment). This is critical for
+	// than mc.env (the macro definition-time environment). This is critical for
 	// checking if identifiers like => are bound by enclosing forms (like lambda
 	// from let expansion) at the macro use site.
-	bindingEnv := mctx.env
-	if mctx.expanderCtx != nil && mctx.expanderCtx.Env() != nil {
-		bindingEnv = mctx.expanderCtx.Env()
+	bindingEnv := mc.env
+	if mc.expanderCtx != nil && mc.expanderCtx.Env() != nil {
+		bindingEnv = mc.expanderCtx.Env()
 	}
 	bindingChecker := &envBindingChecker{env: bindingEnv}
 
 	// Try each clause in order
 	for i, clause := range clauses {
 		// Try to match the pattern with R7RS binding checking
-		err := clause.matcher.MatchWithBindingChecker(mctx.Context(), input, bindingChecker)
+		err := clause.matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site
@@ -213,19 +213,19 @@ func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineCon
 				PatternVarSyntax: clause.patternVarSyntax,
 			})
 			if err != nil {
-				return nil, mctx.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
+				return nil, mc.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))
 			}
 
 			// Set the expanded result as the value
-			mctx.SetValue(expanded)
-			mctx.pc++ // Important: increment PC to avoid infinite loop
-			return mctx, nil
+			mc.SetValue(expanded)
+			mc.pc++ // Important: increment PC to avoid infinite loop
+			return mc, nil
 		}
 		// If no match, try next clause
 	}
 
 	// No clauses matched
-	return nil, mctx.Error("syntax-rules: no matching clause for input")
+	return nil, mc.Error("syntax-rules: no matching clause for input")
 }
 
 func (p *OperationSyntaxRulesTransform) EqualTo(other values.Value) bool {

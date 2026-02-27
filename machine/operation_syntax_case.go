@@ -61,18 +61,18 @@ func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	}
 }
 
-func (p *OperationSyntaxCaseMatch) Apply(mctx *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Get the clause from value register
-	clauseVal := mctx.GetValue()
+	clauseVal := mc.GetValue()
 	clause, ok := clauseVal.(*syntaxCaseClause)
 	if !ok {
-		return nil, mctx.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
+		return nil, mc.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
 
 	// Get input from per-context state (set by OperationStoreSyntaxCaseInput)
-	sc := mctx.syntaxCase
+	sc := mc.syntaxCase
 	if sc == nil || sc.input == nil {
-		return nil, mctx.Error("syntax-case: no input available")
+		return nil, mc.Error("syntax-case: no input available")
 	}
 	input := sc.input
 
@@ -80,22 +80,22 @@ func (p *OperationSyntaxCaseMatch) Apply(mctx *MachineContext) (*MachineContext,
 	matcher := match.NewSyntaxMatcherWithEllipsisVars(clause.patternVars, clause.bytecode, clause.ellipsisVars)
 
 	// Try to match
-	err := matcher.Match(mctx.Context(), input)
+	err := matcher.Match(mc.Context(), input)
 	if err != nil {
 		// Match failed
-		mctx.SetValue(values.FalseValue)
-		mctx.pc++
+		mc.SetValue(values.FalseValue)
+		mc.pc++
 		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
 		// so we record #f in the value register and return no runtime error.
-		return mctx, nil // nolint:errcheck, nilerr
+		return mc, nil // nolint:errcheck, nilerr
 	}
 
 	// Match succeeded - store bindings and matcher in per-context state
 	sc.bindings = matcher.GetBindings()
 	sc.matcher = matcher
-	mctx.SetValue(values.TrueValue)
-	mctx.pc++
-	return mctx, nil
+	mc.SetValue(values.TrueValue)
+	mc.pc++
+	return mc, nil
 }
 
 func (p *OperationSyntaxCaseMatch) EqualTo(other values.Value) bool {
@@ -127,15 +127,15 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 	}
 }
 
-func (p *OperationBindPatternVars) Apply(mctx *MachineContext) (*MachineContext, error) {
-	sc := mctx.syntaxCase
+func (p *OperationBindPatternVars) Apply(mc *MachineContext) (*MachineContext, error) {
+	sc := mc.syntaxCase
 	if sc == nil || sc.bindings == nil {
-		return nil, mctx.Error("syntax-case: no pattern bindings available")
+		return nil, mc.Error("syntax-case: no pattern bindings available")
 	}
 
 	// Create a new local environment frame with slots for pattern variables
 	localEnv := environment.NewLocalEnvironment(len(p.PatternVars))
-	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mctx.env)
+	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.env)
 
 	// Bind each pattern variable - use MaybeCreateLocalBinding to get the actual slot
 	// which matches what the compiler does at compile time
@@ -148,17 +148,17 @@ func (p *OperationBindPatternVars) Apply(mctx *MachineContext) (*MachineContext,
 		}
 		err := childEnv.SetLocalValue(li, stxVal)
 		if err != nil {
-			return nil, mctx.WrapError(err, fmt.Sprintf("syntax-case: failed to bind pattern variable %s", varName))
+			return nil, mc.WrapError(err, fmt.Sprintf("syntax-case: failed to bind pattern variable %s", varName))
 		}
 	}
 
 	// Switch to the new environment. childEnv was heap-allocated (not from
 	// envFramePool), so clear envPooled to prevent RestoreAndRelease from
 	// recycling it. See vm_state.go envPooled write-site table.
-	mctx.env = childEnv
-	mctx.envPooled = false
-	mctx.pc++
-	return mctx, nil
+	mc.env = childEnv
+	mc.envPooled = false
+	mc.pc++
+	return mc, nil
 }
 
 func (p *OperationBindPatternVars) EqualTo(other values.Value) bool {
@@ -180,8 +180,8 @@ func NewOperationSyntaxCaseNoMatch() *OperationSyntaxCaseNoMatch {
 	}
 }
 
-func (p *OperationSyntaxCaseNoMatch) Apply(mctx *MachineContext) (*MachineContext, error) {
-	return nil, mctx.Error("syntax-case: no matching clause")
+func (p *OperationSyntaxCaseNoMatch) Apply(mc *MachineContext) (*MachineContext, error) {
+	return nil, mc.Error("syntax-case: no matching clause")
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
@@ -205,29 +205,29 @@ func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 	}
 }
 
-func (p *OperationSyntaxTemplateExpand) Apply(mctx *MachineContext) (*MachineContext, error) {
-	sc := mctx.syntaxCase
+func (p *OperationSyntaxTemplateExpand) Apply(mc *MachineContext) (*MachineContext, error) {
+	sc := mc.syntaxCase
 	if sc == nil || sc.matcher == nil {
-		return nil, mctx.Error("syntax: no pattern matcher available for template expansion")
+		return nil, mc.Error("syntax: no pattern matcher available for template expansion")
 	}
 
 	// Get the template from value register
-	templateVal := mctx.GetValue()
+	templateVal := mc.GetValue()
 	template, ok := templateVal.(syntax.SyntaxValue)
 	if !ok {
-		return nil, mctx.Error(fmt.Sprintf("syntax: expected syntax template, got %T", templateVal))
+		return nil, mc.Error(fmt.Sprintf("syntax: expected syntax template, got %T", templateVal))
 	}
 
 	// Expand the template using the matcher (handles ellipsis)
 	// Use nil for intro scope and freeIds for now - hygiene can be added later
 	expanded, err := sc.matcher.Expand(template, match.ExpandOptions{})
 	if err != nil {
-		return nil, mctx.WrapError(err, "syntax: template expansion error")
+		return nil, mc.WrapError(err, "syntax: template expansion error")
 	}
 
-	mctx.SetValue(expanded)
-	mctx.pc++
-	return mctx, nil
+	mc.SetValue(expanded)
+	mc.pc++
+	return mc, nil
 }
 
 func (p *OperationSyntaxTemplateExpand) EqualTo(other values.Value) bool {
@@ -247,18 +247,18 @@ func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
 	}
 }
 
-func (p *OperationStoreSyntaxCaseInput) Apply(mctx *MachineContext) (*MachineContext, error) {
-	sc := ensureSyntaxCaseState(mctx)
-	val := mctx.GetValue()
+func (p *OperationStoreSyntaxCaseInput) Apply(mc *MachineContext) (*MachineContext, error) {
+	sc := ensureSyntaxCaseState(mc)
+	val := mc.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
 	stx, ok := val.(syntax.SyntaxValue)
 	if ok {
 		sc.input = stx
 	} else {
-		sc.input = schemeutil.DatumToSyntaxValue(mctx.Context(), nil, val)
+		sc.input = schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
 	}
-	mctx.pc++
-	return mctx, nil
+	mc.pc++
+	return mc, nil
 }
 
 func (p *OperationStoreSyntaxCaseInput) EqualTo(other values.Value) bool {
@@ -278,10 +278,10 @@ func NewOperationClearSyntaxCaseInput() *OperationClearSyntaxCaseInput {
 	}
 }
 
-func (p *OperationClearSyntaxCaseInput) Apply(mctx *MachineContext) (*MachineContext, error) {
-	mctx.syntaxCase = nil
-	mctx.pc++
-	return mctx, nil
+func (p *OperationClearSyntaxCaseInput) Apply(mc *MachineContext) (*MachineContext, error) {
+	mc.syntaxCase = nil
+	mc.pc++
+	return mc, nil
 }
 
 func (p *OperationClearSyntaxCaseInput) EqualTo(other values.Value) bool {
