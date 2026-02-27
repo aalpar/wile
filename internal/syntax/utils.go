@@ -84,6 +84,16 @@ func SyntaxForEach(ctx context.Context, o SyntaxValue, fn func(ctx context.Conte
 	return o, nil
 }
 
+// SyntaxWalk iterates over a syntax tuple, calling fn for each element.
+// It is a convenience wrapper around SyntaxForEach for callers that only
+// need the element value (ignoring the index and hasNext arguments).
+func SyntaxWalk(ctx context.Context, o SyntaxValue, fn func(SyntaxValue) error) error {
+	_, err := SyntaxForEach(ctx, o, func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
+		return fn(v)
+	})
+	return err
+}
+
 // EqualTo compares two syntax values for equality, handling nil and pointer identity.
 func EqualTo(a, b SyntaxValue) bool {
 	if a == nil || b == nil {
