@@ -182,7 +182,8 @@ func collectList(pair *syntax.SyntaxPair) ([]syntax.SyntaxValue, bool) {
 
 		// Get the car element
 		car := p.Car()
-		if carSyntax, ok := car.(syntax.SyntaxValue); ok {
+		carSyntax, ok := car.(syntax.SyntaxValue)
+		if ok {
 			elements = append(elements, carSyntax)
 		} else if car != nil {
 			// Wrap non-syntax values

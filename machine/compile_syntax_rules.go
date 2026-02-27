@@ -192,7 +192,8 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	var clausesCdr syntax.SyntaxValue
 
 	// If firstArg is a symbol, it's a custom ellipsis identifier
-	if sym, ok := firstArg.(*syntax.SyntaxSymbol); ok {
+	sym, ok := firstArg.(*syntax.SyntaxSymbol)
+	if ok {
 		symVal := sym.Unwrap()
 		symValSym, ok := symVal.(*values.Symbol)
 		if ok {
@@ -489,7 +490,8 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 			if !isFirst && symVal.Key != ellipsis {
 				// Check if this identifier matches a literal via bound-identifier=?
 				// R7RS §4.3.2: literals are matched by bound-identifier=?, not just name
-				if litSym, ok := literalSyntax[symVal.Key]; ok {
+				litSym, ok := literalSyntax[symVal.Key]
+				if ok {
 					// Name matches - now check scopes (bound-identifier=? semantics)
 					patternScopes := p.Scopes()
 					litScopes := litSym.Scopes()
@@ -566,7 +568,8 @@ func extractLiteralsWithSyntax(ctx context.Context,
 		}
 
 		symVal := sym.Unwrap()
-		if symbol, ok := symVal.(*values.Symbol); ok {
+		symbol, ok := symVal.(*values.Symbol)
+		if ok {
 			literals[symbol.Key] = struct{}{}
 			// Store syntax symbol for scope-aware matching if map provided
 			if literalSyntax != nil {

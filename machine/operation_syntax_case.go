@@ -251,7 +251,8 @@ func (p *OperationStoreSyntaxCaseInput) Apply(mctx *MachineContext) (*MachineCon
 	sc := ensureSyntaxCaseState(mctx)
 	val := mctx.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
-	if stx, ok := val.(syntax.SyntaxValue); ok {
+	stx, ok := val.(syntax.SyntaxValue)
+	if ok {
 		sc.input = stx
 	} else {
 		sc.input = schemeutil.DatumToSyntaxValue(mctx.Context(), nil, val)

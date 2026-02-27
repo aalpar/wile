@@ -125,7 +125,8 @@ func (p *OperationSyntaxRulesTransform) Apply(mctx *MachineContext) (*MachineCon
 
 	// Convert input to syntax value if needed
 	var input syntax.SyntaxValue
-	if stx, ok := inputVal.(syntax.SyntaxValue); ok {
+	stx, ok := inputVal.(syntax.SyntaxValue)
+	if ok {
 		input = stx
 	} else {
 		// Wrap raw value in syntax

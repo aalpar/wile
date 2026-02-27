@@ -429,7 +429,8 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(ctx context.Con
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break

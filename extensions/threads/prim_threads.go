@@ -424,7 +424,8 @@ func PrimMutexLock(mc *machine.MachineContext) error {
 			rest2List, ok := rest2.(values.Tuple)
 			if ok {
 				threadArg := rest2List.Car()
-				if t, ok := threadArg.(*values.Thread); ok {
+				t, ok := threadArg.(*values.Thread)
+				if ok { //nolint:gocritic // ifElseChain: type assertion + value check, not a switch candidate
 					owner = t
 				} else if values.ValueToBool(threadArg) {
 					return values.WrapForeignErrorf(values.ErrNotAThread, "mutex-lock!: expected thread or #f for owner, got %T", threadArg)
@@ -478,7 +479,8 @@ func PrimMutexUnlock(mc *machine.MachineContext) error {
 
 		// Parse condition-variable (first optional arg)
 		cvArg := restList.Car()
-		if c, ok := cvArg.(*values.ConditionVariable); ok {
+		c, ok := cvArg.(*values.ConditionVariable)
+		if ok {
 			cv = c
 		} else if values.ValueToBool(cvArg) {
 			return values.WrapForeignErrorf(values.ErrNotAConditionVariable, "mutex-unlock!: expected condition-variable or #f, got %T", cvArg)

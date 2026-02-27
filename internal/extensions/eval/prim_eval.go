@@ -434,7 +434,8 @@ func PrimCompile(mc *machine.MachineContext) error {
 
 	// Accept either syntax object or datum
 	var syntaxVal syntax.SyntaxValue
-	if sv, ok := expr.(syntax.SyntaxValue); ok {
+	sv, ok := expr.(syntax.SyntaxValue)
+	if ok {
 		syntaxVal = sv
 	} else {
 		// Convert datum to syntax value

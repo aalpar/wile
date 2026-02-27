@@ -67,12 +67,18 @@ func PrimDatumToSyntax(mc *machine.MachineContext) error {
 	if templateArg == values.FalseValue {
 		// #f means no lexical context
 		sctx = nil
-	} else if templateID, ok := templateArg.(*syntax.SyntaxSymbol); ok {
-		sctx = templateID.SourceContext()
-	} else if templateStx, ok := templateArg.(syntax.SyntaxValue); ok {
-		sctx = templateStx.SourceContext()
 	} else {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "datum->syntax: template-id must be an identifier, syntax object, or #f")
+		templateID, ok := templateArg.(*syntax.SyntaxSymbol)
+		if ok {
+			sctx = templateID.SourceContext()
+		} else {
+			templateStx, ok := templateArg.(syntax.SyntaxValue)
+			if ok {
+				sctx = templateStx.SourceContext()
+			} else {
+				return values.WrapForeignErrorf(values.ErrInvalidArgument, "datum->syntax: template-id must be an identifier, syntax object, or #f")
+			}
+		}
 	}
 
 	// Convert datum to syntax

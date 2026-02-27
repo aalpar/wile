@@ -58,7 +58,8 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	var valueExpr syntax.SyntaxValue
 
 	// Check if it's a function definition: (define-for-syntax (name args...) body...)
-	if firstPair, ok := first.(*syntax.SyntaxPair); ok {
+	firstPair, ok := first.(*syntax.SyntaxPair)
+	if ok {
 		// Function shorthand - extract name and build lambda
 		nameStx := firstPair.SyntaxCar()
 		nameSyntaxSym, ok := nameStx.(*syntax.SyntaxSymbol)

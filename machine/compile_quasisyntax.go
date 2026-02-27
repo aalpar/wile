@@ -343,7 +343,8 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break

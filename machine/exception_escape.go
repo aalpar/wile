@@ -55,14 +55,17 @@ func (p *ErrExceptionEscape) Error() string {
 	// Format the condition
 	if p.Condition == nil {
 		b.WriteString("exception: <nil>")
-	} else if ne, ok := p.Condition.(*values.NativeError); ok && hasSource {
-		// NativeError with source: use clean "error: message" format
-		b.WriteString("error: ")
-		b.WriteString(ne.Error())
 	} else {
-		// Non-NativeError or no source: use SchemeString for backward compat
-		b.WriteString("exception: ")
-		b.WriteString(p.Condition.SchemeString())
+		ne, ok := p.Condition.(*values.NativeError)
+		if ok && hasSource {
+			// NativeError with source: use clean "error: message" format
+			b.WriteString("error: ")
+			b.WriteString(ne.Error())
+		} else {
+			// Non-NativeError or no source: use SchemeString for backward compat
+			b.WriteString("exception: ")
+			b.WriteString(p.Condition.SchemeString())
+		}
 	}
 
 	// Append stack trace if present

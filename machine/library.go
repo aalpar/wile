@@ -346,7 +346,8 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	if len(p.Renames) > 0 {
 		renamed := make(map[string]string)
 		for localName, externalName := range result {
-			if newName, ok := p.Renames[localName]; ok {
+			newName, ok := p.Renames[localName]
+			if ok {
 				renamed[newName] = externalName
 			} else {
 				renamed[localName] = externalName
