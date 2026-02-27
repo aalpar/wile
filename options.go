@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/security"
 )
 
 // LibraryImportEvent records what happened when a library was imported.
@@ -36,6 +37,7 @@ type engineConfig struct {
 	libraryEnabled bool // true when WithLibraryPaths was called
 	skipCore       bool // true when WithoutCore was called
 	importObserver func(LibraryImportEvent)
+	authorizer     security.Authorizer
 }
 
 // EngineOption configures an Engine.
@@ -112,6 +114,24 @@ func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
 func WithoutCore() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.skipCore = true
+	}
+}
+
+// WithAuthorizer sets the Authorizer for the engine. The authorizer is
+// injected into every context passed to Eval, Compile, Run, and Call,
+// gating runtime primitives and compile-time code loading.
+//
+// Without this option, all operations are allowed (open by default).
+// The authorizer is immutable after engine construction.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    wile.WithAuthorizer(security.ReadOnly()),
+//	)
+func WithAuthorizer(auth security.Authorizer) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.authorizer = auth
 	}
 }
 

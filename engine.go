@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -50,6 +51,7 @@ type Engine struct {
 	closers      []registry.Closeable
 	closed       bool
 	maxCallDepth uint64
+	authorizer   security.Authorizer
 }
 
 // extSnapshot tracks the primitive index range for an extension so it can be
@@ -172,6 +174,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		registry:     reg,
 		closers:      closers,
 		maxCallDepth: cfg.maxCallDepth,
+		authorizer:   cfg.authorizer,
 	}
 	return q, nil
 }
@@ -209,6 +212,7 @@ func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source
 }
 
 func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
+	ctx = p.withAuth(ctx)
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
@@ -250,6 +254,7 @@ func (p *Engine) CompileWithSource(ctx context.Context, code string, source stri
 }
 
 func (p *Engine) compile(ctx context.Context, code string, source string) (*CompiledCode, error) {
+	ctx = p.withAuth(ctx)
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
@@ -337,6 +342,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 }
 
 func (p *Engine) callCallable(ctx context.Context, callable values.Callable, args []values.Value) (Value, error) {
+	ctx = p.withAuth(ctx)
 	tpl := machine.NewEmptyNativeTemplate()
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
@@ -396,6 +402,15 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 // passed to NewEngine via WithRegistry to create a restricted engine.
 func (p *Engine) Registry() *registry.Registry {
 	return p.registry.Clone()
+}
+
+// withAuth returns ctx with the engine's authorizer attached, or ctx
+// unchanged if no authorizer is configured.
+func (p *Engine) withAuth(ctx context.Context) context.Context {
+	if p.authorizer == nil {
+		return ctx
+	}
+	return security.WithAuthorizer(ctx, p.authorizer)
 }
 
 // internal helpers
@@ -496,6 +511,7 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 }
 
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
+	ctx = p.withAuth(ctx)
 	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
 	mc := machine.NewMachineContext(ctx, cont)
 	mc.SetMaxCallDepth(p.maxCallDepth)

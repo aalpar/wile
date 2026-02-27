@@ -20,7 +20,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/security"
+	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -300,6 +304,112 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 	evt := myEvents[0]
 	c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})
 	c.Assert(evt.Imported, qt.DeepEquals, []string{"alpha"}) // only alpha was imported
+}
+
+// TestWithAuthorizer_FlowsToContext verifies that WithAuthorizer injects
+// the authorizer into the context so security.Check sees it.
+func TestWithAuthorizer_FlowsToContext(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	var captured []security.AccessRequest
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		captured = append(captured, req)
+		return nil
+	})
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(files.Extension),
+		WithExtension(system.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// file-exists? should trigger a file/stat check once the primitives
+	// are gated (Phase 4). For now, verify the authorizer is reachable
+	// from the context by checking it via security.FromContext inside
+	// a Go primitive.
+	engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "test-auth-check",
+		ParamCount: 0,
+		Impl: func(mc *MachineContext) error {
+			err := security.Check(mc.Context(), security.AccessRequest{
+				Resource: security.ResourceFile,
+				Action:   security.ActionRead,
+				Target:   "/test/path",
+			})
+			if err != nil {
+				return err
+			}
+			mc.SetValue(values.TrueValue)
+			return nil
+		},
+	})
+
+	result, err := engine.Eval(ctx, "(test-auth-check)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
+	c.Assert(len(captured), qt.Equals, 1)
+	c.Assert(captured[0].Target, qt.Equals, "/test/path")
+}
+
+// TestWithAuthorizer_DenyBlocksEval verifies that a denying authorizer
+// causes security.Check to return ErrAccessDenied.
+func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.DenyAll()),
+	)
+	c.Assert(err, qt.IsNil)
+
+	engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "test-auth-deny",
+		ParamCount: 0,
+		Impl: func(mc *MachineContext) error {
+			return security.Check(mc.Context(), security.AccessRequest{
+				Resource: security.ResourceFile,
+				Action:   security.ActionWrite,
+				Target:   "/secret",
+			})
+		},
+	})
+
+	_, err = engine.Eval(ctx, "(test-auth-deny)")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestNoAuthorizer_AllowsByDefault verifies that without WithAuthorizer,
+// security.Check allows everything.
+func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "test-auth-open",
+		ParamCount: 0,
+		Impl: func(mc *MachineContext) error {
+			err := security.Check(mc.Context(), security.AccessRequest{
+				Resource: security.ResourceFile,
+				Action:   security.ActionWrite,
+				Target:   "/anything",
+			})
+			if err != nil {
+				return err
+			}
+			mc.SetValue(values.TrueValue)
+			return nil
+		},
+	})
+
+	result, err := engine.Eval(ctx, "(test-auth-open)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
 }
 
 // writeTestFile is a helper that writes content to a file.

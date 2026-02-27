@@ -319,7 +319,7 @@ Embedders that don't set it pay nothing (nil check before firing).
 
 # Authorization Framework
 
-**Status**: Planned — Not started
+**Status**: Phases 1-3 implemented
 
 ## Motivation
 
