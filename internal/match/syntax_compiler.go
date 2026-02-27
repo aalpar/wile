@@ -255,7 +255,8 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
 func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) {
-	if _, isVar := vis.variables[sym.Sym.Key]; isVar {
+	_, isVar := vis.variables[sym.Sym.Key]
+	if isVar {
 		// Pattern variable - capture it
 		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Sym.Key})
 		entry.variables[sym.Sym.Key] = struct{}{}
@@ -348,7 +349,8 @@ func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStack
 func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) map[string]struct{} {
 	capturedVars := make(map[string]struct{})
 
-	if prevPair, ok := entry.lastElement.(*syntax.SyntaxPair); ok {
+	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
+	if ok {
 		vars := vis.analysis.GetVariables(prevPair)
 		for v := range vars {
 			capturedVars[v] = struct{}{}
@@ -469,7 +471,8 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
 	sym, ok := cdr.(*syntax.SyntaxSymbol)
 	if ok {
-		if _, isVar := vis.variables[sym.Sym.Key]; isVar {
+		_, isVar := vis.variables[sym.Sym.Key]
+		if isVar {
 			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
 			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Sym.Key})
 			entry.variables[sym.Sym.Key] = struct{}{}

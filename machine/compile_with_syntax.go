@@ -155,7 +155,8 @@ func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallCon
 		}
 
 		if !isLast {
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
 			} else {
 				break
@@ -180,7 +181,8 @@ func (p *CompileTimeContinuation) buildWithSyntaxBegin(srcCtx *syntax.SourceCont
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break

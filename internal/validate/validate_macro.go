@@ -57,28 +57,31 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 	// Second element should be the literals list (could be empty)
 	literalsExpr := elements[1]
 	if syntax.IsSyntaxEmptyList(literalsExpr) { //nolint:revive // empty block: empty literals list is valid
-	} else if literalsPair, ok := literalsExpr.(*syntax.SyntaxPair); ok {
-		if !literalsPair.IsEmptyList() && !literalsPair.IsList() {
-			result.addError(getSourceContext(literalsExpr), "syntax-rules", "syntax-rules literals must be a proper list")
-			return nil
-		}
-		// Validate each literal is a symbol
-		if !literalsPair.IsEmptyList() {
-			_, err := syntax.SyntaxForEach(ctx, literalsPair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-				_, ok := asSyntaxSymbol(v)
-				if !ok {
-					result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
-				}
-				return nil
-			})
-			if err != nil {
-				result.addError(source, "syntax-rules", "error iterating literals list")
+	} else {
+		literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
+		if ok {
+			if !literalsPair.IsEmptyList() && !literalsPair.IsList() {
+				result.addError(getSourceContext(literalsExpr), "syntax-rules", "syntax-rules literals must be a proper list")
 				return nil
 			}
+			// Validate each literal is a symbol
+			if !literalsPair.IsEmptyList() {
+				_, err := syntax.SyntaxForEach(ctx, literalsPair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+					_, ok := asSyntaxSymbol(v)
+					if !ok {
+						result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
+					}
+					return nil
+				})
+				if err != nil {
+					result.addError(source, "syntax-rules", "error iterating literals list")
+					return nil
+				}
+			}
+		} else {
+			result.addError(getSourceContext(literalsExpr), "syntax-rules", "syntax-rules literals must be a list")
+			return nil
 		}
-	} else {
-		result.addError(getSourceContext(literalsExpr), "syntax-rules", "syntax-rules literals must be a list")
-		return nil
 	}
 
 	// Validate each clause has pattern and template

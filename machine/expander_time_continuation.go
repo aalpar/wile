@@ -279,7 +279,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		for !syntax.IsSyntaxEmptyList(current) {
 			numBindings++
 			cdr := current.SyntaxCdr()
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
 			} else {
 				break
@@ -321,7 +322,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 
 			cdr := current.SyntaxCdr()
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
 			} else {
 				break
@@ -394,7 +396,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 
 		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break
@@ -426,7 +429,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			hasDefine = true
 		}
 		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok { //nolint:gocritic // ifElseChain: type assertion + value check, not a switch candidate
 			current = nextPair
 		} else if !syntax.IsSyntaxEmptyList(cdr) {
 			return nil, values.WrapForeignErrorf(values.ErrNotAList, "%s: body must be a proper list", formName)
@@ -574,7 +578,8 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 	var message string
 	switch m := msgVal.(type) {
 	case *syntax.SyntaxObject:
-		if str, ok := m.Unwrap().(*values.String); ok {
+		str, ok := m.Unwrap().(*values.String)
+		if ok {
 			message = str.Value
 		} else {
 			message = m.Unwrap().SchemeString()
@@ -894,7 +899,8 @@ func collectBodyExpressions(body *syntax.SyntaxPair) ([]syntax.SyntaxValue, erro
 	for !syntax.IsSyntaxEmptyList(current) {
 		exprs = append(exprs, current.SyntaxCar())
 		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok { //nolint:gocritic // ifElseChain: type assertion + value check, not a switch candidate
 			current = nextPair
 		} else if syntax.IsSyntaxEmptyList(cdr) {
 			break
@@ -1129,13 +1135,15 @@ func extractFormalSymbols(formals syntax.SyntaxValue) []formalSymbol {
 				result = append(result, formalSymbol{sym.Sym, sym.Scopes(), sym.SourceContext()})
 			}
 			cdr := current.SyntaxCdr()
-			if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+			nextPair, ok := cdr.(*syntax.SyntaxPair)
+			if ok {
 				current = nextPair
-			} else if sym, ok := cdr.(*syntax.SyntaxSymbol); ok {
-				// Improper list: (x y . rest)
-				result = append(result, formalSymbol{sym.Sym, sym.Scopes(), sym.SourceContext()})
-				break
 			} else {
+				sym, ok := cdr.(*syntax.SyntaxSymbol)
+				if ok {
+					// Improper list: (x y . rest)
+					result = append(result, formalSymbol{sym.Sym, sym.Scopes(), sym.SourceContext()})
+				}
 				break
 			}
 		}
@@ -1169,7 +1177,8 @@ func extractIdentifierList(idList syntax.SyntaxValue) []*syntax.SyntaxSymbol {
 			result = append(result, sym)
 		}
 		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break
@@ -1220,7 +1229,8 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(sym *syntax.SyntaxSymbol
 		}
 
 		cdr := current.SyntaxCdr()
-		if nextPair, ok := cdr.(*syntax.SyntaxPair); ok {
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if ok {
 			current = nextPair
 		} else {
 			break

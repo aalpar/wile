@@ -284,7 +284,8 @@ func PrimMakeRWMutex(mc *machine.MachineContext) error {
 		restList, ok := restVal.(values.Tuple)
 		if ok {
 			nameVal := restList.Car()
-			if s, ok := nameVal.(*values.String); ok {
+			s, ok := nameVal.(*values.String)
+			if ok {
 				name = s.Value
 			} else {
 				sym, ok := nameVal.(*values.Symbol)
