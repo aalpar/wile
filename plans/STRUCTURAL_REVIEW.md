@@ -89,8 +89,12 @@ var charCiCompareSpecs = []struct {
     name string
     cmp  func(rune, rune) bool
 }{
-    {"char-ci=?",  func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }},
-    {"char-ci<?",  func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }},
+    {"char-ci=?", func(a, b rune) bool {
+        return simpleCaseFold(a) == simpleCaseFold(b)
+    }},
+    {"char-ci<?", func(a, b rune) bool {
+        return simpleCaseFold(a) < simpleCaseFold(b)
+    }},
     // ...
 }
 ```
@@ -100,7 +104,7 @@ var charCiCompareSpecs = []struct {
 
 ---
 
-### [High] ~~34 compound if-assignments across 18 files~~ DONE
+### [High] ~~33 compound if-assignments across 17 files~~ DONE
 
 **Principle**: Consistency Debt (convention violation)
 
@@ -283,8 +287,8 @@ theoretical, not active.
 
 **State of the code**: Structurally healthy. Clean DAG with no cycles, stable
 packages at the bottom, volatile wiring packages at the top. The debt is mostly
-consistency-level (34 compound if-assignments, naming drift in 3 files, 11
-single-line functions) rather than architectural. The `Promise.Forced` state-
+consistency-level (~~33 compound if-assignments~~ done, naming drift in 3 files,
+11 single-line functions) rather than architectural. The `Promise.Forced` state-
 tightness fix is done. The one real composability fix (hand-unrolled
 ci-comparisons) has an established pattern to follow. The `any`-typed
 `ResolvedBinding` is the most structurally interesting problem -- a type-system
