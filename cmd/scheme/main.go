@@ -222,8 +222,8 @@ func main() {
 	}
 
 	// Initialize library registry with search paths and attach to environment
-	registry := initLibraryRegistry(ctx)
-	env.SetLibraryRegistry(registry)
+	libRegistry := initLibraryRegistry(ctx)
+	env.SetLibraryRegistry(libRegistry)
 
 	// Set up the library environment factory on the TopLevelEnvironment.
 	// Uses NewLibraryEnvironmentFrame which shares the TopLevelEnvironment for symbol identity.

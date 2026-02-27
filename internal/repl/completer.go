@@ -31,18 +31,16 @@ func NewSchemeCompleter(
 func (p *SchemeCompleter) Do(line []rune, pos int) ([][]rune, int) {
 	lineStr := string(line[:pos])
 
-	// Context 1: after "," — complete meta-command names
+	// Context 1: after ",edit " — complete filenames
+	if strings.HasPrefix(lineStr, ",edit ") {
+		prefix := lineStr[len(",edit "):]
+		return p.completeFilenames(prefix)
+	}
+
+	// Context 2: after "," — complete meta-command names
 	if strings.HasPrefix(lineStr, ",") {
 		prefix := lineStr[1:]
 		return p.completeFromList(prefix, p.metaCommands)
-	}
-
-	// Context 2: after ",edit " or ",load " — complete filenames
-	for _, fileCmd := range []string{",edit ", ",load "} {
-		if strings.HasPrefix(lineStr, fileCmd) {
-			prefix := lineStr[len(fileCmd):]
-			return p.completeFilenames(prefix)
-		}
 	}
 
 	// Context 3: complete Scheme bindings

@@ -2,6 +2,8 @@ package repl
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -52,4 +54,28 @@ func TestSchemeCompleter_CommaOnly(t *testing.T) {
 	c.Assert(length, qt.Equals, 0) // empty prefix after ","
 	// Should list all meta-commands
 	c.Assert(len(newLines), qt.Equals, 3)
+}
+
+func TestSchemeCompleter_FileCompletion(t *testing.T) {
+	c := qt.New(t)
+	sc := NewSchemeCompleter(nil, []string{"edit"})
+
+	// Create a temp dir with known files
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "foo.scm"), []byte(""), 0644)
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(dir, "foobar.scm"), []byte(""), 0644)
+	c.Assert(err, qt.IsNil)
+
+	// ",edit <dir>/foo" should complete to both files
+	prefix := filepath.Join(dir, "foo")
+	line := []rune(",edit " + prefix)
+	newLines, length := sc.Do(line, len(line))
+	c.Assert(length, qt.Equals, len(prefix))
+	c.Assert(len(newLines), qt.Equals, 2) // foo.scm and foobar.scm
+
+	// Verify ",edit " doesn't fall through to meta-command completion
+	line2 := []rune(",edit nonexistent-path-xyz")
+	newLines2, _ := sc.Do(line2, len(line2))
+	c.Assert(len(newLines2), qt.Equals, 0) // no matches, but didn't complete as meta-command
 }
