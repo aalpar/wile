@@ -1,6 +1,8 @@
 package repl
 
 import (
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -29,13 +31,19 @@ func NewSchemeCompleter(
 func (p *SchemeCompleter) Do(line []rune, pos int) ([][]rune, int) {
 	lineStr := string(line[:pos])
 
-	// Context 1: after "," — complete meta-command names
+	// Context 1: after ",edit " — complete filenames
+	if strings.HasPrefix(lineStr, ",edit ") {
+		prefix := lineStr[len(",edit "):]
+		return p.completeFilenames(prefix)
+	}
+
+	// Context 2: after "," — complete meta-command names
 	if strings.HasPrefix(lineStr, ",") {
 		prefix := lineStr[1:]
 		return p.completeFromList(prefix, p.metaCommands)
 	}
 
-	// Context 2: complete Scheme bindings
+	// Context 3: complete Scheme bindings
 	prefix := p.extractSymbolPrefix(lineStr)
 	if prefix == "" {
 		return nil, 0
@@ -106,6 +114,21 @@ func (p *SchemeCompleter) completeFromList(prefix string, candidates []string) (
 		}
 	}
 	return matches, len(prefix)
+}
+
+// completeFilenames returns file/directory completions for the given prefix.
+func (p *SchemeCompleter) completeFilenames(prefix string) ([][]rune, int) {
+	matches, _ := filepath.Glob(prefix + "*")
+	var results [][]rune
+	for _, m := range matches {
+		suffix := m[len(prefix):]
+		info, err := os.Stat(m)
+		if err == nil && info.IsDir() {
+			suffix += "/"
+		}
+		results = append(results, []rune(suffix))
+	}
+	return results, len(prefix)
 }
 
 // BindingNames returns all binding names visible in the environment.
