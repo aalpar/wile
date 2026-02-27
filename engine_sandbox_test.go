@@ -17,12 +17,15 @@ package wile
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
+	eval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 
@@ -410,6 +413,254 @@ func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
 	result, err := engine.Eval(ctx, "(test-auth-open)")
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4-6 integration tests: security.Check gates on real primitives
+// ---------------------------------------------------------------------------
+
+func TestAuthorizer_DenyBlocksFileRead(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.DenyAll()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(file-exists? "/tmp/x")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksFileWrite(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.DenyAll()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(open-output-file "/tmp/x")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksDelete(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.DenyAll()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(delete-file "/tmp/x")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_ReadOnlyAllowsStat(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.ReadOnly()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, dir))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
+}
+
+func TestAuthorizer_ReadOnlyDeniesWrite(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.ReadOnly()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(open-output-file "/tmp/x")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksEnvVar(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Resource == security.ResourceEnv {
+			return security.ErrAccessDenied
+		}
+		return nil
+	})
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(system.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(get-environment-variable "PATH")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksExit(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Resource == security.ResourceProcess {
+			return security.ErrAccessDenied
+		}
+		return nil
+	})
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(system.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(exit)`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksLoad(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Resource == security.ResourceCode {
+			return security.ErrAccessDenied
+		}
+		return nil
+	})
+
+	dir := t.TempDir()
+	scmFile := filepath.Join(dir, "file.scm")
+	err := writeTestFile(scmFile, `(define x 42)`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(eval.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, fmt.Sprintf(`(load %q)`, scmFile))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_DenyBlocksImport(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	err := writeTestFile(filepath.Join(dir, "testlib.sld"), `(define-library (testlib)
+  (export val)
+  (begin (define val 99)))`)
+	c.Assert(err, qt.IsNil)
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Resource == security.ResourceCode {
+			return security.ErrAccessDenied
+		}
+		return nil
+	})
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithLibraryPaths(dir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (testlib))`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	txtFile := filepath.Join(dir, "hello.txt")
+	err := writeTestFile(txtFile, "hello")
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.FilesystemRoot(dir)),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, txtFile))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
+}
+
+func TestAuthorizer_FilesystemRootDeniesOutside(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(security.FilesystemRoot(dir)),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, `(file-exists? "/etc/passwd")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestAuthorizer_SelectivePolicy(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	dataFile := filepath.Join(dir, "data.txt")
+	err := writeTestFile(dataFile, "data")
+	c.Assert(err, qt.IsNil)
+
+	// Allow reads, deny writes
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		switch req.Action {
+		case security.ActionRead, security.ActionStat, security.ActionLoad:
+			return nil
+		default:
+			return security.ErrAccessDenied
+		}
+	})
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// Read should succeed
+	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, dataFile))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
+
+	// Write should fail
+	_, err = engine.Eval(ctx, fmt.Sprintf(`(open-output-file %q)`, filepath.Join(dir, "out.txt")))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
 
 // writeTestFile is a helper that writes content to a file.

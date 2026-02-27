@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -33,7 +34,7 @@ const (
 	SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
 )
 
-func findFile(p *CompileTimeContinuation, _ CompileTimeCallContext, path string) (fs.File, string, error) {
+func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
 	if path == "" {
 		return nil, "", values.WrapForeignErrorf(values.ErrFileNotFound, "include: empty filename")
 	}
@@ -51,6 +52,15 @@ func findFile(p *CompileTimeContinuation, _ CompileTimeCallContext, path string)
 	}
 
 	absPath, err := environment.ResolveFile(stack, path, fallbackDirs)
+	if err != nil {
+		return nil, "", err
+	}
+
+	err = security.Check(ctctx.Context(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   absPath,
+	})
 	if err != nil {
 		return nil, "", err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -99,6 +100,15 @@ func PrimLoad(mc *machine.MachineContext) error {
 	absPath, err := environment.ResolveFile(stack, filename.Value, []string{cwd})
 	if err != nil {
 		return values.WrapForeignErrorf(err, "load")
+	}
+
+	err = security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   absPath,
+	})
+	if err != nil {
+		return err
 	}
 
 	// Open the file
