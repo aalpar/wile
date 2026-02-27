@@ -243,7 +243,7 @@ func TestAcquireContinuation_ReturnsZeroedFrame(t *testing.T) {
 	qt.Assert(t, cont.singleValue, qt.IsNil)
 	qt.Assert(t, cont.multiValues, qt.IsNil)
 	qt.Assert(t, cont.pc, qt.Equals, 0)
-	qt.Assert(t, cont.callDepth, qt.Equals, uint64(0))
+	qt.Assert(t, cont.callDepth, qt.Equals, 0)
 	qt.Assert(t, cont.promptHandler, qt.IsNil)
 	qt.Assert(t, cont.promptTag, qt.IsNil)
 	qt.Assert(t, cont.shared, qt.IsFalse)

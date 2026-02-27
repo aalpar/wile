@@ -428,7 +428,9 @@ func makeRealNumberPrimitive(op realNumberOp) func(*machine.MachineContext) erro
 	}
 }
 
-func integerPassthrough(v *values.Integer) values.Value { return v }
+func integerPassthrough(v *values.Integer) values.Value {
+	return v
+}
 
 // rationalToInteger returns an exact integer for exact rational inputs.
 // R7RS §6.2.6: floor, ceiling, truncate, round return integers.

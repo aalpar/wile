@@ -308,8 +308,9 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 // used for continuation re-entry (call/cc) where the same continuation may be invoked
 // multiple times, requiring the copy to prevent stack corruption.
 func (p *MachineContext) PopContinuation() *MachineContinuation {
-	if p.callDepth > 0 {
-		p.callDepth--
+	p.callDepth--
+	if p.callDepth < 0 {
+		panic("callDepth underflow in PopContinuation")
 	}
 	q := p.cont
 	p.template = q.template

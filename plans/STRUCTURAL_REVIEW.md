@@ -145,78 +145,62 @@ removed.
 
 ---
 
-### [Medium] `vmState.callDepth` is `uint64` with documented underflow risk
+### [Medium] ~~`vmState.callDepth` is `uint64` with documented underflow risk~~ DONE
 
 **Principle**: State Tightness
-**Where**: `machine/vm_state.go:82-86`
+**Where**: `machine/vm_state.go`
 
-The field is unsigned but depth is conceptually non-negative. Subtraction can
-wrap silently to 2^64-1. The comment says "all depth computation must use the
-parent pointer rather than arithmetic on callDepth" -- this is a process-level
-mitigation for a type-level problem.
-
-**Proposed direction**: Change to `int`. Maximum realistic call depth is bounded
-by memory, not `int` range. Underflow becomes a detectable negative value.
-**Effort**: S
+**Completed.** Field changed from `uint64` to `int`. The silent guard
+`if p.callDepth > 0 { p.callDepth-- }` in `PopContinuation` replaced with
+an unconditional decrement plus `if p.callDepth < 0 { panic(...) }`, making
+underflow immediately detectable instead of silently clamped. The `uint64(0)`
+comparison in `pool_test.go` updated to `0`.
 
 ---
 
-### [Medium] `mctx` naming in 3 operation files
+### [Medium] ~~`mctx` naming in 3 operation files~~ DONE
 
 **Principle**: Consistency Debt
 **Where**: `machine/operation_syntax_case.go`,
 `machine/operation_syntax_rules_transform.go`,
 `machine/operation_build_syntax.go`
 
-Convention is `mc` for `*MachineContext` parameters. These three files use
-`mctx`.
-
-**Proposed direction**: Rename `mctx` to `mc`.
-**Effort**: S
+**Completed.** All `mctx` occurrences renamed to `mc` in the three operation
+files, matching the project-wide `*MachineContext` parameter convention.
 
 ---
 
-### [Medium] Single-line function definitions in sentinel types
+### [Medium] ~~Single-line function definitions in sentinel types~~ DONE
 
 **Principle**: Consistency Debt (imperative violation)
-**Where**: `values/values.go:41-43,51-52` (5 methods on voidType/eofType),
-`internal/syntax/syntax.go:24-29` (6 methods on syntaxVoidType)
+**Where**: `values/values.go` (5 methods on voidType/eofType),
+`internal/syntax/syntax.go` (6 methods on syntaxVoidType)
 
-CLAUDE.md imperative: "NEVER write single-line function definitions."
-11 methods violate this.
-
-**Proposed direction**: Expand each to multi-line form. Mechanical.
-**Effort**: S
+**Completed.** All 11 methods expanded to multi-line form. An additional
+single-line function (`integerPassthrough` in `extensions/math/prim_math.go`)
+found during cleanup was expanded as well.
 
 ---
 
-### [Low] `SyntaxForEach` callback signature is too broad
+### [Low] ~~`SyntaxForEach` callback signature is too broad~~ DONE
 
 **Principle**: Composability (Interface Segregation)
-**Where**: `machine/compile_time_continuation_library.go` -- 15 call sites, of
-which 13 blank `index` and 14 blank `hasNext`
+**Where**: `internal/syntax/utils.go`
 
-The callback signature `func(context.Context, int, bool, SyntaxValue) error`
-forces every caller to acknowledge 4 parameters when most only use 1.
-
-**Proposed direction**: Add a `SyntaxWalk(ctx, v, func(SyntaxValue) error)`
-convenience wrapper that delegates to `SyntaxForEach`.
-**Effort**: S
+**Completed.** `SyntaxWalk(ctx, v, func(SyntaxValue) error)` added as a
+convenience wrapper that delegates to `SyntaxForEach`. Call sites that only
+need element iteration updated to use the narrower signature.
 
 ---
 
-### [Low] `NativeTemplate` parallel slices have unenforced length invariant
+### [Low] ~~`NativeTemplate` parallel slices have unenforced length invariant~~ DONE
 
 **Principle**: State Tightness (representation invariant)
-**Where**: `machine/native_template.go:28-53`
+**Where**: `machine/native_template.go`
 
-`code []Instruction` and `sourceRefs []uint16` must always have the same length.
-The struct-of-arrays layout is deliberate for cache performance. No structural
-change needed, but the invariant should be enforced at construction time.
-
-**Proposed direction**: Add an assertion in the template constructor:
-`if len(code) != len(sourceRefs) { panic("...") }`.
-**Effort**: S
+**Completed.** Length-equality assertion added at construction time:
+`if len(p.code) != len(p.sourceRefs) { panic(...) }`. Invariant is now
+enforced structurally at the point of construction rather than by convention.
 
 ---
 
@@ -258,11 +242,4 @@ and the three Medium structural findings are resolved. Remaining work is
 consistency-level debt (naming drift in 3 files, 11 single-line functions,
 `ToFloat64` coverage gap, `callDepth` type) and two Low-priority additions.
 
-**Remaining items**:
-
-1. ~~**`ToFloat64` vs `ExtractReal` gap** -- clarify or unify~~ DONE
-2. **`vmState.callDepth` `uint64` → `int`** -- detectable underflow (S)
-3. **`mctx` → `mc` rename** -- 3 operation files (S)
-4. **Single-line function definitions** -- 11 methods (S)
-5. **`SyntaxWalk` convenience wrapper** -- reduces 13 blanked parameters (S)
-6. **`NativeTemplate` length-invariant assertion** -- panic at construction (S)
+**All items resolved.** The review is complete.
