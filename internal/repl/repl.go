@@ -38,6 +38,8 @@ import (
 type REPL struct {
 	env         *environment.EnvironmentFrame
 	debugCtx    *DebugContext
+	metaHandler *MetaCommandHandler
+	docProvider DocProvider
 	historyFile string
 	prompt      string
 	contPrompt  string
@@ -83,6 +85,13 @@ func WithErrorOutput(w io.Writer) Option {
 	}
 }
 
+// WithDocProvider sets the documentation provider for the ,doc command.
+func WithDocProvider(dp DocProvider) Option {
+	return func(r *REPL) {
+		r.docProvider = dp
+	}
+}
+
 // New creates a new REPL with the given environment and options.
 func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
 	r := &REPL{
@@ -97,6 +106,7 @@ func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
 	for _, opt := range opts {
 		opt(r)
 	}
+	r.metaHandler = NewMetaCommandHandler(r.env, r.debugCtx, r.docProvider)
 	return r
 }
 
@@ -162,10 +172,10 @@ func (p *REPL) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Check for debug commands before parsing as Scheme
+		// Check for meta-commands before parsing as Scheme
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, ",") && inputBuffer.Len() == 0 {
-			p.debugCtx.HandleDebugCommand(trimmed, p.out)
+			p.metaHandler.Handle(trimmed, p.out)
 			continue
 		}
 

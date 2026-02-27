@@ -27,3 +27,18 @@ func TestNewEnvironmentTiny(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, env, qt.IsNotNil)
 }
+
+// TestNewTopLevelWithRegistry tests that the environment+registry variant returns
+// both a valid environment and a populated registry.
+func TestNewTopLevelWithRegistry(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	env, reg, err := NewTopLevelWithRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(env, qt.IsNotNil)
+	c.Assert(reg, qt.IsNotNil)
+
+	// Verify the registry has primitives (+ is registered by core)
+	_, found := reg.FindPrimitive("+", 0)
+	c.Assert(found, qt.IsTrue)
+}
