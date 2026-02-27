@@ -117,7 +117,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	var libEnv *environment.EnvironmentFrame
 	factory := p.env.TopLevelEnv().LibraryEnvFactory()
 	if factory != nil {
-		libEnv, err = factory(ctctx.ctx, p.env)
+		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
 			return values.WrapForeignErrorf(err, "define-library: could not create library environment")
 		}
@@ -331,6 +331,8 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			return values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
 				importSet.LibraryName.SchemeString())
 		}
+
+		fireImportObserver(p.env, importedLib, bindings, lib.Name.Parts)
 
 		// Bind the imported names in the library's environment (lib.Env)
 		for localName, externalName := range bindings {
@@ -752,6 +754,8 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 			return values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
 				importSet.LibraryName.SchemeString())
 		}
+
+		fireImportObserver(p.env, lib, bindings, nil)
 
 		// Copy bindings to the target phase
 		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)

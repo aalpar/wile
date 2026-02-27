@@ -387,6 +387,111 @@ func TestRegistry_CloneGlobalValues(t *testing.T) {
 	c.Assert(len(clone.GlobalValues()), qt.Equals, 1)
 }
 
+func TestRegistry_Without(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "car", Category: "pairs"},
+		{Name: "cdr", Category: "pairs"},
+		{Name: "set-car!", Category: "pairs"},
+		{Name: "+", Category: "arithmetic"},
+		{Name: "vector-set!", Category: "vectors"},
+	}, PhaseRuntime)
+	r.AddBinding("if")
+	r.AddMacroSource("(define-syntax and ...)")
+	r.AddGlobalValue("gv", testValue("x"))
+
+	tcs := []struct {
+		name    string
+		exclude []string
+		want    []string
+	}{
+		{"remove one", []string{"set-car!"}, []string{"car", "cdr", "+", "vector-set!"}},
+		{"remove multiple", []string{"set-car!", "vector-set!"}, []string{"car", "cdr", "+"}},
+		{"remove nonexistent silently", []string{"nonexistent"}, []string{"car", "cdr", "set-car!", "+", "vector-set!"}},
+		{"remove nothing", nil, []string{"car", "cdr", "set-car!", "+", "vector-set!"}},
+		{"remove all", []string{"car", "cdr", "set-car!", "+", "vector-set!"}, []string{}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			filtered := r.Without(tc.exclude...)
+			c.Assert(filtered.PrimitiveNames(), qt.DeepEquals, tc.want)
+			// Non-primitive fields are copied unchanged.
+			c.Assert(filtered.Bindings(), qt.DeepEquals, []string{"if"})
+			c.Assert(len(filtered.MacroSources()), qt.Equals, 1)
+			c.Assert(len(filtered.GlobalValues()), qt.Equals, 1)
+		})
+	}
+
+	// Original is unmodified.
+	c.Assert(r.PrimitiveCount(), qt.Equals, 5)
+}
+
+func TestRegistry_WithoutCategory(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "car", Category: "pairs"},
+		{Name: "cdr", Category: "pairs"},
+		{Name: "+", Category: "arithmetic"},
+		{Name: "display", Category: "io"},
+		{Name: "uncategorized"},
+	}, PhaseRuntime)
+	r.AddBinding("lambda")
+
+	tcs := []struct {
+		name    string
+		exclude []string
+		want    []string
+	}{
+		{"remove one category", []string{"pairs"}, []string{"+", "display", "uncategorized"}},
+		{"remove multiple categories", []string{"pairs", "io"}, []string{"+", "uncategorized"}},
+		{"remove nonexistent category", []string{"nonexistent"}, []string{"car", "cdr", "+", "display", "uncategorized"}},
+		{"remove empty-string category", []string{""}, []string{"car", "cdr", "+", "display"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			filtered := r.WithoutCategory(tc.exclude...)
+			c.Assert(filtered.PrimitiveNames(), qt.DeepEquals, tc.want)
+			c.Assert(filtered.Bindings(), qt.DeepEquals, []string{"lambda"})
+		})
+	}
+
+	// Original is unmodified.
+	c.Assert(r.PrimitiveCount(), qt.Equals, 5)
+}
+
+func TestRegistry_WithoutBindings(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	r.AddPrimitives([]PrimitiveSpec{
+		{Name: "set!", Category: "special"},
+		{Name: "+", Category: "arithmetic"},
+	}, PhaseRuntime)
+	r.AddBindings([]string{"if", "set!", "lambda", "define"})
+
+	tcs := []struct {
+		name    string
+		exclude []string
+		want    []string
+	}{
+		{"remove one binding", []string{"set!"}, []string{"if", "lambda", "define"}},
+		{"remove multiple", []string{"set!", "if"}, []string{"lambda", "define"}},
+		{"remove nonexistent", []string{"nonexistent"}, []string{"if", "set!", "lambda", "define"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			filtered := r.WithoutBindings(tc.exclude...)
+			c.Assert(filtered.Bindings(), qt.DeepEquals, tc.want)
+			// Primitives are unchanged.
+			c.Assert(filtered.PrimitiveCount(), qt.Equals, 2)
+		})
+	}
+}
+
 func TestExtension(t *testing.T) {
 	c := qt.New(t)
 

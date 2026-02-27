@@ -20,8 +20,13 @@ import (
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 )
+
+// LibraryImportEvent records what happened when a library was imported.
+// See machine.LibraryImportEvent for field documentation.
+type LibraryImportEvent = machine.LibraryImportEvent
 
 type engineConfig struct {
 	registry       *registry.Registry
@@ -30,6 +35,7 @@ type engineConfig struct {
 	libraryPaths   []string
 	libraryEnabled bool // true when WithLibraryPaths was called
 	skipCore       bool // true when WithoutCore was called
+	importObserver func(LibraryImportEvent)
 }
 
 // EngineOption configures an Engine.
@@ -85,6 +91,15 @@ func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true
 		cfg.libraryPaths = paths
+	}
+}
+
+// WithImportObserver sets a callback that is invoked each time a library is
+// imported. The observer is read-only — it cannot influence the import.
+// Requires WithLibraryPaths to be effective (no libraries loaded without it).
+func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.importObserver = obs
 	}
 }
 
