@@ -643,3 +643,28 @@ func TestBigComplex_MixedRationalBigInteger(t *testing.T) {
 	sum := bc.Add(bc2)
 	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
 }
+
+func TestBigComplex_HashCode(t *testing.T) {
+	c := qt.New(t)
+
+	// Stability: same value produces same hash.
+	bc1 := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(3.0),
+		values.NewBigFloatFromFloat64(4.0),
+	)
+	bc2 := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(3.0),
+		values.NewBigFloatFromFloat64(4.0),
+	)
+	c.Assert(bc1.HashCode(), qt.Equals, bc2.HashCode())
+
+	// Exact (BigInteger) parts: stability.
+	be1 := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2))
+	be2 := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2))
+	c.Assert(be1.HashCode(), qt.Equals, be2.HashCode())
+
+	// Distinctness: different values hash differently.
+	h1 := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(1), values.NewBigFloatFromFloat64(2)).HashCode()
+	h2 := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2), values.NewBigFloatFromFloat64(1)).HashCode()
+	c.Assert(h1, qt.Not(qt.Equals), h2)
+}

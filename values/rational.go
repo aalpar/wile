@@ -88,18 +88,6 @@ func (p *Rational) Float64() float64 {
 	return f
 }
 
-// Per-type conversion helpers for Rational.
-// These eliminate repeated conversion expressions in the type-switch
-// dispatch methods below. Each produces the representation needed by
-// the target type's native arithmetic.
-
-func (p *Rational) bigFloat() *big.Float {
-	return new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(p.value)
-}
-func (p *Rational) toComplex() complex128 {
-	return complex(p.Float64(), 0)
-}
-
 // IsInteger returns true if the rational represents an integer (denominator is 1).
 func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
@@ -120,186 +108,33 @@ var rationalMultiply [numKinds]func(*Rational, Number) Number
 var rationalDivide [numKinds]func(*Rational, Number) Number
 
 func init() {
-	rationalAdd[KindInteger] = func(p *Rational, o Number) Number {
-		other := o.(*Integer).bigRat()
-		result := new(big.Rat).Add(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalAdd[KindBigInteger] = func(p *Rational, o Number) Number {
-		other := o.(*BigInteger).bigRat()
-		result := new(big.Rat).Add(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalAdd[KindFloat] = func(p *Rational, o Number) Number {
-		return NewFloat(p.Float64() + o.(*Float).Value)
-	}
-	rationalAdd[KindBigFloat] = func(p *Rational, o Number) Number {
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Add(self, o.(*BigFloat).value)}
-	}
-	rationalAdd[KindRational] = func(p *Rational, o Number) Number {
+	rationalAdd = makeAddDispatch(KindRational, func(p *Rational, o Number) Number {
 		result := new(big.Rat).Add(p.value, o.(*Rational).value)
 		return &Rational{value: result}
-	}
-	rationalAdd[KindComplex] = func(p *Rational, o Number) Number {
-		return NewComplex(p.toComplex() + o.(*Complex).Value)
-	}
-	rationalAdd[KindBigComplex] = func(p *Rational, o Number) Number {
-		bf := p.bigFloat()
-		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
-		return bc.Add(o)
-	}
+	})
 
-	rationalSubtract[KindInteger] = func(p *Rational, o Number) Number {
-		other := o.(*Integer).bigRat()
-		result := new(big.Rat).Sub(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalSubtract[KindBigInteger] = func(p *Rational, o Number) Number {
-		other := o.(*BigInteger).bigRat()
-		result := new(big.Rat).Sub(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalSubtract[KindFloat] = func(p *Rational, o Number) Number {
-		return NewFloat(p.Float64() - o.(*Float).Value)
-	}
-	rationalSubtract[KindBigFloat] = func(p *Rational, o Number) Number {
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Sub(self, o.(*BigFloat).value)}
-	}
-	rationalSubtract[KindRational] = func(p *Rational, o Number) Number {
+	rationalSubtract = makeSubtractDispatch(KindRational, func(p *Rational, o Number) Number {
 		result := new(big.Rat).Sub(p.value, o.(*Rational).value)
 		return &Rational{value: result}
-	}
-	rationalSubtract[KindComplex] = func(p *Rational, o Number) Number {
-		return NewComplex(p.toComplex() - o.(*Complex).Value)
-	}
-	rationalSubtract[KindBigComplex] = func(p *Rational, o Number) Number {
-		bf := p.bigFloat()
-		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
-		return bc.Subtract(o)
-	}
+	})
 
-	rationalLessThan[KindInteger] = func(p *Rational, o Number) bool {
-		return p.value.Cmp(o.(*Integer).bigRat()) < 0
-	}
-	rationalLessThan[KindBigInteger] = func(p *Rational, o Number) bool {
-		return p.value.Cmp(o.(*BigInteger).bigRat()) < 0
-	}
-	rationalLessThan[KindFloat] = func(p *Rational, o Number) bool {
-		return p.Float64() < o.(*Float).Value
-	}
-	rationalLessThan[KindBigFloat] = func(p *Rational, o Number) bool {
-		self := new(big.Float).SetRat(p.value)
-		return self.Cmp(o.(*BigFloat).BigFloatValue()) < 0
-	}
-	rationalLessThan[KindRational] = func(p *Rational, o Number) bool {
+	rationalLessThan = makeLessThanDispatch(KindRational, func(p *Rational, o Number) bool {
 		return p.value.Cmp(o.(*Rational).value) < 0
-	}
-	rationalLessThan[KindComplex] = func(p *Rational, o Number) bool {
-		return p.Float64() < real(o.(*Complex).Value)
-	}
-	rationalLessThan[KindBigComplex] = func(p *Rational, o Number) bool {
-		return p.bigFloat().Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue()) < 0
-	}
+	})
 
-	rationalCompare[KindInteger] = func(p *Rational, o Number) int {
-		return p.value.Cmp(o.(*Integer).bigRat())
-	}
-	rationalCompare[KindBigInteger] = func(p *Rational, o Number) int {
-		return p.value.Cmp(o.(*BigInteger).bigRat())
-	}
-	rationalCompare[KindFloat] = func(p *Rational, o Number) int {
-		pf := p.Float64()
-		v := o.(*Float)
-		if pf < v.Value {
-			return -1
-		} else if pf > v.Value {
-			return 1
-		}
-		return 0
-	}
-	rationalCompare[KindBigFloat] = func(p *Rational, o Number) int {
-		self := new(big.Float).SetRat(p.value)
-		return self.Cmp(o.(*BigFloat).BigFloatValue())
-	}
-	rationalCompare[KindRational] = func(p *Rational, o Number) int {
+	rationalCompare = makeCompareDispatch(KindRational, func(p *Rational, o Number) int {
 		return p.value.Cmp(o.(*Rational).value)
-	}
-	rationalCompare[KindComplex] = func(p *Rational, o Number) int {
-		pf := p.Float64()
-		r := real(o.(*Complex).Value)
-		if pf < r {
-			return -1
-		} else if pf > r {
-			return 1
-		}
-		return 0
-	}
-	rationalCompare[KindBigComplex] = func(p *Rational, o Number) int {
-		self := p.bigFloat()
-		return self.Cmp(toBigFloat(o.(*BigComplex).Real()).BigFloatValue())
-	}
+	})
 
-	rationalMultiply[KindInteger] = func(p *Rational, o Number) Number {
-		other := o.(*Integer).bigRat()
-		result := new(big.Rat).Mul(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalMultiply[KindBigInteger] = func(p *Rational, o Number) Number {
-		other := o.(*BigInteger).bigRat()
-		result := new(big.Rat).Mul(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalMultiply[KindFloat] = func(p *Rational, o Number) Number {
-		return NewFloat(p.Float64() * o.(*Float).Value)
-	}
-	rationalMultiply[KindBigFloat] = func(p *Rational, o Number) Number {
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Mul(self, o.(*BigFloat).value)}
-	}
-	rationalMultiply[KindRational] = func(p *Rational, o Number) Number {
+	rationalMultiply = makeMultiplyDispatch(KindRational, func(p *Rational, o Number) Number {
 		result := new(big.Rat).Mul(p.value, o.(*Rational).value)
 		return &Rational{value: result}
-	}
-	rationalMultiply[KindComplex] = func(p *Rational, o Number) Number {
-		return NewComplex(p.toComplex() * o.(*Complex).Value)
-	}
-	rationalMultiply[KindBigComplex] = func(p *Rational, o Number) Number {
-		bf := p.bigFloat()
-		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
-		return bc.Multiply(o)
-	}
+	})
 
-	rationalDivide[KindInteger] = func(p *Rational, o Number) Number {
-		other := o.(*Integer).bigRat()
-		result := new(big.Rat).Quo(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalDivide[KindBigInteger] = func(p *Rational, o Number) Number {
-		other := o.(*BigInteger).bigRat()
-		result := new(big.Rat).Quo(p.value, other)
-		return &Rational{value: result}
-	}
-	rationalDivide[KindFloat] = func(p *Rational, o Number) Number {
-		return NewFloat(p.Float64() / o.(*Float).Value)
-	}
-	rationalDivide[KindBigFloat] = func(p *Rational, o Number) Number {
-		self := p.bigFloat()
-		return &BigFloat{value: new(big.Float).Quo(self, o.(*BigFloat).value)}
-	}
-	rationalDivide[KindRational] = func(p *Rational, o Number) Number {
+	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) Number {
 		result := new(big.Rat).Quo(p.value, o.(*Rational).value)
 		return &Rational{value: result}
-	}
-	rationalDivide[KindComplex] = func(p *Rational, o Number) Number {
-		return NewComplex(p.toComplex() / o.(*Complex).Value)
-	}
-	rationalDivide[KindBigComplex] = func(p *Rational, o Number) Number {
-		bf := p.bigFloat()
-		bc := NewBigComplex(&BigFloat{value: bf}, NewBigFloatFromFloat64(0))
-		return bc.Divide(o)
-	}
+	})
 }
 
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.

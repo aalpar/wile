@@ -121,7 +121,7 @@ func TestRational_Divide(t *testing.T) {
 
 	c1 := values.NewComplex(complex(2, 0))
 	result = r1.Divide(c1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(0.25, 0)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(0.25))
 }
 
 func TestRational_IsZero(t *testing.T) {

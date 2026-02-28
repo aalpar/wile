@@ -16,6 +16,7 @@ package values
 
 import (
 	"math"
+	"math/big"
 	"math/cmplx"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ var (
 	_ Value         = (*Complex)(nil)
 	_ Number        = (*Complex)(nil)
 	_ ComplexNumber = (*Complex)(nil)
+	_ Hashable      = (*Complex)(nil)
 )
 
 // Complex represents a Scheme complex number.
@@ -57,17 +59,6 @@ func (p *Complex) Imag() float64 {
 	return imag(p.Value)
 }
 
-// Per-type conversion helper for Complex.
-// This eliminates repeated conversion expressions in the type-switch
-// dispatch methods below for BigFloat and BigComplex cases.
-
-func (p *Complex) toBigComplex() *BigComplex {
-	return NewBigComplexFromBigFloats(
-		NewBigFloatFromFloat64(real(p.Value)),
-		NewBigFloatFromFloat64(imag(p.Value)),
-	)
-}
-
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *Complex) Kind() NumericKind {
 	return KindComplex
@@ -81,120 +72,19 @@ var complexMultiply [numKinds]func(*Complex, Number) Number
 var complexDivide [numKinds]func(*Complex, Number) Number
 
 func init() {
-	complexAdd[KindInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value + o.(*Integer).toComplex())
-	}
-	complexAdd[KindBigInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value + complex(o.(*BigInteger).float64Val(), 0))
-	}
-	complexAdd[KindFloat] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value + o.(*Float).toComplex())
-	}
-	complexAdd[KindBigFloat] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Add(o)
-	}
-	complexAdd[KindRational] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value + o.(*Rational).toComplex())
-	}
-	complexAdd[KindComplex] = func(p *Complex, o Number) Number {
+	complexAdd = makeAddDispatch(KindComplex, func(p *Complex, o Number) Number {
 		return NewComplex(p.Value + o.(*Complex).Value)
-	}
-	complexAdd[KindBigComplex] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Add(o)
-	}
+	})
 
-	complexSubtract[KindInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value - o.(*Integer).toComplex())
-	}
-	complexSubtract[KindBigInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value - complex(o.(*BigInteger).float64Val(), 0))
-	}
-	complexSubtract[KindFloat] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value - o.(*Float).toComplex())
-	}
-	complexSubtract[KindBigFloat] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Subtract(o)
-	}
-	complexSubtract[KindRational] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value - o.(*Rational).toComplex())
-	}
-	complexSubtract[KindComplex] = func(p *Complex, o Number) Number {
+	complexSubtract = makeSubtractDispatch(KindComplex, func(p *Complex, o Number) Number {
 		return NewComplex(p.Value - o.(*Complex).Value)
-	}
-	complexSubtract[KindBigComplex] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Subtract(o)
-	}
+	})
 
-	complexLessThan[KindInteger] = func(p *Complex, o Number) bool {
-		return real(p.Value) < float64(o.(*Integer).Value)
-	}
-	complexLessThan[KindBigInteger] = func(p *Complex, o Number) bool {
-		return real(p.Value) < o.(*BigInteger).float64Val()
-	}
-	complexLessThan[KindFloat] = func(p *Complex, o Number) bool {
-		return real(p.Value) < o.(*Float).Value
-	}
-	complexLessThan[KindBigFloat] = func(p *Complex, o Number) bool {
-		self := NewBigFloatFromFloat64(real(p.Value))
-		return self.Compare(o.(*BigFloat)) < 0
-	}
-	complexLessThan[KindRational] = func(p *Complex, o Number) bool {
-		return real(p.Value) < o.(*Rational).Float64()
-	}
-	complexLessThan[KindComplex] = func(p *Complex, o Number) bool {
+	complexLessThan = makeLessThanDispatch(KindComplex, func(p *Complex, o Number) bool {
 		return real(p.Value) < real(o.(*Complex).Value)
-	}
-	complexLessThan[KindBigComplex] = func(p *Complex, o Number) bool {
-		return NewBigFloatFromFloat64(real(p.Value)).Compare(o.(*BigComplex).Real()) < 0
-	}
+	})
 
-	complexCompare[KindInteger] = func(p *Complex, o Number) int {
-		r := real(p.Value)
-		vf := float64(o.(*Integer).Value)
-		if r < vf {
-			return -1
-		} else if r > vf {
-			return 1
-		}
-		return 0
-	}
-	complexCompare[KindBigInteger] = func(p *Complex, o Number) int {
-		r := real(p.Value)
-		vf := o.(*BigInteger).float64Val()
-		if r < vf {
-			return -1
-		} else if r > vf {
-			return 1
-		}
-		return 0
-	}
-	complexCompare[KindFloat] = func(p *Complex, o Number) int {
-		r := real(p.Value)
-		if r < o.(*Float).Value {
-			return -1
-		} else if r > o.(*Float).Value {
-			return 1
-		}
-		return 0
-	}
-	complexCompare[KindBigFloat] = func(p *Complex, o Number) int {
-		return NewBigFloatFromFloat64(real(p.Value)).Compare(o)
-	}
-	complexCompare[KindRational] = func(p *Complex, o Number) int {
-		r := real(p.Value)
-		vf := o.(*Rational).Float64()
-		if r < vf {
-			return -1
-		} else if r > vf {
-			return 1
-		}
-		return 0
-	}
-	complexCompare[KindComplex] = func(p *Complex, o Number) int {
+	complexCompare = makeCompareDispatch(KindComplex, func(p *Complex, o Number) int {
 		r1, r2 := real(p.Value), real(o.(*Complex).Value)
 		if r1 < r2 {
 			return -1
@@ -202,58 +92,15 @@ func init() {
 			return 1
 		}
 		return 0
-	}
-	complexCompare[KindBigComplex] = func(p *Complex, o Number) int {
-		return NewBigFloatFromFloat64(real(p.Value)).Compare(o.(*BigComplex).Real())
-	}
+	})
 
-	complexMultiply[KindInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value * o.(*Integer).toComplex())
-	}
-	complexMultiply[KindBigInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value * complex(o.(*BigInteger).float64Val(), 0))
-	}
-	complexMultiply[KindFloat] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value * o.(*Float).toComplex())
-	}
-	complexMultiply[KindBigFloat] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Multiply(o)
-	}
-	complexMultiply[KindRational] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value * o.(*Rational).toComplex())
-	}
-	complexMultiply[KindComplex] = func(p *Complex, o Number) Number {
+	complexMultiply = makeMultiplyDispatch(KindComplex, func(p *Complex, o Number) Number {
 		return NewComplex(p.Value * o.(*Complex).Value)
-	}
-	complexMultiply[KindBigComplex] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Multiply(o)
-	}
+	})
 
-	complexDivide[KindInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value / o.(*Integer).toComplex())
-	}
-	complexDivide[KindBigInteger] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value / complex(o.(*BigInteger).float64Val(), 0))
-	}
-	complexDivide[KindFloat] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value / o.(*Float).toComplex())
-	}
-	complexDivide[KindBigFloat] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Divide(o)
-	}
-	complexDivide[KindRational] = func(p *Complex, o Number) Number {
-		return NewComplex(p.Value / o.(*Rational).toComplex())
-	}
-	complexDivide[KindComplex] = func(p *Complex, o Number) Number {
+	complexDivide = makeDivideDispatch(KindComplex, func(p *Complex, o Number) Number {
 		return NewComplex(p.Value / o.(*Complex).Value)
-	}
-	complexDivide[KindBigComplex] = func(p *Complex, o Number) Number {
-		bc := p.toBigComplex()
-		return bc.Divide(o)
-	}
+	})
 }
 
 // Add returns the sum of this complex number and another number.
@@ -455,6 +302,15 @@ func (p *Complex) EqualTo(v Value) bool {
 		return p.Value == other.Value
 	}
 	return false
+}
+
+// HashCode returns a hash of the complex value.
+// Hashes real and imaginary parts independently via hashInexactNumeric
+// and combines them with a multiplicative mixing constant.
+func (p *Complex) HashCode() uint64 {
+	r := hashInexactNumeric(new(big.Float).SetFloat64(real(p.Value)))
+	i := hashInexactNumeric(new(big.Float).SetFloat64(imag(p.Value)))
+	return r ^ (i * 0x9e3779b97f4a7c15)
 }
 
 // SchemeString returns the Scheme representation of this complex number.
