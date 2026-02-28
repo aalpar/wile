@@ -62,8 +62,8 @@ import (
 //	│ envPooled    │ ✓              │ ✗ (=false)  │ ✓ or false(shared)  │ ✓                │
 //	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
 type vmState struct {
-	env          *environment.EnvironmentFrame
-	template     *NativeTemplate
+	env      *environment.EnvironmentFrame
+	template *NativeTemplate
 	// singleValue and multiValues form a split value register.
 	//
 	// Only one field is live at a time — the other is always nil.
@@ -78,8 +78,8 @@ type vmState struct {
 	//
 	// multiValues is only populated by R7RS (values ...) and is consumed by
 	// call-with-values. All other instructions operate on singleValue.
-	singleValue values.Value   // value register: single value (fast path)
-	multiValues MultipleValues // value register: multiple values (R7RS values/call-with-values only)
+	singleValue  values.Value   // value register: single value (fast path)
+	multiValues  MultipleValues // value register: multiple values (R7RS values/call-with-values only)
 	evals        *Stack         // evaluation stack, holds intermediate values during execution
 	pc           int
 	windingStack WindingStack // R7RS dynamic-wind extent tracking

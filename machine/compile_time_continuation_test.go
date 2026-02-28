@@ -2151,11 +2151,17 @@ func TestFindFileCWDFallback(t *testing.T) {
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
 
-	// findFile should resolve "cwd-test.scm" via CWD fallback
+	// findFile should resolve "cwd-test.scm" via CWD fallback.
+	// Use filepath.EvalSymlinks on dir to normalize: on macOS, t.TempDir()
+	// returns /tmp/... but os.Getwd() (inside findFile) returns /private/tmp/...
+	// because /tmp is a symlink.
+	realDir, err := filepath.EvalSymlinks(dir)
+	qt.Assert(t, err, qt.IsNil)
+
 	f, absPath, err := findFile(cont, ctctx, "cwd-test.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
-	qt.Assert(t, absPath, qt.Equals, filepath.Join(dir, "cwd-test.scm"))
+	qt.Assert(t, absPath, qt.Equals, filepath.Join(realDir, "cwd-test.scm"))
 }
 
 // TestFindFileEmptyPath verifies that findFile rejects empty paths.
