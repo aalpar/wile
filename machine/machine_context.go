@@ -302,7 +302,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 
 // PopContinuation pops the current continuation from the machine context and returns it.
 // It restores the machine context to the state saved in the popped continuation.
-// Returns ErrCallDepthExceeded if callDepth would go below zero (compiler bug).
+// Returns ErrContinuationUnderflow if callDepth would go below zero (compiler bug).
 //
 // Note: Unlike Restore(), we do NOT copy evals here because PopContinuation is used
 // for normal function return where the continuation is consumed once. Restore() is
@@ -312,7 +312,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	p.callDepth--
 	if p.callDepth < 0 {
 		p.callDepth = 0
-		return nil, values.WrapForeignErrorf(values.ErrCallDepthExceeded,
+		return nil, values.WrapForeignErrorf(values.ErrContinuationUnderflow,
 			"callDepth underflow in PopContinuation")
 	}
 	q := p.cont

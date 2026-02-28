@@ -165,7 +165,7 @@ func TestPopContinuation_Underflow(t *testing.T) {
 
 	// Popping from an empty continuation chain must return an error, not panic.
 	_, err := mc.PopContinuation()
-	c.Assert(errors.Is(err, values.ErrCallDepthExceeded), qt.IsTrue)
+	c.Assert(errors.Is(err, values.ErrContinuationUnderflow), qt.IsTrue)
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {

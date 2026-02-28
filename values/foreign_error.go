@@ -142,7 +142,8 @@ var (
 	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
 	// Recursion depth
-	ErrCallDepthExceeded = NewStaticError("call depth exceeded")
+	ErrCallDepthExceeded     = NewStaticError("call depth exceeded")
+	ErrContinuationUnderflow = NewStaticError("continuation underflow")
 
 	// Escape continuations
 	ErrExpiredEscape       = NewStaticError("expired escape procedure")
