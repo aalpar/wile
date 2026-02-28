@@ -34,6 +34,11 @@ import (
 // ErrEngineClosed is returned when Close is called on an already-closed engine.
 var ErrEngineClosed = values.NewStaticError("engine is closed")
 
+// DefaultMaxCallDepth is the default call depth limit for new engines.
+// At ~500 bytes per frame, 10000 frames ≈ 5MB. Use WithMaxCallDepth(0)
+// to opt out of the limit explicitly.
+const DefaultMaxCallDepth uint64 = 10000
+
 // Engine is the main entry point for embedding Wile.
 //
 // An Engine is NOT safe for concurrent use from multiple goroutines.
@@ -72,6 +77,13 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+
+	// Apply default call depth when the caller did not set one explicitly.
+	// WithMaxCallDepth(0) means unlimited — callDepthSet tracks whether the
+	// caller opted in, so we don't override an explicit zero.
+	if !cfg.callDepthSet {
+		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
 	// Build registry
