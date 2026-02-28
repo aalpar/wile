@@ -131,6 +131,11 @@ readme-check:
 test: build
 	$(GO_TEST) ./...
 	@$(MAKE) test-scheme
+	@$(MAKE) test-scheme
+
+.PHONY: test-race test
+test-race: build
+	$(GO_TEST) -race ./...
 
 # Run Scheme-level test suite.
 # Override SCHEME to test against different implementations:
