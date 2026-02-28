@@ -606,6 +606,10 @@ func (p *BigComplex) EqualTo(o Value) bool {
 	if v == nil || p == nil {
 		return p == v
 	}
+	// NaN is not equal to anything, including itself (IEEE 754).
+	if p.IsNaN() || v.IsNaN() {
+		return false
+	}
 	// Compare real parts
 	if !p.real.EqualTo(v.real) {
 		// Try comparing as BigFloat

@@ -283,8 +283,8 @@ func TestPromotionResultKind_API(t *testing.T) {
 // when a Float with Inf/NaN is combined with a BigComplex, the imaginary part
 // of the BigComplex operand must be preserved in the result.
 //
-// After the fix (removing the guard and making BigFloat Inf/NaN-capable), the
-// result is *BigComplex with the imaginary part fully preserved at BigFloat precision.
+// After the fix (making BigFloat Inf/NaN-capable and updating the guard to return
+// BigComplex), the result is *BigComplex with the imaginary part fully preserved.
 func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
 	c := qt.New(t)
 
@@ -383,7 +383,7 @@ func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
 }
 
 // TestFloatBigComplexGuard_ResultType verifies that the guard path
-// produces *Complex (not *Float, not *BigComplex) for the BigComplex LUB case.
+// produces *BigComplex for the BigComplex LUB case (fix for #362).
 func TestFloatBigComplexGuard_ResultType(t *testing.T) {
 	c := qt.New(t)
 	bc := NewBigComplex(

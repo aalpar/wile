@@ -784,3 +784,44 @@ func TestBigComplex_InfNaNPredicates(t *testing.T) {
 	c.Assert(finite.IsFinite(), qt.IsTrue)
 	c.Assert(finite.IsNaN(), qt.IsFalse)
 }
+
+// TestBigComplex_NaNEquality verifies IEEE 754: NaN is never equal to
+// anything, including itself. This is a regression test for a bug where
+// BigComplex.EqualTo fell through to Compare (which returns 0 for NaN),
+// causing NaN == NaN to return true.
+func TestBigComplex_NaNEquality(t *testing.T) {
+	c := qt.New(t)
+
+	nanReal := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	nanImag := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigFloatNaN(),
+	)
+	nanBoth := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigFloatNaN(),
+	)
+	finite := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	// NaN != NaN (IEEE 754).
+	c.Assert(nanReal.EqualTo(nanReal), qt.IsFalse)
+	c.Assert(nanImag.EqualTo(nanImag), qt.IsFalse)
+	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsFalse)
+
+	// NaN != finite.
+	c.Assert(nanReal.EqualTo(finite), qt.IsFalse)
+	c.Assert(finite.EqualTo(nanReal), qt.IsFalse)
+
+	// NaN BigComplex != NaN BigComplex (different instances).
+	nanReal2 := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	c.Assert(nanReal.EqualTo(nanReal2), qt.IsFalse)
+}
