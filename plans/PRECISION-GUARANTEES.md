@@ -4,6 +4,14 @@ Precision loss is a P1 conformance issue. Wile guarantees exact arithmetic for e
 
 This document defines WHERE precision is guaranteed, WHERE loss is unavoidable, and WHERE loss is a bug.
 
+## Algebraic Bias of Scheme Numerics
+
+Scheme's numeric tower is biased toward algebra — symbolic manipulation and exact representation. Operations on exact inputs should produce exact results; types should preserve mathematical identity where possible. Wile maps this onto Go's concrete machine types, which creates a pragmatic boundary: operations within `int64` (< 2^53 for float64 interop), `float64`, and `complex128` are fast and precise within their domains. Operations that promote to `BigInteger`, `BigFloat`, `Rational`, or `BigComplex` leave the machine-optimized path.
+
+This document's tier model reflects that boundary. Tier 1 (exact) and Tier 2 (inherently inexact) are the algebraic core. Tiers 3 and 4 are where machine-type limitations create precision gaps — gaps that are acknowledged, scoped, and (in the future) controllable via precision mode settings or machine-type constraint flags.
+
+See `docs/dev/NUMERIC_TOWER.md` § "Design Philosophy" for the full architectural rationale.
+
 ## R7RS Foundation
 
 R7RS §6.2.2 establishes the rules:
@@ -60,16 +68,20 @@ Precision loss at system boundaries (FFI, I/O, Go interop) is unavoidable when t
 | `number->string` (decimal notation) | BigFloat, Rational | Finite decimal may not represent value exactly |
 | `inexact` | Any exact type | Explicit user request to lose exactness |
 
-### Tier 4: GUARD — Precision Loss in IEEE 754 Special-Value Handling
+### Tier 4: IEEE 754 Special Values in Arbitrary-Precision Types
 
-BigFloat and BigComplex cannot represent Inf/NaN. When Float(Inf/NaN) participates in arithmetic with these types, the dispatch guard falls back to float64/complex128.
+`values.BigFloat` and `values.BigComplex` support IEEE 754 Inf and NaN representation. This eliminates the previous Inf/NaN guard paths in the dispatch table — operations stay in their domain, and the promotion lattice produces the correct result type regardless of special values.
 
-| Condition | What Happens | Why Acceptable |
-|-----------|-------------|----------------|
-| `Float(Inf/NaN) op BigFloat` | Result is `Float(float64)` | Inf/NaN dominates real result; no exact BigFloat alternative exists |
-| `Float(Inf/NaN) op BigComplex` | Result is `Complex(complex128)` (fix #362) | Inf/NaN dominates real part; imaginary part truncated to float64 because no complex type exists that combines Inf-capable real with arbitrary-precision imaginary |
+| Operation | Result Type | Precision |
+|-----------|------------|-----------|
+| `Float(Inf/NaN) op BigFloat` | `BigFloat` (per lattice) | No precision loss — BigFloat represents Inf/NaN natively |
+| `Float(Inf/NaN) op BigComplex` | `BigComplex` (per lattice) | No precision loss — imaginary part preserved exactly |
+| `BigFloat(Inf) op BigFloat` | `BigFloat` | IEEE 754 rules apply |
+| `BigComplex(Inf real) op BigComplex` | `BigComplex` | IEEE 754 rules apply to each component |
 
-**This is the ONLY place where "precision loss is acceptable" as a blanket statement.** The justification is structural: the type system cannot represent the result without loss, and the alternative (error/panic) would be worse for most use cases.
+**No blanket precision loss is acceptable at this tier.** The type system can represent all results without domain switching. See `docs/dev/NUMERIC_TOWER.md` § "IEEE 754 Semantic Uniformity".
+
+**Go `math/big.Float` limitations:** Go's `big.Float` supports Inf (`SetInf`) but not NaN. Wile's `values.BigFloat` extends beyond `big.Float` with internal state to track NaN. See #362 plan for implementation details.
 
 ## Known Precision Bugs
 
@@ -91,7 +103,7 @@ Issues where precision is lost unnecessarily — these are P1 conformance bugs.
 
 ## Proposed: Precision Control Setting
 
-A runtime or engine-level setting to control precision loss behavior at Tier 3 and Tier 4 boundaries.
+A runtime or engine-level setting to control precision loss behavior at Tier 3 boundaries.
 
 ### Motivation
 
@@ -130,7 +142,7 @@ engine := wile.New(
 | 1 (Exact) | Exact (no change) | Exact (no change) |
 | 2 (Transcendental) | Inexact result | Inexact result |
 | 3 (Boundary) | Silent truncation | Error: implementation restriction |
-| 4 (Inf/NaN guard) | float64/complex128 fallback | Error: implementation restriction |
+| 4 (IEEE 754 specials) | Normal lattice promotion (no precision loss) | Normal lattice promotion (no precision loss) |
 
 ### Open Questions
 
@@ -139,12 +151,61 @@ engine := wile.New(
 3. Should the setting be per-engine or per-call?
 4. How does this interact with R7RS `parameterize`? Should it be a Scheme-level parameter?
 
+## Proposed: Machine-Type Constraint Flags
+
+Orthogonal to `PrecisionMode`, a **machine-type constraint** would keep all numeric computation within Go's hardware-accelerated types, raising an implementation-restriction error rather than promoting to Big* types.
+
+### Motivation
+
+Some use cases (game scripting, real-time systems, embedded contexts) need predictable performance and bounded memory. Automatic promotion to `BigInteger`/`BigFloat`/`BigComplex` introduces heap allocation and unbounded computation cost. A constraint flag would guarantee that all arithmetic stays in the machine-type domain.
+
+### Proposed API
+
+```go
+type NumericDomain int
+
+const (
+    // NumericDomainFull allows promotion to Big* types (default).
+    NumericDomainFull NumericDomain = iota
+
+    // NumericDomainMachine constrains arithmetic to int64, float64, complex128.
+    // Operations that would promote to Big* types raise an implementation
+    // restriction error instead.
+    NumericDomainMachine
+)
+
+// Engine option:
+engine := wile.New(
+    wile.WithNumericDomain(wile.NumericDomainMachine),
+)
+```
+
+### Behavior Under Machine Domain
+
+| Scenario | Full (default) | Machine |
+|----------|---------------|---------|
+| Integer overflow (int64) | Promote to BigInteger | Error: implementation restriction |
+| Exact division (Integer / Integer) | Rational | Error unless result is exact integer |
+| Float × BigComplex | BigComplex (lattice promotion) | complex128 (stays in machine domain) |
+| `(expt 2 1000)` | BigInteger | Error: implementation restriction |
+| Reader literal `#z...` | BigInteger | Error at parse time |
+
+### Interaction with #362
+
+Under `NumericDomainFull` (default), the #362 fix extends BigFloat/BigComplex to support Inf/NaN natively, and the promotion lattice produces the correct result type without guards. Under `NumericDomainMachine`, BigComplex would never be constructed — all complex arithmetic stays in `complex128`, and Inf/NaN is handled by Go's native complex128 type.
+
+### Status
+
+Desired feature, not yet a priority. No implementation work planned.
+
 ## Audit Checklist
 
 Sites to verify conform to the tier model:
 
-- [ ] `values/promotion.go:numberToFloat64` — Tier 4, justified
-- [ ] `values/promotion.go:numberToComplex128` (new, #362) — Tier 4, justified
+- [ ] `values/big_float.go` — Tier 4: BigFloat must support Inf and NaN (IEEE 754 uniformity)
+- [ ] `values/big_complex.go` — Tier 4: BigComplex must support Inf/NaN parts via BigFloat
+- [ ] `values/promotion.go:isSpecialFloat` guard — **REMOVE** after BigFloat Inf/NaN support (#362)
+- [ ] `values/promotion.go:numberToFloat64` — Tier 3 (FFI boundary only, not used in dispatch after #362)
 - [ ] `values/big_complex.go:toExactPart` — **BUG** (unnecessary float64 roundtrip)
 - [ ] `internal/parser/parser.go:numberToInexact` — **BUG** (Float instead of BigFloat)
 - [ ] `internal/parser/parser.go:makeInexact` — **BUG** (Float instead of BigFloat)

@@ -26,7 +26,7 @@ When investigating R7RS conformance issues:
 | `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Complete (PR #361) |
 | `SIGNALS_REMEDIATION.md` | Implementation plan for SIGNALS_REVIEW findings P1–P6 + P4b | Complete (PR #361) |
 | `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: numeric dispatch duplication, extension friction, testing gaps, consistency debt | Reference |
-| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: Float(Inf/NaN) + BigComplex drops imaginary part in arithmetic dispatch guard | Proposed |
+| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: Extend BigFloat/BigComplex with IEEE 754 Inf/NaN support, remove dispatch guard (#362) | Proposed |
 | `PRECISION-GUARANTEES.md` | Precision loss policy: tier model, known bugs, proposed PrecisionMode setting | Reference |
 
 ## Before Starting Work

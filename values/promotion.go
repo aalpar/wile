@@ -201,6 +201,9 @@ func initPromoters() {
 	// Float → BigFloat
 	promoter[KindFloat][KindBigFloat] = func(n Number) Number {
 		p := n.(*Float)
+		if math.IsNaN(p.Value) {
+			return NewBigFloatNaN()
+		}
 		return &BigFloat{value: new(big.Float).SetPrec(DefaultBigFloatPrecision).SetFloat64(p.Value)}
 	}
 
@@ -258,8 +261,8 @@ func Promote(n Number, target NumericKind) Number {
 }
 
 // isSpecialFloat reports whether a Float holds IEEE 754 Inf or NaN.
-// BigFloat cannot represent these values (SetFloat64 panics on NaN,
-// and arithmetic on BigFloat Inf is undefined).
+// Used by comparison dispatches (LessThan, Compare) to fall back to
+// float64 comparisons when the LUB is BigFloat/BigComplex.
 func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }
@@ -289,10 +292,10 @@ func numberToFloat64(n Number) float64 {
 }
 
 // numberToComplex128 converts any Number to complex128 for the IEEE 754
-// Inf/NaN guard path. Both real and imaginary parts are truncated to float64
-// (Tier 4 precision loss — acceptable because Inf/NaN dominates the result,
-// and any finite float64 approximation is strictly better than total loss of
-// the imaginary part). See plans/PRECISION-GUARANTEES.md.
+// Inf/NaN guard path in the Float×BigComplex case. Precision loss (Tier 4) is
+// acceptable because Inf/NaN dominates the result; the imaginary part of the
+// non-Float operand is extracted at float64 precision for the same reason.
+// See plans/PRECISION-GUARANTEES.md.
 func numberToComplex128(n Number) complex128 {
 	switch v := n.(type) {
 	case *Integer:
@@ -325,16 +328,6 @@ func cmpFloat64(a, b float64) int {
 	return 0
 }
 
-// makeAddDispatch generates a dispatch table for the Add operation.
-// The same-type entry uses the hand-written sameTypeAdd (preserving
-// the hot-path performance — e.g., Integer+Integer overflow detection).
-// Cross-type entries promote both operands to the LUB type via the
-// promotion table and delegate to the LUB type's Add method.
-//
-// IEEE 754 guard: when Float is involved and the LUB is BigFloat or
-// BigComplex, Inf/NaN cannot be promoted. For these cases the generated
-// dispatch checks for special values and returns the Float directly
-// (any finite ± Inf = Inf, any ± NaN = NaN).
 // makeArithmeticDispatch generates a dispatch table for an arithmetic
 // operation (Add, Subtract, Multiply, Divide). The same-type entry uses
 // the hand-written sameTypeOp (preserving hot-path performance — e.g.,
@@ -342,11 +335,14 @@ func cmpFloat64(a, b float64) int {
 // operands to the LUB type via the promotion table and delegate to the
 // LUB type's operation via applyOp.
 //
-// IEEE 754 guard: when Float is involved and the LUB is BigFloat or
-// BigComplex, Inf/NaN cannot be promoted losslessly. For these cases
-// the generated dispatch checks for special values and falls back to
-// float64 arithmetic via float64Op(numberToFloat64(src), numberToFloat64(dst)).
-// This is correct because the Inf/NaN dominates the result.
+// IEEE 754 special-value guard: the promotion table maps Float×Exact → BigFloat
+// for precision. When Float holds Inf or NaN, precision is irrelevant — the
+// result is determined by the special value. The guard short-circuits to
+// float64 arithmetic in that case, preserving the *Float return type.
+//
+// For the Float×BigComplex → BigComplex case, the guard uses complex128
+// arithmetic but wraps the result in BigComplex (not Complex) so the imaginary
+// part of the BigComplex operand is preserved. This is the fix for issue #362.
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
@@ -365,14 +361,8 @@ func makeArithmeticDispatch[T Number](
 		promSrc := promoter[srcKind][lubKind]
 		promDst := promoter[dstKind][lubKind]
 
-		// IEEE 754 special-value guard: BigFloat/BigComplex cannot handle Inf/NaN.
-		// When Float participates and the LUB goes beyond float64/complex128,
-		// check for special values and short-circuit.
-		//
-		// When lubKind == KindBigComplex, we use complex128Op so the imaginary
-		// part of the non-Float operand is preserved. When lubKind is anything
-		// else (e.g. KindBigFloat), float64Op suffices — there is no imaginary
-		// part to lose.
+		// IEEE 754 special-value guard: when Float is the receiver and the LUB
+		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
 
 		switch {
@@ -382,7 +372,13 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(any(p).(*Float)) {
 					if lubIsComplex {
-						return NewComplex(complex128Op(numberToComplex128(p), numberToComplex128(o)))
+						// Return BigComplex so the imaginary part of the
+						// BigComplex operand is preserved (fix for #362).
+						z := complex128Op(numberToComplex128(p), numberToComplex128(o))
+						return NewBigComplexFromBigFloats(
+							NewBigFloatFromFloat64(real(z)),
+							NewBigFloatFromFloat64(imag(z)),
+						)
 					}
 					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
 				}
@@ -394,7 +390,11 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						return NewComplex(complex128Op(numberToComplex128(p), numberToComplex128(o)))
+						z := complex128Op(numberToComplex128(p), numberToComplex128(o))
+						return NewBigComplexFromBigFloats(
+							NewBigFloatFromFloat64(real(z)),
+							NewBigFloatFromFloat64(imag(z)),
+						)
 					}
 					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
 				}

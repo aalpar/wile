@@ -429,28 +429,26 @@ func (p *BigComplex) IsInteger() bool {
 	return p.IsReal() && p.RealPart().IsInteger()
 }
 
-// IsRational returns true if this BigComplex is a real number.
+// IsRational returns true if this BigComplex is a real, finite number.
 //
-// R7RS §6.2.6: rational? returns #t for real BigComplex values since
-// BigInteger, Rational, and BigFloat parts are all finite.
+// R7RS §6.2.6: rational? returns #t for finite real numbers.
+// Inf and NaN are not rational, even when the imaginary part is zero.
 func (p *BigComplex) IsRational() bool {
-	return p.IsReal()
+	return p.IsReal() && p.real.IsRational()
 }
 
-// IsFinite returns true since BigComplex parts are always finite.
+// IsFinite returns true if both real and imaginary parts are finite.
 //
-// R7RS §6.2.6: BigComplex uses BigInteger, Rational, or BigFloat parts,
-// none of which support Inf or NaN.
+// R7RS §6.2.6: finite? returns #t if neither part is Inf or NaN.
 func (p *BigComplex) IsFinite() bool {
-	return true
+	return p.real.IsFinite() && p.imag.IsFinite()
 }
 
-// IsNaN returns false since BigComplex parts cannot represent NaN.
+// IsNaN returns true if either real or imaginary part is NaN.
 //
-// R7RS §6.2.6: BigComplex uses BigInteger, Rational, or BigFloat parts,
-// none of which support NaN.
+// R7RS §6.2.6: nan? returns #t for complex numbers with a NaN component.
 func (p *BigComplex) IsNaN() bool {
-	return false
+	return p.real.IsNaN() || p.imag.IsNaN()
 }
 
 // isExactPart returns true if the number is an exact type (BigInteger or Rational).
@@ -479,28 +477,24 @@ func (p *BigComplex) ToExact() Number {
 	return NewBigComplex(realExact, imagExact)
 }
 
-// toExactPart converts a BigComplex part to an exact type (BigInteger or Rational).
+// toExactPart converts a BigComplex part to a BigComplex-compatible exact type
+// (*BigInteger or *Rational).
 //
 // R7RS §6.2.6: exact converts to exact representation, preserving value.
-// For BigFloat, converts via big.Rat (not truncation) to preserve fractional parts.
+// For BigFloat, converts via ToExact() then simplifies integer-valued rationals
+// (3/1 → 3). Simplify may return *Integer; we promote it back to *BigInteger
+// since NewBigComplex only accepts *BigInteger, *Rational, or *BigFloat.
 func toExactPart(n Number) Number {
 	switch v := n.(type) {
 	case *BigInteger, *Rational:
 		return v
 	case *BigFloat:
-		// Convert via big.Rat to preserve fractional values
-		// E.g., 1.5 -> 3/2 (not truncated to 1)
-		f, _ := v.value.Float64()
-		r := new(big.Rat).SetFloat64(f)
-		if r == nil {
-			// Non-finite value (should not happen for BigFloat)
-			panic(ErrExactnessConversion)
+		q := Simplify(v.ToExact())
+		i, ok := q.(*Integer)
+		if ok {
+			return NewBigIntegerFromInt64(i.Value)
 		}
-		if r.IsInt() {
-			num := r.Num()
-			return NewBigInteger(new(big.Int).Set(num))
-		}
-		return NewRationalFromRat(r)
+		return q
 	}
 	panic(ErrNotANumber)
 }

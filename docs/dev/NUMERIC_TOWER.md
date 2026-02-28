@@ -6,6 +6,56 @@ This document describes the numeric tower implementation in `values/numeric_towe
 
 ---
 
+## Design Philosophy: Algebraic Bias vs. Machine Arithmetic
+
+Scheme's numeric tower is biased toward **algebra** — symbolic manipulation and exact representation. The tower is designed so that exact operations on exact inputs produce exact results (R7RS §6.2.2), and types preserve mathematical identity where possible. In an ideal algebraic system, `(* pi 1)` yields `pi` (not a float64 approximation), and `(log (exp 1))` yields exactly `1` (not `0.9999999999999998`).
+
+Wile does not implement symbolic evaluation. It maps R7RS numerics onto Go's concrete types, which creates a pragmatic boundary: operations are only as precise as their runtime representation allows.
+
+### Machine-Type Optimization
+
+Wile's arithmetic is optimized for the common case where values stay within machine-type domains:
+
+| Domain | Condition | Guarantee |
+|--------|-----------|-----------|
+| `int64` | Integer operands with results fitting int64 | Exact, hardware-speed arithmetic |
+| `float64` | Float operands, or Integer operands < 2^53 promoted to Float | IEEE 754 precision, hardware speed |
+| `complex128` | Complex operands, or Float/Integer promoted to Complex | Two float64 components, hardware speed |
+
+When operations remain within these domains, results are both fast and as precise as the representation permits.
+
+### IEEE 754 Semantic Uniformity
+
+All inexact floating-point types in Wile — both machine-width (`Float`, `Complex`) and arbitrary-precision (`BigFloat`, `BigComplex`) — follow IEEE 754 semantics for special values (Inf, NaN). This is a deliberate design decision:
+
+- **`values.BigFloat` and `values.BigComplex` MUST represent both Inf and NaN**, regardless of what Go's `math/big.Float` supports natively. Go's `big.Float` supports Inf (`big.Float.SetInf`) but has no NaN representation; Wile extends beyond this with internal state to track NaN.
+- **IEEE 754 is the single reference spec** for all Inf/NaN behavior. When someone asks "what does `(+ +inf.0 x)` do?", the answer is "IEEE 754" regardless of whether `x` is `Float` or `BigFloat`.
+- **Code paths stay uniform**: `BigFloat.Add` handles Inf/NaN the same way `float64` addition does. No branching on "which numeric type am I?" to get special-value semantics right.
+- **Operations stay in their domain**: `float64 × float64 → float64`. `BigFloat × BigFloat → BigFloat`. Inf/NaN is never a reason to switch domains or demote types.
+
+This eliminates the need for Inf/NaN guard paths in the dispatch table — the promotion lattice works correctly for all values, including special values.
+
+### Promotion Beyond Machine Types
+
+Certain operations promote values to arbitrary-precision types (`BigInteger`, `BigFloat`, `Rational`, `BigComplex`). Once a value enters the Big* domain, subsequent operations produce Big* results — there is no automatic demotion back to machine types during computation (only `Simplify` demotes after the fact).
+
+This promotion is correct per R7RS but has practical consequences:
+- Big* arithmetic is significantly slower (heap-allocated, no hardware acceleration)
+- Mixed operations (e.g., `Float × BigComplex`) promote to the lattice LUB as usual
+
+### Out of Scope
+
+The following algebraic optimizations are acknowledged but not planned for the current version:
+
+- **Symbolic identity preservation**: `(* pi 1) → pi`, `(+ x 0) → x` (requires symbolic evaluation engine)
+- **Algebraic simplification**: `(log (exp x)) → x`, `(sqrt (* x x)) → (abs x)` (requires term rewriting)
+- **Singleton transcendental constants**: Representing `e`, `π`, etc. as singleton values so that operations like `(log e) → 1` produce exact results instead of floating-point approximations. This is philosophically aligned with Scheme's algebraic bias but crosses into Computer Algebra System (CAS) territory. No mainstream Scheme implementation (Guile, Racket, Chez, Chibi, MIT Scheme) does this — all represent `e` and `π` as inexact flonums. R7RS §6.2.6 explicitly excludes `log`, `sin`, `cos`, `exp` from the list of exactness-preserving operations. Scope creep is the main risk: each recognized identity (`(log e) → 1`, `(sin π) → 0`, `(log (* e e)) → 2`) is a special case, and a complete solution requires term rewriting. If pursued, this would be an extension (e.g., `(scheme symbolic)` library), not a change to the core numeric tower.
+- **Machine-type constraint flags**: Engine-level flags to keep ALL computations within `int64`, `float64`, or `complex128` (desired feature, not yet a priority). This would prevent unexpected promotion to Big* types at the cost of raising implementation-restriction errors when results exceed machine-type range.
+
+These are valid future directions but require significant design work beyond the current numeric tower architecture.
+
+---
+
 ## Overview
 
 The numeric tower uses **direct dispatch** — each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods handle all 7 incoming types via type switches. This is the intentional architecture.

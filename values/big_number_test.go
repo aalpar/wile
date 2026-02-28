@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -383,4 +384,279 @@ func TestBigFloat_ZeroOptimizations(t *testing.T) {
 	// Multiply by zero
 	prod := bf.Multiply(zero)
 	c.Assert(prod.(*values.BigFloat).IsZero(), qt.IsTrue)
+}
+
+func TestBigFloat_InfPredicates(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name       string
+		bf         *values.BigFloat
+		isFinite   bool
+		isRational bool
+		isNaN      bool
+		isInteger  bool
+		isZero     bool
+		str        string
+	}{
+		{
+			name:       "positive inf",
+			bf:         values.NewBigFloat(new(big.Float).SetInf(false)),
+			isFinite:   false,
+			isRational: false,
+			isNaN:      false,
+			isInteger:  false,
+			isZero:     false,
+			str:        "+inf.0",
+		},
+		{
+			name:       "negative inf",
+			bf:         values.NewBigFloat(new(big.Float).SetInf(true)),
+			isFinite:   false,
+			isRational: false,
+			isNaN:      false,
+			isInteger:  false,
+			isZero:     false,
+			str:        "-inf.0",
+		},
+		{
+			name:       "nan",
+			bf:         values.NewBigFloatNaN(),
+			isFinite:   false,
+			isRational: false,
+			isNaN:      true,
+			isInteger:  false,
+			isZero:     false,
+			str:        "+nan.0",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.bf.IsFinite(), qt.Equals, tc.isFinite)
+			c.Assert(tc.bf.IsRational(), qt.Equals, tc.isRational)
+			c.Assert(tc.bf.IsNaN(), qt.Equals, tc.isNaN)
+			c.Assert(tc.bf.IsInteger(), qt.Equals, tc.isInteger)
+			c.Assert(tc.bf.IsZero(), qt.Equals, tc.isZero)
+			c.Assert(tc.bf.SchemeString(), qt.Equals, tc.str)
+		})
+	}
+}
+
+func TestBigFloat_InfArithmetic(t *testing.T) {
+	c := qt.New(t)
+
+	posInf := values.NewBigFloat(new(big.Float).SetInf(false))
+	three := values.NewBigFloatFromFloat64(3.0)
+
+	tcs := []struct {
+		name   string
+		result values.Number
+		finite bool
+		isNaN  bool
+	}{
+		{"inf + 3 = inf", posInf.Add(three), false, false},
+		{"inf * 3 = inf", posInf.Multiply(three), false, false},
+		{"inf + inf = inf", posInf.Add(posInf), false, false},
+		{"inf - 3 = inf", posInf.Subtract(three), false, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.result.IsFinite(), qt.Equals, tc.finite)
+			c.Assert(tc.result.IsNaN(), qt.Equals, tc.isNaN)
+		})
+	}
+}
+
+func TestBigFloat_ErrNaNRecovery(t *testing.T) {
+	c := qt.New(t)
+
+	posInf := values.NewBigFloat(new(big.Float).SetInf(false))
+	negInf := values.NewBigFloat(new(big.Float).SetInf(true))
+	zero := values.NewBigFloatFromFloat64(0.0)
+
+	tcs := []struct {
+		name   string
+		result values.Number
+	}{
+		{"+inf + -inf = NaN", posInf.Add(negInf)},
+		{"0 * +inf = NaN", zero.Multiply(posInf)},
+		{"+inf / +inf = NaN", posInf.Divide(posInf)},
+		{"+inf - +inf = NaN", posInf.Subtract(posInf)},
+		{"nan + 3 = NaN", values.NewBigFloatNaN().Add(values.NewBigFloatFromFloat64(3))},
+		{"3 + nan = NaN", values.NewBigFloatFromFloat64(3).Add(values.NewBigFloatNaN())},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.result.IsNaN(), qt.IsTrue)
+		})
+	}
+}
+
+func TestBigFloat_HashConsistency(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		f    *values.Float
+		bf   *values.BigFloat
+	}{
+		{
+			name: "+inf.0",
+			f:    values.NewFloat(math.Inf(1)),
+			bf:   values.NewBigFloat(new(big.Float).SetInf(false)),
+		},
+		{
+			name: "-inf.0",
+			f:    values.NewFloat(math.Inf(-1)),
+			bf:   values.NewBigFloat(new(big.Float).SetInf(true)),
+		},
+		{
+			name: "+nan.0",
+			f:    values.NewFloat(math.NaN()),
+			bf:   values.NewBigFloatNaN(),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.f.HashCode(), qt.Equals, tc.bf.HashCode())
+		})
+	}
+}
+
+func TestBigFloat_NaNEquality(t *testing.T) {
+	c := qt.New(t)
+
+	nan1 := values.NewBigFloatNaN()
+	nan2 := values.NewBigFloatNaN()
+	finite := values.NewBigFloatFromFloat64(1.0)
+
+	// NaN is not equal to anything, including itself.
+	c.Assert(nan1.EqualTo(nan1), qt.IsFalse)
+	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
+	c.Assert(nan1.EqualTo(finite), qt.IsFalse)
+	c.Assert(finite.EqualTo(nan1), qt.IsFalse)
+}
+
+func TestBigFloat_FromFloat64NaN(t *testing.T) {
+	c := qt.New(t)
+
+	// NewBigFloatFromFloat64(NaN) must not panic and must produce NaN.
+	bf := values.NewBigFloatFromFloat64(math.NaN())
+	c.Assert(bf.IsNaN(), qt.IsTrue)
+	c.Assert(bf.SchemeString(), qt.Equals, "+nan.0")
+}
+
+// TestBigComplex_FloatInfDispatch is the regression test for issue #362.
+// Float(Inf/NaN) combined with BigComplex must preserve the imaginary part.
+func TestBigComplex_FloatInfDispatch(t *testing.T) {
+	c := qt.New(t)
+
+	// BigComplex(3+4i) with exact BigInteger parts.
+	bc := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	tcs := []struct {
+		name     string
+		result   values.Number
+		realInf  bool
+		realNaN  bool
+		imagZero bool
+	}{
+		{
+			name:     "+inf.0 + (3+4i)",
+			result:   values.NewFloat(math.Inf(1)).Add(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "(3+4i) + +inf.0",
+			result:   bc.Add(values.NewFloat(math.Inf(1))),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "-inf.0 + (3+4i)",
+			result:   values.NewFloat(math.Inf(-1)).Add(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "+nan.0 + (3+4i)",
+			result:   values.NewFloat(math.NaN()).Add(bc),
+			realInf:  false,
+			realNaN:  true,
+			imagZero: false,
+		},
+		{
+			name:     "+inf.0 - (3+4i)",
+			result:   values.NewFloat(math.Inf(1)).Subtract(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "(3+4i) - +inf.0",
+			result:   bc.Subtract(values.NewFloat(math.Inf(1))),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			// Result must be *BigComplex (not *Float or *Complex).
+			bResult, ok := tc.result.(*values.BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *BigComplex, got %T", tc.result))
+
+			realPart := bResult.Real()
+			imagPart := bResult.Imag()
+
+			// Imaginary part must not be zero (the original bug: imaginary lost).
+			c.Assert(imagPart.IsZero(), qt.IsFalse)
+
+			if tc.realInf {
+				c.Assert(realPart.IsFinite(), qt.IsFalse)
+				c.Assert(realPart.IsNaN(), qt.IsFalse)
+			}
+			if tc.realNaN {
+				c.Assert(realPart.IsNaN(), qt.IsTrue)
+			}
+		})
+	}
+}
+
+func TestBigComplex_InfNaNPredicates(t *testing.T) {
+	c := qt.New(t)
+
+	infReal := values.NewBigComplex(
+		values.NewBigFloat(new(big.Float).SetInf(false)),
+		values.NewBigIntegerFromInt64(4),
+	)
+	nanReal := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	finite := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	// BigComplex with Inf real part.
+	c.Assert(infReal.IsFinite(), qt.IsFalse)
+	c.Assert(infReal.IsNaN(), qt.IsFalse)
+	c.Assert(infReal.IsRational(), qt.IsFalse)
+
+	// BigComplex with NaN real part.
+	c.Assert(nanReal.IsFinite(), qt.IsFalse)
+	c.Assert(nanReal.IsNaN(), qt.IsTrue)
+	c.Assert(nanReal.IsRational(), qt.IsFalse)
+
+	// Ordinary finite BigComplex.
+	c.Assert(finite.IsFinite(), qt.IsTrue)
+	c.Assert(finite.IsNaN(), qt.IsFalse)
 }
