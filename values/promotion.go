@@ -305,8 +305,7 @@ func numberToComplex128(n Number) complex128 {
 	case *Float:
 		return complex(v.Value, 0)
 	case *BigFloat:
-		f, _ := v.value.Float64()
-		return complex(f, 0)
+		return complex(v.Float64(), 0)
 	case *Rational:
 		return complex(v.Float64(), 0)
 	case *Complex:

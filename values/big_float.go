@@ -106,6 +106,10 @@ func (p *BigFloat) Float64() float64 {
 // HashCode returns a hash code for this BigFloat.
 // For Inf and NaN, delegates to float64 bit pattern matching Float.HashCode,
 // ensuring Float and BigFloat produce identical hashes for equal values.
+//
+// Note: NaN != NaN (IEEE 754), so two NaN BigFloats are never EqualTo each
+// other. A NaN key stored in a hashtable is therefore unretrievable — the
+// Hashable contract is not violated, but NaN is not a useful hashtable key.
 func (p *BigFloat) HashCode() uint64 {
 	if p.nan {
 		return hashUint64(0x5, math.Float64bits(math.NaN()))
@@ -305,7 +309,7 @@ func (p *BigFloat) IsNaN() bool {
 // R7RS §6.2.6: (exact +inf.0) and (exact +nan.0) are errors.
 func (p *BigFloat) ToExact() Number {
 	if p.nan || p.value.IsInf() {
-		panic(ErrExactnessConversion)
+		panic(WrapForeignErrorf(ErrExactnessConversion, "cannot convert non-finite BigFloat to exact"))
 	}
 	r, _ := p.value.Rat(nil)
 	if r == nil {
@@ -373,11 +377,11 @@ func (p *BigFloat) IsVoid() bool {
 func (p *BigFloat) EqualTo(o Value) bool {
 	v, ok := o.(*BigFloat)
 	if ok {
-		if p.nan || v.nan {
-			return false
-		}
 		if v == nil || p == nil {
 			return p == v
+		}
+		if p.nan || v.nan {
+			return false
 		}
 		return p.value.Cmp(v.value) == 0
 	}
