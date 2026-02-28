@@ -132,7 +132,7 @@ test: build
 	$(GO_TEST) ./...
 	@$(MAKE) test-scheme
 
-.PHONY: test-race test
+.PHONY: test-race
 test-race: build
 	$(GO_TEST) -race ./...
 
