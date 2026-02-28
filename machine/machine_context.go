@@ -302,15 +302,18 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 
 // PopContinuation pops the current continuation from the machine context and returns it.
 // It restores the machine context to the state saved in the popped continuation.
+// Returns ErrCallDepthExceeded if callDepth would go below zero (compiler bug).
 //
 // Note: Unlike Restore(), we do NOT copy evals here because PopContinuation is used
 // for normal function return where the continuation is consumed once. Restore() is
 // used for continuation re-entry (call/cc) where the same continuation may be invoked
 // multiple times, requiring the copy to prevent stack corruption.
-func (p *MachineContext) PopContinuation() *MachineContinuation {
+func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	p.callDepth--
 	if p.callDepth < 0 {
-		panic("callDepth underflow in PopContinuation")
+		p.callDepth = 0
+		return nil, values.WrapForeignErrorf(values.ErrCallDepthExceeded,
+			"callDepth underflow in PopContinuation")
 	}
 	q := p.cont
 	p.template = q.template
@@ -323,7 +326,7 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 	// envPooled: restore caller's ownership state. Caller (releaseContinuation
 	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled
-	return q
+	return q, nil
 }
 
 // SaveContinuation pushes a new continuation onto the machine context with the given offset to the current program counter.
