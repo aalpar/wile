@@ -25,6 +25,13 @@ var (
 	_ SyntaxValue  = (*SyntaxSymbol)(nil)
 )
 
+// ResolvedRef is the type for a pre-resolved binding stored on a SyntaxSymbol.
+// The concrete type is always *environment.GlobalIndex; this interface exists
+// solely to break the circular import between internal/syntax and environment.
+type ResolvedRef interface {
+	values.Value
+}
+
 // SymbolInterner is an interface for interning symbols.
 // This allows SyntaxSymbol to cache interned symbols without importing
 // the environment package (which would create a circular dependency).
@@ -39,9 +46,9 @@ type SyntaxSymbol struct {
 	// ResolvedBinding holds a pre-resolved binding for free identifiers in macro templates.
 	// This is set during macro expansion for identifiers that should resolve to bindings
 	// in the macro's definition environment rather than the use-site environment.
-	// Type: *environment.GlobalIndex (stored as any to avoid circular import).
+	// Type: *environment.GlobalIndex (satisfies ResolvedRef via values.Value).
 	// nil for normal symbols; only set for free identifiers from macros.
-	ResolvedBinding any
+	ResolvedBinding ResolvedRef
 }
 
 // NewSyntaxSymbol creates a new syntax symbol from a key string.
@@ -102,7 +109,7 @@ func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 // WithResolvedBinding returns a new SyntaxSymbol with the given pre-resolved binding.
 // This is used during macro expansion to tag free identifiers with their
 // definition-site bindings, enabling proper resolution across library boundaries.
-func (p *SyntaxSymbol) WithResolvedBinding(binding any) *SyntaxSymbol {
+func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 	return &SyntaxSymbol{
 		Sym: p.Sym,
 		syntaxBase: syntaxBase{

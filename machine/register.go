@@ -22,32 +22,32 @@ import (
 
 func init() {
 	// Register compilers for core forms (Tier 1 - typed ValidatedExpr)
-	registerTypedCompiler("if", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedIf) error {
-		return ctc.CompileValidatedIf(ctctx, formName, v)
+	registerTypedCompiler("if", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedIf) error {
+		return ctc.CompileValidatedIf(ctctx, v)
 	})
-	registerTypedCompiler("define", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
-		return ctc.CompileValidatedDefine(ctctx, formName, v)
+	registerTypedCompiler("define", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
+		return ctc.CompileValidatedDefine(ctctx, v)
 	})
-	registerTypedCompiler("lambda", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
-		return ctc.CompileValidatedLambda(ctctx, formName, v)
+	registerTypedCompiler("lambda", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
+		return ctc.CompileValidatedLambda(ctctx, v)
 	})
-	registerTypedCompiler("case-lambda", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
-		return ctc.CompileValidatedCaseLambda(ctctx, formName, v)
+	registerTypedCompiler("case-lambda", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
+		return ctc.CompileValidatedCaseLambda(ctctx, v)
 	})
-	registerTypedCompiler("set!", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
-		return ctc.CompileValidatedSetBang(ctctx, formName, v)
+	registerTypedCompiler("set!", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
+		return ctc.CompileValidatedSetBang(ctctx, v)
 	})
-	registerTypedCompiler("quote", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedQuote) error {
-		return ctc.CompileValidatedQuote(ctctx, formName, v)
+	registerTypedCompiler("quote", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedQuote) error {
+		return ctc.CompileValidatedQuote(ctctx, v)
 	})
-	registerTypedCompiler("begin", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedBegin) error {
-		return ctc.CompileValidatedBegin(ctctx, formName, v)
+	registerTypedCompiler("begin", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedBegin) error {
+		return ctc.CompileValidatedBegin(ctctx, v)
 	})
-	registerTypedCompiler("quasiquote", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
-		return ctc.CompileValidatedQuasiquote(ctctx, formName, v)
+	registerTypedCompiler("quasiquote", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
+		return ctc.CompileValidatedQuasiquote(ctctx, v)
 	})
-	registerTypedCompiler("dynamic-wind", func(ctc *CompileTimeContinuation, formName string, ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
-		return ctc.CompileValidatedDynamicWind(ctctx, formName, v)
+	registerTypedCompiler("dynamic-wind", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
+		return ctc.CompileValidatedDynamicWind(ctctx, v)
 	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)
@@ -76,11 +76,10 @@ func init() {
 }
 
 // registerTypedCompiler registers a compiler that handles a typed ValidatedExpr.
-func registerTypedCompiler[T validate.ValidatedExpr](name string, fn func(*CompileTimeContinuation, string, CompileTimeCallContext, T) error) {
+func registerTypedCompiler[T validate.ValidatedExpr](name string, fn func(*CompileTimeContinuation, CompileTimeCallContext, T) error) {
 	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr any) error {
 		return fn(
 			ctc.(*CompileTimeContinuation),
-			name,
 			ctctx.(CompileTimeCallContext),
 			expr.(T),
 		)

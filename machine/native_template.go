@@ -575,6 +575,9 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	if p == nil {
 		return nil
 	}
+	if len(p.code) != len(p.sourceRefs) {
+		panic("native_template: code/sourceRefs length invariant violated")
+	}
 	q := &NativeTemplate{
 		parameterCount: p.parameterCount,
 		valueCount:     p.valueCount,

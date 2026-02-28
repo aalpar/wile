@@ -449,7 +449,7 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 
 	// (if #f "true" "false") — constant-folds to just "false"
 	prog := values.List(values.NewSymbol("if"),
-		values.NewBoolean(false),
+		values.FalseValue,
 		values.NewString("true"),
 		values.NewString("false"))
 
@@ -469,7 +469,7 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 
 	// (if #t "true" "false") — constant-folds to just "true"
 	prog2 := values.List(values.NewSymbol("if"),
-		values.NewBoolean(true),
+		values.TrueValue,
 		values.NewString("true"),
 		values.NewString("false"))
 
@@ -529,7 +529,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	// top-level closure with no parameters (thunk)
 	prog := values.List(values.NewSymbol("begin"),
 		values.List(values.NewSymbol("define"), symX,
-			values.List(values.NewSymbol("lambda"), values.NewSymbol("y"), values.NewBoolean(true))),
+			values.List(values.NewSymbol("lambda"), values.NewSymbol("y"), values.TrueValue)),
 		values.List(symX, values.NewString("bindSymbolWithScopes")))
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -573,7 +573,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValues(), qt.HasLen, 1)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewBoolean(true))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
 }
 
@@ -2151,11 +2151,17 @@ func TestFindFileCWDFallback(t *testing.T) {
 	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
 	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
 
-	// findFile should resolve "cwd-test.scm" via CWD fallback
+	// findFile should resolve "cwd-test.scm" via CWD fallback.
+	// Use filepath.EvalSymlinks on dir to normalize: on macOS, t.TempDir()
+	// returns /tmp/... but os.Getwd() (inside findFile) returns /private/tmp/...
+	// because /tmp is a symlink.
+	realDir, err := filepath.EvalSymlinks(dir)
+	qt.Assert(t, err, qt.IsNil)
+
 	f, absPath, err := findFile(cont, ctctx, "cwd-test.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
-	qt.Assert(t, absPath, qt.Equals, filepath.Join(dir, "cwd-test.scm"))
+	qt.Assert(t, absPath, qt.Equals, filepath.Join(realDir, "cwd-test.scm"))
 }
 
 // TestFindFileEmptyPath verifies that findFile rejects empty paths.

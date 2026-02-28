@@ -64,10 +64,15 @@ type MachineContext struct {
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
 	barrierValid     *BarrierToken        // non-nil when inside a with-continuation-barrier; pointer identity identifies the barrier
 	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
-	thread           *values.Thread       // SRFI-18 thread object: nil = primordial thread
-	syntaxCase       *syntaxCaseState     // per-context syntax-case expansion state; nil when not in syntax-case
-	maxCallDepth     uint64               // 0 = unlimited (default), otherwise max continuation depth
-	restArgBuf       values.PairBlock     // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	// thread is the SRFI-18 thread object (nil = primordial thread).
+	// This is the Scheme-visible half of the thread identity split.
+	// The numeric half (threadID) lives in vmState and propagates into
+	// continuations. See the comment on vmState.threadID for the full
+	// design and invariant.
+	thread       *values.Thread
+	syntaxCase   *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
+	maxCallDepth uint64           // 0 = unlimited (default), otherwise max continuation depth
+	restArgBuf   values.PairBlock // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -303,8 +308,9 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 // used for continuation re-entry (call/cc) where the same continuation may be invoked
 // multiple times, requiring the copy to prevent stack corruption.
 func (p *MachineContext) PopContinuation() *MachineContinuation {
-	if p.callDepth > 0 {
-		p.callDepth--
+	p.callDepth--
+	if p.callDepth < 0 {
+		panic("callDepth underflow in PopContinuation")
 	}
 	q := p.cont
 	p.template = q.template
@@ -329,7 +335,7 @@ func (p *MachineContext) PopContinuation() *MachineContinuation {
 // See the comment on NewMachineContinuationFromMachineContext for why this matters.
 func (p *MachineContext) SaveContinuation(off int) error {
 	p.callDepth++
-	if p.maxCallDepth > 0 && p.callDepth > p.maxCallDepth {
+	if p.maxCallDepth > 0 && uint64(p.callDepth) > p.maxCallDepth {
 		p.callDepth--
 		return values.WrapForeignErrorf(values.ErrCallDepthExceeded,
 			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)
@@ -347,7 +353,7 @@ func (p *MachineContext) CurrentContinuation() *MachineContinuation {
 
 // CallDepth returns the depth of the current continuation stack.
 func (p *MachineContext) CallDepth() int {
-	return int(p.callDepth)
+	return p.callDepth
 }
 
 func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*MachineContext, error) {

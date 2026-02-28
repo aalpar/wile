@@ -1051,16 +1051,16 @@ func TestSyntaxSymbol_AddScope_Idempotent_PreservesResolvedBinding(t *testing.T)
 	sctx := NewSourceContext("x", "test.scm",
 		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
 	sym := NewSyntaxSymbol("x", sctx)
-	sym = sym.WithResolvedBinding("some-binding")
+	sym = sym.WithResolvedBinding(values.FalseValue)
 
 	scope := NewScope()
 	sym2 := sym.AddScope(scope).(*SyntaxSymbol)
-	c.Assert(sym2.ResolvedBinding, qt.Equals, "some-binding")
+	c.Assert(sym2.ResolvedBinding, qt.Equals, values.FalseValue)
 
 	// Idempotent — same pointer, binding preserved
 	sym3 := sym2.AddScope(scope).(*SyntaxSymbol)
 	c.Assert(sym3, qt.Equals, sym2)
-	c.Assert(sym3.ResolvedBinding, qt.Equals, "some-binding")
+	c.Assert(sym3.ResolvedBinding, qt.Equals, values.FalseValue)
 }
 
 // TestStructuralSharing_CascadesFromIdempotentSymbols verifies the full cascade:

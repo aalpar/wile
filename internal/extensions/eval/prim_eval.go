@@ -402,7 +402,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 		if err != nil {
 			return values.WrapForeignErrorf(err, "expand-once: expansion failed")
 		}
-		mc.SetValues(expanded, values.NewBoolean(didExpand))
+		mc.SetValues(expanded, values.BoolToBoolean(didExpand))
 		return nil
 	}
 
@@ -413,7 +413,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 	if err != nil {
 		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
-	mc.SetValues(expanded, values.NewBoolean(didExpand))
+	mc.SetValues(expanded, values.BoolToBoolean(didExpand))
 	return nil
 }
 

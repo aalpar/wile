@@ -78,7 +78,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#t",
-			expect: values.NewBoolean(true),
+			expect: values.TrueValue,
 			sexpect: syntax.NewSyntaxObject(
 				values.TrueValue,
 				syntax.NewSourceContext("#t", "",
@@ -89,7 +89,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#f",
-			expect: values.NewBoolean(false),
+			expect: values.FalseValue,
 			sexpect: syntax.NewSyntaxObject(
 				values.FalseValue,
 				syntax.NewSourceContext("#f", "",
@@ -100,7 +100,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#false",
-			expect: values.NewBoolean(false),
+			expect: values.FalseValue,
 			sexpect: syntax.NewSyntaxObject(
 				values.FalseValue,
 				syntax.NewSourceContext("#false", "",
@@ -111,7 +111,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:     "#true",
-			expect: values.NewBoolean(true),
+			expect: values.TrueValue,
 			sexpect: syntax.NewSyntaxObject(
 				values.TrueValue,
 				syntax.NewSourceContext("#true", "",

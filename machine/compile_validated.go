@@ -121,7 +121,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 // is the simplest form of constant folding — evaluating known expressions
 // at compile time rather than runtime.
 // See BIBLIOGRAPHY.md "Constant Folding".
-func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedIf) error {
+func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, v *validate.ValidatedIf) error {
 	// Constant folding: if the test is a compile-time-known literal, fold the
 	// if form to just the consequent or alternative. Per R7RS, only #f is false;
 	// all other values (including 0, "", '()) are truthy.
@@ -209,10 +209,10 @@ func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
 }
 
 // CompileValidatedDefine compiles a validated define form.
-func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallContext, formName string, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
 	if v.IsFunction {
 		// (define (name params...) body...) - compile as lambda then define
-		return p.CompileValidatedDefineFn(ctctx, formName, v)
+		return p.CompileValidatedDefineFn(ctctx, v)
 	}
 	// (define name expr) - compile value then store
 	return p.compileValidatedDefineVar(ctctx, v)
@@ -337,7 +337,7 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol) error {
 // The function name is bound before compiling the body to enable self-recursion:
 //
 //	(define (fact n) (if (<= n 1) 1 (* n (fact (- n 1)))))
-func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDefine) error {
+func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
 	// Step 1: Declare the binding early for self-recursion support.
 	// This must happen before compiling the body so that references to the
 	// function name within the body resolve correctly.
@@ -476,7 +476,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 }
 
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
-func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedLambda) error {
+func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
 	// Create local environment and template for lambda body.
 	// compileClosure creates the child environment frame after binding parameters.
 	lenv := environment.NewLocalEnvironment(0)
@@ -587,7 +587,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 //	  ((x y . rest) (apply + x y rest)))  ; 2+ args: sum all
 //
 // At runtime, the VM selects the first clause whose arity matches the call.
-func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedCaseLambda) error {
+func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
 	// Phase 1: Compile each clause as a separate closure.
 	// Unlike regular lambda which produces one closure, case-lambda produces
 	// multiple closures (one per clause) that are combined into a dispatch structure.
@@ -623,7 +623,7 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 }
 
 // CompileValidatedSetBang compiles a validated (set! name expr) form.
-func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedSetBang) error {
+func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
 	// Get the interned symbol (validator guarantees it's a SyntaxSymbol)
 	sym := p.env.InternSymbol(v.Name.Sym)
 	symbolScopes := v.Name.Scopes()
@@ -674,7 +674,7 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 }
 
 // CompileValidatedQuote compiles a validated (quote datum) form.
-func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, _ string, v *validate.ValidatedQuote) error {
+func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, v *validate.ValidatedQuote) error {
 	// Unwrap all syntax and intern symbols in the global environment.
 	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
 	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
@@ -687,7 +687,7 @@ func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext
 
 // CompileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
-func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedQuasiquote) error {
+func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
 	// The existing quasiquote compiler expects the raw syntax template
 	err := p.compileQuasiquoteDatum(ctctx, v.Template, 1)
 	if err != nil {
@@ -706,7 +706,7 @@ func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCa
 // are visible throughout the body, enabling forward references between defines.
 //
 // Example: (begin (display "hello") (newline) 42) => 42 (after printing)
-func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedBegin) error {
+func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, v *validate.ValidatedBegin) error {
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
 	for _, expr := range v.Body() {
@@ -805,7 +805,7 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 //	after_after:                   ; Stack: [before, thunk, after, result]
 //	PEEK_K 0                       ; value = result (thunk's return value)
 //	DROP DROP DROP DROP            ; clean up stack
-func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, _ string, v *validate.ValidatedDynamicWind) error {
+func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
 	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true)
