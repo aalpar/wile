@@ -419,6 +419,8 @@ func makeRealNumberPrimitive(op realNumberOp) func(*machine.MachineContext) erro
 			}
 		case *values.Float:
 			mc.SetValue(values.NewFloat(op.floatOp(v.Value)))
+		case *values.BigFloat:
+			mc.SetValue(values.NewBigFloatFromFloat64(op.floatOp(v.Float64())))
 		case *values.Rational:
 			mc.SetValue(op.rationalOp(v))
 		default:
