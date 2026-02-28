@@ -99,7 +99,7 @@ func TestByteVectorInputOutputPort_Flush(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
-// ByteVectorBufferedOutputPort (note: "Bufferd" is the actual spelling)
+// ByteVectorBufferedOutputPort
 
 func TestByteVectorBufferedOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)

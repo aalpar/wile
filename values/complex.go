@@ -304,12 +304,23 @@ func (p *Complex) EqualTo(v Value) bool {
 	return false
 }
 
+// hashComplexComponent hashes a single float64 component of a complex number.
+// For finite values it delegates to hashInexactNumeric via big.Float.
+// For NaN or ±Inf it hashes the raw IEEE-754 bits to avoid big.Float panics.
+func hashComplexComponent(f float64) uint64 {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return hashUint64(0x5, math.Float64bits(f))
+	}
+	return hashInexactNumeric(new(big.Float).SetFloat64(f))
+}
+
 // HashCode returns a hash of the complex value.
-// Hashes real and imaginary parts independently via hashInexactNumeric
+// Hashes real and imaginary parts independently via hashComplexComponent
 // and combines them with a multiplicative mixing constant.
+// NaN and ±Inf components use bitwise hashing to avoid big.Float panics.
 func (p *Complex) HashCode() uint64 {
-	r := hashInexactNumeric(new(big.Float).SetFloat64(real(p.Value)))
-	i := hashInexactNumeric(new(big.Float).SetFloat64(imag(p.Value)))
+	r := hashComplexComponent(real(p.Value))
+	i := hashComplexComponent(imag(p.Value))
 	return r ^ (i * 0x9e3779b97f4a7c15)
 }
 
