@@ -116,8 +116,6 @@ func (p *BigFloat) HashCode() uint64 {
 	return hashInexactNumeric(p.value)
 }
 
-// Add returns the sum of this BigFloat and another number.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *BigFloat) Kind() NumericKind {
 	return KindBigFloat
@@ -140,11 +138,11 @@ func init() {
 	})
 
 	bigFloatLessThan = makeLessThanDispatch(KindBigFloat, func(p *BigFloat, o Number) bool {
-		return p.value.Cmp(o.(*BigFloat).value) < 0
+		return p.LessThan(o)
 	})
 
 	bigFloatCompare = makeCompareDispatch(KindBigFloat, func(p *BigFloat, o Number) int {
-		return p.value.Cmp(o.(*BigFloat).value)
+		return p.Compare(o)
 	})
 
 	bigFloatMultiply = makeMultiplyDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
@@ -257,13 +255,15 @@ func (p *BigFloat) LessThan(o Number) bool {
 }
 
 // IsNegative returns true if this BigFloat is negative.
+// NaN has no sign and returns false.
 func (p *BigFloat) IsNegative() bool {
-	return p.value.Sign() < 0
+	return !p.nan && p.value.Sign() < 0
 }
 
 // IsPositive returns true if this BigFloat is positive.
+// NaN has no sign and returns false.
 func (p *BigFloat) IsPositive() bool {
-	return p.value.Sign() > 0
+	return !p.nan && p.value.Sign() > 0
 }
 
 // IsExact returns false since BigFloat is always inexact.
@@ -328,8 +328,11 @@ func (p *BigFloat) Abs() Number {
 }
 
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
-// NaN BigFloat returns 0 (NaN has no sign).
+// NaN returns 0 (NaN has no sign).
 func (p *BigFloat) Sign() int {
+	if p.nan {
+		return 0
+	}
 	return p.value.Sign()
 }
 
