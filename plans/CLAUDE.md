@@ -23,6 +23,8 @@ When investigating R7RS conformance issues:
 | `TESTING.md` | Scheme test expansion (complete) | Complete |
 | `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Approved |
 | `STRUCTURAL_REVIEW.md` | Codebase-wide structural reduction + tech debt assessment: dependency map, state tightness, composability, consistency debt | Reference |
+| `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Reference |
+| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: numeric dispatch duplication, extension friction, testing gaps, consistency debt | Reference |
 
 ## Before Starting Work
 

@@ -928,6 +928,22 @@ func TestEngineClose(t *testing.T) {
 
 // Sandbox options
 
+// TestDefaultCallDepth verifies that an engine created without WithMaxCallDepth
+// uses DefaultMaxCallDepth, preventing unbounded recursion from OOMing the host.
+func TestDefaultCallDepth(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Engine created without WithMaxCallDepth must have a finite default limit.
+	eng, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	// Uses (+ 1 ...) to prevent TCO so the continuation stack grows.
+	_, err = eng.Eval(ctx, "(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))")
+	c.Assert(errors.Is(err, values.ErrCallDepthExceeded), qt.IsTrue)
+}
+
 func TestWithoutCore(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background(), WithoutCore())

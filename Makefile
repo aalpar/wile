@@ -132,6 +132,10 @@ test: build
 	$(GO_TEST) ./...
 	@$(MAKE) test-scheme
 
+.PHONY: test-race
+test-race: build
+	$(GO_TEST) -race ./...
+
 # Run Scheme-level test suite.
 # Override SCHEME to test against different implementations:
 #   make test-scheme                                    # Use Wile (default)

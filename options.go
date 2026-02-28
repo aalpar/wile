@@ -33,6 +33,7 @@ type engineConfig struct {
 	registry       *registry.Registry
 	extensions     []registry.Extension
 	maxCallDepth   uint64
+	callDepthSet   bool // true if WithMaxCallDepth was explicitly called
 	libraryPaths   []string
 	libraryEnabled bool // true when WithLibraryPaths was called
 	skipCore       bool // true when WithoutCore was called
@@ -67,10 +68,12 @@ func WithExtensions(exts ...registry.Extension) EngineOption {
 
 // WithMaxCallDepth sets the maximum recursion depth for the VM.
 // When the continuation stack exceeds this depth, ErrCallDepthExceeded is returned.
-// A value of 0 means unlimited (the default).
+// A value of 0 means unlimited (no depth check). When not called, the engine
+// uses DefaultMaxCallDepth (10000).
 func WithMaxCallDepth(n uint64) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxCallDepth = n
+		cfg.callDepthSet = true
 	}
 }
 

@@ -22,6 +22,19 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// compile_validated.go handles compilation of core Scheme forms that go through
+// upfront validation (validate.Validate) before codegen. These are the fixed
+// R7RS core forms: if, lambda, define, set!, quote, quasiquote, begin,
+// case-lambda, dynamic-wind.
+//
+// Extension forms (define-syntax, import, include, syntax-case, etc.) use a
+// separate registry-based compilation path in compile_time_continuation.go via
+// CompileSyntaxPrimitive() → LookupSyntaxCompiler().
+//
+// Decision criteria: if a form has fixed syntax that can be validated once before
+// compilation, it goes through the validated path. If a form's syntax is
+// extensible or defined by the extension system itself, it uses the registry path.
+
 // compileValidated dispatches compilation based on the validated expression type.
 // Each ValidatedExpr type has a corresponding compile method that can assume
 // the expression structure has already been validated.

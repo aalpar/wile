@@ -144,7 +144,7 @@ func PrimOpenOutputBytevector(mc *machine.MachineContext) error {
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "open-output-bytevector: expected one or zero arguments but got %d", tup.Length())
 	}
 	if tup.Length() == 0 {
-		mc.SetValue(values.NewByteVectorBufferdOutputPort())
+		mc.SetValue(values.NewByteVectorBufferedOutputPort())
 		return nil
 	}
 	bvec, ok := tup.Car().(values.OutputPort)

@@ -144,16 +144,28 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 2)
 	qt.Assert(t, mc.Parent(), valuestest.SchemeEquals, bottom2)
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
-	mc.PopContinuation()
+	_, err := mc.PopContinuation()
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.cont, qt.Equals, bottom1)
 	qt.Assert(t, mc.Parent(), qt.Equals, bottom1)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
 	qt.Assert(t, mc.PC(), qt.Equals, 20)
-	mc.PopContinuation()
+	_, err = mc.PopContinuation()
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.cont, qt.Equals, bottom0)
 	qt.Assert(t, mc.Parent(), qt.IsNil)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 0)
 	qt.Assert(t, mc.PC(), qt.Equals, 10)
+}
+
+func TestPopContinuation_Underflow(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	// Popping from an empty continuation chain must return an error, not panic.
+	_, err := mc.PopContinuation()
+	c.Assert(errors.Is(err, values.ErrContinuationUnderflow), qt.IsTrue)
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
@@ -1216,7 +1228,8 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 
 	// Pop 3 of them
 	for range 3 {
-		mc.PopContinuation()
+		_, err := mc.PopContinuation()
+		qt.Assert(t, err, qt.IsNil)
 	}
 
 	// Should be able to save 8 more (was at depth 2 after pops, limit 10)

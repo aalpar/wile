@@ -21,18 +21,23 @@ import "fmt"
 // is single-goroutine. Sub-contexts have their own counters (not aggregated
 // into the parent).
 type VMCounters struct {
-	OpsExecuted              uint64
-	ClosuresApplied          uint64
-	EnvsCopied               uint64
-	BindingsCopied           uint64
-	ContinuationsSaved       uint64
-	ContinuationsRestored    uint64
-	StackPopAlls             uint64
-	StackElementsCopied      uint64
-	ForeignCalls             uint64
-	SubContextsCreated       uint64
-	StackPoolReleases        uint64
-	SubContextPoolReleases   uint64
+	OpsExecuted            uint64
+	ClosuresApplied        uint64
+	EnvsCopied             uint64
+	BindingsCopied         uint64
+	ContinuationsSaved     uint64
+	ContinuationsRestored  uint64
+	StackPopAlls           uint64
+	StackElementsCopied    uint64
+	ForeignCalls           uint64
+	SubContextsCreated     uint64
+	StackPoolReleases      uint64
+	SubContextPoolReleases uint64
+	// Pool effectiveness under call/cc:
+	//   ratio = SharedFrameRestores / (SharedFrameRestores + ContinuationPoolReleases)
+	//   0.0 = no call/cc impact (all frames recycled via pool)
+	//   1.0 = all frames shared (no recycling, pure GC pressure)
+	//   > 0.5 = pool losing more than it saves; consider profiling GC pauses
 	ContinuationPoolReleases uint64
 	EnvFramePoolReleases     uint64
 	SharedFrameRestores      uint64

@@ -76,3 +76,14 @@ When a single test function needs both success and error cases, use two separate
 **Why this matters:** The duplication that remains in table-driven tests (the `for` loop + `t.Run` + assert) is *structural* — it's the test mechanism, written once. The duplication in scattered `t.Run` calls is *accidental* — the same mechanism copy-pasted with different data. Adding a table case is one line; adding a scattered `t.Run` case is three lines of boilerplate where the assertion logic can silently drift from its neighbors.
 
 **The only exception** is a test that requires unique setup/teardown per case (e.g., subprocess execution, `t.Setenv`, file I/O). Even then, prefer a table with a setup callback over hand-unrolled `t.Run` calls.
+
+## Gotchas
+
+- **Variadic rest-arg buffer**: When a variadic primitive is applied via the `noCopyApply`
+  path, the rest-arg list (the `values.Tuple` for `...args`) is backed by
+  `MachineContext.restArgBuf` — a reusable `PairBlock`. The list is valid only for the
+  duration of the foreign function call. If your primitive stores the rest-arg list (returns
+  it, puts it in a data structure, or passes it to a sub-context that outlives the call),
+  you MUST copy the spine first. See `PrimList` in `registry/core/prim_lists.go` for the
+  canonical copy pattern. Failure to copy creates a latent aliasing bug that corrupts the
+  next variadic call's arguments.

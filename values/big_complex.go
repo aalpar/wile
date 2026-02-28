@@ -23,6 +23,7 @@ var (
 	_ Value         = (*BigComplex)(nil)
 	_ Number        = (*BigComplex)(nil)
 	_ ComplexNumber = (*BigComplex)(nil)
+	_ Hashable      = (*BigComplex)(nil)
 )
 
 // BigComplex represents an arbitrary-precision complex number.
@@ -257,6 +258,10 @@ func (p *BigComplex) Kind() NumericKind {
 	return KindBigComplex
 }
 
+// BigComplex has 5 dispatch tables (no bigComplexLessThan).
+// Complex ordering is undefined in R7RS §6.2.6 — LessThan delegates to Compare,
+// which uses magnitude comparison as a total order for internal use (sorting, etc.)
+// but is NOT mathematical ordering. Compare is initialized below like all other types.
 var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
 var bigComplexCompare [numKinds]func(*BigComplex, Number) int
@@ -264,146 +269,25 @@ var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
 var bigComplexDivide [numKinds]func(*BigComplex, Number) Number
 
 func init() {
-	bigComplexAdd[KindInteger] = func(p *BigComplex, o Number) Number {
-		bi := NewBigIntegerFromInt64(o.(*Integer).Value)
-		newReal := addParts(p.real, bi)
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexAdd[KindBigInteger] = func(p *BigComplex, o Number) Number {
-		newReal := addParts(p.real, o.(*BigInteger))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexAdd[KindFloat] = func(p *BigComplex, o Number) Number {
-		bf := NewBigFloatFromFloat64(o.(*Float).Value)
-		newReal := addParts(p.real, bf)
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexAdd[KindBigFloat] = func(p *BigComplex, o Number) Number {
-		newReal := addParts(p.real, o.(*BigFloat))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexAdd[KindRational] = func(p *BigComplex, o Number) Number {
-		newReal := addParts(p.real, o.(*Rational))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexAdd[KindComplex] = func(p *BigComplex, o Number) Number {
-		v := o.(*Complex)
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		newReal := addParts(p.real, bc.real)
-		newImag := addParts(p.imag, bc.imag)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexAdd[KindBigComplex] = func(p *BigComplex, o Number) Number {
+	bigComplexAdd = makeAddDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
 		newReal := addParts(p.real, v.real)
 		newImag := addParts(p.imag, v.imag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
+	})
 
-	bigComplexSubtract[KindInteger] = func(p *BigComplex, o Number) Number {
-		bi := NewBigIntegerFromInt64(o.(*Integer).Value)
-		newReal := subtractParts(p.real, bi)
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexSubtract[KindBigInteger] = func(p *BigComplex, o Number) Number {
-		newReal := subtractParts(p.real, o.(*BigInteger))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexSubtract[KindFloat] = func(p *BigComplex, o Number) Number {
-		bf := NewBigFloatFromFloat64(o.(*Float).Value)
-		newReal := subtractParts(p.real, bf)
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexSubtract[KindBigFloat] = func(p *BigComplex, o Number) Number {
-		newReal := subtractParts(p.real, o.(*BigFloat))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexSubtract[KindRational] = func(p *BigComplex, o Number) Number {
-		newReal := subtractParts(p.real, o.(*Rational))
-		return maybeSimplify(promoteToBigComplexPart(newReal), p.imag)
-	}
-	bigComplexSubtract[KindComplex] = func(p *BigComplex, o Number) Number {
-		v := o.(*Complex)
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		newReal := subtractParts(p.real, bc.real)
-		newImag := subtractParts(p.imag, bc.imag)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexSubtract[KindBigComplex] = func(p *BigComplex, o Number) Number {
+	bigComplexSubtract = makeSubtractDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
 		newReal := subtractParts(p.real, v.real)
 		newImag := subtractParts(p.imag, v.imag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
+	})
 
-	bigComplexCompare[KindInteger] = func(p *BigComplex, o Number) int {
-		otherReal := NewBigIntegerFromInt64(o.(*Integer).Value)
-		return toBigFloat(p.real).Compare(otherReal)
-	}
-	bigComplexCompare[KindBigInteger] = func(p *BigComplex, o Number) int {
-		return toBigFloat(p.real).Compare(o.(*BigInteger))
-	}
-	bigComplexCompare[KindFloat] = func(p *BigComplex, o Number) int {
-		otherReal := NewBigFloatFromFloat64(o.(*Float).Value)
-		return toBigFloat(p.real).Compare(otherReal)
-	}
-	bigComplexCompare[KindBigFloat] = func(p *BigComplex, o Number) int {
-		return toBigFloat(p.real).Compare(o.(*BigFloat))
-	}
-	bigComplexCompare[KindRational] = func(p *BigComplex, o Number) int {
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(o.(*Rational).Rat())
-		otherReal := &BigFloat{value: bf}
-		return toBigFloat(p.real).Compare(otherReal)
-	}
-	bigComplexCompare[KindComplex] = func(p *BigComplex, o Number) int {
-		otherReal := NewBigFloatFromFloat64(real(o.(*Complex).Value))
-		return toBigFloat(p.real).Compare(otherReal)
-	}
-	bigComplexCompare[KindBigComplex] = func(p *BigComplex, o Number) int {
+	bigComplexCompare = makeCompareDispatch(KindBigComplex, func(p *BigComplex, o Number) int {
 		return toBigFloat(p.real).Compare(toBigFloat(o.(*BigComplex).real))
-	}
+	})
 
-	bigComplexMultiply[KindInteger] = func(p *BigComplex, o Number) Number {
-		bi := NewBigIntegerFromInt64(o.(*Integer).Value)
-		return p.Multiply(bi)
-	}
-	bigComplexMultiply[KindBigInteger] = func(p *BigComplex, o Number) Number {
-		v := o.(*BigInteger)
-		newReal := multiplyParts(p.real, v)
-		newImag := multiplyParts(p.imag, v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexMultiply[KindFloat] = func(p *BigComplex, o Number) Number {
-		bf := NewBigFloatFromFloat64(o.(*Float).Value)
-		return p.Multiply(bf)
-	}
-	bigComplexMultiply[KindBigFloat] = func(p *BigComplex, o Number) Number {
-		v := o.(*BigFloat)
-		newReal := multiplyParts(p.real, v)
-		newImag := multiplyParts(p.imag, v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexMultiply[KindRational] = func(p *BigComplex, o Number) Number {
-		v := o.(*Rational)
-		newReal := multiplyParts(p.real, v)
-		newImag := multiplyParts(p.imag, v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexMultiply[KindComplex] = func(p *BigComplex, o Number) Number {
-		v := o.(*Complex)
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		return p.Multiply(bc)
-	}
-	bigComplexMultiply[KindBigComplex] = func(p *BigComplex, o Number) Number {
+	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
 		ac := multiplyParts(p.real, v.real)
 		bd := multiplyParts(p.imag, v.imag)
@@ -412,49 +296,18 @@ func init() {
 		newReal := subtractParts(ac, bd)
 		newImag := addParts(ad, bc)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
+	})
 
-	bigComplexDivide[KindInteger] = func(p *BigComplex, o Number) Number {
-		bi := NewBigIntegerFromInt64(o.(*Integer).Value)
-		newReal := divideParts(p.real, bi)
-		newImag := divideParts(p.imag, bi)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexDivide[KindBigInteger] = func(p *BigComplex, o Number) Number {
-		v := o.(*BigInteger)
-		newReal := divideParts(p.real, v)
-		newImag := divideParts(p.imag, v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexDivide[KindFloat] = func(p *BigComplex, o Number) Number {
-		bf := NewBigFloatFromFloat64(o.(*Float).Value)
-		newReal := toBigFloat(p.real).Divide(bf)
-		newImag := toBigFloat(p.imag).Divide(bf)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexDivide[KindBigFloat] = func(p *BigComplex, o Number) Number {
-		v := o.(*BigFloat)
-		newReal := toBigFloat(p.real).Divide(v)
-		newImag := toBigFloat(p.imag).Divide(v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexDivide[KindRational] = func(p *BigComplex, o Number) Number {
-		v := o.(*Rational)
-		newReal := divideParts(p.real, v)
-		newImag := divideParts(p.imag, v)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
-	bigComplexDivide[KindComplex] = func(p *BigComplex, o Number) Number {
-		v := o.(*Complex)
-		bc := NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(real(v.Value)),
-			NewBigFloatFromFloat64(imag(v.Value)),
-		)
-		return p.Divide(bc)
-	}
-	bigComplexDivide[KindBigComplex] = func(p *BigComplex, o Number) Number {
+	bigComplexDivide = makeDivideDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		// (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
+		// Scalar divisor (d=0): divide each part directly to preserve exactness.
+		// Scalars promoted from Integer/BigInteger/Rational arrive with BigInteger(0) imag.
+		if v.imag.IsZero() {
+			newReal := divideParts(p.real, v.real)
+			newImag := divideParts(p.imag, v.real)
+			return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
+		}
+		// General case: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
 		ac := multiplyParts(p.real, v.real)
 		bd := multiplyParts(p.imag, v.imag)
 		bc := multiplyParts(p.imag, v.real)
@@ -469,19 +322,13 @@ func init() {
 		newReal := toBigFloat(numerReal).Divide(toBigFloat(denom))
 		newImag := toBigFloat(numerImag).Divide(toBigFloat(denom))
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
+	})
 }
 
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
 // Inexactness is contagious per R7RS §6.2.2.
 func (p *BigComplex) Add(o Number) Number {
-	v, ok := o.(*BigComplex)
-	if ok {
-		newReal := addParts(p.real, v.real)
-		newImag := addParts(p.imag, v.imag)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
 	return bigComplexAdd[o.Kind()](p, o)
 }
 
@@ -490,12 +337,6 @@ func (p *BigComplex) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *BigComplex) Subtract(o Number) Number {
-	v, ok := o.(*BigComplex)
-	if ok {
-		newReal := subtractParts(p.real, v.real)
-		newImag := subtractParts(p.imag, v.imag)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
 	return bigComplexSubtract[o.Kind()](p, o)
 }
 
@@ -511,17 +352,6 @@ func (p *BigComplex) Multiply(o Number) Number {
 	if p.IsZero() && o.IsFinite() {
 		return multiplyResultForZero(p, o)
 	}
-	v, ok := o.(*BigComplex)
-	if ok {
-		// (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-		ac := multiplyParts(p.real, v.real)
-		bd := multiplyParts(p.imag, v.imag)
-		ad := multiplyParts(p.real, v.imag)
-		bc := multiplyParts(p.imag, v.real)
-		newReal := subtractParts(ac, bd)
-		newImag := addParts(ad, bc)
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
-	}
 	return bigComplexMultiply[o.Kind()](p, o)
 }
 
@@ -533,24 +363,6 @@ func (p *BigComplex) Multiply(o Number) Number {
 func (p *BigComplex) Divide(o Number) Number {
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
-	}
-	v, ok := o.(*BigComplex)
-	if ok {
-		// (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
-		ac := multiplyParts(p.real, v.real)
-		bd := multiplyParts(p.imag, v.imag)
-		bc := multiplyParts(p.imag, v.real)
-		ad := multiplyParts(p.real, v.imag)
-		cc := multiplyParts(v.real, v.real)
-		dd := multiplyParts(v.imag, v.imag)
-
-		numerReal := addParts(ac, bd)
-		numerImag := subtractParts(bc, ad)
-		denom := addParts(cc, dd)
-
-		newReal := toBigFloat(numerReal).Divide(toBigFloat(denom))
-		newImag := toBigFloat(numerImag).Divide(toBigFloat(denom))
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -815,4 +627,15 @@ func (p *BigComplex) EqualTo(o Value) bool {
 		}
 	}
 	return true
+}
+
+// HashCode returns a hash of the complex value.
+// Hashes real and imaginary parts independently via hashInexactNumeric
+// and combines them with a multiplicative mixing constant.
+// Uses the same combining formula as Complex.HashCode for cross-type consistency:
+// when BigComplex.EqualTo(*Complex) holds, both produce equal hashes.
+func (p *BigComplex) HashCode() uint64 {
+	r := hashInexactNumeric(toBigFloat(p.real).value)
+	i := hashInexactNumeric(toBigFloat(p.imag).value)
+	return r ^ (i * 0x9e3779b97f4a7c15)
 }

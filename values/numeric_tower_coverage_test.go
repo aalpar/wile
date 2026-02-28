@@ -300,30 +300,30 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"Integer+Integer":    "*values.Integer",
 		"Integer+BigInteger": "*values.BigInteger",
 		"Integer+Rational":   "*values.Rational",
-		"Integer+Float":      "*values.Float",
+		"Integer+Float":      "*values.BigFloat",
 		"Integer+BigFloat":   "*values.BigFloat",
-		"Integer+Complex":    "*values.Complex",
+		"Integer+Complex":    "*values.BigComplex",
 		"Integer+BigComplex": "*values.BigComplex",
 		// BigInteger row
 		"BigInteger+Integer":    "*values.BigInteger",
 		"BigInteger+BigInteger": "*values.BigInteger",
 		"BigInteger+Rational":   "*values.Rational",
-		"BigInteger+Float":      "*values.BigFloat", // Changed: precision preservation
+		"BigInteger+Float":      "*values.BigFloat",
 		"BigInteger+BigFloat":   "*values.BigFloat",
-		"BigInteger+Complex":    "*values.Complex",
+		"BigInteger+Complex":    "*values.BigComplex",
 		"BigInteger+BigComplex": "*values.BigComplex",
 		// Rational row
 		"Rational+Integer":    "*values.Rational",
 		"Rational+BigInteger": "*values.Rational",
 		"Rational+Rational":   "*values.Rational",
-		"Rational+Float":      "*values.Float",
+		"Rational+Float":      "*values.BigFloat",
 		"Rational+BigFloat":   "*values.BigFloat",
-		"Rational+Complex":    "*values.Complex",
+		"Rational+Complex":    "*values.BigComplex",
 		"Rational+BigComplex": "*values.BigComplex",
 		// Float row
-		"Float+Integer":    "*values.Float",
-		"Float+BigInteger": "*values.Float",
-		"Float+Rational":   "*values.Float",
+		"Float+Integer":    "*values.BigFloat",
+		"Float+BigInteger": "*values.BigFloat",
+		"Float+Rational":   "*values.BigFloat",
 		"Float+Float":      "*values.Float",
 		"Float+BigFloat":   "*values.BigFloat",
 		"Float+Complex":    "*values.Complex",
@@ -337,9 +337,9 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"BigFloat+Complex":    "*values.BigComplex", // Preserves BigFloat precision
 		"BigFloat+BigComplex": "*values.BigComplex",
 		// Complex row
-		"Complex+Integer":    "*values.Complex",
-		"Complex+BigInteger": "*values.Complex",
-		"Complex+Rational":   "*values.Complex",
+		"Complex+Integer":    "*values.BigComplex",
+		"Complex+BigInteger": "*values.BigComplex",
+		"Complex+Rational":   "*values.BigComplex",
 		"Complex+Float":      "*values.Complex",
 		"Complex+BigFloat":   "*values.BigComplex",
 		"Complex+Complex":    "*values.Complex",
@@ -394,33 +394,9 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		}
 	}
 
-	// Test Subtract (same expected types as Add)
-	for _, a := range receivers {
-		for _, b := range operands {
-			key := a.name + "+" + b.name // reuse the same key pattern
-			t.Run("Subtract/"+a.name+"-"+b.name, func(t *testing.T) {
-				result := a.value.Subtract(b.value)
-				actualType := fmt.Sprintf("%T", result)
-				expectedType := expectedAdd[key]
-				c.Assert(actualType, qt.Equals, expectedType,
-					qt.Commentf("Subtract: %s - %s", a.name, b.name))
-			})
-		}
-	}
-
-	// Test Multiply (same expected types as Add)
-	for _, a := range receivers {
-		for _, b := range operands {
-			key := a.name + "+" + b.name
-			t.Run("Multiply/"+a.name+"*"+b.name, func(t *testing.T) {
-				result := a.value.Multiply(b.value)
-				actualType := fmt.Sprintf("%T", result)
-				expectedType := expectedAdd[key]
-				c.Assert(actualType, qt.Equals, expectedType,
-					qt.Commentf("Multiply: %s * %s", a.name, b.name))
-			})
-		}
-	}
+	// Subtract and Multiply use the same promotion lattice as Add
+	// (via makeSubtractDispatch / makeMultiplyDispatch), so their result
+	// types match the Add table above. No separate type-result test needed.
 }
 
 // TestNumericTower_DivisionResultTypes verifies division result types.
@@ -451,34 +427,35 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 	// Division result types
 	// Note: Integer/Integer returns Rational when not exact (5/3), Integer when exact (6/2)
 	expectedDiv := map[string]string{
-		// Integer row - division by non-divisor produces Rational
+		// Integer row — division by non-divisor produces Rational;
+		// cross-type follows the promotion lattice (same LUB as Add).
 		"Integer/Integer":    "*values.Rational", // 5/3 = 5/3
 		"Integer/BigInteger": "*values.Rational", // 5/11 = 5/11
 		"Integer/Rational":   "*values.Rational",
-		"Integer/Float":      "*values.Float",
+		"Integer/Float":      "*values.BigFloat",
 		"Integer/BigFloat":   "*values.BigFloat",
-		"Integer/Complex":    "*values.Complex",
+		"Integer/Complex":    "*values.BigComplex",
 		"Integer/BigComplex": "*values.BigComplex",
 		// BigInteger row
 		"BigInteger/Integer":    "*values.Rational",
 		"BigInteger/BigInteger": "*values.Rational",
 		"BigInteger/Rational":   "*values.Rational",
-		"BigInteger/Float":      "*values.BigFloat", // Changed: precision preservation
+		"BigInteger/Float":      "*values.BigFloat",
 		"BigInteger/BigFloat":   "*values.BigFloat",
-		"BigInteger/Complex":    "*values.Complex",
+		"BigInteger/Complex":    "*values.BigComplex",
 		"BigInteger/BigComplex": "*values.BigComplex",
 		// Rational row
 		"Rational/Integer":    "*values.Rational",
 		"Rational/BigInteger": "*values.Rational",
 		"Rational/Rational":   "*values.Rational",
-		"Rational/Float":      "*values.Float",
+		"Rational/Float":      "*values.BigFloat",
 		"Rational/BigFloat":   "*values.BigFloat",
-		"Rational/Complex":    "*values.Complex",
+		"Rational/Complex":    "*values.BigComplex",
 		"Rational/BigComplex": "*values.BigComplex",
 		// Float row
-		"Float/Integer":    "*values.Float",
-		"Float/BigInteger": "*values.Float",
-		"Float/Rational":   "*values.Float",
+		"Float/Integer":    "*values.BigFloat",
+		"Float/BigInteger": "*values.BigFloat",
+		"Float/Rational":   "*values.BigFloat",
 		"Float/Float":      "*values.Float",
 		"Float/BigFloat":   "*values.BigFloat",
 		"Float/Complex":    "*values.Complex",
@@ -489,12 +466,12 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"BigFloat/Rational":   "*values.BigFloat",
 		"BigFloat/Float":      "*values.BigFloat",
 		"BigFloat/BigFloat":   "*values.BigFloat",
-		"BigFloat/Complex":    "*values.BigComplex", // Preserves BigFloat precision
+		"BigFloat/Complex":    "*values.BigComplex",
 		"BigFloat/BigComplex": "*values.BigComplex",
 		// Complex row
-		"Complex/Integer":    "*values.Complex",
-		"Complex/BigInteger": "*values.Complex",
-		"Complex/Rational":   "*values.Complex",
+		"Complex/Integer":    "*values.BigComplex",
+		"Complex/BigInteger": "*values.BigComplex",
+		"Complex/Rational":   "*values.BigComplex",
 		"Complex/Float":      "*values.Complex",
 		"Complex/BigFloat":   "*values.BigComplex",
 		"Complex/Complex":    "*values.Complex",

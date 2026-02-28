@@ -214,3 +214,44 @@ func TestHashConsistencySameValueStability(t *testing.T) {
 	bf2 := values.NewBigFloatFromFloat64(1.23)
 	c.Assert(bf1.HashCode(), qt.Equals, bf2.HashCode())
 }
+
+// TestHashConsistencyComplexFamily verifies that BigComplex (with BigFloat parts)
+// and Complex produce the same hash when BigComplex.EqualTo(Complex) holds.
+// Contract: if a.EqualTo(b) then a.HashCode() == b.HashCode().
+func TestHashConsistencyComplexFamily(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name    string
+		complex *values.Complex
+		big     *values.BigComplex
+	}{
+		{
+			"3+4i",
+			values.NewComplex(complex(3, 4)),
+			values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(3), values.NewBigFloatFromFloat64(4)),
+		},
+		{
+			"zero",
+			values.NewComplex(complex(0, 0)),
+			values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(0), values.NewBigFloatFromFloat64(0)),
+		},
+		{
+			"1.5+2.5i",
+			values.NewComplex(complex(1.5, 2.5)),
+			values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(1.5), values.NewBigFloatFromFloat64(2.5)),
+		},
+	}
+
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			// Precondition: BigComplex.EqualTo(Complex) holds.
+			c.Assert(tc.big.EqualTo(tc.complex), qt.IsTrue,
+				qt.Commentf("precondition: BigComplex must equal Complex"))
+
+			// Contract: equal values must produce equal hashes.
+			c.Assert(tc.big.HashCode(), qt.Equals, tc.complex.HashCode(),
+				qt.Commentf("BigComplex and Complex hash must agree for %s", tc.name))
+		})
+	}
+}

@@ -20,65 +20,65 @@ import (
 	"io"
 )
 
-var _ Value = (*ByteVectorBufferdOutputPort)(nil)
-var _ Port = (*ByteVectorBufferdOutputPort)(nil)
-var _ OutputPort = (*ByteVectorBufferdOutputPort)(nil)
-var _ BinaryWriter = (*ByteVectorBufferdOutputPort)(nil)
-var _ ByteVectorExtractor = (*ByteVectorBufferdOutputPort)(nil)
-var _ io.WriteCloser = (*ByteVectorBufferdOutputPort)(nil)
-var _ io.ByteWriter = (*ByteVectorBufferdOutputPort)(nil)
+var _ Value = (*ByteVectorBufferedOutputPort)(nil)
+var _ Port = (*ByteVectorBufferedOutputPort)(nil)
+var _ OutputPort = (*ByteVectorBufferedOutputPort)(nil)
+var _ BinaryWriter = (*ByteVectorBufferedOutputPort)(nil)
+var _ ByteVectorExtractor = (*ByteVectorBufferedOutputPort)(nil)
+var _ io.WriteCloser = (*ByteVectorBufferedOutputPort)(nil)
+var _ io.ByteWriter = (*ByteVectorBufferedOutputPort)(nil)
 
-// ByteVectorBufferdOutputPort represents a Scheme output port writing to memory.
-type ByteVectorBufferdOutputPort struct {
+// ByteVectorBufferedOutputPort represents a Scheme output port writing to memory.
+type ByteVectorBufferedOutputPort struct {
 	portBase
 	buf *bytes.Buffer
 }
 
-// NewByteVectorBufferdOutputPort creates a new in-memory bytevector output port.
-func NewByteVectorBufferdOutputPort() *ByteVectorBufferdOutputPort {
-	return &ByteVectorBufferdOutputPort{
+// NewByteVectorBufferedOutputPort creates a new in-memory bytevector output port.
+func NewByteVectorBufferedOutputPort() *ByteVectorBufferedOutputPort {
+	return &ByteVectorBufferedOutputPort{
 		buf: bytes.NewBuffer([]byte{}),
 	}
 }
 
-// NewByteVectorBufferdOutputPortFromBuffer creates a new in-memory bytevector output port.
-func NewByteVectorBufferdOutputPortFromBuffer(buf *bytes.Buffer) *ByteVectorBufferdOutputPort {
-	q := &ByteVectorBufferdOutputPort{
+// NewByteVectorBufferedOutputPortFromBuffer creates a new in-memory bytevector output port.
+func NewByteVectorBufferedOutputPortFromBuffer(buf *bytes.Buffer) *ByteVectorBufferedOutputPort {
+	q := &ByteVectorBufferedOutputPort{
 		buf: buf,
 	}
 	return q
 }
 
-func (p *ByteVectorBufferdOutputPort) Flush() error {
+func (p *ByteVectorBufferedOutputPort) Flush() error {
 	return p.guardClosed()
 }
 
-func (p *ByteVectorBufferdOutputPort) Write(bs []byte) (int, error) {
+func (p *ByteVectorBufferedOutputPort) Write(bs []byte) (int, error) {
 	return guardedWrite(&p.portBase, p.buf, bs)
 }
 
-func (p *ByteVectorBufferdOutputPort) WriteByte(b byte) error {
+func (p *ByteVectorBufferedOutputPort) WriteByte(b byte) error {
 	return guardedWriteByte(&p.portBase, p.buf, b)
 }
 
 // Datum returns the underlying bytes.Buffer.
-func (p *ByteVectorBufferdOutputPort) Datum() *bytes.Buffer {
+func (p *ByteVectorBufferedOutputPort) Datum() *bytes.Buffer {
 	return p.buf
 }
 
-func (p *ByteVectorBufferdOutputPort) ReadByteVector() (*ByteVector, error) {
+func (p *ByteVectorBufferedOutputPort) ReadByteVector() (*ByteVector, error) {
 	b := p.buf.Bytes()
 	return NewByteVectorFromBytes(b...), nil
 }
 
 // IsVoid returns true if this port is nil.
-func (p *ByteVectorBufferdOutputPort) IsVoid() bool {
+func (p *ByteVectorBufferedOutputPort) IsVoid() bool {
 	return p == nil
 }
 
 // EqualTo returns true if both ports share the same buffer.
-func (p *ByteVectorBufferdOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*ByteVectorBufferdOutputPort)
+func (p *ByteVectorBufferedOutputPort) EqualTo(v Value) bool {
+	other, ok := v.(*ByteVectorBufferedOutputPort)
 	if ok {
 		return p.buf == other.buf
 	}
@@ -86,6 +86,6 @@ func (p *ByteVectorBufferdOutputPort) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme representation of this port.
-func (p *ByteVectorBufferdOutputPort) SchemeString() string {
+func (p *ByteVectorBufferedOutputPort) SchemeString() string {
 	return fmt.Sprintf("<bytevector-output-port %p>", p.buf)
 }

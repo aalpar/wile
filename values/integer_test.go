@@ -143,7 +143,7 @@ func TestInteger_Divide(t *testing.T) {
 
 	c1 := values.NewComplex(complex(2, 0))
 	result = i1.Divide(c1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(5))
 }
 
 func TestInteger_IsZero(t *testing.T) {
