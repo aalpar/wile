@@ -159,11 +159,11 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	c.Assert(bf.Float64(), qt.Equals, float64(100.5))
 	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
 
-	// Add with Complex
+	// Add with Complex → BigComplex (no-loss: exact BigInteger never truncates to float64)
 	sumC := bi.Add(values.NewComplex(complex(1, 2)))
-	comp, ok := sumC.(*values.Complex)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(real(comp.Datum()), qt.Equals, float64(101))
+	bc, ok := sumC.(*values.BigComplex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigComplex, got %T", sumC))
+	c.Assert(bc.RealAsBigFloat().Float64(), qt.Equals, float64(101))
 }
 
 func TestBigFloat_Constructors(t *testing.T) {

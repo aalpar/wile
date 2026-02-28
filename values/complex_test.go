@@ -229,3 +229,26 @@ func TestComplex_SchemeString(t *testing.T) {
 		})
 	}
 }
+
+func TestComplex_HashCode(t *testing.T) {
+	c := qt.New(t)
+
+	// Stability: same value produces same hash.
+	c.Assert(values.NewComplex(complex(3, 4)).HashCode(),
+		qt.Equals, values.NewComplex(complex(3, 4)).HashCode())
+
+	// Zero.
+	c.Assert(values.NewComplex(complex(0, 0)).HashCode(),
+		qt.Equals, values.NewComplex(complex(0, 0)).HashCode())
+
+	// Distinctness: different values almost certainly produce different hashes.
+	h1 := values.NewComplex(complex(1, 2)).HashCode()
+	h2 := values.NewComplex(complex(2, 1)).HashCode()
+	c.Assert(h1, qt.Not(qt.Equals), h2,
+		qt.Commentf("(1+2i) and (2+1i) should hash differently"))
+
+	// Sign matters: real and imaginary parts are treated distinctly.
+	hPos := values.NewComplex(complex(3, 4)).HashCode()
+	hSwap := values.NewComplex(complex(4, 3)).HashCode()
+	c.Assert(hPos, qt.Not(qt.Equals), hSwap)
+}

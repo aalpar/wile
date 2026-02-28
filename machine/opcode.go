@@ -18,6 +18,15 @@ package machine
 // Operations migrated from interface dispatch to integer dispatch
 // get a dedicated OpCode. Complex operations that remain as interface
 // values use OpComplex with a side table index.
+//
+// Adding a new opcode requires changes in:
+//  1. opcode.go — add OpXxx constant and entry in opcodeNames
+//  2. machine_context.go Run() — add dispatch case in the main switch
+//  3. native_template.go — add cases in both operationToInstruction() and instructionToOperation()
+//  4. operation_xxx.go — create new operation type (or add to existing file)
+//  5. compile_*.go — add compiler method to emit the new opcode
+//  6. Relevant _test.go files
+//  7. peephole.go — if the new op participates in fusion/chaining
 type OpCode uint16
 
 const (

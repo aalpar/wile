@@ -131,6 +131,14 @@ func Join(a, b TypeClass) TypeClass {
 }
 
 func maxPrecision(a, b PrecisionRank) PrecisionRank {
+	// No-loss rule: exact types (Integer, BigInteger, Rational) meeting
+	// Float must produce BigFloat, not Float. Exact values cannot be
+	// truncated to float64 without precision loss.
+	exactA := a <= PrecisionRational
+	exactB := b <= PrecisionRational
+	if exactA && b == PrecisionFloat || exactB && a == PrecisionFloat {
+		return PrecisionBigFloat
+	}
 	if a > b {
 		return a
 	}
@@ -243,15 +251,15 @@ func TestLattice_Join(t *testing.T) {
 		{"Int+Rational", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionRational, ComplexityReal},
 			TypeClass{PrecisionRational, ComplexityReal}},
 		{"Int+Float", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityReal},
-			TypeClass{PrecisionFloat, ComplexityReal}},
+			TypeClass{PrecisionBigFloat, ComplexityReal}},
 		{"Rational+Float", TypeClass{PrecisionRational, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityReal},
-			TypeClass{PrecisionFloat, ComplexityReal}},
+			TypeClass{PrecisionBigFloat, ComplexityReal}},
 		{"Float+BigFloat", TypeClass{PrecisionFloat, ComplexityReal}, TypeClass{PrecisionBigFloat, ComplexityReal},
 			TypeClass{PrecisionBigFloat, ComplexityReal}},
 
 		// Real + Complex (complexity promotion)
 		{"Int+Complex", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
-			TypeClass{PrecisionFloat, ComplexityComplex}},
+			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 		{"BigFloat+Complex", TypeClass{PrecisionBigFloat, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
 			TypeClass{PrecisionBigFloat, ComplexityComplex}}, // Lattice says BigFloat precision!
 		{"Rational+BigComplex(exact)", TypeClass{PrecisionRational, ComplexityReal}, TypeClass{PrecisionRational, ComplexityComplex},
@@ -303,41 +311,14 @@ func TestLattice_PredictionsVsActual(t *testing.T) {
 
 	typeNames := []string{"Integer", "BigInteger", "Rational", "Float", "BigFloat", "Complex", "BigComplex"}
 
-	// Known divergences between lattice prediction and actual behavior
-	// These are intentional design choices: BigComplex is preserved for any operation involving it
+	// Known divergences between lattice prediction and actual behavior.
+	// After the no-loss promotion table refactoring, the lattice model and
+	// actual behavior are fully aligned. No divergences remain for Add.
 	knownDivergences := map[string]struct {
 		lattice string
 		actual  string
 		reason  string
-	}{
-		// BigInteger+Float uses BigFloat for precision preservation (M5 fix)
-		"BigInteger+Float": {
-			lattice: "*values.Float",
-			actual:  "*values.BigFloat",
-			reason:  "Precision preservation: BigInteger+Float promotes to BigFloat (not Float) to avoid precision loss for >53-bit integers",
-		},
-		// Operations involving BigComplex always return BigComplex (preserves structure)
-		"Float+BigComplex": {
-			lattice: "*values.Complex",
-			actual:  "*values.BigComplex",
-			reason:  "BigComplex is preserved: any op with BigComplex returns BigComplex",
-		},
-		"Complex+BigComplex": {
-			lattice: "*values.Complex",
-			actual:  "*values.BigComplex",
-			reason:  "BigComplex is preserved: any op with BigComplex returns BigComplex",
-		},
-		"BigComplex+Float": {
-			lattice: "*values.Complex",
-			actual:  "*values.BigComplex",
-			reason:  "BigComplex is preserved: any op with BigComplex returns BigComplex",
-		},
-		"BigComplex+Complex": {
-			lattice: "*values.Complex",
-			actual:  "*values.BigComplex",
-			reason:  "BigComplex is preserved: any op with BigComplex returns BigComplex",
-		},
-	}
+	}{}
 
 	var mismatches []string
 	var matches int
@@ -410,9 +391,9 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Integer+Integer":    "*values.Integer",
 		"Integer+BigInteger": "*values.BigInteger",
 		"Integer+Rational":   "*values.Rational",
-		"Integer+Float":      "*values.Float",
+		"Integer+Float":      "*values.BigFloat",
 		"Integer+BigFloat":   "*values.BigFloat",
-		"Integer+Complex":    "*values.Complex",
+		"Integer+Complex":    "*values.BigComplex",
 		"Integer+BigComplex": "*values.BigComplex",
 
 		// BigInteger row
@@ -421,22 +402,22 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigInteger+Rational":   "*values.Rational",
 		"BigInteger+Float":      "*values.BigFloat", // Changed: precision preservation
 		"BigInteger+BigFloat":   "*values.BigFloat",
-		"BigInteger+Complex":    "*values.Complex",
+		"BigInteger+Complex":    "*values.BigComplex",
 		"BigInteger+BigComplex": "*values.BigComplex",
 
 		// Rational row
 		"Rational+Integer":    "*values.Rational",
 		"Rational+BigInteger": "*values.Rational",
 		"Rational+Rational":   "*values.Rational",
-		"Rational+Float":      "*values.Float",
+		"Rational+Float":      "*values.BigFloat",
 		"Rational+BigFloat":   "*values.BigFloat",
-		"Rational+Complex":    "*values.Complex",
+		"Rational+Complex":    "*values.BigComplex",
 		"Rational+BigComplex": "*values.BigComplex",
 
 		// Float row
-		"Float+Integer":    "*values.Float",
-		"Float+BigInteger": "*values.Float",
-		"Float+Rational":   "*values.Float",
+		"Float+Integer":    "*values.BigFloat",
+		"Float+BigInteger": "*values.BigFloat",
+		"Float+Rational":   "*values.BigFloat",
 		"Float+Float":      "*values.Float",
 		"Float+BigFloat":   "*values.BigFloat",
 		"Float+Complex":    "*values.Complex",
@@ -452,9 +433,9 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigFloat+BigComplex": "*values.BigComplex",
 
 		// Complex row
-		"Complex+Integer":    "*values.Complex",
-		"Complex+BigInteger": "*values.Complex",
-		"Complex+Rational":   "*values.Complex",
+		"Complex+Integer":    "*values.BigComplex",
+		"Complex+BigInteger": "*values.BigComplex",
+		"Complex+Rational":   "*values.BigComplex",
 		"Complex+Float":      "*values.Complex",
 		"Complex+BigFloat":   "*values.BigComplex", // Complex.Add(BigFloat) preserves precision!
 		"Complex+Complex":    "*values.Complex",

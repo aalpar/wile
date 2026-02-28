@@ -99,11 +99,11 @@ func TestByteVectorInputOutputPort_Flush(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
-// ByteVectorBufferdOutputPort (note: "Bufferd" is the actual spelling)
+// ByteVectorBufferedOutputPort (note: "Bufferd" is the actual spelling)
 
-func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
+func TestByteVectorBufferedOutputPort_Basic(t *testing.T) {
 	c := qt.New(t)
-	port := values.NewByteVectorBufferdOutputPort()
+	port := values.NewByteVectorBufferedOutputPort()
 	c.Assert(port.IsVoid(), qt.IsFalse)
 	c.Assert(port.SchemeString(), qt.Matches, ".*port.*")
 	c.Assert(port.IsClosed(), qt.IsFalse)
@@ -127,7 +127,7 @@ func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
 	c.Assert(bv, qt.IsNotNil)
 
 	// EqualTo
-	port2 := values.NewByteVectorBufferdOutputPort()
+	port2 := values.NewByteVectorBufferedOutputPort()
 	c.Assert(port.EqualTo(port), qt.IsTrue)
 	c.Assert(port.EqualTo(port2), qt.IsFalse)
 	c.Assert(port.EqualTo(values.NewInteger(1)), qt.IsFalse)
@@ -138,10 +138,10 @@ func TestByteVectorBufferdOutputPort_Basic(t *testing.T) {
 	c.Assert(port.IsClosed(), qt.IsTrue)
 }
 
-func TestByteVectorBufferdOutputPort_FromBuffer(t *testing.T) {
+func TestByteVectorBufferedOutputPort_FromBuffer(t *testing.T) {
 	c := qt.New(t)
 	buf := &bytes.Buffer{}
-	port := values.NewByteVectorBufferdOutputPortFromBuffer(buf)
+	port := values.NewByteVectorBufferedOutputPortFromBuffer(buf)
 	c.Assert(port, qt.IsNotNil)
 
 	_, err := port.Write([]byte{1})

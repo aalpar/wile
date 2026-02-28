@@ -174,7 +174,9 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	return nil
 }
 
-// CompileSyntaxPrimitive compiles a syntax primitive if sym corresponds to one.
+// CompileSyntaxPrimitive compiles extension forms via the syntax compiler registry.
+// Core forms (if, lambda, define, etc.) use a separate validated compilation path —
+// see compile_validated.go and the compileValidated() method there.
 func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
 	symVal := p.env.InternSymbol(sym.Sym)
 	scopes := sym.Scopes()
