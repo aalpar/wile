@@ -50,6 +50,8 @@ and the closing brace MUST be on its own line. No exceptions.
 
 When working from `TODO.md` or a phased plan, read and update `TODO.md` after completing each phase. Mark items done as you go so progress is visible and no work gets repeated across sessions.
 
+**The build is not clean until `make lint && make covercheck` both pass.** Run both after any code changes and fix all failures before claiming the task complete.
+
 ## Session Planning
 
 Finish codebase reading and exploration before the session ends. If a plan is too large to complete in one session, break it into smaller chunks that can each be completed independently. Partial exploration with no code changes is wasted work.
