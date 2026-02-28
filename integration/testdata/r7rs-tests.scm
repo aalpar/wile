@@ -2525,6 +2525,14 @@
           (guard (exn (else exn))
             (delete-file " no such file "))))
 
+;; #362: Float(Inf/NaN) + BigComplex preserves imaginary part.
+;; (make-rectangular 3 4) produces BigComplex(BigInteger(3), BigInteger(4)).
+;; Before the fix the Inf/NaN guard returned NewFloat, discarding the imag part.
+(test "+inf.0+4.0i" (number->string (+ +inf.0 (make-rectangular 3 4))))
+(test "+inf.0+4.0i" (number->string (+ (make-rectangular 3 4) +inf.0)))
+(test "+nan.0+4.0i" (number->string (+ +nan.0 (make-rectangular 3 4))))
+(test "+inf.0-4.0i" (number->string (- +inf.0 (make-rectangular 3 4))))
+
 (test-end)
 
 (test-end)

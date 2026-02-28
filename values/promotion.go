@@ -288,6 +288,32 @@ func numberToFloat64(n Number) float64 {
 	panic(ErrNotANumber)
 }
 
+// numberToComplex128 converts any Number to complex128 for the IEEE 754
+// Inf/NaN guard path. Both real and imaginary parts are truncated to float64
+// (Tier 4 precision loss — acceptable because Inf/NaN dominates the result,
+// and any finite float64 approximation is strictly better than total loss of
+// the imaginary part). See plans/PRECISION-GUARANTEES.md.
+func numberToComplex128(n Number) complex128 {
+	switch v := n.(type) {
+	case *Integer:
+		return complex(float64(v.Value), 0)
+	case *BigInteger:
+		return complex(float64FromBigInt(v.value), 0)
+	case *Float:
+		return complex(v.Value, 0)
+	case *BigFloat:
+		f, _ := v.value.Float64()
+		return complex(f, 0)
+	case *Rational:
+		return complex(v.Float64(), 0)
+	case *Complex:
+		return v.Value
+	case *BigComplex:
+		return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
+	}
+	panic(ErrNotANumber)
+}
+
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.
 // Used by makeCompareDispatch for the IEEE 754 special-value guard.
 func cmpFloat64(a, b float64) int {
@@ -326,6 +352,7 @@ func makeArithmeticDispatch[T Number](
 	sameTypeOp func(T, Number) Number,
 	applyOp func(Number, Number) Number,
 	float64Op func(float64, float64) float64,
+	complex128Op func(complex128, complex128) complex128,
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -340,22 +367,35 @@ func makeArithmeticDispatch[T Number](
 
 		// IEEE 754 special-value guard: BigFloat/BigComplex cannot handle Inf/NaN.
 		// When Float participates and the LUB goes beyond float64/complex128,
-		// check for special values and short-circuit via float64 arithmetic.
+		// check for special values and short-circuit.
+		//
+		// When lubKind == KindBigComplex, we use complex128Op so the imaginary
+		// part of the non-Float operand is preserved. When lubKind is anything
+		// else (e.g. KindBigFloat), float64Op suffices — there is no imaginary
+		// part to lose.
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
 
 		switch {
 		case srcKind == KindFloat && lubNeedsGuard:
 			// Receiver is Float, might have Inf/NaN.
+			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(any(p).(*Float)) {
+					if lubIsComplex {
+						return NewComplex(complex128Op(numberToComplex128(p), numberToComplex128(o)))
+					}
 					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
 		case dstKind == KindFloat && lubNeedsGuard:
 			// Operand is Float, might have Inf/NaN.
+			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
+					if lubIsComplex {
+						return NewComplex(complex128Op(numberToComplex128(p), numberToComplex128(o)))
+					}
 					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
@@ -378,6 +418,9 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 		func(a, b float64) float64 {
 			return a + b
 		},
+		func(a, b complex128) complex128 {
+			return a + b
+		},
 	)
 }
 
@@ -388,6 +431,9 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 			return a.Subtract(b)
 		},
 		func(a, b float64) float64 {
+			return a - b
+		},
+		func(a, b complex128) complex128 {
 			return a - b
 		},
 	)
@@ -402,6 +448,9 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 		func(a, b float64) float64 {
 			return a * b
 		},
+		func(a, b complex128) complex128 {
+			return a * b
+		},
 	)
 }
 
@@ -412,6 +461,9 @@ func makeDivideDispatch[T Number](srcKind NumericKind, sameTypeDiv func(T, Numbe
 			return a.Divide(b)
 		},
 		func(a, b float64) float64 {
+			return a / b
+		},
+		func(a, b complex128) complex128 {
 			return a / b
 		},
 	)

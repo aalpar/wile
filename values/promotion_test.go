@@ -15,6 +15,8 @@
 package values
 
 import (
+	"math"
+	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -276,4 +278,168 @@ func TestPromotionResultKind_API(t *testing.T) {
 	c.Assert(PromotionResultKind(KindInteger, KindFloat), qt.Equals, KindBigFloat)
 	c.Assert(PromotionResultKind(KindRational, KindComplex), qt.Equals, KindBigComplex)
 	c.Assert(PromotionResultKind(KindFloat, KindComplex), qt.Equals, KindComplex)
+}
+
+// TestFloatBigComplexGuard_ImaginaryPreserved verifies fix for issue #362:
+// when a Float with Inf/NaN is combined with a BigComplex, the imaginary part
+// of the BigComplex operand must be preserved in the result.
+//
+// Prior to the fix, the guard returned NewFloat(...), discarding the imaginary part.
+// After the fix, the guard returns NewComplex(complex128Op(...)) when lubKind == KindBigComplex.
+func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
+	c := qt.New(t)
+
+	// BigComplex(3+4i) with BigInteger parts — guarantees BigComplex kind (not Complex).
+	bc := NewBigComplex(
+		NewBigIntegerFromInt64(3),
+		NewBigIntegerFromInt64(4),
+	)
+
+	type testCase struct {
+		name     string
+		floatVal *Float
+		op       func(a, b Number) Number
+		expected complex128
+	}
+
+	cases := []testCase{
+		{
+			name:     "add +inf.0 + BigComplex(3+4i): imag preserved",
+			floatVal: NewFloat(math.Inf(1)),
+			op: func(a, b Number) Number {
+				return a.Add(b)
+			},
+			expected: complex(math.Inf(1), 0) + complex(3, 4),
+		},
+		{
+			name:     "add -inf.0 + BigComplex(3+4i): imag preserved",
+			floatVal: NewFloat(math.Inf(-1)),
+			op: func(a, b Number) Number {
+				return a.Add(b)
+			},
+			expected: complex(math.Inf(-1), 0) + complex(3, 4),
+		},
+		{
+			name:     "add +nan.0 + BigComplex(3+4i): NaN propagates",
+			floatVal: NewFloat(math.NaN()),
+			op: func(a, b Number) Number {
+				return a.Add(b)
+			},
+			expected: complex(math.NaN(), 0) + complex(3, 4),
+		},
+		{
+			name:     "sub +inf.0 - BigComplex(3+4i): imag sign flips",
+			floatVal: NewFloat(math.Inf(1)),
+			op: func(a, b Number) Number {
+				return a.Subtract(b)
+			},
+			expected: complex(math.Inf(1), 0) - complex(3, 4),
+		},
+		{
+			name:     "mul +inf.0 * BigComplex(3+4i): complex semantics, not component-wise",
+			floatVal: NewFloat(math.Inf(1)),
+			op: func(a, b Number) Number {
+				return a.Multiply(b)
+			},
+			// complex(+Inf, 0) * complex(3, 4) = complex(+Inf, +Inf), NOT component-wise.
+			expected: complex(math.Inf(1), 0) * complex(3, 4),
+		},
+		{
+			name:     "mul +nan.0 * BigComplex(3+4i): NaN propagates to both parts",
+			floatVal: NewFloat(math.NaN()),
+			op: func(a, b Number) Number {
+				return a.Multiply(b)
+			},
+			expected: complex(math.NaN(), 0) * complex(3, 4),
+		},
+		{
+			name:     "div +inf.0 / BigComplex(3+4i): correct complex division",
+			floatVal: NewFloat(math.Inf(1)),
+			op: func(a, b Number) Number {
+				return a.Divide(b)
+			},
+			expected: complex(math.Inf(1), 0) / complex(3, 4),
+		},
+	}
+
+	for _, tc := range cases {
+		// Float is receiver, BigComplex is operand.
+		result := tc.op(tc.floatVal, bc)
+		c.Assert(result, qt.Not(qt.IsNil), qt.Commentf("%s: result is nil", tc.name))
+		cx, ok := result.(*Complex)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("%s: expected *Complex, got %T", tc.name, result))
+		// NaN != NaN, so compare real and imaginary parts separately.
+		if math.IsNaN(real(tc.expected)) {
+			c.Assert(math.IsNaN(real(cx.Value)), qt.IsTrue, qt.Commentf("%s: real part should be NaN", tc.name))
+		} else {
+			c.Assert(real(cx.Value), qt.Equals, real(tc.expected), qt.Commentf("%s: real part mismatch", tc.name))
+		}
+		if math.IsNaN(imag(tc.expected)) {
+			c.Assert(math.IsNaN(imag(cx.Value)), qt.IsTrue, qt.Commentf("%s: imag part should be NaN", tc.name))
+		} else {
+			c.Assert(imag(cx.Value), qt.Equals, imag(tc.expected), qt.Commentf("%s: imag part mismatch", tc.name))
+		}
+
+		// Reversed: BigComplex is receiver, Float is operand (symmetric dispatch).
+		resultRev := tc.op(bc, tc.floatVal)
+		c.Assert(resultRev, qt.Not(qt.IsNil), qt.Commentf("%s (reversed): result is nil", tc.name))
+		cxRev, ok := resultRev.(*Complex)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("%s (reversed): expected *Complex, got %T", tc.name, resultRev))
+		// For reversed direction the complex128 oracle is op(bc, float): bc op float.
+		// We can't reuse tc.expected directly (subtraction/division are not symmetric),
+		// so compute the oracle from Go complex128 arithmetic.
+		revExpected := tc.op(
+			NewComplex(complex(3, 4)),
+			NewComplex(complex(real(complex(tc.floatVal.Value, 0)), 0)),
+		).(*Complex).Value
+		if math.IsNaN(real(revExpected)) {
+			c.Assert(math.IsNaN(real(cxRev.Value)), qt.IsTrue, qt.Commentf("%s (reversed): real part should be NaN", tc.name))
+		} else {
+			c.Assert(real(cxRev.Value), qt.Equals, real(revExpected), qt.Commentf("%s (reversed): real part mismatch", tc.name))
+		}
+		if math.IsNaN(imag(revExpected)) {
+			c.Assert(math.IsNaN(imag(cxRev.Value)), qt.IsTrue, qt.Commentf("%s (reversed): imag part should be NaN", tc.name))
+		} else {
+			c.Assert(imag(cxRev.Value), qt.Equals, imag(revExpected), qt.Commentf("%s (reversed): imag part mismatch", tc.name))
+		}
+	}
+}
+
+// TestFloatBigComplexGuard_ResultType verifies that the guard path
+// produces *Complex (not *Float, not *BigComplex) for the BigComplex LUB case.
+func TestFloatBigComplexGuard_ResultType(t *testing.T) {
+	c := qt.New(t)
+	bc := NewBigComplex(
+		NewBigIntegerFromInt64(3),
+		NewBigIntegerFromInt64(4),
+	)
+	result := NewFloat(math.Inf(1)).Add(bc)
+	_, isComplex := result.(*Complex)
+	_, isFloat := result.(*Float)
+	_, isBigComplex := result.(*BigComplex)
+	c.Assert(isComplex, qt.IsTrue, qt.Commentf("expected *Complex, got float=%v bigcomplex=%v actual=%T", isFloat, isBigComplex, result))
+}
+
+// TestNumberToComplex128 verifies the helper converts all Number types correctly.
+func TestNumberToComplex128(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(numberToComplex128(NewInteger(3)), qt.Equals, complex(3.0, 0))
+	c.Assert(numberToComplex128(NewBigIntegerFromInt64(5)), qt.Equals, complex(5.0, 0))
+	c.Assert(numberToComplex128(NewFloat(1.5)), qt.Equals, complex(1.5, 0))
+	c.Assert(numberToComplex128(NewBigFloatFromFloat64(2.5)), qt.Equals, complex(2.5, 0))
+	c.Assert(numberToComplex128(NewRational(1, 2)), qt.Equals, complex(0.5, 0))
+	c.Assert(numberToComplex128(NewComplex(complex(1, 2))), qt.Equals, complex(1, 2))
+	c.Assert(numberToComplex128(NewBigComplex(
+		NewBigIntegerFromInt64(3),
+		NewBigIntegerFromInt64(4),
+	)), qt.Equals, complex(3.0, 4.0))
+	// Float with Inf preserves the special value.
+	r := numberToComplex128(NewFloat(math.Inf(1)))
+	c.Assert(math.IsInf(real(r), 1), qt.IsTrue)
+	c.Assert(imag(r), qt.Equals, 0.0)
+	// BigInteger with large value — truncates to float64 (Tier 4, acceptable).
+	bigN := &BigInteger{value: new(big.Int).Lsh(big.NewInt(1), 100)}
+	r2 := numberToComplex128(bigN)
+	c.Assert(math.IsInf(real(r2), 0), qt.IsFalse) // large but finite after truncation
+	c.Assert(imag(r2), qt.Equals, 0.0)
 }
