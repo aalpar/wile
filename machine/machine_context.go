@@ -1261,7 +1261,7 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 // unwindStackTo runs after thunks from innermost to commonDepth on the given stack,
 // then sets p.windingStack to the common ancestor prefix.
 func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) error {
-	// Run after thunks from innermost to outermost (reverse order)
+	// Run after thunks from innermost to outermost (reverse order).
 	for i := len(stack) - 1; i >= commonDepth; i-- {
 		frame := stack[i]
 		if frame.After != nil {
@@ -1270,17 +1270,22 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
+				// Truncate to reflect that extents > i are already exited.
+				p.windingStack = stack[:i:i]
 				return err
 			}
 			err = sub.Run()
 			ReleaseSubContext(sub)
 			if err != nil {
-				// Propagate escapes and exceptions
+				// Propagate escapes and exceptions.
+				p.windingStack = stack[:i:i]
 				return err
 			}
 		}
+		// This extent is now exited; update winding stack immediately.
+		p.windingStack = stack[:i:i]
 	}
-	// Update current winding stack to common ancestor
+	// Update current winding stack to common ancestor.
 	p.windingStack = stack[:commonDepth:commonDepth]
 	return nil
 }
