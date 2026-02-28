@@ -16,6 +16,7 @@ package values_test
 
 import (
 	"math"
+	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -667,4 +668,160 @@ func TestBigComplex_HashCode(t *testing.T) {
 	h1 := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(1), values.NewBigFloatFromFloat64(2)).HashCode()
 	h2 := values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2), values.NewBigFloatFromFloat64(1)).HashCode()
 	c.Assert(h1, qt.Not(qt.Equals), h2)
+}
+
+// TestBigComplex_FloatInfDispatch is the regression test for issue #362.
+// Float(Inf/NaN) combined with BigComplex must preserve the imaginary part.
+func TestBigComplex_FloatInfDispatch(t *testing.T) {
+	c := qt.New(t)
+
+	// BigComplex(3+4i) with exact BigInteger parts.
+	bc := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	tcs := []struct {
+		name     string
+		result   values.Number
+		realInf  bool
+		realNaN  bool
+		imagZero bool
+	}{
+		{
+			name:     "+inf.0 + (3+4i)",
+			result:   values.NewFloat(math.Inf(1)).Add(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "(3+4i) + +inf.0",
+			result:   bc.Add(values.NewFloat(math.Inf(1))),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "-inf.0 + (3+4i)",
+			result:   values.NewFloat(math.Inf(-1)).Add(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "+nan.0 + (3+4i)",
+			result:   values.NewFloat(math.NaN()).Add(bc),
+			realInf:  false,
+			realNaN:  true,
+			imagZero: false,
+		},
+		{
+			name:     "+inf.0 - (3+4i)",
+			result:   values.NewFloat(math.Inf(1)).Subtract(bc),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+		{
+			name:     "(3+4i) - +inf.0",
+			result:   bc.Subtract(values.NewFloat(math.Inf(1))),
+			realInf:  true,
+			realNaN:  false,
+			imagZero: false,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			// Result must be *BigComplex (not *Float or *Complex).
+			bResult, ok := tc.result.(*values.BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *BigComplex, got %T", tc.result))
+
+			realPart := bResult.Real()
+			imagPart := bResult.Imag()
+
+			// Imaginary part must not be zero (the original bug: imaginary lost).
+			c.Assert(imagPart.IsZero(), qt.IsFalse)
+
+			if tc.realInf {
+				c.Assert(realPart.IsFinite(), qt.IsFalse)
+				c.Assert(realPart.IsNaN(), qt.IsFalse)
+			}
+			if tc.realNaN {
+				c.Assert(realPart.IsNaN(), qt.IsTrue)
+			}
+		})
+	}
+}
+
+func TestBigComplex_InfNaNPredicates(t *testing.T) {
+	c := qt.New(t)
+
+	infReal := values.NewBigComplex(
+		values.NewBigFloat(new(big.Float).SetInf(false)),
+		values.NewBigIntegerFromInt64(4),
+	)
+	nanReal := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	finite := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	// BigComplex with Inf real part.
+	c.Assert(infReal.IsFinite(), qt.IsFalse)
+	c.Assert(infReal.IsNaN(), qt.IsFalse)
+	c.Assert(infReal.IsRational(), qt.IsFalse)
+
+	// BigComplex with NaN real part.
+	c.Assert(nanReal.IsFinite(), qt.IsFalse)
+	c.Assert(nanReal.IsNaN(), qt.IsTrue)
+	c.Assert(nanReal.IsRational(), qt.IsFalse)
+
+	// Ordinary finite BigComplex.
+	c.Assert(finite.IsFinite(), qt.IsTrue)
+	c.Assert(finite.IsNaN(), qt.IsFalse)
+}
+
+// TestBigComplex_NaNEquality verifies IEEE 754: NaN is never equal to
+// anything, including itself. This is a regression test for a bug where
+// BigComplex.EqualTo fell through to Compare (which returns 0 for NaN),
+// causing NaN == NaN to return true.
+func TestBigComplex_NaNEquality(t *testing.T) {
+	c := qt.New(t)
+
+	nanReal := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	nanImag := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigFloatNaN(),
+	)
+	nanBoth := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigFloatNaN(),
+	)
+	finite := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+
+	// NaN != NaN (IEEE 754).
+	c.Assert(nanReal.EqualTo(nanReal), qt.IsFalse)
+	c.Assert(nanImag.EqualTo(nanImag), qt.IsFalse)
+	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsFalse)
+
+	// NaN != finite.
+	c.Assert(nanReal.EqualTo(finite), qt.IsFalse)
+	c.Assert(finite.EqualTo(nanReal), qt.IsFalse)
+
+	// NaN BigComplex != NaN BigComplex (different instances).
+	nanReal2 := values.NewBigComplex(
+		values.NewBigFloatNaN(),
+		values.NewBigIntegerFromInt64(4),
+	)
+	c.Assert(nanReal.EqualTo(nanReal2), qt.IsFalse)
 }

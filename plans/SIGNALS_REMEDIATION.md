@@ -1,12 +1,10 @@
 # Signals Review Remediation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status: COMPLETE** — All 7 tasks merged in PR #361 (2026-02-28). Branch: `fix/signals-remediation`.
 
 **Goal:** Implement all six proposed fixes from `plans/SIGNALS_REVIEW.md` (P1–P6) plus one additional fix (P4b) in a single feature branch, one commit per task.
 
 **Architecture:** Seven independent tasks, ordered by signals-review priority. P3 and P2 touch the VM; P4/P4b touch the security/error chain; P1 touches dynamic-wind; P5/P6 are documentation-only. No circular dependencies between tasks — any can fail without blocking others.
-
-**Branch:** create a new feature branch from master before starting (see `/branch` skill).
 
 **Tech Stack:** Go 1.23, `github.com/frankban/quicktest` for tests, `make lint && make covercheck` after each task.
 

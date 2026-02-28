@@ -2,7 +2,7 @@
 
 **Plans go in `plans/`.** Do not create plan files in any other location.
 
-**Plan file naming**: Use `UPPERCASE_WITH_UNDERSCORES.md` (e.g., `OPTIMIZATION_PLAN.md`).
+**Plan file naming**: ALL CAPS. Use `UPPERCASE-WITH-HYPHENS.md` (e.g., `362-BIGCOMPLEX-INFNAN-GUARD.md`). Issue-linked plans are prefixed with the issue number.
 
 ## R7RS Investigation Procedure
 
@@ -23,8 +23,11 @@ When investigating R7RS conformance issues:
 | `TESTING.md` | Scheme test expansion (complete) | Complete |
 | `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Approved |
 | `STRUCTURAL_REVIEW.md` | Codebase-wide structural reduction + tech debt assessment: dependency map, state tightness, composability, consistency debt | Reference |
-| `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Reference |
+| `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Complete (PR #361) |
+| `SIGNALS_REMEDIATION.md` | Implementation plan for SIGNALS_REVIEW findings P1–P6 + P4b | Complete (PR #361) |
 | `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: numeric dispatch duplication, extension friction, testing gaps, consistency debt | Reference |
+| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: Extend BigFloat/BigComplex with IEEE 754 Inf/NaN support, remove dispatch guard (#362) | Proposed |
+| `PRECISION-GUARANTEES.md` | Precision loss policy: tier model, known bugs, proposed PrecisionMode setting | Reference |
 
 ## Before Starting Work
 

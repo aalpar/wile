@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 )
 
@@ -30,8 +31,16 @@ const DefaultBigFloatPrecision = 256
 
 // BigFloat represents an arbitrary-precision floating-point number.
 // Created with the #m prefix in Scheme (e.g., #m3.14159265358979323846).
+//
+// big.Float natively supports ±Inf via SetInf/IsInf. NaN has no native
+// big.Float representation (operations that produce NaN under IEEE 754 panic
+// with big.ErrNaN instead), so NaN is tracked via an out-of-band flag.
+//
+// Invariant: when nan is true, value MUST be a valid (zero-valued) *big.Float,
+// never nil, to prevent nil-pointer panics.
 type BigFloat struct {
 	value *big.Float
+	nan   bool
 }
 
 // NewBigFloat creates a new BigFloat from a big.Float.
@@ -39,8 +48,16 @@ func NewBigFloat(v *big.Float) *BigFloat {
 	return &BigFloat{value: new(big.Float).Copy(v)}
 }
 
+// NewBigFloatNaN creates a new BigFloat representing NaN.
+func NewBigFloatNaN() *BigFloat {
+	return &BigFloat{value: new(big.Float), nan: true}
+}
+
 // NewBigFloatFromFloat64 creates a new BigFloat from a float64.
 func NewBigFloatFromFloat64(v float64) *BigFloat {
+	if math.IsNaN(v) {
+		return NewBigFloatNaN()
+	}
 	return &BigFloat{value: big.NewFloat(v).SetPrec(DefaultBigFloatPrecision)}
 }
 
@@ -54,6 +71,24 @@ func NewBigFloatFromString(s string) *BigFloat {
 	return &BigFloat{value: v}
 }
 
+// recoverNaN wraps a big.Float operation that may panic with big.ErrNaN.
+// If the operation panics with ErrNaN, returns a BigFloat NaN. Non-ErrNaN
+// panics are re-panicked. Used to convert IEEE 754 NaN-producing operations
+// (Inf+(-Inf), 0*Inf, Inf/Inf) into BigFloat NaN values.
+func recoverNaN(op func() *BigFloat) (result *BigFloat) {
+	defer func() {
+		r := recover()
+		if r != nil {
+			if _, ok := r.(big.ErrNaN); ok {
+				result = NewBigFloatNaN()
+			} else {
+				panic(r)
+			}
+		}
+	}()
+	return op()
+}
+
 // BigFloatValue returns the underlying big.Float value.
 func (p *BigFloat) BigFloatValue() *big.Float {
 	return p.value
@@ -61,19 +96,30 @@ func (p *BigFloat) BigFloatValue() *big.Float {
 
 // Float64 returns the value as float64 (may lose precision).
 func (p *BigFloat) Float64() float64 {
+	if p.nan {
+		return math.NaN()
+	}
 	f, _ := p.value.Float64()
 	return f
 }
 
 // HashCode returns a hash code for this BigFloat.
-// Uses the canonical inexact-family hash so that Float and BigFloat
-// produce identical hashes for equal values.
+// For Inf and NaN, delegates to float64 bit pattern matching Float.HashCode,
+// ensuring Float and BigFloat produce identical hashes for equal values.
+//
+// Note: NaN != NaN (IEEE 754), so two NaN BigFloats are never EqualTo each
+// other. A NaN key stored in a hashtable is therefore unretrievable — the
+// Hashable contract is not violated, but NaN is not a useful hashtable key.
 func (p *BigFloat) HashCode() uint64 {
+	if p.nan {
+		return hashUint64(0x5, math.Float64bits(math.NaN()))
+	}
+	if p.value.IsInf() {
+		return hashUint64(0x5, math.Float64bits(p.Float64()))
+	}
 	return hashInexactNumeric(p.value)
 }
 
-// Add returns the sum of this BigFloat and another number.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *BigFloat) Kind() NumericKind {
 	return KindBigFloat
@@ -88,27 +134,27 @@ var bigFloatDivide [numKinds]func(*BigFloat, Number) Number
 
 func init() {
 	bigFloatAdd = makeAddDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
-		return &BigFloat{value: new(big.Float).Add(p.value, o.(*BigFloat).value)}
+		return p.Add(o)
 	})
 
 	bigFloatSubtract = makeSubtractDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
-		return &BigFloat{value: new(big.Float).Sub(p.value, o.(*BigFloat).value)}
+		return p.Subtract(o)
 	})
 
 	bigFloatLessThan = makeLessThanDispatch(KindBigFloat, func(p *BigFloat, o Number) bool {
-		return p.value.Cmp(o.(*BigFloat).value) < 0
+		return p.LessThan(o)
 	})
 
 	bigFloatCompare = makeCompareDispatch(KindBigFloat, func(p *BigFloat, o Number) int {
-		return p.value.Cmp(o.(*BigFloat).value)
+		return p.Compare(o)
 	})
 
 	bigFloatMultiply = makeMultiplyDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
-		return &BigFloat{value: new(big.Float).Mul(p.value, o.(*BigFloat).value)}
+		return p.Multiply(o)
 	})
 
 	bigFloatDivide = makeDivideDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
-		return &BigFloat{value: new(big.Float).Quo(p.value, o.(*BigFloat).value)}
+		return p.Divide(o)
 	})
 }
 
@@ -118,7 +164,12 @@ func init() {
 func (p *BigFloat) Add(o Number) Number {
 	v, ok := o.(*BigFloat)
 	if ok {
-		return &BigFloat{value: new(big.Float).Add(p.value, v.value)}
+		if p.nan || v.nan {
+			return NewBigFloatNaN()
+		}
+		return recoverNaN(func() *BigFloat {
+			return &BigFloat{value: new(big.Float).Add(p.value, v.value)}
+		})
 	}
 	return bigFloatAdd[o.Kind()](p, o)
 }
@@ -130,7 +181,12 @@ func (p *BigFloat) Add(o Number) Number {
 func (p *BigFloat) Subtract(o Number) Number {
 	v, ok := o.(*BigFloat)
 	if ok {
-		return &BigFloat{value: new(big.Float).Sub(p.value, v.value)}
+		if p.nan || v.nan {
+			return NewBigFloatNaN()
+		}
+		return recoverNaN(func() *BigFloat {
+			return &BigFloat{value: new(big.Float).Sub(p.value, v.value)}
+		})
 	}
 	return bigFloatSubtract[o.Kind()](p, o)
 }
@@ -139,7 +195,13 @@ func (p *BigFloat) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Multiply(o Number) Number {
+	if p.nan || o.IsNaN() {
+		return NewBigFloatNaN()
+	}
 	if o.IsZero() {
+		if !p.IsFinite() {
+			return NewBigFloatNaN() // 0 * Inf = NaN
+		}
 		return multiplyResultForZero(o, p)
 	}
 	if p.IsZero() && o.IsFinite() {
@@ -147,35 +209,48 @@ func (p *BigFloat) Multiply(o Number) Number {
 	}
 	v, ok := o.(*BigFloat)
 	if ok {
-		return &BigFloat{value: new(big.Float).Mul(p.value, v.value)}
+		return recoverNaN(func() *BigFloat {
+			return &BigFloat{value: new(big.Float).Mul(p.value, v.value)}
+		})
 	}
 	return bigFloatMultiply[o.Kind()](p, o)
 }
 
 // Divide returns the quotient of this BigFloat and another number.
 func (p *BigFloat) Divide(o Number) Number {
+	if p.nan || o.IsNaN() {
+		return NewBigFloatNaN()
+	}
 	if o.IsZero() {
 		panic(ErrDivisionByZero)
 	}
 	v, ok := o.(*BigFloat)
 	if ok {
-		return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
+		return recoverNaN(func() *BigFloat {
+			return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
+		})
 	}
 	return bigFloatDivide[o.Kind()](p, o)
 }
 
 // Negate returns the negation of this BigFloat.
 func (p *BigFloat) Negate() Number {
+	if p.nan {
+		return NewBigFloatNaN()
+	}
 	return &BigFloat{value: new(big.Float).Neg(p.value)}
 }
 
 // IsZero returns true if this BigFloat is zero.
 func (p *BigFloat) IsZero() bool {
-	return p.value.Sign() == 0
+	return !p.nan && p.value.Sign() == 0
 }
 
 // LessThan returns true if this BigFloat is less than another number.
 func (p *BigFloat) LessThan(o Number) bool {
+	if p.nan || o.IsNaN() {
+		return false
+	}
 	v, ok := o.(*BigFloat)
 	if ok {
 		return p.value.Cmp(v.value) < 0
@@ -184,13 +259,15 @@ func (p *BigFloat) LessThan(o Number) bool {
 }
 
 // IsNegative returns true if this BigFloat is negative.
+// NaN has no sign and returns false.
 func (p *BigFloat) IsNegative() bool {
-	return p.value.Sign() < 0
+	return !p.nan && p.value.Sign() < 0
 }
 
 // IsPositive returns true if this BigFloat is positive.
+// NaN has no sign and returns false.
 func (p *BigFloat) IsPositive() bool {
-	return p.value.Sign() > 0
+	return !p.nan && p.value.Sign() > 0
 }
 
 // IsExact returns false since BigFloat is always inexact.
@@ -202,33 +279,38 @@ func (p *BigFloat) IsExact() bool {
 //
 // R7RS §6.2.6: integer? returns #t for inexact integers.
 func (p *BigFloat) IsInteger() bool {
-	return p.value.IsInt()
+	return !p.nan && p.value.IsInt()
 }
 
-// IsRational returns true since BigFloat is always finite (big.Float has no Inf/NaN).
+// IsRational returns true if this BigFloat holds a finite value.
 //
 // R7RS §6.2.6: rational? returns #t for all finite real numbers.
+// Inf and NaN are not rational.
 func (p *BigFloat) IsRational() bool {
-	return true
+	return !p.nan && !p.value.IsInf()
 }
 
-// IsFinite returns true since big.Float has no Inf or NaN representation.
+// IsFinite returns true if this BigFloat holds a finite value.
 //
 // R7RS §6.2.6: finite? returns #t for finite numbers.
 func (p *BigFloat) IsFinite() bool {
-	return true
+	return !p.nan && !p.value.IsInf()
 }
 
-// IsNaN returns false since big.Float has no NaN representation.
+// IsNaN returns true if this BigFloat holds NaN.
 //
-// R7RS §6.2.6: nan? returns #f for big.Float values.
+// R7RS §6.2.6: nan? returns #t for NaN values.
 func (p *BigFloat) IsNaN() bool {
-	return false
+	return p.nan
 }
 
 // ToExact converts this BigFloat to an exact Rational.
+//
+// R7RS §6.2.6: (exact +inf.0) and (exact +nan.0) are errors.
 func (p *BigFloat) ToExact() Number {
-	// Convert to Rational for exact representation
+	if p.nan || p.value.IsInf() {
+		panic(WrapForeignErrorf(ErrExactnessConversion, "cannot convert non-finite BigFloat to exact"))
+	}
 	r, _ := p.value.Rat(nil)
 	if r == nil {
 		return NewRational(0, 1)
@@ -243,16 +325,27 @@ func (p *BigFloat) ToInexact() Number {
 
 // Abs returns the absolute value of this BigFloat.
 func (p *BigFloat) Abs() Number {
+	if p.nan {
+		return NewBigFloatNaN()
+	}
 	return NewBigFloat(new(big.Float).Abs(p.value))
 }
 
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
+// NaN returns 0 (NaN has no sign).
 func (p *BigFloat) Sign() int {
+	if p.nan {
+		return 0
+	}
 	return p.value.Sign()
 }
 
 // Compare compares this BigFloat with another number.
+// Returns 0 for NaN operands (NaN has no valid ordering).
 func (p *BigFloat) Compare(o Number) int {
+	if p.nan || o.IsNaN() {
+		return 0
+	}
 	v, ok := o.(*BigFloat)
 	if ok {
 		return p.value.Cmp(v.value)
@@ -262,6 +355,15 @@ func (p *BigFloat) Compare(o Number) int {
 
 // SchemeString returns the Scheme representation of this BigFloat.
 func (p *BigFloat) SchemeString() string {
+	if p.nan {
+		return "+nan.0"
+	}
+	if p.value.IsInf() {
+		if p.value.Sign() < 0 {
+			return "-inf.0"
+		}
+		return "+inf.0"
+	}
 	return p.value.Text('g', -1)
 }
 
@@ -271,19 +373,25 @@ func (p *BigFloat) IsVoid() bool {
 }
 
 // EqualTo returns true if this BigFloat equals another value.
+// NaN is not equal to anything, including itself (IEEE 754).
 func (p *BigFloat) EqualTo(o Value) bool {
 	v, ok := o.(*BigFloat)
-	if !ok {
-		// Also check if equal to regular Float
-		f, ok := o.(*Float)
-		if ok {
-			vf := new(big.Float).SetFloat64(f.Value)
-			return p.value.Cmp(vf) == 0
+	if ok {
+		if v == nil || p == nil {
+			return p == v
 		}
-		return false
+		if p.nan || v.nan {
+			return false
+		}
+		return p.value.Cmp(v.value) == 0
 	}
-	if v == nil || p == nil {
-		return p == v
+	f, ok := o.(*Float)
+	if ok {
+		if p.nan || math.IsNaN(f.Value) {
+			return false
+		}
+		vf := new(big.Float).SetFloat64(f.Value)
+		return p.value.Cmp(vf) == 0
 	}
-	return p.value.Cmp(v.value) == 0
+	return false
 }

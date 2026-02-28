@@ -103,6 +103,7 @@ Two-layer sandboxing for embedded use:
 - Comments explain *why*, not *what* — non-obvious logic gets context, obvious code gets none
 - Table-driven tests are the norm for multiple scenarios (see `registry/CLAUDE.md`)
 - All new packages require unit tests; significant features need integration tests in `integration/`
+- **Early return from functions.** Check preconditions and known failure modes first, return early on error/edge cases, keep the happy path flat and unindented. No nested if/else chains when guard clauses suffice. See `CODING_STYLE.md` for examples.
 
 ## Git Workflow
 

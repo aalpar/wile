@@ -273,3 +273,93 @@ func TestFloat_ToExact_NonFinite(t *testing.T) {
 		})
 	}
 }
+
+// TestFloat_InfNaNPredicates verifies that IEEE 754 special-value predicates
+// are correct and symmetric with BigFloat's behaviour.
+func TestFloat_InfNaNPredicates(t *testing.T) {
+	c := qt.New(t)
+	// Only special values: finite predicate cases are covered by TestFloat_SchemeString.
+	tcs := []struct {
+		name       string
+		v          *values.Float
+		isFinite   bool
+		isNaN      bool
+		isRational bool
+		isInteger  bool
+		scheme     string
+	}{
+		{"+inf.0", values.NewFloat(math.Inf(1)), false, false, false, false, "+inf.0"},
+		{"-inf.0", values.NewFloat(math.Inf(-1)), false, false, false, false, "-inf.0"},
+		{"+nan.0", values.NewFloat(math.NaN()), false, true, false, false, "+nan.0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(tc.v.IsFinite(), qt.Equals, tc.isFinite)
+			c.Assert(tc.v.IsNaN(), qt.Equals, tc.isNaN)
+			c.Assert(tc.v.IsRational(), qt.Equals, tc.isRational)
+			c.Assert(tc.v.IsInteger(), qt.Equals, tc.isInteger)
+			c.Assert(tc.v.SchemeString(), qt.Equals, tc.scheme)
+		})
+	}
+}
+
+// TestFloat_NaNEquality verifies that NaN != NaN (IEEE 754) in EqualTo.
+func TestFloat_NaNEquality(t *testing.T) {
+	c := qt.New(t)
+	nan1 := values.NewFloat(math.NaN())
+	nan2 := values.NewFloat(math.NaN())
+	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
+	c.Assert(nan1.EqualTo(nan1), qt.IsFalse)
+	c.Assert(nan1.EqualTo(values.NewFloat(0)), qt.IsFalse)
+	c.Assert(nan1.EqualTo(values.NewFloat(math.Inf(1))), qt.IsFalse)
+}
+
+// TestFloat_InfNaNArithmetic verifies IEEE 754 Inf/NaN arithmetic outcomes.
+func TestFloat_InfNaNArithmetic(t *testing.T) {
+	c := qt.New(t)
+	posInf := values.NewFloat(math.Inf(1))
+	negInf := values.NewFloat(math.Inf(-1))
+	nan := values.NewFloat(math.NaN())
+	three := values.NewFloat(3)
+
+	// Inf arithmetic stays non-finite.
+	r := posInf.Add(three)
+	c.Assert(r.IsFinite(), qt.IsFalse)
+	c.Assert(r.IsNaN(), qt.IsFalse)
+
+	r = posInf.Multiply(three)
+	c.Assert(r.IsFinite(), qt.IsFalse)
+
+	// Inf + (-Inf) = NaN.
+	r = posInf.Add(negInf)
+	c.Assert(r.IsNaN(), qt.IsTrue)
+
+	// NaN propagates.
+	r = nan.Add(three)
+	c.Assert(r.IsNaN(), qt.IsTrue)
+
+	r = three.Add(nan)
+	c.Assert(r.IsNaN(), qt.IsTrue)
+}
+
+// TestFloat_InfNaNHashConsistency verifies that Float and BigFloat produce
+// identical hash codes for the same Inf/NaN value (required by the Hashable contract).
+func TestFloat_InfNaNHashConsistency(t *testing.T) {
+	c := qt.New(t)
+	for _, v := range []float64{math.Inf(1), math.Inf(-1), math.NaN()} {
+		f := values.NewFloat(v)
+		bf := values.NewBigFloatFromFloat64(v)
+		c.Assert(f.HashCode(), qt.Equals, bf.HashCode(),
+			qt.Commentf("hash mismatch for %v: Float=%d BigFloat=%d", v, f.HashCode(), bf.HashCode()))
+	}
+}
+
+// TestFloat_LessThanNaN verifies that NaN comparisons return false (IEEE 754).
+func TestFloat_LessThanNaN(t *testing.T) {
+	c := qt.New(t)
+	nan := values.NewFloat(math.NaN())
+	one := values.NewFloat(1)
+	c.Assert(nan.LessThan(one), qt.IsFalse)
+	c.Assert(one.LessThan(nan), qt.IsFalse)
+	c.Assert(nan.LessThan(nan), qt.IsFalse)
+}

@@ -14,7 +14,7 @@ The codebase is architecturally sound — bytecode VM, correct continuation chai
 
 ## Findings
 
-### F1 [Priority: High] — Numeric dispatch tables: 41 hand-unrolled arrays
+### F1 [Priority: High] [COMPLETE] — Numeric dispatch tables: 41 hand-unrolled arrays
 
 **Where**: `values/{integer,big_integer,float,big_float,complex,big_complex,rational}.go`
 **What**: Each of 7 numeric types declares `[numKinds]func` dispatch arrays for Add, Subtract, Multiply, Divide, LessThan, Compare — totaling 41 arrays (BigComplex has 5, all others have 6). Each array is populated in `init()` with 7–9 entries of structurally identical code: extract operand, promote, compute, wrap result.
@@ -41,7 +41,9 @@ Same shape, same semantics, different only in the receiver's conversion method n
 
 **Effort**: L (touches 7 files, needs careful correctness verification)
 
-**TODO — Remediation Instructions**:
+**Status**: COMPLETE — All 3 phases implemented. `values/promotion.go` contains the promotion lattice as data (`promotionTable`, `promoter` arrays) and generic dispatch generators (`makeArithmeticDispatch[T]`, `makeLessThanDispatch[T]`, `makeCompareDispatch[T]`). All 41 hand-written dispatch arrays across 7 type files replaced with generated dispatch. Tests in `values/promotion_test.go`.
+
+**Remediation Instructions** (retained for reference):
 
 This is the largest structural debt item. Do NOT attempt a full rewrite in one pass. Break into phases:
 
@@ -135,7 +137,7 @@ Once Phase 2 proves the pattern, extend to Subtract, Multiply, Divide, LessThan,
 
 ---
 
-### F2 [Priority: High] — Extension friction: adding a callable type = 3+ files, adding an opcode = 7+ files
+### F2 [Priority: High] [PARTIAL] — Extension friction: adding a callable type = 3+ files, adding an opcode = 7+ files
 
 **Where**: `machine/machine_context.go` (ApplyCallable, Run), `machine/expander_time_continuation.go` (transformer dispatch), `machine/native_template.go` (operationToInstruction/instructionToOperation), `machine/compile_validated.go`, `machine/opcode.go`
 
@@ -160,9 +162,11 @@ No registry, no visitor, no dispatch table — all hand-wired switches.
 
 **Effort**: M (callables) / L (opcodes, due to performance constraints)
 
-**TODO — Remediation Instructions**:
+**Status**: Part A COMPLETE — opcode addition checklist added to `machine/opcode.go:22`. Part B (callable dispatch unification) NOT started.
 
-**Part A: Document the opcode addition checklist (do first, trivial)**
+**Remediation Instructions**:
+
+**Part A: Document the opcode addition checklist (do first, trivial)** [COMPLETE]
 
 1. Create a comment block at the top of `machine/opcode.go` (after the package doc) documenting the exact files that must be touched when adding a new opcode:
    ```
@@ -199,7 +203,7 @@ The two expander dispatches only handle MachineClosure and ForeignClosure becaus
 
 ---
 
-### F3 [Priority: High] — Complex and BigComplex missing HashCode
+### F3 [Priority: High] [COMPLETE] — Complex and BigComplex missing HashCode
 
 **Where**: `values/complex.go`, `values/big_complex.go`
 **What**: Neither type implements `Hashable` (confirmed: 0 `HashCode` occurrences in both files). All other numeric types that can serve as hashtable keys implement it: Integer, BigInteger, Float, BigFloat, Rational. The `values/CLAUDE.local.md` explicitly lists the Hashable implementors and Complex/BigComplex are absent.
@@ -210,7 +214,9 @@ The two expander dispatches only handle MachineClosure and ForeignClosure becaus
 
 **Effort**: S
 
-**TODO — Remediation Instructions**:
+**Status**: COMPLETE — `Complex.HashCode()` added at `values/complex.go:321`, `BigComplex.HashCode()` added at `values/big_complex.go:637`.
+
+**Remediation Instructions** (retained for reference):
 
 1. Read `values/values.go:125-128` for the `Hashable` interface definition (`HashCode() uint64`).
 2. Read existing implementations for the pattern:
@@ -321,7 +327,7 @@ Run `make test && make lint`. All 115 test files in registry/core/ should pass u
 
 ---
 
-### F5 [Priority: Medium] — Duplicate test-scheme invocation in Makefile
+### F5 [Priority: Medium] [COMPLETE] — Duplicate test-scheme invocation in Makefile
 
 **Where**: `Makefile:133-134`
 **What**: The `test` target calls `test-scheme` twice:
@@ -336,7 +342,9 @@ Run `make test && make lint`. All 115 test files in registry/core/ should pass u
 
 **Effort**: Trivial
 
-**TODO — Remediation Instructions**:
+**Status**: COMPLETE — duplicate `test-scheme` line removed. Only one invocation remains at `Makefile:133`.
+
+**Remediation Instructions** (retained for reference):
 
 1. Open `Makefile`, find lines 133-134 (the `test` target).
 2. Delete the second `@$(MAKE) test-scheme` line (line 134).
@@ -463,7 +471,7 @@ Run `make test && make covercheck`.
 
 ---
 
-### F8 [Priority: Medium] — Two compilation dispatch paths with no unifying abstraction
+### F8 [Priority: Medium] [COMPLETE] — Two compilation dispatch paths with no unifying abstraction
 
 **Where**: `machine/compile_validated.go` (validated forms), `machine/compile_time_continuation.go` (registry-based forms)
 **What**: Core forms (if, lambda, define, set!, quote, begin) go through the validated path: `validate.Validate()` → `ValidatedExpr` subtypes → `compileValidated()` switch. Extension forms (define-syntax, import, include, syntax-case) go through the registry path: `CompileSyntaxPrimitive()` → `LookupSyntaxCompiler()`. Two different mechanisms for one concept: "compile a special form."
@@ -474,7 +482,9 @@ Run `make test && make covercheck`.
 
 **Effort**: S (document) / L (unify)
 
-**TODO — Remediation Instructions (document only — S effort)**:
+**Status**: COMPLETE (document phase) — doc comments added at `compile_validated.go:25-35` and cross-reference at `compile_time_continuation.go:178-179`. Unification deferred.
+
+**Remediation Instructions (document only — S effort)** (retained for reference):
 
 The two paths are:
 - **Validated path** (`machine/compile_validated.go:60-114`): Core forms — `if`, `lambda`, `define`, `quote`, `quasiquote`, `begin`, `case-lambda`, `dynamic-wind`, `set!`. Uses `validate.Validate()` → `ValidatedExpr` subtypes → `compileValidated()` two-tier dispatch (form-name registry lookup at lines 74-82, then type-based at lines 90-106).
@@ -505,7 +515,7 @@ Also add a cross-reference comment at the top of `machine/compile_time_continuat
 
 ---
 
-### F9 [Priority: Medium] — BigComplex missing 1 dispatch table (5 vs 6 for all other types)
+### F9 [Priority: Medium] [COMPLETE] — BigComplex missing 1 dispatch table (5 vs 6 for all other types)
 
 **Where**: `values/big_complex.go`
 **What**: BigComplex has 5 `[numKinds]` dispatch arrays while all other numeric types have 6. The missing table is likely `LessThan` (complex ordering is undefined in R7RS, so this may be intentional).
@@ -516,7 +526,9 @@ Also add a cross-reference comment at the top of `machine/compile_time_continuat
 
 **Effort**: Trivial
 
-**TODO — Remediation Instructions**:
+**Status**: COMPLETE — comment documenting intentional omission added at `values/big_complex.go:261-264`.
+
+**Remediation Instructions** (retained for reference):
 
 Verified: BigComplex has 5 dispatch arrays. The missing one is `bigComplexLessThan`. The `LessThan` method (line 584-586) delegates to `Compare()`:
 ```go
@@ -665,7 +677,7 @@ Run `go test -bench=. -benchmem ./machine/ ./internal/tokenizer/ ./registry/core
 
 ---
 
-### F14 [Priority: Low] — ByteVectorBufferdOutputPort typo in type name
+### F14 [Priority: Low] [COMPLETE] — ByteVectorBufferdOutputPort typo in type name
 
 **Where**: `values/byte_vector_buffered_output_port.go`
 **What**: The type is named `ByteVectorBufferdOutputPort` — missing 'e' in "Buffered". Documented in `values/CLAUDE.local.md` as known.
@@ -676,7 +688,9 @@ Run `go test -bench=. -benchmem ./machine/ ./internal/tokenizer/ ./registry/core
 
 **Effort**: S
 
-**TODO — Remediation Instructions**:
+**Status**: COMPLETE — type renamed to `ByteVectorBufferedOutputPort` throughout codebase. Zero `Bufferd` occurrences remain in Go or markdown files.
+
+**Remediation Instructions** (retained for reference):
 
 The typo affects 31 Go references across 3 files and 9 markdown references across 4 docs.
 

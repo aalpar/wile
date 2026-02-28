@@ -3,6 +3,7 @@
 Date: 2026-02-27
 Scope: Full codebase (177k lines Go)
 Method: Six-lens signals analysis (mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity)
+Remediation: All proposed changes (P1–P6 + P4b) implemented and merged in PR #361 (2026-02-28). See `plans/SIGNALS_REMEDIATION.md`.
 
 ## Executive Summary
 
@@ -341,11 +342,14 @@ No code change needed — just document in `counters.go`:
 
 ## Priority Order
 
-| Priority | Change | Effort | Risk |
-|----------|--------|--------|------|
-| 1 | P3: Default maxCallDepth | Small | Low (breaking but v1.x) |
-| 2 | P4: Error chain integration tests | Small | None |
-| 3 | P2: callDepth panic → error | Medium | Low (signature change) |
-| 4 | P1: Incremental winding stack update | Small | Low |
-| 5 | P5: Document restArgBuf contract | Trivial | None |
-| 6 | P6: Pool effectiveness documentation | Trivial | None |
+All changes implemented in PR #361 (2026-02-28).
+
+| Priority | Change | Effort | Risk | Status |
+|----------|--------|--------|------|--------|
+| 1 | P3: Default maxCallDepth | Small | Low (breaking but v1.x) | ✓ Done |
+| 2 | P4: Error chain integration tests | Small | None | ✓ Done |
+| 2b | P4b: Fix fmt.Errorf in security.Check | Trivial | None | ✓ Done |
+| 3 | P2: callDepth panic → error | Medium | Low (signature change) | ✓ Done |
+| 4 | P1: Incremental winding stack update | Small | Low | ✓ Done |
+| 5 | P5: Document restArgBuf contract | Trivial | None | ✓ Done |
+| 6 | P6: Pool effectiveness documentation | Trivial | None | ✓ Done |
