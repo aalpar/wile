@@ -105,7 +105,8 @@ func toBigFloat(n Number) *BigFloat {
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
 	case *Integer:
-		return NewBigFloatFromFloat64(float64(v.Value))
+		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetInt64(v.Value)
+		return &BigFloat{value: bf}
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
