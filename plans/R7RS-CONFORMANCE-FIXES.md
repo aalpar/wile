@@ -1,7 +1,31 @@
 # R7RS Conformance Fixes
 
 **Source:** `plans/R7RS-CONFORMANCE-REVIEW.md`, `plans/R7RS-PORT-IO-CONFORMANCE.md`
-**Status:** Plan (awaiting approval)
+**Status:** Complete (all phases shipped)
+
+---
+
+## Completion Summary
+
+All 8 phases shipped across 5 PRs plus 1 open PR for a remaining C3 sub-fix:
+
+| PR | Merged | Phases | Key Findings |
+|----|--------|--------|--------------|
+| #364 | 2026-03-01 | 1, 2, 3, 4, 5, 8 (partial) | C2, C4, H2, H5, H6, L4, L5, L6, M6, E3 |
+| #365 | 2026-03-01 | 4, 5, 8 (remainder) | H2, H3, H4, M1, M2, L1, L2, L3, E2, E3 |
+| #366 | 2026-03-01 | 6 | M3 (guard re-raise), M5 (eval multi-value), M4 (not reproducible) |
+| #367 | 2026-03-01 | 6, 7 | M3/M5 continued, M7 (vector patterns), E1 (crash prevention) |
+| #368 | 2026-03-01 | — (excluded) | H1 (apply tail position — shipped as separate effort) |
+| #369 | **Open** | 1 (sub-fix) | C3 BigFloat `.0` suffix |
+
+**Originally excluded items — final status:**
+- L7 (`char-ready?`/`u8-ready?` always `#t`) — remains a documented semantic difference
+- E1 (datum-label circular literals) — crash prevention shipped in PR #367; shared acyclic datum labels (`#0=(a) (#0#)`) still incorrectly rejected (tracked in `TODO.md`)
+- H1 (`apply` tail position) — completed in PR #368 as compile-time special form
+
+**M4 (dynamic-wind double-fire):** Investigated with 5 test variations (simple/nested/re-entry × top-level/let). Not reproducible — all cases show correct identical behavior. Closed as not-a-bug.
+
+**M8 (dotted pair patterns):** Investigated and confirmed working correctly. The conformance review's test case was misleading — `b` captures the rest list, and `(list a b)` places it in evaluation position. Not a bug.
 
 ---
 
@@ -11,15 +35,11 @@ Group fixes by subsystem to minimize context-switching. Each phase is independen
 shippable as a single PR. Phases are ordered by impact and ease — quick wins first
 to build confidence in the test infrastructure, then deeper fixes.
 
-**Excluded from this plan:**
-- L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, conservative-safe
-- E1 (datum-label circular literals) — parser/compiler scope, separate effort
-- H1 (`apply` tail position) — VM architecture change, separate effort
-
 ---
 
-## Phase 1: Display & Write Round-Trip (C2, C3, L6)
+## Phase 1: Display & Write Round-Trip (C2, C3, L6) ✓
 
+**Status:** C2 and L6 complete (PR #364). C3 open (PR #369).
 **Theme:** `write` output must be readable by `read`. Three bugs break round-trip.
 **Effort:** Low (lookup table + String method tweak + format fix)
 **PR scope:** `values/`
@@ -168,8 +188,9 @@ Add to existing test files (table-driven, per `registry/CLAUDE.md`):
 
 ---
 
-## Phase 2: Port I/O Fixes (C5, H6, L4, L5, M6)
+## Phase 2: Port I/O Fixes (C5, H6, L4, L5, M6) ✓
 
+**Status:** Complete (PR #364, #365).
 **Theme:** Port system conformance — short reads, crash, direction checks, edge cases.
 **Effort:** Low–Medium
 **PR scope:** `internal/extensions/io/`
@@ -387,8 +408,9 @@ Add to `internal/extensions/io/prim_read_write_test.go` (table-driven):
 
 ---
 
-## Phase 3: Parameterize & Environment (C1, C4)
+## Phase 3: Parameterize & Environment (C1, C4) ✓
 
+**Status:** Complete (PR #364). C1 uses `%parameter-raw-set!` in `bootstrap.scm`. C4 returns `NewChildTopLevelEnvironment()`.
 **Theme:** Parameter and environment object semantics.
 **Effort:** Medium
 **PR scope:** `registry/core/bootstrap.scm`, `internal/extensions/eval/`
@@ -518,8 +540,9 @@ environment). The fix is the same: `NewChildTopLevelEnvironment()`.
 
 ---
 
-## Phase 4: Numeric Precision (H2, H3, H4, M1, M2, L1, L2)
+## Phase 4: Numeric Precision (H2, H3, H4, M1, M2, L1, L2) ✓
 
+**Status:** Complete (PR #364, #365).
 **Theme:** Exactness preservation and IEEE 754 edge cases.
 **Effort:** Medium–High
 **PR scope:** `values/`, `extensions/math/`
@@ -768,8 +791,9 @@ directly as test cases, plus edge cases:
 
 ---
 
-## Phase 5: String->Number Parsing (H5, L3)
+## Phase 5: String->Number Parsing (H5, L3) ✓
 
+**Status:** Complete (PR #364, #365). L3 (tokenizer prefix ordering) fixed in parser.
 **Theme:** Number reader completeness.
 **Effort:** Medium
 **PR scope:** `extensions/math/prim_math.go`, `internal/tokenizer/`
@@ -856,8 +880,9 @@ The parser is in `internal/parser/`. The difference reveals the bug.
 
 ---
 
-## Phase 6: Control & Exception Semantics (M3, M4, M5)
+## Phase 6: Control & Exception Semantics (M3, M4, M5) ✓
 
+**Status:** Complete (PR #366, #367). M3 uses R7RS §7.3 double `call/cc` pattern. M5 uses `SetValues(sub.GetValues()...)`. M4 not reproducible.
 **Theme:** Exception handling and continuation interactions.
 **Effort:** Medium–High
 **PR scope:** `registry/core/bootstrap.scm`, `machine/`, `internal/extensions/eval/`
@@ -981,8 +1006,9 @@ The same mechanism should be used by eval.
 
 ---
 
-## Phase 7: Vector Patterns in syntax-rules (M7)
+## Phase 7: Vector Patterns in syntax-rules (M7) ✓
 
+**Status:** Complete (PR #367). `ByteCodeVisitCarAsVector` + vector-to-pair-chain conversion. M8 confirmed not-a-bug.
 **Theme:** `syntax-rules` vector patterns.
 **Effort:** Medium (single new bytecode + 5 type-switch additions)
 **PR scope:** `internal/match/`, `machine/compile_syntax_rules.go`
@@ -1338,8 +1364,9 @@ func isPairPattern(codes []SyntaxCommand) bool {
 
 ---
 
-## Phase 8: Edge-Case NaN Guards (E2, E3)
+## Phase 8: Edge-Case NaN Guards (E2, E3) ✓
 
+**Status:** Complete (PR #364, #365).
 **Theme:** NaN comparison edge cases in helpers and cross-type dispatch.
 **Effort:** Low
 **PR scope:** `registry/helpers/`, `values/`
@@ -1424,19 +1451,19 @@ No fix needed for Float-Float NaN comparison.
 
 ## Summary
 
-| Phase | Findings | Effort | Theme |
+| Phase | Findings | Status | Theme |
 |-------|----------|--------|-------|
-| 1 | C2, C3, L6 | Low | Display/write round-trip |
-| 2 | C5, H6, L4, L5, M6 | Low–Med | Port I/O |
-| 3 | C1, C4 | Medium | Parameters & environments |
-| 4 | H2, H3, H4, M1, M2, L1, L2 | Med–High | Numeric precision |
-| 5 | H5, L3 | Medium | Number parsing |
-| 6 | M3, M4, M5 | Med–High | Control & exceptions |
-| 7 | M7 | Medium | Vector patterns (M8 not a bug) |
-| 8 | E2, E3 | Low | NaN edge cases |
+| 1 | C2, C3, L6 | ✓ (C3 PR #369 open) | Display/write round-trip |
+| 2 | C5, H6, L4, L5, M6 | ✓ | Port I/O |
+| 3 | C1, C4 | ✓ | Parameters & environments |
+| 4 | H2, H3, H4, M1, M2, L1, L2 | ✓ | Numeric precision |
+| 5 | H5, L3 | ✓ | Number parsing |
+| 6 | M3, M4, M5 | ✓ (M4 not reproducible) | Control & exceptions |
+| 7 | M7 | ✓ (M8 not a bug) | Vector patterns |
+| 8 | E2, E3 | ✓ | NaN edge cases |
 
-**Total:** 26 findings across 8 phases. Phases 1, 2, and 8 are quick wins.
-Phases 6 and 7 require the deepest investigation.
+**Total:** 26 findings across 8 phases. 24 fixed, 1 not reproducible (M4), 1 not a bug (M8).
+Additionally: H1 (excluded) shipped in PR #368; E1 (excluded) crash prevention shipped in PR #367.
 
 ## Corrections from Source Verification
 

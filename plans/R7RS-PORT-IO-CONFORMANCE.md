@@ -236,8 +236,8 @@ correctness of sequential `read` calls.
 | `input-port-open?` | 6.13.1 | PASS | |
 | `output-port-open?` | 6.13.1 | PASS | |
 | `close-port` | 6.13.1 | PASS | Flushes bufio.Writer, idempotent |
-| `close-input-port` | 6.13.1 | PARTIAL | Accepts output ports (Issue 3) |
-| `close-output-port` | 6.13.1 | PARTIAL | Accepts input ports (Issue 3) |
+| `close-input-port` | 6.13.1 | PASS | Fixed: `PrimCloseInputPort` validates direction (PR #364) |
+| `close-output-port` | 6.13.1 | PASS | Fixed: `PrimCloseOutputPort` validates direction (PR #364) |
 | `call-with-port` | 6.13.1 | PASS | Closes port on exit, returns value |
 | `open-input-string` | 6.13.1 | PASS | Uses bytes.Buffer directly |
 | `open-output-string` | 6.13.1 | PASS | Uses bytes.Buffer directly |
@@ -254,26 +254,26 @@ correctness of sequential `read` calls.
 | `read-char` | 6.13.2 | PASS | Rejects binary ports correctly |
 | `peek-char` | 6.13.2 | PASS | ReadRune + UnreadRune; multibyte correct |
 | `read-line` | 6.13.2 | PASS | Handles \n, \r\n, bare \r |
-| `read-string` | 6.13.2 | PARTIAL | k=0 returns EOF not "" (Issue 4) |
+| `read-string` | 6.13.2 | PASS | Fixed: k=0 returns `""` (PR #364) |
 | `char-ready?` | 6.13.2 | PARTIAL | Always returns #t (Issue 5) |
-| `write-char` | 6.13.2 | PARTIAL | Accepts binary ports (Issue 2) |
-| `write-string` | 6.13.2 | PARTIAL | Accepts binary ports (Issue 2) |
-| `newline` | 6.13.2 | PARTIAL | Accepts binary ports (Issue 2) |
-| `display` | 6.13.3 | PARTIAL | Accepts binary ports (Issue 2) |
-| `write` | 6.13.3 | PARTIAL | Accepts binary ports (Issue 2) |
-| `write-simple` | 6.13.3 | PARTIAL | Accepts binary ports (Issue 2) |
-| `write-shared` | 6.13.3 | PARTIAL | Accepts binary ports (Issue 2) |
+| `write-char` | 6.13.2 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `write-string` | 6.13.2 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `newline` | 6.13.2 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `display` | 6.13.3 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `write` | 6.13.3 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `write-simple` | 6.13.3 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
+| `write-shared` | 6.13.3 | PASS | Fixed: `getOptionalTextualOutputPort` rejects binary ports (PR #364) |
 | `read-u8` | 6.13.3 | PASS | Rejects textual ports correctly |
 | `peek-u8` | 6.13.3 | PASS | ReadByte + UnreadByte |
 | `u8-ready?` | 6.13.3 | PARTIAL | Always returns #t (Issue 5) |
 | `write-u8` | 6.13.3 | PASS | Rejects textual ports correctly |
-| `read-bytevector` | 6.13.3 | FAIL | Short reads from bufio (Finding 1) |
-| `read-bytevector!` | 6.13.3 | FAIL | Short reads from bufio (Finding 1) |
+| `read-bytevector` | 6.13.3 | PASS | Fixed: `io.ReadFull` replaces single `Read` call (PR #364) |
+| `read-bytevector!` | 6.13.3 | PASS | Fixed: `io.ReadFull` replaces single `Read` call (PR #364) |
 | `write-bytevector` | 6.13.3 | PASS | Rejects textual ports correctly |
 | `flush-output-port` | 6.13.3 | PASS | Delegates to bufio.Writer.Flush |
 | `read` | 6.13.2 | PASS | Cached parser per port |
-| `current-input-port` parameterize | 6.13.1 | FAIL | Crashes with non-CharacterInputPort (Issue 1) |
-| `current-output-port` parameterize | 6.13.1 | FAIL | Crashes with non-CharacterOutputPort (Issue 1) |
+| `current-input-port` parameterize | 6.13.1 | PASS | Fixed: returns `TextualReader` interface (PR #364) |
+| `current-output-port` parameterize | 6.13.1 | PASS | Fixed: returns `OutputPort` interface (PR #364) |
 
 ## Edge Case Results
 
@@ -293,58 +293,58 @@ correctness of sequential `read` calls.
 | `(let ((p (open-input-string "hi"))) (close-port p) (guard (e (#t 'error)) (read-char p)))` | error | error | PASS |
 | `(let ((p (open-output-bytevector))) (write-bytevector #u8(1 2 3 4 5) p 1 4) (get-output-bytevector p))` | `#u8(2 3 4)` | `#u8(2 3 4)` | PASS |
 | `(let ((p (open-input-string "hi"))) (call-with-port p (lambda (port) (read-char port))) (input-port-open? p))` | `#f` | `#f` | PASS |
-| `(let ((p (open-output-bytevector))) (guard (e (#t 'error)) (write-char #\A p)))` | error | (void) | FAIL |
-| `(let ((p (open-output-string))) (guard (e (#t 'error)) (close-input-port p)))` | error | (void) | FAIL |
-| `(let ((p (open-input-string "hello"))) (read-string 0 p))` | `""` | `#!eof` | FAIL |
-| `(parameterize ((current-input-port (open-input-string "hi"))) (read-char))` | `#\h` | crash | FAIL |
-| `(parameterize ((current-output-port (open-output-string))) (write-char #\A))` | (void) | crash | FAIL |
-| 8192-byte file, two `read-bytevector 4000` calls | `(4000 4000)` | `(4000 96)` | FAIL |
+| `(let ((p (open-output-bytevector))) (guard (e (#t 'error)) (write-char #\A p)))` | error | error | PASS (fixed PR #364) |
+| `(let ((p (open-output-string))) (guard (e (#t 'error)) (close-input-port p)))` | error | error | PASS (fixed PR #364) |
+| `(let ((p (open-input-string "hello"))) (read-string 0 p))` | `""` | `""` | PASS (fixed PR #364) |
+| `(parameterize ((current-input-port (open-input-string "hi"))) (read-char))` | `#\h` | `#\h` | PASS (fixed PR #364) |
+| `(parameterize ((current-output-port (open-output-string))) (write-char #\A))` | (void) | (void) | PASS (fixed PR #364) |
+| 8192-byte file, two `read-bytevector 4000` calls | `(4000 4000)` | `(4000 4000)` | PASS (fixed PR #364) |
 | `(let ((p (open-input-string "a\r\nb\rc"))) (list (read-line p) (read-line p) (read-line p)))` | `("a" "b" "c")` | `("a" "b" "c")` | PASS |
 
 ## Issues Found (Prioritized)
 
-### 1. [HIGH] `read-bytevector` / `read-bytevector!` return fewer bytes than available (bufio short read)
+### 1. [HIGH] `read-bytevector` / `read-bytevector!` return fewer bytes than available (bufio short read) — FIXED
 
 - **Severity:** High -- incorrect behavior for file-backed binary ports
 - **Spec:** R7RS 6.13.3: "Reads the next k bytes, or as many as are available before the end of file"
 - **Cause:** Single `p.Read(buf)` call; `bufio.Reader.Read()` returns only buffered data
 - **Location:** `internal/extensions/io/prim_read_write.go`, `PrimReadBytevector` and `PrimReadBytevectorBang`
-- **Fix:** Use `io.ReadFull` or loop `Read` calls until k bytes or EOF
+- **Resolution:** Replaced with `io.ReadFull` (PR #364)
 
-### 2. [HIGH] `current-input-port` / `current-output-port` crash when parameterized to non-Character port
+### 2. [HIGH] `current-input-port` / `current-output-port` crash when parameterized to non-Character port — FIXED
 
 - **Severity:** High -- crashes the interpreter
 - **Spec:** R7RS 6.13.1: parameter objects work with any port of appropriate direction
 - **Cause:** Hard type assertion to `*CharacterInputPort` / `*CharacterOutputPort`
 - **Location:** `internal/extensions/io/state.go`, `GetCurrentInputPort` and `GetCurrentOutputPort`
-- **Fix:** Return interface types (`TextualReader` / `TextualWriter` or `InputPort` / `OutputPort`)
+- **Resolution:** Returns `TextualReader` / `OutputPort` interfaces (PR #364)
 
-### 3. [MEDIUM] Textual output operations accept binary ports
+### 3. [MEDIUM] Textual output operations accept binary ports — FIXED
 
 - **Severity:** Medium -- silently produces UTF-8 bytes in binary ports
 - **Spec:** R7RS 6.13.2: "It is an error" to use textual ops on binary ports
 - **Cause:** `getOptionalOutputPort` checks `OutputPort` not `TextualWriter`
 - **Location:** `internal/extensions/io/prim_read_write.go`
 - **Affected ops:** `write-char`, `write-string`, `display`, `newline`, `write`, `write-simple`, `write-shared`
-- **Fix:** Check for `TextualWriter` instead of `OutputPort` in textual output operations
+- **Resolution:** Added `getOptionalTextualOutputPort` with explicit binary rejection (PR #364)
 
-### 4. [LOW] `close-input-port` / `close-output-port` accept wrong port direction
+### 4. [LOW] `close-input-port` / `close-output-port` accept wrong port direction — FIXED
 
 - **Severity:** Low -- harmless but non-conformant
 - **Spec:** R7RS 6.13.1 implies direction-specific behavior
 - **Location:** `internal/extensions/io/register.go` (both map to `PrimClosePort`)
-- **Fix:** Create separate implementations that check `InputPort` / `OutputPort`
+- **Resolution:** Separate `PrimCloseInputPort` / `PrimCloseOutputPort` with direction checks (PR #364)
 
-### 5. [LOW] `read-string 0` returns EOF instead of empty string
+### 5. [LOW] `read-string 0` returns EOF instead of empty string — FIXED
 
 - **Severity:** Low -- edge case
 - **Spec:** R7RS 6.13.2: zero characters read should return `""`
 - **Location:** `internal/extensions/io/prim_read_write.go`, `PrimReadString`
-- **Fix:** Check `k == 0` and return empty string before entering the read loop
+- **Resolution:** Early return for `k == 0` (PR #364)
 
-### 6. [LOW] `char-ready?` / `u8-ready?` always return `#t`
+### 6. [LOW] `char-ready?` / `u8-ready?` always return `#t` — WONTFIX
 
 - **Severity:** Low -- only affects interactive/network I/O
 - **Spec:** R7RS 6.13.2/6.13.3: should check for non-blocking availability
 - **Location:** `internal/extensions/io/prim_read_write.go`
-- **Note:** Common simplification across Scheme implementations
+- **Note:** Documented semantic difference (L7). Common simplification across Scheme implementations.
