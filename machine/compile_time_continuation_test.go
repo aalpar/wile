@@ -2381,3 +2381,23 @@ func TestDeduplicateLiteral_CircularPair(t *testing.T) {
 	result := tpl.DeduplicateLiteral(pair)
 	qt.Assert(t, result, qt.IsNotNil)
 }
+
+// TestDeduplicateLiteral_SharedAcyclicPair tests that DeduplicateLiteral
+// returns consistent results for shared-but-acyclic structures.
+// Both occurrences of the shared pair must get the same deduplicated result.
+func TestDeduplicateLiteral_SharedAcyclicPair(t *testing.T) {
+	// Construct shared structure: root = (shared . shared) where shared = (sym)
+	sym := values.NewSymbol("x")
+	shared := values.NewCons(sym, values.EmptyList)
+	root := values.NewCons(shared, shared)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	// Pre-populate the literal pool with the symbol so deduplication
+	// actually produces a different pointer for the inner pair.
+	tpl.MaybeAppendLiteral(sym)
+
+	result := tpl.DeduplicateLiteral(root)
+	resultPair := result.(*values.Pair)
+	// Both car and cdr must point to the same deduplicated pair.
+	qt.Assert(t, resultPair.Car(), qt.Equals, resultPair.Cdr())
+}
