@@ -85,7 +85,7 @@ func TestWriteSimple(t *testing.T) {
 			code: `(let ((p (open-output-string)))
 				(write-simple #(1 2 3) p)
 				(get-output-string p))`,
-			expected: "#( 1 2 3 )",
+			expected: "#(1 2 3)",
 		},
 		{
 			name: "write-simple empty list",

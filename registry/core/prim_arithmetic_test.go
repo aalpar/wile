@@ -539,20 +539,20 @@ func TestTruncate(t *testing.T) {
 
 func TestSqrt(t *testing.T) {
 	tcs := []schemeCodeTestCase{
-		// Integer operations
-		{"sqrt of perfect square 4", `(sqrt 4)`, values.NewFloat(2.0)},
-		{"sqrt of perfect square 9", `(sqrt 9)`, values.NewFloat(3.0)},
-		{"sqrt of perfect square 16", `(sqrt 16)`, values.NewFloat(4.0)},
+		// Perfect square integers return exact integer per R7RS §6.2.6
+		{"sqrt of perfect square 4", `(sqrt 4)`, values.NewInteger(2)},
+		{"sqrt of perfect square 9", `(sqrt 9)`, values.NewInteger(3)},
+		{"sqrt of perfect square 16", `(sqrt 16)`, values.NewInteger(4)},
 		{"sqrt of 2", `(sqrt 2)`, values.NewFloat(1.4142135623730951)},
-		{"sqrt of 0", `(sqrt 0)`, values.NewFloat(0.0)},
-		{"sqrt of 1", `(sqrt 1)`, values.NewFloat(1.0)},
+		{"sqrt of 0", `(sqrt 0)`, values.NewInteger(0)},
+		{"sqrt of 1", `(sqrt 1)`, values.NewInteger(1)},
 
-		// Float operations
+		// Float operations (always inexact)
 		{"sqrt of float", `(sqrt 2.25)`, values.NewFloat(1.5)},
 		{"sqrt of small float", `(sqrt 0.25)`, values.NewFloat(0.5)},
 
-		// Rational operations
-		{"sqrt of rational perfect square", `(sqrt 1/4)`, values.NewFloat(0.5)},
+		// Perfect square rational returns exact rational per R7RS §6.2.6
+		{"sqrt of rational perfect square", `(sqrt 1/4)`, values.NewRational(1, 2)},
 		{"sqrt of rational", `(sqrt 2/9)`, values.NewFloat(0.4714045207910317)},
 	}
 	for _, tc := range tcs {
@@ -565,22 +565,31 @@ func TestSqrt(t *testing.T) {
 }
 
 func TestSqrt_NegativeToComplex(t *testing.T) {
+	// Negative perfect-square integers return exact BigComplex per R7RS §6.2.6
 	t.Run("sqrt of negative integer", func(t *testing.T) {
 		result, err := runSchemeCode(t, `(sqrt -1)`)
 		qt.Assert(t, err, qt.IsNil)
-		c, ok := result.(*values.Complex)
+		bc, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, c.Real() == 0.0, qt.IsTrue)
-		qt.Assert(t, c.Imag() == 1.0, qt.IsTrue)
+		qt.Assert(t, bc.Real().IsZero(), qt.IsTrue)
+		qt.Assert(t, bc.IsExact(), qt.IsTrue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(1),
+		))
 	})
 
 	t.Run("sqrt of negative 4", func(t *testing.T) {
 		result, err := runSchemeCode(t, `(sqrt -4)`)
 		qt.Assert(t, err, qt.IsNil)
-		c, ok := result.(*values.Complex)
+		bc, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, c.Real() == 0.0, qt.IsTrue)
-		qt.Assert(t, c.Imag() == 2.0, qt.IsTrue)
+		qt.Assert(t, bc.Real().IsZero(), qt.IsTrue)
+		qt.Assert(t, bc.IsExact(), qt.IsTrue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(2),
+		))
 	})
 }
 
@@ -1255,6 +1264,26 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 	}
 }
 
+// TestDivisionByInexactZero verifies that dividing by an inexact zero returns
+// ±Inf or NaN per R7RS §6.2.6 and IEEE 754, rather than raising an error.
+func TestDivisionByInexactZero(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{"(/ 1 0.0) is +inf.0", `(/ 1 0.0)`, values.NewFloat(math.Inf(1))},
+		{"(/ -1 0.0) is -inf.0", `(/ -1 0.0)`, values.NewFloat(math.Inf(-1))},
+		{"(/ 0.0 0.0) is +nan.0", `(nan? (/ 0.0 0.0))`, values.TrueValue},
+		{"(/ 1.0 0.0) is +inf.0", `(/ 1.0 0.0)`, values.NewFloat(math.Inf(1))},
+		{"(/ -1.0 0.0) is -inf.0", `(/ -1.0 0.0)`, values.NewFloat(math.Inf(-1))},
+		{"(/ 1/3 0.0) is +inf.0", `(infinite? (/ 1/3 0.0))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 func TestOverflowPromotion(t *testing.T) {
 	// R7RS §6.2.3: Integer overflow should promote to BigInteger
 	tcs := []schemeCodeTestCase{
@@ -1308,9 +1337,13 @@ func TestSpecialValueArithmetic(t *testing.T) {
 		qt.Assert(t, err, qt.IsNotNil)
 	})
 
-	t.Run("(/ 1.0 0.0) is error", func(t *testing.T) {
-		_, err := runSchemeCode(t, "(/ 1.0 0.0)")
-		qt.Assert(t, err, qt.IsNotNil)
+	// R7RS §6.2.6 + IEEE 754: division by inexact zero returns ±inf or nan
+	t.Run("(/ 1.0 0.0) is +inf.0", func(t *testing.T) {
+		result, err := runSchemeCode(t, "(/ 1.0 0.0)")
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	// inf arithmetic

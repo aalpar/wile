@@ -596,6 +596,12 @@ func TestSignPredicatesExtended(t *testing.T) {
 		{"positive? on -inf.0", `(positive? -inf.0)`, values.FalseValue},
 		{"negative? on +inf.0", `(negative? +inf.0)`, values.FalseValue},
 		{"negative? on -inf.0", `(negative? -inf.0)`, values.TrueValue},
+
+		// R7RS §6.2.6: real-valued complex numbers (zero imaginary part)
+		{"positive? on 3+0i", `(positive? 3+0i)`, values.TrueValue},
+		{"positive? on -3+0i", `(positive? -3+0i)`, values.FalseValue},
+		{"negative? on -3+0i", `(negative? -3+0i)`, values.TrueValue},
+		{"negative? on 3+0i", `(negative? 3+0i)`, values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

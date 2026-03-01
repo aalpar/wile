@@ -361,7 +361,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.6: The / procedure returns the quotient of its arguments.
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) Number {
-	if o.IsZero() {
+	if o.IsZero() && o.IsExact() {
 		panic(ErrDivisionByZero)
 	}
 	return bigComplexDivide[o.Kind()](p, o)

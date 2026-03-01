@@ -40,7 +40,7 @@ func TestExtensionAsLibrary_Import(t *testing.T) {
 		(sqrt 4)
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "2.0")
+	c.Assert(result.SchemeString(), qt.Equals, "2")
 }
 
 func TestExtensionAsLibrary_Only(t *testing.T) {
@@ -59,7 +59,7 @@ func TestExtensionAsLibrary_Only(t *testing.T) {
 		(sqrt 16)
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "4.0")
+	c.Assert(result.SchemeString(), qt.Equals, "4")
 }
 
 func TestExtensionAsLibrary_Prefix(t *testing.T) {
@@ -77,7 +77,7 @@ func TestExtensionAsLibrary_Prefix(t *testing.T) {
 		(m:sqrt 9)
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "3.0")
+	c.Assert(result.SchemeString(), qt.Equals, "3")
 }
 
 func TestExtensionAsLibrary_Rename(t *testing.T) {
@@ -95,7 +95,7 @@ func TestExtensionAsLibrary_Rename(t *testing.T) {
 		(square-root 25)
 	`)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "5.0")
+	c.Assert(result.SchemeString(), qt.Equals, "5")
 }
 
 func TestExtensionAsLibrary_NoRuntimePrimitives(t *testing.T) {

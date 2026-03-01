@@ -173,7 +173,7 @@ func TestRegisterFuncTypeRoundTrips(t *testing.T) {
 		{"string", `(identity-string "hello")`, `"hello"`},
 		{"bool true", "(identity-bool #t)", "#t"},
 		{"bool false", "(identity-bool #f)", "#f"},
-		{"bytes", "(identity-bytes #u8(1 2 3))", "#u8( 1 2 3 )"},
+		{"bytes", "(identity-bytes #u8(1 2 3))", "#u8(1 2 3)"},
 		{"value pass-through", "(identity-value '(1 2 3))", "(1 2 3)"},
 		{"value symbol", "(identity-value 'foo)", "foo"},
 	}

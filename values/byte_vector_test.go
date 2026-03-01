@@ -31,11 +31,11 @@ func TestByteVector_SchemeString(t *testing.T) {
 	}{
 		{
 			in:  values.NewByteVector(values.NewByte(10)),
-			out: "#u8( 10 )",
+			out: "#u8(10)",
 		},
 		{
 			in:  values.NewByteVector(values.NewByte(10), values.NewByte(20)),
-			out: "#u8( 10 20 )",
+			out: "#u8(10 20)",
 		},
 	}
 	for _, tc := range tcs {
@@ -82,7 +82,7 @@ func TestByteVector_Set(t *testing.T) {
 	bv := values.NewByteVector(values.NewByte(10), values.NewByte(20), values.NewByte(30))
 	bv.Set(1, values.NewByte(99))
 	c.Assert(bv.Get(1), valuestest.SchemeEquals, values.NewByte(99))
-	c.Assert(bv.SchemeString(), qt.Equals, "#u8( 10 99 30 )")
+	c.Assert(bv.SchemeString(), qt.Equals, "#u8(10 99 30)")
 }
 
 func TestByteVector_Set_Error(t *testing.T) {
@@ -191,12 +191,12 @@ func TestNewByteVectorFromIntegers(t *testing.T) {
 		{
 			name: "single byte",
 			ints: []*values.Integer{values.NewInteger(42)},
-			want: "#u8( 42 )",
+			want: "#u8(42)",
 		},
 		{
 			name: "boundary values",
 			ints: []*values.Integer{values.NewInteger(0), values.NewInteger(255)},
-			want: "#u8( 0 255 )",
+			want: "#u8(0 255)",
 		},
 	}
 	for _, tc := range tcs {

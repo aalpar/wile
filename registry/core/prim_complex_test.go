@@ -41,7 +41,7 @@ func TestRealPart(t *testing.T) {
 		{
 			name: "real-part of integer",
 			prog: values.List(values.NewSymbol("real-part"), values.NewInteger(5)),
-			out:  values.NewFloat(5.0),
+			out:  values.NewInteger(5),
 		},
 	}
 	for _, tc := range tcs {
@@ -67,7 +67,7 @@ func TestImagPart(t *testing.T) {
 		{
 			name: "imag-part of integer",
 			prog: values.List(values.NewSymbol("imag-part"), values.NewInteger(5)),
-			out:  values.NewFloat(0.0),
+			out:  values.NewInteger(0),
 		},
 	}
 	for _, tc := range tcs {
@@ -93,7 +93,7 @@ func TestMagnitude(t *testing.T) {
 		{
 			name: "magnitude of real number",
 			prog: values.List(values.NewSymbol("magnitude"), values.NewInteger(-5)),
-			out:  values.NewFloat(5.0),
+			out:  values.NewInteger(5),
 		},
 	}
 	for _, tc := range tcs {

@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -78,9 +79,32 @@ func (p *Character) EqualTo(v Value) bool {
 	return false
 }
 
+// charNames maps the 9 R7RS named characters (§6.6) to their mnemonic names.
+// Characters not in this map use #\<char> for graphic chars or #\xHEX for non-graphic.
+var charNames = map[rune]string{
+	'\a': "alarm",
+	'\b': "backspace",
+	0x7F: "delete",
+	0x1B: "escape",
+	'\n': "newline",
+	0x00: "null",
+	'\r': "return",
+	' ':  "space",
+	'\t': "tab",
+}
+
 // SchemeString returns the Scheme representation of the character.
+// Named characters use the R7RS mnemonic form (#\newline). Graphic characters
+// use #\<char>. Non-graphic non-named characters use #\xHEX for round-trip safety.
 func (p *Character) SchemeString() string {
-	return fmt.Sprintf(`#\%c`, p.Value)
+	name, ok := charNames[p.Value]
+	if ok {
+		return `#\` + name
+	}
+	if unicode.IsGraphic(p.Value) {
+		return fmt.Sprintf(`#\%c`, p.Value)
+	}
+	return fmt.Sprintf(`#\x%X`, p.Value)
 }
 
 func (p *Character) String() string {

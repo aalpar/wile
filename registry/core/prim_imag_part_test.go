@@ -34,10 +34,10 @@ func TestImagPartExtended(t *testing.T) {
 		{name: "imag-part of inexact complex", code: `(imag-part 3.0+4.0i)`, expected: values.NewFloat(4.0)},
 		{name: "imag-part of inexact complex negative", code: `(imag-part 3.0-4.0i)`, expected: values.NewFloat(-4.0)},
 
-		// Real numbers (imaginary part is 0)
-		{name: "imag-part of integer", code: `(imag-part 5)`, expected: values.NewFloat(0.0)},
+		// Real numbers: imag-part is 0 with exactness matching input per R7RS §6.2.6
+		{name: "imag-part of integer", code: `(imag-part 5)`, expected: values.NewInteger(0)},
 		{name: "imag-part of float", code: `(imag-part 5.5)`, expected: values.NewFloat(0.0)},
-		{name: "imag-part of rational", code: `(imag-part 3/4)`, expected: values.NewFloat(0.0)},
+		{name: "imag-part of rational", code: `(imag-part 3/4)`, expected: values.NewInteger(0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -122,7 +122,7 @@ func TestMagnitudeExtraCoverage(t *testing.T) {
 		{
 			name: "magnitude of real number",
 			code: "(magnitude 5)",
-			out:  values.NewFloat(5.0),
+			out:  values.NewInteger(5),
 		},
 	}
 	for _, tc := range tcs {

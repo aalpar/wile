@@ -90,9 +90,11 @@ func TestOpenOutputBytevector(t *testing.T) {
 }
 
 func TestGetOutputBytevector(t *testing.T) {
+	// R7RS: binary output ports do not accept textual ops (display/write).
+	// Use write-bytevector to write raw bytes to a bytevector output port.
 	result, err := runSchemeCode(t, `
 		(let ((p (open-output-bytevector)))
-			(display "Hi" p)
+			(write-bytevector #u8(72 105) p)
 			(get-output-bytevector p))
 	`)
 	qt.Assert(t, err, qt.IsNil)

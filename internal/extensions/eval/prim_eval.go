@@ -240,11 +240,14 @@ func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 	// R7RS specifies version 5 (for R5RS) or 7 (for R7RS)
 	switch versionInt.Value {
 	case 5, 7:
-		// Return the current top-level environment
-		// In a full implementation, this would return a restricted environment
-		topLevel := mc.EnvironmentFrame().TopLevelEnv()
-		topLevel.Name = "scheme-report-environment"
-		mc.SetValue(topLevel)
+		// Create a new environment that is distinct from interaction-environment
+		// but contains a snapshot of the current standard bindings.
+		// R7RS §6.12: scheme-report-environment must be distinct from
+		// interaction-environment and contain the R7RS standard bindings.
+		callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
+		newTopLevel := callerTopLevel.NewSchemeReportEnvironment()
+		newTopLevel.Name = "scheme-report-environment"
+		mc.SetValue(newTopLevel)
 		return nil
 	default:
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "scheme-report-environment: unsupported version, expected 5 or 7")

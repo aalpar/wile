@@ -80,6 +80,47 @@ func PrimClosePort(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimCloseInputPort implements the (close-input-port) primitive.
+// Requires an input port; errors if given an output port.
+//
+// R7RS §6.13.1: close-input-port takes an input port.
+func PrimCloseInputPort(mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	_, ok := o.(values.InputPort)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAnInputPort, "close-input-port: expected an input port but got %T", o)
+	}
+	err := closePort(o)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "close-input-port: %v", err)
+	}
+	mc.SetValue(values.Void)
+	return nil
+}
+
+// PrimCloseOutputPort implements the (close-output-port) primitive.
+// Requires an output port; errors if given an input port.
+// Flushes buffered data before closing.
+//
+// R7RS §6.13.1: close-output-port takes an output port.
+func PrimCloseOutputPort(mc *machine.MachineContext) error {
+	o := mc.Arg(0)
+	p, ok := o.(values.OutputPort)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotAnOutputPort, "close-output-port: expected an output port but got %T", o)
+	}
+	flushErr := p.Flush()
+	if flushErr != nil {
+		return values.WrapForeignErrorf(flushErr, "close-output-port: flush failed")
+	}
+	err := closePort(o)
+	if err != nil {
+		return values.WrapForeignErrorf(err, "close-output-port: %v", err)
+	}
+	mc.SetValue(values.Void)
+	return nil
+}
+
 // PrimEofObject implements the (eof-object) primitive.
 // Returns the EOF object.
 func PrimEofObject(mc *machine.MachineContext) error {

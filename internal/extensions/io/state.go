@@ -108,12 +108,13 @@ func ResetState() {
 }
 
 // GetCurrentInputPort returns the current input port from the parameter.
-func GetCurrentInputPort() *values.CharacterInputPort {
+// Returns values.TextualReader to support parameterize with string input ports.
+func GetCurrentInputPort() values.TextualReader {
 	if currentInputPortParam == nil {
 		// Fallback for tests that don't call InitState
 		return values.NewCharacterInputPortFromReader(os.Stdin)
 	}
-	return currentInputPortParam.Value().(*values.CharacterInputPort)
+	return currentInputPortParam.Value().(values.TextualReader)
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
@@ -122,7 +123,7 @@ func GetCurrentInputPortParam() *machine.Parameter {
 }
 
 // SetCurrentInputPort sets the current input port value. Used for testing.
-func SetCurrentInputPort(port *values.CharacterInputPort) {
+func SetCurrentInputPort(port values.TextualReader) {
 	InitState() // Ensure state is initialized
 	currentInputPortParam.SetValue(port)
 }
@@ -135,12 +136,13 @@ func ResetCurrentInputPort() {
 }
 
 // GetCurrentOutputPort returns the current output port from the parameter.
-func GetCurrentOutputPort() *values.CharacterOutputPort {
+// Returns values.OutputPort to support parameterize with string output ports.
+func GetCurrentOutputPort() values.OutputPort {
 	if currentOutputPortParam == nil {
 		// Fallback for tests that don't call InitState
 		return values.NewCharacterOutputPortFromWriter(os.Stdout)
 	}
-	return currentOutputPortParam.Value().(*values.CharacterOutputPort)
+	return currentOutputPortParam.Value().(values.OutputPort)
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
@@ -149,7 +151,7 @@ func GetCurrentOutputPortParam() *machine.Parameter {
 }
 
 // SetCurrentOutputPort sets the current output port value. Used for testing and parameterize.
-func SetCurrentOutputPort(port *values.CharacterOutputPort) {
+func SetCurrentOutputPort(port values.OutputPort) {
 	InitState() // Ensure state is initialized
 	currentOutputPortParam.SetValue(port)
 }

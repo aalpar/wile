@@ -21,13 +21,18 @@ When investigating R7RS conformance issues:
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
 | `TESTING.md` | Scheme test expansion (complete) | Complete |
-| `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Approved |
-| `STRUCTURAL_REVIEW.md` | Codebase-wide structural reduction + tech debt assessment: dependency map, state tightness, composability, consistency debt | Reference |
+| `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Complete (see `2026-02-26-repl-enhancements.md`) |
+| `2026-02-26-repl-enhancements.md` | Step-by-step implementation plan for REPL_ENHANCEMENTS | Complete |
 | `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Complete (PR #361) |
 | `SIGNALS_REMEDIATION.md` | Implementation plan for SIGNALS_REVIEW findings P1–P6 + P4b | Complete (PR #361) |
-| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: numeric dispatch duplication, extension friction, testing gaps, consistency debt | Reference |
-| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: Extend BigFloat/BigComplex with IEEE 754 Inf/NaN support, remove dispatch guard (#362) | Proposed |
+| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: numeric dispatch duplication, extension friction, testing gaps, consistency debt | Reference (F1 complete; others open) |
+| `STAFF_ENGINEER_REVIEW.md` | Net-new debt findings beyond TECH_DEBT_REVIEW: N1 VM opcode dedup, N2 VM error pattern | Reference (open) |
+| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: BigFloat Inf/NaN-capable, BigComplex guard patched for Float×BigComplex case (#362) | Complete (PR #363) — approach differs from plan; see status block at top of file |
+| `2026-02-27-crosscheck-design.md` | Design doc for crosscheck plugin (parallel cross-purpose agents) | Complete (implemented) |
+| `2026-02-27-crosscheck-impl.md` | Step-by-step implementation plan for crosscheck plugin | Complete |
 | `PRECISION-GUARANTEES.md` | Precision loss policy: tier model, known bugs, proposed PrecisionMode setting | Reference |
+| `R7RS-CONFORMANCE-REVIEW.md` | Full R7RS-small conformance audit: 5 critical, 6 high, 8 medium, 7 low findings across all spec sections | Reference |
+| `R7RS-PORT-IO-CONFORMANCE.md` | Detailed port/IO conformance report with bufio analysis | Reference |
 
 ## Before Starting Work
 

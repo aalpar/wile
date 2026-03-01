@@ -424,6 +424,39 @@ func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment
 	return q
 }
 
+// NewSchemeReportEnvironment creates a new TopLevelEnvironment that is
+// distinct from the receiver (so eq? returns #f) but contains a snapshot
+// of the receiver's current global bindings at the time of the call.
+//
+// This implements R7RS §6.12 scheme-report-environment semantics: the returned
+// environment is a separate object from interaction-environment and contains
+// the standard bindings. User definitions added after this call are NOT
+// visible in the returned environment.
+func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment {
+	q := &TopLevelEnvironment{
+		libraryRegistry:   p.libraryRegistry,
+		libraryEnvFactory: p.libraryEnvFactory,
+		parent:            p,
+	}
+
+	// Copy the parent's global bindings and repoint topLevel to the child,
+	// so that symbol interning delegates through q → p (parent chain).
+	copiedGlobal := p.runtime.global.Copy().(*GlobalEnvironmentFrame)
+	copiedGlobal.topLevel = q
+
+	q.runtime = &EnvironmentFrame{
+		parent:     nil,
+		global:     copiedGlobal,
+		phaseLevel: PhaseRuntime,
+		topLevel:   q,
+	}
+
+	q.phases = newPhaseRegistryWithTopLevel(q)
+	q.runtime.phases = q.phases
+
+	return q
+}
+
 // NewChildRuntime creates a new runtime environment frame that shares this
 // TopLevelEnvironment for symbol and syntax interning, but has its own
 // GlobalEnvironmentFrame and PhaseRegistry for isolated bindings.
