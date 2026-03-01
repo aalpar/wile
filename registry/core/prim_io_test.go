@@ -626,11 +626,10 @@ func TestBytevectorPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test bytevector output port:
-	// (let ((out (open-output-bytevector)))
-	//   (display "AB" out)
-	//   (get-output-bytevector out))
+	// R7RS: binary output ports do not accept textual ops (display/write).
+	// Use write-bytevector with the bytes for "AB" directly.
 	prog := `(let ((out (open-output-bytevector)))
-		(display "AB" out)
+		(write-bytevector #u8(65 66) out)
 		(get-output-bytevector out))`
 
 	p := parser.NewParser(env, true, strings.NewReader(prog))

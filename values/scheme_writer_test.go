@@ -39,7 +39,7 @@ func TestWriteValueToString_SimpleValues(t *testing.T) {
 		{"eof", values.EOFObject, "#!eof"},
 		{"nil", nil, "#<void>"},
 		{"character", values.NewCharacter('a'), "#\\a"},
-		{"character space", values.NewCharacter(' '), "#\\ "},
+		{"character space", values.NewCharacter(' '), "#\\space"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -363,3 +363,27 @@ func TestFloat_LessThanNaN(t *testing.T) {
 	c.Assert(one.LessThan(nan), qt.IsFalse)
 	c.Assert(nan.LessThan(nan), qt.IsFalse)
 }
+
+// TestFloat_EqualTo_NaNVsBigFloat verifies that Float.EqualTo does not panic
+// when comparing a NaN Float against a BigFloat (E3). Go's big.Float.SetFloat64(NaN)
+// panics; the guard must short-circuit before that conversion.
+func TestFloat_EqualTo_NaNVsBigFloat(t *testing.T) {
+	tcs := []struct {
+		name string
+		a    *values.Float
+		b    *values.BigFloat
+		want bool
+	}{
+		{"NaN vs finite BigFloat", values.NewFloat(math.NaN()), values.NewBigFloatFromFloat64(1.0), false},
+		{"NaN vs BigFloat NaN", values.NewFloat(math.NaN()), values.NewBigFloatNaN(), false},
+		{"finite vs BigFloat NaN", values.NewFloat(1.0), values.NewBigFloatNaN(), false},
+		{"finite vs equal BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(1.0), true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			// Must not panic.
+			got := tc.a.EqualTo(tc.b)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}

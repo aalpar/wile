@@ -633,6 +633,65 @@ func replaceHashDigits(s string) string {
 	return strings.ReplaceAll(s, "#", "0")
 }
 
+// parseBaseWithExactness handles #b, #o, #x prefixes followed by an optional
+// #e/#i exactness marker. R7RS §7.1.1: prefix ordering is either (#e|#i)(#b|#o|#x)
+// or (#b|#o|#x)(#e|#i). The base-marker cases (#b/#o/#x) may see an exactness
+// marker as their next token; this method handles that transparently.
+func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+
+	// Check for trailing exactness prefix: #x#e or #x#i.
+	exactness := 0 // 0 = unspecified, 1 = exact (#e), -1 = inexact (#i)
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateMarkerNumberExact:
+		exactness = 1
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+	case tokenizer.TokenizerStateMarkerNumberInexact:
+		exactness = -1
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+	}
+
+	// Parse the number in the given base.
+	var q syntax.SyntaxValue
+	var tok tokenizer.Token
+	var err error
+	if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
+		p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
+		q, tok, err = p.parseRationalWithBase(base)
+	} else {
+		q, tok, err = p.parseIntegerWithBase(base)
+	}
+	if err != nil {
+		return nil, tok, err
+	}
+
+	// Apply exactness if a trailing prefix was present.
+	switch exactness {
+	case 1:
+		exact, convErr := p.makeExact(q)
+		if convErr != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", convErr)
+		}
+		return exact, tok, nil
+	case -1:
+		inexact, convErr := p.makeInexact(q)
+		if convErr != nil {
+			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", convErr)
+		}
+		return inexact, tok, nil
+	}
+	return q, tok, nil
+}
+
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
 
@@ -1000,27 +1059,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBase2:
-		// #b prefix - next token is base 2 integer or rational
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
-			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
-			return p.parseRationalWithBase(2)
-		}
-		return p.parseIntegerWithBase(2)
+		// #b prefix — next token is optional exactness marker then base-2 number
+		return p.parseBaseWithExactness(2)
 	case tokenizer.TokenizerStateMarkerBase8:
-		// #o prefix - next token is base 8 integer or rational
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
-			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
-			return p.parseRationalWithBase(8)
-		}
-		return p.parseIntegerWithBase(8)
+		// #o prefix — next token is optional exactness marker then base-8 number
+		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
 		// #d prefix - next token is base 10 integer
 		p.cur, p.err = p.toks.Next()
@@ -1029,16 +1072,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		return p.readSyntax()
 	case tokenizer.TokenizerStateMarkerBase16:
-		// #x prefix - next token is base 16 integer or rational
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
-			p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
-			return p.parseRationalWithBase(16)
-		}
-		return p.parseIntegerWithBase(16)
+		// #x prefix — next token is optional exactness marker then base-16 number
+		return p.parseBaseWithExactness(16)
 	case tokenizer.TokenizerStateSignedIntegerBase2, tokenizer.TokenizerStateUnsignedIntegerBase2:
 		return p.parseIntegerWithBase(2)
 	case tokenizer.TokenizerStateSignedIntegerBase8, tokenizer.TokenizerStateUnsignedIntegerBase8:

@@ -64,6 +64,22 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimParameterRawSet implements the (%parameter-raw-set! param val) primitive.
+// Sets a parameter's internal value directly, bypassing the converter.
+// Used by the parameterize macro to restore a previously captured value
+// without double-applying the converter.
+//
+// This is an internal primitive — not part of the public API.
+func PrimParameterRawSet(mc *machine.MachineContext) error {
+	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, values.ErrNotAParameter, "%parameter-raw-set!")
+	if err != nil {
+		return err
+	}
+	param.SetValue(mc.Arg(1))
+	mc.SetValue(values.Void)
+	return nil
+}
+
 // PrimParameterQ implements the parameter? predicate.
 // Returns #t if the argument is a parameter object.
 var PrimParameterQ = helpers.MakeTypePredicate(func(o values.Value) bool {

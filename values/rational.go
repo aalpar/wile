@@ -180,7 +180,7 @@ func (p *Rational) Multiply(o Number) Number {
 
 // Divide returns the quotient of two numbers.
 func (p *Rational) Divide(o Number) Number {
-	if o.IsZero() {
+	if o.IsZero() && o.IsExact() {
 		panic(ErrDivisionByZero)
 	}
 	v, ok := o.(*Rational)

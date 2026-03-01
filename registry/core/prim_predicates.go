@@ -211,16 +211,34 @@ var PrimZeroQ = helpers.MakeNumericPredicate[values.Number](
 // PrimPositiveQ implements the positive? predicate.
 //
 // R7RS §6.2.6: Returns #t if the real number is positive.
-var PrimPositiveQ = helpers.MakeNumericPredicate[values.RealNumber](
-	"positive?", values.ErrNotANumber, values.RealNumber.IsPositive,
-)
+// Real-valued complex numbers (zero imaginary part) are accepted.
+func PrimPositiveQ(mc *machine.MachineContext) error {
+	return realSignPredicate(mc, "positive?", values.RealNumber.IsPositive)
+}
 
 // PrimNegativeQ implements the negative? predicate.
 //
 // R7RS §6.2.6: Returns #t if the real number is negative.
-var PrimNegativeQ = helpers.MakeNumericPredicate[values.RealNumber](
-	"negative?", values.ErrNotANumber, values.RealNumber.IsNegative,
-)
+// Real-valued complex numbers (zero imaginary part) are accepted.
+func PrimNegativeQ(mc *machine.MachineContext) error {
+	return realSignPredicate(mc, "negative?", values.RealNumber.IsNegative)
+}
+
+// realSignPredicate implements positive? and negative? with support for
+// real-valued complex numbers per R7RS §6.2.6.
+func realSignPredicate(mc *machine.MachineContext, name string, test func(values.RealNumber) bool) error {
+	o := mc.Arg(0)
+	c, ok := o.(values.ComplexNumber)
+	if ok && c.IsReal() {
+		o = c.RealPart()
+	}
+	r, ok := o.(values.RealNumber)
+	if !ok {
+		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, mc.Arg(0))
+	}
+	mc.SetValue(values.BoolToBoolean(test(r)))
+	return nil
+}
 
 // parityCheck is a helper for implementing parity predicates (odd? and even?).
 // It accepts the predicate name, a test for regular integers, and a test for big integers.

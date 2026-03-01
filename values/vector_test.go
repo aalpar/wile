@@ -260,37 +260,37 @@ func TestVectorSchemeString(t *testing.T) {
 		{
 			name: "single element",
 			in:   values.NewVector(values.NewInteger(42)),
-			out:  "#( 42 )",
+			out:  "#(42)",
 		},
 		{
 			name: "two elements",
 			in:   values.NewVector(values.NewInteger(1), values.NewInteger(2)),
-			out:  "#( 1 2 )",
+			out:  "#(1 2)",
 		},
 		{
 			name: "three elements",
 			in:   values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
-			out:  "#( 1 2 3 )",
+			out:  "#(1 2 3)",
 		},
 		{
 			name: "mixed types",
 			in:   values.NewVector(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
-			out:  "#( 1 \"hello\" #t )",
+			out:  "#(1 \"hello\" #t)",
 		},
 		{
 			name: "nested vector",
 			in:   values.NewVector(values.NewVector(values.NewInteger(1), values.NewInteger(2)), values.NewInteger(3)),
-			out:  "#( #( 1 2 ) 3 )",
+			out:  "#(#(1 2) 3)",
 		},
 		{
 			name: "nested list",
 			in:   values.NewVector(values.List(values.NewInteger(1), values.NewInteger(2)), values.NewInteger(3)),
-			out:  "#( (1 2) 3 )",
+			out:  "#((1 2) 3)",
 		},
 		{
 			name: "symbols",
 			in:   values.NewVector(values.NewSymbol("a"), values.NewSymbol("b")),
-			out:  "#( a b )",
+			out:  "#(a b)",
 		},
 	}
 

@@ -208,12 +208,12 @@ func TestNewVector(t *testing.T) {
 
 	t.Run("with elements", func(t *testing.T) {
 		v := NewVector(NewInteger(1), NewString("two"), NewBoolean(true))
-		c.Assert(v.SchemeString(), qt.Equals, `#( 1 "two" #t )`)
+		c.Assert(v.SchemeString(), qt.Equals, `#(1 "two" #t)`)
 	})
 
 	t.Run("single element", func(t *testing.T) {
 		v := NewVector(NewFloat(3.14))
-		c.Assert(v.SchemeString(), qt.Equals, "#( 3.14 )")
+		c.Assert(v.SchemeString(), qt.Equals, "#(3.14)")
 	})
 }
 
@@ -967,7 +967,7 @@ func TestWithSafeExtensions(t *testing.T) {
 	// Safe primitives present
 	result, err := engine.Eval(ctx, "(sqrt 4)")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "2.0")
+	c.Assert(result.SchemeString(), qt.Equals, "2")
 
 	// Privileged primitives absent
 	_, err = engine.Eval(ctx, `(open-input-file "x")`)

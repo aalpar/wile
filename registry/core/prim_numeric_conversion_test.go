@@ -96,11 +96,12 @@ func TestIntegerQ(t *testing.T) {
 
 func TestSqrtExtended(t *testing.T) {
 	t.Run("sqrt of perfect square", func(t *testing.T) {
+		// R7RS §6.2.6: sqrt of exact perfect square returns exact integer
 		result, err := runSchemeCode(t, "(sqrt 4)")
 		qt.Assert(t, err, qt.IsNil)
-		floatResult, ok := result.(*values.Float)
+		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, floatResult.Value, qt.Equals, 2.0)
+		qt.Assert(t, intResult.Value, qt.Equals, int64(2))
 	})
 
 	t.Run("sqrt of non-perfect square", func(t *testing.T) {
@@ -112,12 +113,17 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of negative number returns complex", func(t *testing.T) {
+		// R7RS §6.2.6: sqrt of exact negative perfect square returns exact BigComplex
 		result, err := runSchemeCode(t, "(sqrt -1)")
 		qt.Assert(t, err, qt.IsNil)
-		complexResult, ok := result.(*values.Complex)
+		bcResult, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, real(complexResult.Value), qt.Equals, 0.0)
-		qt.Assert(t, imag(complexResult.Value), qt.Equals, 1.0)
+		qt.Assert(t, bcResult.Real().IsZero(), qt.IsTrue)
+		qt.Assert(t, bcResult.IsExact(), qt.IsTrue)
+		qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigComplex(
+			values.NewBigIntegerFromInt64(0),
+			values.NewBigIntegerFromInt64(1),
+		))
 	})
 
 	t.Run("sqrt of complex number", func(t *testing.T) {
@@ -130,19 +136,21 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of zero", func(t *testing.T) {
+		// R7RS §6.2.6: sqrt of exact 0 returns exact 0
 		result, err := runSchemeCode(t, "(sqrt 0)")
 		qt.Assert(t, err, qt.IsNil)
-		floatResult, ok := result.(*values.Float)
+		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, floatResult.Value, qt.Equals, 0.0)
+		qt.Assert(t, intResult.Value, qt.Equals, int64(0))
 	})
 
 	t.Run("sqrt of rational", func(t *testing.T) {
+		// R7RS §6.2.6: sqrt of exact perfect-square rational returns exact rational
 		result, err := runSchemeCode(t, "(sqrt 1/4)")
 		qt.Assert(t, err, qt.IsNil)
-		floatResult, ok := result.(*values.Float)
+		rResult, ok := result.(*values.Rational)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, floatResult.Value, qt.Equals, 0.5)
+		qt.Assert(t, rResult, valuestest.SchemeEquals, values.NewRational(1, 2))
 	})
 }
 

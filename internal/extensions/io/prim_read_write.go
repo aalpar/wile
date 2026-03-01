@@ -59,6 +59,22 @@ func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.Out
 	return p, nil
 }
 
+// getOptionalTextualOutputPort extracts an optional textual output port, rejecting
+// binary-only output ports. Use for textual operations (write, display, newline, etc.)
+// that must not accept binary ports. flush-output-port uses getOptionalOutputPort directly.
+func getOptionalTextualOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
+	p, err := getOptionalOutputPort(mc, argIndex)
+	if err != nil {
+		return nil, err
+	}
+	_, isBinary := p.(values.BinaryWriter)
+	if isBinary {
+		return nil, values.WrapForeignErrorf(values.ErrNotATextualPort,
+			"expected a textual output port, got binary port")
+	}
+	return p, nil
+}
+
 // getOptionalInputPort extracts an optional input port from a variadic argument list.
 // If the list is empty, returns the current input port.
 // Otherwise, extracts and validates the port from the list's car.
@@ -229,7 +245,7 @@ func PrimReadSyntax(mc *machine.MachineContext) error {
 // R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
 func PrimWrite(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalOutputPort(mc, 1)
+	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
@@ -271,6 +287,11 @@ func PrimWriteChar(mc *machine.MachineContext) error {
 		}
 		writer = p
 	}
+	_, isBinaryWriter := writer.(values.BinaryWriter)
+	if isBinaryWriter {
+		return values.WrapForeignErrorf(values.ErrNotATextualPort,
+			"write-char: expected a textual output port, got binary port")
+	}
 	buf := make([]byte, 0, utf8.UTFMax)
 	_, err = writer.Write(utf8.AppendRune(buf, ch.Value))
 	if err != nil {
@@ -289,7 +310,7 @@ func PrimWriteChar(mc *machine.MachineContext) error {
 // R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
 func PrimDisplay(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalOutputPort(mc, 1)
+	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
@@ -309,7 +330,7 @@ func PrimDisplay(mc *machine.MachineContext) error {
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
 func PrimNewline(mc *machine.MachineContext) error {
-	writer, err := getOptionalOutputPort(mc, 0)
+	writer, err := getOptionalTextualOutputPort(mc, 0)
 	if err != nil {
 		return err
 	}
@@ -331,7 +352,7 @@ func PrimNewline(mc *machine.MachineContext) error {
 // (write-simple obj) or (write-simple obj port)
 func PrimWriteSimple(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalOutputPort(mc, 1)
+	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
@@ -355,7 +376,7 @@ func PrimWriteSimple(mc *machine.MachineContext) error {
 // (write-shared obj) or (write-shared obj port)
 func PrimWriteShared(mc *machine.MachineContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalOutputPort(mc, 1)
+	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
@@ -480,6 +501,11 @@ func PrimReadString(mc *machine.MachineContext) error {
 	}
 	if k.Value < 0 {
 		return values.WrapForeignErrorf(values.ErrInvalidArgument, "read-string: k must be non-negative")
+	}
+	// R7RS §6.13.2: (read-string 0 port) returns "", not eof-object.
+	if k.Value == 0 {
+		mc.SetValue(values.NewString(""))
+		return nil
 	}
 
 	// Check allocation limit (assume 4 bytes per rune worst case)
@@ -692,35 +718,29 @@ func PrimReadBytevector(mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Read up to k bytes
+	// Read exactly k bytes using io.ReadFull to avoid short reads from buffered ports.
+	// R7RS §6.13.3: read-bytevector returns a bytevector of exactly k bytes if available.
 	buf := make([]byte, k.Value)
-	n, err := p.Read(buf)
-
-	// Per io.Reader contract: process n > 0 bytes before examining errors.
-	// When Read() returns (n > 0, io.EOF), we have successfully read n bytes;
-	// the EOF status is irrelevant since we have data to return.
-	if n > 0 {
-		// Successfully read n bytes; create and return bytevector
-		bv := make(values.ByteVector, n)
-		for i := range n {
-			bv[i] = &values.Byte{Value: buf[i]}
-		}
-		mc.SetValue(&bv)
-		return nil
-	}
-
-	// n == 0: no bytes read, check why
-	if errors.Is(err, io.EOF) {
+	n, err := io.ReadFull(p, buf)
+	switch {
+	case err == nil:
+		// Full read: proceed with buf as-is.
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		// Partial read at EOF: return the bytes we got.
+		buf = buf[:n]
+	case errors.Is(err, io.EOF):
+		// No bytes at all: return eof-object.
 		mc.SetValue(values.EOFObject)
 		return nil
-	}
-	if err != nil {
+	default:
 		return values.WrapForeignReadErrorf(err, "read-bytevector: error reading from port")
 	}
 
-	// n == 0, err == nil: valid but unusual per io.Reader contract
-	// Return empty bytevector
-	mc.SetValue(&values.ByteVector{})
+	bv := make(values.ByteVector, len(buf))
+	for i := range buf {
+		bv[i] = &values.Byte{Value: buf[i]}
+	}
+	mc.SetValue(&bv)
 	return nil
 }
 
@@ -745,33 +765,30 @@ func PrimReadBytevectorBang(mc *machine.MachineContext) error {
 		return err
 	}
 
+	// Read exactly (end-start) bytes using io.ReadFull to avoid short reads from buffered ports.
+	// R7RS §6.13.3: read-bytevector! fills the range [start,end) if bytes are available.
 	buf := make([]byte, end-start)
-	n, err := p.Read(buf)
-
-	// Per io.Reader contract: process n > 0 bytes before examining errors.
-	// When Read() returns (n > 0, io.EOF), we have successfully read n bytes;
-	// the EOF status is irrelevant since we have data to return.
-	if n > 0 {
-		// Successfully read n bytes; copy into bytevector and return count
-		for i := range n {
-			(*bv)[start+i] = values.NewByte(buf[i])
-		}
-		mc.SetValue(values.NewInteger(int64(n)))
-		return nil
-	}
-
-	// n == 0: no bytes read, check why
-	if errors.Is(err, io.EOF) {
-		mc.SetValue(values.EOFObject)
-		return nil
-	}
+	n, err := io.ReadFull(p, buf)
 	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			// Partial read at EOF: copy what we got and return the count.
+			for i := range n {
+				(*bv)[start+i] = values.NewByte(buf[i])
+			}
+			mc.SetValue(values.NewInteger(int64(n)))
+			return nil
+		}
+		if errors.Is(err, io.EOF) {
+			mc.SetValue(values.EOFObject)
+			return nil
+		}
 		return values.WrapForeignReadErrorf(err, "read-bytevector!: error reading from port")
 	}
 
-	// n == 0, err == nil: valid but unusual per io.Reader contract
-	// Return 0 (zero bytes read)
-	mc.SetValue(values.NewInteger(0))
+	for i := range n {
+		(*bv)[start+i] = values.NewByte(buf[i])
+	}
+	mc.SetValue(values.NewInteger(int64(n)))
 	return nil
 }
 

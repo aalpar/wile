@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -34,10 +35,10 @@ func TestRealPartExtended(t *testing.T) {
 		{name: "real-part of inexact complex", code: `(real-part 3.0+4.0i)`, expected: values.NewFloat(3.0)},
 		{name: "real-part of inexact complex negative", code: `(real-part -3.0+4.0i)`, expected: values.NewFloat(-3.0)},
 
-		// Real numbers (imaginary part is 0)
-		{name: "real-part of integer", code: `(real-part 5)`, expected: values.NewFloat(5.0)},
+		// Real numbers: real-part is the number itself (exactness preserved per R7RS §6.2.6)
+		{name: "real-part of integer", code: `(real-part 5)`, expected: values.NewInteger(5)},
 		{name: "real-part of float", code: `(real-part 5.5)`, expected: values.NewFloat(5.5)},
-		{name: "real-part of rational", code: `(real-part 3/4)`, expected: values.NewFloat(0.75)},
+		{name: "real-part of rational", code: `(real-part 3/4)`, expected: values.NewRationalFromBigInt(big.NewInt(3), big.NewInt(4))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

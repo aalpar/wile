@@ -145,7 +145,7 @@ func (p *Complex) Multiply(o Number) Number {
 
 // Divide returns the quotient of this complex number and another number.
 func (p *Complex) Divide(o Number) Number {
-	if o.IsZero() {
+	if o.IsZero() && o.IsExact() {
 		panic(ErrDivisionByZero)
 	}
 	v, ok := o.(*Complex)

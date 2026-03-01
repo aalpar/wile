@@ -202,7 +202,8 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of integer",
 			code: "(real-part 5)",
-			out:  values.NewFloat(5.0),
+			// exact real: real-part returns the number itself
+			out: values.NewInteger(5),
 		},
 		{
 			name: "real-part of float",
@@ -212,7 +213,8 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of rational",
 			code: "(real-part 1/2)",
-			out:  values.NewFloat(0.5),
+			// exact rational: real-part returns the number itself
+			out: values.NewRational(1, 2),
 		},
 		{
 			name: "real-part of negative complex",
@@ -229,12 +231,12 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 		{
 			name: "real-part of rational with negative numerator",
 			code: "(real-part -3/4)",
-			out:  values.NewFloat(-0.75),
+			out:  values.NewRational(-3, 4),
 		},
 		{
 			name: "real-part of zero",
 			code: "(real-part 0)",
-			out:  values.NewFloat(0.0),
+			out:  values.NewInteger(0),
 		},
 		{
 			name: "real-part of complex with zero real",

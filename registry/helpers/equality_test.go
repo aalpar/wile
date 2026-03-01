@@ -238,6 +238,27 @@ func TestEqv(t *testing.T) {
 			b:    values.NewBigFloat(new(big.Float).SetPrec(256).SetFloat64(1.0)),
 			want: true,
 		},
+		// E2: NaN is not equal to anything, including itself. BigFloat stores NaN
+		// as a separate flag; without a guard, Cmp on the zero backing *big.Float
+		// returns 0 (incorrectly treating NaN == NaN as true).
+		{
+			name: "bigfloat/NaN not equal to NaN",
+			a:    values.NewBigFloatNaN(),
+			b:    values.NewBigFloatNaN(),
+			want: false,
+		},
+		{
+			name: "bigfloat/NaN not equal to finite",
+			a:    values.NewBigFloatNaN(),
+			b:    values.NewBigFloatFromFloat64(1.0),
+			want: false,
+		},
+		{
+			name: "bigfloat/finite not equal to NaN",
+			a:    values.NewBigFloatFromFloat64(1.0),
+			b:    values.NewBigFloatNaN(),
+			want: false,
+		},
 
 		// ── Rational == Rational ───────────────────────────────────────
 		{

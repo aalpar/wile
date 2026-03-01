@@ -222,7 +222,14 @@ func (p *BigFloat) Divide(o Number) Number {
 		return NewBigFloatNaN()
 	}
 	if o.IsZero() {
-		panic(ErrDivisionByZero)
+		if o.IsExact() {
+			panic(ErrDivisionByZero)
+		}
+		// Inexact zero: IEEE 754 semantics — ±Inf or NaN
+		if p.nan || p.IsZero() {
+			return NewBigFloatNaN()
+		}
+		return NewBigFloat(new(big.Float).SetInf(p.value.Sign() < 0))
 	}
 	v, ok := o.(*BigFloat)
 	if ok {

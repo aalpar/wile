@@ -657,3 +657,84 @@ func TestReadBytevectorBang(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// L5: close-input-port / close-output-port direction enforcement
+// =============================================================================
+
+func TestClosePortDirection(t *testing.T) {
+	engine := newEngine(t)
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"close-input-port rejects output port", `(close-input-port (open-output-string))`},
+		{"close-input-port rejects binary output port", `(close-input-port (open-output-bytevector))`},
+		{"close-output-port rejects input port", `(close-output-port (open-input-string "x"))`},
+		{"close-output-port rejects binary input port", `(close-output-port (open-input-bytevector #u8(1)))`},
+		{"close-input-port rejects integer", `(close-input-port 42)`},
+		{"close-output-port rejects integer", `(close-output-port 42)`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// H6: parameterize with string ports does not crash
+// =============================================================================
+
+func TestParameterizeCurrentPorts(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"read-char from parameterized string input",
+			`(parameterize ((current-input-port (open-input-string "hi"))) (read-char))`,
+			values.NewCharacter('h')},
+		{"write-char to parameterized string output",
+			`(let ((p (open-output-string)))
+			   (parameterize ((current-output-port p))
+			     (write-char #\A))
+			   (get-output-string p))`,
+			values.NewString("A")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal().EqualTo(tc.want), qt.IsTrue,
+				qt.Commentf("got %v, want %v", result.Internal().SchemeString(), tc.want.SchemeString()))
+		})
+	}
+}
+
+// =============================================================================
+// M6: textual output ops reject binary ports
+// =============================================================================
+
+func TestTextualOpsRejectBinaryPorts(t *testing.T) {
+	engine := newEngine(t)
+
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"write-char to binary port", `(write-char #\A (open-output-bytevector))`},
+		{"display to binary port", `(display "hi" (open-output-bytevector))`},
+		{"write to binary port", `(write 42 (open-output-bytevector))`},
+		{"newline to binary port", `(newline (open-output-bytevector))`},
+		{"write-simple to binary port", `(write-simple 42 (open-output-bytevector))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
