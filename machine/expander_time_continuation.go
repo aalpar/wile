@@ -1312,6 +1312,49 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
+// invokeTransformerClosure invokes a Closure (MachineClosure or ForeignClosure)
+// as a macro transformer with the given input form. If expanderCtx is non-nil,
+// it is set on the context for auxiliary syntax hygiene (R7RS §4.3.2).
+//
+// On success, the caller receives the MachineContext with the result in the
+// value register and must call ReleaseSubContext when done. On error, cleanup
+// is handled internally.
+func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax.SyntaxValue, expanderCtx *ExpanderContext) (*MachineContext, error) {
+	var mc *MachineContext
+	switch c := cls.(type) {
+	case *MachineClosure:
+		mc = acquireMacroContext(ctx, c)
+		if expanderCtx != nil {
+			mc.SetExpanderContext(expanderCtx)
+		}
+		_, err := mc.Apply(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+		err = mc.Run()
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, err
+		}
+	case *ForeignClosure:
+		mc = acquireSubContext()
+		mc.ctx = ctx
+		mc.evals = acquireStack()
+		if expanderCtx != nil {
+			mc.SetExpanderContext(expanderCtx)
+		}
+		_, err := mc.applyForeign(c, inputForm)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+	default:
+		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "unexpected closure type: %T", cls)
+	}
+	return mc, nil
+}
+
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
 func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
@@ -1332,33 +1375,9 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
 
-	var mc *MachineContext
-	switch c := cls.(type) {
-	case *MachineClosure:
-		mc = acquireMacroContext(p.ctx, c)
-		mc.SetExpanderContext(expanderCtx)
-		_, err := mc.Apply(c, inputForm)
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
-		}
-		err = mc.Run()
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, err
-		}
-	case *ForeignClosure:
-		mc = acquireSubContext()
-		mc.ctx = p.ctx
-		mc.evals = acquireStack()
-		mc.SetExpanderContext(expanderCtx)
-		_, err := mc.applyForeign(c, inputForm)
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, values.WrapForeignErrorf(err, "failed to apply transformer")
-		}
-	default:
-		return nil, values.WrapForeignErrorf(values.ErrNotAClosure, "unexpected closure type: %T", cls)
+	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, expanderCtx)
+	if err != nil {
+		return nil, err
 	}
 	defer ReleaseSubContext(mc)
 
@@ -1442,31 +1461,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	}
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
-	var mc *MachineContext
-	switch c := cls.(type) {
-	case *MachineClosure:
-		mc = acquireMacroContext(p.ctx, c)
-		_, err := mc.Apply(c, inputForm)
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, false, values.WrapForeignErrorf(err, "failed to apply transformer")
-		}
-		err = mc.Run()
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, false, err
-		}
-	case *ForeignClosure:
-		mc = acquireSubContext()
-		mc.ctx = p.ctx
-		mc.evals = acquireStack()
-		_, err := mc.applyForeign(c, inputForm)
-		if err != nil {
-			ReleaseSubContext(mc)
-			return nil, false, values.WrapForeignErrorf(err, "failed to apply transformer")
-		}
-	default:
-		return nil, false, values.WrapForeignErrorf(values.ErrNotAClosure, "unexpected closure type: %T", cls)
+	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, nil)
+	if err != nil {
+		return nil, false, err
 	}
 	defer ReleaseSubContext(mc)
 
