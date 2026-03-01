@@ -361,6 +361,10 @@ func (p *BigFloat) Compare(o Number) int {
 }
 
 // SchemeString returns the Scheme representation of this BigFloat.
+//
+// R7RS §6.2.6: Inexact integers must include a decimal point to distinguish
+// them from exact integers. big.Float.Text('g', -1) drops ".0" for integer
+// values, so we append it when neither '.' nor 'e'/'E' is present.
 func (p *BigFloat) SchemeString() string {
 	if p.nan {
 		return "+nan.0"
@@ -371,7 +375,13 @@ func (p *BigFloat) SchemeString() string {
 		}
 		return "+inf.0"
 	}
-	return p.value.Text('g', -1)
+	s := p.value.Text('g', -1)
+	for i := 0; i < len(s); i++ {
+		if s[i] == '.' || s[i] == 'e' || s[i] == 'E' {
+			return s
+		}
+	}
+	return s + ".0"
 }
 
 // IsVoid returns true if this BigFloat is nil.
