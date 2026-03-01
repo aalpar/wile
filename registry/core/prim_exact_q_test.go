@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,27 +25,27 @@ import (
 )
 
 func TestExactQ(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact types
-		{name: "exact? on integer", code: `(exact? 42)`, expected: values.TrueValue},
-		{name: "exact? on negative integer", code: `(exact? -42)`, expected: values.TrueValue},
-		{name: "exact? on rational", code: `(exact? 3/4)`, expected: values.TrueValue},
-		{name: "exact? on biginteger", code: `(exact? #z123456789012345678901234567890)`, expected: values.TrueValue},
+		{Name: "exact? on integer", Code: `(exact? 42)`, Expected: values.TrueValue},
+		{Name: "exact? on negative integer", Code: `(exact? -42)`, Expected: values.TrueValue},
+		{Name: "exact? on rational", Code: `(exact? 3/4)`, Expected: values.TrueValue},
+		{Name: "exact? on biginteger", Code: `(exact? #z123456789012345678901234567890)`, Expected: values.TrueValue},
 
 		// Exact complex (integer parts)
-		{name: "exact? on exact complex", code: `(exact? 1+2i)`, expected: values.TrueValue},
+		{Name: "exact? on exact complex", Code: `(exact? 1+2i)`, Expected: values.TrueValue},
 
 		// Inexact types
-		{name: "exact? on float", code: `(exact? 3.14)`, expected: values.FalseValue},
-		{name: "exact? on inexact complex", code: `(exact? 1.0+2.0i)`, expected: values.FalseValue},
-		{name: "exact? on +inf.0", code: `(exact? +inf.0)`, expected: values.FalseValue},
-		{name: "exact? on +nan.0", code: `(exact? +nan.0)`, expected: values.FalseValue},
+		{Name: "exact? on float", Code: `(exact? 3.14)`, Expected: values.FalseValue},
+		{Name: "exact? on inexact complex", Code: `(exact? 1.0+2.0i)`, Expected: values.FalseValue},
+		{Name: "exact? on +inf.0", Code: `(exact? +inf.0)`, Expected: values.FalseValue},
+		{Name: "exact? on +nan.0", Code: `(exact? +nan.0)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

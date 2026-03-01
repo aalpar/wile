@@ -19,6 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 )
@@ -33,75 +34,75 @@ import (
 func TestVoidReturningExpressionAsArgument(t *testing.T) {
 	c := qt.New(t)
 
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// display returns void; passing it as an argument should work
 		{
-			name:     "display as argument",
-			code:     `((lambda (x) x) (display ""))`,
-			expected: values.Void,
+			Name:     "display as argument",
+			Code:     `((lambda (x) x) (display ""))`,
+			Expected: values.Void,
 		},
 		// newline returns void
 		{
-			name:     "newline as argument",
-			code:     `((lambda (x) x) (newline))`,
-			expected: values.Void,
+			Name:     "newline as argument",
+			Code:     `((lambda (x) x) (newline))`,
+			Expected: values.Void,
 		},
 		// write returns void
 		{
-			name:     "write as argument",
-			code:     `((lambda (x) x) (write ""))`,
-			expected: values.Void,
+			Name:     "write as argument",
+			Code:     `((lambda (x) x) (write ""))`,
+			Expected: values.Void,
 		},
 		// vector-set! returns void
 		{
-			name:     "vector-set! as argument",
-			code:     `((lambda (x) x) (vector-set! (vector 1 2 3) 0 99))`,
-			expected: values.Void,
+			Name:     "vector-set! as argument",
+			Code:     `((lambda (x) x) (vector-set! (vector 1 2 3) 0 99))`,
+			Expected: values.Void,
 		},
 		// bytevector-u8-set! returns void
 		{
-			name:     "bytevector-u8-set! as argument",
-			code:     `((lambda (x) x) (bytevector-u8-set! (bytevector 1 2 3) 0 99))`,
-			expected: values.Void,
+			Name:     "bytevector-u8-set! as argument",
+			Code:     `((lambda (x) x) (bytevector-u8-set! (bytevector 1 2 3) 0 99))`,
+			Expected: values.Void,
 		},
 		// close-port returns void
 		{
-			name:     "close-port as argument",
-			code:     `((lambda (x) x) (close-port (open-input-string "x")))`,
-			expected: values.Void,
+			Name:     "close-port as argument",
+			Code:     `((lambda (x) x) (close-port (open-input-string "x")))`,
+			Expected: values.Void,
 		},
 		// void as argument in a multi-argument call
 		{
-			name:     "void among multiple arguments",
-			code:     `((lambda (x y) y) (display "") 42)`,
-			expected: values.NewInteger(42),
+			Name:     "void among multiple arguments",
+			Code:     `((lambda (x y) y) (display "") 42)`,
+			Expected: values.NewInteger(42),
 		},
 		// void as first of two arguments
 		{
-			name:     "void as first argument",
-			code:     `((lambda (x y) x) (display "") 42)`,
-			expected: values.Void,
+			Name:     "void as first argument",
+			Code:     `((lambda (x y) x) (display "") 42)`,
+			Expected: values.Void,
 		},
 		// guard with void-producing expression (the original symptom)
 		{
-			name:     "guard with void body",
-			code:     `(guard (exn (#t "caught")) (display ""))`,
-			expected: values.Void,
+			Name:     "guard with void body",
+			Code:     `(guard (exn (#t "caught")) (display ""))`,
+			Expected: values.Void,
 		},
 		// guard catching a raise after void-producing code
 		{
-			name: "guard catching raise",
-			code: `(guard (exn (#t exn))
+			Name: "guard catching raise",
+			Code: `(guard (exn (#t exn))
 				(raise "test"))`,
-			expected: values.NewString("test"),
+			Expected: values.NewString("test"),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

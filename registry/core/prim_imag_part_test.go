@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,39 +25,39 @@ import (
 )
 
 func TestImagPartExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact complex (integer parts parsed as exact BigComplex)
-		{name: "imag-part of complex", code: `(imag-part 3+4i)`, expected: values.NewBigIntegerFromInt64(4)},
-		{name: "imag-part of complex negative", code: `(imag-part 3-4i)`, expected: values.NewBigIntegerFromInt64(-4)},
-		{name: "imag-part of pure real complex", code: `(imag-part 3+0i)`, expected: values.NewBigIntegerFromInt64(0)},
+		{Name: "imag-part of complex", Code: `(imag-part 3+4i)`, Expected: values.NewBigIntegerFromInt64(4)},
+		{Name: "imag-part of complex negative", Code: `(imag-part 3-4i)`, Expected: values.NewBigIntegerFromInt64(-4)},
+		{Name: "imag-part of pure real complex", Code: `(imag-part 3+0i)`, Expected: values.NewBigIntegerFromInt64(0)},
 
 		// Inexact complex (float parts)
-		{name: "imag-part of inexact complex", code: `(imag-part 3.0+4.0i)`, expected: values.NewFloat(4.0)},
-		{name: "imag-part of inexact complex negative", code: `(imag-part 3.0-4.0i)`, expected: values.NewFloat(-4.0)},
+		{Name: "imag-part of inexact complex", Code: `(imag-part 3.0+4.0i)`, Expected: values.NewFloat(4.0)},
+		{Name: "imag-part of inexact complex negative", Code: `(imag-part 3.0-4.0i)`, Expected: values.NewFloat(-4.0)},
 
 		// Real numbers: imag-part is 0 with exactness matching input per R7RS §6.2.6
-		{name: "imag-part of integer", code: `(imag-part 5)`, expected: values.NewInteger(0)},
-		{name: "imag-part of float", code: `(imag-part 5.5)`, expected: values.NewFloat(0.0)},
-		{name: "imag-part of rational", code: `(imag-part 3/4)`, expected: values.NewInteger(0)},
+		{Name: "imag-part of integer", Code: `(imag-part 5)`, Expected: values.NewInteger(0)},
+		{Name: "imag-part of float", Code: `(imag-part 5.5)`, Expected: values.NewFloat(0.0)},
+		{Name: "imag-part of rational", Code: `(imag-part 3/4)`, Expected: values.NewInteger(0)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestImagPartErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "imag-part of string", code: `(imag-part "hello")`},
-		{name: "imag-part of symbol", code: `(imag-part 'foo)`},
-		{name: "imag-part of list", code: `(imag-part '(1 2 3))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "imag-part of string", Code: `(imag-part "hello")`},
+		{Name: "imag-part of symbol", Code: `(imag-part 'foo)`},
+		{Name: "imag-part of list", Code: `(imag-part '(1 2 3))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

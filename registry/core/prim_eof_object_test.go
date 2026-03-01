@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -29,7 +30,7 @@ func TestEofObjectFromRead(t *testing.T) {
 	// R7RS §6.13.2: "If an end of file is encountered in the input before any
 	// characters are found that can begin an object, then an end-of-file object
 	// is returned."
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "")))
 			(eof-object? (read p)))
 	`)
@@ -39,7 +40,7 @@ func TestEofObjectFromRead(t *testing.T) {
 
 func TestEofObjectFromReadAfterData(t *testing.T) {
 	// Reading past the end of data returns eof-object
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(read p)
 			(eof-object? (read p)))
@@ -50,7 +51,7 @@ func TestEofObjectFromReadAfterData(t *testing.T) {
 
 func TestEofObjectFromReadCharAfterRead(t *testing.T) {
 	// After read consumes data, read-char also returns eof-object
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(read p)
 			(eof-object? (read-char p)))
@@ -61,7 +62,7 @@ func TestEofObjectFromReadCharAfterRead(t *testing.T) {
 
 func TestEofObjectFromReadMultipleEof(t *testing.T) {
 	// Multiple reads past EOF all return eof-object
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "")))
 			(let ((a (read p))
 			      (b (read p))
@@ -76,19 +77,19 @@ func TestEofObjectFromReadMultipleEof(t *testing.T) {
 
 func TestEofObjectUniqueness(t *testing.T) {
 	// There is only one eof-object
-	result, err := runSchemeCode(t, `(eq? (eof-object) (eof-object))`)
+	result, err := testhelpers.RunSchemeCode(t, `(eq? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectEqv(t *testing.T) {
-	result, err := runSchemeCode(t, `(eqv? (eof-object) (eof-object))`)
+	result, err := testhelpers.RunSchemeCode(t, `(eqv? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectEqual(t *testing.T) {
-	result, err := runSchemeCode(t, `(equal? (eof-object) (eof-object))`)
+	result, err := testhelpers.RunSchemeCode(t, `(equal? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

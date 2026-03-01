@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestCharacters_ArityErrors verifies that character primitives reject
 // wrong argument counts. The VM enforces arity automatically via
@@ -27,10 +31,10 @@ func TestCharacters_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2)")
 		})
 	}
 
@@ -44,7 +48,7 @@ func TestCharacters_ArityErrors(t *testing.T) {
 	}
 	for _, name := range charComparisons {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 	}
 }

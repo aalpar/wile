@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -70,7 +71,7 @@ func TestWriteShared(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			str, ok := result.(*values.String)
 			qt.Assert(t, ok, qt.IsTrue)
@@ -81,7 +82,7 @@ func TestWriteShared(t *testing.T) {
 
 func TestWriteSharedDefaultPort(t *testing.T) {
 	// write-shared with only one argument should use current-output-port
-	result, err := runSchemeCode(t, `(begin (write-shared 42) #t)`)
+	result, err := testhelpers.RunSchemeCode(t, `(begin (write-shared 42) #t)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

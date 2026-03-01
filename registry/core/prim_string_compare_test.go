@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -57,7 +58,7 @@ func TestStringEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -103,7 +104,7 @@ func TestStringLessThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -144,7 +145,7 @@ func TestStringGreaterThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -185,7 +186,7 @@ func TestStringLessThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -226,7 +227,7 @@ func TestStringGreaterThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -236,196 +237,196 @@ func TestStringGreaterThanOrEqual(t *testing.T) {
 // Case-insensitive string comparison tests
 
 func TestStringCIEqual(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ci=? equal same case",
-			code:     `(string-ci=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? equal same case",
+			Code:     `(string-ci=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci=? equal different case",
-			code:     `(string-ci=? "Hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? equal different case",
+			Code:     `(string-ci=? "Hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci=? equal all caps",
-			code:     `(string-ci=? "HELLO" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? equal all caps",
+			Code:     `(string-ci=? "HELLO" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci=? different strings",
-			code:     `(string-ci=? "hello" "world")`,
-			expected: values.FalseValue,
+			Name:     "string-ci=? different strings",
+			Code:     `(string-ci=? "hello" "world")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci=? empty strings",
-			code:     `(string-ci=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? empty strings",
+			Code:     `(string-ci=? "" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci=? different lengths",
-			code:     `(string-ci=? "AB" "ABC")`,
-			expected: values.FalseValue,
+			Name:     "string-ci=? different lengths",
+			Code:     `(string-ci=? "AB" "ABC")`,
+			Expected: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCILessThan(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ci<? less",
-			code:     `(string-ci<? "abc" "def")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<? less",
+			Code:     `(string-ci<? "abc" "def")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<? less case insensitive",
-			code:     `(string-ci<? "ABC" "def")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<? less case insensitive",
+			Code:     `(string-ci<? "ABC" "def")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<? equal",
-			code:     `(string-ci<? "Hello" "hello")`,
-			expected: values.FalseValue,
+			Name:     "string-ci<? equal",
+			Code:     `(string-ci<? "Hello" "hello")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci<? greater",
-			code:     `(string-ci<? "xyz" "ABC")`,
-			expected: values.FalseValue,
+			Name:     "string-ci<? greater",
+			Code:     `(string-ci<? "xyz" "ABC")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci<? prefix less",
-			code:     `(string-ci<? "A" "AB")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<? prefix less",
+			Code:     `(string-ci<? "A" "AB")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<? empty less than non-empty",
-			code:     `(string-ci<? "" "a")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<? empty less than non-empty",
+			Code:     `(string-ci<? "" "a")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCIGreaterThan(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ci>? greater",
-			code:     `(string-ci>? "def" "abc")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>? greater",
+			Code:     `(string-ci>? "def" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>? greater case insensitive",
-			code:     `(string-ci>? "DEF" "abc")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>? greater case insensitive",
+			Code:     `(string-ci>? "DEF" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>? equal",
-			code:     `(string-ci>? "Hello" "hello")`,
-			expected: values.FalseValue,
+			Name:     "string-ci>? equal",
+			Code:     `(string-ci>? "Hello" "hello")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci>? less",
-			code:     `(string-ci>? "abc" "XYZ")`,
-			expected: values.FalseValue,
+			Name:     "string-ci>? less",
+			Code:     `(string-ci>? "abc" "XYZ")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci>? non-empty greater than empty",
-			code:     `(string-ci>? "a" "")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>? non-empty greater than empty",
+			Code:     `(string-ci>? "a" "")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCILessThanOrEqual(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ci<=? equal same case",
-			code:     `(string-ci<=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<=? equal same case",
+			Code:     `(string-ci<=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<=? equal different case",
-			code:     `(string-ci<=? "HELLO" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<=? equal different case",
+			Code:     `(string-ci<=? "HELLO" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<=? less",
-			code:     `(string-ci<=? "abc" "DEF")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<=? less",
+			Code:     `(string-ci<=? "abc" "DEF")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<=? greater",
-			code:     `(string-ci<=? "XYZ" "abc")`,
-			expected: values.FalseValue,
+			Name:     "string-ci<=? greater",
+			Code:     `(string-ci<=? "XYZ" "abc")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci<=? empty strings",
-			code:     `(string-ci<=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<=? empty strings",
+			Code:     `(string-ci<=? "" "")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCIGreaterThanOrEqual(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ci>=? equal same case",
-			code:     `(string-ci>=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>=? equal same case",
+			Code:     `(string-ci>=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>=? equal different case",
-			code:     `(string-ci>=? "HELLO" "hello")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>=? equal different case",
+			Code:     `(string-ci>=? "HELLO" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>=? greater",
-			code:     `(string-ci>=? "xyz" "ABC")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>=? greater",
+			Code:     `(string-ci>=? "xyz" "ABC")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>=? less",
-			code:     `(string-ci>=? "abc" "XYZ")`,
-			expected: values.FalseValue,
+			Name:     "string-ci>=? less",
+			Code:     `(string-ci>=? "abc" "XYZ")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci>=? empty strings",
-			code:     `(string-ci>=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>=? empty strings",
+			Code:     `(string-ci>=? "" "")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -434,73 +435,73 @@ func TestStringCIGreaterThanOrEqual(t *testing.T) {
 // NOTE: These tests will fail until string-ci comparisons are made variadic per R7RS
 
 func TestStringCICompareVariadic(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-ci=? variadic
 		{
-			name:     "string-ci=? three equal mixed case",
-			code:     `(string-ci=? "abc" "ABC" "Abc")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? three equal mixed case",
+			Code:     `(string-ci=? "abc" "ABC" "Abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci=? three one different",
-			code:     `(string-ci=? "abc" "ABC" "def")`,
-			expected: values.FalseValue,
+			Name:     "string-ci=? three one different",
+			Code:     `(string-ci=? "abc" "ABC" "def")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string-ci=? four equal",
-			code:     `(string-ci=? "Hello" "HELLO" "hello" "hElLo")`,
-			expected: values.TrueValue,
+			Name:     "string-ci=? four equal",
+			Code:     `(string-ci=? "Hello" "HELLO" "hello" "hElLo")`,
+			Expected: values.TrueValue,
 		},
 		// string-ci<? variadic
 		{
-			name:     "string-ci<? three ascending mixed case",
-			code:     `(string-ci<? "ABC" "def" "GHI")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<? three ascending mixed case",
+			Code:     `(string-ci<? "ABC" "def" "GHI")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<? three not ascending",
-			code:     `(string-ci<? "abc" "GHI" "def")`,
-			expected: values.FalseValue,
+			Name:     "string-ci<? three not ascending",
+			Code:     `(string-ci<? "abc" "GHI" "def")`,
+			Expected: values.FalseValue,
 		},
 		// string-ci>? variadic
 		{
-			name:     "string-ci>? three descending mixed case",
-			code:     `(string-ci>? "XYZ" "mno" "ABC")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>? three descending mixed case",
+			Code:     `(string-ci>? "XYZ" "mno" "ABC")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>? three not descending",
-			code:     `(string-ci>? "xyz" "abc" "MNO")`,
-			expected: values.FalseValue,
+			Name:     "string-ci>? three not descending",
+			Code:     `(string-ci>? "xyz" "abc" "MNO")`,
+			Expected: values.FalseValue,
 		},
 		// string-ci<=? variadic
 		{
-			name:     "string-ci<=? three non-decreasing with equal",
-			code:     `(string-ci<=? "abc" "ABC" "def")`,
-			expected: values.TrueValue,
+			Name:     "string-ci<=? three non-decreasing with equal",
+			Code:     `(string-ci<=? "abc" "ABC" "def")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci<=? three decreasing",
-			code:     `(string-ci<=? "xyz" "MNO" "abc")`,
-			expected: values.FalseValue,
+			Name:     "string-ci<=? three decreasing",
+			Code:     `(string-ci<=? "xyz" "MNO" "abc")`,
+			Expected: values.FalseValue,
 		},
 		// string-ci>=? variadic
 		{
-			name:     "string-ci>=? three non-increasing with equal",
-			code:     `(string-ci>=? "xyz" "MNO" "mno")`,
-			expected: values.TrueValue,
+			Name:     "string-ci>=? three non-increasing with equal",
+			Code:     `(string-ci>=? "xyz" "MNO" "mno")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string-ci>=? three increasing",
-			code:     `(string-ci>=? "abc" "MNO" "xyz")`,
-			expected: values.FalseValue,
+			Name:     "string-ci>=? three increasing",
+			Code:     `(string-ci>=? "abc" "MNO" "xyz")`,
+			Expected: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -509,327 +510,327 @@ func TestStringCICompareVariadic(t *testing.T) {
 // These tests exercise the actual registered string comparison primitives
 
 func TestStringEqualScheme(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic equality
 		{
-			name:     "equal strings",
-			code:     `(string=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "equal strings",
+			Code:     `(string=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "different strings",
-			code:     `(string=? "hello" "world")`,
-			expected: values.FalseValue,
+			Name:     "different strings",
+			Code:     `(string=? "hello" "world")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "empty strings equal",
-			code:     `(string=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "empty strings equal",
+			Code:     `(string=? "" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "case sensitive different",
-			code:     `(string=? "Hello" "hello")`,
-			expected: values.FalseValue,
+			Name:     "case sensitive different",
+			Code:     `(string=? "Hello" "hello")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "different lengths",
-			code:     `(string=? "ab" "abc")`,
-			expected: values.FalseValue,
+			Name:     "different lengths",
+			Code:     `(string=? "ab" "abc")`,
+			Expected: values.FalseValue,
 		},
 		// Unicode
 		{
-			name:     "unicode equal",
-			code:     `(string=? "café" "café")`,
-			expected: values.TrueValue,
+			Name:     "unicode equal",
+			Code:     `(string=? "café" "café")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "unicode different",
-			code:     `(string=? "café" "cafe")`,
-			expected: values.FalseValue,
+			Name:     "unicode different",
+			Code:     `(string=? "café" "cafe")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "Chinese strings equal",
-			code:     `(string=? "你好" "你好")`,
-			expected: values.TrueValue,
+			Name:     "Chinese strings equal",
+			Code:     `(string=? "你好" "你好")`,
+			Expected: values.TrueValue,
 		},
 		// Edge cases
 		{
-			name:     "single char equal",
-			code:     `(string=? "a" "a")`,
-			expected: values.TrueValue,
+			Name:     "single char equal",
+			Code:     `(string=? "a" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "single char different",
-			code:     `(string=? "a" "b")`,
-			expected: values.FalseValue,
+			Name:     "single char different",
+			Code:     `(string=? "a" "b")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "empty vs non-empty",
-			code:     `(string=? "" "a")`,
-			expected: values.FalseValue,
+			Name:     "empty vs non-empty",
+			Code:     `(string=? "" "a")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "whitespace matters",
-			code:     `(string=? "a b" "a  b")`,
-			expected: values.FalseValue,
+			Name:     "whitespace matters",
+			Code:     `(string=? "a b" "a  b")`,
+			Expected: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringLessThanScheme(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
-			name:     "lexicographic less",
-			code:     `(string<? "abc" "abd")`,
-			expected: values.TrueValue,
+			Name:     "lexicographic less",
+			Code:     `(string<? "abc" "abd")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "lexicographic greater",
-			code:     `(string<? "abd" "abc")`,
-			expected: values.FalseValue,
+			Name:     "lexicographic greater",
+			Code:     `(string<? "abd" "abc")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "equal strings",
-			code:     `(string<? "abc" "abc")`,
-			expected: values.FalseValue,
+			Name:     "equal strings",
+			Code:     `(string<? "abc" "abc")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "prefix is less",
-			code:     `(string<? "ab" "abc")`,
-			expected: values.TrueValue,
+			Name:     "prefix is less",
+			Code:     `(string<? "ab" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "longer is not less than prefix",
-			code:     `(string<? "abc" "ab")`,
-			expected: values.FalseValue,
+			Name:     "longer is not less than prefix",
+			Code:     `(string<? "abc" "ab")`,
+			Expected: values.FalseValue,
 		},
 		// Case sensitivity (ASCII order: A-Z < a-z)
 		{
-			name:     "uppercase less than lowercase",
-			code:     `(string<? "A" "a")`,
-			expected: values.TrueValue,
+			Name:     "uppercase less than lowercase",
+			Code:     `(string<? "A" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "Z less than a",
-			code:     `(string<? "Z" "a")`,
-			expected: values.TrueValue,
+			Name:     "Z less than a",
+			Code:     `(string<? "Z" "a")`,
+			Expected: values.TrueValue,
 		},
 		// Empty strings
 		{
-			name:     "empty less than non-empty",
-			code:     `(string<? "" "a")`,
-			expected: values.TrueValue,
+			Name:     "empty less than non-empty",
+			Code:     `(string<? "" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "non-empty not less than empty",
-			code:     `(string<? "a" "")`,
-			expected: values.FalseValue,
+			Name:     "non-empty not less than empty",
+			Code:     `(string<? "a" "")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "empty not less than empty",
-			code:     `(string<? "" "")`,
-			expected: values.FalseValue,
+			Name:     "empty not less than empty",
+			Code:     `(string<? "" "")`,
+			Expected: values.FalseValue,
 		},
 		// Unicode
 		{
-			name:     "unicode ordering",
-			code:     `(string<? "a" "α")`,
-			expected: values.TrueValue,
+			Name:     "unicode ordering",
+			Code:     `(string<? "a" "α")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringGreaterThanScheme(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
-			name:     "lexicographic greater",
-			code:     `(string>? "abd" "abc")`,
-			expected: values.TrueValue,
+			Name:     "lexicographic greater",
+			Code:     `(string>? "abd" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "lexicographic less",
-			code:     `(string>? "abc" "abd")`,
-			expected: values.FalseValue,
+			Name:     "lexicographic less",
+			Code:     `(string>? "abc" "abd")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "equal strings",
-			code:     `(string>? "abc" "abc")`,
-			expected: values.FalseValue,
+			Name:     "equal strings",
+			Code:     `(string>? "abc" "abc")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "longer is greater than prefix",
-			code:     `(string>? "abc" "ab")`,
-			expected: values.TrueValue,
+			Name:     "longer is greater than prefix",
+			Code:     `(string>? "abc" "ab")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "prefix is not greater",
-			code:     `(string>? "ab" "abc")`,
-			expected: values.FalseValue,
+			Name:     "prefix is not greater",
+			Code:     `(string>? "ab" "abc")`,
+			Expected: values.FalseValue,
 		},
 		// Case sensitivity
 		{
-			name:     "lowercase greater than uppercase",
-			code:     `(string>? "a" "A")`,
-			expected: values.TrueValue,
+			Name:     "lowercase greater than uppercase",
+			Code:     `(string>? "a" "A")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "a greater than Z",
-			code:     `(string>? "a" "Z")`,
-			expected: values.TrueValue,
+			Name:     "a greater than Z",
+			Code:     `(string>? "a" "Z")`,
+			Expected: values.TrueValue,
 		},
 		// Empty strings
 		{
-			name:     "non-empty greater than empty",
-			code:     `(string>? "a" "")`,
-			expected: values.TrueValue,
+			Name:     "non-empty greater than empty",
+			Code:     `(string>? "a" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "empty not greater than non-empty",
-			code:     `(string>? "" "a")`,
-			expected: values.FalseValue,
+			Name:     "empty not greater than non-empty",
+			Code:     `(string>? "" "a")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "empty not greater than empty",
-			code:     `(string>? "" "")`,
-			expected: values.FalseValue,
+			Name:     "empty not greater than empty",
+			Code:     `(string>? "" "")`,
+			Expected: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringLessOrEqualScheme(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
-			name:     "less than",
-			code:     `(string<=? "abc" "abd")`,
-			expected: values.TrueValue,
+			Name:     "less than",
+			Code:     `(string<=? "abc" "abd")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "equal",
-			code:     `(string<=? "abc" "abc")`,
-			expected: values.TrueValue,
+			Name:     "equal",
+			Code:     `(string<=? "abc" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "greater than",
-			code:     `(string<=? "abd" "abc")`,
-			expected: values.FalseValue,
+			Name:     "greater than",
+			Code:     `(string<=? "abd" "abc")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "prefix less or equal",
-			code:     `(string<=? "ab" "abc")`,
-			expected: values.TrueValue,
+			Name:     "prefix less or equal",
+			Code:     `(string<=? "ab" "abc")`,
+			Expected: values.TrueValue,
 		},
 		// Empty strings
 		{
-			name:     "empty less or equal to empty",
-			code:     `(string<=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "empty less or equal to empty",
+			Code:     `(string<=? "" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "empty less or equal to non-empty",
-			code:     `(string<=? "" "a")`,
-			expected: values.TrueValue,
+			Name:     "empty less or equal to non-empty",
+			Code:     `(string<=? "" "a")`,
+			Expected: values.TrueValue,
 		},
 		// Case sensitivity
 		{
-			name:     "uppercase less or equal lowercase",
-			code:     `(string<=? "A" "a")`,
-			expected: values.TrueValue,
+			Name:     "uppercase less or equal lowercase",
+			Code:     `(string<=? "A" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "same case equal",
-			code:     `(string<=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "same case equal",
+			Code:     `(string<=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringGreaterOrEqualScheme(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
-			name:     "greater than",
-			code:     `(string>=? "abd" "abc")`,
-			expected: values.TrueValue,
+			Name:     "greater than",
+			Code:     `(string>=? "abd" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "equal",
-			code:     `(string>=? "abc" "abc")`,
-			expected: values.TrueValue,
+			Name:     "equal",
+			Code:     `(string>=? "abc" "abc")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "less than",
-			code:     `(string>=? "abc" "abd")`,
-			expected: values.FalseValue,
+			Name:     "less than",
+			Code:     `(string>=? "abc" "abd")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "longer greater or equal to prefix",
-			code:     `(string>=? "abc" "ab")`,
-			expected: values.TrueValue,
+			Name:     "longer greater or equal to prefix",
+			Code:     `(string>=? "abc" "ab")`,
+			Expected: values.TrueValue,
 		},
 		// Empty strings
 		{
-			name:     "empty greater or equal to empty",
-			code:     `(string>=? "" "")`,
-			expected: values.TrueValue,
+			Name:     "empty greater or equal to empty",
+			Code:     `(string>=? "" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "non-empty greater or equal to empty",
-			code:     `(string>=? "a" "")`,
-			expected: values.TrueValue,
+			Name:     "non-empty greater or equal to empty",
+			Code:     `(string>=? "a" "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "empty not greater or equal to non-empty",
-			code:     `(string>=? "" "a")`,
-			expected: values.FalseValue,
+			Name:     "empty not greater or equal to non-empty",
+			Code:     `(string>=? "" "a")`,
+			Expected: values.FalseValue,
 		},
 		// Case sensitivity
 		{
-			name:     "lowercase greater or equal uppercase",
-			code:     `(string>=? "a" "A")`,
-			expected: values.TrueValue,
+			Name:     "lowercase greater or equal uppercase",
+			Code:     `(string>=? "a" "A")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "same case equal",
-			code:     `(string>=? "hello" "hello")`,
-			expected: values.TrueValue,
+			Name:     "same case equal",
+			Code:     `(string>=? "hello" "hello")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -837,48 +838,48 @@ func TestStringGreaterOrEqualScheme(t *testing.T) {
 // Variadic string comparison tests
 
 func TestStringCompareVariadic(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string=? three equal strings",
-			code:     `(string=? "a" "a" "a")`,
-			expected: values.TrueValue,
+			Name:     "string=? three equal strings",
+			Code:     `(string=? "a" "a" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string=? three strings one different",
-			code:     `(string=? "a" "a" "b")`,
-			expected: values.FalseValue,
+			Name:     "string=? three strings one different",
+			Code:     `(string=? "a" "a" "b")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string<? three ascending",
-			code:     `(string<? "a" "b" "c")`,
-			expected: values.TrueValue,
+			Name:     "string<? three ascending",
+			Code:     `(string<? "a" "b" "c")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string<? three not ascending",
-			code:     `(string<? "a" "c" "b")`,
-			expected: values.FalseValue,
+			Name:     "string<? three not ascending",
+			Code:     `(string<? "a" "c" "b")`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string>? three descending",
-			code:     `(string>? "c" "b" "a")`,
-			expected: values.TrueValue,
+			Name:     "string>? three descending",
+			Code:     `(string>? "c" "b" "a")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string<=? three non-decreasing equal",
-			code:     `(string<=? "a" "a" "b")`,
-			expected: values.TrueValue,
+			Name:     "string<=? three non-decreasing equal",
+			Code:     `(string<=? "a" "a" "b")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string>=? three non-increasing equal",
-			code:     `(string>=? "b" "a" "a")`,
-			expected: values.TrueValue,
+			Name:     "string>=? three non-increasing equal",
+			Code:     `(string>=? "b" "a" "a")`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

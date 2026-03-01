@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,83 +27,83 @@ import (
 // define-values Tests (R7RS §5.3.3)
 
 func TestDefineValuesComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Zero values
 		{
-			name:     "zero values",
-			code:     `(begin (define-values () (values)) 'ok)`,
-			expected: values.NewSymbol("ok"),
+			Name:     "zero values",
+			Code:     `(begin (define-values () (values)) 'ok)`,
+			Expected: values.NewSymbol("ok"),
 		},
 
 		// Single value
 		{
-			name:     "single value",
-			code:     `(begin (define-values (x) (values 42)) x)`,
-			expected: values.NewInteger(42),
+			Name:     "single value",
+			Code:     `(begin (define-values (x) (values 42)) x)`,
+			Expected: values.NewInteger(42),
 		},
 
 		// Two values
 		{
-			name:     "two values",
-			code:     `(begin (define-values (a b) (values 1 2)) (list a b))`,
-			expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+			Name:     "two values",
+			Code:     `(begin (define-values (a b) (values 1 2)) (list a b))`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2)),
 		},
 
 		// Three values
 		{
-			name:     "three values",
-			code:     `(begin (define-values (a b c) (values 1 2 3)) (list a b c))`,
-			expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+			Name:     "three values",
+			Code:     `(begin (define-values (a b c) (values 1 2 3)) (list a b c))`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 		},
 
 		// Four values
 		{
-			name:     "four values",
-			code:     `(begin (define-values (w x y z) (values 'a 'b 'c 'd)) (list w x y z))`,
-			expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d")),
+			Name:     "four values",
+			Code:     `(begin (define-values (w x y z) (values 'a 'b 'c 'd)) (list w x y z))`,
+			Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d")),
 		},
 
 		// With floor/
 		{
-			name:     "floor/ returns two values",
-			code:     `(begin (define-values (quot rem) (floor/ 17 5)) (list quot rem))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(2)),
+			Name:     "floor/ returns two values",
+			Code:     `(begin (define-values (quot rem) (floor/ 17 5)) (list quot rem))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(2)),
 		},
 
 		// Mixed types
 		{
-			name:     "mixed types",
-			code:     `(begin (define-values (num str sym) (values 42 "hello" 'world)) (list num str sym))`,
-			expected: values.List(values.NewInteger(42), values.NewString("hello"), values.NewSymbol("world")),
+			Name:     "mixed types",
+			Code:     `(begin (define-values (num str sym) (values 42 "hello" 'world)) (list num str sym))`,
+			Expected: values.List(values.NewInteger(42), values.NewString("hello"), values.NewSymbol("world")),
 		},
 
 		// Rest pattern: bare identifier collects all values as a list (R7RS §5.3.3)
 		{
-			name:     "rest pattern collects all values",
-			code:     `(begin (define-values x (values 1 2)) x)`,
-			expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+			Name:     "rest pattern collects all values",
+			Code:     `(begin (define-values x (values 1 2)) x)`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2)),
 		},
 		{
-			name:     "rest pattern single value",
-			code:     `(begin (define-values x (values 42)) x)`,
-			expected: values.List(values.NewInteger(42)),
+			Name:     "rest pattern single value",
+			Code:     `(begin (define-values x (values 42)) x)`,
+			Expected: values.List(values.NewInteger(42)),
 		},
 		{
-			name:     "rest pattern no values",
-			code:     `(begin (define-values x (values)) x)`,
-			expected: values.EmptyList,
+			Name:     "rest pattern no values",
+			Code:     `(begin (define-values x (values)) x)`,
+			Expected: values.EmptyList,
 		},
 		{
-			name:     "rest pattern many values",
-			code:     `(begin (define-values x (values 'a 'b 'c 'd 'e)) x)`,
-			expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e")),
+			Name:     "rest pattern many values",
+			Code:     `(begin (define-values x (values 'a 'b 'c 'd 'e)) x)`,
+			Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e")),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

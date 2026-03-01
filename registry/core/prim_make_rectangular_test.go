@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,47 +25,47 @@ import (
 )
 
 func TestMakeRectangularComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer args - R7RS §6.2.6: exact + exact = exact BigComplex
-		{name: "make-rectangular integers", code: `(make-rectangular 3 4)`,
-			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))},
-		{name: "make-rectangular negative integers", code: `(make-rectangular -3 -4)`,
-			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-3), values.NewBigIntegerFromInt64(-4))},
+		{Name: "make-rectangular integers", Code: `(make-rectangular 3 4)`,
+			Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))},
+		{Name: "make-rectangular negative integers", Code: `(make-rectangular -3 -4)`,
+			Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-3), values.NewBigIntegerFromInt64(-4))},
 		// When imaginary is zero, exact result is the exact real part
-		{name: "make-rectangular zero imaginary", code: `(make-rectangular 5 0)`,
-			expected: values.NewBigIntegerFromInt64(5)},
-		{name: "make-rectangular zero real", code: `(make-rectangular 0 5)`,
-			expected: values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(5))},
+		{Name: "make-rectangular zero imaginary", Code: `(make-rectangular 5 0)`,
+			Expected: values.NewBigIntegerFromInt64(5)},
+		{Name: "make-rectangular zero real", Code: `(make-rectangular 0 5)`,
+			Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(5))},
 
 		// Float args - inexact Complex
-		{name: "make-rectangular floats", code: `(make-rectangular 3.0 4.0)`,
-			expected: values.NewComplexFromParts(3.0, 4.0)},
+		{Name: "make-rectangular floats", Code: `(make-rectangular 3.0 4.0)`,
+			Expected: values.NewComplexFromParts(3.0, 4.0)},
 		// Mixed exact/inexact -> inexact Complex
-		{name: "make-rectangular mixed int float", code: `(make-rectangular 3 4.0)`,
-			expected: values.NewComplexFromParts(3.0, 4.0)},
+		{Name: "make-rectangular mixed int float", Code: `(make-rectangular 3 4.0)`,
+			Expected: values.NewComplexFromParts(3.0, 4.0)},
 
 		// Rational args - exact BigComplex with Rational parts
-		{name: "make-rectangular rationals", code: `(make-rectangular 1/2 3/4)`,
-			expected: values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4))},
+		{Name: "make-rectangular rationals", Code: `(make-rectangular 1/2 3/4)`,
+			Expected: values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMakeRectangularErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "make-rectangular string arg", code: `(make-rectangular "3" 4)`},
-		{name: "make-rectangular symbol arg", code: `(make-rectangular 3 'four)`},
-		{name: "make-rectangular complex arg", code: `(make-rectangular 1+2i 3)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "make-rectangular string arg", Code: `(make-rectangular "3" 4)`},
+		{Name: "make-rectangular symbol arg", Code: `(make-rectangular 3 'four)`},
+		{Name: "make-rectangular complex arg", Code: `(make-rectangular 1+2i 3)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

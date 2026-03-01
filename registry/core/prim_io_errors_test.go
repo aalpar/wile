@@ -17,86 +17,88 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
+
 	qt "github.com/frankban/quicktest"
 )
 
 // I/O Error Condition Tests
 
 func TestReadErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "read from output port",
-			code: `(read (open-output-string))`,
+			Name: "read from output port",
+			Code: `(read (open-output-string))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestWriteErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "write to input port",
-			code: `(write 42 (open-input-string ""))`,
+			Name: "write to input port",
+			Code: `(write 42 (open-input-string ""))`,
 		},
 		{
-			name: "display to input port",
-			code: `(display "hello" (open-input-string ""))`,
+			Name: "display to input port",
+			Code: `(display "hello" (open-input-string ""))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestOpenInputFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "open nonexistent file",
-			code: `(open-input-file "/this/path/does/not/exist.txt")`,
+			Name: "open nonexistent file",
+			Code: `(open-input-file "/this/path/does/not/exist.txt")`,
 		},
 		{
-			name: "wrong type - symbol",
-			code: `(open-input-file 'foo)`,
+			Name: "wrong type - symbol",
+			Code: `(open-input-file 'foo)`,
 		},
 		{
-			name: "wrong type - integer",
-			code: `(open-input-file 42)`,
+			Name: "wrong type - integer",
+			Code: `(open-input-file 42)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestOpenOutputFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "wrong type - symbol",
-			code: `(open-output-file 'foo)`,
+			Name: "wrong type - symbol",
+			Code: `(open-output-file 'foo)`,
 		},
 		{
-			name: "wrong type - integer",
-			code: `(open-output-file 42)`,
+			Name: "wrong type - integer",
+			Code: `(open-output-file 42)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

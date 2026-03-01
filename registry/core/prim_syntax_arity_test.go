@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestSyntax_ArityErrors verifies that syntax object primitives reject
 // wrong argument counts. The VM enforces arity automatically via
@@ -28,10 +32,10 @@ func TestSyntax_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2)")
 		})
 	}
 
@@ -43,13 +47,13 @@ func TestSyntax_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity2 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" one arg", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1)")
 		})
 		t.Run(name+" three args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2 3)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2 3)")
 		})
 	}
 }

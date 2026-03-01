@@ -16,6 +16,8 @@ package core_test
 
 import (
 	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
 )
 
 // TestGenerateTemporaries_H7Regression tests fix for H7: generate-temporaries
@@ -32,7 +34,7 @@ func TestGenerateTemporaries_H7Regression(t *testing.T) {
 			       (identifier? (cadr temps))
 			       (identifier? (caddr temps))))
 		`
-		runSchemeCodeExpectTrue(t, code)
+		testhelpers.RunSchemeCodeExpectTrue(t, code)
 	})
 
 	t.Run("empty list", func(t *testing.T) {
@@ -41,7 +43,7 @@ func TestGenerateTemporaries_H7Regression(t *testing.T) {
 			  (and (list? temps)
 			       (= (length temps) 0)))
 		`
-		runSchemeCodeExpectTrue(t, code)
+		testhelpers.RunSchemeCodeExpectTrue(t, code)
 	})
 
 	t.Run("single element list", func(t *testing.T) {
@@ -50,24 +52,24 @@ func TestGenerateTemporaries_H7Regression(t *testing.T) {
 			  (and (= (length temps) 1)
 			       (identifier? (car temps))))
 		`
-		runSchemeCodeExpectTrue(t, code)
+		testhelpers.RunSchemeCodeExpectTrue(t, code)
 	})
 
 	// H7: Error cases - should return proper Scheme errors, not panic
 	t.Run("error: string argument", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(generate-temporaries "not-a-list")`)
+		testhelpers.RunSchemeCodeExpectError(t, `(generate-temporaries "not-a-list")`)
 	})
 
 	t.Run("error: number argument", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(generate-temporaries 42)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(generate-temporaries 42)`)
 	})
 
 	t.Run("error: symbol argument", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(generate-temporaries 'not-a-list)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(generate-temporaries 'not-a-list)`)
 	})
 
 	t.Run("error: vector argument", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(generate-temporaries #(a b c))`)
+		testhelpers.RunSchemeCodeExpectError(t, `(generate-temporaries #(a b c))`)
 	})
 
 	t.Run("uniqueness", func(t *testing.T) {
@@ -78,6 +80,6 @@ func TestGenerateTemporaries_H7Regression(t *testing.T) {
 			  ; Identifiers should be unique
 			  (not (free-identifier=? (car temps1) (car temps2))))
 		`
-		runSchemeCodeExpectTrue(t, code)
+		testhelpers.RunSchemeCodeExpectTrue(t, code)
 	})
 }

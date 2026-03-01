@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,28 +25,28 @@ import (
 )
 
 func TestExact(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer - already exact
-		{name: "exact on integer", code: `(exact 42)`, expected: values.NewInteger(42)},
-		{name: "exact on negative integer", code: `(exact -42)`, expected: values.NewInteger(-42)},
-		{name: "exact on zero", code: `(exact 0)`, expected: values.NewInteger(0)},
+		{Name: "exact on integer", Code: `(exact 42)`, Expected: values.NewInteger(42)},
+		{Name: "exact on negative integer", Code: `(exact -42)`, Expected: values.NewInteger(-42)},
+		{Name: "exact on zero", Code: `(exact 0)`, Expected: values.NewInteger(0)},
 
 		// Float to rational
-		{name: "exact on float 0.5", code: `(exact 0.5)`, expected: values.NewRational(1, 2)},
-		{name: "exact on float 0.25", code: `(exact 0.25)`, expected: values.NewRational(1, 4)},
-		{name: "exact on float 1.5", code: `(exact 1.5)`, expected: values.NewRational(3, 2)},
+		{Name: "exact on float 0.5", Code: `(exact 0.5)`, Expected: values.NewRational(1, 2)},
+		{Name: "exact on float 0.25", Code: `(exact 0.25)`, Expected: values.NewRational(1, 4)},
+		{Name: "exact on float 1.5", Code: `(exact 1.5)`, Expected: values.NewRational(3, 2)},
 		// R7RS §6.2.6: exact on integer float returns Integer (simpler exact representation)
-		{name: "exact on integer float", code: `(exact 3.0)`, expected: values.NewInteger(3)},
+		{Name: "exact on integer float", Code: `(exact 3.0)`, Expected: values.NewInteger(3)},
 
 		// Rational - already exact
-		{name: "exact on rational", code: `(exact 3/4)`, expected: values.NewRational(3, 4)},
-		{name: "exact on negative rational", code: `(exact -3/4)`, expected: values.NewRational(-3, 4)},
+		{Name: "exact on rational", Code: `(exact 3/4)`, Expected: values.NewRational(3, 4)},
+		{Name: "exact on negative rational", Code: `(exact -3/4)`, Expected: values.NewRational(-3, 4)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -55,26 +56,26 @@ func TestExact(t *testing.T) {
 func TestExact_Complex(t *testing.T) {
 	// exact on inexact complex produces exact BigComplex
 	t.Run("exact on 1.5+2.5i", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(exact 1.5+2.5i)")
+		result, err := testhelpers.RunSchemeCode(t, "(exact 1.5+2.5i)")
 		qt.Assert(t, err, qt.IsNil)
 		_, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
 	})
 
 	t.Run("exact on 3.0+0.0i", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(exact 3.0+0.0i)")
+		result, err := testhelpers.RunSchemeCode(t, "(exact 3.0+0.0i)")
 		qt.Assert(t, err, qt.IsNil)
 		_, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
 	})
 
 	t.Run("exact? of exact complex", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(exact? (exact 1.5+2.5i))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(exact? (exact 1.5+2.5i))")
 	})
 
 	// exact on already-exact complex (BigComplex with integer parts)
 	t.Run("exact on exact complex passthrough", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(exact? (exact 1+2i))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(exact? (exact 1+2i))")
 	})
 }
 
@@ -84,73 +85,73 @@ func TestExact_Complex(t *testing.T) {
 // Architectural Review H4: toExactPart converts BigFloat to integer by
 // truncation instead of Rational. (exact 1.5+0i) produces 1 instead of 3/2.
 func TestExact_ComplexFractionalParts(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Fractional real part should become Rational 3/2, not Integer 1
 		{
-			name:     "fractional real preserves fraction",
-			code:     "(= (real-part (exact 1.5+0i)) 3/2)",
-			expected: values.TrueValue,
+			Name:     "fractional real preserves fraction",
+			Code:     "(= (real-part (exact 1.5+0i)) 3/2)",
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "fractional imag preserves fraction",
-			code:     "(= (imag-part (exact 0+2.5i)) 5/2)",
-			expected: values.TrueValue,
+			Name:     "fractional imag preserves fraction",
+			Code:     "(= (imag-part (exact 0+2.5i)) 5/2)",
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "both fractional parts preserve fractions",
-			code:     "(and (= (real-part (exact 1.5+2.5i)) 3/2) (= (imag-part (exact 1.5+2.5i)) 5/2))",
-			expected: values.TrueValue,
+			Name:     "both fractional parts preserve fractions",
+			Code:     "(and (= (real-part (exact 1.5+2.5i)) 3/2) (= (imag-part (exact 1.5+2.5i)) 5/2))",
+			Expected: values.TrueValue,
 		},
 		// Integer-valued floats should simplify to integers
 		{
-			name:     "integer-valued real simplifies",
-			code:     "(integer? (real-part (exact 3.0+2.5i)))",
-			expected: values.TrueValue,
+			Name:     "integer-valued real simplifies",
+			Code:     "(integer? (real-part (exact 3.0+2.5i)))",
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "integer-valued imag simplifies",
-			code:     "(integer? (imag-part (exact 1.5+4.0i)))",
-			expected: values.TrueValue,
+			Name:     "integer-valued imag simplifies",
+			Code:     "(integer? (imag-part (exact 1.5+4.0i)))",
+			Expected: values.TrueValue,
 		},
 		// Verify exactness is preserved
 		{
-			name:     "exact complex with fractional parts is exact",
-			code:     "(exact? (exact 1.5+2.5i))",
-			expected: values.TrueValue,
+			Name:     "exact complex with fractional parts is exact",
+			Code:     "(exact? (exact 1.5+2.5i))",
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "real part of exact complex is exact",
-			code:     "(exact? (real-part (exact 1.5+2.5i)))",
-			expected: values.TrueValue,
+			Name:     "real part of exact complex is exact",
+			Code:     "(exact? (real-part (exact 1.5+2.5i)))",
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "imag part of exact complex is exact",
-			code:     "(exact? (imag-part (exact 1.5+2.5i)))",
-			expected: values.TrueValue,
+			Name:     "imag part of exact complex is exact",
+			Code:     "(exact? (imag-part (exact 1.5+2.5i)))",
+			Expected: values.TrueValue,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestExactErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "exact on non-number string", code: `(exact "hello")`},
-		{name: "exact on symbol", code: `(exact 'foo)`},
-		{name: "exact on list", code: `(exact '(1 2 3))`},
-		{name: "exact on +inf.0", code: `(exact +inf.0)`},
-		{name: "exact on -inf.0", code: `(exact -inf.0)`},
-		{name: "exact on +nan.0", code: `(exact +nan.0)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "exact on non-number string", Code: `(exact "hello")`},
+		{Name: "exact on symbol", Code: `(exact 'foo)`},
+		{Name: "exact on list", Code: `(exact '(1 2 3))`},
+		{Name: "exact on +inf.0", Code: `(exact +inf.0)`},
+		{Name: "exact on -inf.0", Code: `(exact -inf.0)`},
+		{Name: "exact on +nan.0", Code: `(exact +nan.0)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

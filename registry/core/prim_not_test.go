@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,39 +27,39 @@ import (
 // not Tests (R7RS §6.3 - Boolean negation)
 
 func TestNotComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Only #f is false
-		{name: "not false is true", code: `(not #f)`, expected: values.TrueValue},
+		{Name: "not false is true", Code: `(not #f)`, Expected: values.TrueValue},
 
 		// Everything else is true (returns #f)
-		{name: "not true", code: `(not #t)`, expected: values.FalseValue},
-		{name: "not zero", code: `(not 0)`, expected: values.FalseValue},
-		{name: "not one", code: `(not 1)`, expected: values.FalseValue},
-		{name: "not negative", code: `(not -1)`, expected: values.FalseValue},
-		{name: "not empty list", code: `(not '())`, expected: values.FalseValue},
-		{name: "not non-empty list", code: `(not '(1 2 3))`, expected: values.FalseValue},
-		{name: "not empty string", code: `(not "")`, expected: values.FalseValue},
-		{name: "not non-empty string", code: `(not "hello")`, expected: values.FalseValue},
-		{name: "not symbol", code: `(not 'foo)`, expected: values.FalseValue},
-		{name: "not vector", code: `(not #(1 2 3))`, expected: values.FalseValue},
-		{name: "not empty vector", code: `(not #())`, expected: values.FalseValue},
-		{name: "not procedure", code: `(not +)`, expected: values.FalseValue},
-		{name: "not lambda", code: `(not (lambda (x) x))`, expected: values.FalseValue},
-		{name: "not character", code: `(not #\a)`, expected: values.FalseValue},
-		{name: "not float", code: `(not 3.14)`, expected: values.FalseValue},
-		{name: "not rational", code: `(not 1/2)`, expected: values.FalseValue},
-		{name: "not complex", code: `(not 1+2i)`, expected: values.FalseValue},
+		{Name: "not true", Code: `(not #t)`, Expected: values.FalseValue},
+		{Name: "not zero", Code: `(not 0)`, Expected: values.FalseValue},
+		{Name: "not one", Code: `(not 1)`, Expected: values.FalseValue},
+		{Name: "not negative", Code: `(not -1)`, Expected: values.FalseValue},
+		{Name: "not empty list", Code: `(not '())`, Expected: values.FalseValue},
+		{Name: "not non-empty list", Code: `(not '(1 2 3))`, Expected: values.FalseValue},
+		{Name: "not empty string", Code: `(not "")`, Expected: values.FalseValue},
+		{Name: "not non-empty string", Code: `(not "hello")`, Expected: values.FalseValue},
+		{Name: "not symbol", Code: `(not 'foo)`, Expected: values.FalseValue},
+		{Name: "not vector", Code: `(not #(1 2 3))`, Expected: values.FalseValue},
+		{Name: "not empty vector", Code: `(not #())`, Expected: values.FalseValue},
+		{Name: "not procedure", Code: `(not +)`, Expected: values.FalseValue},
+		{Name: "not lambda", Code: `(not (lambda (x) x))`, Expected: values.FalseValue},
+		{Name: "not character", Code: `(not #\a)`, Expected: values.FalseValue},
+		{Name: "not float", Code: `(not 3.14)`, Expected: values.FalseValue},
+		{Name: "not rational", Code: `(not 1/2)`, Expected: values.FalseValue},
+		{Name: "not complex", Code: `(not 1+2i)`, Expected: values.FalseValue},
 
 		// Double negation
-		{name: "not not false", code: `(not (not #f))`, expected: values.FalseValue},
-		{name: "not not true", code: `(not (not #t))`, expected: values.TrueValue},
-		{name: "not not number", code: `(not (not 42))`, expected: values.TrueValue},
+		{Name: "not not false", Code: `(not (not #f))`, Expected: values.FalseValue},
+		{Name: "not not true", Code: `(not (not #t))`, Expected: values.TrueValue},
+		{Name: "not not number", Code: `(not (not 42))`, Expected: values.TrueValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

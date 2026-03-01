@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,213 +25,213 @@ import (
 )
 
 func TestCxR2Level(t *testing.T) {
-	tests := []schemeCodeTestCase{
+	tests := []testhelpers.SchemeCodeTestCase{
 		// 2-level accessors
 		{
-			name:     "caar",
-			code:     `(caar '((1 2) 3))`,
-			expected: values.NewInteger(1),
+			Name:     "caar",
+			Code:     `(caar '((1 2) 3))`,
+			Expected: values.NewInteger(1),
 		},
 		{
-			name:     "cadr",
-			code:     `(cadr '(1 2 3))`,
-			expected: values.NewInteger(2),
+			Name:     "cadr",
+			Code:     `(cadr '(1 2 3))`,
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "cdar",
-			code:     `(cdar '((1 2 3) 4))`,
-			expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+			Name:     "cdar",
+			Code:     `(cdar '((1 2 3) 4))`,
+			Expected: values.List(values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
-			name:     "cddr",
-			code:     `(cddr '(1 2 3 4))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+			Name:     "cddr",
+			Code:     `(cddr '(1 2 3 4))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
 		},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCxR3Level(t *testing.T) {
-	tests := []schemeCodeTestCase{
+	tests := []testhelpers.SchemeCodeTestCase{
 		// 3-level accessors
 		{
-			name:     "caaar",
-			code:     `(caaar '(((1 2) 3) 4))`,
-			expected: values.NewInteger(1),
+			Name:     "caaar",
+			Code:     `(caaar '(((1 2) 3) 4))`,
+			Expected: values.NewInteger(1),
 		},
 		{
-			name:     "caadr",
-			code:     `(caadr '(1 (2 3) 4))`,
-			expected: values.NewInteger(2),
+			Name:     "caadr",
+			Code:     `(caadr '(1 (2 3) 4))`,
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "cadar",
-			code:     `(cadar '((1 2 3) 4))`,
-			expected: values.NewInteger(2),
+			Name:     "cadar",
+			Code:     `(cadar '((1 2 3) 4))`,
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "caddr",
-			code:     `(caddr '(1 2 3 4))`,
-			expected: values.NewInteger(3),
+			Name:     "caddr",
+			Code:     `(caddr '(1 2 3 4))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "cdaar",
-			code:     `(cdaar '(((1 2 3) 4) 5))`,
-			expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+			Name:     "cdaar",
+			Code:     `(cdaar '(((1 2 3) 4) 5))`,
+			Expected: values.List(values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
-			name:     "cdadr",
-			code:     `(cdadr '(1 (2 3 4) 5))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+			Name:     "cdadr",
+			Code:     `(cdadr '(1 (2 3 4) 5))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
 		},
 		{
-			name:     "cddar",
-			code:     `(cddar '((1 2 3 4) 5))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+			Name:     "cddar",
+			Code:     `(cddar '((1 2 3 4) 5))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
 		},
 		{
-			name:     "cdddr",
-			code:     `(cdddr '(1 2 3 4 5))`,
-			expected: values.List(values.NewInteger(4), values.NewInteger(5)),
+			Name:     "cdddr",
+			Code:     `(cdddr '(1 2 3 4 5))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(5)),
 		},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCxR4Level(t *testing.T) {
-	tests := []schemeCodeTestCase{
+	tests := []testhelpers.SchemeCodeTestCase{
 		// 4-level accessors
 		{
-			name:     "caaaar",
-			code:     `(caaaar '((((1 2) 3) 4) 5))`,
-			expected: values.NewInteger(1),
+			Name:     "caaaar",
+			Code:     `(caaaar '((((1 2) 3) 4) 5))`,
+			Expected: values.NewInteger(1),
 		},
 		{
-			name:     "caaadr",
-			code:     `(caaadr '(1 ((2 3) 4) 5))`,
-			expected: values.NewInteger(2),
+			Name:     "caaadr",
+			Code:     `(caaadr '(1 ((2 3) 4) 5))`,
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "caadar",
-			code:     `(caadar '(((1 2) (3 4) 5) 6))`,
-			expected: values.NewInteger(3),
+			Name:     "caadar",
+			Code:     `(caadar '(((1 2) (3 4) 5) 6))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "caaddr",
-			code:     `(caaddr '(1 2 (3 4) 5))`,
-			expected: values.NewInteger(3),
+			Name:     "caaddr",
+			Code:     `(caaddr '(1 2 (3 4) 5))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "cadaar",
-			code:     `(cadaar '(((1 2 3) 4) 5))`,
-			expected: values.NewInteger(2),
+			Name:     "cadaar",
+			Code:     `(cadaar '(((1 2 3) 4) 5))`,
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "cadadr",
-			code:     `(cadadr '(1 (2 3 4) 5))`,
-			expected: values.NewInteger(3),
+			Name:     "cadadr",
+			Code:     `(cadadr '(1 (2 3 4) 5))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "caddar",
-			code:     `(caddar '((1 2 3 4) 5))`,
-			expected: values.NewInteger(3),
+			Name:     "caddar",
+			Code:     `(caddar '((1 2 3 4) 5))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "cadddr",
-			code:     `(cadddr '(1 2 3 4 5))`,
-			expected: values.NewInteger(4),
+			Name:     "cadddr",
+			Code:     `(cadddr '(1 2 3 4 5))`,
+			Expected: values.NewInteger(4),
 		},
 		{
-			name:     "cdaaar",
-			code:     `(cdaaar '((((1 2 3) 4) 5) 6))`,
-			expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+			Name:     "cdaaar",
+			Code:     `(cdaaar '((((1 2 3) 4) 5) 6))`,
+			Expected: values.List(values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
-			name:     "cdaadr",
-			code:     `(cdaadr '(1 ((2 3 4) 5) 6))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+			Name:     "cdaadr",
+			Code:     `(cdaadr '(1 ((2 3 4) 5) 6))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
 		},
 		{
-			name:     "cdadar",
-			code:     `(cdadar '(((1 2) (3 4 5) 6) 7))`,
-			expected: values.List(values.NewInteger(4), values.NewInteger(5)),
+			Name:     "cdadar",
+			Code:     `(cdadar '(((1 2) (3 4 5) 6) 7))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(5)),
 		},
 		{
-			name:     "cdaddr",
-			code:     `(cdaddr '(1 2 (3 4 5) 6))`,
-			expected: values.List(values.NewInteger(4), values.NewInteger(5)),
+			Name:     "cdaddr",
+			Code:     `(cdaddr '(1 2 (3 4 5) 6))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(5)),
 		},
 		{
-			name:     "cddaar",
-			code:     `(cddaar '(((1 2 3 4) 5) 6))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+			Name:     "cddaar",
+			Code:     `(cddaar '(((1 2 3 4) 5) 6))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
 		},
 		{
-			name:     "cddadr",
-			code:     `(cddadr '(1 (2 3 4 5) 6))`,
-			expected: values.List(values.NewInteger(4), values.NewInteger(5)),
+			Name:     "cddadr",
+			Code:     `(cddadr '(1 (2 3 4 5) 6))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(5)),
 		},
 		{
-			name:     "cdddar",
-			code:     `(cdddar '((1 2 3 4 5) 6))`,
-			expected: values.List(values.NewInteger(4), values.NewInteger(5)),
+			Name:     "cdddar",
+			Code:     `(cdddar '((1 2 3 4 5) 6))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(5)),
 		},
 		{
-			name:     "cddddr",
-			code:     `(cddddr '(1 2 3 4 5 6))`,
-			expected: values.List(values.NewInteger(5), values.NewInteger(6)),
+			Name:     "cddddr",
+			Code:     `(cddddr '(1 2 3 4 5 6))`,
+			Expected: values.List(values.NewInteger(5), values.NewInteger(6)),
 		},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCxRErrors(t *testing.T) {
-	tests := []schemeCodeErrorTestCase{
+	tests := []testhelpers.SchemeCodeErrorTestCase{
 		// 2-level errors
-		{"caar on non-pair", `(caar 42)`},
-		{"caar on empty list", `(caar '())`},
-		{"caar car is not pair", `(caar '(1 2))`},
-		{"cadr on empty list", `(cadr '())`},
-		{"cadr on single element list", `(cadr '(1))`},
-		{"cdar on empty list", `(cdar '())`},
-		{"cdar car is not pair", `(cdar '(1))`},
-		{"cddr on empty list", `(cddr '())`},
-		{"cddr on single element list", `(cddr '(1))`},
+		{Name: "caar on non-pair", Code: `(caar 42)`},
+		{Name: "caar on empty list", Code: `(caar '())`},
+		{Name: "caar car is not pair", Code: `(caar '(1 2))`},
+		{Name: "cadr on empty list", Code: `(cadr '())`},
+		{Name: "cadr on single element list", Code: `(cadr '(1))`},
+		{Name: "cdar on empty list", Code: `(cdar '())`},
+		{Name: "cdar car is not pair", Code: `(cdar '(1))`},
+		{Name: "cddr on empty list", Code: `(cddr '())`},
+		{Name: "cddr on single element list", Code: `(cddr '(1))`},
 
 		// 3-level errors
-		{"caaar on non-pair", `(caaar 'not-a-pair)`},
-		{"caddr on too short list", `(caddr '(1))`},
-		{"caaar inner too shallow", `(caaar '((1)))`},
+		{Name: "caaar on non-pair", Code: `(caaar 'not-a-pair)`},
+		{Name: "caddr on too short list", Code: `(caddr '(1))`},
+		{Name: "caaar inner too shallow", Code: `(caaar '((1)))`},
 
 		// 4-level errors
-		{"caaaar on non-pair", `(caaaar '(((1))))`},
-		{"cadddr on too short list", `(cadddr '(1 2))`},
+		{Name: "caaaar on non-pair", Code: `(caaaar '(((1))))`},
+		{Name: "cadddr on too short list", Code: `(cadddr '(1 2))`},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

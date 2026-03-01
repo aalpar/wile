@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -36,7 +37,7 @@ func TestWithOutputToFile(t *testing.T) {
 	code := fmt.Sprintf(`(with-output-to-file "%s"
 		(lambda () (display "hello")))`, tmpfile)
 
-	_, err := runSchemeCode(t, code)
+	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 
 	content, err := os.ReadFile(tmpfile)
@@ -53,22 +54,22 @@ func TestWithOutputToFileReturnsResult(t *testing.T) {
 			(display "test")
 			'result))`, tmpfile)
 
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("result"))
 }
 
 func TestWithOutputToFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "wrong type for filename",
-			code: `(with-output-to-file 42 (lambda () #t))`,
+			Name: "wrong type for filename",
+			Code: `(with-output-to-file 42 (lambda () #t))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

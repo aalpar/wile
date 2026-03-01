@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -34,14 +35,14 @@ import (
 
 func TestNewline(t *testing.T) {
 	prog := values.List(values.NewSymbol("newline"))
-	result, err := runProgramAST(t, prog)
+	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
 func TestCurrentInputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-input-port"))
-	result, err := runProgramAST(t, prog)
+	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterInputPort)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -49,7 +50,7 @@ func TestCurrentInputPort(t *testing.T) {
 
 func TestCurrentOutputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-output-port"))
-	result, err := runProgramAST(t, prog)
+	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	_, ok := result.(*values.CharacterOutputPort)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -767,22 +768,22 @@ func TestPortPredicates(t *testing.T) {
 }
 
 func TestReadSyntaxFromStringPort(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "read-syntax from string port",
-			code: `(let ((p (open-input-string "(+ 1 2)")))
+			Name: "read-syntax from string port",
+			Code: `(let ((p (open-input-string "(+ 1 2)")))
 				(read-syntax p))`,
 		},
 		{
-			name: "read-syntax simple symbol",
-			code: `(let ((p (open-input-string "hello")))
+			Name: "read-syntax simple symbol",
+			Code: `(let ((p (open-input-string "hello")))
 				(read-syntax p))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 		})
@@ -790,22 +791,22 @@ func TestReadSyntaxFromStringPort(t *testing.T) {
 }
 
 func TestReadTokenFromStringPort(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "read-token identifier",
-			code: `(let ((p (open-input-string "hello")))
+			Name: "read-token identifier",
+			Code: `(let ((p (open-input-string "hello")))
 				(read-token p))`,
 		},
 		{
-			name: "read-token number",
-			code: `(let ((p (open-input-string "42")))
+			Name: "read-token number",
+			Code: `(let ((p (open-input-string "42")))
 				(read-token p))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 		})
@@ -813,7 +814,7 @@ func TestReadTokenFromStringPort(t *testing.T) {
 }
 
 func TestNewlineToStringPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)
 			(newline p)
@@ -828,7 +829,7 @@ func TestNewlineToStringPort(t *testing.T) {
 func TestWriteCircularPair(t *testing.T) {
 	// Test that write handles circular pairs correctly with datum labels
 	// R7RS §6.13.3: write-shared uses datum labels for shared/circular structures
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(let ((x (cons 1 2)))
 				(set-cdr! x x)
@@ -844,7 +845,7 @@ func TestWriteCircularPair(t *testing.T) {
 
 func TestWriteCircularList(t *testing.T) {
 	// Test write with a circular list
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(let ((x (list 1 2 3)))
 				(set-cdr! (cdr (cdr x)) x)
@@ -860,7 +861,7 @@ func TestWriteCircularList(t *testing.T) {
 
 func TestDisplayCircularPair(t *testing.T) {
 	// Test that display handles circular pairs correctly
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(let ((x (cons 1 2)))
 				(set-cdr! x x)
@@ -875,7 +876,7 @@ func TestDisplayCircularPair(t *testing.T) {
 
 func TestWriteCircularVector(t *testing.T) {
 	// Test write with a circular vector
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(let ((v (vector 1 2 3)))
 				(vector-set! v 1 v)
@@ -891,7 +892,7 @@ func TestWriteCircularVector(t *testing.T) {
 
 func TestWriteSharedCircularPair(t *testing.T) {
 	// Test write-shared with circular pairs
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(let ((x (cons 1 2)))
 				(set-cdr! x x)
@@ -906,7 +907,7 @@ func TestWriteSharedCircularPair(t *testing.T) {
 
 func TestWriteNonCircularPair(t *testing.T) {
 	// Test that non-circular structures don't get labels
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write '(1 2 3) p)
 			(get-output-string p))
@@ -919,7 +920,7 @@ func TestWriteNonCircularPair(t *testing.T) {
 
 func TestWriteNonCircularVector(t *testing.T) {
 	// Test that non-circular vectors don't get labels
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write #(1 2 3) p)
 			(get-output-string p))

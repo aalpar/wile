@@ -18,6 +18,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -25,39 +26,39 @@ import (
 )
 
 func TestRealPartExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact complex (integer parts parsed as exact BigComplex)
-		{name: "real-part of complex", code: `(real-part 3+4i)`, expected: values.NewBigIntegerFromInt64(3)},
-		{name: "real-part of complex negative", code: `(real-part -3+4i)`, expected: values.NewBigIntegerFromInt64(-3)},
-		{name: "real-part of pure imaginary", code: `(real-part 0+4i)`, expected: values.NewBigIntegerFromInt64(0)},
+		{Name: "real-part of complex", Code: `(real-part 3+4i)`, Expected: values.NewBigIntegerFromInt64(3)},
+		{Name: "real-part of complex negative", Code: `(real-part -3+4i)`, Expected: values.NewBigIntegerFromInt64(-3)},
+		{Name: "real-part of pure imaginary", Code: `(real-part 0+4i)`, Expected: values.NewBigIntegerFromInt64(0)},
 
 		// Inexact complex (float parts)
-		{name: "real-part of inexact complex", code: `(real-part 3.0+4.0i)`, expected: values.NewFloat(3.0)},
-		{name: "real-part of inexact complex negative", code: `(real-part -3.0+4.0i)`, expected: values.NewFloat(-3.0)},
+		{Name: "real-part of inexact complex", Code: `(real-part 3.0+4.0i)`, Expected: values.NewFloat(3.0)},
+		{Name: "real-part of inexact complex negative", Code: `(real-part -3.0+4.0i)`, Expected: values.NewFloat(-3.0)},
 
 		// Real numbers: real-part is the number itself (exactness preserved per R7RS §6.2.6)
-		{name: "real-part of integer", code: `(real-part 5)`, expected: values.NewInteger(5)},
-		{name: "real-part of float", code: `(real-part 5.5)`, expected: values.NewFloat(5.5)},
-		{name: "real-part of rational", code: `(real-part 3/4)`, expected: values.NewRationalFromBigInt(big.NewInt(3), big.NewInt(4))},
+		{Name: "real-part of integer", Code: `(real-part 5)`, Expected: values.NewInteger(5)},
+		{Name: "real-part of float", Code: `(real-part 5.5)`, Expected: values.NewFloat(5.5)},
+		{Name: "real-part of rational", Code: `(real-part 3/4)`, Expected: values.NewRationalFromBigInt(big.NewInt(3), big.NewInt(4))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestRealPartErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "real-part of string", code: `(real-part "hello")`},
-		{name: "real-part of symbol", code: `(real-part 'foo)`},
-		{name: "real-part of list", code: `(real-part '(1 2 3))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "real-part of string", Code: `(real-part "hello")`},
+		{Name: "real-part of symbol", Code: `(real-part 'foo)`},
+		{Name: "real-part of list", Code: `(real-part '(1 2 3))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

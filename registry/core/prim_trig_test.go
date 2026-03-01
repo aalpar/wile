@@ -27,6 +27,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -71,7 +72,7 @@ func TestSin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -109,7 +110,7 @@ func TestCos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -141,7 +142,7 @@ func TestTan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -179,7 +180,7 @@ func TestAsin(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -217,7 +218,7 @@ func TestAcos(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -261,7 +262,7 @@ func TestAtan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -299,7 +300,7 @@ func TestExp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -342,7 +343,7 @@ func TestLog(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.tolerance > 0 {
 				qt.Assert(t, withinTolerance(t, result, tc.out, tc.tolerance), qt.IsTrue)
@@ -354,52 +355,52 @@ func TestLog(t *testing.T) {
 }
 
 func TestTrigWithRationals(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "sin with rational",
-			code: `(sin 1/2)`,
+			Name: "sin with rational",
+			Code: `(sin 1/2)`,
 		},
 		{
-			name: "cos with rational",
-			code: `(cos 1/2)`,
+			Name: "cos with rational",
+			Code: `(cos 1/2)`,
 		},
 		{
-			name: "tan with rational",
-			code: `(tan 1/4)`,
+			Name: "tan with rational",
+			Code: `(tan 1/4)`,
 		},
 		{
-			name: "asin with rational",
-			code: `(asin 1/2)`,
+			Name: "asin with rational",
+			Code: `(asin 1/2)`,
 		},
 		{
-			name: "acos with rational",
-			code: `(acos 1/2)`,
+			Name: "acos with rational",
+			Code: `(acos 1/2)`,
 		},
 		{
-			name: "atan with rational",
-			code: `(atan 1/2)`,
+			Name: "atan with rational",
+			Code: `(atan 1/2)`,
 		},
 		{
-			name: "atan2 with rationals",
-			code: `(atan 1/2 3/4)`,
+			Name: "atan2 with rationals",
+			Code: `(atan 1/2 3/4)`,
 		},
 		{
-			name: "log with rational",
-			code: `(log 1/2)`,
+			Name: "log with rational",
+			Code: `(log 1/2)`,
 		},
 		{
-			name: "log with rational base",
-			code: `(log 8 2)`,
+			Name: "log with rational base",
+			Code: `(log 8 2)`,
 		},
 		{
-			name: "exp with rational",
-			code: `(exp 1/2)`,
+			Name: "exp with rational",
+			Code: `(exp 1/2)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 		})
 	}
@@ -412,7 +413,7 @@ func TestTrigWithRationals(t *testing.T) {
 // Helper for checking float results with tolerance using Scheme code
 func assertFloatResult(t *testing.T, code string, expected float64, tolerance float64) {
 	t.Helper()
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	resultFloat, ok := result.(*values.Float)
 	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected Float, got %T", result))
@@ -424,7 +425,7 @@ func assertFloatResult(t *testing.T, code string, expected float64, tolerance fl
 // Helper for checking complex results with tolerance
 func assertComplexResult(t *testing.T, code string, expectedReal, expectedImag, tolerance float64) {
 	t.Helper()
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	resultComplex, ok := result.(*values.Complex)
 	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected Complex, got %T", result))
@@ -461,7 +462,7 @@ func TestExpExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// exp(+inf) = +inf
-		result, err := runSchemeCode(t, `(exp +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(exp +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -471,7 +472,7 @@ func TestExpExtended(t *testing.T) {
 		assertFloatResult(t, `(exp -inf.0)`, 0.0, 1e-10)
 
 		// exp(nan) = nan
-		result, err = runSchemeCode(t, `(exp +nan.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(exp +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -481,15 +482,15 @@ func TestExpExtended(t *testing.T) {
 
 // TestExpErrors tests error conditions for exp
 func TestExpErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "exp string", code: `(exp "hello")`},
-		{name: "exp symbol", code: `(exp 'foo)`},
-		{name: "exp list", code: `(exp '(1 2 3))`},
-		{name: "exp boolean", code: `(exp #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "exp string", Code: `(exp "hello")`},
+		{Name: "exp symbol", Code: `(exp 'foo)`},
+		{Name: "exp list", Code: `(exp '(1 2 3))`},
+		{Name: "exp boolean", Code: `(exp #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -544,21 +545,21 @@ func TestLogExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// log(+inf) = +inf
-		result, err := runSchemeCode(t, `(log +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(log +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsInf(resultFloat.Value, 1), qt.IsTrue)
 
 		// log(0) = -inf
-		result, err = runSchemeCode(t, `(log 0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(log 0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsInf(resultFloat.Value, -1), qt.IsTrue)
 
 		// log(nan) = nan
-		result, err = runSchemeCode(t, `(log +nan.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(log +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -568,17 +569,17 @@ func TestLogExtended(t *testing.T) {
 
 // TestLogErrors tests error conditions for log
 func TestLogErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "log string", code: `(log "hello")`},
-		{name: "log symbol", code: `(log 'foo)`},
-		{name: "log list", code: `(log '(1 2 3))`},
-		{name: "log boolean", code: `(log #t)`},
-		{name: "log base string", code: `(log 10 "two")`},
-		{name: "log base symbol", code: `(log 10 'two)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "log string", Code: `(log "hello")`},
+		{Name: "log symbol", Code: `(log 'foo)`},
+		{Name: "log list", Code: `(log '(1 2 3))`},
+		{Name: "log boolean", Code: `(log #t)`},
+		{Name: "log base string", Code: `(log 10 "two")`},
+		{Name: "log base symbol", Code: `(log 10 'two)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -610,21 +611,21 @@ func TestSinExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// sin(+inf) = nan
-		result, err := runSchemeCode(t, `(sin +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(sin +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(resultFloat.Value), qt.IsTrue)
 
 		// sin(-inf) = nan
-		result, err = runSchemeCode(t, `(sin -inf.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(sin -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(resultFloat.Value), qt.IsTrue)
 
 		// sin(nan) = nan
-		result, err = runSchemeCode(t, `(sin +nan.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(sin +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -634,15 +635,15 @@ func TestSinExtended(t *testing.T) {
 
 // TestSinErrors tests error conditions for sin
 func TestSinErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "sin string", code: `(sin "hello")`},
-		{name: "sin symbol", code: `(sin 'foo)`},
-		{name: "sin list", code: `(sin '(1 2 3))`},
-		{name: "sin boolean", code: `(sin #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "sin string", Code: `(sin "hello")`},
+		{Name: "sin symbol", Code: `(sin 'foo)`},
+		{Name: "sin list", Code: `(sin '(1 2 3))`},
+		{Name: "sin boolean", Code: `(sin #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -674,21 +675,21 @@ func TestCosExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// cos(+inf) = nan
-		result, err := runSchemeCode(t, `(cos +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(cos +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(resultFloat.Value), qt.IsTrue)
 
 		// cos(-inf) = nan
-		result, err = runSchemeCode(t, `(cos -inf.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(cos -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(resultFloat.Value), qt.IsTrue)
 
 		// cos(nan) = nan
-		result, err = runSchemeCode(t, `(cos +nan.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(cos +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -698,15 +699,15 @@ func TestCosExtended(t *testing.T) {
 
 // TestCosErrors tests error conditions for cos
 func TestCosErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "cos string", code: `(cos "hello")`},
-		{name: "cos symbol", code: `(cos 'foo)`},
-		{name: "cos list", code: `(cos '(1 2 3))`},
-		{name: "cos boolean", code: `(cos #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "cos string", Code: `(cos "hello")`},
+		{Name: "cos symbol", Code: `(cos 'foo)`},
+		{Name: "cos list", Code: `(cos '(1 2 3))`},
+		{Name: "cos boolean", Code: `(cos #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -736,14 +737,14 @@ func TestTanExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// tan(+inf) = nan
-		result, err := runSchemeCode(t, `(tan +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(tan +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(resultFloat.Value), qt.IsTrue)
 
 		// tan(nan) = nan
-		result, err = runSchemeCode(t, `(tan +nan.0)`)
+		result, err = testhelpers.RunSchemeCode(t, `(tan +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok = result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -753,15 +754,15 @@ func TestTanExtended(t *testing.T) {
 
 // TestTanErrors tests error conditions for tan
 func TestTanErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "tan string", code: `(tan "hello")`},
-		{name: "tan symbol", code: `(tan 'foo)`},
-		{name: "tan list", code: `(tan '(1 2 3))`},
-		{name: "tan boolean", code: `(tan #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "tan string", Code: `(tan "hello")`},
+		{Name: "tan symbol", Code: `(tan 'foo)`},
+		{Name: "tan list", Code: `(tan '(1 2 3))`},
+		{Name: "tan boolean", Code: `(tan #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -798,7 +799,7 @@ func TestAsinExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// asin(nan) = nan
-		result, err := runSchemeCode(t, `(asin +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(asin +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -808,15 +809,15 @@ func TestAsinExtended(t *testing.T) {
 
 // TestAsinErrors tests error conditions for asin
 func TestAsinErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "asin string", code: `(asin "hello")`},
-		{name: "asin symbol", code: `(asin 'foo)`},
-		{name: "asin list", code: `(asin '(1 2 3))`},
-		{name: "asin boolean", code: `(asin #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "asin string", Code: `(asin "hello")`},
+		{Name: "asin symbol", Code: `(asin 'foo)`},
+		{Name: "asin list", Code: `(asin '(1 2 3))`},
+		{Name: "asin boolean", Code: `(asin #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -853,7 +854,7 @@ func TestAcosExtended(t *testing.T) {
 
 	t.Run("special values", func(t *testing.T) {
 		// acos(nan) = nan
-		result, err := runSchemeCode(t, `(acos +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(acos +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -863,15 +864,15 @@ func TestAcosExtended(t *testing.T) {
 
 // TestAcosErrors tests error conditions for acos
 func TestAcosErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "acos string", code: `(acos "hello")`},
-		{name: "acos symbol", code: `(acos 'foo)`},
-		{name: "acos list", code: `(acos '(1 2 3))`},
-		{name: "acos boolean", code: `(acos #t)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "acos string", Code: `(acos "hello")`},
+		{Name: "acos symbol", Code: `(acos 'foo)`},
+		{Name: "acos list", Code: `(acos '(1 2 3))`},
+		{Name: "acos boolean", Code: `(acos #t)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -923,7 +924,7 @@ func TestAtanExtended(t *testing.T) {
 		// atan(-inf) = -π/2
 		assertFloatResult(t, `(atan -inf.0)`, -math.Pi/2, 1e-10)
 		// atan(nan) = nan
-		result, err := runSchemeCode(t, `(atan +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(atan +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		resultFloat, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -942,17 +943,17 @@ func TestAtanExtended(t *testing.T) {
 
 // TestAtanErrors tests error conditions for atan
 func TestAtanErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "atan string", code: `(atan "hello")`},
-		{name: "atan symbol", code: `(atan 'foo)`},
-		{name: "atan list", code: `(atan '(1 2 3))`},
-		{name: "atan boolean", code: `(atan #t)`},
-		{name: "atan2 second arg string", code: `(atan 1 "hello")`},
-		{name: "atan2 second arg symbol", code: `(atan 1 'foo)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "atan string", Code: `(atan "hello")`},
+		{Name: "atan symbol", Code: `(atan 'foo)`},
+		{Name: "atan list", Code: `(atan '(1 2 3))`},
+		{Name: "atan boolean", Code: `(atan #t)`},
+		{Name: "atan2 second arg string", Code: `(atan 1 "hello")`},
+		{Name: "atan2 second arg symbol", Code: `(atan 1 'foo)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -1046,7 +1047,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"1", "2", "0.5", "10", "100"}
 		for _, x := range testValues {
 			code := `(exp (log ` + x + `))`
-			expected, _ := runSchemeCode(t, x)
+			expected, _ := testhelpers.RunSchemeCode(t, x)
 			expectedFloat, ok := expected.(*values.Float)
 			if !ok {
 				if intVal, ok := expected.(*values.Integer); ok {
@@ -1067,7 +1068,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"0", "1", "-1", "0.5", "2"}
 		for _, x := range testValues {
 			code := `(log (exp ` + x + `))`
-			expected, _ := runSchemeCode(t, x)
+			expected, _ := testhelpers.RunSchemeCode(t, x)
 			var expectedVal float64
 			switch v := expected.(type) {
 			case *values.Float:
@@ -1086,7 +1087,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"0", "0.5", "-0.5", "1", "-1"}
 		for _, x := range testValues {
 			code := `(asin (sin ` + x + `))`
-			expected, _ := runSchemeCode(t, x)
+			expected, _ := testhelpers.RunSchemeCode(t, x)
 			var expectedVal float64
 			switch v := expected.(type) {
 			case *values.Float:
@@ -1102,7 +1103,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"0", "0.5", "1", "2", "3"}
 		for _, x := range testValues {
 			code := `(acos (cos ` + x + `))`
-			expected, _ := runSchemeCode(t, x)
+			expected, _ := testhelpers.RunSchemeCode(t, x)
 			var expectedVal float64
 			switch v := expected.(type) {
 			case *values.Float:
@@ -1119,7 +1120,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"0", "0.5", "-0.5", "1", "-1"}
 		for _, x := range testValues {
 			code := `(atan (tan ` + x + `))`
-			expected, _ := runSchemeCode(t, x)
+			expected, _ := testhelpers.RunSchemeCode(t, x)
 			var expectedVal float64
 			switch v := expected.(type) {
 			case *values.Float:

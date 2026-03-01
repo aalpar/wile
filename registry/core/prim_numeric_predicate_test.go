@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -67,7 +68,7 @@ func TestZeroQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -105,7 +106,7 @@ func TestOddQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -115,16 +116,16 @@ func TestOddQ(t *testing.T) {
 // TestOddQ_Errors tests error cases for odd?.
 func TestOddQ_Errors(t *testing.T) {
 	t.Run("odd? on non-integer float", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(odd? 3.5)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(odd? 3.5)`)
 	})
 	t.Run("odd? on non-integer bigfloat", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(odd? #m3.5)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(odd? #m3.5)`)
 	})
 	t.Run("odd? on rational", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(odd? 1/2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(odd? 1/2)`)
 	})
 	t.Run("odd? on complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(odd? 1+2i)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(odd? 1+2i)`)
 	})
 }
 
@@ -159,7 +160,7 @@ func TestEvenQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -169,16 +170,16 @@ func TestEvenQ(t *testing.T) {
 // TestEvenQ_Errors tests error cases for even?.
 func TestEvenQ_Errors(t *testing.T) {
 	t.Run("even? on non-integer float", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(even? 3.5)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(even? 3.5)`)
 	})
 	t.Run("even? on non-integer bigfloat", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(even? #m3.5)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(even? #m3.5)`)
 	})
 	t.Run("even? on rational", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(even? 1/2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(even? 1/2)`)
 	})
 	t.Run("even? on complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(even? 1+2i)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(even? 1+2i)`)
 	})
 }
 
@@ -238,7 +239,7 @@ func TestNumericEquals(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -284,7 +285,7 @@ func TestNumericLessThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -327,7 +328,7 @@ func TestNumericGreaterThan(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -369,7 +370,7 @@ func TestNumericLessThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -411,7 +412,7 @@ func TestNumericGreaterThanOrEqual(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -448,7 +449,7 @@ func TestRealQ_ComplexRegression(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -460,28 +461,28 @@ func TestRealQ_ComplexRegression(t *testing.T) {
 func TestComparison_NonRealComplex(t *testing.T) {
 	// Non-real complex should error for ordering comparisons
 	t.Run("< with non-real complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(< 1+1i 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(< 1+1i 2)`)
 	})
 	t.Run("> with non-real complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(> 1+1i 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(> 1+1i 2)`)
 	})
 	t.Run("<= with non-real complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(<= 1+1i 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(<= 1+1i 2)`)
 	})
 	t.Run(">= with non-real complex", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(>= 1+1i 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(>= 1+1i 2)`)
 	})
 
 	// = allows complex (R7RS §6.2.6: = works on all numbers)
 	t.Run("= with complex", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(= 1+1i 1+1i)`)
+		result, err := testhelpers.RunSchemeCode(t, `(= 1+1i 1+1i)`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.Equals, values.TrueValue)
 	})
 
 	// Real complex (zero imaginary) should work with ordering comparisons
 	t.Run("< with real complex", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(< 1+0i 2+0i)`)
+		result, err := testhelpers.RunSchemeCode(t, `(< 1+0i 2+0i)`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.Equals, values.TrueValue)
 	})
@@ -491,34 +492,34 @@ func TestComparison_NonRealComplex(t *testing.T) {
 // R7RS §6.2.6: =, <, >, <=, >= require numeric arguments.
 func TestComparison_TypeErrors(t *testing.T) {
 	t.Run("= string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(= "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(= "hello" 1)`)
 	})
 	t.Run("= boolean first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(= #t 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(= #t 1)`)
 	})
 	t.Run("< string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(< "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(< "hello" 1)`)
 	})
 	t.Run("< boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(< 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(< 1 #t)`)
 	})
 	t.Run("> string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(> "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(> "hello" 1)`)
 	})
 	t.Run("> boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(> 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(> 1 #t)`)
 	})
 	t.Run("<= string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(<= "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(<= "hello" 1)`)
 	})
 	t.Run("<= boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(<= 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(<= 1 #t)`)
 	})
 	t.Run(">= string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(>= "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(>= "hello" 1)`)
 	})
 	t.Run(">= boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(>= 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(>= 1 #t)`)
 	})
 }
 
@@ -565,7 +566,7 @@ func TestExactnessPredicatesExtended(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -605,7 +606,7 @@ func TestSignPredicatesExtended(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -639,7 +640,7 @@ func TestSpecialValuePredicatesExtended(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -699,7 +700,7 @@ func TestTypeTowerPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})

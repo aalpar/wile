@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,99 +27,99 @@ import (
 // eq? Tests (R7RS §6.1 - Identity comparison)
 
 func TestEqQComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Symbols - same symbol name should be eq?
-		{name: "same symbol", code: `(eq? 'foo 'foo)`, expected: values.TrueValue},
-		{name: "different symbols", code: `(eq? 'foo 'bar)`, expected: values.FalseValue},
+		{Name: "same symbol", Code: `(eq? 'foo 'foo)`, Expected: values.TrueValue},
+		{Name: "different symbols", Code: `(eq? 'foo 'bar)`, Expected: values.FalseValue},
 
 		// Booleans - singletons
-		{name: "true eq? true", code: `(eq? #t #t)`, expected: values.TrueValue},
-		{name: "false eq? false", code: `(eq? #f #f)`, expected: values.TrueValue},
-		{name: "true not eq? false", code: `(eq? #t #f)`, expected: values.FalseValue},
+		{Name: "true eq? true", Code: `(eq? #t #t)`, Expected: values.TrueValue},
+		{Name: "false eq? false", Code: `(eq? #f #f)`, Expected: values.TrueValue},
+		{Name: "true not eq? false", Code: `(eq? #t #f)`, Expected: values.FalseValue},
 
 		// Empty list - singleton
-		{name: "empty list eq? empty list", code: `(eq? '() '())`, expected: values.TrueValue},
+		{Name: "empty list eq? empty list", Code: `(eq? '() '())`, Expected: values.TrueValue},
 
 		// Small integers - implementation may cache these
-		{name: "same small integer", code: `(eq? 5 5)`, expected: values.TrueValue},
-		{name: "zero eq? zero", code: `(eq? 0 0)`, expected: values.TrueValue},
+		{Name: "same small integer", Code: `(eq? 5 5)`, Expected: values.TrueValue},
+		{Name: "zero eq? zero", Code: `(eq? 0 0)`, Expected: values.TrueValue},
 
 		// Characters - same character should be eq?
-		{name: "same character", code: `(eq? #\a #\a)`, expected: values.TrueValue},
-		{name: "different characters", code: `(eq? #\a #\b)`, expected: values.FalseValue},
+		{Name: "same character", Code: `(eq? #\a #\a)`, Expected: values.TrueValue},
+		{Name: "different characters", Code: `(eq? #\a #\b)`, Expected: values.FalseValue},
 
 		// Pairs - literals may be shared per R7RS §4.1.2
 		// "The implementation may share storage between constants where appropriate."
 		// This implementation interns literal lists, so they ARE eq?
-		{name: "literal pairs same contents (interned)", code: `(eq? '(1 2) '(1 2))`, expected: values.TrueValue},
-		{name: "different pairs different contents", code: `(eq? '(1) '(2))`, expected: values.FalseValue},
+		{Name: "literal pairs same contents (interned)", Code: `(eq? '(1 2) '(1 2))`, Expected: values.TrueValue},
+		{Name: "different pairs different contents", Code: `(eq? '(1) '(2))`, Expected: values.FalseValue},
 
 		// Strings - literals may be shared per R7RS §4.1.2
 		// This implementation interns literal strings, so they ARE eq?
-		{name: "literal strings same contents (interned)", code: `(eq? "hello" "hello")`, expected: values.TrueValue},
+		{Name: "literal strings same contents (interned)", Code: `(eq? "hello" "hello")`, Expected: values.TrueValue},
 
 		// Vectors - literals are interned like pairs and strings
-		{name: "literal vectors same contents (interned)", code: `(eq? #(1 2 3) #(1 2 3))`, expected: values.TrueValue},
+		{Name: "literal vectors same contents (interned)", Code: `(eq? #(1 2 3) #(1 2 3))`, Expected: values.TrueValue},
 
 		// Procedures - same procedure should be eq?
-		{name: "same primitive", code: `(eq? + +)`, expected: values.TrueValue},
-		{name: "different primitives", code: `(eq? + -)`, expected: values.FalseValue},
+		{Name: "same primitive", Code: `(eq? + +)`, Expected: values.TrueValue},
+		{Name: "different primitives", Code: `(eq? + -)`, Expected: values.FalseValue},
 
 		// Large integers - different literal bignums are distinct objects
-		{name: "large integer literals (interned)", code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567890)`, expected: values.TrueValue},
-		{name: "different large integers", code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567891)`, expected: values.FalseValue},
+		{Name: "large integer literals (interned)", Code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567890)`, Expected: values.TrueValue},
+		{Name: "different large integers", Code: `(eq? #z123456789012345678901234567890 #z123456789012345678901234567891)`, Expected: values.FalseValue},
 
 		// Float identity
-		{name: "same float literal", code: `(eq? 3.14 3.14)`, expected: values.TrueValue},
-		{name: "different floats", code: `(eq? 3.14 2.71)`, expected: values.FalseValue},
-		{name: "positive zero float", code: `(eq? 0.0 0.0)`, expected: values.TrueValue},
-		{name: "positive infinity", code: `(eq? +inf.0 +inf.0)`, expected: values.TrueValue},
-		{name: "negative infinity", code: `(eq? -inf.0 -inf.0)`, expected: values.TrueValue},
+		{Name: "same float literal", Code: `(eq? 3.14 3.14)`, Expected: values.TrueValue},
+		{Name: "different floats", Code: `(eq? 3.14 2.71)`, Expected: values.FalseValue},
+		{Name: "positive zero float", Code: `(eq? 0.0 0.0)`, Expected: values.TrueValue},
+		{Name: "positive infinity", Code: `(eq? +inf.0 +inf.0)`, Expected: values.TrueValue},
+		{Name: "negative infinity", Code: `(eq? -inf.0 -inf.0)`, Expected: values.TrueValue},
 
 		// Cross-type comparisons
-		{name: "integer vs symbol", code: `(eq? 1 'one)`, expected: values.FalseValue},
-		{name: "string vs symbol", code: `(eq? "foo" 'foo)`, expected: values.FalseValue},
-		{name: "empty list vs false", code: `(eq? '() #f)`, expected: values.FalseValue},
-		{name: "integer vs float same value", code: `(eq? 42 42.0)`, expected: values.FalseValue},
+		{Name: "integer vs symbol", Code: `(eq? 1 'one)`, Expected: values.FalseValue},
+		{Name: "string vs symbol", Code: `(eq? "foo" 'foo)`, Expected: values.FalseValue},
+		{Name: "empty list vs false", Code: `(eq? '() #f)`, Expected: values.FalseValue},
+		{Name: "integer vs float same value", Code: `(eq? 42 42.0)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestEqQWithLetBinding(t *testing.T) {
 	// Test that eq? works correctly with let bindings (same object)
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "same pair via let",
-			code:     `(let ((x '(1 2 3))) (eq? x x))`,
-			expected: values.TrueValue,
+			Name:     "same pair via let",
+			Code:     `(let ((x '(1 2 3))) (eq? x x))`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "same string via let",
-			code:     `(let ((s "hello")) (eq? s s))`,
-			expected: values.TrueValue,
+			Name:     "same string via let",
+			Code:     `(let ((s "hello")) (eq? s s))`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "same vector via let",
-			code:     `(let ((v #(1 2 3))) (eq? v v))`,
-			expected: values.TrueValue,
+			Name:     "same vector via let",
+			Code:     `(let ((v #(1 2 3))) (eq? v v))`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "same lambda via let",
-			code:     `(let ((f (lambda (x) x))) (eq? f f))`,
-			expected: values.TrueValue,
+			Name:     "same lambda via let",
+			Code:     `(let ((f (lambda (x) x))) (eq? f f))`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

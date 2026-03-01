@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -38,7 +39,7 @@ func TestOpenInputFile(t *testing.T) {
 	code := fmt.Sprintf(`(let ((p (open-input-file "%s")))
 		(close-port p)
 		#t)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -56,7 +57,7 @@ func TestOpenInputFileAndRead(t *testing.T) {
 		(let ((data (read p)))
 			(close-port p)
 			data))`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	expected := values.List(values.NewSymbol("+"), values.NewInteger(1), values.NewInteger(2))
 	qt.Assert(t, result, valuestest.SchemeEquals, expected)
@@ -70,7 +71,7 @@ func TestOpenOutputFile(t *testing.T) {
 		(display "hello" p)
 		(close-port p)
 		#t)`, tmpfile)
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
@@ -89,7 +90,7 @@ func TestOpenOutputFileWithMultipleWrites(t *testing.T) {
 		(display "world" p)
 		(close-port p)
 		#t)`, tmpfile)
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
@@ -110,7 +111,7 @@ func TestClosePortWithFileInputPort(t *testing.T) {
 	code := fmt.Sprintf(`(let ((p (open-input-file "%s")))
 		(close-port p)
 		#t)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -123,7 +124,7 @@ func TestClosePortWithFileOutputPort(t *testing.T) {
 		(display "test" p)
 		(close-port p)
 		#t)`, tmpfile)
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
@@ -133,36 +134,36 @@ func TestClosePortWithFileOutputPort(t *testing.T) {
 }
 
 func TestClosePortExtended(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "close-port on string input port",
-			code: `(let ((p (open-input-string "hello")))
+			Name: "close-port on string input port",
+			Code: `(let ((p (open-input-string "hello")))
 				(close-port p)
 				#t)`,
 		},
 		{
-			name: "close-port on string output port",
-			code: `(let ((p (open-output-string)))
+			Name: "close-port on string output port",
+			Code: `(let ((p (open-output-string)))
 				(close-port p)
 				#t)`,
 		},
 		{
-			name: "close-port on bytevector input port",
-			code: `(let ((p (open-input-bytevector (bytevector 1 2 3))))
+			Name: "close-port on bytevector input port",
+			Code: `(let ((p (open-input-bytevector (bytevector 1 2 3))))
 				(close-port p)
 				#t)`,
 		},
 		{
-			name: "close-port on bytevector output port",
-			code: `(let ((p (open-output-bytevector)))
+			Name: "close-port on bytevector output port",
+			Code: `(let ((p (open-output-bytevector)))
 				(close-port p)
 				#t)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})

@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,25 +27,25 @@ import (
 // Current Port Tests (R7RS §6.13.1)
 
 func TestCurrentInputPortIsInputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `(input-port? (current-input-port))`)
+	result, err := testhelpers.RunSchemeCode(t, `(input-port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentOutputPortIsOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `(output-port? (current-output-port))`)
+	result, err := testhelpers.RunSchemeCode(t, `(output-port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentInputPortIsPort(t *testing.T) {
-	result, err := runSchemeCode(t, `(port? (current-input-port))`)
+	result, err := testhelpers.RunSchemeCode(t, `(port? (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestCurrentOutputPortIsPort(t *testing.T) {
-	result, err := runSchemeCode(t, `(port? (current-output-port))`)
+	result, err := testhelpers.RunSchemeCode(t, `(port? (current-output-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

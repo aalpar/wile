@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -52,7 +53,7 @@ func TestEval(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -61,36 +62,36 @@ func TestEval(t *testing.T) {
 
 func TestInteractionEnvironment(t *testing.T) {
 	t.Run("returns environment", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(interaction-environment)")
+		result, err := testhelpers.RunSchemeCode(t, "(interaction-environment)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 }
 
 func TestEvalExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "eval subtraction",
-			code:     `(eval '(- 10 3) (interaction-environment))`,
-			expected: values.NewInteger(7),
+			Name:     "eval subtraction",
+			Code:     `(eval '(- 10 3) (interaction-environment))`,
+			Expected: values.NewInteger(7),
 		},
 		{
-			name:     "eval nested expression",
-			code:     `(eval '(+ (* 2 3) 4) (interaction-environment))`,
-			expected: values.NewInteger(10),
+			Name:     "eval nested expression",
+			Code:     `(eval '(+ (* 2 3) 4) (interaction-environment))`,
+			Expected: values.NewInteger(10),
 		},
 		{
-			name:     "eval if expression",
-			code:     `(eval '(if (> 5 3) 1 2) (interaction-environment))`,
-			expected: values.NewInteger(1),
+			Name:     "eval if expression",
+			Code:     `(eval '(if (> 5 3) 1 2) (interaction-environment))`,
+			Expected: values.NewInteger(1),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -101,48 +102,48 @@ func TestEvalExtended(t *testing.T) {
 
 // TestEvalWithLambda tests eval with lambda expressions
 func TestEvalWithLambda(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "eval lambda application",
-			code:     `(eval '((lambda (x) (+ x 1)) 5) (interaction-environment))`,
-			expected: values.NewInteger(6),
+			Name:     "eval lambda application",
+			Code:     `(eval '((lambda (x) (+ x 1)) 5) (interaction-environment))`,
+			Expected: values.NewInteger(6),
 		},
 		{
-			name:     "eval lambda with multiple args",
-			code:     `(eval '((lambda (x y) (* x y)) 3 4) (interaction-environment))`,
-			expected: values.NewInteger(12),
+			Name:     "eval lambda with multiple args",
+			Code:     `(eval '((lambda (x y) (* x y)) 3 4) (interaction-environment))`,
+			Expected: values.NewInteger(12),
 		},
 		{
-			name:     "eval let expression",
-			code:     `(eval '(let ((x 10)) (+ x 5)) (interaction-environment))`,
-			expected: values.NewInteger(15),
+			Name:     "eval let expression",
+			Code:     `(eval '(let ((x 10)) (+ x 5)) (interaction-environment))`,
+			Expected: values.NewInteger(15),
 		},
 		{
-			name:     "eval cond expression",
-			code:     `(eval '(cond ((= 1 2) 'no) ((= 2 2) 'yes) (else 'maybe)) (interaction-environment))`,
-			expected: values.NewSymbol("yes"),
+			Name:     "eval cond expression",
+			Code:     `(eval '(cond ((= 1 2) 'no) ((= 2 2) 'yes) (else 'maybe)) (interaction-environment))`,
+			Expected: values.NewSymbol("yes"),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 // TestEvalErrors tests error conditions for eval
 func TestEvalErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "eval with non-environment", code: `(eval '(+ 1 2) 42)`},
-		{name: "eval with string env", code: `(eval '(+ 1 2) "env")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "eval with non-environment", Code: `(eval '(+ 1 2) 42)`},
+		{Name: "eval with string env", Code: `(eval '(+ 1 2) "env")`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -154,15 +155,15 @@ func TestEvalErrors(t *testing.T) {
 
 // TestSchemeReportEnvironmentErrors tests error conditions
 func TestSchemeReportEnvironmentErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "unsupported version", code: `(scheme-report-environment 6)`},
-		{name: "non-integer version", code: `(scheme-report-environment "5")`},
-		{name: "version 0", code: `(scheme-report-environment 0)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "unsupported version", Code: `(scheme-report-environment 6)`},
+		{Name: "non-integer version", Code: `(scheme-report-environment "5")`},
+		{Name: "version 0", Code: `(scheme-report-environment 0)`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -174,14 +175,14 @@ func TestSchemeReportEnvironmentErrors(t *testing.T) {
 
 // TestNullEnvironmentErrors tests error conditions
 func TestNullEnvironmentErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "unsupported version", code: `(null-environment 6)`},
-		{name: "non-integer version", code: `(null-environment "5")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "unsupported version", Code: `(null-environment 6)`},
+		{Name: "non-integer version", Code: `(null-environment "5")`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -227,7 +228,7 @@ func TestCompile(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -276,7 +277,7 @@ func TestSyntaxToDatum(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -314,7 +315,7 @@ func TestDatumToSyntax(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -323,14 +324,14 @@ func TestDatumToSyntax(t *testing.T) {
 
 // TestDatumToSyntaxErrors tests error conditions
 func TestDatumToSyntaxErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "invalid template - number", code: `(datum->syntax 42 'foo)`},
-		{name: "invalid template - string", code: `(datum->syntax "bad" 'foo)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "invalid template - number", Code: `(datum->syntax 42 'foo)`},
+		{Name: "invalid template - string", Code: `(datum->syntax "bad" 'foo)`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -381,7 +382,7 @@ func TestIdentifierQ(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -414,7 +415,7 @@ func TestExpand(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -423,14 +424,14 @@ func TestExpand(t *testing.T) {
 
 // TestExpandErrors tests error conditions for expand
 func TestExpandErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "expand non-syntax", code: `(expand 42)`},
-		{name: "expand string", code: `(expand "hello")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "expand non-syntax", Code: `(expand 42)`},
+		{Name: "expand string", Code: `(expand "hello")`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -447,7 +448,7 @@ func TestExpandOnce(t *testing.T) {
 		code := `(call-with-values
 			(lambda () (expand-once (datum->syntax #f '(+ 1 2))))
 			(lambda (stx expanded?) expanded?))`
-		result, err := runSchemeCode(t, code)
+		result, err := testhelpers.RunSchemeCode(t, code)
 		qt.Assert(t, err, qt.IsNil)
 		// For a primitive form like +, no expansion happens
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
@@ -458,7 +459,7 @@ func TestExpandOnce(t *testing.T) {
 			(lambda () (expand-once (datum->syntax #f '(+ 1 2))))
 			(lambda (stx expanded?)
 				(syntax->datum stx)))`
-		result, err := runSchemeCode(t, code)
+		result, err := testhelpers.RunSchemeCode(t, code)
 		qt.Assert(t, err, qt.IsNil)
 		expected := values.List(values.NewSymbol("+"), values.NewInteger(1), values.NewInteger(2))
 		qt.Assert(t, result, valuestest.SchemeEquals, expected)
@@ -467,14 +468,14 @@ func TestExpandOnce(t *testing.T) {
 
 // TestExpandOnceErrors tests error conditions for expand-once
 func TestExpandOnceErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "expand-once non-syntax", code: `(expand-once 42)`},
-		{name: "expand-once string", code: `(expand-once "hello")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "expand-once non-syntax", Code: `(expand-once 42)`},
+		{Name: "expand-once string", Code: `(expand-once "hello")`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -487,19 +488,19 @@ func TestExpandOnceErrors(t *testing.T) {
 // TestMakeCompileTimeValue tests the make-compile-time-value primitive
 func TestMakeCompileTimeValue(t *testing.T) {
 	t.Run("make-compile-time-value wraps value", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(make-compile-time-value 42)`)
+		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value 42)`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 
 	t.Run("make-compile-time-value wraps string", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(make-compile-time-value "hello")`)
+		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value "hello")`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 
 	t.Run("make-compile-time-value wraps list", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(make-compile-time-value '(a b c))`)
+		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value '(a b c))`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, qt.IsNotNil)
 	})
@@ -512,19 +513,19 @@ func TestMakeCompileTimeValue(t *testing.T) {
 // TestEnvironmentSymbolIdentity tests that environments created by (environment)
 // share symbol interning with the caller, ensuring R7RS §6.5 symbol identity.
 func TestEnvironmentSymbolIdentity(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "empty environment eval quoted symbol",
-			code:     `(let ((e (environment))) (eval ''hello e))`,
-			expected: values.NewSymbol("hello"),
+			Name:     "empty environment eval quoted symbol",
+			Code:     `(let ((e (environment))) (eval ''hello e))`,
+			Expected: values.NewSymbol("hello"),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -532,24 +533,24 @@ func TestEnvironmentSymbolIdentity(t *testing.T) {
 // TestNullEnvironmentSymbolIdentity tests that null-environment shares
 // symbol interning with the caller for R7RS §6.5 symbol identity.
 func TestNullEnvironmentSymbolIdentity(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "null-environment 5 returns environment",
-			code:     `(let ((e (null-environment 5))) (eval ''hello e))`,
-			expected: values.NewSymbol("hello"),
+			Name:     "null-environment 5 returns environment",
+			Code:     `(let ((e (null-environment 5))) (eval ''hello e))`,
+			Expected: values.NewSymbol("hello"),
 		},
 		{
-			name:     "null-environment 7 returns environment",
-			code:     `(let ((e (null-environment 7))) (eval ''hello e))`,
-			expected: values.NewSymbol("hello"),
+			Name:     "null-environment 7 returns environment",
+			Code:     `(let ((e (null-environment 7))) (eval ''hello e))`,
+			Expected: values.NewSymbol("hello"),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

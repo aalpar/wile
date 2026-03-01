@@ -19,6 +19,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,43 +27,43 @@ import (
 )
 
 func TestAddition(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"add two integers", `(+ 1 2)`, values.NewInteger(3)},
-		{"add three integers", `(+ 1 2 3)`, values.NewInteger(6)},
-		{"add single integer", `(+ 5)`, values.NewInteger(5)},
-		{"add no arguments returns 0", `(+)`, values.NewInteger(0)},
-		{"add negative numbers", `(+ -5 3)`, values.NewInteger(-2)},
+		{Name: "add two integers", Code: `(+ 1 2)`, Expected: values.NewInteger(3)},
+		{Name: "add three integers", Code: `(+ 1 2 3)`, Expected: values.NewInteger(6)},
+		{Name: "add single integer", Code: `(+ 5)`, Expected: values.NewInteger(5)},
+		{Name: "add no arguments returns 0", Code: `(+)`, Expected: values.NewInteger(0)},
+		{Name: "add negative numbers", Code: `(+ -5 3)`, Expected: values.NewInteger(-2)},
 
 		// Float operations
-		{"add two floats", `(+ 1.5 2.5)`, values.NewFloat(4.0)},
-		{"add float and integer", `(+ 1 2.5)`, values.NewFloat(3.5)},
-		{"add integer and float", `(+ 2.5 1)`, values.NewFloat(3.5)},
+		{Name: "add two floats", Code: `(+ 1.5 2.5)`, Expected: values.NewFloat(4.0)},
+		{Name: "add float and integer", Code: `(+ 1 2.5)`, Expected: values.NewFloat(3.5)},
+		{Name: "add integer and float", Code: `(+ 2.5 1)`, Expected: values.NewFloat(3.5)},
 
 		// Rational operations
-		{"add two rationals", `(+ 1/2 1/4)`, values.NewRational(3, 4)},
-		{"add rational and integer", `(+ 1/2 1)`, values.NewRational(3, 2)},
-		{"add integer and rational", `(+ 1 1/2)`, values.NewRational(3, 2)},
-		{"add rational and float", `(+ 1/2 0.5)`, values.NewFloat(1.0)},
+		{Name: "add two rationals", Code: `(+ 1/2 1/4)`, Expected: values.NewRational(3, 4)},
+		{Name: "add rational and integer", Code: `(+ 1/2 1)`, Expected: values.NewRational(3, 2)},
+		{Name: "add integer and rational", Code: `(+ 1 1/2)`, Expected: values.NewRational(3, 2)},
+		{Name: "add rational and float", Code: `(+ 1/2 0.5)`, Expected: values.NewFloat(1.0)},
 
 		// Complex operations
-		{"add two complex", `(+ 1+2i 3+4i)`, values.NewComplexFromParts(4.0, 6.0)},
-		{"add complex and integer", `(+ 1+2i 3)`, values.NewComplexFromParts(4.0, 2.0)},
-		{"add complex and float", `(+ 1+2i 1.5)`, values.NewComplexFromParts(2.5, 2.0)},
+		{Name: "add two complex", Code: `(+ 1+2i 3+4i)`, Expected: values.NewComplexFromParts(4.0, 6.0)},
+		{Name: "add complex and integer", Code: `(+ 1+2i 3)`, Expected: values.NewComplexFromParts(4.0, 2.0)},
+		{Name: "add complex and float", Code: `(+ 1+2i 1.5)`, Expected: values.NewComplexFromParts(2.5, 2.0)},
 
 		// BigInteger operations
-		{"add two bigintegers", `(+ #z10000000000000000000 #z1)`, values.NewBigIntegerFromString("10000000000000000001", 10)},
-		{"add biginteger and integer", `(+ #z10000000000000000000 5)`, values.NewBigIntegerFromString("10000000000000000005", 10)},
+		{Name: "add two bigintegers", Code: `(+ #z10000000000000000000 #z1)`, Expected: values.NewBigIntegerFromString("10000000000000000001", 10)},
+		{Name: "add biginteger and integer", Code: `(+ #z10000000000000000000 5)`, Expected: values.NewBigIntegerFromString("10000000000000000005", 10)},
 
 		// Variadic
-		{"add many integers", `(+ 1 2 3 4 5)`, values.NewInteger(15)},
-		{"add many mixed types", `(+ 1 2.0 3/2)`, values.NewFloat(4.5)},
+		{Name: "add many integers", Code: `(+ 1 2 3 4 5)`, Expected: values.NewInteger(15)},
+		{Name: "add many mixed types", Code: `(+ 1 2.0 3/2)`, Expected: values.NewFloat(4.5)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -70,7 +71,7 @@ func TestAddition(t *testing.T) {
 func TestAddition_SpecialValues(t *testing.T) {
 	// Test infinity and NaN behavior
 	t.Run("add positive infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(+ 1 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(+ 1 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -78,7 +79,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("add negative infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(+ 1 -inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(+ 1 -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -86,7 +87,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("add nan propagation", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(+ 1 +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(+ 1 +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -94,7 +95,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("infinity minus infinity is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(+ +inf.0 -inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(+ +inf.0 -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -103,50 +104,50 @@ func TestAddition_SpecialValues(t *testing.T) {
 }
 
 func TestSubtraction(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"subtract two integers", `(- 5 2)`, values.NewInteger(3)},
-		{"negate single integer", `(- 5)`, values.NewInteger(-5)},
-		{"subtract multiple integers", `(- 10 3 2)`, values.NewInteger(5)},
-		{"subtract negative result", `(- 1 5)`, values.NewInteger(-4)},
-		{"negate negative", `(- -5)`, values.NewInteger(5)},
+		{Name: "subtract two integers", Code: `(- 5 2)`, Expected: values.NewInteger(3)},
+		{Name: "negate single integer", Code: `(- 5)`, Expected: values.NewInteger(-5)},
+		{Name: "subtract multiple integers", Code: `(- 10 3 2)`, Expected: values.NewInteger(5)},
+		{Name: "subtract negative result", Code: `(- 1 5)`, Expected: values.NewInteger(-4)},
+		{Name: "negate negative", Code: `(- -5)`, Expected: values.NewInteger(5)},
 
 		// Float operations
-		{"subtract two floats", `(- 5.5 2.5)`, values.NewFloat(3.0)},
-		{"negate float", `(- 3.14)`, values.NewFloat(-3.14)},
-		{"subtract float and integer", `(- 5.5 2)`, values.NewFloat(3.5)},
-		{"subtract integer and float", `(- 5 2.5)`, values.NewFloat(2.5)},
+		{Name: "subtract two floats", Code: `(- 5.5 2.5)`, Expected: values.NewFloat(3.0)},
+		{Name: "negate float", Code: `(- 3.14)`, Expected: values.NewFloat(-3.14)},
+		{Name: "subtract float and integer", Code: `(- 5.5 2)`, Expected: values.NewFloat(3.5)},
+		{Name: "subtract integer and float", Code: `(- 5 2.5)`, Expected: values.NewFloat(2.5)},
 
 		// Rational operations
-		{"subtract two rationals", `(- 3/4 1/4)`, values.NewRational(1, 2)},
-		{"negate rational", `(- 1/2)`, values.NewRational(-1, 2)},
-		{"subtract rational and integer", `(- 3/2 1)`, values.NewRational(1, 2)},
-		{"subtract integer and rational", `(- 2 1/2)`, values.NewRational(3, 2)},
+		{Name: "subtract two rationals", Code: `(- 3/4 1/4)`, Expected: values.NewRational(1, 2)},
+		{Name: "negate rational", Code: `(- 1/2)`, Expected: values.NewRational(-1, 2)},
+		{Name: "subtract rational and integer", Code: `(- 3/2 1)`, Expected: values.NewRational(1, 2)},
+		{Name: "subtract integer and rational", Code: `(- 2 1/2)`, Expected: values.NewRational(3, 2)},
 
 		// Complex operations
-		{"subtract two complex", `(- 5+6i 2+3i)`, values.NewComplexFromParts(3.0, 3.0)},
-		{"negate complex", `(- 1+2i)`, values.NewComplexFromParts(-1.0, -2.0)},
-		{"subtract complex and integer", `(- 5+3i 2)`, values.NewComplexFromParts(3.0, 3.0)},
+		{Name: "subtract two complex", Code: `(- 5+6i 2+3i)`, Expected: values.NewComplexFromParts(3.0, 3.0)},
+		{Name: "negate complex", Code: `(- 1+2i)`, Expected: values.NewComplexFromParts(-1.0, -2.0)},
+		{Name: "subtract complex and integer", Code: `(- 5+3i 2)`, Expected: values.NewComplexFromParts(3.0, 3.0)},
 
 		// BigInteger operations
-		{"subtract two bigintegers", `(- #z10000000000000000005 #z5)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
-		{"negate biginteger", `(- #z10000000000000000000)`, values.NewBigIntegerFromString("-10000000000000000000", 10)},
+		{Name: "subtract two bigintegers", Code: `(- #z10000000000000000005 #z5)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "negate biginteger", Code: `(- #z10000000000000000000)`, Expected: values.NewBigIntegerFromString("-10000000000000000000", 10)},
 
 		// Variadic
-		{"subtract many integers", `(- 100 20 30 10)`, values.NewInteger(40)},
+		{Name: "subtract many integers", Code: `(- 100 20 30 10)`, Expected: values.NewInteger(40)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestSubtraction_SpecialValues(t *testing.T) {
 	t.Run("subtract from infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(- +inf.0 1)`)
+		result, err := testhelpers.RunSchemeCode(t, `(- +inf.0 1)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -154,7 +155,7 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("negate infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(- +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(- +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -162,7 +163,7 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("subtract nan propagation", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(- +nan.0 1)`)
+		result, err := testhelpers.RunSchemeCode(t, `(- +nan.0 1)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -172,64 +173,64 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 
 func TestSubtraction_Errors(t *testing.T) {
 	t.Run("subtract no arguments", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(-)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(-)`)
 	})
 	t.Run("subtract string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(- "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(- "hello" 1)`)
 	})
 	t.Run("subtract boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(- 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(- 1 #t)`)
 	})
 }
 
 func TestMultiplication(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"multiply two integers", `(* 3 4)`, values.NewInteger(12)},
-		{"multiply three integers", `(* 2 3 4)`, values.NewInteger(24)},
-		{"multiply single integer", `(* 7)`, values.NewInteger(7)},
-		{"multiply no arguments returns 1", `(*)`, values.NewInteger(1)},
-		{"multiply by zero", `(* 5 0)`, values.NewInteger(0)},
-		{"multiply negative numbers", `(* -3 4)`, values.NewInteger(-12)},
-		{"multiply two negatives", `(* -3 -4)`, values.NewInteger(12)},
+		{Name: "multiply two integers", Code: `(* 3 4)`, Expected: values.NewInteger(12)},
+		{Name: "multiply three integers", Code: `(* 2 3 4)`, Expected: values.NewInteger(24)},
+		{Name: "multiply single integer", Code: `(* 7)`, Expected: values.NewInteger(7)},
+		{Name: "multiply no arguments returns 1", Code: `(*)`, Expected: values.NewInteger(1)},
+		{Name: "multiply by zero", Code: `(* 5 0)`, Expected: values.NewInteger(0)},
+		{Name: "multiply negative numbers", Code: `(* -3 4)`, Expected: values.NewInteger(-12)},
+		{Name: "multiply two negatives", Code: `(* -3 -4)`, Expected: values.NewInteger(12)},
 
 		// Float operations
-		{"multiply two floats", `(* 2.5 4.0)`, values.NewFloat(10.0)},
-		{"multiply float and integer", `(* 2.5 4)`, values.NewFloat(10.0)},
-		{"multiply integer and float", `(* 4 2.5)`, values.NewFloat(10.0)},
-		{"multiply float by zero", `(* 3.14 0)`, values.NewInteger(0)}, // zero short-circuits to Integer
+		{Name: "multiply two floats", Code: `(* 2.5 4.0)`, Expected: values.NewFloat(10.0)},
+		{Name: "multiply float and integer", Code: `(* 2.5 4)`, Expected: values.NewFloat(10.0)},
+		{Name: "multiply integer and float", Code: `(* 4 2.5)`, Expected: values.NewFloat(10.0)},
+		{Name: "multiply float by zero", Code: `(* 3.14 0)`, Expected: values.NewInteger(0)}, // zero short-circuits to Integer
 
 		// Rational operations
-		{"multiply two rationals", `(* 1/2 2/3)`, values.NewRational(1, 3)},
-		{"multiply rational and integer", `(* 1/2 4)`, values.NewRational(2, 1)}, // stays Rational
-		{"multiply integer and rational", `(* 4 1/2)`, values.NewRational(2, 1)}, // stays Rational
-		{"multiply rational and float", `(* 1/2 3.0)`, values.NewFloat(1.5)},
+		{Name: "multiply two rationals", Code: `(* 1/2 2/3)`, Expected: values.NewRational(1, 3)},
+		{Name: "multiply rational and integer", Code: `(* 1/2 4)`, Expected: values.NewRational(2, 1)}, // stays Rational
+		{Name: "multiply integer and rational", Code: `(* 4 1/2)`, Expected: values.NewRational(2, 1)}, // stays Rational
+		{Name: "multiply rational and float", Code: `(* 1/2 3.0)`, Expected: values.NewFloat(1.5)},
 
 		// Complex operations
-		{"multiply two complex", `(* 1+2i 3+4i)`, values.NewComplexFromParts(-5.0, 10.0)},
-		{"multiply complex and integer", `(* 2+3i 2)`, values.NewComplexFromParts(4.0, 6.0)},
-		{"multiply complex and float", `(* 1+1i 2.0)`, values.NewComplexFromParts(2.0, 2.0)},
+		{Name: "multiply two complex", Code: `(* 1+2i 3+4i)`, Expected: values.NewComplexFromParts(-5.0, 10.0)},
+		{Name: "multiply complex and integer", Code: `(* 2+3i 2)`, Expected: values.NewComplexFromParts(4.0, 6.0)},
+		{Name: "multiply complex and float", Code: `(* 1+1i 2.0)`, Expected: values.NewComplexFromParts(2.0, 2.0)},
 
 		// BigInteger operations
-		{"multiply two bigintegers", `(* #z10000000000000000000 #z2)`, values.NewBigIntegerFromString("20000000000000000000", 10)},
-		{"multiply biginteger and integer", `(* #z10000000000000000000 3)`, values.NewBigIntegerFromString("30000000000000000000", 10)},
+		{Name: "multiply two bigintegers", Code: `(* #z10000000000000000000 #z2)`, Expected: values.NewBigIntegerFromString("20000000000000000000", 10)},
+		{Name: "multiply biginteger and integer", Code: `(* #z10000000000000000000 3)`, Expected: values.NewBigIntegerFromString("30000000000000000000", 10)},
 
 		// Variadic
-		{"multiply many integers", `(* 2 3 4 5)`, values.NewInteger(120)},
-		{"multiply many mixed types", `(* 2 3.0 1/2)`, values.NewFloat(3.0)},
+		{Name: "multiply many integers", Code: `(* 2 3 4 5)`, Expected: values.NewInteger(120)},
+		{Name: "multiply many mixed types", Code: `(* 2 3.0 1/2)`, Expected: values.NewFloat(3.0)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMultiplication_SpecialValues(t *testing.T) {
 	t.Run("multiply by infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(* 2 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(* 2 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -237,7 +238,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("multiply negative by infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(* -2 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(* -2 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -245,7 +246,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("zero times infinity is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(* 0 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(* 0 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -253,7 +254,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("multiply nan propagation", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(* 2 +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(* 2 +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -262,51 +263,51 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 }
 
 func TestDivision(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"divide two integers", `(/ 10 2)`, values.NewInteger(5)},
-		{"divide multiple integers", `(/ 100 5 4)`, values.NewInteger(5)},
-		{"divide single integer returns reciprocal", `(/ 5)`, values.NewRational(1, 5)},
-		{"divide single integer 1 returns integer", `(/ 1)`, values.NewInteger(1)},
-		{"divide integers non-evenly returns rational", `(/ 1 2)`, values.NewRational(1, 2)},
-		{"divide integers auto-simplifies rational", `(/ 10 4)`, values.NewRational(5, 2)},
-		{"divide integers evenly returns integer", `(/ 6 3)`, values.NewInteger(2)},
+		{Name: "divide two integers", Code: `(/ 10 2)`, Expected: values.NewInteger(5)},
+		{Name: "divide multiple integers", Code: `(/ 100 5 4)`, Expected: values.NewInteger(5)},
+		{Name: "divide single integer returns reciprocal", Code: `(/ 5)`, Expected: values.NewRational(1, 5)},
+		{Name: "divide single integer 1 returns integer", Code: `(/ 1)`, Expected: values.NewInteger(1)},
+		{Name: "divide integers non-evenly returns rational", Code: `(/ 1 2)`, Expected: values.NewRational(1, 2)},
+		{Name: "divide integers auto-simplifies rational", Code: `(/ 10 4)`, Expected: values.NewRational(5, 2)},
+		{Name: "divide integers evenly returns integer", Code: `(/ 6 3)`, Expected: values.NewInteger(2)},
 
 		// Float operations
-		{"divide two floats", `(/ 10.0 4.0)`, values.NewFloat(2.5)},
-		{"divide float and integer", `(/ 10.0 4)`, values.NewFloat(2.5)},
-		{"divide integer and float", `(/ 10 4.0)`, values.NewFloat(2.5)},
-		{"reciprocal of float", `(/ 4.0)`, values.NewFloat(0.25)},
+		{Name: "divide two floats", Code: `(/ 10.0 4.0)`, Expected: values.NewFloat(2.5)},
+		{Name: "divide float and integer", Code: `(/ 10.0 4)`, Expected: values.NewFloat(2.5)},
+		{Name: "divide integer and float", Code: `(/ 10 4.0)`, Expected: values.NewFloat(2.5)},
+		{Name: "reciprocal of float", Code: `(/ 4.0)`, Expected: values.NewFloat(0.25)},
 
 		// Rational operations
-		{"divide two rationals", `(/ 1/2 1/4)`, values.NewRational(2, 1)},
-		{"divide rational and integer", `(/ 3/4 3)`, values.NewRational(1, 4)},
-		{"divide integer and rational", `(/ 3 3/4)`, values.NewRational(4, 1)},
-		{"reciprocal of rational", `(/ 3/4)`, values.NewRational(4, 3)},
+		{Name: "divide two rationals", Code: `(/ 1/2 1/4)`, Expected: values.NewRational(2, 1)},
+		{Name: "divide rational and integer", Code: `(/ 3/4 3)`, Expected: values.NewRational(1, 4)},
+		{Name: "divide integer and rational", Code: `(/ 3 3/4)`, Expected: values.NewRational(4, 1)},
+		{Name: "reciprocal of rational", Code: `(/ 3/4)`, Expected: values.NewRational(4, 3)},
 
 		// Complex operations
-		{"divide two complex", `(/ 4+2i 1+1i)`, values.NewComplexFromParts(3.0, -1.0)},
-		{"divide complex and integer", `(/ 4+2i 2)`, values.NewComplexFromParts(2.0, 1.0)},
-		{"reciprocal of complex", `(/ 1+1i)`, values.NewComplexFromParts(0.5, -0.5)},
+		{Name: "divide two complex", Code: `(/ 4+2i 1+1i)`, Expected: values.NewComplexFromParts(3.0, -1.0)},
+		{Name: "divide complex and integer", Code: `(/ 4+2i 2)`, Expected: values.NewComplexFromParts(2.0, 1.0)},
+		{Name: "reciprocal of complex", Code: `(/ 1+1i)`, Expected: values.NewComplexFromParts(0.5, -0.5)},
 
 		// BigInteger operations
-		{"divide two bigintegers evenly", `(/ #z20000000000000000000 #z2)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "divide two bigintegers evenly", Code: `(/ #z20000000000000000000 #z2)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
 
 		// Variadic
-		{"divide many integers", `(/ 120 2 3 4)`, values.NewInteger(5)},
+		{Name: "divide many integers", Code: `(/ 120 2 3 4)`, Expected: values.NewInteger(5)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestDivision_SpecialValues(t *testing.T) {
 	t.Run("divide by infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(/ 1 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(/ 1 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -314,7 +315,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("infinity divided by number", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(/ +inf.0 2)`)
+		result, err := testhelpers.RunSchemeCode(t, `(/ +inf.0 2)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -322,7 +323,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("divide nan propagation", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(/ +nan.0 2)`)
+		result, err := testhelpers.RunSchemeCode(t, `(/ +nan.0 2)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -330,7 +331,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("infinity divided by infinity is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(/ +inf.0 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(/ +inf.0 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -343,53 +344,53 @@ func TestDivision_SpecialValues(t *testing.T) {
 
 func TestDivision_Errors(t *testing.T) {
 	t.Run("divide no arguments", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(/)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(/)`)
 	})
 
 	t.Run("integer division by zero", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(/ 1 0)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(/ 1 0)`)
 	})
 
 	t.Run("divide string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(/ "hello" 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(/ "hello" 2)`)
 	})
 	t.Run("divide boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(/ 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(/ 1 #t)`)
 	})
 }
 
 func TestAbs(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer operations
-		{"abs of positive", `(abs 5)`, values.NewInteger(5)},
-		{"abs of negative", `(abs -5)`, values.NewInteger(5)},
-		{"abs of zero", `(abs 0)`, values.NewInteger(0)},
+		{Name: "abs of positive", Code: `(abs 5)`, Expected: values.NewInteger(5)},
+		{Name: "abs of negative", Code: `(abs -5)`, Expected: values.NewInteger(5)},
+		{Name: "abs of zero", Code: `(abs 0)`, Expected: values.NewInteger(0)},
 
 		// Float operations
-		{"abs of positive float", `(abs 3.14)`, values.NewFloat(3.14)},
-		{"abs of negative float", `(abs -3.14)`, values.NewFloat(3.14)},
-		{"abs of zero float", `(abs 0.0)`, values.NewFloat(0.0)},
+		{Name: "abs of positive float", Code: `(abs 3.14)`, Expected: values.NewFloat(3.14)},
+		{Name: "abs of negative float", Code: `(abs -3.14)`, Expected: values.NewFloat(3.14)},
+		{Name: "abs of zero float", Code: `(abs 0.0)`, Expected: values.NewFloat(0.0)},
 
 		// Rational operations
-		{"abs of positive rational", `(abs 3/4)`, values.NewRational(3, 4)},
-		{"abs of negative rational", `(abs -3/4)`, values.NewRational(3, 4)},
+		{Name: "abs of positive rational", Code: `(abs 3/4)`, Expected: values.NewRational(3, 4)},
+		{Name: "abs of negative rational", Code: `(abs -3/4)`, Expected: values.NewRational(3, 4)},
 
 		// BigInteger operations
-		{"abs of positive biginteger", `(abs #z10000000000000000000)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
-		{"abs of negative biginteger", `(abs #z-10000000000000000000)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "abs of positive biginteger", Code: `(abs #z10000000000000000000)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "abs of negative biginteger", Code: `(abs #z-10000000000000000000)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestAbs_SpecialValues(t *testing.T) {
 	t.Run("abs of positive infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(abs +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(abs +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -397,7 +398,7 @@ func TestAbs_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("abs of negative infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(abs -inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(abs -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -405,7 +406,7 @@ func TestAbs_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("abs of nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(abs +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(abs +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -437,7 +438,7 @@ func TestFloor(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -468,7 +469,7 @@ func TestCeiling(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -499,7 +500,7 @@ func TestRound(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -530,7 +531,7 @@ func TestTruncate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -538,28 +539,28 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestSqrt(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Perfect square integers return exact integer per R7RS §6.2.6
-		{"sqrt of perfect square 4", `(sqrt 4)`, values.NewInteger(2)},
-		{"sqrt of perfect square 9", `(sqrt 9)`, values.NewInteger(3)},
-		{"sqrt of perfect square 16", `(sqrt 16)`, values.NewInteger(4)},
-		{"sqrt of 2", `(sqrt 2)`, values.NewFloat(1.4142135623730951)},
-		{"sqrt of 0", `(sqrt 0)`, values.NewInteger(0)},
-		{"sqrt of 1", `(sqrt 1)`, values.NewInteger(1)},
+		{Name: "sqrt of perfect square 4", Code: `(sqrt 4)`, Expected: values.NewInteger(2)},
+		{Name: "sqrt of perfect square 9", Code: `(sqrt 9)`, Expected: values.NewInteger(3)},
+		{Name: "sqrt of perfect square 16", Code: `(sqrt 16)`, Expected: values.NewInteger(4)},
+		{Name: "sqrt of 2", Code: `(sqrt 2)`, Expected: values.NewFloat(1.4142135623730951)},
+		{Name: "sqrt of 0", Code: `(sqrt 0)`, Expected: values.NewInteger(0)},
+		{Name: "sqrt of 1", Code: `(sqrt 1)`, Expected: values.NewInteger(1)},
 
 		// Float operations (always inexact)
-		{"sqrt of float", `(sqrt 2.25)`, values.NewFloat(1.5)},
-		{"sqrt of small float", `(sqrt 0.25)`, values.NewFloat(0.5)},
+		{Name: "sqrt of float", Code: `(sqrt 2.25)`, Expected: values.NewFloat(1.5)},
+		{Name: "sqrt of small float", Code: `(sqrt 0.25)`, Expected: values.NewFloat(0.5)},
 
 		// Perfect square rational returns exact rational per R7RS §6.2.6
-		{"sqrt of rational perfect square", `(sqrt 1/4)`, values.NewRational(1, 2)},
-		{"sqrt of rational", `(sqrt 2/9)`, values.NewFloat(0.4714045207910317)},
+		{Name: "sqrt of rational perfect square", Code: `(sqrt 1/4)`, Expected: values.NewRational(1, 2)},
+		{Name: "sqrt of rational", Code: `(sqrt 2/9)`, Expected: values.NewFloat(0.4714045207910317)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -567,7 +568,7 @@ func TestSqrt(t *testing.T) {
 func TestSqrt_NegativeToComplex(t *testing.T) {
 	// Negative perfect-square integers return exact BigComplex per R7RS §6.2.6
 	t.Run("sqrt of negative integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(sqrt -1)`)
+		result, err := testhelpers.RunSchemeCode(t, `(sqrt -1)`)
 		qt.Assert(t, err, qt.IsNil)
 		bc, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -580,7 +581,7 @@ func TestSqrt_NegativeToComplex(t *testing.T) {
 	})
 
 	t.Run("sqrt of negative 4", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(sqrt -4)`)
+		result, err := testhelpers.RunSchemeCode(t, `(sqrt -4)`)
 		qt.Assert(t, err, qt.IsNil)
 		bc, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -595,7 +596,7 @@ func TestSqrt_NegativeToComplex(t *testing.T) {
 
 func TestSqrt_SpecialValues(t *testing.T) {
 	t.Run("sqrt of positive infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(sqrt +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(sqrt +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -603,7 +604,7 @@ func TestSqrt_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("sqrt of nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(sqrt +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(sqrt +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -612,52 +613,52 @@ func TestSqrt_SpecialValues(t *testing.T) {
 }
 
 func TestExpt(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer exponents
-		{"2^3", `(expt 2 3)`, values.NewInteger(8)},
-		{"2^0", `(expt 2 0)`, values.NewInteger(1)},
-		{"10^2", `(expt 10 2)`, values.NewInteger(100)},
-		{"0^0", `(expt 0 0)`, values.NewInteger(1)},
-		{"0^1", `(expt 0 1)`, values.NewInteger(0)},
-		{"1^100", `(expt 1 100)`, values.NewInteger(1)},
-		{"-2^3", `(expt -2 3)`, values.NewInteger(-8)},
-		{"-2^4", `(expt -2 4)`, values.NewInteger(16)},
+		{Name: "2^3", Code: `(expt 2 3)`, Expected: values.NewInteger(8)},
+		{Name: "2^0", Code: `(expt 2 0)`, Expected: values.NewInteger(1)},
+		{Name: "10^2", Code: `(expt 10 2)`, Expected: values.NewInteger(100)},
+		{Name: "0^0", Code: `(expt 0 0)`, Expected: values.NewInteger(1)},
+		{Name: "0^1", Code: `(expt 0 1)`, Expected: values.NewInteger(0)},
+		{Name: "1^100", Code: `(expt 1 100)`, Expected: values.NewInteger(1)},
+		{Name: "-2^3", Code: `(expt -2 3)`, Expected: values.NewInteger(-8)},
+		{Name: "-2^4", Code: `(expt -2 4)`, Expected: values.NewInteger(16)},
 
 		// Negative integer exponents
-		{"2^-1", `(expt 2 -1)`, values.NewRational(1, 2)},
-		{"2^-2", `(expt 2 -2)`, values.NewRational(1, 4)},
-		{"10^-1", `(expt 10 -1)`, values.NewRational(1, 10)},
+		{Name: "2^-1", Code: `(expt 2 -1)`, Expected: values.NewRational(1, 2)},
+		{Name: "2^-2", Code: `(expt 2 -2)`, Expected: values.NewRational(1, 4)},
+		{Name: "10^-1", Code: `(expt 10 -1)`, Expected: values.NewRational(1, 10)},
 
 		// Float base
-		{"2.0^3", `(expt 2.0 3)`, values.NewFloat(8.0)},
-		{"2.5^2", `(expt 2.5 2)`, values.NewFloat(6.25)},
+		{Name: "2.0^3", Code: `(expt 2.0 3)`, Expected: values.NewFloat(8.0)},
+		{Name: "2.5^2", Code: `(expt 2.5 2)`, Expected: values.NewFloat(6.25)},
 
 		// Float exponent (fractional power)
-		{"4^0.5", `(expt 4 0.5)`, values.NewFloat(2.0)},
+		{Name: "4^0.5", Code: `(expt 4 0.5)`, Expected: values.NewFloat(2.0)},
 		// Note: 8^(1/3) and 27^(1/3) tested separately due to floating-point precision
 
 		// Rational base
-		{"(1/2)^2", `(expt 1/2 2)`, values.NewRational(1, 4)},
-		{"(1/2)^-1", `(expt 1/2 -1)`, values.NewInteger(2)},
-		{"(2/3)^2", `(expt 2/3 2)`, values.NewRational(4, 9)},
+		{Name: "(1/2)^2", Code: `(expt 1/2 2)`, Expected: values.NewRational(1, 4)},
+		{Name: "(1/2)^-1", Code: `(expt 1/2 -1)`, Expected: values.NewInteger(2)},
+		{Name: "(2/3)^2", Code: `(expt 2/3 2)`, Expected: values.NewRational(4, 9)},
 
 		// Note: i^2 tested separately due to floating-point precision
 
 		// BigInteger
-		{"bigint^2", `(expt #z10000000000 2)`, values.NewBigIntegerFromString("100000000000000000000", 10)},
+		{Name: "bigint^2", Code: `(expt #z10000000000 2)`, Expected: values.NewBigIntegerFromString("100000000000000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestExpt_SpecialValues(t *testing.T) {
 	t.Run("infinity^2", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt +inf.0 2)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt +inf.0 2)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -665,7 +666,7 @@ func TestExpt_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("2^infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt 2 +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt 2 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -673,7 +674,7 @@ func TestExpt_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("nan exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt 2 +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt 2 +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -687,7 +688,7 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 	const epsilon = 1e-10
 
 	t.Run("8^(1/3) ≈ 2", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt 8 1/3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt 8 1/3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -695,7 +696,7 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 	})
 
 	t.Run("27^(1/3) ≈ 3", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt 27 1/3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt 27 1/3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -703,7 +704,7 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 	})
 
 	t.Run("i^2 ≈ -1", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(expt 0+1i 2)`)
+		result, err := testhelpers.RunSchemeCode(t, `(expt 0+1i 2)`)
 		qt.Assert(t, err, qt.IsNil)
 		c, ok := result.(*values.Complex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -713,44 +714,44 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 }
 
 func TestSquare(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer operations
-		{"square of 5", `(square 5)`, values.NewInteger(25)},
-		{"square of -3", `(square -3)`, values.NewInteger(9)},
-		{"square of 0", `(square 0)`, values.NewInteger(0)},
-		{"square of 1", `(square 1)`, values.NewInteger(1)},
+		{Name: "square of 5", Code: `(square 5)`, Expected: values.NewInteger(25)},
+		{Name: "square of -3", Code: `(square -3)`, Expected: values.NewInteger(9)},
+		{Name: "square of 0", Code: `(square 0)`, Expected: values.NewInteger(0)},
+		{Name: "square of 1", Code: `(square 1)`, Expected: values.NewInteger(1)},
 
 		// Float operations
-		{"square of float", `(square 2.5)`, values.NewFloat(6.25)},
-		{"square of negative float", `(square -2.5)`, values.NewFloat(6.25)},
+		{Name: "square of float", Code: `(square 2.5)`, Expected: values.NewFloat(6.25)},
+		{Name: "square of negative float", Code: `(square -2.5)`, Expected: values.NewFloat(6.25)},
 
 		// Rational operations
-		{"square of rational", `(square 1/2)`, values.NewRational(1, 4)},
-		{"square of negative rational", `(square -2/3)`, values.NewRational(4, 9)},
+		{Name: "square of rational", Code: `(square 1/2)`, Expected: values.NewRational(1, 4)},
+		{Name: "square of negative rational", Code: `(square -2/3)`, Expected: values.NewRational(4, 9)},
 
 		// Exact complex operations (integer parts are parsed as exact BigComplex)
-		{"square of exact complex", `(square 1+1i)`, values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(2))},
-		{"square of exact imaginary", `(square 0+2i)`, values.NewBigIntegerFromInt64(-4)},
+		{Name: "square of exact complex", Code: `(square 1+1i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(2))},
+		{Name: "square of exact imaginary", Code: `(square 0+2i)`, Expected: values.NewBigIntegerFromInt64(-4)},
 
 		// Inexact complex operations
-		{"square of inexact complex", `(square 1.0+1.0i)`, values.NewComplexFromParts(0.0, 2.0)},
-		{"square of inexact imaginary", `(square 0.0+2.0i)`, values.NewComplexFromParts(-4.0, 0.0)},
+		{Name: "square of inexact complex", Code: `(square 1.0+1.0i)`, Expected: values.NewComplexFromParts(0.0, 2.0)},
+		{Name: "square of inexact imaginary", Code: `(square 0.0+2.0i)`, Expected: values.NewComplexFromParts(-4.0, 0.0)},
 
 		// BigInteger operations
-		{"square of biginteger", `(square #z10000000000)`, values.NewBigIntegerFromString("100000000000000000000", 10)},
+		{Name: "square of biginteger", Code: `(square #z10000000000)`, Expected: values.NewBigIntegerFromString("100000000000000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestSquare_SpecialValues(t *testing.T) {
 	t.Run("square of infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(square +inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(square +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -758,7 +759,7 @@ func TestSquare_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("square of negative infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(square -inf.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(square -inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -766,7 +767,7 @@ func TestSquare_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("square of nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(square +nan.0)`)
+		result, err := testhelpers.RunSchemeCode(t, `(square +nan.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -775,231 +776,231 @@ func TestSquare_SpecialValues(t *testing.T) {
 }
 
 func TestGcd(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"gcd of 12 and 8", `(gcd 12 8)`, values.NewInteger(4)},
-		{"gcd of no args", `(gcd)`, values.NewInteger(0)},
-		{"gcd of one arg", `(gcd 5)`, values.NewInteger(5)},
-		{"gcd of coprime numbers", `(gcd 7 11)`, values.NewInteger(1)},
-		{"gcd of same numbers", `(gcd 5 5)`, values.NewInteger(5)},
-		{"gcd with zero", `(gcd 5 0)`, values.NewInteger(5)},
-		{"gcd of two zeros", `(gcd 0 0)`, values.NewInteger(0)},
+		{Name: "gcd of 12 and 8", Code: `(gcd 12 8)`, Expected: values.NewInteger(4)},
+		{Name: "gcd of no args", Code: `(gcd)`, Expected: values.NewInteger(0)},
+		{Name: "gcd of one arg", Code: `(gcd 5)`, Expected: values.NewInteger(5)},
+		{Name: "gcd of coprime numbers", Code: `(gcd 7 11)`, Expected: values.NewInteger(1)},
+		{Name: "gcd of same numbers", Code: `(gcd 5 5)`, Expected: values.NewInteger(5)},
+		{Name: "gcd with zero", Code: `(gcd 5 0)`, Expected: values.NewInteger(5)},
+		{Name: "gcd of two zeros", Code: `(gcd 0 0)`, Expected: values.NewInteger(0)},
 
 		// Negative numbers (gcd is always non-negative)
-		{"gcd of negative numbers", `(gcd -12 8)`, values.NewInteger(4)},
-		{"gcd of two negatives", `(gcd -12 -8)`, values.NewInteger(4)},
-		{"gcd of negative single arg", `(gcd -5)`, values.NewInteger(5)},
+		{Name: "gcd of negative numbers", Code: `(gcd -12 8)`, Expected: values.NewInteger(4)},
+		{Name: "gcd of two negatives", Code: `(gcd -12 -8)`, Expected: values.NewInteger(4)},
+		{Name: "gcd of negative single arg", Code: `(gcd -5)`, Expected: values.NewInteger(5)},
 
 		// Variadic (3+ args)
-		{"gcd of three numbers", `(gcd 12 18 24)`, values.NewInteger(6)},
-		{"gcd of four numbers", `(gcd 100 50 25 75)`, values.NewInteger(25)},
+		{Name: "gcd of three numbers", Code: `(gcd 12 18 24)`, Expected: values.NewInteger(6)},
+		{Name: "gcd of four numbers", Code: `(gcd 100 50 25 75)`, Expected: values.NewInteger(25)},
 
 		// BigInteger operations
-		{"gcd of bigintegers", `(gcd #z100000000000000000000 #z50000000000000000000)`, values.NewBigIntegerFromString("50000000000000000000", 10)},
+		{Name: "gcd of bigintegers", Code: `(gcd #z100000000000000000000 #z50000000000000000000)`, Expected: values.NewBigIntegerFromString("50000000000000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestLcm(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"lcm of 4 and 6", `(lcm 4 6)`, values.NewInteger(12)},
-		{"lcm of no args", `(lcm)`, values.NewInteger(1)},
-		{"lcm of one arg", `(lcm 5)`, values.NewInteger(5)},
-		{"lcm of coprime numbers", `(lcm 7 11)`, values.NewInteger(77)},
-		{"lcm of same numbers", `(lcm 5 5)`, values.NewInteger(5)},
-		{"lcm with zero returns zero", `(lcm 5 0)`, values.NewInteger(0)},
-		{"lcm of two zeros", `(lcm 0 0)`, values.NewInteger(0)},
-		{"lcm of 1 and any number", `(lcm 1 42)`, values.NewInteger(42)},
+		{Name: "lcm of 4 and 6", Code: `(lcm 4 6)`, Expected: values.NewInteger(12)},
+		{Name: "lcm of no args", Code: `(lcm)`, Expected: values.NewInteger(1)},
+		{Name: "lcm of one arg", Code: `(lcm 5)`, Expected: values.NewInteger(5)},
+		{Name: "lcm of coprime numbers", Code: `(lcm 7 11)`, Expected: values.NewInteger(77)},
+		{Name: "lcm of same numbers", Code: `(lcm 5 5)`, Expected: values.NewInteger(5)},
+		{Name: "lcm with zero returns zero", Code: `(lcm 5 0)`, Expected: values.NewInteger(0)},
+		{Name: "lcm of two zeros", Code: `(lcm 0 0)`, Expected: values.NewInteger(0)},
+		{Name: "lcm of 1 and any number", Code: `(lcm 1 42)`, Expected: values.NewInteger(42)},
 
 		// Negative numbers (lcm is always non-negative)
-		{"lcm of negative numbers", `(lcm -4 6)`, values.NewInteger(12)},
-		{"lcm of two negatives", `(lcm -4 -6)`, values.NewInteger(12)},
+		{Name: "lcm of negative numbers", Code: `(lcm -4 6)`, Expected: values.NewInteger(12)},
+		{Name: "lcm of two negatives", Code: `(lcm -4 -6)`, Expected: values.NewInteger(12)},
 
 		// Variadic (3+ args)
-		{"lcm of three numbers", `(lcm 2 3 4)`, values.NewInteger(12)},
-		{"lcm of four numbers", `(lcm 2 3 4 5)`, values.NewInteger(60)},
+		{Name: "lcm of three numbers", Code: `(lcm 2 3 4)`, Expected: values.NewInteger(12)},
+		{Name: "lcm of four numbers", Code: `(lcm 2 3 4 5)`, Expected: values.NewInteger(60)},
 
 		// BigInteger operations
-		{"lcm of bigintegers", `(lcm #z10000000000 #z30000000000)`, values.NewBigIntegerFromString("30000000000", 10)},
+		{Name: "lcm of bigintegers", Code: `(lcm #z10000000000 #z30000000000)`, Expected: values.NewBigIntegerFromString("30000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestQuotient(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (truncates toward zero)
-		{"quotient 7/3", `(quotient 7 3)`, values.NewInteger(2)},
-		{"quotient -7/3", `(quotient -7 3)`, values.NewInteger(-2)},
-		{"quotient 7/-3", `(quotient 7 -3)`, values.NewInteger(-2)},
-		{"quotient -7/-3", `(quotient -7 -3)`, values.NewInteger(2)},
-		{"quotient exact division", `(quotient 10 2)`, values.NewInteger(5)},
-		{"quotient zero dividend", `(quotient 0 5)`, values.NewInteger(0)},
-		{"quotient 1/larger", `(quotient 1 5)`, values.NewInteger(0)},
+		{Name: "quotient 7/3", Code: `(quotient 7 3)`, Expected: values.NewInteger(2)},
+		{Name: "quotient -7/3", Code: `(quotient -7 3)`, Expected: values.NewInteger(-2)},
+		{Name: "quotient 7/-3", Code: `(quotient 7 -3)`, Expected: values.NewInteger(-2)},
+		{Name: "quotient -7/-3", Code: `(quotient -7 -3)`, Expected: values.NewInteger(2)},
+		{Name: "quotient exact division", Code: `(quotient 10 2)`, Expected: values.NewInteger(5)},
+		{Name: "quotient zero dividend", Code: `(quotient 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "quotient 1/larger", Code: `(quotient 1 5)`, Expected: values.NewInteger(0)},
 
 		// Float operations
-		{"quotient with floats", `(quotient 7.0 3.0)`, values.NewFloat(2.0)},
-		{"quotient integer and float", `(quotient 7 3.0)`, values.NewFloat(2.0)},
+		{Name: "quotient with floats", Code: `(quotient 7.0 3.0)`, Expected: values.NewFloat(2.0)},
+		{Name: "quotient integer and float", Code: `(quotient 7 3.0)`, Expected: values.NewFloat(2.0)},
 
 		// BigInteger operations
-		{"quotient bigintegers", `(quotient #z100000000000000000000 #z30000000000000000000)`, values.NewBigIntegerFromString("3", 10)},
+		{Name: "quotient bigintegers", Code: `(quotient #z100000000000000000000 #z30000000000000000000)`, Expected: values.NewBigIntegerFromString("3", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestQuotient_Errors(t *testing.T) {
 	t.Run("quotient by zero", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(quotient 7 0)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(quotient 7 0)`)
 	})
 	t.Run("quotient string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(quotient "hello" 3)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(quotient "hello" 3)`)
 	})
 	t.Run("quotient boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(quotient 7 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(quotient 7 #t)`)
 	})
 }
 
 func TestRemainder(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (sign follows dividend)
-		{"remainder 7/3", `(remainder 7 3)`, values.NewInteger(1)},
-		{"remainder -7/3", `(remainder -7 3)`, values.NewInteger(-1)},
-		{"remainder 7/-3", `(remainder 7 -3)`, values.NewInteger(1)},
-		{"remainder -7/-3", `(remainder -7 -3)`, values.NewInteger(-1)},
-		{"remainder exact division", `(remainder 10 2)`, values.NewInteger(0)},
-		{"remainder zero dividend", `(remainder 0 5)`, values.NewInteger(0)},
-		{"remainder 1/larger", `(remainder 1 5)`, values.NewInteger(1)},
+		{Name: "remainder 7/3", Code: `(remainder 7 3)`, Expected: values.NewInteger(1)},
+		{Name: "remainder -7/3", Code: `(remainder -7 3)`, Expected: values.NewInteger(-1)},
+		{Name: "remainder 7/-3", Code: `(remainder 7 -3)`, Expected: values.NewInteger(1)},
+		{Name: "remainder -7/-3", Code: `(remainder -7 -3)`, Expected: values.NewInteger(-1)},
+		{Name: "remainder exact division", Code: `(remainder 10 2)`, Expected: values.NewInteger(0)},
+		{Name: "remainder zero dividend", Code: `(remainder 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "remainder 1/larger", Code: `(remainder 1 5)`, Expected: values.NewInteger(1)},
 
 		// Float operations
-		{"remainder with floats", `(remainder 7.0 3.0)`, values.NewFloat(1.0)},
-		{"remainder negative float", `(remainder -7.0 3.0)`, values.NewFloat(-1.0)},
+		{Name: "remainder with floats", Code: `(remainder 7.0 3.0)`, Expected: values.NewFloat(1.0)},
+		{Name: "remainder negative float", Code: `(remainder -7.0 3.0)`, Expected: values.NewFloat(-1.0)},
 
 		// BigInteger operations
-		{"remainder bigintegers", `(remainder #z100000000000000000000 #z30000000000000000000)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "remainder bigintegers", Code: `(remainder #z100000000000000000000 #z30000000000000000000)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestRemainder_Errors(t *testing.T) {
 	t.Run("remainder by zero", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(remainder 7 0)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(remainder 7 0)`)
 	})
 	t.Run("remainder string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(remainder "hello" 3)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(remainder "hello" 3)`)
 	})
 	t.Run("remainder boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(remainder 7 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(remainder 7 #t)`)
 	})
 }
 
 func TestModulo(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (sign follows divisor)
-		{"modulo 7/3", `(modulo 7 3)`, values.NewInteger(1)},
-		{"modulo -7/3", `(modulo -7 3)`, values.NewInteger(2)},
-		{"modulo 7/-3", `(modulo 7 -3)`, values.NewInteger(-2)},
-		{"modulo -7/-3", `(modulo -7 -3)`, values.NewInteger(-1)},
-		{"modulo exact division", `(modulo 10 2)`, values.NewInteger(0)},
-		{"modulo zero dividend", `(modulo 0 5)`, values.NewInteger(0)},
-		{"modulo 1/larger", `(modulo 1 5)`, values.NewInteger(1)},
+		{Name: "modulo 7/3", Code: `(modulo 7 3)`, Expected: values.NewInteger(1)},
+		{Name: "modulo -7/3", Code: `(modulo -7 3)`, Expected: values.NewInteger(2)},
+		{Name: "modulo 7/-3", Code: `(modulo 7 -3)`, Expected: values.NewInteger(-2)},
+		{Name: "modulo -7/-3", Code: `(modulo -7 -3)`, Expected: values.NewInteger(-1)},
+		{Name: "modulo exact division", Code: `(modulo 10 2)`, Expected: values.NewInteger(0)},
+		{Name: "modulo zero dividend", Code: `(modulo 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "modulo 1/larger", Code: `(modulo 1 5)`, Expected: values.NewInteger(1)},
 
 		// Additional sign cases
-		{"modulo -1/3", `(modulo -1 3)`, values.NewInteger(2)},
-		{"modulo 1/-3", `(modulo 1 -3)`, values.NewInteger(-2)},
+		{Name: "modulo -1/3", Code: `(modulo -1 3)`, Expected: values.NewInteger(2)},
+		{Name: "modulo 1/-3", Code: `(modulo 1 -3)`, Expected: values.NewInteger(-2)},
 
 		// Float operations
-		{"modulo with floats", `(modulo 7.0 3.0)`, values.NewFloat(1.0)},
-		{"modulo negative dividend float", `(modulo -7.0 3.0)`, values.NewFloat(2.0)},
+		{Name: "modulo with floats", Code: `(modulo 7.0 3.0)`, Expected: values.NewFloat(1.0)},
+		{Name: "modulo negative dividend float", Code: `(modulo -7.0 3.0)`, Expected: values.NewFloat(2.0)},
 
 		// BigInteger operations
-		{"modulo bigintegers", `(modulo #z100000000000000000007 #z10)`, values.NewBigIntegerFromString("7", 10)},
+		{Name: "modulo bigintegers", Code: `(modulo #z100000000000000000007 #z10)`, Expected: values.NewBigIntegerFromString("7", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestModulo_Errors(t *testing.T) {
 	t.Run("modulo by zero", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(modulo 7 0)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(modulo 7 0)`)
 	})
 	t.Run("modulo string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(modulo "hello" 3)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(modulo "hello" 3)`)
 	})
 	t.Run("modulo boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(modulo 7 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(modulo 7 #t)`)
 	})
 }
 
 func TestMax(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"max of two", `(max 3 5)`, values.NewInteger(5)},
-		{"max of three", `(max 3 5 1)`, values.NewInteger(5)},
-		{"max of one", `(max 7)`, values.NewInteger(7)},
-		{"max with negatives", `(max -3 -5 -1)`, values.NewInteger(-1)},
-		{"max with zero", `(max 0 -5 5)`, values.NewInteger(5)},
+		{Name: "max of two", Code: `(max 3 5)`, Expected: values.NewInteger(5)},
+		{Name: "max of three", Code: `(max 3 5 1)`, Expected: values.NewInteger(5)},
+		{Name: "max of one", Code: `(max 7)`, Expected: values.NewInteger(7)},
+		{Name: "max with negatives", Code: `(max -3 -5 -1)`, Expected: values.NewInteger(-1)},
+		{Name: "max with zero", Code: `(max 0 -5 5)`, Expected: values.NewInteger(5)},
 
 		// Float operations
-		{"max of floats", `(max 3.5 2.5)`, values.NewFloat(3.5)},
-		{"max of negative floats", `(max -1.5 -2.5)`, values.NewFloat(-1.5)},
+		{Name: "max of floats", Code: `(max 3.5 2.5)`, Expected: values.NewFloat(3.5)},
+		{Name: "max of negative floats", Code: `(max -1.5 -2.5)`, Expected: values.NewFloat(-1.5)},
 
 		// Mixed types (result is inexact if any arg is inexact)
-		{"max integer and float", `(max 3 2.5)`, values.NewFloat(3.0)},
-		{"max float wins", `(max 2 3.5)`, values.NewFloat(3.5)},
+		{Name: "max integer and float", Code: `(max 3 2.5)`, Expected: values.NewFloat(3.0)},
+		{Name: "max float wins", Code: `(max 2 3.5)`, Expected: values.NewFloat(3.5)},
 
 		// Rational operations
-		{"max of rationals", `(max 1/2 3/4)`, values.NewRational(3, 4)},
-		{"max rational and integer", `(max 1/2 1)`, values.NewInteger(1)},
+		{Name: "max of rationals", Code: `(max 1/2 3/4)`, Expected: values.NewRational(3, 4)},
+		{Name: "max rational and integer", Code: `(max 1/2 1)`, Expected: values.NewInteger(1)},
 
 		// BigInteger operations
-		{"max of bigintegers", `(max #z10000000000000000000 #z20000000000000000000)`, values.NewBigIntegerFromString("20000000000000000000", 10)},
+		{Name: "max of bigintegers", Code: `(max #z10000000000000000000 #z20000000000000000000)`, Expected: values.NewBigIntegerFromString("20000000000000000000", 10)},
 
 		// BigFloat operations (always inexact)
-		{"max of bigfloats", `(max #m3.5 #m2.5)`, values.NewBigFloatFromString("3.5")},
-		{"max bigfloat and integer", `(max #m2.5 3)`, values.NewFloat(3.0)}, // Integer wins but becomes inexact
-		{"max integer and bigfloat", `(max 3 #m2.5)`, values.NewFloat(3.0)}, // Integer wins but becomes inexact
+		{Name: "max of bigfloats", Code: `(max #m3.5 #m2.5)`, Expected: values.NewBigFloatFromString("3.5")},
+		{Name: "max bigfloat and integer", Code: `(max #m2.5 3)`, Expected: values.NewFloat(3.0)}, // Integer wins but becomes inexact
+		{Name: "max integer and bigfloat", Code: `(max 3 #m2.5)`, Expected: values.NewFloat(3.0)}, // Integer wins but becomes inexact
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMax_SpecialValues(t *testing.T) {
 	t.Run("max with positive infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(max 1 2 +inf.0 3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(max 1 2 +inf.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1007,7 +1008,7 @@ func TestMax_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("max with negative infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(max -inf.0 -100)`)
+		result, err := testhelpers.RunSchemeCode(t, `(max -inf.0 -100)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1015,7 +1016,7 @@ func TestMax_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("max with nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(max 1 +nan.0 3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(max 1 +nan.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1025,57 +1026,57 @@ func TestMax_SpecialValues(t *testing.T) {
 
 func TestMax_Errors(t *testing.T) {
 	t.Run("max no arguments", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(max)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(max)`)
 	})
 	t.Run("max string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(max "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(max "hello" 1)`)
 	})
 	t.Run("max boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(max 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(max 1 #t)`)
 	})
 }
 
 func TestMin(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
-		{"min of two", `(min 3 5)`, values.NewInteger(3)},
-		{"min of three", `(min 3 5 1)`, values.NewInteger(1)},
-		{"min of one", `(min 7)`, values.NewInteger(7)},
-		{"min with negatives", `(min -3 -5 -1)`, values.NewInteger(-5)},
-		{"min with zero", `(min 0 -5 5)`, values.NewInteger(-5)},
+		{Name: "min of two", Code: `(min 3 5)`, Expected: values.NewInteger(3)},
+		{Name: "min of three", Code: `(min 3 5 1)`, Expected: values.NewInteger(1)},
+		{Name: "min of one", Code: `(min 7)`, Expected: values.NewInteger(7)},
+		{Name: "min with negatives", Code: `(min -3 -5 -1)`, Expected: values.NewInteger(-5)},
+		{Name: "min with zero", Code: `(min 0 -5 5)`, Expected: values.NewInteger(-5)},
 
 		// Float operations
-		{"min of floats", `(min 3.5 2.5)`, values.NewFloat(2.5)},
-		{"min of negative floats", `(min -1.5 -2.5)`, values.NewFloat(-2.5)},
+		{Name: "min of floats", Code: `(min 3.5 2.5)`, Expected: values.NewFloat(2.5)},
+		{Name: "min of negative floats", Code: `(min -1.5 -2.5)`, Expected: values.NewFloat(-2.5)},
 
 		// Mixed types (result is inexact if any arg is inexact)
-		{"min integer and float", `(min 3 2.5)`, values.NewFloat(2.5)},
-		{"min integer wins", `(min 2 3.5)`, values.NewFloat(2.0)},
+		{Name: "min integer and float", Code: `(min 3 2.5)`, Expected: values.NewFloat(2.5)},
+		{Name: "min integer wins", Code: `(min 2 3.5)`, Expected: values.NewFloat(2.0)},
 
 		// Rational operations
-		{"min of rationals", `(min 1/2 3/4)`, values.NewRational(1, 2)},
-		{"min rational and integer", `(min 1/2 1)`, values.NewRational(1, 2)},
+		{Name: "min of rationals", Code: `(min 1/2 3/4)`, Expected: values.NewRational(1, 2)},
+		{Name: "min rational and integer", Code: `(min 1/2 1)`, Expected: values.NewRational(1, 2)},
 
 		// BigInteger operations
-		{"min of bigintegers", `(min #z10000000000000000000 #z20000000000000000000)`, values.NewBigIntegerFromString("10000000000000000000", 10)},
+		{Name: "min of bigintegers", Code: `(min #z10000000000000000000 #z20000000000000000000)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
 
 		// BigFloat operations (always inexact)
-		{"min of bigfloats", `(min #m3.5 #m2.5)`, values.NewBigFloatFromString("2.5")},
-		{"min bigfloat and integer", `(min #m2.5 3)`, values.NewBigFloatFromString("2.5")}, // BigFloat wins, stays BigFloat
-		{"min integer and bigfloat", `(min 2 #m3.5)`, values.NewFloat(2.0)},                // Integer wins but becomes inexact
+		{Name: "min of bigfloats", Code: `(min #m3.5 #m2.5)`, Expected: values.NewBigFloatFromString("2.5")},
+		{Name: "min bigfloat and integer", Code: `(min #m2.5 3)`, Expected: values.NewBigFloatFromString("2.5")}, // BigFloat wins, stays BigFloat
+		{Name: "min integer and bigfloat", Code: `(min 2 #m3.5)`, Expected: values.NewFloat(2.0)},                // Integer wins but becomes inexact
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMin_SpecialValues(t *testing.T) {
 	t.Run("min with negative infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(min 1 2 -inf.0 3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(min 1 2 -inf.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1083,7 +1084,7 @@ func TestMin_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("min with positive infinity", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(min +inf.0 100)`)
+		result, err := testhelpers.RunSchemeCode(t, `(min +inf.0 100)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1091,7 +1092,7 @@ func TestMin_SpecialValues(t *testing.T) {
 	})
 
 	t.Run("min with nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(min 1 +nan.0 3)`)
+		result, err := testhelpers.RunSchemeCode(t, `(min 1 +nan.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1101,85 +1102,85 @@ func TestMin_SpecialValues(t *testing.T) {
 
 func TestMin_Errors(t *testing.T) {
 	t.Run("min no arguments", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(min)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(min)`)
 	})
 	t.Run("min string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(min "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(min "hello" 1)`)
 	})
 	t.Run("min boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(min 1 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(min 1 #t)`)
 	})
 }
 
 func TestAddition_Errors(t *testing.T) {
 	t.Run("add string arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(+ "hello" 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(+ "hello" 1)`)
 	})
 	t.Run("add boolean arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(+ #t 1)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(+ #t 1)`)
 	})
 }
 
 func TestMultiplication_Errors(t *testing.T) {
 	t.Run("multiply string arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(* "hello" 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(* "hello" 2)`)
 	})
 	t.Run("multiply boolean arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(* #t 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(* #t 2)`)
 	})
 }
 
 func TestAbs_Errors(t *testing.T) {
 	t.Run("abs of string", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(abs "hello")`)
+		testhelpers.RunSchemeCodeExpectError(t, `(abs "hello")`)
 	})
 	t.Run("abs of boolean", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(abs #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(abs #t)`)
 	})
 }
 
 func TestSquare_Errors(t *testing.T) {
 	t.Run("square of string", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(square "hello")`)
+		testhelpers.RunSchemeCodeExpectError(t, `(square "hello")`)
 	})
 	t.Run("square of boolean", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(square #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(square #t)`)
 	})
 }
 
 func TestSqrt_Errors(t *testing.T) {
 	t.Run("sqrt of string", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(sqrt "hello")`)
+		testhelpers.RunSchemeCodeExpectError(t, `(sqrt "hello")`)
 	})
 	t.Run("sqrt of boolean", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(sqrt #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(sqrt #t)`)
 	})
 }
 
 func TestExpt_Errors(t *testing.T) {
 	t.Run("expt string base", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(expt "hello" 2)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(expt "hello" 2)`)
 	})
 	t.Run("expt boolean exponent", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(expt 2 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(expt 2 #t)`)
 	})
 }
 
 func TestGcd_Errors(t *testing.T) {
 	t.Run("gcd string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(gcd "hello" 4)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(gcd "hello" 4)`)
 	})
 	t.Run("gcd boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(gcd 4 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(gcd 4 #t)`)
 	})
 }
 
 func TestLcm_Errors(t *testing.T) {
 	t.Run("lcm string first arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(lcm "hello" 4)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(lcm "hello" 4)`)
 	})
 	t.Run("lcm boolean second arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, `(lcm 4 #t)`)
+		testhelpers.RunSchemeCodeExpectError(t, `(lcm 4 #t)`)
 	})
 }
 
@@ -1189,33 +1190,23 @@ func TestLcm_Errors(t *testing.T) {
 // applyForeign, not just the values package panic.
 func TestDivisionByZero_SchemeException(t *testing.T) {
 	c := qt.New(t)
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer / 0
-		{"integer div zero caught by guard",
-			`(guard (exn (#t "caught")) (/ 1 0))`,
-			values.NewString("caught")},
+		{Name: "integer div zero caught by guard", Code: `(guard (exn (#t "caught")) (/ 1 0))`, Expected: values.NewString("caught")},
 		// BigInteger / 0 (Issue #22)
-		{"biginteger div zero caught by guard",
-			`(guard (exn (#t "caught")) (/ (expt 2 100) 0))`,
-			values.NewString("caught")},
+		{Name: "biginteger div zero caught by guard", Code: `(guard (exn (#t "caught")) (/ (expt 2 100) 0))`, Expected: values.NewString("caught")},
 		// Float / 0
-		{"float div zero caught by guard",
-			`(guard (exn (#t "caught")) (/ 1.5 0))`,
-			values.NewString("caught")},
+		{Name: "float div zero caught by guard", Code: `(guard (exn (#t "caught")) (/ 1.5 0))`, Expected: values.NewString("caught")},
 		// Rational / 0
-		{"rational div zero caught by guard",
-			`(guard (exn (#t "caught")) (/ 1/3 0))`,
-			values.NewString("caught")},
+		{Name: "rational div zero caught by guard", Code: `(guard (exn (#t "caught")) (/ 1/3 0))`, Expected: values.NewString("caught")},
 		// Complex / 0
-		{"complex div zero caught by guard",
-			`(guard (exn (#t "caught")) (/ 1+2i 0))`,
-			values.NewString("caught")},
+		{Name: "complex div zero caught by guard", Code: `(guard (exn (#t "caught")) (/ 1+2i 0))`, Expected: values.NewString("caught")},
 	}
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1223,16 +1214,16 @@ func TestDivisionByZero_SchemeException(t *testing.T) {
 // TestDivisionByZero_ReturnsError verifies that division by zero returns an
 // error through the VM rather than panicking.
 func TestDivisionByZero_ReturnsError(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{"integer / 0", `(/ 1 0)`},
-		{"biginteger / 0", `(/ (expt 2 100) 0)`},
-		{"float / 0", `(/ 1.5 0)`},
-		{"rational / 0", `(/ 1/3 0)`},
-		{"complex / 0", `(/ 1+2i 0)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "integer / 0", Code: `(/ 1 0)`},
+		{Name: "biginteger / 0", Code: `(/ (expt 2 100) 0)`},
+		{Name: "float / 0", Code: `(/ 1.5 0)`},
+		{Name: "rational / 0", Code: `(/ 1/3 0)`},
+		{Name: "complex / 0", Code: `(/ 1+2i 0)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
 		})
@@ -1256,7 +1247,7 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
 			qt.Assert(t, err, qt.ErrorMatches, `(?s).*division by zero.*`)
@@ -1267,47 +1258,47 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 // TestDivisionByInexactZero verifies that dividing by an inexact zero returns
 // ±Inf or NaN per R7RS §6.2.6 and IEEE 754, rather than raising an error.
 func TestDivisionByInexactZero(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"(/ 1 0.0) is +inf.0", `(/ 1 0.0)`, values.NewFloat(math.Inf(1))},
-		{"(/ -1 0.0) is -inf.0", `(/ -1 0.0)`, values.NewFloat(math.Inf(-1))},
-		{"(/ 0.0 0.0) is +nan.0", `(nan? (/ 0.0 0.0))`, values.TrueValue},
-		{"(/ 1.0 0.0) is +inf.0", `(/ 1.0 0.0)`, values.NewFloat(math.Inf(1))},
-		{"(/ -1.0 0.0) is -inf.0", `(/ -1.0 0.0)`, values.NewFloat(math.Inf(-1))},
-		{"(/ 1/3 0.0) is +inf.0", `(infinite? (/ 1/3 0.0))`, values.TrueValue},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "(/ 1 0.0) is +inf.0", Code: `(/ 1 0.0)`, Expected: values.NewFloat(math.Inf(1))},
+		{Name: "(/ -1 0.0) is -inf.0", Code: `(/ -1 0.0)`, Expected: values.NewFloat(math.Inf(-1))},
+		{Name: "(/ 0.0 0.0) is +nan.0", Code: `(nan? (/ 0.0 0.0))`, Expected: values.TrueValue},
+		{Name: "(/ 1.0 0.0) is +inf.0", Code: `(/ 1.0 0.0)`, Expected: values.NewFloat(math.Inf(1))},
+		{Name: "(/ -1.0 0.0) is -inf.0", Code: `(/ -1.0 0.0)`, Expected: values.NewFloat(math.Inf(-1))},
+		{Name: "(/ 1/3 0.0) is +inf.0", Code: `(infinite? (/ 1/3 0.0))`, Expected: values.TrueValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestOverflowPromotion(t *testing.T) {
 	// R7RS §6.2.3: Integer overflow should promote to BigInteger
-	tcs := []schemeCodeTestCase{
-		{"add overflow", `(+ 9223372036854775807 1)`, values.NewBigIntegerFromString("9223372036854775808", 10)},
-		{"subtract underflow", `(- -9223372036854775808 1)`, values.NewBigIntegerFromString("-9223372036854775809", 10)},
-		{"multiply overflow", `(* 9223372036854775807 2)`, values.NewBigIntegerFromString("18446744073709551614", 10)},
-		{"abs MinInt64", `(abs -9223372036854775808)`, values.NewBigIntegerFromString("9223372036854775808", 10)},
-		{"lcm overflow", `(lcm 9223372036854775807 2)`, values.NewBigIntegerFromString("18446744073709551614", 10)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "add overflow", Code: `(+ 9223372036854775807 1)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
+		{Name: "subtract underflow", Code: `(- -9223372036854775808 1)`, Expected: values.NewBigIntegerFromString("-9223372036854775809", 10)},
+		{Name: "multiply overflow", Code: `(* 9223372036854775807 2)`, Expected: values.NewBigIntegerFromString("18446744073709551614", 10)},
+		{Name: "abs MinInt64", Code: `(abs -9223372036854775808)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
+		{Name: "lcm overflow", Code: `(lcm 9223372036854775807 2)`, Expected: values.NewBigIntegerFromString("18446744073709551614", 10)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 
 	// Exactness and type preservation
-	runSchemeCodeExpectTrue(t, `(exact? (+ 9223372036854775807 1))`)
-	runSchemeCodeExpectTrue(t, `(integer? (+ 9223372036854775807 1))`)
-	runSchemeCodeExpectTrue(t, `(= (+ 9223372036854775807 1) 9223372036854775808)`)
-	runSchemeCodeExpectTrue(t, `(= (- -9223372036854775808 1) -9223372036854775809)`)
-	runSchemeCodeExpectTrue(t, `(= (* 9223372036854775807 2) 18446744073709551614)`)
-	runSchemeCodeExpectTrue(t, `(= (abs -9223372036854775808) 9223372036854775808)`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(exact? (+ 9223372036854775807 1))`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(integer? (+ 9223372036854775807 1))`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(= (+ 9223372036854775807 1) 9223372036854775808)`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(= (- -9223372036854775808 1) -9223372036854775809)`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(= (* 9223372036854775807 2) 18446744073709551614)`)
+	testhelpers.RunSchemeCodeExpectTrue(t, `(= (abs -9223372036854775808) 9223372036854775808)`)
 }
 
 // TestSpecialValueArithmetic tests arithmetic with +inf.0, -inf.0, and +nan.0.
@@ -1315,7 +1306,7 @@ func TestOverflowPromotion(t *testing.T) {
 func TestSpecialValueArithmetic(t *testing.T) {
 	// inf + -inf = nan
 	t.Run("+inf.0 + -inf.0 is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(+ +inf.0 -inf.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(+ +inf.0 -inf.0)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1324,7 +1315,7 @@ func TestSpecialValueArithmetic(t *testing.T) {
 
 	// 0 * inf = nan (IEEE 754)
 	t.Run("0 * +inf.0 is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(* 0 +inf.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(* 0 +inf.0)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1333,13 +1324,13 @@ func TestSpecialValueArithmetic(t *testing.T) {
 
 	// Division by exact zero is an error.
 	t.Run("(/ 0 0) is error", func(t *testing.T) {
-		_, err := runSchemeCode(t, "(/ 0 0)")
+		_, err := testhelpers.RunSchemeCode(t, "(/ 0 0)")
 		qt.Assert(t, err, qt.IsNotNil)
 	})
 
 	// R7RS §6.2.6 + IEEE 754: division by inexact zero returns ±inf or nan
 	t.Run("(/ 1.0 0.0) is +inf.0", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(/ 1.0 0.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(/ 1.0 0.0)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1348,7 +1339,7 @@ func TestSpecialValueArithmetic(t *testing.T) {
 
 	// inf arithmetic
 	t.Run("+inf.0 + 1 is +inf.0", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(+ +inf.0 1)")
+		result, err := testhelpers.RunSchemeCode(t, "(+ +inf.0 1)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1356,7 +1347,7 @@ func TestSpecialValueArithmetic(t *testing.T) {
 	})
 
 	t.Run("-inf.0 - 1 is -inf.0", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(- -inf.0 1)")
+		result, err := testhelpers.RunSchemeCode(t, "(- -inf.0 1)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1365,7 +1356,7 @@ func TestSpecialValueArithmetic(t *testing.T) {
 
 	// nan propagation
 	t.Run("nan + 1 is nan", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(+ +nan.0 1)")
+		result, err := testhelpers.RunSchemeCode(t, "(+ +nan.0 1)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)

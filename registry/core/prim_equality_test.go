@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -53,7 +54,7 @@ func TestNumericEquality(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -93,7 +94,7 @@ func TestEqQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -129,7 +130,7 @@ func TestEqualQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -144,7 +145,7 @@ func TestEqQWithDifferentPairs(t *testing.T) {
 			values.List(values.NewInteger(1), values.NewInteger(2))),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewInteger(3), values.NewInteger(4))))
-	result, err := runProgramAST(t, prog)
+	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// Two different pairs should not be eq?
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
@@ -157,7 +158,7 @@ func TestEqualQWithLists(t *testing.T) {
 			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))))
-	result, err := runProgramAST(t, prog)
+	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
 	// equal? compares by value, so equivalent lists should be equal?
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
@@ -408,7 +409,7 @@ func TestEqvQPrimitive(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

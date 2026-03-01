@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -25,41 +26,41 @@ import (
 func TestPrompt_BasicAbortRoundTrip(t *testing.T) {
 	c := qt.New(t)
 
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "abort with single value",
-			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+			Name: "abort with single value",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test)))
 				(call-with-continuation-prompt
 				  (lambda () (abort-current-continuation tag 42))
 				  tag
 				  (lambda (v) v)))`,
-			expected: values.NewInteger(42),
+			Expected: values.NewInteger(42),
 		},
 		{
-			name: "normal return through prompt",
-			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+			Name: "normal return through prompt",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test)))
 				(call-with-continuation-prompt
 				  (lambda () 99)
 				  tag
 				  (lambda (v) v)))`,
-			expected: values.NewInteger(99),
+			Expected: values.NewInteger(99),
 		},
 		{
-			name: "abort with multiple values to handler",
-			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+			Name: "abort with multiple values to handler",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test)))
 				(call-with-continuation-prompt
 				  (lambda () (abort-current-continuation tag 1 2 3))
 				  tag
 				  (lambda (a b c) (+ a b c))))`,
-			expected: values.NewInteger(6),
+			Expected: values.NewInteger(6),
 		},
 	}
 
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, qt.DeepEquals, tc.expected)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
 		})
 	}
 }
@@ -97,9 +98,9 @@ func TestPrompt_ContinuationPromptTagPredicate(t *testing.T) {
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
 			if tc.expected {
-				runSchemeCodeExpectTrue(t, tc.code)
+				testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 			} else {
-				runSchemeCodeExpectFalse(t, tc.code)
+				testhelpers.RunSchemeCodeExpectFalse(t, tc.code)
 			}
 		})
 	}
@@ -108,10 +109,10 @@ func TestPrompt_ContinuationPromptTagPredicate(t *testing.T) {
 func TestPrompt_ComposableContinuation(t *testing.T) {
 	c := qt.New(t)
 
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "capture and apply composable continuation",
-			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+			Name: "capture and apply composable continuation",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test)))
 				(call-with-continuation-prompt
 				  (lambda ()
 				    (+ 1 (call-with-composable-continuation
@@ -119,11 +120,11 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 				            tag)))
 				  tag
 				  #f))`,
-			expected: values.NewInteger(11),
+			Expected: values.NewInteger(11),
 		},
 		{
-			name: "composable continuation applied multiple times",
-			code: `(let ((tag (make-continuation-prompt-tag 'test)))
+			Name: "composable continuation applied multiple times",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test)))
 				(let ((k #f))
 				  (let ((result
 				    (call-with-continuation-prompt
@@ -138,15 +139,15 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 				          (set! k #f)
 				          (saved 20))
 				        result))))`,
-			expected: values.NewInteger(21),
+			Expected: values.NewInteger(21),
 		},
 	}
 
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, qt.DeepEquals, tc.expected)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
 		})
 	}
 }
@@ -154,10 +155,10 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 func TestPrompt_NestedPrompts(t *testing.T) {
 	c := qt.New(t)
 
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "nested prompts with different tags",
-			code: `(let ((tag1 (make-continuation-prompt-tag 'outer))
+			Name: "nested prompts with different tags",
+			Code: `(let ((tag1 (make-continuation-prompt-tag 'outer))
 				       (tag2 (make-continuation-prompt-tag 'inner)))
 				(call-with-continuation-prompt
 				  (lambda ()
@@ -167,11 +168,11 @@ func TestPrompt_NestedPrompts(t *testing.T) {
 				      (lambda (v) (+ v 1))))
 				  tag1
 				  (lambda (v) (* v 100))))`,
-			expected: values.NewInteger(43),
+			Expected: values.NewInteger(43),
 		},
 		{
-			name: "abort to outer prompt skipping inner prompt",
-			code: `(let ((tag1 (make-continuation-prompt-tag 'outer))
+			Name: "abort to outer prompt skipping inner prompt",
+			Code: `(let ((tag1 (make-continuation-prompt-tag 'outer))
 				       (tag2 (make-continuation-prompt-tag 'inner)))
 				(call-with-continuation-prompt
 				  (lambda ()
@@ -181,15 +182,15 @@ func TestPrompt_NestedPrompts(t *testing.T) {
 				      (lambda (v) (+ v 1))))
 				  tag1
 				  (lambda (v) (* v 100))))`,
-			expected: values.NewInteger(4200),
+			Expected: values.NewInteger(4200),
 		},
 	}
 
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, qt.DeepEquals, tc.expected)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
 		})
 	}
 }
@@ -197,10 +198,10 @@ func TestPrompt_NestedPrompts(t *testing.T) {
 func TestPrompt_DynamicWind(t *testing.T) {
 	c := qt.New(t)
 
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "dynamic-wind after thunk runs on abort",
-			code: `(let ((tag (make-continuation-prompt-tag 'test))
+			Name: "dynamic-wind after thunk runs on abort",
+			Code: `(let ((tag (make-continuation-prompt-tag 'test))
 				       (log '()))
 				(call-with-continuation-prompt
 				  (lambda ()
@@ -210,17 +211,17 @@ func TestPrompt_DynamicWind(t *testing.T) {
 				      (lambda () (set! log (cons 'after log)))))
 				  tag
 				  (lambda (v) log)))`,
-			expected: values.List(
+			Expected: values.List(
 				values.NewSymbol("after"),
 				values.NewSymbol("before")),
 		},
 	}
 
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, qt.DeepEquals, tc.expected)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
 		})
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -41,7 +42,7 @@ func TestWithInputFromFile(t *testing.T) {
 	code := fmt.Sprintf(`(with-input-from-file "%s"
 		(lambda () (read)))`, f.Name())
 
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
@@ -58,26 +59,26 @@ func TestWithInputFromFileReturnsResult(t *testing.T) {
 	code := fmt.Sprintf(`(with-input-from-file "%s"
 		(lambda () 'done))`, f.Name())
 
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
 }
 
 func TestWithInputFromFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "file not found",
-			code: `(with-input-from-file "/nonexistent/path.txt" (lambda () #t))`,
+			Name: "file not found",
+			Code: `(with-input-from-file "/nonexistent/path.txt" (lambda () #t))`,
 		},
 		{
-			name: "wrong type for filename",
-			code: `(with-input-from-file 42 (lambda () #t))`,
+			Name: "wrong type for filename",
+			Code: `(with-input-from-file 42 (lambda () #t))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

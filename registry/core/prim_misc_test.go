@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -67,7 +68,7 @@ func TestComplexPredicate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -116,7 +117,7 @@ func TestRealPredicate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -157,7 +158,7 @@ func TestRationalPredicate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -169,7 +170,7 @@ func TestRationalPredicate(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFeatures(t *testing.T) {
-	result, err := runSchemeCode(t, "(features)")
+	result, err := testhelpers.RunSchemeCode(t, "(features)")
 	qt.Assert(t, err, qt.IsNil)
 
 	// features should return a list
@@ -179,7 +180,7 @@ func TestFeatures(t *testing.T) {
 }
 
 func TestJiffiesPerSecond(t *testing.T) {
-	result, err := runSchemeCode(t, "(jiffies-per-second)")
+	result, err := testhelpers.RunSchemeCode(t, "(jiffies-per-second)")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return a positive integer
@@ -191,7 +192,7 @@ func TestJiffiesPerSecond(t *testing.T) {
 }
 
 func TestCurrentJiffy(t *testing.T) {
-	result, err := runSchemeCode(t, "(current-jiffy)")
+	result, err := testhelpers.RunSchemeCode(t, "(current-jiffy)")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return a number (integer or float)
@@ -204,7 +205,7 @@ func TestCurrentJiffy(t *testing.T) {
 }
 
 func TestCurrentSecond(t *testing.T) {
-	result, err := runSchemeCode(t, "(current-second)")
+	result, err := testhelpers.RunSchemeCode(t, "(current-second)")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return a number (typically a float representing Unix timestamp)
@@ -228,7 +229,7 @@ func TestCurrentJiffyMonotonic(t *testing.T) {
 			(define j2 (current-jiffy))
 			(>= j2 j1))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -237,7 +238,7 @@ func TestCurrentSecondReasonable(t *testing.T) {
 	// Test that current-second returns a reasonable Unix timestamp
 	// (greater than Jan 1, 2020 timestamp: 1577836800)
 	code := "(> (current-second) 1577836800)"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -285,7 +286,7 @@ func TestNotPredicate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -295,50 +296,50 @@ func TestNotPredicate(t *testing.T) {
 func TestListPredicateWithImproperList(t *testing.T) {
 	// Test that list? correctly identifies improper lists
 	code := "(list? '(1 . 2))"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestListPredicateWithProperList(t *testing.T) {
 	code := "(list? '(1 2 3))"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestListPredicateWithEmptyList(t *testing.T) {
 	code := "(list? '())"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestProcedurePredicateComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// R7RS §6.1: procedure? returns #t for all procedure types
-		{name: "builtin", code: `(procedure? +)`, expected: values.TrueValue},
-		{name: "lambda", code: `(procedure? (lambda (x) x))`, expected: values.TrueValue},
-		{name: "continuation is procedure", code: `(call-with-current-continuation (lambda (k) (procedure? k)))`, expected: values.TrueValue},
-		{name: "case-lambda is procedure", code: `(procedure? (case-lambda ((x) x) ((x y) (+ x y))))`, expected: values.TrueValue},
-		{name: "closure with captured state", code: `(let ((x 10)) (procedure? (lambda () x)))`, expected: values.TrueValue},
-		{name: "parameter is procedure", code: `(procedure? (make-parameter 0))`, expected: values.TrueValue},
-		{name: "composable continuation is procedure", code: `(let ((tag (make-continuation-prompt-tag))) (call-with-continuation-prompt (lambda () (call-with-composable-continuation (lambda (k) (procedure? k)) tag)) tag (lambda (v) v)))`, expected: values.TrueValue},
+		{Name: "builtin", Code: `(procedure? +)`, Expected: values.TrueValue},
+		{Name: "lambda", Code: `(procedure? (lambda (x) x))`, Expected: values.TrueValue},
+		{Name: "continuation is procedure", Code: `(call-with-current-continuation (lambda (k) (procedure? k)))`, Expected: values.TrueValue},
+		{Name: "case-lambda is procedure", Code: `(procedure? (case-lambda ((x) x) ((x y) (+ x y))))`, Expected: values.TrueValue},
+		{Name: "closure with captured state", Code: `(let ((x 10)) (procedure? (lambda () x)))`, Expected: values.TrueValue},
+		{Name: "parameter is procedure", Code: `(procedure? (make-parameter 0))`, Expected: values.TrueValue},
+		{Name: "composable continuation is procedure", Code: `(let ((tag (make-continuation-prompt-tag))) (call-with-continuation-prompt (lambda () (call-with-composable-continuation (lambda (k) (procedure? k)) tag)) tag (lambda (v) v)))`, Expected: values.TrueValue},
 
 		// Non-procedure types
-		{name: "number", code: `(procedure? 5)`, expected: values.FalseValue},
-		{name: "empty list", code: `(procedure? '())`, expected: values.FalseValue},
-		{name: "string", code: `(procedure? "hello")`, expected: values.FalseValue},
-		{name: "boolean", code: `(procedure? #t)`, expected: values.FalseValue},
-		{name: "character", code: `(procedure? #\a)`, expected: values.FalseValue},
-		{name: "vector", code: `(procedure? '#(1 2))`, expected: values.FalseValue},
-		{name: "pair", code: `(procedure? (cons 1 2))`, expected: values.FalseValue},
+		{Name: "number", Code: `(procedure? 5)`, Expected: values.FalseValue},
+		{Name: "empty list", Code: `(procedure? '())`, Expected: values.FalseValue},
+		{Name: "string", Code: `(procedure? "hello")`, Expected: values.FalseValue},
+		{Name: "boolean", Code: `(procedure? #t)`, Expected: values.FalseValue},
+		{Name: "character", Code: `(procedure? #\a)`, Expected: values.FalseValue},
+		{Name: "vector", Code: `(procedure? '#(1 2))`, Expected: values.FalseValue},
+		{Name: "pair", Code: `(procedure? (cons 1 2))`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
